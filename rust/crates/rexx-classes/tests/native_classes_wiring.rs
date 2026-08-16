@@ -65,20 +65,35 @@ fn class_is_an_instance_of_itself_by_identity() {
 
 /// `MethodDict::merge`'s distinguishing half against `merge_methods` alone
 /// is that it carries the metaclass's *scope* into the class-behaviour, not
-/// only its method entries. Replacing `merge` with `merge_methods` at the
-/// `cascade_build` call site would still pass every `class_has_method`
-/// check above (the donated methods still land) -- it would leave this one
-/// false, since only `merge` copies the scope marker across.
+/// only its method entries.
+///
+/// This does **not** read `class_behaviour_has_scope(class, class)` --
+/// fix round 1 did, and the reviewer caught it by mutation:
+/// `cascade_build` calls `target.add_scope(class)` *unconditionally* right
+/// after the merge branch (`class_graph.rs`, the `own`/`target.add_scope`
+/// lines following the merge), so a class's own scope lands in its own
+/// class-behaviour regardless of whether the merge ran at all --
+/// substituting `merge_methods` for `merge` at the call site left that
+/// version of this test green. The one scope no other path can ever add is
+/// the metaclass's, read from a class that is neither the metaclass itself
+/// nor descended from it: `Widget` here is an ordinary `subclass Object`,
+/// so `.Class` is not among its ancestors and `cascade_build`'s ordinary
+/// ancestor walk never visits it -- the *only* way `.Class`'s scope can
+/// reach `Widget`'s class-behaviour is the metaclass-merge branch, and only
+/// the scope-copying half of `merge` (not `merge_methods`) marks it
+/// present. Verified by the same substitution this round, transcript in
+/// `task-3-report.md`'s fix round 2 appendix.
 #[test]
 fn the_metaclass_merge_carries_the_metaclasss_scope_not_just_its_methods() {
-    let (r, _object, class) = bootstrap_object_and_class();
-    // .Class's own class-behaviour self-merges (metaclass == class itself),
-    // so .Class's scope must be present in its own class-behaviour.
+    let (mut r, object, class) = bootstrap_object_and_class();
+    let widget = r.define_class("Widget", Some(object), ClassKind::Regular, class);
     assert!(
-        r.class_behaviour_has_scope(class, class),
+        r.class_behaviour_has_scope(widget, class),
         "a merge_methods-only implementation would still copy SUBCLASS etc. \
-         onto .Class's class-behaviour without ever marking .Class's own \
-         scope as present there"
+         onto Widget's class-behaviour (the metaclass merge's methods still \
+         land) without ever marking .Class's own scope as present there, \
+         since .Class is not one of Widget's ancestors and no other path \
+         ever adds it"
     );
 }
 
@@ -643,28 +658,6 @@ fn every_prologue_mutated_class_matches_its_recorded_own_instance_method_set() {
             ],
         ),
         (
-            "Set",
-            &[
-                "ALLINDEXES",
-                "ALLITEMS",
-                "AT",
-                "EMPTY",
-                "HASINDEX",
-                "HASITEM",
-                "INDEX",
-                "INIT",
-                "ISEMPTY",
-                "ITEMS",
-                "MAKEARRAY",
-                "PUT",
-                "REMOVE",
-                "REMOVEITEM",
-                "SUPPLIER",
-                "[]",
-                "[]=",
-            ],
-        ),
-        (
             "Directory",
             &[
                 "ALLINDEXES",
@@ -689,58 +682,6 @@ fn every_prologue_mutated_class_matches_its_recorded_own_instance_method_set() {
                 "SUPPLIER",
                 "UNKNOWN",
                 "UNSETMETHOD",
-                "[]",
-                "[]=",
-            ],
-        ),
-        (
-            "Relation",
-            &[
-                "ALLAT",
-                "ALLINDEX",
-                "ALLINDEXES",
-                "ALLITEMS",
-                "AT",
-                "EMPTY",
-                "HASINDEX",
-                "HASITEM",
-                "INDEX",
-                "INIT",
-                "ISEMPTY",
-                "ITEMS",
-                "MAKEARRAY",
-                "PUT",
-                "REMOVE",
-                "REMOVEALL",
-                "REMOVEITEM",
-                "SUPPLIER",
-                "UNIQUEINDEXES",
-                "[]",
-                "[]=",
-            ],
-        ),
-        (
-            "Bag",
-            &[
-                "ALLAT",
-                "ALLINDEX",
-                "ALLINDEXES",
-                "ALLITEMS",
-                "AT",
-                "EMPTY",
-                "HASINDEX",
-                "HASITEM",
-                "INDEX",
-                "INIT",
-                "ISEMPTY",
-                "ITEMS",
-                "MAKEARRAY",
-                "PUT",
-                "REMOVE",
-                "REMOVEALL",
-                "REMOVEITEM",
-                "SUPPLIER",
-                "UNIQUEINDEXES",
                 "[]",
                 "[]=",
             ],
@@ -801,19 +742,21 @@ fn every_prologue_mutated_class_matches_its_recorded_own_instance_method_set() {
                 "WAIT",
             ],
         ),
-        // Supplier is deliberately not in this table: `~inheritInstanceMethods`
-        // (unlike `~inherit`) rewrites the donor's methods to the
-        // recipient's *own* scope (`RexxClass::inheritInstanceMethods`,
-        // `ClassClass.cpp:558-586`, `setMethodScope`), so on the live
-        // oracle `.Supplier~methods(.Supplier)` answers eight names, not
-        // Setup.cpp's own five -- `SupplierMixin`'s donation is no longer
-        // distinguishable by scope at all once it has run. This table's
-        // technique (`cls~methods(cls)`) therefore cannot verify Supplier's
-        // pre-prologue derivation against the oracle the way it does for
-        // every other class here; `own_instance_method_names` (five names,
-        // trusted from `Setup.cpp` alone) and
-        // `suppliers_flattened_set_lacks_suppliermixins_four_donated_methods`
-        // below carry Supplier's actual evidence instead.
+        // `Supplier`, `Set`, `Bag` and `Relation` are deliberately not in
+        // this table: `~inheritInstanceMethods` (unlike `~inherit`) rewrites
+        // the donor's methods to the recipient's *own* scope
+        // (`RexxClass::inheritInstanceMethods`, `ClassClass.cpp:558-586`,
+        // `setMethodScope`, `:563`), so on the live oracle
+        // `.Supplier~methods(.Supplier)` (and likewise `.Set`'s, `.Bag`'s,
+        // `.Relation`'s) answers the post-donation set, not `Setup.cpp`'s
+        // own -- the donor mixin's contribution is no longer
+        // distinguishable by scope at all once `CoreClasses.orx` has run
+        // it. This table's technique (`cls~methods(cls)`) therefore cannot
+        // verify these four classes' pre-prologue derivation against the
+        // oracle the way it does for every other class here;
+        // `own_instance_method_names` (trusted from `Setup.cpp` alone) and
+        // the dedicated `*_flattened_set_*` tests below carry their actual
+        // evidence instead.
     ];
     for &(name, expected) in cases {
         let id = r.lookup(&name.to_ascii_uppercase()).unwrap();
@@ -1136,8 +1079,8 @@ fn every_class_answers_its_recorded_own_class_methods() {
         ("Set", &["NEW", "OF"]),
         ("Bag", &["NEW", "OF"]),
         ("List", &["NEW", "OF"]),
-        ("Method", &["NEW", "LOADEXTERNALMETHOD"]),
-        ("Routine", &["NEW", "LOADEXTERNALROUTINE"]),
+        ("Method", &["NEW", "NEWFILE", "LOADEXTERNALMETHOD"]),
+        ("Routine", &["NEW", "NEWFILE", "LOADEXTERNALROUTINE"]),
         ("Package", &["NEW", "DEFAULTOPTIONS"]),
     ] {
         let id = r.lookup(&name.to_ascii_uppercase()).unwrap();
@@ -1148,6 +1091,91 @@ fn every_class_answers_its_recorded_own_class_methods() {
             );
         }
     }
+}
+
+/// Every native class's own (unflattened) class-method set, exact --
+/// `own_class_method_names`'s only caller anywhere in the crate before this
+/// test existed was the internal derivation itself, so a build that gave
+/// any one of these twenty-five classes a spurious or missing class method
+/// passed. Values above (`Array`/`Set`/`Bag`/`List`'s `Of`,
+/// `Method`/`Routine`/`Package`'s second entry) are corroborated against a
+/// live oracle `hasmethod` check in the test above; every class not listed
+/// there is `New` alone -- `Setup.cpp`'s own `AddClassMethod` list for that
+/// block has exactly one entry, and `build.rs`'s derivation (independently
+/// re-implemented and diffed against the oracle in an earlier review round)
+/// is what this assertion actually reads.
+#[test]
+fn every_native_class_matches_its_recorded_own_class_method_set() {
+    let r = native_classes();
+    let new_only = [
+        "Object",
+        "String",
+        "IdentityTable",
+        "Table",
+        "StringTable",
+        "Directory",
+        "Relation",
+        "Message",
+        "RexxContext",
+        "EventSemaphore",
+        "MutexSemaphore",
+        "MutableBuffer",
+        "Supplier",
+        "Pointer",
+        "Buffer",
+        "WeakReference",
+        "StackFrame",
+    ];
+    for name in new_only {
+        let id = r.lookup(&name.to_ascii_uppercase()).unwrap();
+        assert_eq!(
+            r.own_class_method_names(id),
+            set(&["NEW"]),
+            "{name}'s own class methods, from Setup.cpp's single AddClassMethod entry"
+        );
+    }
+    let cases: &[(&str, &[&str])] = &[
+        ("Class", &["NEW"]),
+        ("Array", &["NEW", "OF"]),
+        ("Set", &["NEW", "OF"]),
+        ("Bag", &["NEW", "OF"]),
+        ("List", &["NEW", "OF"]),
+        ("Method", &["NEW", "NEWFILE", "LOADEXTERNALMETHOD"]),
+        ("Routine", &["NEW", "NEWFILE", "LOADEXTERNALROUTINE"]),
+        ("Package", &["NEW", "DEFAULTOPTIONS"]),
+    ];
+    for &(name, expected) in cases {
+        let id = r.lookup(&name.to_ascii_uppercase()).unwrap();
+        assert_eq!(
+            r.own_class_method_names(id),
+            set(expected),
+            "{name}'s own class methods"
+        );
+    }
+}
+
+/// `class_method_names` (the *flattened* class-side set -- own class
+/// methods plus everything the metaclass merge donates) had no caller
+/// anywhere in the crate before this test. `.Array~class`'s flattened set
+/// must be a superset of its own two class methods and must also carry
+/// `.Class`'s own instance methods (`SUBCLASS`), which is the metaclass
+/// merge's contribution -- already exercised for presence by
+/// `every_native_class_answers_class_instance_methods_on_its_class_side`,
+/// but never previously read through this specific accessor.
+#[test]
+fn class_method_names_reads_the_flattened_class_side_set() {
+    let r = native_classes();
+    let array = r.lookup("ARRAY").unwrap();
+    let flattened = r.class_method_names(array);
+    assert!(flattened.contains("NEW"));
+    assert!(flattened.contains("OF"));
+    assert!(flattened.contains("SUBCLASS"));
+    assert!(
+        flattened.len() > r.own_class_method_names(array).len(),
+        "the flattened class-side set must be strictly larger than Array's \
+         own two class methods -- equal would mean the metaclass merge \
+         contributed nothing"
+    );
 }
 
 // ---------------------------------------------------------------------
@@ -1186,15 +1214,14 @@ fn a_native_classs_flattened_set_includes_its_ancestors_methods_the_cascade_witn
     );
 }
 
-/// `array_from_orderedcollection` (`task3_fixround1.rex` Part C): recorded
-/// nineteen names scoped to `.OrderedCollection` on a live `.Array` instance.
-/// Six of them are not among Array's own thirty-five (the rest re-declare
-/// names Array already has, at `OrderedCollection`'s own scope, since
-/// `CoreClasses.orx:1011-1231` redeclares them `ABSTRACT` before `Array`'s
-/// concrete versions were ever donated -- irrelevant to the *name set* this
-/// task's probes check, only to scope attribution, which no probe here
-/// reads). This is the measured difference R8 asks for: every one of these
-/// six is attributable to `OrderedCollection`, confirmed present on a live
+/// `array_from_orderedcollection` (`task3_fixround1.rex` Part C): the names
+/// recorded scoped to `.OrderedCollection` on a live `.Array` instance
+/// include several Array already has under its own scope (`CoreClasses.orx:1011-1231`
+/// redeclares them `ABSTRACT` before `Array`'s concrete versions were ever
+/// donated -- irrelevant to the *name set* this task's probes check, only
+/// to scope attribution, which no probe here reads) alongside genuinely new
+/// ones. This is the measured difference R8 asks for: each name below is
+/// attributable to `OrderedCollection`, confirmed present on a live
 /// instance and absent from this crate's native (pre-prologue) set.
 #[test]
 fn arrays_flattened_set_is_a_measured_subset_of_the_live_oracles() {
@@ -1233,52 +1260,197 @@ fn arrays_flattened_set_is_a_measured_subset_of_the_live_oracles() {
     }
 }
 
-/// `string_from_comparable` (Part C): `.Comparable`'s one method,
-/// `COMPARETO`, is scoped to `.Comparable` on a live `.String` instance --
-/// but `Setup.cpp` already gives `.String` its own `CompareTo`
-/// (`StringClass.cpp:688`, `AddMethod("CompareTo", ...)`), so this is a
-/// scope-attribution change, not a name-set one: `COMPARETO` is present in
-/// this crate's native String either way. Unlike `Array`/`Supplier`
-/// (below), `String`'s `~inherit(.Comparable)` measurably donates **no**
-/// name this crate's native set lacks -- recorded here so that fact is
-/// asserted rather than merely absent from this file.
+// `string_from_comparable` (Part C): `.Comparable`'s one method,
+// `COMPARETO`, is scoped to `.Comparable` on a live `.String` instance --
+// but `Setup.cpp` already gives `.String` its own `CompareTo`
+// (`StringClass.cpp:688`, `AddMethod("CompareTo", ...)`), so this is a
+// scope-attribution change, not a name-set one. Unlike
+// `Array`/`Set`/`Bag`/`Relation`/`Supplier` (below), `String`'s
+// `~inherit(.Comparable)` measurably donates no name this crate's native
+// set lacks. `COMPARETO`'s presence is already asserted by the exact-set
+// comparison in `every_prologue_mutated_class_matches_its_recorded_own_instance_method_set`'s
+// `String` case above, so there is no separate test for it here -- a
+// dedicated one would only restate that membership.
+
+/// `Setup.cpp`'s own derivation for the four classes `~inheritInstanceMethods`
+/// rescopes (excluded from the exact-match table above for exactly that
+/// reason): each one's *pre-prologue* own instance methods, asserted
+/// directly against this crate's own bookkeeping rather than against a live
+/// oracle query that cannot isolate them once the donation has run.
 #[test]
-fn strings_native_set_already_has_comparables_one_method_under_its_own_name() {
+fn set_bag_relation_and_supplier_match_their_setup_cpp_derived_own_sets() {
     let r = native_classes();
-    let string = r.lookup("STRING").unwrap();
-    assert!(
-        r.own_instance_method_names(string).contains("COMPARETO"),
-        "Setup.cpp's own CompareTo, not Comparable's donation"
-    );
+    let cases: &[(&str, &[&str])] = &[
+        (
+            "Set",
+            &[
+                "ALLINDEXES",
+                "ALLITEMS",
+                "AT",
+                "EMPTY",
+                "HASINDEX",
+                "HASITEM",
+                "INDEX",
+                "INIT",
+                "ISEMPTY",
+                "ITEMS",
+                "MAKEARRAY",
+                "PUT",
+                "REMOVE",
+                "REMOVEITEM",
+                "SUPPLIER",
+                "[]",
+                "[]=",
+            ],
+        ),
+        (
+            "Bag",
+            &[
+                "ALLAT",
+                "ALLINDEX",
+                "ALLINDEXES",
+                "ALLITEMS",
+                "AT",
+                "EMPTY",
+                "HASINDEX",
+                "HASITEM",
+                "INDEX",
+                "INIT",
+                "ISEMPTY",
+                "ITEMS",
+                "MAKEARRAY",
+                "PUT",
+                "REMOVE",
+                "REMOVEALL",
+                "REMOVEITEM",
+                "SUPPLIER",
+                "UNIQUEINDEXES",
+                "[]",
+                "[]=",
+            ],
+        ),
+        (
+            "Relation",
+            &[
+                "ALLAT",
+                "ALLINDEX",
+                "ALLINDEXES",
+                "ALLITEMS",
+                "AT",
+                "EMPTY",
+                "HASINDEX",
+                "HASITEM",
+                "INDEX",
+                "INIT",
+                "ISEMPTY",
+                "ITEMS",
+                "MAKEARRAY",
+                "PUT",
+                "REMOVE",
+                "REMOVEALL",
+                "REMOVEITEM",
+                "SUPPLIER",
+                "UNIQUEINDEXES",
+                "[]",
+                "[]=",
+            ],
+        ),
+        ("Supplier", &["AVAILABLE", "INDEX", "INIT", "ITEM", "NEXT"]),
+    ];
+    for &(name, expected) in cases {
+        let id = r.lookup(&name.to_ascii_uppercase()).unwrap();
+        assert_eq!(
+            r.own_instance_method_names(id),
+            set(expected),
+            "{name}'s own (pre-prologue) instance methods, from Setup.cpp directly"
+        );
+    }
 }
 
-/// `set_from_mapcollection`/`set_from_setcollection` (Part C): `.Set`'s live
-/// instance answers `MAKEARRAY` and `PUTALL` from `.MapCollection` (`MAKEARRAY`
-/// is present natively too, at a different scope, so only `PUTALL` is a true
-/// gap; `.SetCollection` itself donates no additional *names* -- confirmed
-/// empty in the recorded probe, since its own methods are pure `ABSTRACT`
-/// declarations that `Set` already answers concretely).
+/// `.Set`'s live instance answers names from `.MapCollection` (`MAKEARRAY`,
+/// present natively too at a different scope -- a scope-attribution change,
+/// not a name-set one) and, measured separately, from `.SetMixin`
+/// (`CoreClasses.orx:85`'s `~inheritInstanceMethods(.SetMixin)`, `SetMixin`
+/// itself defined at `:411`): `XOR`, `INTERSECTION`, `UNION`, `SUBSET`,
+/// `PUTALL`, none of them in `Setup.cpp`'s own derivation. `.SetCollection`
+/// (`~inherit`ed separately, `:114`) donates no additional name -- `grep`
+/// confirms its own definition (`:1296`) declares no methods at all, so an
+/// empty result is not "abstract declarations `Set` already answers", it is
+/// that there is nothing to declare.
 #[test]
-fn sets_flattened_set_lacks_putall_from_mapcollection() {
+fn sets_flattened_set_lacks_setmixins_donated_methods() {
     let r = native_classes();
     let set_class = r.lookup("SET").unwrap();
-    assert!(!r.instance_method_names(set_class).contains("PUTALL"));
+    let native = r.instance_method_names(set_class);
+    for name in ["XOR", "INTERSECTION", "UNION", "SUBSET", "PUTALL"] {
+        assert!(
+            !native.contains(name),
+            "{name} recorded present on a live .Set instance via SetMixin \
+             but should be absent from this crate's pre-prologue native set"
+        );
+    }
 }
 
-/// `supplier_from_suppliermixin` (Part C, queried against `.SupplierMixin`
-/// itself) recorded empty -- because `~inheritInstanceMethods` rewrites the
-/// donated methods' scope to the recipient (`setMethodScope`,
-/// `ClassClass.cpp:561`), nothing stays scoped to `.SupplierMixin` once the
-/// donation has run. `.Supplier~methods(.Supplier)` (Part A) is where the
-/// four donated names actually show up, rescoped to `Supplier` itself:
-/// `ALLINDEXES`, `ALLITEMS`, `GETARRAYS`, `SUPPLIER`, none of them in
-/// `Setup.cpp`'s own five (`AVAILABLE`/`INDEX`/`INIT`/`ITEM`/`NEXT`). The
-/// earlier submission's finding (Supplier needed deferral because of this)
-/// still holds as a fact about Supplier; R8 supersedes the deferral, and
-/// these four names are exactly the measured difference, attributable to
-/// `CoreClasses.orx:80`'s `~inheritInstanceMethods(.SupplierMixin)`.
+/// `.Relation`'s live instance answers `.ManyItemMixin`'s donated methods
+/// (`CoreClasses.orx:82`'s `~inheritInstanceMethods(.ManyItemMixin)`,
+/// `ManyItemMixin` itself defined at `:218`): `UNION`, `DIFFERENCE`, `XOR`,
+/// `INTERSECTION`, `SUBSET`, none of them in `Setup.cpp`'s own derivation.
 #[test]
-fn suppliers_flattened_set_lacks_suppliermixins_four_donated_methods() {
+fn relations_flattened_set_lacks_manyitemmixins_donated_methods() {
+    let r = native_classes();
+    let relation = r.lookup("RELATION").unwrap();
+    let native = r.instance_method_names(relation);
+    for name in ["UNION", "DIFFERENCE", "XOR", "INTERSECTION", "SUBSET"] {
+        assert!(
+            !native.contains(name),
+            "{name} recorded present on a live .Relation instance via \
+             ManyItemMixin but should be absent from this crate's \
+             pre-prologue native set"
+        );
+    }
+}
+
+/// `.Bag`'s live instance answers both `.ManyItemMixin`'s
+/// (`CoreClasses.orx:83`) and `.BagMixin`'s (`:87`, `BagMixin` itself
+/// defined at `:557`) donated methods: `UNION`, `XOR`, `INTERSECTION`,
+/// `DIFFERENCE`, `SUBSET`, `PUTALL` (the two donations' method names
+/// overlap except for `BagMixin`'s own `PUTALL`), none of them in
+/// `Setup.cpp`'s own derivation.
+#[test]
+fn bags_flattened_set_lacks_manyitemmixin_and_bagmixins_donated_methods() {
+    let r = native_classes();
+    let bag = r.lookup("BAG").unwrap();
+    let native = r.instance_method_names(bag);
+    for name in [
+        "UNION",
+        "XOR",
+        "INTERSECTION",
+        "DIFFERENCE",
+        "SUBSET",
+        "PUTALL",
+    ] {
+        assert!(
+            !native.contains(name),
+            "{name} recorded present on a live .Bag instance via \
+             ManyItemMixin/BagMixin but should be absent from this crate's \
+             pre-prologue native set"
+        );
+    }
+}
+
+/// `.SupplierMixin` itself (`CoreClasses.orx:80`'s
+/// `~inheritInstanceMethods(.SupplierMixin)`), queried directly, recorded
+/// empty -- because `~inheritInstanceMethods` rewrites the donated methods'
+/// scope to the recipient (`RexxClass::inheritInstanceMethods`'s
+/// `setMethodScope`, `ClassClass.cpp:563`), nothing stays scoped to
+/// `.SupplierMixin` once the donation has run; the donated names show up
+/// rescoped to `Supplier` itself instead, none of them in `Setup.cpp`'s own
+/// derivation: `ALLINDEXES`, `ALLITEMS`, `GETARRAYS`, `SUPPLIER`. The
+/// earlier submission's finding (Supplier needed deferral because of this)
+/// still holds as a fact about Supplier; R8 supersedes the deferral. `Set`,
+/// `Bag` and `Relation` (above) have the identical mechanism.
+#[test]
+fn suppliers_flattened_set_lacks_suppliermixins_donated_methods() {
     let r = native_classes();
     let supplier = r.lookup("SUPPLIER").unwrap();
     let native = r.instance_method_names(supplier);
@@ -1297,16 +1469,20 @@ fn suppliers_flattened_set_lacks_suppliermixins_four_donated_methods() {
 // ---------------------------------------------------------------------
 
 /// The brief's own done-when condition, restated as a property rather than
-/// a count: every derived checklist entry is native or deferred (checked by
-/// walking `checklist`, not merely `deferrals`, so a name that is neither
-/// would be caught here), and every deferral names a mechanism rather than
-/// "not needed yet" (checked by requiring the reason cite a concrete
-/// artifact -- a C++ symbol, a `Setup.cpp`/`CoreClasses.orx` mechanism name,
-/// or a measured oracle fact -- rather than merely by excluding one
-/// rewording of the forbidden phrase). `native_classes.rs`'s own internal
-/// unit tests check the stronger, implementation-visible version of this
-/// (the checklist-token-to-block-name mapping and the registration itself);
-/// this is the public-API shape of the same guarantee.
+/// a count: every derived checklist entry is native or deferred, checked
+/// both directions -- walking `checklist` to catch a name that is neither
+/// native nor deferred, and separately walking `deferrals` to catch a
+/// deferral naming a token the checklist does not have. What "every
+/// deferral names a mechanism" actually reduces to in this test: the
+/// reason is non-empty, does not contain the specific phrase "not needed",
+/// and clears a length floor. That is a floor against an empty or
+/// near-vacuous reason reappearing, not a check that the reason cites a
+/// real artifact -- this test cannot verify that a citation is genuine, so
+/// it does not claim to. `native_classes.rs`'s own internal unit tests
+/// check the stronger, implementation-visible version of the
+/// native-or-deferred property (the checklist-token-to-block-name mapping
+/// and the registration itself); this is the public-API shape of the same
+/// guarantee.
 #[test]
 fn every_setup_class_is_native_or_deferred_with_a_reason() {
     let checklist = setup_class_names();
@@ -1325,26 +1501,25 @@ fn every_setup_class_is_native_or_deferred_with_a_reason() {
                     !d.reason.is_empty(),
                     "{token:?} has an empty deferral reason"
                 );
-                // A reason must name a mechanism: a concrete artifact this
-                // crate or the oracle exposes (a citeable symbol, method
-                // name, or measured fact), not an absence of the phrase
-                // "not needed yet" alone -- that phrase check is retained
-                // as a floor, not the whole test, since a reworded version
-                // ("not required at this time") would evade it otherwise.
+                // What this actually checks: the reason avoids the specific
+                // forbidden phrase and clears a length floor. Neither is a
+                // real "names a mechanism" check -- a 41-character string
+                // with no citation in it passes -- so this is a floor, not
+                // a substitute for the human read the brief's ruling asks
+                // for; it exists to catch an empty or near-empty reason
+                // being silently reintroduced, nothing subtler.
                 assert!(
                     !d.reason.to_ascii_lowercase().contains("not needed"),
-                    "{token:?}'s reason must name a mechanism, not decline on timing"
+                    "{token:?}'s reason must not decline on timing"
                 );
                 assert!(
                     d.reason.len() > 40,
-                    "{token:?}'s reason ({:?}) is too short to name a mechanism",
+                    "{token:?}'s reason ({:?}) is too short to be a real explanation",
                     d.reason
                 );
             }
             None => {
-                // Not deferred -- must actually be registered (this is the
-                // part the doc comment previously implied without checking:
-                // walking the checklist, not only the deferral table).
+                // Not deferred -- must actually be registered.
                 let block_name = block_name_for(token);
                 assert!(
                     r.lookup(&block_name.to_ascii_uppercase()).is_some(),
@@ -1352,6 +1527,18 @@ fn every_setup_class_is_native_or_deferred_with_a_reason() {
                 );
             }
         }
+    }
+    // The reverse direction the loop above cannot see: every deferral's own
+    // token must itself be a real checklist entry, or a stale deferral
+    // (naming a class Setup.cpp no longer declares) would go unnoticed --
+    // the loop above only ever looks *up* from the checklist into the
+    // deferral table, never the other way.
+    for d in deferrals {
+        assert!(
+            checklist.contains(&d.setup_class),
+            "deferral {:?} names a token not in the derived checklist",
+            d.setup_class
+        );
     }
     // No duplicate deferrals.
     let mut seen = std::collections::HashSet::new();

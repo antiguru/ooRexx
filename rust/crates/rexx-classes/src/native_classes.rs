@@ -53,12 +53,12 @@
 //!   (`Setup.cpp:1737`). This registry models environment-reachable class
 //!   objects; none of these three is one.
 //! * `QueueClass` -- Setup.cpp donates Array's instance methods
-//!   (`InheritInstanceMethods(Array)`) then removes nine of them
+//!   (`InheritInstanceMethods(Array)`) then removes several of them
 //!   (`Dimension`, `Dimensions`, `Fill`, `sort`, `sortWith`, `stableSort`,
 //!   `stableSortWith`, `makeString`, `toString`). `MethodDict` does not
 //!   model method removal at all -- Task 2's own scope decision
 //!   (`method_dict.rs`'s doc comment: "no probe this task specifies needs
-//!   it"). Building `.Queue` here would leave those nine names present.
+//!   it"). Building `.Queue` here would leave those names present.
 //! * `VariableReference`, `StemClass` -- Setup.cpp hides `=`, `==`, `\=`,
 //!   `\==`, `<>`, `><` (`HideMethod`) so they redirect to `UNKNOWN`; the
 //!   same not-modelled removal/tombstone mechanism as `Queue`'s.
@@ -191,10 +191,10 @@ const DEFERRALS: &[Deferral] = &[
     },
     Deferral {
         setup_class: "QueueClass",
-        reason: "donates Array's instance methods then RemoveMethod's nine of them (Dimension, \
-                 Dimensions, Fill, sort, sortWith, stableSort, stableSortWith, makeString, \
-                 toString). MethodDict does not model method removal (Task 2's own scope \
-                 decision, method_dict.rs: \"no probe this task specifies needs it\").",
+        reason: "donates Array's instance methods then RemoveMethod's several of them \
+                 (Dimension, Dimensions, Fill, sort, sortWith, stableSort, stableSortWith, \
+                 makeString, toString). MethodDict does not model method removal (Task 2's own \
+                 scope decision, method_dict.rs: \"no probe this task specifies needs it\").",
     },
     Deferral {
         setup_class: "VariableReference",

@@ -1,6 +1,13 @@
-/* Task 3, fix round 1. Every fact this program prints is asserted verbatim
- * (as the recorded value, not re-derived) by
- * crates/rexx-classes/tests/native_classes_wiring.rs. Run as:
+/* Task 3, fix round 1. Every fact this program prints for Part A/B/D/E is
+ * asserted verbatim (as the recorded value, not re-derived) by
+ * crates/rexx-classes/tests/native_classes_wiring.rs -- except Set, Bag,
+ * Relation and Supplier's own `OWN_INSTANCE` lines in Part A, which
+ * `~inheritInstanceMethods` rescoping (see those four classes' own tests)
+ * makes the wrong comparison for their pre-prologue derivation; that file's
+ * tests instead assert their derived own set directly and check each
+ * donated name's *absence* from the flattened set, not this printed line.
+ * Part C's mixin-donation lines are asserted as presence/absence checks on
+ * specific names, not as whole-line equality. Run as:
  *   ( ulimit -v 1048576; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib \
  *     /home/moritz/dev/repos/ooRexx/build/bin/rexx task3_fixround1.rex )
  * from a fresh scratch directory (never this one -- it sits on the external

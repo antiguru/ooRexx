@@ -264,23 +264,23 @@ impl ClassRegistry {
     /// [`ClassGraph::inherit_instance_methods`] models, which donates from
     /// `source`'s own *unflattened* dictionary). This crate has no reason to
     /// build a second donation mechanism: every donor a `Setup.cpp` class
-    /// uses `InheritInstanceMethods` on (`Array`, `IdentityTable`,
-    /// `StringTable`, `Relation`) is itself a **direct** subclass of
-    /// `.Object`, so its own flattened instance set is exactly "Object's
-    /// methods plus its own" -- and the recipient already gets Object's
-    /// methods through its *own* ordinary ancestor cascade regardless of the
-    /// donation. The two mechanisms therefore agree on the resulting **name
-    /// set** (what the six probes check) even though they disagree on which
-    /// class a donated name's scope is attributed to (invisible to every one
-    /// of the six probes, and not queryable through this crate's own public
-    /// API either). Recorded here rather than silently: this is a
-    /// substitution, not an oversight -- though as it happens, every
-    /// `Setup.cpp` class that uses `InheritInstanceMethods` is itself in
-    /// `native_classes.rs`'s deferral table for an unrelated reason
-    /// (`CoreClasses.orx` changes its `~superClasses`/method set further),
-    /// so this substitution is not currently exercised by the native class
-    /// set; it is recorded for whichever later task lifts one of those
-    /// deferrals.
+    /// uses `InheritInstanceMethods` on (`Setup.cpp:861,881,908,933,958,988`
+    /// -- `IdentityTable`, `Relation`, and each other's own recipients) is
+    /// itself a **direct** subclass of `.Object`, so its own flattened
+    /// instance set is exactly "Object's methods plus its own" -- and the
+    /// recipient already gets Object's methods through its *own* ordinary
+    /// ancestor cascade regardless of the donation. The two mechanisms
+    /// therefore agree on the resulting **name set** (what this task's
+    /// probes check) even though they disagree on which class a donated
+    /// name's scope is attributed to (invisible to those probes, and not
+    /// queryable through this crate's own public API either). Recorded here
+    /// rather than silently: this is a substitution, not an oversight, and
+    /// it **is** exercised by the native class set -- `native_classes.rs`'s
+    /// replay loop calls this for `Table`, `StringTable`, `Set`,
+    /// `Directory`, `Relation` and `Bag` (R8 lifted their earlier deferral;
+    /// an earlier draft of this comment said the opposite, written before
+    /// that ruling landed and never re-read against this file's own
+    /// neighbour).
     pub fn inherit_instance_methods(&mut self, class: ObjRef, source: ObjRef) {
         self.graph.inherit_instance_methods(class, source);
     }
