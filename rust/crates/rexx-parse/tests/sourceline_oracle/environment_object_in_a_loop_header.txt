@@ -1,4 +1,4 @@
-count 49
+count 50
 /* A DO header's numeric positions, with one of these objects in them.
  * Phase 5a Task 6, fix round 2.
  *
@@ -7,12 +7,13 @@ count 49
  * This crate refuses them, and a refusal cannot be witnessed by a corpus file
  * -- eval.rs's object_operand_tests carries that half.
  *
- * What is here is the boundary either side of it. FOR, a bare DO's repeat
- * count and NUMERIC DIGITS read the value's TEXT through whole_nonneg rather
- * than converting it to a number, so both implementations answer 26 from the
- * same bytes; a builtin argument does the same and answers 40. Making the
- * whole header loud would take every line below from an agreement to a
- * refusal.
+ * What is here is the boundary either side of it. FOR and a bare DO's repeat
+ * count read the value's TEXT through whole_nonneg rather than converting it
+ * to a number; NUMERIC DIGITS renders the value and parses the bytes in
+ * set_digits_str, which never asks for a number either. So both
+ * implementations answer 26 from the same rendering, and a builtin argument
+ * does the same and answers 40. Making the whole header loud would take every
+ * line below from an agreement to a refusal.
  *
  * Each syntax trap signals to the label that starts the next case, which is
  * what lets one program carry four raises: a syntax condition is not

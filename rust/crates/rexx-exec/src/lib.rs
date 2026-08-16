@@ -694,27 +694,31 @@ impl Loud {
         }
     }
 
-    /// A controlled `DO` header's `initial`, `TO` or `BY` value being one of
-    /// the objects [`Loud::operator_operand`] refuses.
+    /// One of the objects [`Loud::operator_operand`] refuses, in a position
+    /// that is not an operator's operand: a `DO` header's value, or a
+    /// controlled loop's own control variable at the increment.
     ///
-    /// **The same defect at a surface that is not an operator**, which is why
-    /// it is a separate constructor: the program contains no operator to name,
-    /// and naming one would send a reader looking for something that is not
-    /// there. `round_via_unary_plus` is a real unary `+` on the oracle, so all
-    /// three positions answer 97.1 -- measured, `do i = .array to 5`,
-    /// `do i = 1 to .array` and `do i = 1 to 5 by .array` alike.
+    /// **A separate constructor because the program contains no operator to
+    /// name**, and naming one would send a reader looking for something that
+    /// is not there. `position` is the whole phrase rather than a keyword, so
+    /// each site says where it is in its own words.
+    ///
+    /// What the oracle does at each, measured:
+    ///
+    /// * a controlled header's `initial`/`TO`/`BY`, and the control variable
+    ///   the increment adds to, are rounded through what is a real unary `+`,
+    ///   so each answers 97.1;
+    /// * `DO OVER`'s target is handed to `requestArray`, which is 98.913 for a
+    ///   class and an iteration of the entries for a directory or a string
+    ///   table -- neither of which this crate can produce.
     ///
     /// **`do i = 1 to .array` is why "the right operand always agrees" is not
     /// a rule.** It held for the binary operators, where the operand the
     /// operator was sent to converts the other through `stringValue()`; it
-    /// does not hold here, where every position is rounded through a unary
-    /// operator of its own.
-    fn header_operand(role: &str, kind: &str) -> Loud {
+    /// does not hold here, where every position converts on its own.
+    fn object_position(position: &str, kind: &str) -> Loud {
         Loud {
-            message: owned_message(
-                &format!("{kind} as a controlled DO header's {role} value"),
-                Some("Phase 5"),
-            ),
+            message: owned_message(&format!("{kind} as {position}"), Some("Phase 5")),
         }
     }
 

@@ -760,14 +760,17 @@ impl HeaderRole {
     /// Not [`HeaderRole::keyword`]: that answers `None` for `Initial`, which
     /// is right for a `>K>` tag the oracle does not print and useless in a
     /// message that has to say which of a header's expressions was refused.
+    /// The whole phrase rather than the keyword, because
+    /// [`Loud::object_position`] serves sites that are not header roles at
+    /// all.
     pub(crate) fn value_name(self) -> &'static str {
         match self {
-            HeaderRole::Initial => "initial",
-            HeaderRole::To => "TO",
-            HeaderRole::By => "BY",
-            HeaderRole::For | HeaderRole::OverFor => "FOR",
-            HeaderRole::Count => "repeat count",
-            HeaderRole::Over => "OVER",
+            HeaderRole::Initial => "a DO header's initial value",
+            HeaderRole::To => "a DO header's TO value",
+            HeaderRole::By => "a DO header's BY value",
+            HeaderRole::For | HeaderRole::OverFor => "a DO header's FOR value",
+            HeaderRole::Count => "a DO header's repeat count",
+            HeaderRole::Over => "a DO header's OVER target",
         }
     }
 }
@@ -4027,6 +4030,16 @@ impl Interp {
         if let Some(expr) = &raise.additional {
             let value = self.eval(code, expr)?;
             self.roots.push_temp(value);
+            // **A third surface that is neither `stringValue()` nor an
+            // operator**: the oracle hands this value to `requestArray`, the
+            // same conversion `DO OVER` makes. Measured, `raise syntax 40.1
+            // additional (.array)` is a 98 execution error at rc 158, and
+            // `additional (.environment)` substitutes `INPUTOUTPUTSTREAM` --
+            // the first entry of the array the directory converts to -- where
+            // rendering the object substitutes its own name.
+            if let Some(kind) = self.operator_operand_gap(value) {
+                return Err(Loud::object_position("a RAISE ADDITIONAL value", kind).into());
+            }
             let rendered = self.to_text(value).to_vec();
             self.trace_keyword(indent, "ADDITIONAL", &rendered);
             additional.push(rendered);
@@ -4074,6 +4087,12 @@ impl Interp {
                 };
                 let value = self.eval(code, expr)?;
                 self.roots.push_temp(value);
+                // `ADDITIONAL`'s own arm above has why. A list of two or more
+                // is `ExprKind::List` and loud before it reaches here, so the
+                // reachable case is the single-element `array (x)`.
+                if let Some(kind) = self.operator_operand_gap(value) {
+                    return Err(Loud::object_position("a RAISE ARRAY element", kind).into());
+                }
                 let rendered = self.to_text(value).to_vec();
                 self.trace_argument(indent, &rendered);
                 self.trace_argument(indent, &rendered);
@@ -6237,7 +6256,20 @@ impl Interp {
                         .ok_or_else(|| raised_repetition_count_not_whole(&text))?,
                 );
             }
-            HeaderRole::Over => values.over = Some(value),
+            // **`DO OVER` is not `stringValue()` and not an operator**, which
+            // is why R12's other sites do not cover it: the oracle hands the
+            // target to `requestArray`. Measured, `do e over .array` is
+            // 98.913 at rc 158 and `do e over .environment` iterates the
+            // directory's own entries, where `LoopState::OverOnce` binds the
+            // target once and yields the object's rendering. A string still
+            // iterates once yielding itself, which is that state's own rule
+            // and stays true.
+            HeaderRole::Over => {
+                if let Some(kind) = self.operator_operand_gap(value) {
+                    return Err(Loud::object_position(role.value_name(), kind).into());
+                }
+                values.over = Some(value);
+            }
         }
         Ok(())
     }
@@ -6249,10 +6281,13 @@ impl Interp {
     /// is not an operator.** `round_via_unary_plus` is a real unary `+` on the
     /// oracle too, so `do i = 1 to .array` sends `+` to the object and answers
     /// 97.1 -- measured, and measured in all three positions, which is why the
-    /// check is here rather than on the left-hand one. `FOR`, a bare `DO`'s
-    /// repeat count and `NUMERIC DIGITS` do **not** reach it: they go through
-    /// `whole_nonneg`, which reads the value's text, and both implementations
-    /// answer 26.3/26.2/26.5 from that text alike.
+    /// check is here rather than on the left-hand one. `FOR` and a bare `DO`'s
+    /// repeat count do **not** reach it: they go through `whole_nonneg`, which
+    /// reads the value's text, so both implementations answer 26.3 and 26.2
+    /// from that text alike. `NUMERIC DIGITS` does not reach it either, by a
+    /// different route: `exec_numeric` renders the value with `to_text` and
+    /// hands the bytes to `set_digits_str`, so it never asks for a number at
+    /// all.
     ///
     /// A test in front rather than a rewrite of the failing path, unlike every
     /// other R12 site: a header value is evaluated once per loop entry, not
@@ -6260,7 +6295,7 @@ impl Interp {
     fn header_number(&mut self, role: HeaderRole, value: ObjRef) -> Result<Number, Failure> {
         let entry_digits = self.activation().settings.digits();
         if let Some(kind) = self.operator_operand_gap(value) {
-            return Err(Loud::header_operand(role.value_name(), kind).into());
+            return Err(Loud::object_position(role.value_name(), kind).into());
         }
         let operand = self.arith_operand(value)?;
         Ok(round_via_unary_plus(&operand, entry_digits).map_err(Raised::from)?)
@@ -7209,6 +7244,18 @@ impl Interp {
                     *current = match stepped {
                         Some(sum) => ControlValue::Small(sum),
                         None => {
+                            // The control variable is the **left** operand of
+                            // the oracle's own implicit `+`, so an object
+                            // assigned to it inside the body is 97.1 there --
+                            // measured, `do i = 1 to 3; i = .array; end`
+                            // prints one iteration and then raises.
+                            if let Some(kind) = self.operator_operand_gap(previous) {
+                                return Err(Loud::object_position(
+                                    "a controlled DO's control variable",
+                                    kind,
+                                )
+                                .into());
+                            }
                             let read = self.arith_operand(previous)?;
                             ControlValue::Wide(read.add(by, digits).map_err(Raised::from)?)
                         }

@@ -2674,7 +2674,8 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   A name the oracle answers and this crate still does not build is LOUD rather
   than falling back, which is what keeps the silent-wrong-answer shape from
   surviving in the corner the fix does not reach. That set is not enumerated
-  here: it is derived at run time from the two directories' measured contents
+  here: it is derived at run time from what `.environment` and `.local` were
+  measured to hold,
   minus what this crate resolves, so it shrinks on its own as later tasks build
   more. `.QUEUE`, whose class `rexx-classes` defers, and every entry of
   `.local` are in it today.
@@ -2686,25 +2687,75 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   comparing renderings answers 1 for both. Ruling R12: refuse, do not model
   handle equality.
 
-  The refusal is not the whole operator set, and the boundary was measured
-  spelling by spelling rather than swept. Loud: every comparison, every
-  arithmetic operator, `&`/`|`/`&&`, and the prefix operators, with the object
-  on the LEFT; and a controlled DO header's initial, TO and BY values, which
-  round through a real unary + on the oracle -- so `do i = 1 to .array` is
-  loud even though the object is on the right there, and "a right-hand object
-  agrees" is a fact about the binary operators rather than a rule. Still
-  agreeing, and refusing them would over-refuse programs the oracle runs: the
-  concatenation family whichever side the object is on, any operator the
-  object is merely the right operand of, IF/WHEN/WHILE/UNTIL conditions, FOR,
-  a bare DO's repeat count, NUMERIC DIGITS, and a builtin argument -- all of
-  which reach the object through `stringValue()` or read its text.
+  THE REFUSAL IS NOT THE WHOLE OPERATOR SET, AND IT IS NOT ONLY OPERATORS.
+  Three fix rounds found the same defect at four different surfaces, each
+  discovered rather than derived, so the fourth round enumerated the surfaces
+  instead. The table below is that enumeration: every place a value of one of
+  these shapes can be handed to code that assumes text, a number, a logical or
+  an array. It is the artifact that closes this class, and the next task to
+  add a native object should extend it rather than rediscover it.
+
+  HOW TO READ IT. "Refuses" means loud rc 120, restoring what the pre-Phase-5
+  build did for the same program; "agrees" means this crate already produces
+  the oracle's bytes and refusing would over-refuse a program the oracle runs.
+  Every row was probed against the live oracle with `.array` (a class object)
+  and, where the two can differ, `.environment` (an interpreter object). The
+  crate column is both engines; none of the rows differs between them.
+
+    SURFACE                     CONVERSION        ORACLE            VERDICT
+    --------------------------------------------------------------------------
+    comparison, object LEFT     identity          0 / 97.1          refuses
+    arithmetic, object LEFT     message send      97.1              refuses
+    &, |, &&, object LEFT       message send      97.1              refuses
+    prefix + - \                message send      97.1              refuses
+    DO header initial/TO/BY     unary +           97.1              refuses
+    DO control variable         unary +           97.1              refuses
+    DO OVER target              requestArray      98.913 / entries  refuses
+    RAISE ADDITIONAL (x)        requestArray      98.9xx / entries  refuses
+    RAISE ARRAY (x)             requestArray      98.9xx / entries  refuses
+    --------------------------------------------------------------------------
+    any operator, object RIGHT  stringValue()     41.1 / 0 / 1      agrees
+    || and abuttal and blank    stringValue()     the rendering     agrees
+    SAY                         stringValue()     the rendering     agrees
+    assignment then read        none              the rendering     agrees
+    a stem's own name read      stringValue()     the rendering     agrees
+    compound tail in a name     stringValue()     the tail          agrees
+    IF / WHEN / WHILE / UNTIL   text              34.1/.2/.3/.4     agrees
+    a comma condition list      text              34.6              agrees
+    DO FOR and repeat count     whole_nonneg      26.3 / 26.2       agrees
+    PARSE positional =(expr)    whole_nonneg      26.4              agrees
+    NUMERIC DIGITS / FUZZ       set_digits_str    26.5 / 26.6       agrees
+    SIGNAL VALUE                stringValue()     16.1              agrees
+    ADDRESS VALUE               stringValue()     rc 0              agrees
+    CALL (expr)                 stringValue()     43.1              agrees
+    TRACE VALUE                 stringValue()     24.1              agrees
+    PARSE ARG                   stringValue()     the rendering     agrees
+    builtin argument            per builtin       93.9xx / 40.12    agrees
+
+  THE STEM DEFAULT REDIRECT IS A ROUTE, NOT A SURFACE, and it took a round of
+  its own. `a. = .array` puts the object in the stem's default, and `to_text`
+  and `to_number` both chase that default -- so a check testing the handle it
+  was given saw a `Body::Stem` and passed the object straight through to every
+  refusing row above. `operator_operand_gap` now follows the same redirect.
+  The control that proves it was the indirection and not the operator arm:
+  `a. = .array; say a.zz + 1` was loud already, because a compound read yields
+  the class handle itself.
+
+  WHAT THE TABLE STILL CANNOT SEE. `DO x OVER` a stem, and a `RAISE ARRAY`
+  list of two or more, are loud for their own earlier reasons and so cannot
+  distinguish this gap from those. `NUMERIC FORM <expr>` is loud in every
+  build including the pinned one, so it is out of scope rather than agreeing.
+  And a surface added later is not in this table by construction, which is the
+  reason it names the conversion each row makes: a new caller of
+  `requestArray`, of a unary operator, or of `to_number` on an operand the
+  oracle sends a message to, belongs on the refusing side.
 
   `rust/crates/rexx-exec/src/eval.rs`'s `object_operand_tests` pins the
   refusals and the agreements it can reach in-crate;
   `rust/corpus/lang/environment_object_operands.rex` and
-  `environment_object_in_a_loop_header.rex` pin the agreeing halves against
-  the live oracle, the builtins among them. A refusal cannot be witnessed by a
-  corpus file, which has to match.
+  `environment_object_in_a_loop_header.rex` pin agreeing rows against the live
+  oracle, the builtins among them. A refusal cannot be witnessed by a corpus
+  file, which has to match.
 
   `environment.rs`'s `ORACLE_ENVIRONMENT`/`ORACLE_LOCAL` are the two
   directories' contents read off the oracle, and

@@ -1173,6 +1173,19 @@ impl Interp {
         }
         match &self.heap.get(value)?.body {
             Body::Native(_) => Some("one of the interpreter's own objects"),
+            // **The redirect every conversion here takes, taken here too.**
+            // A stem with a default answers *as* that default -- `to_text`
+            // and `to_number` both chase it -- so a check that stopped at the
+            // stem handle would let `a. = .array; say (a. == 'The Array
+            // class')` answer 1 where the oracle answers 0, which is this
+            // gap's original shape reached through one assignment. Measured.
+            // A compound read (`a.zz`) yields the class handle itself and
+            // needs no redirect, which is what says the hole was the
+            // indirection rather than the operator arm.
+            Body::Stem {
+                default: Some(default),
+                ..
+            } => self.operator_operand_gap(*default),
             _ => None,
         }
     }
@@ -2938,8 +2951,7 @@ mod object_operand_tests {
         for (source, role, kind) in cases {
             let (code, stdout, stderr) = both_engines(source);
             let expected = format!(
-                "rexx-exec: {kind} as a controlled DO header's {role} value is not implemented \
-                 (Phase 5)\n"
+                "rexx-exec: {kind} as a DO header's {role} value is not implemented (Phase 5)\n"
             );
             assert_eq!(
                 (code, stdout.as_str(), stderr.as_str()),
@@ -2954,9 +2966,11 @@ mod object_operand_tests {
     /// converting it, which both implementations answer alike.
     ///
     /// The control for the test above, in the shape the concatenation family
-    /// is the control for the operator one: `whole_nonneg` never asks for a
-    /// number, so `FOR`, a bare `DO`'s repeat count and `NUMERIC DIGITS`
-    /// answer 26.3, 26.2 and 26.5 from the object's rendering on both sides.
+    /// is the control for the operator one. `FOR` and a bare `DO`'s repeat
+    /// count go through `whole_nonneg`, which never asks for a number, and
+    /// `NUMERIC DIGITS` renders the value with `to_text` and parses the bytes
+    /// in `set_digits_str` -- so all three answer 26.3, 26.2 and 26.5 from the
+    /// object's rendering on both sides.
     /// `corpus/lang/environment_object_in_a_loop_header.rex` is the same
     /// property against the live oracle.
     #[test]
@@ -2971,6 +2985,141 @@ mod object_operand_tests {
             assert!(
                 stderr.contains(&format!("Error {major}:")),
                 "{:?} reported {stderr:?}",
+                String::from_utf8_lossy(source)
+            );
+        }
+    }
+
+    /// **`DO OVER` hands its target to `requestArray`**, which is neither
+    /// `stringValue()` nor an operator, so it falls outside every boundary the
+    /// two tests above draw.
+    ///
+    /// Measured: `do e over .array` is 98.913 at rc 158, and a directory or a
+    /// string table iterates its own entries -- `do e over .environment`
+    /// prints `INPUTOUTPUTSTREAM` first. `LoopState::OverOnce` bound the
+    /// target once and yielded the object's rendering, so each of these was a
+    /// single wrong line at rc 0 where the pre-Phase-5 build refused the
+    /// program.
+    #[test]
+    fn an_object_as_a_do_over_target_is_loud() {
+        let cases: &[(&[u8], &str)] = &[
+            (b"do e over .array\nsay e\nend\n", "a class object"),
+            (
+                b"do e over .environment\nsay e\nend\n",
+                "one of the interpreter's own objects",
+            ),
+            (
+                b"do e over .local\nsay e\nend\n",
+                "one of the interpreter's own objects",
+            ),
+            (
+                b"do e over .environment for 2\nsay e\nend\n",
+                "one of the interpreter's own objects",
+            ),
+        ];
+        for (source, kind) in cases {
+            let (code, stdout, stderr) = both_engines(source);
+            let expected = format!(
+                "rexx-exec: {kind} as a DO header's OVER target is not implemented (Phase 5)\n"
+            );
+            assert_eq!(
+                (code, stdout.as_str(), stderr.as_str()),
+                (120, "", expected.as_str()),
+                "{:?}",
+                String::from_utf8_lossy(source)
+            );
+        }
+    }
+
+    /// **A stem redirects to its default, and every check has to follow.**
+    ///
+    /// `to_text` and `to_number` chase a `Body::Stem`'s default, so a check
+    /// that stopped at the stem handle let the review's original Critical back
+    /// in through one assignment: measured, `a. = .array; say (a. == 'The
+    /// Array class')` answered `1` where the oracle answers `0`.
+    ///
+    /// The last row is the control that says the hole was the indirection: a
+    /// compound read yields the class handle itself and was loud already.
+    #[test]
+    fn an_object_reached_through_a_stem_default_is_loud() {
+        for source in [
+            &b"a. = .array\nsay (a. == 'The Array class')\n"[..],
+            b"a. = .array\nsay a. + 1\n",
+            b"a. = .array\ndo i = 1 to a.\nend\n",
+            b"a. = .array\nsay a.zz + 1\n",
+        ] {
+            let (code, stdout, stderr) = both_engines(source);
+            assert_eq!(
+                (code, stdout.as_str()),
+                (120, ""),
+                "{:?} reported {stderr:?}",
+                String::from_utf8_lossy(source)
+            );
+            assert!(
+                stderr.contains("a class object"),
+                "{:?} must name the shape it refused, got {stderr:?}",
+                String::from_utf8_lossy(source)
+            );
+        }
+    }
+
+    /// A controlled loop's own increment adds to the control variable, and
+    /// that variable is the oracle's **left** operand of the implicit `+`.
+    ///
+    /// Measured, `do i = 1 to 3; say 'iter' i; i = .array; end` prints one
+    /// iteration and then raises 97.1; this crate printed the same iteration
+    /// and then raised 41.1. The stdout assertion is what pins that the
+    /// refusal happens at the increment and not before the body runs.
+    #[test]
+    fn an_object_assigned_to_a_control_variable_is_loud_at_the_increment() {
+        let (code, stdout, stderr) =
+            both_engines(b"do i = 1 to 3\nsay 'iter' i\ni = .array\nend\n");
+        assert_eq!(
+            (code, stdout.as_str(), stderr.as_str()),
+            (
+                120,
+                "iter 1\n",
+                "rexx-exec: a class object as a controlled DO's control variable is not \
+                 implemented (Phase 5)\n"
+            )
+        );
+    }
+
+    /// `RAISE ... ADDITIONAL` and a single-element `ARRAY` hand their value to
+    /// `requestArray` too.
+    ///
+    /// Measured: `additional (.array)` is a 98 execution error at rc 158, and
+    /// `additional (.environment)` substitutes `INPUTOUTPUTSTREAM` -- the
+    /// first entry of the array the directory converts to -- where rendering
+    /// the object substituted its own name into an otherwise correct 40.1.
+    /// Found by this task's own audit of the conversion surfaces rather than
+    /// by a review.
+    #[test]
+    fn an_object_as_a_raise_substitution_is_loud() {
+        for (source, position) in [
+            (
+                &b"raise syntax 40.1 additional (.array)\n"[..],
+                "a RAISE ADDITIONAL value",
+            ),
+            (
+                b"raise syntax 40.1 additional (.environment)\n",
+                "a RAISE ADDITIONAL value",
+            ),
+            (
+                b"raise syntax 40.1 array (.array)\n",
+                "a RAISE ARRAY element",
+            ),
+        ] {
+            let (code, stdout, stderr) = both_engines(source);
+            assert_eq!(
+                (code, stdout.as_str()),
+                (120, ""),
+                "{:?} reported {stderr:?}",
+                String::from_utf8_lossy(source)
+            );
+            assert!(
+                stderr.contains(position),
+                "{:?} must name its position, got {stderr:?}",
                 String::from_utf8_lossy(source)
             );
         }
@@ -3005,6 +3154,16 @@ mod object_operand_tests {
             (b"say .LOCAL\n", "The Local Directory\n"),
             (b"say value('.LOCAL')\n", "The Local Directory\n"),
             (b"x = .array; say x\n", "The Array class\n"),
+            // `DO OVER` on a string still iterates once yielding itself,
+            // which is `LoopState::OverOnce`'s own rule and stays true.
+            (b"do e over 'abc'\nsay e\nend\n", "abc\n"),
+            // A stem whose default is an ordinary value is untouched by the
+            // redirect the check now follows.
+            (b"a. = .array\nsay a.\n", "The Array class\n"),
+            (b"a. = .array\nsay a. || 'x'\n", "The Array classx\n"),
+            (b"z. = 5\ndo i = 1 to z.\nsay i\nend\n", "1\n2\n3\n4\n5\n"),
+            // A `RAISE` substitution that is an ordinary value still renders.
+            (b"do i = 1 to 2\nsay i\nend\n", "1\n2\n"),
         ];
         for (source, expected) in cases {
             let (code, stdout, stderr) = both_engines(source);
