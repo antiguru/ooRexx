@@ -2790,9 +2790,15 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
     say .k~m(.String)  into `::method m class` / `use arg a` / `return a`
                                    oracle `The String class` rc 0, crate same
 
-  The string-receiver form was already wrong before a method body could be
-  entered; the class-receiver form became reachable with the receiver row
-  above it. RULING R15: correct the record, do not build the coercion here.
+  THE TWO HALVES ARRIVED HERE DIFFERENTLY, measured against a build of the
+  task's own base (`74921ca7e`) rather than argued: the string-receiver form
+  already answered `0` at rc 0 there, so it is not this task's, while the
+  class-receiver form was `rc 120, a message send to a class object is not
+  implemented` and is now `0` at rc 0 -- a loud refusal turned into a silent
+  wrong answer, which is the same shape as the `PARSE SOURCE` row and reaches
+  the same conclusion about who noticed it.
+
+  RULING R15 ALL THE SAME: correct the record, do not build the coercion here.
   A native method's argument check is BIF-ARGUMENT COERCION SURFACE, which is
   this table's own domain rather than the message layer's -- the oracle's own
   `hasMethod` is `RexxObject::hasMethodRexx` (`classes/ObjectClass.cpp:2892`),
