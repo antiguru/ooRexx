@@ -709,23 +709,47 @@ mod tests {
     /// happens on the first day one does. Before class identities moved to
     /// `rexx_core::CLASS_SLOT_BASE`'s reserved range, a class handle decoded
     /// as an ordinary heap handle, `heap.get` answered whatever object held
-    /// that slot, and the send resolved against **that value's** class: a
-    /// silent wrong answer. With the range, `class_id()` is `Some` and this
-    /// is loud.
+    /// that slot, and the send resolved against **that value's** class and
+    /// answered from it: a silent wrong answer. With the range, `class_id()`
+    /// is `Some` and this is loud.
     ///
-    /// Had the range not been reserved, the allocation below would put a
-    /// `Body::Text` in slot 0 and the class-0 handle would resolve to it, so
-    /// this send would answer `3` instead of failing.
+    /// **The arrangement below is what makes the send the catcher**, and
+    /// getting it wrong is what a first version of this test did. `.String`
+    /// is the third identity the registry mints, so under the old minting its
+    /// handle is the arena's **slot 2** -- filling slot 0 alone leaves slot 2
+    /// empty, `heap.get` answers `None`, and the send is loud for the wrong
+    /// reason. With the arena filled up to and including that slot, the old
+    /// minting answers `17`, measured: the length of a string the program
+    /// never named. There is deliberately no `class_id()` precondition here,
+    /// so that reverting the minting fails this test at the send rather than
+    /// ahead of it.
     #[test]
     fn a_class_identity_used_as_a_receiver_is_loud() {
         let mut interp = Interp::new();
-        // Long enough not to fit in the handle, so it really does take the
-        // arena's slot 0 -- which is the slot the first class identity used
-        // to be equal to.
-        let occupant = interp.text(b"abcdefghijklmno");
-        assert!(interp.heap.get(occupant).is_some());
+        // Each is longer than a handle can hold, so each really takes a slot
+        // instead of travelling inline.
+        let mut last = ObjRef::NIL;
+        for text in [
+            &b"first-occupant!"[..],
+            b"second-occupant!",
+            b"third-occupant!!!",
+        ] {
+            last = interp.text(text);
+            assert!(
+                interp.heap.get(last).is_some(),
+                "the occupant went inline instead of into a slot"
+            );
+        }
+        let Decoded::Heap { slot, .. } = last.decode() else {
+            panic!("an arena handle")
+        };
+        assert_eq!(
+            slot, 2,
+            "this test rests on the third occupant holding the slot .String's identity would \
+             have been equal to; the arena's allocation order moved"
+        );
+
         let class = interp.classes().lookup("String").expect("String is native");
-        assert!(class.class_id().is_some());
         assert!(matches!(
             interp.send_message(class, b"LENGTH", None, &[]),
             Err(Failure::Loud(_))

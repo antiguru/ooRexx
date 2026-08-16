@@ -842,10 +842,10 @@ pub(crate) enum Op {
     /// does on the tree-walker, so the clause boundary that follows it is
     /// where a handler queued during the send is delivered.
     ///
-    /// **Both forms**: `q~append(1)`, `q~~append(1)`, and the
+    /// **Every form the clause has**: `q~append(1)`, `q~~append(1)`, and the
     /// message-assignment `q[1] = 2`, which is one `InstructionKind::Message`
-    /// with a value and is decided inside `exec_message` rather than by two
-    /// ops.
+    /// with a value and is decided inside `exec_message` rather than by an op
+    /// of its own.
     Message { index: u32 },
     /// Continues at op `target`.
     Jump { target: u32 },

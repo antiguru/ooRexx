@@ -887,11 +887,12 @@ pub(crate) fn compile(
                 });
                 close_region(&mut ops, at)?;
             }
-            // A message send as a whole clause, all three forms. No register
-            // and no expression slot: `Interp::exec_message` evaluates the
-            // term itself, exactly as the tree-walker's own arm does, so what
-            // this promotion decides is the clause region around it and
-            // nothing about the send.
+            // A message send as a whole clause: the plain form, the `~~`
+            // form, and the message-assignment form. No register and no
+            // expression slot -- `Interp::exec_message` evaluates the term
+            // itself, exactly as the tree-walker's own arm does, so what this
+            // promotion decides is the clause region around it and nothing
+            // about the send.
             InstructionKind::Message { .. } => {
                 let at = op_index(&ops)?;
                 let echo = echoes(trace, instruction);

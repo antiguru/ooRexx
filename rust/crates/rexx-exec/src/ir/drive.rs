@@ -1179,11 +1179,12 @@ impl Interp {
                                         };
                                     break 'region Ok(RegionEnd::Flowed(flow));
                                 }
-                                // A message send that is a whole clause, in
-                                // any of its three forms. `exec_message` is
-                                // the tree-walker's own arm, entered here
-                                // with the same two fields: the term and the
-                                // message-assignment form's value.
+                                // A message send that is a whole clause,
+                                // whichever form it was written in.
+                                // `exec_message` is the tree-walker's own arm,
+                                // entered here with the fields it reads: the
+                                // term, and the message-assignment form's
+                                // value.
                                 Op::Message { index } => {
                                     debug_assert_names_the_clause(code, *index, clause, "Message");
                                     let InstructionKind::Message { term, value } = &clause.kind

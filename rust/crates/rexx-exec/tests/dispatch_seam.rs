@@ -48,6 +48,14 @@
 //!
 //! * **An item introduced by a macro expansion inside the module**, or a
 //!   second `mod seam` in another file. Neither exists; both would pass.
+//! * **A `clear` that hands out more than one clearance per call** -- one
+//!   returning a tuple of them, or a `Vec<Cleared>`. That keeps one struct,
+//!   one function and one call site, so every count here is satisfied while
+//!   two invocation paths are fed from a single trip through the seam. The
+//!   token's not being `Copy` or `Clone` does not reach it: the producer is
+//!   free to build as many as it likes. Nothing defends against this and
+//!   nothing is going to; it is here because the list is what the honest
+//!   answer to "what could pass this" consists of.
 //! * **A path that invokes something other than a primitive method.** The
 //!   token guards `NativeMethod` calls. Phase 5a Task 7 enters Rexx method
 //!   bodies, and if it enters them without going through `Interp::invoke`,

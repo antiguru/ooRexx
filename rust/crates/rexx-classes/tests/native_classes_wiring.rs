@@ -1602,9 +1602,9 @@ fn every_setup_class_is_native_or_deferred_with_a_reason() {
 fn every_registered_class_identity_is_outside_the_arenas_slot_range() {
     let registry = rexx_classes::native_classes();
     // Named rather than swept, so a lookup that started answering `None`
-    // fails here instead of silently shrinking what this reads. The two
-    // bootstrap classes plus a plain one and a donation recipient, which is
-    // every construction path `native_classes` has.
+    // fails here instead of silently shrinking what this reads. The bootstrap
+    // pair, a plain class and a donation recipient, which is every
+    // construction path `native_classes` has.
     for name in ["Object", "Class", "String", "Array", "Bag"] {
         let class = registry
             .lookup(name)

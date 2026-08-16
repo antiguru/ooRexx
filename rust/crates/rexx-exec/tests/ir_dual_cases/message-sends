@@ -12,8 +12,8 @@
 #
 # **Trace, and what these rows are NOT the catcher for.** The corpus programs
 # that send a message all run at the default setting, so nothing there reaches
-# a compiled clause echo at all and these rows are the only traced sends in the
-# tree. They still do not catch a missing `Op::TraceClause`: measured, removing
+# a compiled clause echo at all. These rows still do not catch a missing
+# `Op::TraceClause` either: measured, removing
 # `push_echo` from the message arm of `compile` leaves the whole workspace
 # green, these rows included, because the driver's `Echo::Gated` fallback
 # prints the identical line whenever the chunk's compiled setting is not the
