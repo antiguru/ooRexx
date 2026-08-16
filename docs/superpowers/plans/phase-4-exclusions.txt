@@ -2704,10 +2704,15 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
 
   A row DIVERGES when it is neither: this crate answers, at rc 0, and the
   answer is not the oracle's. That is a third status and the worst of them,
-  because rc and stderr both match and no gate that partitions failures by a
-  loud message can see it. A diverging row carries its own measurement and
-  its own owner immediately below the table, because unlike a refusal it
-  leaves nothing in the tree to name.
+  because the crate hands a program an answer to go on with rather than
+  failing, and nothing in the tree names the gap -- no refusal, no owner and
+  no message, so a gate that partitions failures by a loud message has
+  nothing of the row to partition. Whether the ORACLE is loud on the same
+  program is a property of the individual row and not of the status: it may
+  be, in which case a differential run comparing the three descriptors would
+  catch the row the moment a program ran it. A diverging row carries its own
+  measurement and its own owner immediately below the table, because unlike a
+  refusal it leaves nothing in the tree to name.
 
   IN PARTICULAR, "THE PRE-PHASE-5 BUILD REFUSED IT TOO" DECIDES NOTHING, and
   an earlier version of this table said it did. That build refused every
