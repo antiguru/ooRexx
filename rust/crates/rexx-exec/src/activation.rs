@@ -440,9 +440,9 @@ pub(crate) struct Activation {
     /// What `PARSE SOURCE`'s second word answers while this activation runs.
     ///
     /// A field rather than a function of [`entry`], because [`Entry::Routine`]
-    /// carries two answers and the entry cannot tell them apart:
-    /// [`CallType`]'s own doc has the measured table and the program for each
-    /// row.
+    /// is one kind for a `::ROUTINE` reached by `CALL` and for the same body
+    /// reached as a function, which answer differently: [`CallType`]'s own
+    /// doc has the measured table and the program for each row.
     ///
     /// [`entry`]: Activation::entry
     pub(crate) call_type: CallType,
@@ -693,9 +693,10 @@ pub(crate) enum Entry {
 /// a ::ATTRIBUTE GET or SET, by a message send METHOD
 /// ```
 ///
-/// `Entry::Routine` covers the two `::ROUTINE` rows alike and cannot tell
-/// them apart, which is why this is carried beside it rather than derived
-/// from it: measured, one `::routine` body reached both ways in one program
+/// `Entry::Routine` is one kind for every `::ROUTINE` row above and cannot
+/// tell them apart, which is why this is carried beside it rather than
+/// derived from it: measured, one `::routine` body reached each way in a
+/// single program
 /// answers `SUBROUTINE` from the `CALL` and `FUNCTION` from the function
 /// invocation. And the label rows inherit rather than answering a value of
 /// their own -- measured, a `::routine` invoked as a function whose body then
