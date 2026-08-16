@@ -25,3 +25,18 @@ lang/directive_constant_expression_installs.rex
 lang/directive_constant_expression_fails.rex
 lang/directive_constant_expression_needs_class.rex
 lang/directive_constant_expression_blames_the_last_class.rex
+
+# Task 5: the message send, the scope override, and the dispatch seam. Sends
+# to each value kind this crate can build, resolution from the receiver's own
+# class and from an inherited scope, the three ways a primitive method's
+# arguments can be wrong, the unknown-method condition, the scope-override
+# refusal, the instruction form's own RESULT, and the message-assignment form.
+lang/message_send_native.rex
+lang/message_send_inherited_scope.rex
+lang/message_send_unknown_method.rex
+lang/message_send_scope_override.rex
+lang/message_send_too_many_arguments.rex
+lang/message_send_missing_argument.rex
+lang/message_send_argument_not_a_string.rex
+lang/message_instruction.rex
+lang/message_assignment_form.rex

@@ -107,15 +107,19 @@ fn an_unset_variable_reads_as_its_own_name() {
 /// what it checks. `call "sub"` replaced it, and would have gone the same way
 /// at 4b's Task 3, which implements `CALL`.
 ///
-/// A **message send** is the third and last witness. `~` is Phase 5's object
-/// model, so no task in this plan can implement it out from under this test --
-/// which is exactly what happened the first two times, and the fourth
-/// occurrence of that in this project. `PARSE` and `ADDRESS` were the obvious
-/// alternatives and are rejected for the same reason: both are 4c's, weeks
-/// away, so either would only schedule a fourth break.
+/// A **parenthesised list** is the current witness, and it replaced a message
+/// send, which replaced `call "sub"`, which replaced `do i = 1 to 3 / end`.
+/// The sentence that used to stand here claimed `~` could not be implemented
+/// out from under this test; Phase 5a's own dispatch task implemented it. **No
+/// construct is permanently unimplemented**, so the honest statement is the
+/// property rather than a prediction: this test needs *some* form the executor
+/// refuses, and whichever task implements the current one replaces the witness
+/// and the quoted message together. `ExprKind::List` is the one furthest from
+/// landing today -- D34 makes it a real Array in the commit that makes `~new`
+/// work, which the 5a plan's own boundary paragraph puts in 5b.
 ///
 /// The expected stderr is quoted from a run rather than described:
-/// `rexx-exec: a message send is not implemented (Phase 5)`.
+/// `rexx-exec: a parenthesised list is not implemented (Phase 5)`.
 #[test]
 fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
     assert!(
@@ -124,13 +128,13 @@ fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
     );
     let outcome = run_program(
         SPIKE_PATH,
-        b"q~append(1)\n".to_vec(),
+        b"say (1, 2)\n".to_vec(),
         rexx_exec::Invocation::none(),
     );
     assert_eq!(outcome.exit_code, NOT_IMPLEMENTED_EXIT);
     assert_eq!(
         String::from_utf8(outcome.stderr).expect("the loud message is ASCII"),
-        "rexx-exec: a message send is not implemented (Phase 5)\n"
+        "rexx-exec: a parenthesised list is not implemented (Phase 5)\n"
     );
 }
 
@@ -170,14 +174,15 @@ fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
 /// than failing loudly, so it is no longer a loud path at all and no longer
 /// has a message whose size this contract governs.
 ///
-/// **A message send, and the choice of witness is the point.** This test needs
-/// a form the executor does not evaluate, and it has now been broken twice by
-/// its own witness being implemented underneath it: it began on `+`, moved to
-/// `=` when Task 7 landed arithmetic, and went red again when Task 8 landed
-/// comparison. Picking a third operator would only schedule a third break --
-/// *every* operator, prefix and dyadic, is inside Phase 4a. `~` is Phase 5's
-/// object model, so no task in this plan can take it away, and the message it
-/// produces is `form_name`'s `&'static "a message send"`.
+/// **A parenthesised list, and the choice of witness is the point.** This test
+/// needs a form the executor does not evaluate, and it has now been broken
+/// three times by its own witness being implemented underneath it: it began on
+/// `+`, moved to `=` when Task 7 landed arithmetic, went red again when Task 8
+/// landed comparison, moved to `~`, and went red a third time when Phase 5a's
+/// dispatch task landed `~`. The witness is `ExprKind::List` now, whose message
+/// is `form_name`'s `&'static "a parenthesised list"`; see
+/// [`the_loud_failure_code_cannot_be_confused_with_a_rexx_error`] for why no
+/// choice of witness is permanent and what a task landing this one owes.
 ///
 /// The cost of moving off an operator is that this test no longer reaches
 /// either of the two arms that call `format!`, which are the only two where
@@ -191,15 +196,20 @@ fn a_loud_failure_message_does_not_grow_with_the_expression() {
 
     let small = run_program(
         SPIKE_PATH,
-        b"say 1~a\n".to_vec(),
+        b"say (1, 2)\n".to_vec(),
         rexx_exec::Invocation::none(),
     );
     assert_eq!(small.exit_code, NOT_IMPLEMENTED_EXIT);
 
-    let mut deep = b"say 1".to_vec();
+    // A list whose every element is itself a list, three thousand deep: the
+    // outermost node is the one that fails, and the tree beneath it is what
+    // a message formatting the node would print.
+    let mut deep = b"say ".to_vec();
     for _ in 0..3_000 {
-        deep.extend_from_slice(b"~a");
+        deep.extend_from_slice(b"(1,");
     }
+    deep.push(b'1');
+    deep.extend(std::iter::repeat_n(b')', 3_000));
     deep.push(b'\n');
     let deep = run_program(SPIKE_PATH, deep, rexx_exec::Invocation::none());
     assert_eq!(deep.exit_code, NOT_IMPLEMENTED_EXIT);
@@ -215,7 +225,7 @@ fn a_loud_failure_message_does_not_grow_with_the_expression() {
     );
     let stderr = String::from_utf8(deep.stderr).expect("the loud message is ASCII");
     assert!(
-        stderr.contains("a message send"),
+        stderr.contains("a parenthesised list"),
         "the message should name the form it could not evaluate, and was {stderr:?}"
     );
 }

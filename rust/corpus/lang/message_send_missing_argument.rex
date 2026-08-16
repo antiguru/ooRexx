@@ -1,0 +1,10 @@
+/* A primitive method whose required argument was not supplied is error
+ * 93.903, with the method's own traceback line above the sending clause.
+ * Phase 5a Task 5.
+ *
+ * HASMETHOD is Object's, so the scope on the traceback line is "Object" where
+ * the neighbouring too-many-arguments witness reports "String". Measured,
+ * rc 163.
+ */
+
+say 'abc'~hasMethod

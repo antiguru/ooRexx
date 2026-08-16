@@ -1,0 +1,27 @@
+RC 0
+===STDOUT===
+3
+1
+===STDERR===
+    10 *-* say 'abc'~length
+       >L>   "abc"
+       >M>   "LENGTH" => "3"
+       >>>   "3"
+    11 *-* zz = 'abc'~reverse
+       >L>   "abc"
+       >M>   "REVERSE" => "cba"
+       >>>   "cba"
+       >=>   ZZ <= "cba"
+    12 *-* 'abc'~length
+       >L>   "abc"
+       >M>   "LENGTH" => "3"
+    13 *-* 'abc'~~length
+       >L>   "abc"
+       >M>   "LENGTH" => "abc"
+    14 *-* say 'abc'~hasMethod('LENGTH')
+       >L>   "abc"
+       >L>   "LENGTH"
+       >A>   "LENGTH"
+       >M>   "HASMETHOD" => "1"
+       >>>   "1"
+    15 *-* exit

@@ -870,6 +870,24 @@ impl Interp {
         push_tagged(&mut self.trace, ">F>", indent, false, name, " => ", value);
     }
 
+    /// `>M>` (`TRACE_PREFIX_MESSAGE`): a message send's own result, tagged
+    /// with the message name, **quoted** (`traceMessage`,
+    /// `RexxActivation.hpp:349`, `quoteTag = true`, unlike `>F>`).
+    ///
+    /// Measured: `say 'abc'~length` under `trace i` gives
+    /// `       >M>   "LENGTH" => "3"`, and the line sits at the sending
+    /// clause's own indent -- inside one `DO` it is
+    /// `       >M>     "LENGTH" => "3"`.
+    ///
+    /// Both the expression form and the instruction form emit it; the
+    /// instruction form emits **no** `>>>` beside it, measured.
+    pub(crate) fn trace_message(&mut self, indent: usize, name: &[u8], value: &[u8]) {
+        if !self.trace_mode().intermediates {
+            return;
+        }
+        push_tagged(&mut self.trace, ">M>", indent, true, name, " => ", value);
+    }
+
     /// `>R>` (`TRACE_PREFIX_ALIAS`): a `USE ARG >name` target has just been
     /// aliased onto the caller's variable. `tag` is the **caller's** own
     /// variable name and the value is the **callee's** target name

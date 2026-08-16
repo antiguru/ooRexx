@@ -169,10 +169,15 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     InstructionKind::Parse(_) => ("Parse", Owner::InScope),
     InstructionKind::Arg(_) => ("Arg", Owner::InScope),
     InstructionKind::Pull(_) => ("Pull", Owner::InScope),
+    // A message send as a whole clause -- `q~append(1)`, `q~~append(1)` and
+    // the message-assignment form `q[1] = 2`. In scope in the same sense
+    // `DotVariable` is: the variant evaluates, and the named sub-cases this
+    // crate has no code for (a receiver whose class is deferred, a primitive
+    // method with no implementation) fail loudly rather than silently.
+    InstructionKind::Message { .. } => ("Message", Owner::InScope),
     // ---- Phase 5's ----
     InstructionKind::Expose { .. } => ("Expose", Owner::Phase("Phase 5")),
     InstructionKind::Options { .. } => ("Options", Owner::Phase("Phase 5")),
-    InstructionKind::Message { .. } => ("Message", Owner::Phase("Phase 5")),
     InstructionKind::Guard(_) => ("Guard", Owner::Phase("Phase 5")),
     InstructionKind::Reply { .. } => ("Reply", Owner::Phase("Phase 5")),
     InstructionKind::Forward(_) => ("Forward", Owner::Phase("Phase 5")),
@@ -232,11 +237,14 @@ tags!(expr_tag, EXPR_TAGS, ExprKind, {
     // use is as the argument half of `USE ARG >name`, which `run.rs`'s
     // `eval_argument` handles at the call site.
     ExprKind::VariableReference(_) => ("VariableReference", Owner::InScope),
+    // `target~name(...)`, `target~~name(...)` and `target[...]`, resolved
+    // and invoked through `dispatch.rs`. See `InstructionKind::Message`
+    // above for what "in scope" claims and what it does not.
+    ExprKind::Message { .. } => ("Message", Owner::InScope),
     // ---- the ones that still fail loudly; see coverage.rs's module doc's ownership section ----
     ExprKind::QualifiedCall { .. } => ("QualifiedCall", Owner::Phase("Phase 5")),
     ExprKind::ClassResolver { .. } => ("ClassResolver", Owner::Phase("Phase 5")),
     ExprKind::List(_) => ("List", Owner::Phase("Phase 5")),
-    ExprKind::Message { .. } => ("Message", Owner::Phase("Phase 5")),
 });
 
 tags!(loop_tag, LOOP_TAGS, LoopKind, {
@@ -370,14 +378,12 @@ pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     ("InstructionKind", "Address::Command", "Phase 7"),
     ("InstructionKind", "Expose", "Phase 5"),
     ("InstructionKind", "Options", "Phase 5"),
-    ("InstructionKind", "Message", "Phase 5"),
     ("InstructionKind", "Guard", "Phase 5"),
     ("InstructionKind", "Reply", "Phase 5"),
     ("InstructionKind", "Forward", "Phase 5"),
     ("ExprKind", "QualifiedCall", "Phase 5"),
     ("ExprKind", "ClassResolver", "Phase 5"),
     ("ExprKind", "List", "Phase 5"),
-    ("ExprKind", "Message", "Phase 5"),
     ("LoopKind", "With", "Phase 5"),
 ];
 
@@ -496,7 +502,7 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        35
+        36
     );
     assert_eq!(
         INSTRUCTION_TAGS
@@ -517,7 +523,7 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::Phase("Phase 5"))
             .count(),
-        7
+        6
     );
     assert_eq!(
         INSTRUCTION_TAGS
@@ -533,14 +539,14 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        11
+        12
     );
     assert_eq!(
         EXPR_TAGS
             .iter()
             .filter(|(_, o)| matches!(o, Owner::Phase(_)))
             .count(),
-        4
+        3
     );
 
     assert_eq!(LOOP_TAGS.len(), 6);

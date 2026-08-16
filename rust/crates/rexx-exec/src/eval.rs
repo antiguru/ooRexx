@@ -340,6 +340,13 @@ impl Interp {
                 let text = self.to_text(value).to_vec();
                 self.trace_function(indent, &name, &text);
             }
+            // **`>M>` is not here**, and that is the one value prefix this
+            // hook does not own: the message-assignment form is an
+            // instruction that never evaluates its term as an expression, so
+            // a hook arm would print the line for one of the two forms only.
+            // `Interp::message_term` (`dispatch.rs`) emits it instead, at the
+            // same point in the sequence this hook would have.
+            ExprKind::Message { .. } => {}
             // A comma list (`ExprKind::Logical`) has no value line of its
             // own -- each element is a full `eval` call in its own right
             // (`eval_logical_list`), and traces itself through this same
@@ -572,6 +579,30 @@ impl Interp {
 
             // `f(...)`/`"f"(...)` (Task 4, 4b) -- see `eval_call`'s own doc.
             ExprKind::Call { target, args } => self.eval_call(code, target, args),
+
+            // `target~name(...)`, `target~~name(...)` and `target[...]`
+            // (Phase 5a) -- see `Interp::message_term` (`dispatch.rs`) for
+            // the evaluation order and `Interp::resolve`/`Interp::invoke`
+            // for the send itself. The **expression** form only: the
+            // message-assignment form is an instruction and never an
+            // expression, so `assigned` is `None` here.
+            ExprKind::Message {
+                target,
+                name,
+                super_class,
+                args,
+                cascade,
+            } => self.message_term(
+                code,
+                &crate::dispatch::MessageTerm {
+                    target,
+                    name,
+                    super_class: super_class.as_deref(),
+                    args,
+                    cascade: *cascade,
+                    assigned: None,
+                },
+            ),
 
             other => Err(Loud::expression(other).into()),
         }

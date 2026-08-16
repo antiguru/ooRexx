@@ -152,14 +152,15 @@ whole name would overstate the gap; ignoring the split would understate it.
 EXCLUSIONS -- trace prefixes, with an owner
 -------------------------------------------
 
-The oracle has nineteen trace prefixes (RexxActivation.cpp:3567-3587). Thirteen
-have a committed witness at the end of 4b and six do not; all nineteen are
-enumerated with their owner in rexx-exec/tests/trace_oracle.rs's own
-PREFIX_COVERAGE, which is asserted rather than described (that file's coverage
-test is what fails if this paragraph and the table drift apart). Three of the
-six -- >.> (4c), >M> and >N> (Phase 5) -- follow directly from the construct
-that emits them being that phase's. The other three need a row of their own,
-because their answer was got wrong before it was measured.
+The oracle has nineteen trace prefixes (RexxActivation.cpp:3567-3587). Which of
+them carry a committed witness and which are still owed, with the owner for
+each, is enumerated in rexx-exec/tests/trace_oracle.rs's own PREFIX_COVERAGE,
+which is asserted rather than described -- so that boundary is not restated
+here, where nothing would notice it moving. A prefix whose owner follows
+directly from the construct that emits them belonging to that phase (>.>, >M>
+and >N> were all of that kind) needs no prose beyond that table. The three
+below need a row of their own, because their answer was got wrong before it was
+measured.
 
   +++         Phase 7, not 4c.
 
@@ -2956,8 +2957,8 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   crate.
 
   THE COMMITTED WITNESSES DO NOT REPRODUCE `.NoSuchClass~m` DIRECTLY, AND THAT
-  IS DELIBERATE. `~m` is a message send, and message dispatch (Task 5) does
-  not exist yet -- reproducing it here would fail for the wrong reason, a
+  IS DELIBERATE. `.NoSuchClass` is an environment symbol this crate does not
+  resolve, so reproducing that program here would fail for the wrong reason, a
   loud "not implemented" rather than the oracle's own 97.1. `rust/corpus/lang/
   directive_constant_expression_fails.rex` instead uses `1/0`, fully
   implemented on both engines today, and matches the oracle's own 42.3 at rc
@@ -2966,9 +2967,9 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   is the other shape's witness (99.906, rc 157, one clause echo, no ::CLASS
   present at all). `directive_constant_expression_installs.rex` is the
   regression guard: a well-formed expression (`2+3`) still installs silently,
-  matching the oracle's own rc 0 -- its value is discarded, since nothing in
-  this crate can read a ::CONSTANT's value back before message dispatch
-  (Task 5) and Rexx method invocation (Task 7) exist.
+  matching the oracle's own rc 0 -- its value is discarded, because
+  install_directives records no method for a ::CONSTANT at all, so there is
+  nothing a send could resolve to and read it back from.
 
   THE SECOND CLAUSE ECHO BLAMES THE LAST ::CLASS DIRECTIVE IN THE FILE, NOT
   THE ONE NEAREST THE FAILING ::CONSTANT (review round 1, finding 1). Measured:

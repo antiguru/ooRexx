@@ -226,11 +226,6 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
         category: Category::Instruction,
     },
     Witness {
-        tag: "Message",
-        source: "a~b\n",
-        category: Category::Instruction,
-    },
-    Witness {
         tag: "Guard",
         source: "guard on\n",
         category: Category::Instruction,
@@ -259,11 +254,6 @@ const EXPR_WITNESSES: &[Witness] = &[
     Witness {
         tag: "ClassResolver",
         source: "say ns:Bar\n",
-        category: Category::Expr,
-    },
-    Witness {
-        tag: "Message",
-        source: "say a~b\n",
         category: Category::Expr,
     },
     Witness {
@@ -390,7 +380,7 @@ fn assert_witness_set_is_complete() {
          InstructionKind variant (per arm, for Call and Address), no more \
          and no fewer"
     );
-    assert_eq!(expected_instructions.len(), 9);
+    assert_eq!(expected_instructions.len(), 8);
 
     let expected_exprs: Vec<&str> = EXPR_TAGS
         .iter()
@@ -406,7 +396,7 @@ fn assert_witness_set_is_complete() {
         "EXPR_WITNESSES must have exactly one entry per out-of-scope ExprKind \
          variant, no more and no fewer"
     );
-    assert_eq!(expected_exprs.len(), 4);
+    assert_eq!(expected_exprs.len(), 3);
 }
 
 #[test]
@@ -421,14 +411,14 @@ fn in_scope_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        35
+        36
     );
     assert_eq!(
         EXPR_TAGS
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        11
+        12
     );
 }
 

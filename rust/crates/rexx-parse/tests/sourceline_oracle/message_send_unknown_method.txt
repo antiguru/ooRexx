@@ -1,0 +1,6 @@
+count 5
+/* A name the receiver's behaviour does not answer is error 97.1, naming the
+ * receiver's own string value. Phase 5a Task 5. Measured, rc 159.
+ */
+
+say 'abc'~nosuchmsg

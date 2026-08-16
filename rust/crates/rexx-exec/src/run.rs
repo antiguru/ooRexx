@@ -2391,8 +2391,93 @@ impl Interp {
                 Ok(Flow::Next)
             }
 
+            // A message send as a whole clause: `q~append(1)`, `q~~append(1)`
+            // and the message-assignment form `q[1] = 2`. See
+            // `exec_message`.
+            InstructionKind::Message { term, value } => {
+                self.exec_message(code, term, value.as_ref())
+            }
+
             other => Err(Loud::instruction(other).into()),
         }
+    }
+
+    /// A message send that is a clause of its own
+    /// (`RexxInstructionMessage::execute`, `MessageInstruction.cpp:151`).
+    ///
+    /// **What it does that the expression form does not is settle `RESULT`**,
+    /// as a `CALL` does. Measured, `'abc'~length` followed by `say result`
+    /// prints `3`, and `'abc'~~length` prints `abc` -- the cascade's
+    /// replacement of the result by the target happens before `RESULT` is
+    /// set, not after.
+    ///
+    /// **The oracle's other branch, dropping `RESULT` for a send that
+    /// produced no value, is not written here**, because no send can reach
+    /// it: a primitive method's implementation returns an `ObjRef` by its own
+    /// signature, and a `::METHOD` body is not entered at all yet. The task
+    /// that enters one is the task that can produce a valueless send, and it
+    /// owes the drop.
+    ///
+    /// **There is no `>>>` line**, measured: the clause's own value is not a
+    /// result the instruction reports, so `>M>` is the last line a traced
+    /// send emits.
+    ///
+    /// `value` is the message-assignment form's right-hand side. The oracle
+    /// builds that form as an ordinary message instruction whose name has
+    /// gained a `=` and whose argument list has gained that value in front
+    /// (`MessageInstruction.cpp:76-88`), which is why it shares this arm
+    /// rather than having one of its own -- and why the scope-override check
+    /// applies to it too, measured: `x~a:super = 2` is 88.914.
+    fn exec_message(
+        &mut self,
+        code: &Code<'_>,
+        term: &Expr,
+        value: Option<&Expr>,
+    ) -> Result<Flow, Failure> {
+        let result = match value {
+            // No assignment: the term is an ordinary expression, so `eval`
+            // runs it -- reaching the same `Interp::message_term` the arm
+            // below calls directly, which is what emits the `>M>` line.
+            None => self.eval(code, term)?,
+            Some(value) => {
+                let ExprKind::Message {
+                    target,
+                    name,
+                    super_class,
+                    args,
+                    ..
+                } = &term.kind
+                else {
+                    // `rexx-parse` builds this variant only from a message
+                    // term (`instruction.rs`'s `message`), so nothing else
+                    // can arrive; loud rather than a panic, on the standing
+                    // rule that a parser guarantee the type system does not
+                    // carry must not abort.
+                    return Err(Loud::expression(&term.kind).into());
+                };
+                let mut assigned = name.to_vec();
+                assigned.push(b'=');
+                self.message_term(
+                    code,
+                    &crate::dispatch::MessageTerm {
+                        target,
+                        name: &assigned,
+                        super_class: super_class.as_deref(),
+                        args,
+                        // The oracle builds this form as `KEYWORD_MESSAGE`
+                        // whatever the term's own tilde count, so a `~~`
+                        // written here is not a cascade.
+                        cascade: false,
+                        assigned: Some(value),
+                    },
+                )?
+            }
+        };
+        self.roots.push_temp(result);
+        let slot = self.slot_of(b"RESULT");
+        let frame = self.activation().frame;
+        self.roots.set_slot(frame, slot, result);
+        Ok(Flow::Next)
     }
 
     /// `PROCEDURE`, with or without an `EXPOSE` list (D9r).
@@ -4324,14 +4409,14 @@ impl Interp {
     /// `code` is the body the **argument expressions** are written in, which
     /// is the caller's own and is not what `resolve_call` searched.
     /// Takes the shared value buffer, empty and ready to build into.
-    fn take_value_buffer(&mut self) -> Vec<Option<ObjRef>> {
+    pub(crate) fn take_value_buffer(&mut self) -> Vec<Option<ObjRef>> {
         let mut buffer = std::mem::take(&mut self.value_buffer);
         buffer.clear();
         buffer
     }
 
     /// Hands the value buffer back for the next builtin call.
-    fn give_value_buffer(&mut self, buffer: Vec<Option<ObjRef>>) {
+    pub(crate) fn give_value_buffer(&mut self, buffer: Vec<Option<ObjRef>>) {
         self.value_buffer = buffer;
     }
 
@@ -4826,7 +4911,11 @@ impl Interp {
     /// `USE ARG >` target needs the slot a `Reference` carries. Sharing the
     /// step is what keeps `>A>` and the `>O>` line a `>p` argument traces
     /// identical on both.
-    fn eval_traced_argument(&mut self, code: &Code<'_>, expr: &Expr) -> Result<Argument, Failure> {
+    pub(crate) fn eval_traced_argument(
+        &mut self,
+        code: &Code<'_>,
+        expr: &Expr,
+    ) -> Result<Argument, Failure> {
         let argument = self.eval_argument(code, expr)?;
         self.roots.push_temp(argument.value());
         if let Some(rendered) = self.intermediate_text(argument.value()) {
@@ -5385,7 +5474,7 @@ impl Interp {
             return;
         }
         if let Some((line, text)) = self.clause_site(source, blame) {
-            self.failure_site = Some(FailureSite { line, text, indent });
+            self.failure_site = Some(FailureSite::Clause { line, text, indent });
         }
     }
 
@@ -5460,7 +5549,7 @@ impl Interp {
             return;
         }
         if let Some((line, text)) = site {
-            self.failure_site = Some(FailureSite { line, text, indent });
+            self.failure_site = Some(FailureSite::Clause { line, text, indent });
         }
     }
 

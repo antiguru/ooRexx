@@ -851,6 +851,15 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/directive_constant_expression_fails.rex",
     "lang/directive_constant_expression_needs_class.rex",
     "lang/directive_constant_expression_blames_the_last_class.rex",
+    "lang/message_send_native.rex",
+    "lang/message_send_inherited_scope.rex",
+    "lang/message_send_unknown_method.rex",
+    "lang/message_send_scope_override.rex",
+    "lang/message_send_too_many_arguments.rex",
+    "lang/message_send_missing_argument.rex",
+    "lang/message_send_argument_not_a_string.rex",
+    "lang/message_instruction.rex",
+    "lang/message_assignment_form.rex",
 ];
 
 #[test]

@@ -267,6 +267,11 @@ with no seam at all.
 engines, with `ir_dual` live from here on. For the chokepoint, state what the test counts and what
 would make it pass while a second dispatch path exists.
 
+**`>M>` is this task's, not Task 7's.** Amended after the task ran: the prefix fires for *any*
+message send (`RexxExpressionMessage::evaluate` and `RexxInstructionMessage::execute` both call
+`traceMessage`), so a native send under `TRACE I` emits it and leaving it out would turn a loud gap
+into a wrong trace. `trace_oracle.rs`'s `PREFIX_COVERAGE` row and its witness moved here.
+
 **Done when** native sends and one scope-override send match the oracle on both engines.
 
 ---
@@ -305,11 +310,14 @@ Both engines.
 the trace prefixes a method entry produces. **Not** `~new`/`init`, **not** `FORWARD`, **not**
 per-object methods -- those are 5b's.
 
-**`>M>` is this task's**, and `ir_dual` cannot police its indent: both engines format trace through
-one shared `trace.rs`, so a wrong indent is wrong identically on both arms. The instrument is
-in-crate exact-stderr assertions in the shape of the existing indent tests in
-`rexx-exec/src/run/tests.rs`, with expected bytes **captured from the oracle**, not typed. Update
-`trace_oracle.rs`'s `PREFIX_COVERAGE` row for `>M>` in this commit.
+**`>M>` landed in Task 5**, which is where the construct that emits it landed; its
+`PREFIX_COVERAGE` row and witness are already in place. What this task owes is the trace a **Rexx
+method activation** adds around it -- the `>I>`/`<I<` invocation lines and the callee's own clause
+echoes -- and `ir_dual` cannot police any of their indents: both engines format trace through one
+shared `trace.rs`, so a wrong indent is wrong identically on both arms. The instrument is in-crate
+exact-stderr assertions in the shape of the existing indent tests in `rexx-exec/src/run/tests.rs`
+(`a_message_sends_two_indents_are_the_oracles_own_and_normalisation_cannot_see_them` is Task 5's
+own), with expected bytes **captured from the oracle**, not typed.
 
 **Verification.** Oracle-differential on a class method and an instance method returning a value,
 under no trace and under `TRACE I`, both engines, using Task 1's unnormalised mode for the traced

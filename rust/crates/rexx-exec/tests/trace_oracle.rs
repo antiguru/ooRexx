@@ -47,6 +47,7 @@
 //! | `>A>` | `call_arguments.rex`, `function_call.rex` |
 //! | `>F>` | `function_call.rex` |
 //! | `>R>` | `use_arg_alias.rex` |
+//! | `>M>` | `message_send.rex` |
 //! | `>.>` | `parse_placeholder.rex` |
 //!
 //! **Several witnesses below claim no prefix the table above does not
@@ -417,6 +418,22 @@ fn pull_queue_covers_the_line_reading_sources_in_both_modes() {
     check_witness("pull_queue", &path);
 }
 
+/// `>M>`: a message send's own result line, at four positions -- inside a
+/// `SAY`, at the right of an assignment, as a whole clause, and in the `~~`
+/// form whose line shows the target rather than the method's result. The
+/// argument-bearing send is what puts an `>A>` between the receiver's `>L>`
+/// and the `>M>`.
+///
+/// The tag is **quoted**, which is what separates this line from `>F>`:
+/// `traceMessage` passes `quoteTag = true` (`RexxActivation.hpp:349`) where
+/// `traceFunction` passes `false`. A witness for one does not cover the
+/// other.
+#[test]
+fn message_send_covers_the_message_result_line() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/trace_oracle/message_send.rex");
+    check_witness("message_send", &path);
+}
+
 /// The module doc's own table, as data: which prefixes each witness is
 /// claimed to cover. See the module doc's own note on why this exists --
 /// found missing by a branch review (H3), which swapped `keyword_while.rex`
@@ -458,6 +475,7 @@ const WITNESS_PREFIXES: &[(&str, &[&str])] = &[
         &["*-*", ">>>", ">=>", ">L>", ">K>", ">.>"],
     ),
     ("pull_queue", &["*-*", ">>>", ">=>", ">K>"]),
+    ("message_send", &["*-*", ">>>", ">=>", ">L>", ">A>", ">M>"]),
 ];
 
 /// Every prefix a witness below is expected to reach, between them.
@@ -467,7 +485,7 @@ const WITNESS_PREFIXES: &[(&str, &[&str])] = &[
 /// ever really emit would go unnoticed otherwise).
 const CLAIMED_PREFIXES: &[&str] = &[
     "*-*", ">>>", ">=>", ">L>", ">V>", ">O>", ">K>", ">C>", ">P>", ">E>", ">A>", ">F>", ">R>",
-    ">.>",
+    ">.>", ">M>",
 ];
 
 fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
@@ -601,8 +619,6 @@ enum Coverage {
 ///   bring this prefix into reach; issuing a command does, and that is the
 ///   half of `ADDRESS` that is not 4c's. See `phase-4-exclusions.txt`'s own
 ///   `+++` row for the transcripts.
-/// * `>M>` -- Phase 5. Message sends; `ExprKind::Message` is Phase 5's in
-///   the exclusions file's own ownership table.
 /// * `>N>` -- Phase 5. `traceClassResolution`, a namespace-qualified name,
 ///   which needs `::REQUIRES`; `ExprKind::QualifiedCall` is Phase 5's there.
 ///
@@ -624,7 +640,7 @@ const PREFIX_COVERAGE: &[(&str, Coverage)] = &[
     (">P>", Coverage::Witnessed),
     (">O>", Coverage::Witnessed),
     (">C>", Coverage::Witnessed),
-    (">M>", Coverage::Owned("Phase 5")),
+    (">M>", Coverage::Witnessed),
     (">A>", Coverage::Witnessed),
     (">=>", Coverage::Witnessed),
     (">I>", Coverage::WitnessedLive(LIVE_INVOCATION_WITNESS)),
@@ -714,11 +730,11 @@ const LIVE_INVOCATION_WITNESS: &str = "lang/routine_dispatch.rex";
 /// `Witnessed` and `WitnessedLive` together: both are compared against the
 /// oracle byte for byte, and the split between them is about where the
 /// expectation lives, not about how strict the check is.
-const WITNESSED_PREFIX_COUNT: usize = 16;
+const WITNESSED_PREFIX_COUNT: usize = 17;
 
-/// The other three, each with an owner. `WITNESSED_PREFIX_COUNT` plus this is
+/// The rest, each with an owner. `WITNESSED_PREFIX_COUNT` plus this is
 /// asserted to be the whole table, so neither number can drift on its own.
-const OUT_OF_SCOPE_PREFIX_COUNT: usize = 3;
+const OUT_OF_SCOPE_PREFIX_COUNT: usize = 2;
 
 /// The phases an owner may name. A phase that has finished cannot own a
 /// prefix -- whatever it owned is witnessed by then -- so a finished phase's
@@ -747,7 +763,7 @@ const OWNER_PHASES: &[&str] = &["Phase 5", "Phase 7"];
 ///    table.
 /// 4. Every owner names a phase from [`OWNER_PHASES`].
 #[test]
-fn the_trace_surfaces_coverage_is_sixteen_of_nineteen_with_owners_for_the_rest() {
+fn the_trace_surfaces_coverage_is_seventeen_of_nineteen_with_owners_for_the_rest() {
     let mut listed: Vec<&str> = PREFIX_COVERAGE.iter().map(|(prefix, _)| *prefix).collect();
     listed.sort_unstable();
     let before_dedup = listed.len();

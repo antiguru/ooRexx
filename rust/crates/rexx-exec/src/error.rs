@@ -1172,6 +1172,70 @@ impl Raised {
         Raised::syntax(93, 903, vec![position.to_string().into_bytes()])
     }
 
+    /// 93.902: a message send passed more arguments than the method takes.
+    /// `arity` is the count the method **declares**, not the count that
+    /// arrived -- measured, `'abc'~length(1)` reports `0 expected` and
+    /// `'abc'~hasMethod('a','b')` reports `1 expected`, both at rc 163.
+    ///
+    /// A trailing omitted argument is not one that arrived: measured,
+    /// `'abc'~hasMethod(,)` is 93.903 rather than this, because the argument
+    /// list's own count drops trailing omissions, while
+    /// `'abc'~hasMethod(,'x')` is this error.
+    pub(crate) fn too_many_method_arguments(arity: usize) -> Raised {
+        Raised::syntax(93, 902, vec![arity.to_string().into_bytes()])
+    }
+
+    /// 88.909: a method argument has no string value. `position` is
+    /// 1-based in the method's own argument list.
+    ///
+    /// Measured at rc 168: `'abc'~hasMethod(.nil)` reports `Argument 1 must
+    /// have a string value.`, where `'abc'~hasMethod(5)` answers `0` --
+    /// a number has a string value and `.nil` does not.
+    /// 88.914: a `target~name:scope` override whose scope expression did not
+    /// evaluate to a class object.
+    ///
+    /// The two substitutions are fixed at the raise site in the oracle too
+    /// (`reportException(Error_Invalid_argument_noclass, "SCOPE", "Class")`,
+    /// `ExpressionMessage.cpp:168`), so this constructor takes none.
+    /// Measured at rc 168: `say "abc"~length:super` reports `Argument SCOPE
+    /// must be an instance of the Class class.`
+    pub(crate) fn scope_override_not_a_class() -> Raised {
+        Raised::syntax(88, 914, vec![b"SCOPE".to_vec(), b"Class".to_vec()])
+    }
+
+    pub(crate) fn argument_needs_a_string_value(position: usize) -> Raised {
+        Raised::syntax(88, 909, vec![position.to_string().into_bytes()])
+    }
+
+    /// 97.1: the receiver's behaviour answers no method of that name.
+    /// `target` is the receiver's own **string value** and `name` the
+    /// message as the send spells it, already upcased by the parser.
+    ///
+    /// Measured at rc 159: `'abc'~nosuch` reports `Object "abc" does not
+    /// understand message "NOSUCH".`, and `.nil~nosuch` reports `Object "The
+    /// NIL object"`, which is `.nil`'s own string value rather than a
+    /// special case of this message.
+    pub(crate) fn no_method(target: &[u8], name: &[u8]) -> Raised {
+        Raised::syntax(97, 1, vec![target.to_vec(), name.to_vec()])
+    }
+
+    /// The traceback line a native (C++-implemented, here Rust-implemented)
+    /// method activation contributes, rendered whole.
+    ///
+    /// `Message_Translations_compiled_method_invocation` carries its own
+    /// leading blank line-number field and `*-*` marker, unlike a source
+    /// clause's echo, which `crate::trace::push_clause` assembles around the
+    /// clause text. Measured: `       *-* Compiled method "LENGTH" with
+    /// scope "String".`, and the line is unindented even for a send nested
+    /// two `DO` levels deep.
+    pub(crate) fn compiled_method_line(name: &[u8], scope: &str) -> Vec<u8> {
+        let substitutions = vec![name.to_vec(), scope.as_bytes().to_vec()];
+        match rexx_inventory::errors::lookup(101, 20) {
+            Some(entry) => substitute(entry.text, &substitutions),
+            None => b"<no message 101.20 in the catalogue>".to_vec(),
+        }
+    }
+
     /// 93.904: a `MAX`/`MIN` argument is not a number. `position` is 1-based
     /// **in the underlying method's argument list**, so it is one lower than
     /// the call's own numbering -- measured, `max(1,'a',3)` reports `Method
@@ -1472,7 +1536,7 @@ impl From<Raised> for Failure {
 /// Where a failing clause was found -- `Interp::failure_site`'s own type
 /// (`lib.rs`), and what `run.rs`'s `record_failure_site` fills in.
 ///
-/// A named struct rather than a `(usize, Vec<u8>, usize)` tuple **on
+/// [`FailureSite::Clause`]'s fields are named rather than positional **on
 /// purpose**: `line` and `indent` are both bare `usize`s, and a position-only
 /// tuple lets the two transpose with nothing to catch it -- the failure mode
 /// would be plausible-looking, wrong stderr, not a compile error or a panic.
@@ -1488,26 +1552,77 @@ impl From<Raised> for Failure {
 /// `run.rs`'s own `seal_site_level` is what closes one off and starts the
 /// next.
 #[derive(Clone)]
-pub(crate) struct FailureSite {
-    pub(crate) line: usize,
-    pub(crate) text: Vec<u8>,
-    /// Spaces to prefix `text` with on the echo line, Task 11's own
-    /// nesting-depth quantity. **Computed statically from the AST** (`run.rs`'s
-    /// `static_indent`), never carried on a running counter: Task 10's own
-    /// report concluded the depth is derivable from the instruction list
-    /// alone with no runtime block stack, and this task's own oracle
-    /// measurements confirm it for the ordinary case and for one
-    /// LEAVE/ITERATE error family (28.5) besides -- see `static_indent`'s
-    /// own doc comment and the report for the transcripts. A mutable
-    /// per-`Interp` counter was the first design tried here and was
-    /// abandoned once it became clear it would need perfect symmetric
-    /// bookkeeping on every exit path out of every construct, including the
-    /// error paths and the `run_bounded` `Goto`-absorption case `Flow`'s own
-    /// doc comment warns about -- exactly the class of defect this crate's
-    /// skipped-`pop_frame` discussion elsewhere already flags. A pure
-    /// function of `(instructions, index)` cannot desync, because there is
-    /// nothing stateful to desync.
-    pub(crate) indent: usize,
+pub(crate) enum FailureSite {
+    /// A level whose failing clause is source text, echoed under its own
+    /// line number.
+    Clause {
+        line: usize,
+        text: Vec<u8>,
+        /// Spaces to prefix `text` with on the echo line, Task 11's own
+        /// nesting-depth quantity. **Computed statically from the AST**
+        /// (`run.rs`'s `static_indent`), never carried on a running counter:
+        /// Task 10's own report concluded the depth is derivable from the
+        /// instruction list alone with no runtime block stack, and this
+        /// task's own oracle measurements confirm it for the ordinary case
+        /// and for one LEAVE/ITERATE error family (28.5) besides -- see
+        /// `static_indent`'s own doc comment and the report for the
+        /// transcripts. A mutable per-`Interp` counter was the first design
+        /// tried here and was abandoned once it became clear it would need
+        /// perfect symmetric bookkeeping on every exit path out of every
+        /// construct, including the error paths and the `run_bounded`
+        /// `Goto`-absorption case `Flow`'s own doc comment warns about --
+        /// exactly the class of defect this crate's skipped-`pop_frame`
+        /// discussion elsewhere already flags. A pure function of
+        /// `(instructions, index)` cannot desync, because there is nothing
+        /// stateful to desync.
+        indent: usize,
+    },
+    /// A level with no source clause of its own: a native method
+    /// activation, whose whole echo line is a catalogue entry
+    /// ([`Raised::compiled_method_line`]) carrying its own blank
+    /// line-number field, `*-*` marker and text.
+    ///
+    /// It contributes no line number to the report's `running <path> line
+    /// <n>` span -- measured, `'abc'~length(1)` on line 3 of a program
+    /// reports `line 3`, the sending clause's, with this echo above it.
+    Rendered(Vec<u8>),
+}
+
+impl FailureSite {
+    /// The source line this site echoes under, or `None` for a site that has
+    /// no clause of its own.
+    pub(crate) fn line(&self) -> Option<usize> {
+        match self {
+            FailureSite::Clause { line, .. } => Some(*line),
+            FailureSite::Rendered(_) => None,
+        }
+    }
+
+    /// The clause text a [`FailureSite::Clause`] echoes, or the whole
+    /// rendered line of a [`FailureSite::Rendered`].
+    ///
+    /// `#[cfg(test)]` because the report reads the two variants apart rather
+    /// than through one accessor: it needs the line number and the indent
+    /// alongside, and only a test asks a site for its text on its own.
+    #[cfg(test)]
+    pub(crate) fn text(&self) -> &[u8] {
+        match self {
+            FailureSite::Clause { text, .. } => text,
+            FailureSite::Rendered(bytes) => bytes,
+        }
+    }
+
+    /// The spaces a [`FailureSite::Clause`]'s text is prefixed with, or
+    /// `None` for a rendered site, whose line carries its own leading blanks.
+    ///
+    /// `#[cfg(test)]`, for the reason [`FailureSite::text`] gives.
+    #[cfg(test)]
+    pub(crate) fn indent(&self) -> Option<usize> {
+        match self {
+            FailureSite::Clause { indent, .. } => Some(*indent),
+            FailureSite::Rendered(_) => None,
+        }
+    }
 }
 
 /// Where the failing clause is, which is everything the report needs from
@@ -1611,13 +1726,26 @@ impl Raised {
         // clamp, the six-wide line field and the indent, and this loop owns
         // only the order.
         for entry in site.sites {
-            crate::trace::push_clause(&mut out, entry.line, entry.indent, &entry.text);
+            match entry {
+                FailureSite::Clause { line, text, indent } => {
+                    crate::trace::push_clause(&mut out, *line, *indent, text);
+                }
+                // Already a whole line, `*-*` marker and blank line-number
+                // field included, straight from the catalogue.
+                FailureSite::Rendered(bytes) => {
+                    out.extend_from_slice(bytes);
+                    out.push(b'\n');
+                }
+            }
         }
-        // The innermost entry's line, or `0` when nothing was recorded at all
-        // -- `execute`'s own guard already substitutes a visible placeholder
-        // entry for that case, so this fallback is unreachable from there and
-        // exists so this function has no panic on the error path.
-        let line = site.sites.first().map_or(0, |entry| entry.line);
+        // The innermost *clause* entry's line, or `0` when nothing was
+        // recorded at all -- `execute`'s own guard already substitutes a
+        // visible placeholder entry for that case, so this fallback is
+        // unreachable from there and exists so this function has no panic on
+        // the error path. A `Rendered` entry is skipped rather than counted:
+        // it has no line of its own, and the oracle reports the sending
+        // clause's line above it.
+        let line = site.sites.iter().find_map(FailureSite::line).unwrap_or(0);
         // `RAISE PROPAGATE` drops the position span and nothing else
         // (`Delivery::positionless`). Measured against the same program with
         // and without the `raise propagate`: the echo lines, the sub line and
@@ -1769,7 +1897,7 @@ mod tests {
     /// shipped, and it is worth more as an untouched expectation than as a
     /// new test asserting the same thing.
     fn one(line: usize, text: &[u8], indent: usize) -> Vec<FailureSite> {
-        vec![FailureSite {
+        vec![FailureSite::Clause {
             line,
             text: text.to_vec(),
             indent,
@@ -1992,12 +2120,12 @@ mod tests {
     fn the_report_echoes_one_line_per_level_innermost_first() {
         let raised = Raised::syntax(42, 3, vec![]);
         let sites = vec![
-            FailureSite {
+            FailureSite::Clause {
                 line: 8,
                 text: b"say 1/0".to_vec(),
                 indent: 6,
             },
-            FailureSite {
+            FailureSite::Clause {
                 line: 3,
                 text: b"call sub1".to_vec(),
                 indent: 4,

@@ -30,7 +30,7 @@ use std::collections::{BTreeSet, HashMap};
 /// Identifies a method body. The bodies themselves are a later task's
 /// concern (dispatch, Task 3); this crate only tracks which name resolves
 /// to which identity, and through which scope.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct MethodId(pub u32);
 
 /// One name's entry for one scope. Several of these can share a name when

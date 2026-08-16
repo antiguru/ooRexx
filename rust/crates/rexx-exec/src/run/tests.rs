@@ -975,7 +975,10 @@ fn an_absorbed_whencases_escaping_false_branch_reports_end_at_its_own_residual_i
         panic!("expected Raised, got {failure:?}");
     };
     assert_eq!((raised.number, raised.sub), (7, 3));
-    let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(indent, 4);
 }
 
@@ -1003,7 +1006,10 @@ fn an_absorbed_whencases_escape_to_end_reports_the_same_constant_offset_nested()
         panic!("expected Raised, got {failure:?}");
     };
     assert_eq!((raised.number, raised.sub), (7, 3));
-    let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(indent, 6);
 }
 
@@ -1096,9 +1102,12 @@ fn when_condition_that_is_not_0_or_1_raises_34_2() {
 fn a_when_conditions_own_failure_is_attributed_to_the_when_not_the_select() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"select\nwhen 'x' then nop\nend").unwrap_err();
-    let FailureSite { line, text, .. } = interp
+    let FailureSite::Clause { line, text, .. } = interp
         .failure_site
-        .expect("a raised condition always resolves a site when source is Some");
+        .expect("a raised condition always resolves a site when source is Some")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(line, 2, "the WHEN's own line, not the SELECT's (line 1)");
     assert_eq!(
         text,
@@ -1119,7 +1128,10 @@ fn the_second_of_two_whens_own_failure_moves_the_line_with_it() {
         b"select\nwhen 1 = 0 then nop\nwhen 'x' then nop\nend",
     )
     .unwrap_err();
-    let FailureSite { line, text, .. } = interp.failure_site.expect("a site was resolved");
+    let FailureSite::Clause { line, text, .. } = interp.failure_site.expect("a site was resolved")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(line, 3, "the second WHEN's own line, not the first's (2)");
     assert_eq!(text, b"when 'x' ".to_vec());
 }
@@ -1132,7 +1144,10 @@ fn the_second_of_two_whens_own_failure_moves_the_line_with_it() {
 fn a_select_cases_own_expression_failure_is_attributed_to_the_select() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"select case (1/0)\nwhen 1 then nop\nend").unwrap_err();
-    let FailureSite { line, text, .. } = interp.failure_site.expect("a site was resolved");
+    let FailureSite::Clause { line, text, .. } = interp.failure_site.expect("a site was resolved")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(line, 1);
     assert_eq!(text, b"select case (1/0)".to_vec());
 }
@@ -1145,7 +1160,10 @@ fn a_select_cases_own_expression_failure_is_attributed_to_the_select() {
 fn a_whencase_values_own_failure_is_attributed_to_the_when_not_the_select() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"select case 1\nwhen (1/0) then nop\nend").unwrap_err();
-    let FailureSite { line, text, .. } = interp.failure_site.expect("a site was resolved");
+    let FailureSite::Clause { line, text, .. } = interp.failure_site.expect("a site was resolved")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(line, 2);
     assert_eq!(text, b"when (1/0) ".to_vec());
 }
@@ -1163,7 +1181,10 @@ fn a_raise_inside_an_otherwise_branch_is_attributed_to_its_own_clause() {
         b"select\nwhen 1 = 0 then nop\notherwise\n  say 1/0\nend",
     )
     .unwrap_err();
-    let FailureSite { line, text, .. } = interp.failure_site.expect("a site was resolved");
+    let FailureSite::Clause { line, text, .. } = interp.failure_site.expect("a site was resolved")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(line, 4);
     assert_eq!(text, b"say 1/0".to_vec());
 }
@@ -1193,7 +1214,10 @@ fn a_raise_inside_an_otherwise_branch_is_attributed_to_its_own_clause() {
 fn a_raise_inside_a_matched_whens_body_is_attributed_to_its_own_clause() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"select\nwhen 1 = 1 then\n  say 1/0\nend").unwrap_err();
-    let FailureSite { line, text, .. } = interp.failure_site.expect("a site was resolved");
+    let FailureSite::Clause { line, text, .. } = interp.failure_site.expect("a site was resolved")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(
         line, 3,
         "the WHEN's own body clause, not the SELECT's (line 1)"
@@ -1211,7 +1235,10 @@ fn a_raise_inside_a_matched_whens_body_is_attributed_to_its_own_clause() {
 fn a_raise_inside_an_ifs_then_body_is_attributed_to_its_own_clause() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"if 1 = 1 then\n  say 1/0").unwrap_err();
-    let FailureSite { line, text, .. } = interp.failure_site.expect("a site was resolved");
+    let FailureSite::Clause { line, text, .. } = interp.failure_site.expect("a site was resolved")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(
         line, 2,
         "the THEN branch's own body clause, not the IF's (line 1)"
@@ -2121,13 +2148,19 @@ fn a_comma_list_while_condition_raises_34_6_not_34_3() {
 fn until_is_attributed_to_the_end_clause_while_while_is_attributed_to_the_do_clause() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"do until 'x'\nnop\nend").unwrap_err();
-    let FailureSite { line, text, .. } = interp.failure_site.expect("a site was resolved");
+    let FailureSite::Clause { line, text, .. } = interp.failure_site.expect("a site was resolved")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(line, 3, "the END's own line");
     assert_eq!(text, b"end".to_vec(), "the END's own clause, not the DO's");
 
     let mut interp = Interp::new();
     run_source(&mut interp, b"do while 'x'\nnop\nend").unwrap_err();
-    let FailureSite { line, text, .. } = interp.failure_site.expect("a site was resolved");
+    let FailureSite::Clause { line, text, .. } = interp.failure_site.expect("a site was resolved")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(line, 1, "the DO's own line");
     assert_eq!(text, b"do while 'x'".to_vec(), "the DO's own clause");
 }
@@ -2392,7 +2425,10 @@ fn leave_no_match_through_two_real_loops_resets_to_the_outer_ones_own_indent() {
         b"do i = 1 to 3\ndo j = 1 to 3\nleave zz\nend\nend",
     )
     .unwrap_err();
-    let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(indent, 0);
 }
 
@@ -2410,7 +2446,10 @@ fn leave_no_match_through_two_real_loops_resets_to_the_outer_ones_own_indent() {
 fn iterate_wrong_kind_through_a_transparent_unlabelled_block_reports_full_lexical_depth() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"do label x\ndo\niterate x\nend\nend").unwrap_err();
-    let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(indent, 4, "two DO frames deep, matching the oracle");
 }
 
@@ -2492,7 +2531,10 @@ fn the_corrected_28x_indent_rule_matches_all_fourteen_probed_shapes() {
     ] {
         let mut interp = Interp::new();
         run_source(&mut interp, source).unwrap_err();
-        let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+        let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+        else {
+            panic!("not a clause site")
+        };
         assert_eq!(indent, expect, "{name}: {source:?}");
     }
 }
@@ -2701,7 +2743,10 @@ fn one_two_and_three_enclosing_dos_indent_by_two_four_and_six() {
     ] {
         let mut interp = Interp::new();
         run_source(&mut interp, source).unwrap_err();
-        let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+        let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+        else {
+            panic!("not a clause site")
+        };
         assert_eq!(indent, spaces, "{source:?}");
     }
 }
@@ -2717,7 +2762,11 @@ fn one_two_and_three_enclosing_dos_indent_by_two_four_and_six() {
 fn the_indent_after_a_loop_has_already_exited_is_not_left_over_from_it() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"do i = 1 to 3\nsay i\nend\nsay 1/0").unwrap_err();
-    let FailureSite { indent, text, .. } = interp.failure_site.expect("a site was resolved");
+    let FailureSite::Clause { indent, text, .. } =
+        interp.failure_site.expect("a site was resolved")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(
         indent, 0,
         "top level, after the loop, not the loop's own two"
@@ -2742,7 +2791,10 @@ fn control_setup_expressions_are_unindented_unlike_the_loop_body_they_precede() 
     ] {
         let mut interp = Interp::new();
         run_source(&mut interp, source).unwrap_err();
-        let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+        let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+        else {
+            panic!("not a clause site")
+        };
         assert_eq!(indent, 0, "{source:?}");
     }
 }
@@ -2754,12 +2806,18 @@ fn control_setup_expressions_are_unindented_unlike_the_loop_body_they_precede() 
 fn while_and_until_are_indented_inside_the_loops_own_frame() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"do while 1/0\nsay 1\nend").unwrap_err();
-    let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(indent, 2);
 
     let mut interp = Interp::new();
     run_source(&mut interp, b"do until 1/0\nsay 1\nend").unwrap_err();
-    let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(indent, 2);
 }
 
@@ -2772,7 +2830,10 @@ fn while_and_until_are_indented_inside_the_loops_own_frame() {
 fn a_whens_own_condition_is_indented_at_the_selects_own_two_spaces() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"select\nwhen 1/0 then nop\nend").unwrap_err();
-    let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(indent, 2);
 }
 
@@ -2786,7 +2847,10 @@ fn a_whens_own_condition_is_indented_at_the_selects_own_two_spaces() {
 fn a_matched_whens_then_body_indents_six_but_otherwises_body_indents_only_four() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"select\nwhen 1 = 1 then say 1/0\nend").unwrap_err();
-    let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(indent, 6);
 
     let mut interp = Interp::new();
@@ -2795,7 +2859,10 @@ fn a_matched_whens_then_body_indents_six_but_otherwises_body_indents_only_four()
         b"select\nwhen 1 = 0 then nop\notherwise\nsay 1/0\nend",
     )
     .unwrap_err();
-    let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(
         indent, 4,
         "OTHERWISE's own body, one frame, not the WHEN-THEN shape's two"
@@ -2810,12 +2877,18 @@ fn a_matched_whens_then_body_indents_six_but_otherwises_body_indents_only_four()
 fn an_ifs_matched_then_or_else_branch_indents_four_and_an_else_if_chain_indents_eight() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"if 1 = 1 then say 1/0").unwrap_err();
-    let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(indent, 4, "THEN");
 
     let mut interp = Interp::new();
     run_source(&mut interp, b"if 1 = 0 then say 2\nelse say 1/0").unwrap_err();
-    let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(indent, 4, "a plain ELSE, not part of an else-if chain");
 
     let mut interp = Interp::new();
@@ -2824,7 +2897,10 @@ fn an_ifs_matched_then_or_else_branch_indents_four_and_an_else_if_chain_indents_
         b"if 1 = 0 then say 2\nelse if 1 = 1 then say 1/0",
     )
     .unwrap_err();
-    let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(
         indent, 8,
         "the outer ELSE's own four, plus the inner IF's THEN's own four"
@@ -3007,7 +3083,10 @@ fn a_select_nested_inside_a_do_composes_the_two_constructs_own_contributions() {
         b"do i = 1 to 3\nselect\nwhen 1 = 1 then say 1/0\notherwise nop\nend\nend",
     )
     .unwrap_err();
-    let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    else {
+        panic!("not a clause site")
+    };
     assert_eq!(indent, 8);
 }
 
@@ -3537,7 +3616,13 @@ fn the_report_echoes_one_clause_per_activation_innermost_first() {
         .failure_sites
         .iter()
         .chain(interp.failure_site.iter())
-        .map(|s| (s.line, s.text.clone(), s.indent))
+        .map(|s| {
+            (
+                s.line().expect("a clause site"),
+                s.text().to_vec(),
+                s.indent().expect("a clause site"),
+            )
+        })
         .collect();
     assert_eq!(
         sealed,
@@ -3562,7 +3647,7 @@ fn a_calls_arguments_are_evaluated_in_the_caller() {
         "an argument that raises must surface as its own condition, not run the callee: {failure:?}"
     );
     let site = interp.failure_site.expect("a site was resolved");
-    assert_eq!((site.line, site.text), (1, b"call sub 1/0".to_vec()));
+    assert_eq!((site.line(), site.text()), (Some(1), &b"call sub 1/0"[..]));
 }
 
 /// The quoted form bypasses the label search entirely, so `call "SUB"`
@@ -4045,7 +4130,7 @@ fn signal_to_an_undefined_label_inside_a_fragment_reports_both_clauses() {
         .failure_sites
         .iter()
         .chain(interp.failure_site.iter())
-        .map(|s| (s.line, s.text.clone()))
+        .map(|s| (s.line().expect("a clause site"), s.text().to_vec()))
         .collect();
     assert_eq!(
         sealed,
@@ -5447,14 +5532,17 @@ fn a_second_raise_after_a_trapped_one_reports_its_own_site() {
     .unwrap_err();
     let mut sites = std::mem::take(&mut interp.failure_sites);
     sites.extend(interp.failure_site.take());
-    let lines: Vec<usize> = sites.iter().map(|site| site.line).collect();
+    let lines: Vec<usize> = sites
+        .iter()
+        .map(|site| site.line().expect("a clause site"))
+        .collect();
     assert_eq!(
         lines,
         vec![6],
         "exactly one echo, naming the second raise's own clause -- the \
          first raise's site (line 2) must not have survived being trapped"
     );
-    assert_eq!(sites[0].text, b"say 2/0".to_vec());
+    assert_eq!(sites[0].text(), b"say 2/0");
 }
 
 /// `SIGNAL ON NOVALUE` fires for a simple variable and for a compound,
@@ -5519,7 +5607,7 @@ fn a_trap_label_that_does_not_exist_is_16_1_at_the_raising_clause() {
     assert_eq!((raised.number, raised.sub), (16, 1));
     assert_eq!(raised.additional, vec![b"NOSUCHLABEL".to_vec()]);
     let site = interp.failure_site.expect("a site was resolved");
-    assert_eq!((site.line, site.text), (3, b"say 1/0".to_vec()));
+    assert_eq!((site.line(), site.text()), (Some(3), &b"say 1/0"[..]));
 }
 
 /// A trap is inherited by a callee and fires **there**, in the callee's
@@ -5775,7 +5863,10 @@ fn raise_propagate_re_raises_the_original_condition_and_its_site() {
     assert!(interp.out.is_empty(), "`outer` must not have run");
     let mut sites = std::mem::take(&mut interp.failure_sites);
     sites.extend(interp.failure_site.take());
-    let lines: Vec<usize> = sites.iter().map(|site| site.line).collect();
+    let lines: Vec<usize> = sites
+        .iter()
+        .map(|site| site.line().expect("a clause site"))
+        .collect();
     assert_eq!(
         lines,
         vec![6, 2],
@@ -6469,11 +6560,11 @@ fn a_handler_that_fails_at_a_clause_boundary_blames_that_clause() {
     let mut sites = std::mem::take(&mut interp.failure_sites);
     sites.extend(interp.failure_site.take());
     assert!(
-        sites.iter().any(|site| site.text == b"call sub".to_vec()),
+        sites.iter().any(|site| site.text() == b"call sub"),
         "expected the `call sub` clause among the echoes, got {:?}",
         sites
             .iter()
-            .map(|site| String::from_utf8_lossy(&site.text).into_owned())
+            .map(|site| String::from_utf8_lossy(site.text()).into_owned())
             .collect::<Vec<_>>()
     );
 }
@@ -7704,4 +7795,66 @@ fn a_paths_steps_land_on_the_node_it_names() {
         .expect("three steps fit");
     assert!(node(past_the_call).is_none());
     assert!(Interp::chunk_node_at(instruction, 1, NodePath::ROOT).is_none());
+}
+
+/// **The two message-send indents, pinned here because nothing else in the
+/// tree can pin them**, for the reason
+/// [`task_9s_two_new_indents_are_the_oracles_own_and_normalisation_cannot_see_them`]
+/// gives: `tests/trace_oracle.rs` and `tests/corpus.rs` both compare through
+/// DEVIATION 0's `normalize_stderr`, which collapses exactly the space run
+/// these two lines differ in. A unit test's own `assert_eq!` is outside
+/// either comparison function.
+///
+/// Every byte below is the oracle's, captured with `cat -A` from the two
+/// programs run verbatim.
+///
+/// * `>M>` sits at the **sending clause's** indent, like every other value
+///   line: two further in inside one `DO`.
+/// * a failing native method's `Compiled method ... with scope ...` traceback
+///   line carries **no** indent at all, even for a send two `DO` levels
+///   deep -- the catalogue entry supplies its own leading blanks and the
+///   send's nesting does not move it.
+#[test]
+fn a_message_sends_two_indents_are_the_oracles_own_and_normalisation_cannot_see_them() {
+    let mut interp = Interp::new();
+    run_source(
+        &mut interp,
+        b"trace i\ndo ii = 1 to 1\n  say 'abc'~length\nend\n",
+    )
+    .expect("the program runs");
+    assert_eq!(
+        String::from_utf8(interp.trace.clone()).expect("trace is UTF-8"),
+        concat!(
+            "     2 *-* do ii = 1 to 1\n",
+            "       >L>   \"1\"\n",
+            "       >L>   \"1\"\n",
+            "       >K>   \"TO\" => \"1\"\n",
+            "       >=>   II <= \"1\"\n",
+            "     3 *-*   say 'abc'~length\n",
+            "       >L>     \"abc\"\n",
+            "       >M>     \"LENGTH\" => \"3\"\n",
+            "       >>>     \"3\"\n",
+            "     4 *-* end\n",
+            "     2 *-* do ii = 1 to 1\n",
+            "       >V>     II => \"1\"\n",
+            "       >>>     \"1\"\n",
+            "       >>>     \"2\"\n",
+            "       >=>     II <= \"2\"\n",
+        )
+    );
+
+    let outcome = crate::run_program(
+        "/abs/nested.rex",
+        b"do ii = 1 to 1\n  do jj = 1 to 1\n    say 'abc'~length(1)\n  end\nend\n".to_vec(),
+        crate::Invocation::none(),
+    );
+    assert_eq!(
+        String::from_utf8(outcome.stderr).expect("the report is UTF-8"),
+        concat!(
+            "       *-* Compiled method \"LENGTH\" with scope \"String\".\n",
+            "     3 *-*     say 'abc'~length(1)\n",
+            "Error 93 running /abs/nested.rex line 3:  Incorrect call to method.\n",
+            "Error 93.902:  Too many arguments in invocation of method; 0 expected.\n",
+        )
+    );
 }

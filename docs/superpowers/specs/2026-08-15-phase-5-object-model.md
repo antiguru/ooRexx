@@ -485,8 +485,8 @@ So the instrument is **in-crate exact-stderr assertions**, in the shape the exis
 depths, and where each expected byte string came from -- an expected string typed by the implementer
 rather than captured from the oracle pins the implementation to itself.
 
-`trace_oracle.rs`'s `PREFIX_COVERAGE` declares `>M>` and `>N>` as `Coverage::Owned("Phase 5")`. Satisfying
-this section means changing those rows, and the plan owes that edit.
+`trace_oracle.rs`'s `PREFIX_COVERAGE` declared `>M>` and `>N>` as `Coverage::Owned("Phase 5")` when this
+spec was written. Satisfying this section means changing those rows, and the plan owes that edit.
 
 **A separate stderr divergence, also Phase 5's, that the first draft missed entirely.** An error traceback
 through a method frame prints a scope line the oracle produces and this crate does not. Measured, `say b. + 1`

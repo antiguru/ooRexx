@@ -213,6 +213,46 @@ impl ClassRegistry {
             .has_scope_at(self.graph.class_behaviour_handle(class), scope)
     }
 
+    /// An ordinary (unscoped) message resolution against `class`'s current
+    /// instance behaviour: the scope the winning entry came from, and the
+    /// method it names -- oracle's `RexxBehaviour::methodLookup`, which
+    /// `RexxObject::messageSend` (`ObjectClass.cpp:866`) calls.
+    ///
+    /// The scope comes back because a caller needs it for more than the
+    /// lookup: it is the class whose `~id` the oracle names in a native
+    /// method's own traceback line, and it is the starting point a further
+    /// scope-override send would take.
+    pub fn lookup_instance_method(&self, class: ObjRef, name: &str) -> Option<(ObjRef, MethodId)> {
+        self.graph
+            .lookup_at(self.graph.instance_behaviour_handle(class), name)
+    }
+
+    /// An ordinary message resolution against the class object itself --
+    /// `class`'s current class behaviour, which is what a send to the class
+    /// rather than to one of its instances answers from.
+    pub fn lookup_class_method(&self, class: ObjRef, name: &str) -> Option<(ObjRef, MethodId)> {
+        self.graph
+            .lookup_at(self.graph.class_behaviour_handle(class), name)
+    }
+
+    /// A scope-override message resolution against `class`'s current
+    /// instance behaviour -- oracle's `RexxObject::superMethod`, which the
+    /// scope-override `messageSend` (`ObjectClass.cpp:919`) calls. See
+    /// [`MethodDict::lookup_from_scope`](crate::MethodDict::lookup_from_scope)
+    /// for what `start_scope` selects.
+    pub fn lookup_instance_method_from_scope(
+        &self,
+        class: ObjRef,
+        name: &str,
+        start_scope: ObjRef,
+    ) -> Option<(ObjRef, MethodId)> {
+        self.graph.lookup_from_scope_at(
+            self.graph.instance_behaviour_handle(class),
+            name,
+            start_scope,
+        )
+    }
+
     /// `~hasMethod` against the class's current instance behaviour.
     pub fn has_method(&self, class: ObjRef, name: &str) -> bool {
         self.graph.has_method(class, name)
