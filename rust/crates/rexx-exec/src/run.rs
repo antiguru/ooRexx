@@ -4535,6 +4535,27 @@ impl Interp {
     /// doc has the measurement). The label path below ignores it and takes
     /// the enclosing activation's instead, which is measured too and is why
     /// the field travels in [`Inherited`].
+    ///
+    /// **That parameter costs one instruction per builtin call and every
+    /// program pays it**, because `Resolved::Builtin` returns from the middle
+    /// of this function before any activation exists: a builtin materialises
+    /// the argument and nothing ever reads it. Measured over a five-round
+    /// interleaved sitting, `instructions:u` per pass, against the sitting
+    /// before it -- `strings` calls four builtins per pass and moved +4.0004
+    /// (tw) / +4.0000 (ir); `alloc4c` calls one and moved +0.67 (tw) / +1.01
+    /// (ir); `emptyloop` and `varlookup` call none and moved by under a
+    /// thousandth; `arith` and `compound` call none and moved by less than
+    /// the unchanged pinned build's own drift on those axes. That is 0.030%
+    /// of `strings` and 0.009% (tw) of `alloc4c`, an order of magnitude under
+    /// this phase's 1% floor, which is why it was accepted.
+    ///
+    /// **The cheaper shape, named here so it is not rediscovered as a
+    /// cost:** keep the value off the path a builtin takes. [`Entered`] is
+    /// already the type that exists only past the builtin return, so a call
+    /// type carried on it, or two monomorphised entry points that fix it at
+    /// the call site rather than passing it, would leave the builtin arm with
+    /// nothing to materialise. Neither is built here and neither has been
+    /// measured, so what is known is the cost and the direction, not the win.
     pub(crate) fn invoke_call(
         &mut self,
         code: &Code<'_>,
