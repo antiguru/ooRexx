@@ -1,0 +1,55 @@
+/* RAISE with one of these objects in a substitution position. Phase 5a
+ * Task 6, fix round 4.
+ *
+ * RaiseInstruction::execute calls requestArray on the additional information
+ * exactly once, and only inside if (errorCode->strCompare(SYNTAX)). So
+ * RAISE SYNTAX ... ADDITIONAL is the one position that array-converts, and
+ * this crate refuses it -- a refusal cannot be witnessed by a corpus file,
+ * and eval.rs's object_operand_tests carries that half.
+ *
+ * Everything here is the other side, and every line of it was rc 120 for a
+ * while: the first version of that fix checked the ARRAY elements too, and
+ * checked ADDITIONAL under every condition. The ARRAY form builds a real
+ * ArrayClass from its elements first, so the requestArray below it gets an
+ * array and returns it unchanged; the elements are rendered, never
+ * converted. DESCRIPTION is a different keyword and is never converted
+ * either.
+ *
+ * The USER condition, the fourth thing that fix over-refused, is NOT here:
+ * `raise user zork additional (.ARRAY)` under a trap produces no output on
+ * either side, so a corpus file could only pin its exit code, and
+ * object_operand_tests pins that directly instead.
+ *
+ * The traps chain to the label that starts the next case, since a raised
+ * condition is not resumable. Each label prints the condition's rc and its
+ * DESCRIPTION, which is what distinguishes the cases from one another, and
+ * the last line is what says all four fired.
+ *
+ * Measured, rc 0.
+ */
+
+signal on syntax name after_array
+raise syntax 40.1 array (.ARRAY)
+
+after_array:
+say 'array     rc' rc condition('D')
+
+signal on syntax name after_two
+raise syntax 40.1 array (.ARRAY, 'b')
+
+after_two:
+say 'two       rc' rc condition('D')
+
+signal on syntax name after_directory
+raise syntax 40.1 array (.ENVIRONMENT)
+
+after_directory:
+say 'directory rc' rc condition('D')
+
+signal on syntax name after_description
+raise syntax 40.1 description (.ARRAY)
+
+after_description:
+say 'described rc' rc condition('D')
+
+say 'all four raised'

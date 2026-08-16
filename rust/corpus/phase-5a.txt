@@ -68,3 +68,9 @@ lang/environment_object_operands.rex
 # DIGITS and a builtin argument all read the value's text instead and go on
 # agreeing.
 lang/environment_object_in_a_loop_header.rex
+
+# Task 6 fix round 4: RAISE substitutes its additional information, and the
+# oracle array-converts it only under a SYNTAX condition. This is the side
+# that does not convert, and every line of it was refused by the first
+# version of that fix.
+lang/environment_object_in_a_raise.rex

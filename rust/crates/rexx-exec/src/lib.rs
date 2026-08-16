@@ -680,7 +680,7 @@ impl Loud {
     /// `stringValue()` exactly as this crate does. **That is a fact about
     /// operators and not a rule about right-hand operands**: a controlled `DO`
     /// header rounds every position through a unary operator of its own, so
-    /// [`Loud::header_operand`] refuses `do i = 1 to .array` too.
+    /// [`Loud::object_position`] refuses `do i = 1 to .array` too.
     ///
     /// `op` is spelled by the caller rather than taken as an `Operator`,
     /// because a prefix operator and a binary one are different types with

@@ -4030,14 +4030,28 @@ impl Interp {
         if let Some(expr) = &raise.additional {
             let value = self.eval(code, expr)?;
             self.roots.push_temp(value);
-            // **A third surface that is neither `stringValue()` nor an
-            // operator**: the oracle hands this value to `requestArray`, the
-            // same conversion `DO OVER` makes. Measured, `raise syntax 40.1
-            // additional (.array)` is a 98 execution error at rc 158, and
-            // `additional (.environment)` substitutes `INPUTOUTPUTSTREAM` --
-            // the first entry of the array the directory converts to -- where
-            // rendering the object substitutes its own name.
-            if let Some(kind) = self.operator_operand_gap(value) {
+            // **A surface that is neither `stringValue()` nor an operator,
+            // and only under one condition.** `RaiseInstruction::execute`
+            // (`instructions/RaiseInstruction.cpp:270`-`290`) calls
+            // `requestArray` on the additional information exactly once, and
+            // only inside `if (errorCode->strCompare(SYNTAX))` -- so under
+            // `USER` or any other condition the value is never
+            // array-converted and this crate's rendering is the oracle's own
+            // answer. Measured both ways: `raise syntax 40.1 additional
+            // (.array)` is a 98 execution error at rc 158, `additional
+            // (.environment)` substitutes `INPUTOUTPUTSTREAM` -- the first
+            // entry of the array the directory converts to -- and `raise user
+            // zork additional (.array)` under a trap is rc 0 on both sides.
+            //
+            // **A propagate is deliberately not refused.** The oracle reads
+            // the condition name off the condition object there rather than
+            // from the clause, which is not knowable here, and answering the
+            // rendering is what this crate already does for every non-SYNTAX
+            // condition.
+            if raise.condition.eq_ignore_ascii_case(b"SYNTAX")
+                && !raise.propagate
+                && let Some(kind) = self.operator_operand_gap(value)
+            {
                 return Err(Loud::object_position("a RAISE ADDITIONAL value", kind).into());
             }
             let rendered = self.to_text(value).to_vec();
@@ -4087,12 +4101,16 @@ impl Interp {
                 };
                 let value = self.eval(code, expr)?;
                 self.roots.push_temp(value);
-                // `ADDITIONAL`'s own arm above has why. A list of two or more
-                // is `ExprKind::List` and loud before it reaches here, so the
-                // reachable case is the single-element `array (x)`.
-                if let Some(kind) = self.operator_operand_gap(value) {
-                    return Err(Loud::object_position("a RAISE ARRAY element", kind).into());
-                }
+                // **No gap check here, and the absence is the decision.**
+                // `RaiseInstruction::execute` builds a real `ArrayClass` from
+                // these elements (`RaiseInstruction.cpp:217`-`239`) and the
+                // `requestArray` below it therefore gets an array already and
+                // returns it unchanged -- the elements are never
+                // array-converted, only rendered by the substitution
+                // machinery. Measured: `array (.array)`, `array
+                // (.environment)` and `array (.array, 'b')` are all rc 216
+                // and byte-identical here. A check on this arm refused all
+                // three.
                 let rendered = self.to_text(value).to_vec();
                 self.trace_argument(indent, &rendered);
                 self.trace_argument(indent, &rendered);

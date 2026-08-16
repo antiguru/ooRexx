@@ -1152,7 +1152,7 @@ impl Interp {
     /// The shapes are a class object and one of the interpreter's own
     /// objects, and neither is a value the oracle treats as text when an
     /// operator meets it. [`Loud::operator_operand`] carries the measurements
-    /// and [`Loud::header_operand`] the one surface that is not an operator.
+    /// and [`Loud::object_position`] the surfaces that are not operators.
     ///
     /// **Every caller reaches this on a path that was already failing, except
     /// [`Interp::compare_values`] and `Interp::header_number`**: a comparison
@@ -3085,30 +3085,29 @@ mod object_operand_tests {
         );
     }
 
-    /// `RAISE ... ADDITIONAL` and a single-element `ARRAY` hand their value to
-    /// `requestArray` too.
+    /// `RAISE ... ADDITIONAL` hands its value to `requestArray` -- **under a
+    /// `SYNTAX` condition and nowhere else**.
     ///
-    /// Measured: `additional (.array)` is a 98 execution error at rc 158, and
-    /// `additional (.environment)` substitutes `INPUTOUTPUTSTREAM` -- the
-    /// first entry of the array the directory converts to -- where rendering
-    /// the object substituted its own name into an otherwise correct 40.1.
-    /// Found by this task's own audit of the conversion surfaces rather than
-    /// by a review.
+    /// `RaiseInstruction::execute` (`instructions/RaiseInstruction.cpp:270`
+    /// -`290`) makes that call once, inside
+    /// `if (errorCode->strCompare(SYNTAX))`. Measured: `additional (.array)`
+    /// is a 98 execution error at rc 158, and `additional (.environment)`
+    /// substitutes `INPUTOUTPUTSTREAM` -- the first entry of the array the
+    /// directory converts to -- where rendering the object substituted its own
+    /// name into an otherwise correct 40.1.
+    ///
+    /// **The `ARRAY (...)` form is not this and is deliberately absent.** The
+    /// oracle builds a real `ArrayClass` from those elements first
+    /// (`:217`-`:239`), so the `requestArray` below gets an array and returns
+    /// it unchanged; the elements are rendered, never converted. A check on
+    /// that arm refused three programs this crate already matched, which is
+    /// what [`a_raise_the_oracle_does_not_array_convert_still_answers`] now
+    /// holds it to.
     #[test]
-    fn an_object_as_a_raise_substitution_is_loud() {
-        for (source, position) in [
-            (
-                &b"raise syntax 40.1 additional (.array)\n"[..],
-                "a RAISE ADDITIONAL value",
-            ),
-            (
-                b"raise syntax 40.1 additional (.environment)\n",
-                "a RAISE ADDITIONAL value",
-            ),
-            (
-                b"raise syntax 40.1 array (.array)\n",
-                "a RAISE ARRAY element",
-            ),
+    fn an_object_as_a_raise_syntax_substitution_is_loud() {
+        for source in [
+            &b"raise syntax 40.1 additional (.array)\n"[..],
+            b"raise syntax 40.1 additional (.environment)\n",
         ] {
             let (code, stdout, stderr) = both_engines(source);
             assert_eq!(
@@ -3118,8 +3117,67 @@ mod object_operand_tests {
                 String::from_utf8_lossy(source)
             );
             assert!(
-                stderr.contains(position),
+                stderr.contains("a RAISE ADDITIONAL value"),
                 "{:?} must name its position, got {stderr:?}",
+                String::from_utf8_lossy(source)
+            );
+        }
+    }
+
+    /// **The `RAISE` over-refusal control, and the reason it is its own
+    /// test.**
+    ///
+    /// Every expected string below is the oracle's own output for that
+    /// program, and every one of them was **rc 120 for a while**: the first
+    /// version of the `RAISE` fix checked the `ARRAY` elements and checked
+    /// `ADDITIONAL` under every condition, which refused four programs this
+    /// crate had been matching byte for byte. It shipped with the whole suite
+    /// green, because the control standing in for it was a counted loop with
+    /// no `RAISE` in it.
+    #[test]
+    fn a_raise_the_oracle_does_not_array_convert_still_answers() {
+        let cases: &[(&[u8], i32, &str)] = &[
+            // The ARRAY form: the oracle has an array already, so the object
+            // is rendered into the substitution like any other value.
+            (
+                b"raise syntax 40.1 array (.array)\n",
+                216,
+                "External routine \"The Array class\" failed.",
+            ),
+            (
+                b"raise syntax 40.1 array (.environment)\n",
+                216,
+                "External routine \"The Environment Directory\" failed.",
+            ),
+            (
+                b"raise syntax 40.1 array (.array, 'b')\n",
+                216,
+                "External routine \"The Array class\" failed.",
+            ),
+            // Not a SYNTAX condition, so `requestArray` is never reached.
+            (
+                b"signal on user zork name got\nraise user zork additional (.array)\ngot:\nsay 'trapped'\n",
+                0,
+                "",
+            ),
+            // DESCRIPTION is a different keyword and never array-converted.
+            (
+                b"raise syntax 40.1 description (.array)\n",
+                216,
+                "External routine \"&1\" failed.",
+            ),
+        ];
+        for (source, expected_code, expected_in_stderr) in cases {
+            let (code, _stdout, stderr) = both_engines(source);
+            assert_eq!(
+                code,
+                *expected_code,
+                "{:?} reported {stderr:?}",
+                String::from_utf8_lossy(source)
+            );
+            assert!(
+                stderr.contains(expected_in_stderr),
+                "{:?} must still answer the oracle's own bytes, got {stderr:?}",
                 String::from_utf8_lossy(source)
             );
         }
@@ -3162,8 +3220,6 @@ mod object_operand_tests {
             (b"a. = .array\nsay a.\n", "The Array class\n"),
             (b"a. = .array\nsay a. || 'x'\n", "The Array classx\n"),
             (b"z. = 5\ndo i = 1 to z.\nsay i\nend\n", "1\n2\n3\n4\n5\n"),
-            // A `RAISE` substitution that is an ordinary value still renders.
-            (b"do i = 1 to 2\nsay i\nend\n", "1\n2\n"),
         ];
         for (source, expected) in cases {
             let (code, stdout, stderr) = both_engines(source);

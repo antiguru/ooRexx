@@ -2688,49 +2688,77 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   handle equality.
 
   THE REFUSAL IS NOT THE WHOLE OPERATOR SET, AND IT IS NOT ONLY OPERATORS.
-  Three fix rounds found the same defect at four different surfaces, each
-  discovered rather than derived, so the fourth round enumerated the surfaces
-  instead. The table below is that enumeration: every place a value of one of
-  these shapes can be handed to code that assumes text, a number, a logical or
-  an array. It is the artifact that closes this class, and the next task to
-  add a native object should extend it rather than rediscover it.
+  Three fix rounds found the same defect at a new surface each time, so the
+  fourth enumerated the surfaces instead. The table below is that enumeration:
+  every place a value of one of these shapes can be handed to code that
+  assumes text, a number, a logical or an array. The next task to add a native
+  object should extend it rather than rediscover it.
 
-  HOW TO READ IT. "Refuses" means loud rc 120, restoring what the pre-Phase-5
-  build did for the same program; "agrees" means this crate already produces
-  the oracle's bytes and refusing would over-refuse a program the oracle runs.
-  Every row was probed against the live oracle with `.array` (a class object)
-  and, where the two can differ, `.environment` (an interpreter object). The
-  crate column is both engines; none of the rows differs between them.
+  HOW TO READ IT, AND THE RULE THAT DECIDES A ROW. A row AGREES when this
+  crate already produces the oracle's bytes for that program on all three
+  descriptors; refusing such a row is a regression, not a gap. A row REFUSES
+  when it does not, and the oracle's answer needs a mechanism this crate has
+  no way to produce. Nothing else decides it.
 
-    SURFACE                     CONVERSION        ORACLE            VERDICT
-    --------------------------------------------------------------------------
-    comparison, object LEFT     identity          0 / 97.1          refuses
-    arithmetic, object LEFT     message send      97.1              refuses
-    &, |, &&, object LEFT       message send      97.1              refuses
-    prefix + - \                message send      97.1              refuses
-    DO header initial/TO/BY     unary +           97.1              refuses
-    DO control variable         unary +           97.1              refuses
-    DO OVER target              requestArray      98.913 / entries  refuses
-    RAISE ADDITIONAL (x)        requestArray      98.9xx / entries  refuses
-    RAISE ARRAY (x)             requestArray      98.9xx / entries  refuses
-    --------------------------------------------------------------------------
-    any operator, object RIGHT  stringValue()     41.1 / 0 / 1      agrees
-    || and abuttal and blank    stringValue()     the rendering     agrees
-    SAY                         stringValue()     the rendering     agrees
-    assignment then read        none              the rendering     agrees
-    a stem's own name read      stringValue()     the rendering     agrees
-    compound tail in a name     stringValue()     the tail          agrees
-    IF / WHEN / WHILE / UNTIL   text              34.1/.2/.3/.4     agrees
-    a comma condition list      text              34.6              agrees
-    DO FOR and repeat count     whole_nonneg      26.3 / 26.2       agrees
-    PARSE positional =(expr)    whole_nonneg      26.4              agrees
-    NUMERIC DIGITS / FUZZ       set_digits_str    26.5 / 26.6       agrees
-    SIGNAL VALUE                stringValue()     16.1              agrees
-    ADDRESS VALUE               stringValue()     rc 0              agrees
-    CALL (expr)                 stringValue()     43.1              agrees
-    TRACE VALUE                 stringValue()     24.1              agrees
-    PARSE ARG                   stringValue()     the rendering     agrees
-    builtin argument            per builtin       93.9xx / 40.12    agrees
+  IN PARTICULAR, "THE PRE-PHASE-5 BUILD REFUSED IT TOO" DECIDES NOTHING, and
+  an earlier version of this table said it did. That build refused every
+  program here, on both sides of the line, because it resolved no `.NAME` at
+  all -- so the test was true of all of them and licensed any over-refusal.
+  It licensed exactly one: a `RAISE` check written against it refused four
+  programs this crate had been matching byte for byte. Every row below was
+  re-probed against the live oracle under the rule above, on both engines,
+  which agree on every row.
+
+    SURFACE                     WHAT THE ORACLE DOES WITH IT  ANSWER    ROW
+    -------------------------------------------------------------------------
+    comparison, object LEFT     compares identity             0         refuses
+    arithmetic, object LEFT     sends the operator            97.1      refuses
+    &, |, &&, object LEFT       sends the operator            97.1      refuses
+    prefix + - \                sends the operator            97.1      refuses
+    DO header initial           unary + on the value          97.1      refuses
+    DO header TO                unary + on the value          97.1      refuses
+    DO header BY                unary + on the value          97.1      refuses
+    DO control variable         unary + at the increment      97.1      refuses
+    DO OVER target              requestArray                  98.913    refuses
+    RAISE SYNTAX ADDITIONAL     requestArray                  98.939    refuses
+    -------------------------------------------------------------------------
+    any operator, object RIGHT  the left operand converts it  41.1 / 1  agrees
+    2 ** object                 whole-number conversion       26.8      agrees
+    || and abuttal and blank    stringValue() on both sides   rendering agrees
+    SAY                         stringValue()                 rendering agrees
+    assignment then read        nothing                       rendering agrees
+    a stem's own name read      stringValue()                 rendering agrees
+    compound tail in a name     stringValue()                 the tail  agrees
+    IF / WHEN / WHILE / UNTIL   tests the text                34.1-.4   agrees
+    a comma condition list      tests the text                34.6      agrees
+    SELECT CASE                 compares the text             rc 0      agrees
+    DO FOR                      whole_nonneg                  26.3      agrees
+    DO repeat count             whole_nonneg                  26.2      agrees
+    PARSE positional =(expr)    whole_nonneg                  26.4      agrees
+    NUMERIC DIGITS              set_digits_str on the text    26.5      agrees
+    NUMERIC FUZZ                set_fuzz_str on the text      26.6      agrees
+    SIGNAL VALUE                stringValue()                 16.1      agrees
+    ADDRESS VALUE               stringValue()                 rc 0      agrees
+    CALL (expr)                 stringValue()                 43.1      agrees
+    TRACE VALUE                 stringValue()                 24.1      agrees
+    PARSE ARG                   stringValue()                 rendering agrees
+    EXIT                        stringValue()                 rc 0      agrees
+    builtin argument            per builtin                   93.9xx    agrees
+    RAISE condition expression  stringValue()                 33.904    agrees
+    RAISE DESCRIPTION           stringValue()                 40.1 &1   agrees
+    RAISE ARRAY (x)             stringValue()                 40.1      agrees
+    RAISE ARRAY (x, y)          stringValue()                 40.1      agrees
+    RAISE USER ADDITIONAL       stringValue()                 rc 0      agrees
+
+  WHY `RAISE` SPLITS THE WAY IT DOES, since it is the row that went wrong.
+  `RaiseInstruction::execute` calls `requestArray` exactly once, on the
+  additional information, and only inside
+  `if (errorCode->strCompare(SYNTAX))` (`instructions/RaiseInstruction.cpp:
+  270`-`290`). So a USER condition never reaches it. And the `ARRAY (...)`
+  form has already built a real `ArrayClass` from its elements by then
+  (`:217`-`:239`), so that call gets an array and returns it unchanged -- the
+  elements are rendered by the substitution machinery, never converted, one
+  element or several.
 
   THE STEM DEFAULT REDIRECT IS A ROUTE, NOT A SURFACE, and it took a round of
   its own. `a. = .array` puts the object in the stem's default, and `to_text`
@@ -2741,14 +2769,28 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   `a. = .array; say a.zz + 1` was loud already, because a compound read yields
   the class handle itself.
 
-  WHAT THE TABLE STILL CANNOT SEE. `DO x OVER` a stem, and a `RAISE ARRAY`
-  list of two or more, are loud for their own earlier reasons and so cannot
-  distinguish this gap from those. `NUMERIC FORM <expr>` is loud in every
-  build including the pinned one, so it is out of scope rather than agreeing.
-  And a surface added later is not in this table by construction, which is the
-  reason it names the conversion each row makes: a new caller of
-  `requestArray`, of a unary operator, or of `to_number` on an operand the
-  oracle sends a message to, belongs on the refusing side.
+  FUTURE WORK -- `requestArray` SITES NOT REACHABLE TODAY. The oracle calls it
+  in four more places, none of which any program can reach with one of these
+  objects in this phase, so none is a silent wrong answer now. Whichever task
+  makes one reachable owes it a row above:
+
+    ForwardInstruction.cpp:185        FORWARD ARGUMENTS -- a FORWARD in a
+                                      ::METHOD body never executes yet
+    CommandIOConfiguration.cpp:367    ADDRESS ... WITH INPUT USING (expr) --
+                                      loud, Phase 7
+    ObjectClass.cpp:2136              ~sendWith / ~startWith -- no send to a
+                                      class object resolves yet
+    BaseExecutable.cpp:181            a Method or Routine built from a source
+                                      array -- nothing constructs one yet
+
+  WHAT THE TABLE STILL CANNOT SEE. `DO x OVER` a stem is loud for its own
+  earlier reason and so cannot distinguish this gap from that one.
+  `NUMERIC FORM <expr>` is loud in every build including the pinned one, so it
+  is out of scope rather than agreeing. And a surface added later is not in
+  this table by construction, which is why every row names the conversion it
+  makes: a new caller of `requestArray`, of a unary operator, or of a
+  message send on an operand belongs on the refusing side, and a new caller of
+  `stringValue()` or of a text test belongs on the agreeing side.
 
   `rust/crates/rexx-exec/src/eval.rs`'s `object_operand_tests` pins the
   refusals and the agreements it can reach in-crate;
