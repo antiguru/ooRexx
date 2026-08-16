@@ -599,6 +599,17 @@ impl ClassGraph {
         self.behaviours[handle.0].dict.method_names()
     }
 
+    /// True once `scope` has been folded into a specific handle's dictionary
+    /// -- what distinguishes [`MethodDict::merge`] (methods and scope
+    /// history) from `merge_methods` alone (methods only): a build that
+    /// replaced the former with the latter in `cascade_build`'s metaclass
+    /// branch would still pass every `has_method_at`/`method_names_at`
+    /// check (the donated *methods* still land) while this would go false
+    /// for the metaclass's own scope specifically.
+    pub fn has_scope_at(&self, handle: BehaviourHandle, scope: ObjRef) -> bool {
+        self.behaviours[handle.0].dict.has_scope(scope)
+    }
+
     /// An ordinary (unscoped) lookup against a specific handle.
     pub fn lookup_at(&self, handle: BehaviourHandle, name: &str) -> Option<(ObjRef, MethodId)> {
         self.behaviours[handle.0].dict.lookup(name)

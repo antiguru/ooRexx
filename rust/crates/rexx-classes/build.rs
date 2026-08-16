@@ -6,10 +6,12 @@
 //! Two tables come out of one file:
 //!
 //! * `SETUP_CLASSES` -- the checklist. Every `X::createInstance();` call in
-//!   `MemoryObject::createImage` (`/bin/grep -aE "createInstance\(\)"`,
-//!   matching the brief's own specified command), in file order. This is
-//!   the C++ *type* name (`RexxInteger`, `ArrayClass`, ...), not
-//!   necessarily the Rexx-visible id string.
+//!   `MemoryObject::createImage`, in file order -- a Rust line scan
+//!   (`parse_checklist`, below), not a shelled-out `grep`, but it matches
+//!   the same lines the brief's own specified command
+//!   (`/bin/grep -aE "createInstance\(\)"`) does. This is the C++ *type*
+//!   name (`RexxInteger`, `ArrayClass`, ...), not necessarily the
+//!   Rexx-visible id string.
 //! * `CLASS_DEFINITIONS` -- for every `StartClassDefinition(Name)` block up
 //!   to its matching `EndClassDefinition`/`EndSpecialClassDefinition(Name)`,
 //!   the ordered sequence of `AddMethod`/`AddClassMethod`/

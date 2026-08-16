@@ -36,8 +36,7 @@
 //!
 //! [`DEFERRALS`] is the deferral table: every checklist entry this module
 //! does not build natively, and why. None for "not needed yet" -- each
-//! names a concrete missing mechanism or a fact the oracle itself
-//! contradicts a bare `Setup.cpp` reading:
+//! names a concrete missing mechanism:
 //!
 //! * `RexxInteger`, `NumberString`, `RexxInfo` -- **not reachable through
 //!   this registry's own `.NAME` lookup at all**, measured directly:
@@ -63,53 +62,56 @@
 //! * `VariableReference`, `StemClass` -- Setup.cpp hides `=`, `==`, `\=`,
 //!   `\==`, `<>`, `><` (`HideMethod`) so they redirect to `UNKNOWN`; the
 //!   same not-modelled removal/tombstone mechanism as `Queue`'s.
-//! * `RexxString`, `ArrayClass`, `TableClass`, `IdentityTable`,
-//!   `RelationClass`, `StringTable`, `DirectoryClass`, `SetClass`,
-//!   `BagClass`, `ListClass`, `MessageClass`, `SupplierClass` --
-//!   **`CoreClasses.orx`'s own prologue changes what the live oracle
-//!   answers for these, past what `Setup.cpp` alone builds**, measured
-//!   directly against the running oracle (`~superClasses` and a
-//!   scope-exact `~instanceMethods(class)` query), not inferred: `.String`
-//!   gains a class-side extension (`ALNUM`/`ALPHA`/.../`XDIGIT`) with no
-//!   `~inherit` at all; `.Array`/`.List`/`.Queue` each `~inherit`
-//!   `.OrderedCollection`; `.IdentityTable`/`.Table`/`.StringTable`/
-//!   `.Directory`/`.Relation`/`.Set`/`.Bag`/`.Stem` each `~inherit`
-//!   `.MapCollection`; `.Set`/`.Bag` additionally `~inherit`
-//!   `.SetCollection`; `.Message` `~inherit`s `.MessageNotification` and
-//!   `.AlarmNotification`; `.Supplier`
-//!   `~inheritInstanceMethods(.SupplierMixin)` (donating `allItems`,
-//!   `allIndexes`, `getArrays`, `supplier` without a superclass edge, so
-//!   `~superClasses` alone would miss it -- exactly the hazard this
-//!   task's brief names). None of `OrderedCollection`, `MapCollection`,
-//!   `SetCollection`, `Comparable`, `MessageNotification`,
-//!   `AlarmNotification` or `SupplierMixin` is a `Setup.cpp`/C++ class --
-//!   each is a `::CLASS ... MIXINCLASS` **defined inside
-//!   `CoreClasses.orx` itself** (`interpreter/RexxClasses/CoreClasses.orx`,
-//!   confirmed by `grep`), so building any of these twelve classes
-//!   correctly needs the prologue this task cannot run (D25's own
-//!   qualification, Task 13's). A `Setup.cpp`-only build would answer
-//!   `~superClasses`/the method set wrong for every one of them --
-//!   exactly "transcribing a plausible-looking class list ... and
-//!   asserting it against itself," which the ruling forbids.
 //!
-//! Every other checklist entry is built: superclass `.Object` (root
+//! **Ruling R8 (task review, 2026-08-16): the twelve classes `CoreClasses.orx`
+//! later mutates are built here, not deferred.** An earlier draft of this
+//! module deferred `RexxString`/`ArrayClass`/`TableClass`/`IdentityTable`/
+//! `RelationClass`/`StringTable`/`DirectoryClass`/`SetClass`/`BagClass`/
+//! `ListClass`/`MessageClass`/`SupplierClass` on the grounds that
+//! `CoreClasses.orx` changes what the *live, fully-booted* oracle answers for
+//! them. That reasoning was circular: `CoreClasses.orx` **mutates** these
+//! classes, which means they must already exist as native class objects
+//! before the prologue can touch them. What is unbuildable today is their
+//! *post-prologue* state, not the class itself, and deferring the class
+//! would leave whichever task runs the prologue (Task 13) also having to
+//! create twelve classes first -- work outside that task's scope. So all
+//! twelve are built here, from `Setup.cpp` alone, exactly like the other
+//! thirteen.
+//!
+//! **The verification bar for these twelve is deliberately not the other
+//! thirteen's.** Byte-identity against the live oracle is impossible
+//! pre-prologue: the only oracle this crate can run is fully booted, past
+//! the point these classes are still in the state this module builds.
+//! `tests/native_classes_wiring.rs` instead: (a) asserts each one's derived
+//! `own_instance_method_names`/`own_class_method_names` exactly, against a
+//! set read from `Setup.cpp` -- checkable today, and the state each class
+//! must be in when the prologue starts; (b) *measures* (not assumes) that
+//! this crate's flattened set is a subset of the live oracle's for a
+//! representative sample, and records the measured difference against the
+//! `CoreClasses.orx` line that donates it (`~inherit`s of `OrderedCollection`,
+//! `MapCollection`, `SetCollection`, `Comparable`, `MessageNotification`,
+//! `AlarmNotification`, all `::CLASS MIXINCLASS` definitions **inside
+//! `CoreClasses.orx` itself**, confirmed by `grep`, plus `.Supplier`'s
+//! `~inheritInstanceMethods(.SupplierMixin)`, which adds no superclass edge).
+//! Full post-prologue correctness for these twelve -- their `~superClasses`,
+//! their complete flattened method set -- is explicitly **Task 13's**, not
+//! asserted here.
+//!
+//! Every checklist entry not deferred is built: superclass `.Object` (root
 //! excepted), metaclass `.Class` (`.Class` itself excepted, self-
 //! referentially) -- `buildFinalClassBehaviour`'s own unconditional
 //! `metaClass = TheClassClass` and `superClasses->addLast(TheObjectClass)`
 //! (`ClassClass.cpp:713`, `:725`), the single bootstrap path every one of
-//! these thirteen classes goes through, measured against the oracle to have
-//! no further `CoreClasses.orx` extension. `InheritInstanceMethods(source)`
+//! these twenty-five classes goes through. `InheritInstanceMethods(source)`
 //! operations replay through [`crate::ClassRegistry::inherit_instance_methods`]
 //! (`RexxClass::inheritInstanceMethods`'s donate-by-own-dictionary
 //! semantics) rather than `RexxBehaviour::inheritInstanceMethods`'s
 //! bootstrap-only donate-by-flattened-behaviour semantics
 //! (`RexxBehaviour.cpp:350-361`, what `Setup.cpp`'s macro actually calls) --
 //! see [`crate::ClassRegistry::inherit_instance_methods`]'s own doc comment
-//! for why the two agree on every name this task's probes check. (None of
-//! the thirteen native classes actually uses `InheritInstanceMethods` --
-//! every donor `Setup.cpp` names one is itself deferred -- so this
-//! substitution is recorded for completeness rather than currently
-//! exercised.)
+//! for why the two agree on every name this task's probes check. `Table`,
+//! `StringTable`, `Set`, `Directory`, `Relation` and `Bag` are the actual
+//! `InheritInstanceMethods` users now that R8 lifted their deferral.
 
 use crate::class_graph::ClassKind;
 use crate::registry::ClassRegistry;
@@ -206,83 +208,6 @@ const DEFERRALS: &[Deferral] = &[
                  .MapCollection from CoreClasses.orx, measured (~superClasses gains it): a \
                  second, independent reason.",
     },
-    Deferral {
-        setup_class: "RexxString",
-        reason: "CoreClasses.orx: .string~inherit(.Comparable) (measured, ~superClasses gains \
-                 Comparable) and a class-side extension with no ~inherit at all (ALNUM, ALPHA, \
-                 BLANK, CNTRL, CR, DIGIT, GRAPH, LOWER, NL, NULL, PRINT, PUNCT, SPACE, TAB, \
-                 UPPER, XDIGIT -- measured via .string~instanceMethods(.string)). Comparable is \
-                 a ::CLASS MIXINCLASS defined inside CoreClasses.orx itself, not a Setup.cpp/C++ \
-                 class -- needs the prologue this task cannot run.",
-    },
-    Deferral {
-        setup_class: "ArrayClass",
-        reason: "CoreClasses.orx: .array~inherit(.OrderedCollection), measured (~superClasses \
-                 gains OrderedCollection). OrderedCollection is a ::CLASS MIXINCLASS defined \
-                 inside CoreClasses.orx itself -- needs the prologue this task cannot run.",
-    },
-    Deferral {
-        setup_class: "ListClass",
-        reason: "CoreClasses.orx: .list~inherit(.OrderedCollection), measured. Same missing \
-                 mechanism as ArrayClass.",
-    },
-    Deferral {
-        setup_class: "IdentityTable",
-        reason: "CoreClasses.orx: .identityTable~inherit(.MapCollection), measured \
-                 (~superClasses gains MapCollection). MapCollection is a ::CLASS MIXINCLASS \
-                 defined inside CoreClasses.orx itself -- needs the prologue this task cannot \
-                 run.",
-    },
-    Deferral {
-        setup_class: "TableClass",
-        reason: "CoreClasses.orx: .table~inherit(.MapCollection), measured. Same missing \
-                 mechanism as IdentityTable.",
-    },
-    Deferral {
-        setup_class: "StringTable",
-        reason: "CoreClasses.orx: .stringTable~inherit(.MapCollection), measured. Same missing \
-                 mechanism as IdentityTable.",
-    },
-    Deferral {
-        setup_class: "DirectoryClass",
-        reason: "CoreClasses.orx: .directory~inherit(.MapCollection), measured. Same missing \
-                 mechanism as IdentityTable.",
-    },
-    Deferral {
-        setup_class: "RelationClass",
-        reason: "CoreClasses.orx: .relation~inherit(.MapCollection), measured, and its own \
-                 instance-side content diverges too (INTERSECTION/UNION/XOR/SUBSET/DIFFERENCE \
-                 present on a live instance via .relation~instanceMethods(.relation) that \
-                 Setup.cpp alone never adds -- ManyItemMixin, donated by \
-                 ~inheritInstanceMethods, another CoreClasses.orx-only mixin).",
-    },
-    Deferral {
-        setup_class: "SetClass",
-        reason: "CoreClasses.orx: .set~inherit(.MapCollection) and .set~inherit(.SetCollection), \
-                 measured (~superClasses gains both), plus SetMixin's donated content \
-                 (INTERSECTION/UNION/XOR/SUBSET measured present on a live instance) -- three \
-                 independent CoreClasses.orx-only mixins.",
-    },
-    Deferral {
-        setup_class: "BagClass",
-        reason: "CoreClasses.orx: .bag~inherit(.MapCollection) and .bag~inherit(.SetCollection), \
-                 measured, plus BagMixin's donated content (same shape as SetClass's).",
-    },
-    Deferral {
-        setup_class: "MessageClass",
-        reason: "CoreClasses.orx: .message~inherit(.MessageNotification) and \
-                 .message~inherit(.AlarmNotification), measured (~superClasses gains both). \
-                 Both are ::CLASS MIXINCLASS Object definitions inside CoreClasses.orx itself.",
-    },
-    Deferral {
-        setup_class: "SupplierClass",
-        reason: "CoreClasses.orx: .supplier~inheritInstanceMethods(.SupplierMixin), donating \
-                 allItems/allIndexes/getArrays/supplier -- measured present on a live instance \
-                 via .supplier~instanceMethods(.supplier), absent from Setup.cpp's own five \
-                 (Available/Index/Next/Item/Init). No superclass edge (inheritInstanceMethods \
-                 never adds one), so ~superClasses alone would miss this -- exactly the hazard \
-                 this task's brief names; the method-set probe is what catches it.",
-    },
 ];
 
 /// The checklist, unfiltered -- `SETUP_CLASSES`, `build.rs`-derived.
@@ -302,16 +227,20 @@ fn definition_for(block_name: &str) -> &'static ClassDefinition {
         .unwrap_or_else(|| panic!("no CLASS_DEFINITIONS block named {block_name:?}"))
 }
 
-/// `Setup.cpp:1809`'s `TheClassClass->removeSetupMethods()`, applied at
-/// image-save time to delete exactly these two names from `.Class`'s own
-/// instance methods (D39). `MethodDict` has no removal primitive (Task 2's
-/// own scope decision), so this bootstrap reproduces the *deleted* state by
-/// never adding them in the first place, rather than adding then removing --
-/// the same final answer `removeSetupMethods` leaves, reached without a
-/// removal mechanism this crate does not otherwise need. Measured: the live
-/// oracle's `.class~instancemethods(.class)` does not include either name;
-/// keeping them would be the exact corpus-visible divergence D39 warns
-/// about.
+/// `Setup.cpp:1809`'s `TheClassClass->removeSetupMethods()`: `TheClassClass`
+/// specifically, applied at image-save time to delete exactly these two
+/// names from `.Class`'s own instance methods (D39). `MethodDict` has no
+/// removal primitive (Task 2's own scope decision), so this bootstrap
+/// reproduces the *deleted* state by never adding them in the first place,
+/// rather than adding then removing -- the same final answer
+/// `removeSetupMethods` leaves, reached without a removal mechanism this
+/// crate does not otherwise need. Measured: the live oracle's
+/// `.class~instancemethods(.class)` does not include either name; keeping
+/// them would be the exact corpus-visible divergence D39 warns about. Scoped
+/// to the `"Class"` block alone in [`replay`], matching `removeSetupMethods`
+/// being `TheClassClass`'s own method, not a blanket rule -- harmless today
+/// either way, since no other block's `AddMethod` list names either string,
+/// but scoping it is what keeps that true rather than assuming it.
 const REMOVED_BY_IMAGE_SAVE: &[&str] = &["DefineClassMethod", "InheritInstanceMethods"];
 
 fn replay(registry: &mut ClassRegistry, class: rexx_core::ObjRef, def: &ClassDefinition) {
@@ -319,7 +248,7 @@ fn replay(registry: &mut ClassRegistry, class: rexx_core::ObjRef, def: &ClassDef
         match op {
             Op::AddClassMethod(name) => registry.add_class_method(class, name),
             Op::AddInstanceMethod(name) => {
-                if REMOVED_BY_IMAGE_SAVE.contains(name) {
+                if def.name == "Class" && REMOVED_BY_IMAGE_SAVE.contains(name) {
                     continue;
                 }
                 registry.add_instance_method(class, name)

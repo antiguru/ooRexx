@@ -154,6 +154,12 @@ impl ClassRegistry {
         self.graph.ancestors(class)
     }
 
+    /// `~subClasses` -- oracle's `subClasses`, the reverse edge every
+    /// `define_class`/`inherit` call maintains alongside `superclasses`.
+    pub fn subclasses(&self, class: ObjRef) -> &[ObjRef] {
+        self.graph.subclasses(class)
+    }
+
     /// `~isA`/`~isSubclassOf` -- oracle's `RexxClass::isCompatibleWith`
     /// (`ClassClass.cpp:1660-1681`): `class == other`, or any of `class`'s
     /// ancestors is compatible with `other`, recursively over the same
@@ -196,6 +202,15 @@ impl ClassRegistry {
     pub fn class_method_names(&self, class: ObjRef) -> std::collections::BTreeSet<String> {
         self.graph
             .method_names_at(self.graph.class_behaviour_handle(class))
+    }
+
+    /// True once `scope` is folded into `class`'s current class-behaviour --
+    /// see [`ClassGraph::has_scope_at`] for why this, not a method-presence
+    /// check, is what witnesses [`MethodDict::merge`]'s scope-copying half
+    /// of the metaclass merge (D44).
+    pub fn class_behaviour_has_scope(&self, class: ObjRef, scope: ObjRef) -> bool {
+        self.graph
+            .has_scope_at(self.graph.class_behaviour_handle(class), scope)
     }
 
     /// `~hasMethod` against the class's current instance behaviour.
