@@ -3032,13 +3032,14 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   compare, which is D41's territory and 5c's by R3. No owner is assigned here.
   It is written down so it is not rediscovered as a Phase 5 regression.
 
-  KNOWN GAP: `PRIVATE` AND `GUARD` ON A ::METHOD ARE NOT MODELLED, AND WHAT
-  MAKES EACH ONE SAFE TODAY WILL NOT LAST. A ::METHOD body runs now, so its
-  directive options are reachable, and these two do not do what the oracle's
-  do. What matters to a later task is not that they are open but WHAT MAKES
-  EACH ONE CURRENTLY SAFE, since that is the thing that stops being true, so
-  each limb below says it. This entry is about those two by name and does not
-  claim to enumerate the ::METHOD options this crate leaves unmodelled.
+  KNOWN GAP: `PRIVATE`, `GUARD` AND `PROTECTED` ON A ::METHOD ARE NOT
+  MODELLED, AND WHAT MAKES EACH ONE SAFE TODAY WILL NOT LAST. A ::METHOD body
+  runs now, so its directive options are reachable, and these do not do what
+  the oracle's do. What matters to a later task is not that they are open but
+  WHAT MAKES EACH ONE CURRENTLY SAFE, since that is the thing that stops being
+  true, so each limb below says it. This entry is about those three by name
+  and does not claim to enumerate the ::METHOD options this crate leaves
+  unmodelled.
 
   `PRIVATE` IS MODELLED AS A REFUSAL, WHICH IS AN OVER-REFUSAL. The oracle
   refuses the send only from outside the defining scope; from inside one of
@@ -3090,10 +3091,49 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   class library nobody has looked for -- owns making the guard real rather
   than inheriting a silent no-op.
 
-  NEITHER LIMB HAS AN OWNER ASSIGNED. Both are recorded here rather than in a
+  `PROTECTED` IS MODELLED AS NOTHING, THE SAME WAY `GUARD` IS. `rexx-parse`
+  records the option on the directive (`Protection`, `ast.rs`) and nothing in
+  `rexx-exec` reads it, so `PROTECTED`, `UNPROTECTED` and the default all run
+  the same body the same way. Measured, a class with a `protected` method and
+  an `unprotected` one: both engines and the oracle print `protected ran` and
+  `unprotected ran` at rc 0, which is agreement by the table's own rule and
+  says nothing about the protection.
+
+  WHAT MAKES IT UNOBSERVABLE is that the option is read at one place in the
+  oracle and only when a SECURITY MANAGER OBJECT EXISTS.
+  `RexxObject::messageSend` sends a protected method through
+  `processProtectedMethod` (`classes/ObjectClass.cpp:976`), which asks
+  `SecurityManager::checkProtectedMethod` (`execution/SecurityManager.cpp:
+  175`) -- and that returns `false` on its first line when `manager ==
+  OREF_NULL`, so with no manager installed the method simply runs. This is
+  the same seam `dispatch.rs`'s `mod seam` documents as D45 site one.
+
+  A REXX PROGRAM INSTALLS ONE ONLY BY SENDING `~setSecurityManager` to a
+  Package, a Method or a Routine object, and every route to one of those is
+  LOUD here. Measured on this crate, both engines: `.context~package` is rc
+  120 (`a message send to one of the interpreter's own objects is not
+  implemented`) where the oracle answers `a Package`; `.methods['M']` and
+  `.routines['R']` are the same refusal where the oracle answers `a Method`
+  and `a Routine`; `.Method~new('x', 'return 1')` is rc 120 (`method "NEW" of
+  class "Method" is not implemented`); and `.K~method('M')` is rc 120 (`method
+  "METHOD" of class "Class" is not implemented`). The oracle's remaining
+  `setSecurityManager` calls PROPAGATE a manager that already exists into a
+  `::REQUIRES` package (`package/PackageManager.cpp:806` and `:832`) rather
+  than creating one.
+
+  THAT IS A LIST OF ROUTES CHECKED HERE TOO, and this half of it is checked
+  from the oracle's side rather than from this crate's: `Setup.cpp` adds the
+  `SetSecurityManager` method to the Method, Routine and Package classes
+  (`memory/Setup.cpp:1108`, `:1134`, `:1161`) and to no other class, so those
+  object shapes are what a program has to reach. What is not enumerated is
+  the routes to those OBJECTS -- the class library was not walked looking for
+  another, exactly as for `GUARD`.
+
+  NO LIMB HAS AN OWNER ASSIGNED. All three are recorded here rather than in a
   task report because a report is not in the repository, so a later task
-  reading the tree would find `GuardOption` set by a parser and read by
-  nobody, with nothing saying whether that was decided or overlooked.
+  reading the tree would find `GuardOption` and `Protection` set by a parser
+  and read by nobody, with nothing saying whether that was decided or
+  overlooked.
 
   KNOWN GAP: VALUE'S EXTERNAL-SELECTOR FORM MIXES TWO OWNERS BEHIND ONE
   ARGUMENT. A *present* third argument to VALUE selects the pool this
