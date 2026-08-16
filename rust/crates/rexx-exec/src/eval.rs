@@ -75,7 +75,7 @@ use crate::error::Raised;
 use crate::run::{Ended, Resolved};
 use crate::value::{exact_small_int, within_digits};
 use crate::{Code, Failure, Interp, Loud, StackSpan};
-use rexx_core::{Decoded, NotNumeric, ObjRef};
+use rexx_core::{Body, Decoded, NotNumeric, ObjRef, is_class_slot};
 use rexx_num::{CompareOp, DivOp, Number, compare_decoded};
 use rexx_parse::{CallTarget, Expr, ExprKind, Operator, PrefixOp, SymbolId};
 
@@ -757,7 +757,7 @@ impl Interp {
     pub(crate) fn apply_prefix(&mut self, op: PrefixOp, value: ObjRef) -> Result<ObjRef, Failure> {
         let result = match op {
             PrefixOp::Plus | PrefixOp::Minus => {
-                let number = self.arith_operand(value)?;
+                let number = self.arith_left_operand(op.spelling(), value)?;
                 let digits = self.activation().settings.digits();
                 let form = self.activation().settings.form();
                 let result = if op == PrefixOp::Plus {
@@ -773,7 +773,14 @@ impl Interp {
                 let flipped = match logical_value(&text) {
                     Some(true) => b"0",
                     Some(false) => b"1",
-                    None => return Err(Raised::not_logical(&text).into()),
+                    // `\.array` is 97.1 on the oracle, the same message send
+                    // the dyadic operators make.
+                    None => {
+                        if let Some(kind) = self.operator_operand_gap(value) {
+                            return Err(Loud::operator_operand(op.spelling(), kind).into());
+                        }
+                        return Err(Raised::not_logical(&text).into());
+                    }
                 };
                 self.text(flipped)
             }
@@ -879,7 +886,7 @@ impl Interp {
         let digits = self.activation().settings.digits();
         let form = self.activation().settings.form();
 
-        let left_number = self.arith_operand(left_value)?;
+        let left_number = self.arith_left_operand(op.spelling(), left_value)?;
 
         let result = if op == Operator::Power {
             let exponent = match self.to_number(right_value) {
@@ -921,6 +928,30 @@ impl Interp {
         match self.to_number(value) {
             Ok(number) => Ok(number),
             Err(NotNumeric) => {
+                let text = self.to_text(value).to_vec();
+                Err(Raised::nonnumeric(&text).into())
+            }
+        }
+    }
+
+    /// [`Interp::arith_operand`] for the operand the operator is *sent to*.
+    ///
+    /// **The asymmetry is the oracle's and is measured**: `.array + 1` is 97.1
+    /// where `1 + .array` is 41.1 quoting `"The Array class"`, which this
+    /// crate already answers identically. So only the left operand -- and a
+    /// prefix operator's only one -- can carry this gap, and the right one
+    /// keeps the ordinary 41.1.
+    ///
+    /// Entirely on the failing path: an object of either shape is
+    /// [`NotNumeric`] whatever this decides, so a program doing arithmetic on
+    /// numbers never reaches the test.
+    fn arith_left_operand(&mut self, op: &str, value: ObjRef) -> Result<Number, Failure> {
+        match self.to_number(value) {
+            Ok(number) => Ok(number),
+            Err(NotNumeric) => {
+                if let Some(kind) = self.operator_operand_gap(value) {
+                    return Err(Loud::operator_operand(op, kind).into());
+                }
                 let text = self.to_text(value).to_vec();
                 Err(Raised::nonnumeric(&text).into())
             }
@@ -1025,6 +1056,13 @@ impl Interp {
         if let Some(holds) = small_int_compare(op, left_value, right_value, digits, fuzz) {
             return Ok(self.text(if holds { b"1" } else { b"0" }));
         }
+        // **Behind the fast path above, because a comparison of renderings
+        // never fails and so offers nothing to ride.** Measured, comparing an
+        // object against the very text it renders as answers `0` on the
+        // oracle and `1` here; see `Loud::operator_operand`.
+        if let Some(kind) = self.operator_operand_gap(left_value) {
+            return Err(Loud::operator_operand(op.spelling(), kind).into());
+        }
         let strict = is_strict_compare(op);
         let left_number = if strict {
             None
@@ -1078,7 +1116,18 @@ impl Interp {
         right_value: ObjRef,
     ) -> Result<ObjRef, Failure> {
         let left_text = self.to_text(left_value).to_vec();
-        let left_bool = logical_value(&left_text).ok_or_else(|| Raised::not_logical(&left_text))?;
+        let left_bool = match logical_value(&left_text) {
+            Some(value) => value,
+            // The oracle sends `&`/`|`/`&&` to the left operand as a message
+            // -- `.array & 1` is 97.1 where this crate's own 34.901 quotes
+            // the object's rendering.
+            None => {
+                if let Some(kind) = self.operator_operand_gap(left_value) {
+                    return Err(Loud::operator_operand(op.spelling(), kind).into());
+                }
+                return Err(Raised::not_logical(&left_text).into());
+            }
+        };
         let right_text = self.to_text(right_value).to_vec();
         let right_bool =
             logical_value(&right_text).ok_or_else(|| Raised::not_logical(&right_text))?;
@@ -1109,6 +1158,33 @@ impl Interp {
     ///
     /// **Both operands must already be rooted by the caller**, for the reason
     /// [`Interp::concat_values`] states.
+    /// The noun for a **left** operand no operator here can take, or `None`
+    /// for one every operator can.
+    ///
+    /// Two shapes, both new in Phase 5a and neither of them a value the oracle
+    /// treats as text when an operator meets it: a class object, and one of
+    /// the interpreter's own objects. [`Loud::operator_operand`] carries the
+    /// measurements and the reason the right operand is not this.
+    ///
+    /// **Every caller reaches this on a path that was already failing, except
+    /// [`Interp::compare_values`]**, which cannot -- a comparison of
+    /// renderings always succeeds. There it sits behind the two-small-integer
+    /// fast path, so a loop bound never pays for it.
+    fn operator_operand_gap(&self, value: ObjRef) -> Option<&'static str> {
+        // A small integer, an inline string and `.nil` all leave on this
+        // line: only a heap-tagged handle can be either shape.
+        let Decoded::Heap { slot, generation } = value.decode() else {
+            return None;
+        };
+        if is_class_slot(slot, generation) {
+            return Some("a class object");
+        }
+        match &self.heap.get(value)?.body {
+            Body::Native(_) => Some("one of the interpreter's own objects"),
+            _ => None,
+        }
+    }
+
     pub(crate) fn apply_binary(
         &mut self,
         op: Operator,
@@ -2722,5 +2798,176 @@ mod tests {
             String::from_utf8_lossy(&outcome.stderr)
         );
         assert_eq!(outcome.stdout, b"before\n");
+    }
+}
+
+/// **R12: an operator whose left operand is an object this phase can build
+/// and send no message to.**
+///
+/// A separate module because every case here runs a whole program through
+/// both engines rather than driving `eval` against a hand-built activation,
+/// which is what the module above is for.
+#[cfg(test)]
+mod object_operand_tests {
+    use crate::{Engine, Invocation, run_program};
+
+    /// Runs `source` on both engines and hands back `(exit code, stdout,
+    /// stderr)`, having first insisted the two engines agree with each other.
+    ///
+    /// **Both engines, because the check lives in `apply_binary`,
+    /// `apply_prefix`, `arith_general` and `compare_values`, all four of
+    /// which `crate::ir::Op::Binary`/`Op::Arith`/`Op::Prefix` enter as well.**
+    /// A check placed in `eval_node` instead would leave the compiled arm
+    /// answering, and only running both arms can tell.
+    fn both_engines(source: &[u8]) -> (i32, String, String) {
+        let mut answer = None;
+        for engine in [Engine::TreeWalker, Engine::Ir] {
+            let outcome = run_program(
+                "/t.rex",
+                source.to_vec(),
+                Invocation::none().with_engine(engine),
+            );
+            let seen = (
+                outcome.exit_code,
+                String::from_utf8_lossy(&outcome.stdout).into_owned(),
+                String::from_utf8_lossy(&outcome.stderr).into_owned(),
+            );
+            match &answer {
+                None => answer = Some(seen),
+                Some(first) => assert_eq!(
+                    first,
+                    &seen,
+                    "the two engines disagree on {:?}",
+                    String::from_utf8_lossy(source)
+                ),
+            }
+        }
+        answer.expect("at least one engine ran")
+    }
+
+    /// Every operator the oracle sends to its left operand as a message
+    /// refuses loudly, naming the operator and the operand's shape.
+    ///
+    /// **Each of these answered at rc 0 or raised the wrong condition before
+    /// this test existed**, and the pre-Phase-5 build refused the whole
+    /// program at rc 120 because `.array` did not resolve at all -- so
+    /// resolving the name without this check turned a loud gap into a wrong
+    /// answer. The oracle's own answer is in each row's comment.
+    #[test]
+    fn an_operator_sent_to_an_object_is_loud() {
+        // (source, the operator the message must name, the shape it must name)
+        let cases: &[(&[u8], &str, &str)] = &[
+            // oracle 0 -- identity, not a comparison of renderings
+            (
+                b"say (.array == 'The Array class')\n",
+                "==",
+                "a class object",
+            ),
+            (b"say (.array = 'The Array class')\n", "=", "a class object"),
+            (
+                b"say (.array \\== 'The Array class')\n",
+                "\\==",
+                "a class object",
+            ),
+            // oracle 97.1 at rc 159 -- the operator is a message the class
+            // does not answer
+            (b"say (.array > .array)\n", ">", "a class object"),
+            (b"say (.array + 1)\n", "+", "a class object"),
+            (b"say (.array ** 1)\n", "**", "a class object"),
+            (b"say (.array & 1)\n", "&", "a class object"),
+            (b"say -.array\n", "-", "a class object"),
+            (b"say \\.array\n", "\\", "a class object"),
+            // oracle 0, "The NIL object" -- Directory answers `+` through its
+            // own UNKNOWN, which this crate models nothing of
+            (
+                b"say (.environment + 1)\n",
+                "+",
+                "one of the interpreter's own objects",
+            ),
+            // oracle 0 -- two distinct tables rendering the same text
+            (
+                b"say (.methods == .routines)\n::method m\n  return 1\n::routine r\n  return 2\n",
+                "==",
+                "one of the interpreter's own objects",
+            ),
+        ];
+        for (source, op, kind) in cases {
+            let (code, stdout, stderr) = both_engines(source);
+            let expected = format!(
+                "rexx-exec: the operator `{op}` applied to {kind} is not implemented (Phase 5)\n"
+            );
+            assert_eq!(
+                (code, stdout.as_str(), stderr.as_str()),
+                (120, "", expected.as_str()),
+                "{:?}",
+                String::from_utf8_lossy(source)
+            );
+        }
+    }
+
+    /// **The anti-over-refusal control, and it is not optional.** Making
+    /// *every* operator loud would satisfy the test above and refuse a pile
+    /// of programs the oracle runs at rc 0 with bytes this crate already
+    /// matches.
+    ///
+    /// The boundary is the oracle's own and is measured, not reasoned: the
+    /// operator is sent to the **left** operand, so an object on the right
+    /// is converted through `stringValue()` exactly as this crate converts
+    /// it; and the concatenation family calls `stringValue()` on both sides
+    /// whichever operand is an object. Every expected string below is the
+    /// oracle's own stdout for that program.
+    #[test]
+    fn an_object_the_operator_is_not_sent_to_still_answers() {
+        let cases: &[(&[u8], &str)] = &[
+            // the concatenation family, object on the left
+            (b"say .array || 'x'\n", "The Array classx\n"),
+            (b"say .array'x'\n", "The Array classx\n"),
+            (b"say .array 'x'\n", "The Array class x\n"),
+            (b"say .environment || 'x'\n", "The Environment Directoryx\n"),
+            // an object on the right of an operator sent to a string
+            (
+                b"say ('a StringTable' == .methods)\n::method m\n  return 1\n",
+                "1\n",
+            ),
+            (b"say (1 == .methods)\n::method m\n  return 1\n", "0\n"),
+            // and the plain rendering both `.NAME` routes owe
+            (b"say .LOCAL\n", "The Local Directory\n"),
+            (b"say value('.LOCAL')\n", "The Local Directory\n"),
+            (b"x = .array; say x\n", "The Array class\n"),
+        ];
+        for (source, expected) in cases {
+            let (code, stdout, stderr) = both_engines(source);
+            assert_eq!(
+                (code, stdout.as_str(), stderr.as_str()),
+                (0, *expected, ""),
+                "{:?}",
+                String::from_utf8_lossy(source)
+            );
+        }
+    }
+
+    /// A condition is not an operator, and the oracle's answer for one is
+    /// this crate's already.
+    ///
+    /// `IF`/`WHEN`/`WHILE` and the comma list check their value's *text* on
+    /// both sides -- measured, `if .array then` is 34.1 and `if .array, 1
+    /// then` is 34.6 on the oracle, both quoting the object's own rendering.
+    /// Extending R12's refusal to them would be an over-refusal of a
+    /// diagnostic the two implementations already agree on byte for byte.
+    #[test]
+    fn a_condition_on_an_object_keeps_the_oracles_own_diagnostic() {
+        for (source, major) in [
+            (&b"if .array then say 'y'\n"[..], "34.1"),
+            (b"if .array, 1 then say 'y'\n", "34.6"),
+            (b"do while .array\nend\n", "34.3"),
+        ] {
+            let (code, _stdout, stderr) = both_engines(source);
+            assert_eq!(code, 222, "{:?}", String::from_utf8_lossy(source));
+            assert!(
+                stderr.contains(&format!("Error {major}:")),
+                "{:?} reported {stderr:?}",
+                String::from_utf8_lossy(source)
+            );
+        }
     }
 }

@@ -1,0 +1,36 @@
+count 35
+/* What an operator, a condition and a builtin do with one of these objects
+ * as an operand. Phase 5a Task 6, fix round 1.
+ *
+ * Making .NAME resolve turned every one of these from a refusal into an
+ * answer, so each line is a place a wrong answer could hide. The ones here
+ * are the ones the two implementations agree on, and the agreement is
+ * structural rather than lucky: all of them reach the object through
+ * stringValue(), which is RexxClass::defaultName for a class and the
+ * assigned ~objectName for a directory -- the same bytes this crate renders.
+ *
+ * The operator is sent to the LEFT operand on the oracle, so an object on
+ * the right is converted by the operand it was sent to. That is why the
+ * comparison here has the string first: with the object first the oracle
+ * compares identities instead and this crate refuses the program, which a
+ * corpus file cannot witness because a corpus file has to match.
+ *
+ * The concatenation family is the exception in the other direction: it calls
+ * stringValue() on both sides whichever operand is the object, so all three
+ * spellings agree with the object on the left.
+ *
+ * The last clause raises deliberately: 93.943 substitutes the object's own
+ * rendering into a Rexx condition message, which pins the same conversion
+ * from the error path. It ends the program, so it is last.
+ *
+ * Measured, rc 163.
+ */
+
+say .ARRAY || 'x'
+say .ARRAY'x'
+say .ARRAY 'x'
+say .ENVIRONMENT || 'x'
+say ('The Array class' == .ARRAY)
+say (1 == .ARRAY)
+say word(.ARRAY, 2)
+say abs(.ARRAY)

@@ -96,11 +96,10 @@ pub const SMALL_INT_MIN: i64 = -(1 << 61);
 /// uses.
 ///
 /// A free function so a caller holding an already-decoded handle asks without
-/// decoding a second time. `Interp::to_text` and `Interp::try_text` are the
-/// reason: both are on the hottest path in the interpreter and both have
-/// decoded the handle already. Measured on the `strings` benchmark axis,
-/// asking through `ObjRef::class_id` in those two places and in
-/// `Interp::to_number` instead costs 29 instructions per pass.
+/// decoding a second time. `Interp::operator_operand_gap` is the reason: it
+/// has just matched the handle's `Decoded` to find out whether either shape it
+/// refuses is even possible, and `ObjRef::class_id` would decode again to
+/// answer the same question.
 pub const fn is_class_slot(slot: u32, generation: u32) -> bool {
     generation == 0 && slot >= CLASS_SLOT_BASE
 }

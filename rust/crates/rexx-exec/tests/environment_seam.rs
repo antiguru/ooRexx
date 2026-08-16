@@ -37,8 +37,10 @@
 //!
 //! # The half this test enforces, and what would pass it anyway
 //!
-//! Everything below is a lexical scan of `crates/rexx-exec/src`. It counts
-//! three things:
+//! Everything below is a lexical scan of `crates/rexx-exec/src`. **What it
+//! counts is two literal call spellings and the items inside one
+//! brace-matched region of one file** -- not calls, not producers, not paths.
+//! Concretely:
 //!
 //! * one call to `env_seam::admit(`, so there is one chokepoint and not two;
 //! * one call to `env_seam::directory(`, so a clearance is spent in one place;
@@ -50,6 +52,14 @@
 //! **What would pass every count here while a second lookup path exists**, and
 //! this list is the honest answer rather than an argument that there is none:
 //!
+//! * **An import alias.** `use env_seam::{admit as sneak_admit, directory as
+//!   sneak_directory};` at the top of `environment.rs`, plus a complete second
+//!   lookup path calling those names, compiles and leaves every count below
+//!   unmoved: neither call needle matches the aliased spelling, and no item
+//!   was added to the module, so the item bound does not move either. This is
+//!   the cheapest evasion there is -- it needs nothing already in hand -- and
+//!   it produces a second *chokepoint call*, not merely a second reader.
+//!   Nothing here defends against it.
 //! * **A reader that goes to the object rather than to the directory.** The
 //!   token guards the two *handles*; once a handle is in hand the entries are
 //!   read off `rexx_core::NativeObject`, whose accessors are public to the

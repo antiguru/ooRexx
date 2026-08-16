@@ -265,6 +265,25 @@ impl Interp {
         &mut self.object_model().classes
     }
 
+    /// The rendering of a handle the arena does not hold.
+    ///
+    /// **Exactly one such handle is reachable**: a class identity, which
+    /// `rexx_core::CLASS_SLOT_BASE` puts past every slot the arena can
+    /// allocate, so `Heap::resolve` answers `None` for it
+    /// (`rexx-core/src/heap.rs:292`-`299`) with no test of its own. Anything
+    /// else arriving here is a handle whose object is gone, which is the
+    /// `a live value` tripwire the callers used to carry alone.
+    ///
+    /// **`Interp::to_text` and `Interp::try_text` reach this through the
+    /// `None` their existing `Heap::get` already produces**, which is what
+    /// keeps a class object off their hot path. A guard testing every heap
+    /// operand instead measured 73 instructions per pass of the `strings`
+    /// benchmark axis, on a program that names no class at all.
+    pub(crate) fn not_in_arena(&self, value: ObjRef) -> &[u8] {
+        assert!(value.class_id().is_some(), "a live value");
+        self.class_default_name(value)
+    }
+
     /// `~defaultName` for a class object -- `The <id> class` -- borrowed out
     /// of the registry that minted the identity.
     ///

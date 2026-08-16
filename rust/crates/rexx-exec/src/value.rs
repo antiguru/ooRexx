@@ -34,7 +34,7 @@
 use crate::Interp;
 use rexx_core::{
     BehaviourId, Body, Bytes, Decoded, INLINE_BYTES, InlineText, NotNumeric, ObjRef, SMALL_INT_MAX,
-    SMALL_INT_MIN, is_class_slot,
+    SMALL_INT_MIN,
 };
 use rexx_num::{Form, Number};
 use std::borrow::Cow;
@@ -313,22 +313,16 @@ impl Interp {
                 self.text_scratch[..len].copy_from_slice(&inline);
                 return Cow::Borrowed(&self.text_scratch[..len]);
             }
-            // **Asked before the arena is**, and asked out of the decode
-            // that has already happened rather than a second one: a class
-            // identity is heap-tagged and names no arena slot, so reaching
-            // for the arena with one panics on a handle that is perfectly
-            // live. A guard on this match rather than a `class_id()` call
-            // below it: that call decodes a second time, and measured on the
-            // `strings` axis the second decode here, in `try_text` and in
-            // `to_number` costs 29 instructions per pass.
-            Decoded::Heap { slot, generation } if is_class_slot(slot, generation) => {
-                return Cow::Borrowed(self.class_default_name(value));
-            }
             Decoded::Heap { .. } => {}
         }
 
         let stem_default = {
-            let object = self.heap.get(value).expect("a live value");
+            // **The class arm rides the `None` this lookup already
+            // produces**, and costs nothing when it does not fire --
+            // [`Interp::not_in_arena`] has the measurement and the reason.
+            let Some(object) = self.heap.get(value) else {
+                return Cow::Borrowed(self.not_in_arena(value));
+            };
             match &object.body {
                 Body::Stem {
                     default: Some(d), ..
@@ -423,15 +417,14 @@ impl Interp {
             // the bytes live in the handle, which is a `Copy` local here, so
             // there is nothing outliving this call to borrow from.
             Decoded::Text(_) => return None,
-            // The class arm `to_text` takes, for the reason its own comment
-            // gives: the arena has no slot for a class identity.
-            Decoded::Heap { slot, generation } if is_class_slot(slot, generation) => {
-                return Some(self.class_default_name(value));
-            }
             Decoded::Heap { .. } => {}
         }
 
-        let object = self.heap.get(value).expect("a live value");
+        // The class arm `to_text` takes, in the same place and for the same
+        // reason.
+        let Some(object) = self.heap.get(value) else {
+            return Some(self.not_in_arena(value));
+        };
         match &object.body {
             Body::Text { bytes, .. } => Some(bytes.as_slice()),
             Body::Num { text, .. } => text.as_deref(),
@@ -540,18 +533,18 @@ impl Interp {
                 Ok(text) => Number::parse(text).ok_or(NotNumeric),
                 Err(_) => Err(NotNumeric),
             },
-            // A class object is not a number, and reaching the arena with a
-            // class handle would panic rather than answer -- `to_text`'s own
-            // class arm has why.
-            Decoded::Heap { slot, generation } if is_class_slot(slot, generation) => {
-                Err(NotNumeric)
-            }
             Decoded::Heap { .. } => {
                 // Mirrors `to_text`'s own stem redirect above: decided, and
                 // the borrow on `self.heap` dropped, before the recursive
-                // call below, which cannot overlap it.
+                // call below, which cannot overlap it. The class arm rides
+                // this lookup's own `None`, as it does there.
                 let stem_default = {
-                    let object = self.heap.get(value).expect("a live value");
+                    let Some(object) = self.heap.get(value) else {
+                        // A class object is not a number. The call is for the
+                        // tripwire it carries, not for the bytes.
+                        let _ = self.not_in_arena(value);
+                        return Err(NotNumeric);
+                    };
                     match &object.body {
                         Body::Stem {
                             default: Some(d), ..

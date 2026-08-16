@@ -44,7 +44,17 @@
 //! **any** second producer -- a second `fn`, an `impl` block, a `const` of
 //! that type -- is a second item and fails.
 //!
-//! What that still cannot see, stated rather than argued away:
+//! **What it counts is two literal token spellings and the items inside one
+//! brace-matched region of one file** -- not calls, not producers, not paths.
+//! What that leaves it unable to see, stated rather than argued away:
+//!
+//! * **An import alias**, which is the cheapest evasion of the lot and was
+//!   missing from this list until Phase 5a Task 6's review found it at the
+//!   directory seam. `use seam::{clear as sneak_clear};` plus a second
+//!   invocation path calling `sneak_clear` compiles, adds no item to `mod
+//!   seam`, and matches neither needle -- so every count here is satisfied
+//!   while two paths reach a native method. Verified at the directory seam,
+//!   whose module is shaped the same way; nothing here defends against it.
 //!
 //! * **An item introduced by a macro expansion inside the module**, or a
 //!   second `mod seam` in another file. Neither exists; both would pass.

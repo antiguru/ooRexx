@@ -55,3 +55,9 @@ lang/environment_package_class_shadows_the_environment.rex
 lang/environment_special_dot_variables_are_not_resolved.rex
 lang/environment_methods_table_unattached.rex
 lang/environment_methods_table_attached.rex
+
+# Task 6 fix round 1 (ruling R12): what an operator, a condition and a builtin
+# do with one of these objects as an operand -- the half the two
+# implementations agree on. The half they do not is loud, which a corpus file
+# cannot witness, and `eval.rs`'s `object_operand_tests` carries instead.
+lang/environment_object_operands.rex

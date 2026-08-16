@@ -869,6 +869,7 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/environment_special_dot_variables_are_not_resolved.rex",
     "lang/environment_methods_table_unattached.rex",
     "lang/environment_methods_table_attached.rex",
+    "lang/environment_object_operands.rex",
 ];
 
 #[test]

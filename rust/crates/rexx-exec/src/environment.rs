@@ -74,7 +74,7 @@ use rexx_core::{BehaviourId, Body, NativeObject, ObjRef};
 use crate::plan::ProgramId;
 use crate::{Failure, Interp, Loud};
 
-/// Which of the two directories a lookup is reading.
+/// Which directory a lookup is reading.
 ///
 /// The oracle asks its security manager separately for each --
 /// `checkLocalAccess` before `.local` and `checkEnvironmentAccess` before
@@ -88,17 +88,17 @@ pub(crate) enum EnvScope {
 
 /// The directory-lookup security seam.
 ///
-/// Its own module so that the two directory handles and the clearance token
-/// have their fields private to the smallest possible scope: nothing outside
-/// these lines can name a directory, and nothing outside them can build a
+/// Its own module so that the directory handles and the clearance token have
+/// their fields private to the smallest possible scope: nothing outside these
+/// lines can name a directory, and nothing outside them can build a
 /// clearance, whatever else this file grows.
 mod env_seam {
     use super::{EnvScope, Failure, Interp, ObjRef};
 
-    /// The two directories, readable only with an [`Admitted`].
+    /// `.environment` and `.local`, readable only with an [`Admitted`].
     ///
-    /// Both fields are private, so [`directory`] is the only expression that
-    /// yields one of the handles -- which is what makes the chokepoint below
+    /// The fields are private, so [`directory`] is the only expression that
+    /// yields either handle -- which is what makes the chokepoint below
     /// unavoidable rather than merely conventional.
     pub(super) struct Directories {
         environment: ObjRef,
@@ -113,7 +113,7 @@ mod env_seam {
     /// handle.
     pub(super) struct Admitted(());
 
-    /// Records the two directory handles at bootstrap.
+    /// Records the directory handles at bootstrap.
     ///
     /// Building the pair is not reading it, so this takes no clearance.
     pub(super) fn hold(environment: ObjRef, local: ObjRef) -> Directories {
@@ -124,9 +124,9 @@ mod env_seam {
     /// and of `.environment` passes here, and a manager installed in a later
     /// phase gets its hook in this function's body.
     ///
-    /// The oracle's two checks return a *substitute* value when the manager
-    /// answers one, so what a later phase adds here is the manager call and a
-    /// way to say "answered instead", not a second seam. Nothing is refused in
+    /// Each of the oracle's checks returns a *substitute* value when the
+    /// manager answers one, so what a later phase adds here is the manager
+    /// call and a way to say "answered instead", not a second seam. Nothing is refused in
     /// this phase because there is no manager to refuse anything.
     pub(super) fn admit(
         interp: &mut Interp,
@@ -422,7 +422,7 @@ impl Interp {
 
         // **The one place either directory is read.** The loop is what keeps
         // the chokepoint singular while still asking once per directory, which
-        // is what the oracle's two separate manager calls do.
+        // is what the oracle's own per-directory manager calls do.
         for scope in [EnvScope::Local, EnvScope::Environment] {
             let admitted = env_seam::admit(self, scope, bare)?;
             if let Some(found) = self.directory_entry(admitted, scope, bare) {

@@ -2671,10 +2671,23 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   Directory` and `say value('.ARRAY')` is `The Array class`, byte for byte
   against the oracle on both engines.
 
-  A name the oracle answers and this crate still does not build -- `.QUEUE`,
-  whose class is deferred, and every entry of `.local` -- is LOUD rather than
-  falling back, which is what keeps the silent-wrong-answer shape from
-  surviving in the corner the fix does not reach. `environment.rs`'s
+  A name the oracle answers and this crate still does not build is LOUD rather
+  than falling back, which is what keeps the silent-wrong-answer shape from
+  surviving in the corner the fix does not reach. That set is not enumerated
+  here: it is derived at run time from the two directories' measured contents
+  minus what this crate resolves, so it shrinks on its own as later tasks build
+  more. `.QUEUE`, whose class `rexx-classes` defers, and every entry of
+  `.local` are in it today.
+
+  An OPERATOR whose left operand is one of these objects is loud too, and that
+  is a separate defect the fix round found: the oracle sends the operator to
+  that operand as a message, so `.array == "The Array class"` is 0 and
+  `.methods == .routines` is 0 where both render `a StringTable`, while
+  comparing renderings answers 1 for both. Ruling R12: refuse, do not model
+  handle equality. `rust/crates/rexx-exec/src/eval.rs`'s
+  `object_operand_tests` pins both halves -- the operators that refuse, and
+  the concatenation family, conditions and builtins that go on agreeing
+  because they reach the object through `stringValue()` on both sides. `environment.rs`'s
   `ORACLE_ENVIRONMENT`/`ORACLE_LOCAL` are the two directories' contents read
   off the oracle, and `every_name_the_oracle_answers_resolves_or_is_loud`
   asserts each one either resolves or refuses.

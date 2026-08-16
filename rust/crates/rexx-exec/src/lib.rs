@@ -659,6 +659,38 @@ impl Loud {
         }
     }
 
+    /// An operator whose **left** operand is an object this phase can build
+    /// but send no message to: a class object, or one of the interpreter's
+    /// own (`.environment`, `.local`, `.methods`, `.context`).
+    ///
+    /// **The oracle sends the operator to the left operand as a message**, so
+    /// what it answers is that object's own method and not a comparison of
+    /// renderings. Measured: `.array + 1` and `.array > .array` are 97.1;
+    /// `.methods == .routines` is `0` where both render `a StringTable`;
+    /// `.array == "The Array class"` is `0` against the very text the object
+    /// renders as. Handing those operands to the string and numeric operators
+    /// answers `1`, `1` and `1` -- three wrong answers at rc 0, where this
+    /// crate refused the whole program before `.NAME` resolved at all.
+    ///
+    /// **The right operand is not this**, measured the same way: `1 + .array`
+    /// is 41.1 quoting `"The Array class"` and `"a StringTable" == .methods`
+    /// is `1`, both of which this crate already answers identically, because
+    /// the oracle sends the operator to the *left* operand and that operand
+    /// converts the right one through `stringValue()` exactly as this crate
+    /// does.
+    ///
+    /// `op` is spelled by the caller rather than taken as an `Operator`,
+    /// because a prefix operator and a binary one are different types with
+    /// the same need.
+    fn operator_operand(op: &str, kind: &str) -> Loud {
+        Loud {
+            message: owned_message(
+                &format!("the operator `{op}` applied to {kind}"),
+                Some("Phase 5"),
+            ),
+        }
+    }
+
     /// A `.NAME` the oracle's `.environment` or `.local` answers and this
     /// crate builds nothing for.
     ///
