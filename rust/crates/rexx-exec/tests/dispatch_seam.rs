@@ -202,9 +202,10 @@ fn dispatch_passes_through_exactly_one_chokepoint() {
 /// The token's type is `pub(super)` inside `mod seam`, so `dispatch.rs` is
 /// the widest scope that can name it -- but "widest scope" is a fact about
 /// the module tree, and this asserts the fact about the tree as it stands:
-/// no other file in the crate mentions `Cleared` at all. A second invocation
-/// path funded by a clearance would therefore have to be written beside the
-/// two that exist, in the one file this test already reads.
+/// no other file in the crate names `Cleared` in code. (`run.rs` uses the
+/// word in prose, which is why whole-line comments are stripped.) A second
+/// invocation path funded by a clearance would therefore have to be written
+/// alongside the ones that exist, in the one file this test already reads.
 ///
 /// It does not, and cannot, stop a path that takes **no** clearance; the
 /// module doc's own list says so.

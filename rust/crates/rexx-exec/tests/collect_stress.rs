@@ -184,11 +184,11 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/message_send_unknown_method_on_a_number.rex",
     "lang/message_send_unknown_method_on_nil.rex",
     // A `::METHOD` activation allocates nothing of its own: the frame is
-    // slots, the `SELF`/`SUPER` bindings are handles the caller already
-    // held, and these bodies produce only small integers, short strings and
-    // refusals. `method_class_body.rex` and `method_returns_no_value.rex`
-    // are the two that do allocate, and both do it for a concatenation
-    // rather than for the activation.
+    // slots and the `SELF`/`SUPER` bindings are handles the caller already
+    // held. So what puts a method program here is whatever its body and its
+    // main line do, exactly as for any other program, and the ones absent
+    // from this list are absent for a concatenation or a wide string rather
+    // than for the activation.
     "lang/method_attribute_body.rex",
     "lang/method_body_raises.rex",
     "lang/method_class_side_lookup.rex",
