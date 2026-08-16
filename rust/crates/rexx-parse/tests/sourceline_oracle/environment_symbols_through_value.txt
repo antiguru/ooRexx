@@ -1,0 +1,28 @@
+count 27
+/* VALUE's one-argument form resolves a leading-dot name the same way the
+ * expression form does. Phase 5a Task 6.
+ *
+ * BUILTIN(VALUE) with no selector asks VariableDictionary::getVariableRetriever
+ * for a retriever, and a leading-dot symbol gets an ordinary RexxDotVariable
+ * -- so this route reaches the environment where it used to answer the
+ * argument's own upcased text.
+ *
+ * .NIL, .TRUE and .FALSE are the names the parser resolves for an
+ * expression, and this route does NOT: it finds them as environment entries
+ * instead, which is why they are here and not only in the expression witness
+ * beside this one.
+ *
+ * The argument is upcased before it is classified, so the lower-case
+ * spellings answer the same as the upper-case ones.
+ *
+ * Measured, rc 0.
+ */
+
+say value('.LOCAL')
+say value('.local')
+say value('.ENVIRONMENT')
+say value('.ARRAY')
+say value('.NIL')
+say value('.TRUE')
+say value('.FALSE')
+say value('.noSuchEnvironmentName')

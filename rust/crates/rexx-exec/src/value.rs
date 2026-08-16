@@ -34,7 +34,7 @@
 use crate::Interp;
 use rexx_core::{
     BehaviourId, Body, Bytes, Decoded, INLINE_BYTES, InlineText, NotNumeric, ObjRef, SMALL_INT_MAX,
-    SMALL_INT_MIN,
+    SMALL_INT_MIN, is_class_slot,
 };
 use rexx_num::{Form, Number};
 use std::borrow::Cow;
@@ -313,6 +313,17 @@ impl Interp {
                 self.text_scratch[..len].copy_from_slice(&inline);
                 return Cow::Borrowed(&self.text_scratch[..len]);
             }
+            // **Asked before the arena is**, and asked out of the decode
+            // that has already happened rather than a second one: a class
+            // identity is heap-tagged and names no arena slot, so reaching
+            // for the arena with one panics on a handle that is perfectly
+            // live. A guard on this match rather than a `class_id()` call
+            // below it: that call decodes a second time, and measured on the
+            // `strings` axis the second decode here, in `try_text` and in
+            // `to_number` costs 29 instructions per pass.
+            Decoded::Heap { slot, generation } if is_class_slot(slot, generation) => {
+                return Cow::Borrowed(self.class_default_name(value));
+            }
             Decoded::Heap { .. } => {}
         }
 
@@ -359,7 +370,13 @@ impl Interp {
             // Vec<u8>`. The explicit double-deref sidesteps whatever `AsRef`
             // impl `.as_ref()`'s method resolution was picking.
             Body::Stem { name, .. } => Cow::Borrowed(&**name),
-            other => unreachable!("the value model only creates Text, Num and Stem, got {other:?}"),
+            // `~objectName`, which the object carries because the two
+            // directories were given theirs by the prologue and the rest
+            // derive theirs from a class id -- `environment.rs` builds both.
+            Body::Native(native) => Cow::Borrowed(native.rendered()),
+            other => unreachable!(
+                "the value model only creates Text, Num, Stem and Native, got {other:?}"
+            ),
         }
     }
 
@@ -406,6 +423,11 @@ impl Interp {
             // the bytes live in the handle, which is a `Copy` local here, so
             // there is nothing outliving this call to borrow from.
             Decoded::Text(_) => return None,
+            // The class arm `to_text` takes, for the reason its own comment
+            // gives: the arena has no slot for a class identity.
+            Decoded::Heap { slot, generation } if is_class_slot(slot, generation) => {
+                return Some(self.class_default_name(value));
+            }
             Decoded::Heap { .. } => {}
         }
 
@@ -418,7 +440,10 @@ impl Interp {
                 ..
             } => self.try_text(*default),
             Body::Stem { name, .. } => Some(name),
-            other => unreachable!("the value model only creates Text, Num and Stem, got {other:?}"),
+            Body::Native(native) => Some(native.rendered()),
+            other => unreachable!(
+                "the value model only creates Text, Num, Stem and Native, got {other:?}"
+            ),
         }
     }
 
@@ -515,6 +540,12 @@ impl Interp {
                 Ok(text) => Number::parse(text).ok_or(NotNumeric),
                 Err(_) => Err(NotNumeric),
             },
+            // A class object is not a number, and reaching the arena with a
+            // class handle would panic rather than answer -- `to_text`'s own
+            // class arm has why.
+            Decoded::Heap { slot, generation } if is_class_slot(slot, generation) => {
+                Err(NotNumeric)
+            }
             Decoded::Heap { .. } => {
                 // Mirrors `to_text`'s own stem redirect above: decided, and
                 // the borrow on `self.heap` dropped, before the recursive
@@ -561,9 +592,14 @@ impl Interp {
                         Ok(text) => Number::parse(text).ok_or(NotNumeric),
                         Err(_) => Err(NotNumeric),
                     },
+                    // A directory's rendering is `a Directory`-shaped text
+                    // and never numeric, so this answers the marker rather
+                    // than parsing what `to_text` would produce.
+                    Body::Native(_) => Err(NotNumeric),
                     other => {
                         unreachable!(
-                            "the value model only creates Text, Num and Stem, got {other:?}"
+                            "the value model only creates Text, Num, Stem and Native, got \
+                             {other:?}"
                         )
                     }
                 }

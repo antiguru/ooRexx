@@ -1,0 +1,24 @@
+count 23
+/* .METHODS is the package's table of methods attached to no class. Phase 5a
+ * Task 6.
+ *
+ * LanguageParser::addMethod files a method under the package rather than
+ * under a class exactly while activeClass is still unset, so a ::METHOD
+ * ahead of every ::CLASS is an unattached one and the package's table is
+ * non-empty. .ROUTINES beside it is the same rule for ::ROUTINE.
+ *
+ * .RESOURCES stays the string form: this file declares no ::RESOURCE, so
+ * that table is still null while the other two are not.
+ *
+ * Measured, rc 0.
+ */
+
+say .METHODS
+say .ROUTINES
+say .RESOURCES
+
+::method looseMethod
+  return 1
+
+::routine looseRoutine
+  return 2

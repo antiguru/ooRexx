@@ -862,6 +862,13 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/message_send_argument_not_a_string.rex",
     "lang/message_instruction.rex",
     "lang/message_assignment_form.rex",
+    "lang/environment_symbols.rex",
+    "lang/environment_symbols_through_value.rex",
+    "lang/environment_package_class.rex",
+    "lang/environment_package_class_shadows_the_environment.rex",
+    "lang/environment_special_dot_variables_are_not_resolved.rex",
+    "lang/environment_methods_table_unattached.rex",
+    "lang/environment_methods_table_attached.rex",
 ];
 
 #[test]

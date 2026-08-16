@@ -42,3 +42,16 @@ lang/message_send_missing_argument.rex
 lang/message_send_argument_not_a_string.rex
 lang/message_instruction.rex
 lang/message_assignment_form.rex
+
+# Task 6: the four directories, and the seam's second site. The four objects
+# and the reflection names beside them, both of VALUE's one-argument routes,
+# a class this file declares resolved by name from inside it, the package
+# table shadowing the environment, the three names the parser resolves before
+# either route can, and the package method table in both of its states.
+lang/environment_symbols.rex
+lang/environment_symbols_through_value.rex
+lang/environment_package_class.rex
+lang/environment_package_class_shadows_the_environment.rex
+lang/environment_special_dot_variables_are_not_resolved.rex
+lang/environment_methods_table_unattached.rex
+lang/environment_methods_table_attached.rex

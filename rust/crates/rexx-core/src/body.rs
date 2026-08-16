@@ -111,10 +111,71 @@ pub enum Body {
     Array(Vec<ObjRef>),
     /// A user-defined object: its instance variables.
     Instance(Vec<(String, ObjRef)>),
+    /// An object the interpreter builds for itself rather than one a program
+    /// constructs: `.environment`, `.local`, a package's `.methods` table and
+    /// an activation's `.context`.
+    ///
+    /// **Boxed, and that is the decision the assertion below asks for.** The
+    /// payload is a class handle, a rendered name and a map; inline it is
+    /// wider than [`Body::Stem`] and would widen every `Slot` in the arena for
+    /// a value kind a program allocates at most a handful of. One pointer
+    /// costs the indirection only where one of these objects is actually read.
+    Native(Box<NativeObject>),
     /// A reference that does not keep its target alive. Traces to nothing --
     /// that is the whole point -- and the collector rewrites the target to
     /// `ObjRef::NIL` once it dies.
     WeakRef(ObjRef),
+}
+
+/// The payload of a [`Body::Native`]: what class the object answers to, the
+/// text it renders as, and the name-to-value table it holds.
+///
+/// `rendered` is the answer to `~objectName`, stored rather than derived,
+/// because the two objects this crate builds that carry one were given it by
+/// a Rexx assignment (`CoreClasses.orx:55` and `:990`) and the default a class
+/// id would produce is a different string.
+///
+/// `entries` is empty for an object that holds no table -- an activation's
+/// context object is one -- rather than optional, because a reader asking for
+/// a name it does not hold gets the same `None` either way.
+#[derive(Clone, Debug)]
+pub struct NativeObject {
+    class: ObjRef,
+    rendered: Box<[u8]>,
+    entries: HashMap<Box<[u8]>, ObjRef>,
+}
+
+impl NativeObject {
+    pub fn new(class: ObjRef, rendered: &[u8]) -> NativeObject {
+        NativeObject {
+            class,
+            rendered: rendered.into(),
+            entries: HashMap::new(),
+        }
+    }
+
+    /// The class this object answers to.
+    pub fn class(&self) -> ObjRef {
+        self.class
+    }
+
+    /// The bytes `SAY` prints for this object.
+    pub fn rendered(&self) -> &[u8] {
+        &self.rendered
+    }
+
+    /// The value stored under `key`, which callers hold already uppercased --
+    /// the oracle stores every environment entry under
+    /// `getUpperGlobalName(name)` and looks one up by `className->upper()`, so
+    /// the case folding belongs to the caller that produced the key and not to
+    /// each lookup.
+    pub fn entry(&self, key: &[u8]) -> Option<ObjRef> {
+        self.entries.get(key).copied()
+    }
+
+    pub fn set_entry(&mut self, key: &[u8], value: ObjRef) {
+        self.entries.insert(key.into(), value);
+    }
 }
 
 /// **A `Body` is every object in the heap, and `Slot` is what the arena holds
@@ -154,6 +215,15 @@ impl Body {
             }
             Body::Array(items) => out.extend_from_slice(items),
             Body::Instance(vars) => out.extend(vars.iter().map(|(_, v)| *v)),
+            Body::Native(native) => {
+                // The class handle travels with the values. It names no arena
+                // slot today ([`crate::CLASS_SLOT_BASE`]), so the collector
+                // drops it on the floor; tracing it anyway is what keeps this
+                // arm correct on the day a class object is allocated like
+                // anything else.
+                out.push(native.class);
+                out.extend(native.entries.values().copied());
+            }
             // Deliberately reaches nothing: a weak reference must not keep
             // its target alive.
             Body::WeakRef(_) => {}

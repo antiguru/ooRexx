@@ -458,38 +458,23 @@ pub(crate) fn var(
     Ok(interp.text(if exists { b"1" } else { b"0" }))
 }
 
-/// A constant name's read answer: the upcased text itself, except for the
-/// three dot-prefixed names this crate's own expression evaluator admits
-/// (`eval.rs`'s `ExprKind::DotVariable` arm: `.NIL`, `.TRUE`, `.FALSE`).
+/// A constant name's read answer: a dot-prefixed name resolved the way
+/// `RexxDotVariable::getValue` resolves one, and the upcased text itself for
+/// every other constant shape.
 ///
-/// **A documented gap, not a silent one, for every other dot-prefixed
-/// name.** The oracle's `RexxDotVariable::getValue`
-/// (`expression/ExpressionDotVariable.cpp:195`) first tries a package-level
-/// environment lookup and a small table of reflection names (`RC`, `SIGL`,
-/// ...) before falling back to `"." + name`; this crate has no environment
-/// subsystem at all (measured elsewhere: "any `DotVariable` name beyond the
-/// three admissible ones fails loudly" is `eval.rs`'s own module doc), so
-/// nothing here can distinguish a *defined* `.name` from an undefined one.
-/// The fallback this function takes is correct for every undefined name,
-/// which is every name `VALUE.testGroup` exercises (`.zl`/`.zu`/`.B` are all
-/// undefined dot-derived strings built by concatenation, never
-/// `.local~x`-defined ones passed to `VALUE` directly). It is silently
-/// wrong, at rc 0, for a name the *whole* absent environment/`.local`
-/// subsystem would otherwise resolve -- not one fringe name, since that
-/// subsystem is what `.local`, `.environment`, every class name and every
-/// stream alias resolve through. Measured and ruled: `docs/superpowers/
-/// plans/phase-4-exclusions.txt`'s own KNOWN GAP row has the transcripts
-/// and the decision to declare this rather than build the subsystem.
-fn literal_value(interp: &mut Interp, upper: &[u8]) -> ObjRef {
+/// **`VALUE`'s one-argument form and the expression form are the same
+/// resolution and not the same answer for three names.**
+/// `VariableDictionary::getVariableRetriever` builds an ordinary
+/// `RexxDotVariable` for a leading-dot symbol, so this reaches the identical
+/// order `.NAME` takes -- but the *expression* `.NIL`/`.TRUE`/`.FALSE` is a
+/// `SpecialDotVariable` the parser resolved already, which this route never
+/// sees. Measured on the oracle with `::class True` in the file: `say .TRUE`
+/// prints `1`, `say value('.TRUE')` prints `The TRUE class`.
+fn literal_value(interp: &mut Interp, upper: &[u8]) -> Result<ObjRef, Failure> {
     if upper.first() == Some(&b'.') {
-        match upper {
-            b".NIL" => return ObjRef::NIL,
-            b".TRUE" => return interp.text(b"1"),
-            b".FALSE" => return interp.text(b"0"),
-            _ => {}
-        }
+        return interp.dot_variable(upper);
     }
-    interp.text(upper)
+    Ok(interp.text(upper))
 }
 
 /// `VALUE(name)` / `VALUE(name, newvalue)`: reads (and optionally writes)
@@ -521,7 +506,7 @@ pub(crate) fn value(
             if newvalue.is_some() {
                 return Err(Raised::argument_not_a_symbol(name, 1, &text).into());
             }
-            Ok(literal_value(interp, &upper))
+            literal_value(interp, &upper)
         }
         SymbolKind::Name => {
             let old = interp.read_by_name(&upper);

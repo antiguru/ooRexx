@@ -130,6 +130,11 @@ mod ir;
 // asks for.
 mod dispatch;
 
+// `.environment`, `.local`, `.context` and `.methods` as objects (D33), the
+// order `PackageClass::findClass` resolves a `.NAME` in, and the one directory
+// chokepoint D45 asks for.
+mod environment;
+
 /// The exit code for a construct this crate does not implement.
 ///
 /// It has to sit outside 157..=253, where a Rexx error's `256 - major` lives,
@@ -651,6 +656,24 @@ impl Loud {
     fn receiver_class(kind: &str) -> Loud {
         Loud {
             message: owned_message(&format!("a message send to {kind}"), Some("Phase 5")),
+        }
+    }
+
+    /// A `.NAME` the oracle's `.environment` or `.local` answers and this
+    /// crate builds nothing for.
+    ///
+    /// Loud rather than the dotted-text fallback, which is what an
+    /// **unresolved** name renders as on both sides: taking the fallback for a
+    /// name the oracle resolves is a silent wrong answer at rc 0, and it is
+    /// the shape `phase-4-exclusions.txt` recorded against `VALUE`'s
+    /// one-argument form before this phase closed it.
+    ///
+    /// `owner` differs by which directory holds the name --
+    /// `environment.rs`'s own bootstrap has the split and its reason.
+    fn environment_symbol(name: &[u8], owner: &'static str) -> Loud {
+        let shown = String::from_utf8_lossy(name);
+        Loud {
+            message: owned_message(&format!("environment symbol \"{shown}\""), Some(owner)),
         }
     }
 
@@ -1716,6 +1739,18 @@ struct Interp {
     /// [`Interp::object_model`] (`dispatch.rs`) are the accessors that force
     /// it.
     object_model: Option<dispatch::ObjectModel>,
+    /// `.environment`, `.local` and what `.context`/`.methods` are built from
+    /// (D33). `None` until a `.NAME` is resolved, for the reason
+    /// [`Interp::object_model`] is: building it forces the native class set.
+    environment: Option<environment::EnvironmentModel>,
+    /// The classes each program's own `::CLASS` directives installed, keyed by
+    /// the uppercased name -- `PackageClass`'s installed-class table, which
+    /// `.NAME` resolution consults ahead of `.local` and `.environment`.
+    ///
+    /// Per program rather than global, because that is what makes the first
+    /// step of the order mean anything: two packages may each declare a class
+    /// of one name.
+    package_classes: HashMap<ProgramId, HashMap<Box<[u8]>, ObjRef>>,
     /// Which `(program, directive)` a [`rexx_classes::MethodId`] `install_directives`
     /// minted names -- the "bodies are stored" half of R9, addressed by the
     /// same identity `ClassRegistry::add_instance_method`/`add_class_method`
@@ -2444,6 +2479,8 @@ impl Interp {
             chunks_refused: 0,
             routines: HashMap::new(),
             object_model: None,
+            environment: None,
+            package_classes: HashMap::new(),
             method_bodies: HashMap::new(),
             out: Vec::new(),
             trace: Vec::new(),
@@ -2664,7 +2701,7 @@ impl Interp {
             }
             match &directive.kind {
                 DirectiveKind::Class(class) => {
-                    current_class_id = Some(self.install_class(class));
+                    current_class_id = Some(self.install_class(id, class));
                 }
                 DirectiveKind::Method(method) => {
                     if let Some(class_id) = current_class_id {
@@ -2721,7 +2758,8 @@ impl Interp {
     }
 
     /// `::CLASS`'s own R9 install: a class object in [`Interp::classes`],
-    /// under the name as written.
+    /// carrying the name as written, and an entry in the running package's own
+    /// class table under the uppercased one.
     ///
     /// **Every `::CLASS` naming a `SUBCLASS`/`METACLASS`/`INHERIT` is still a
     /// `directive_gap` above and never reaches here** (Phase 5, this crate
@@ -2734,14 +2772,31 @@ impl Interp {
     /// `String::from_utf8_lossy` rather than a hard requirement: a class
     /// name is close to always ASCII in practice and `ClassRegistry`'s API
     /// takes `&str`, so a non-UTF-8 literal name (legal Rexx, rare in
-    /// practice) is recorded lossily rather than rejected -- a known,
-    /// narrow limitation rather than a silent wrong answer, since nothing
-    /// downstream can observe a class's name yet either.
-    fn install_class(&mut self, class: &ClassDirective) -> ObjRef {
+    /// practice) has its id recorded lossily rather than being rejected -- a
+    /// known, narrow limitation. The id is observable now that `say .Foo`
+    /// renders `The Foo class` through it, so a class whose declared name is
+    /// not UTF-8 renders replacement characters where the oracle renders the
+    /// bytes. The package table's key below is taken from the directive's own
+    /// bytes and is not lossy.
+    fn install_class(&mut self, program: ProgramId, class: &ClassDirective) -> ObjRef {
         let name = String::from_utf8_lossy(&class.name).into_owned();
         let (object, metaclass) = self.root_and_metaclass();
-        self.classes()
-            .define_class(&name, Some(object), ClassKind::Regular, metaclass)
+        // `define_unregistered_class`, not `define_class`: an installed class
+        // does not go into `.environment`, and registering it there would let
+        // `::class array` displace the environment's own `Array` for every
+        // later lookup rather than only for this package's.
+        let id = self.classes().define_unregistered_class(
+            &name,
+            Some(object),
+            ClassKind::Regular,
+            metaclass,
+        );
+        // The package's own installed-class table, which is what `.NAME`
+        // resolution reads first -- see `environment.rs`'s
+        // `record_package_class` for why the registry's flat table is not
+        // that.
+        self.record_package_class(program, &class.name, id);
+        id
     }
 
     /// `::METHOD`'s own R9 install: the name lands in `class`'s instance
@@ -3897,15 +3952,46 @@ mod tests {
         (interp, program)
     }
 
-    /// Had `::CLASS` not created anything in the registry, `lookup` would
-    /// answer `None` and the `expect` below would panic.
+    /// The class `::CLASS name` installed, read out of the package's own
+    /// table.
+    ///
+    /// Not `ClassRegistry::lookup`: that table is `.environment`'s class
+    /// entries and an installed class is deliberately absent from it, so a
+    /// lookup there would answer the environment's class of the same name or
+    /// nothing at all.
+    fn installed_class(interp: &Interp, name: &str) -> rexx_core::ObjRef {
+        interp.package_classes[&ProgramId(0)][name.as_bytes()]
+    }
+
+    /// Had `::CLASS` not created anything, the package's own table would hold
+    /// nothing and the index below would panic.
     #[test]
     fn a_bare_class_directive_creates_a_class_object() {
-        let (mut interp, _program) = installed(b"say 'main ran'\n::class Foo\n");
-        interp
-            .classes()
-            .lookup("FOO")
-            .expect("::CLASS Foo is registered under its own upcased name");
+        let (interp, _program) = installed(b"say 'main ran'\n::class Foo\n");
+        let id = installed_class(&interp, "FOO");
+        assert!(id.class_id().is_some(), "a class identity, not a value");
+    }
+
+    /// **An installed class is not an environment entry**, which is the whole
+    /// of why `install_class` does not register the name.
+    ///
+    /// `::class array` declares a class whose id is `ARRAY`, and
+    /// `.environment` must still answer the native `Array` for that name --
+    /// the package's own table is what shadows it, and only for this package.
+    /// Had the directive registered the name, the environment's snapshot
+    /// would be built from a table the directive had already overwritten.
+    #[test]
+    fn an_installed_class_does_not_displace_the_environments_own_entry() {
+        let (mut interp, _program) = installed(b"say 'main ran'\n::class array\n");
+        let installed = installed_class(&interp, "ARRAY");
+        let native = interp.classes().lookup("Array").expect("Array is native");
+        assert_ne!(installed, native);
+        // Upcased, because the directive names the class with a symbol and
+        // the scanner interns a symbol upcased -- which is why the oracle
+        // prints `The ARRAY class` for it and `The Array class` for the
+        // environment's own.
+        assert_eq!(interp.classes().id_string(installed), "ARRAY");
+        assert_eq!(interp.classes().id_string(native), "Array");
     }
 
     /// A bare `::CLASS` -- the only shape that reaches this far, since
@@ -3917,7 +4003,7 @@ mod tests {
     #[test]
     fn a_bare_class_directive_subclasses_object() {
         let (mut interp, _program) = installed(b"say 'main ran'\n::class Foo\n");
-        let id = interp.classes().lookup("FOO").unwrap();
+        let id = installed_class(&interp, "FOO");
         let object = interp.classes().lookup("Object").unwrap();
         let class = interp.classes().lookup("Class").unwrap();
         assert_eq!(interp.classes().superclass(id), Some(object));
@@ -3933,7 +4019,7 @@ mod tests {
     fn a_user_class_inherits_objects_instance_methods() {
         let (mut interp, _program) =
             installed(b"say 'main ran'\n::class Foo\n::method bar\n  return 1\n");
-        let id = interp.classes().lookup("FOO").unwrap();
+        let id = installed_class(&interp, "FOO");
         let names = interp.classes().instance_method_names(id);
         assert!(names.contains("BAR"));
         assert!(names.contains("HASMETHOD"));
@@ -3950,7 +4036,7 @@ mod tests {
     fn a_method_directive_lands_in_the_classs_instance_dictionary() {
         let (mut interp, _program) =
             installed(b"say 'main ran'\n::class Foo\n::method bar\n  return 1\n");
-        let id = interp.classes().lookup("FOO").unwrap();
+        let id = installed_class(&interp, "FOO");
         assert!(
             interp
                 .classes()
@@ -3965,7 +4051,7 @@ mod tests {
     fn a_class_method_directive_lands_in_the_classs_class_dictionary() {
         let (mut interp, _program) =
             installed(b"say 'main ran'\n::class Foo\n::method bar class\n  return 1\n");
-        let id = interp.classes().lookup("FOO").unwrap();
+        let id = installed_class(&interp, "FOO");
         assert!(interp.classes().own_class_method_names(id).contains("BAR"));
         assert!(
             !interp
@@ -3981,7 +4067,7 @@ mod tests {
     #[test]
     fn an_attribute_with_no_style_installs_both_accessor_names() {
         let (mut interp, _program) = installed(b"say 'main ran'\n::class Foo\n::attribute baz\n");
-        let id = interp.classes().lookup("FOO").unwrap();
+        let id = installed_class(&interp, "FOO");
         let names = interp.classes().own_instance_method_names(id);
         assert!(names.contains("BAZ"));
         assert!(names.contains("BAZ="));
@@ -3994,7 +4080,7 @@ mod tests {
     fn an_attribute_get_installs_only_the_getter() {
         let (mut interp, _program) =
             installed(b"say 'main ran'\n::class Foo\n::attribute baz get\n");
-        let id = interp.classes().lookup("FOO").unwrap();
+        let id = installed_class(&interp, "FOO");
         let names = interp.classes().own_instance_method_names(id);
         assert!(names.contains("BAZ"));
         assert!(!names.contains("BAZ="));
@@ -4029,7 +4115,7 @@ mod tests {
                 .position(|d| matches!(&d.kind, DirectiveKind::Method(m) if &*m.name == name))
                 .expect("the ::METHOD directive is in the program")
         };
-        let id = interp.classes().lookup("FOO").unwrap();
+        let id = installed_class(&interp, "FOO");
         // A bare symbol's own name is already upcased by the scanner (a
         // quoted literal is the shape that would keep the source case), so
         // `bar`/`baz class` in the source above are `BAR`/`BAZ` here.

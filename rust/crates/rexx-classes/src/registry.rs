@@ -39,6 +39,8 @@ pub struct ClassRegistry {
     next_method: u32,
     /// Id string as declared (`~id`), keyed by identity.
     names: HashMap<ObjRef, String>,
+    /// `~defaultName`, keyed by identity -- see [`ClassRegistry::default_name`].
+    default_names: HashMap<ObjRef, String>,
     /// Uppercased name -> identity, the registry's own lookup direction --
     /// oracle's `TheEnvironment->put(classObj, getUpperGlobalName(name))`.
     by_name: HashMap<String, ObjRef>,
@@ -57,6 +59,7 @@ impl ClassRegistry {
             next_id: 0,
             next_method: 0,
             names: HashMap::new(),
+            default_names: HashMap::new(),
             by_name: HashMap::new(),
         }
     }
@@ -99,6 +102,7 @@ impl ClassRegistry {
     ) {
         self.graph.define_class(id, superclass, kind, metaclass);
         self.names.insert(id, name.to_string());
+        self.default_names.insert(id, format!("The {name} class"));
         self.by_name.insert(name.to_ascii_uppercase(), id);
     }
 
@@ -117,6 +121,29 @@ impl ClassRegistry {
         id
     }
 
+    /// Allocate a fresh identity and give it an id string, **without**
+    /// registering the name -- what a `::CLASS` directive creates.
+    ///
+    /// The oracle files an installed class against the package
+    /// (`PackageClass::addInstalledClass`) and never into the environment;
+    /// only `completeSystemClass`, an image-build path, does the latter. So a
+    /// `::CLASS` named `Array` must not displace the environment's own
+    /// `Array`, which registering it here would do -- [`Self::registered`] is
+    /// what `.environment` is populated from.
+    pub fn define_unregistered_class(
+        &mut self,
+        name: &str,
+        superclass: Option<ObjRef>,
+        kind: ClassKind,
+        metaclass: ObjRef,
+    ) -> ObjRef {
+        let id = self.reserve_id();
+        self.graph.define_class(id, superclass, kind, metaclass);
+        self.names.insert(id, name.to_string());
+        self.default_names.insert(id, format!("The {name} class"));
+        id
+    }
+
     /// `.NAME` resolution's terminal step: an uppercased lookup against this
     /// flat table. `None` for anything not in this registry -- deferred
     /// classes included, since deferring one is exactly declining to add it
@@ -128,6 +155,26 @@ impl ClassRegistry {
     /// `~id` -- the string a class was declared with, unmodified case.
     pub fn id_string(&self, class: ObjRef) -> &str {
         &self.names[&class]
+    }
+
+    /// `~defaultName` -- `RexxClass::defaultName` (`ClassClass.cpp:614`),
+    /// which is the id with `The ` in front and ` class` behind it, and is
+    /// what `SAY` prints for a class object.
+    ///
+    /// Stored rather than assembled on demand because the one caller that
+    /// needs it renders a value through a shared borrow and has nowhere to put
+    /// a freshly built string.
+    pub fn default_name(&self, class: ObjRef) -> &str {
+        &self.default_names[&class]
+    }
+
+    /// Every class this registry answers [`Self::lookup`] for, as
+    /// (uppercased name, identity).
+    ///
+    /// The oracle's `completeSystemClass` puts exactly this pair into
+    /// `.environment` (`Setup.cpp:203`), which is the one consumer.
+    pub fn registered(&self) -> impl Iterator<Item = (&str, ObjRef)> {
+        self.by_name.iter().map(|(name, id)| (name.as_str(), *id))
     }
 
     /// `~class`. For a class object specifically, oracle's `~class` and

@@ -91,6 +91,20 @@ pub const CLASS_SLOT_BASE: u32 = 1 << 31;
 pub const SMALL_INT_MAX: i64 = (1 << 61) - 1;
 pub const SMALL_INT_MIN: i64 = -(1 << 61);
 
+/// Whether a decoded `Decoded::Heap`'s parts name a class identity rather than
+/// an arena slot -- [`ObjRef::class_id`]'s own test, and the same expression it
+/// uses.
+///
+/// A free function so a caller holding an already-decoded handle asks without
+/// decoding a second time. `Interp::to_text` and `Interp::try_text` are the
+/// reason: both are on the hottest path in the interpreter and both have
+/// decoded the handle already. Measured on the `strings` benchmark axis,
+/// asking through `ObjRef::class_id` in those two places and in
+/// `Interp::to_number` instead costs 29 instructions per pass.
+pub const fn is_class_slot(slot: u32, generation: u32) -> bool {
+    generation == 0 && slot >= CLASS_SLOT_BASE
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct ObjRef(u64);
 
@@ -179,7 +193,7 @@ impl ObjRef {
     /// what a receiver's decode has to ask before it reaches for the arena.
     pub const fn class_id(self) -> Option<u32> {
         match self.decode() {
-            Decoded::Heap { slot, generation } if generation == 0 && slot >= CLASS_SLOT_BASE => {
+            Decoded::Heap { slot, generation } if is_class_slot(slot, generation) => {
                 Some(slot - CLASS_SLOT_BASE)
             }
             _ => None,

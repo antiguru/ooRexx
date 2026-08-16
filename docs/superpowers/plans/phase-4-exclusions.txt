@@ -2662,7 +2662,32 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   carrying major 5. No owner is assigned.
 
 
-  KNOWN GAP: VALUE ON A DEFINED ENVIRONMENT NAME IS SILENTLY WRONG AT RC 0.
+  CLOSED, Phase 5a Task 6: VALUE ON A DEFINED ENVIRONMENT NAME WAS SILENTLY
+  WRONG AT RC 0. `.environment`, `.local`, `.context` and `.methods` are
+  objects now (D33), and both routes to a leading-dot name -- the expression
+  form and VALUE's one-argument form -- resolve through
+  `crates/rexx-exec/src/environment.rs`'s `Interp::dot_variable`, in
+  `PackageClass::findClass`'s order. `say value('.LOCAL')` is `The Local
+  Directory` and `say value('.ARRAY')` is `The Array class`, byte for byte
+  against the oracle on both engines.
+
+  A name the oracle answers and this crate still does not build -- `.QUEUE`,
+  whose class is deferred, and every entry of `.local` -- is LOUD rather than
+  falling back, which is what keeps the silent-wrong-answer shape from
+  surviving in the corner the fix does not reach. `environment.rs`'s
+  `ORACLE_ENVIRONMENT`/`ORACLE_LOCAL` are the two directories' contents read
+  off the oracle, and `every_name_the_oracle_answers_resolves_or_is_loud`
+  asserts each one either resolves or refuses.
+
+  Witnesses: `rust/corpus/lang/environment_symbols_through_value.rex` for this
+  route and `environment_symbols.rex` for the expression one, both in
+  `phase-5a.txt`. Removing the resolution and restoring the upcased-text
+  fallback takes both to a divergence, and takes `bif_assertions.rs`'s exempt
+  set red in five rows.
+
+  The record of what the gap WAS follows, unchanged.
+
+  VALUE ON A DEFINED ENVIRONMENT NAME IS SILENTLY WRONG AT RC 0.
   VALUE's local-pool read of a name that classifies as a leading-dot Literal
   (`SYMBOL('.foo')`'s own classification) falls back to the argument's own
   upcased spelling whenever that name is undefined -- the oracle's own
@@ -2956,10 +2981,14 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   `c3dbb2021`): both shapes were rc 0, stdout "prolog", stderr empty on this
   crate.
 
-  THE COMMITTED WITNESSES DO NOT REPRODUCE `.NoSuchClass~m` DIRECTLY, AND THAT
-  IS DELIBERATE. `.NoSuchClass` is an environment symbol this crate does not
-  resolve, so reproducing that program here would fail for the wrong reason, a
-  loud "not implemented" rather than the oracle's own 97.1. `rust/corpus/lang/
+  THE COMMITTED WITNESSES DO NOT REPRODUCE `.NoSuchClass~m` DIRECTLY. When
+  they were written, `.NoSuchClass` was an environment symbol this crate did
+  not resolve, so reproducing that program would have failed for the wrong
+  reason, a loud "not implemented" rather than the oracle's own 97.1. Phase 5a
+  Task 6 closed that: both sides now answer `.NOSUCHCLASS` for the name and
+  then 97.1 for the send, and the whole report is byte-identical at rc 159 --
+  measured, so the program is no longer an unusable witness, only an unwritten
+  one. `rust/corpus/lang/
   directive_constant_expression_fails.rex` instead uses `1/0`, fully
   implemented on both engines today, and matches the oracle's own 42.3 at rc
   214 byte for byte, two clause echoes included (the ::CONSTANT's own clause,

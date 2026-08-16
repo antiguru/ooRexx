@@ -37,13 +37,6 @@
 #       write `'41'x~c2d` and `D2C::test10` writes a method call. Needs
 #       dispatch.
 #
-#   UNATTRIBUTED:an environment symbol  `ExprKind::DotVariable` is loud and
-#       `expr_owner` gives it no phase, so the harness has nothing to derive
-#       one from. These rows read a `.NAME` the file never sets -- REVERSE's
-#       `.funnyconst`, VALUE's `.a` -- which the oracle renders as the symbol's
-#       own uppercased text. STREAM's four are the same construct reached
-#       through a prelude.
-#
 #   ANOMALY  Not an attribution at all: the harness's own word for "exited
 #       non-zero and named no construct". All three are BEEP, and the cause is
 #       written down here because nothing derives it: `BEEP` is not a builtin
@@ -77,7 +70,6 @@ CHAROUT::test_stdout_ret2#1	4c
 CHAROUT::test_stdout_start#1	4c
 CHARS::test_stdin_wrong_synatx#1	4c
 D2C::test10#1	Phase 5
-LENGTH::test025#1	UNATTRIBUTED:an environment symbol
 LINES::test_normal_negativeTest1#1	4c
 LINES::test_normal_negativeTest1#2	4c
 LINES::test_normal_negativeTest1#3	4c
@@ -86,9 +78,6 @@ LINES::test_count_negativeTest1#2	4c
 LINES::test_count_negativeTest1#3	4c
 QUALIFY::test_qualify_arg_dot#1	4c
 QUALIFY::test_qualify_arg_dot#2	4c
-REVERSE::test017#1	UNATTRIBUTED:an environment symbol
-REVERSE::test021#1	UNATTRIBUTED:an environment symbol
-REVERSE::test026#1	UNATTRIBUTED:an environment symbol
 RXQUEUE::test_rxqueue_get#1	4c
 RXQUEUE::test_rxqueue_create_one_arg#1	4c
 RXQUEUE::test_rxqueue_create_session#1	4c
@@ -122,11 +111,10 @@ STREAM::test_queryDir_not_exists#5	4c
 STREAM::test_queryDir_not_exists#6	4c
 STREAM::test_queryDir_not_exists#7	4c
 STREAM::test_queryDir_not_exists#8	4c
-STREAM::test_relative_file_exists#1	UNATTRIBUTED:an environment symbol
-STREAM::test_relative_file_exists2#1	UNATTRIBUTED:an environment symbol
-STREAM::test_relative_file_not_exists#1	UNATTRIBUTED:an environment symbol
-STREAM::test_relative_file_not_exists2#1	UNATTRIBUTED:an environment symbol
-VALUE::test019#1	UNATTRIBUTED:an environment symbol
+STREAM::test_relative_file_exists#1	4c
+STREAM::test_relative_file_exists2#1	4c
+STREAM::test_relative_file_not_exists#1	4c
+STREAM::test_relative_file_not_exists2#1	4c
 XRANGE::test_xrange_hex_hex#1	Phase 5
 XRANGE::test_xrange_hex_hex#2	Phase 5
 XRANGE::test_xrange_hex_hex#3	Phase 5

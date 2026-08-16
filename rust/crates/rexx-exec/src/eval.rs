@@ -13,7 +13,7 @@
 //! concatenation, comparison and logic.
 //!
 //! `eval`/`eval_node`/`stack_span` moved here from Task 3's spike, extended
-//! (Task 7) with `Stem`, `Compound`, `DotVariable`'s admissible names,
+//! (Task 7) with `Stem`, `Compound`, `DotVariable`'s parse-time names,
 //! `Prefix`, the arithmetic operators and the concatenation forms
 //! `||` did not already cover, and (Task 8) with the comparison operators
 //! (through `rexx-num`'s `compare_decoded`, never a hand-written
@@ -25,9 +25,10 @@
 //! and (Task 5, 4b) `ExprKind::VariableReference`, the `>x`/`<x` form, which
 //! evaluates to the referenced variable's own value -- the arm's own comment
 //! has the measurement, and why `USE ARG >name` does not come through here.
-//! Every other `ExprKind` -- `QualifiedCall`, `Message`, `ClassResolver`,
-//! `List`, and any `DotVariable` beyond those -- still fails loudly
-//! through the existing, exhaustive `form_name`.
+//! `QualifiedCall`, `ClassResolver` and `List` still fail loudly through the
+//! existing, exhaustive `form_name`. `DotVariable` resolves through
+//! `environment.rs` (Phase 5a, D33), whose own doc has the order and the
+//! names it refuses rather than answers.
 //!
 //! **A function here that opens a temps frame and then evaluates through `?`
 //! leaves its own `pop_frame` unreached when that evaluation raises. That is
@@ -494,13 +495,20 @@ impl Interp {
             ExprKind::Stem(id) => self.read_symbol(code, SymbolRead::Stem, *id, None),
             ExprKind::Compound(id) => self.read_symbol(code, SymbolRead::Compound, *id, None),
 
-            // The three admissible names (D15, "Expression evaluation"):
-            // `.nil`, `.true`, `.false`. Anything else is Phase 5's
-            // (environment symbols beyond these three) and falls through to
-            // the loud failure below. The interned spelling keeps its
-            // leading period and is upcased (`scanner.rs`'s symbol capture
-            // includes the whole `.NAME` span before interning), so the
-            // match is against `.NIL`/`.TRUE`/`.FALSE`, not `NIL`/etc.
+            // **The parser's own names never reach resolution and every
+            // other one does.** `LanguageParser`'s constructor installs a
+            // `SpecialDotVariable` retriever for `.NIL`, `.TRUE` and `.FALSE`
+            // (`parser/LanguageParser.cpp:781`-`783`), so those three are
+            // parse-time constants in the oracle too. Measured: with `::class
+            // True` in the file, `say .TRUE` still prints `1` where `say
+            // value('.TRUE')` prints `The TRUE class`, because only the
+            // second goes through `getVariableRetriever`.
+            //
+            // The interned spelling keeps its leading period and is upcased
+            // (`scanner.rs`'s symbol capture includes the whole `.NAME` span
+            // before interning), so the match is against
+            // `.NIL`/`.TRUE`/`.FALSE`, not `NIL`/etc, and `dot_variable`
+            // takes the same dotted, upcased spelling.
             ExprKind::DotVariable(id) => match code.symbols.name(*id) {
                 ".NIL" => Ok(ObjRef::NIL),
                 // `.true`/`.false` need no representation of their own
@@ -508,7 +516,10 @@ impl Interp {
                 // fresh here the same way any other text value is.
                 ".TRUE" => Ok(self.text(b"1")),
                 ".FALSE" => Ok(self.text(b"0")),
-                _ => Err(Loud::expression(&expr.kind).into()),
+                other => {
+                    let name = other.as_bytes().to_vec();
+                    self.dot_variable(&name)
+                }
             },
 
             ExprKind::Prefix { op, operand } => self.eval_prefix(code, *op, operand),
@@ -1920,18 +1931,28 @@ mod tests {
         assert_eq!(eval_in_place_text(&mut interp, b"say a.1"), b"x");
     }
 
+    /// The names the parser resolves, which reach no directory at all.
     #[test]
-    fn the_three_admissible_dot_variables() {
+    fn the_three_parse_time_dot_variables() {
         let mut interp = Interp::new();
         assert_eq!(eval_text(&mut interp, b"say .nil"), b"The NIL object");
         assert_eq!(eval_text(&mut interp, b"say .true"), b"1");
         assert_eq!(eval_text(&mut interp, b"say .false"), b"0");
     }
 
+    /// Every other name goes through the resolution order, and each of its
+    /// outcomes is reachable from an expression: an environment entry, a name
+    /// nothing here answers that the oracle does, and a name neither answers.
+    ///
+    /// Asserting them together is what makes each mean something. A build that
+    /// always fell back would answer `.ARRAY` with its own text; one that was
+    /// always loud would refuse `.FOO`, which the oracle answers at rc 0.
     #[test]
-    fn a_dot_variable_beyond_the_three_fails_loudly() {
+    fn a_dot_variable_beyond_the_three_resolves_falls_back_or_is_loud() {
         let mut interp = Interp::new();
-        let failure = eval_source(&mut interp, b"say .foo").unwrap_err();
+        assert_eq!(eval_text(&mut interp, b"say .array"), b"The Array class");
+        assert_eq!(eval_text(&mut interp, b"say .foo"), b".FOO");
+        let failure = eval_source(&mut interp, b"say .stdout").unwrap_err();
         assert!(matches!(failure, Failure::Loud(_)), "got {failure:?}");
     }
 

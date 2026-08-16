@@ -265,6 +265,21 @@ impl Interp {
         &mut self.object_model().classes
     }
 
+    /// `~defaultName` for a class object -- `The <id> class` -- borrowed out
+    /// of the registry that minted the identity.
+    ///
+    /// **`&self`, which is why the string is stored rather than built.**
+    /// `Interp::try_text` hands back a borrow of the value's own bytes and has
+    /// nowhere to put a freshly formatted one.
+    pub(crate) fn class_default_name(&self, class: ObjRef) -> &[u8] {
+        self.object_model
+            .as_ref()
+            .expect("a class handle can only have come from the object model")
+            .classes
+            .default_name(class)
+            .as_bytes()
+    }
+
     /// `.Object` and `.Class`: the superclass and metaclass
     /// `RexxClass::subclass` defaults to, which is what a bare `::CLASS`
     /// declares (`ClassClass.cpp:1562`).
@@ -306,6 +321,14 @@ impl Interp {
                     Body::Array(_) => Err("an array"),
                     Body::Instance(_) => Err("an instance of a user class"),
                     Body::WeakRef(_) => Err("a weak reference"),
+                    // `.environment`, `.local`, `.methods` and `.context`.
+                    // Their classes are in the registry, so there is a
+                    // behaviour to resolve against -- what is missing is a
+                    // `NATIVE_METHODS` row for anything a `Directory`, a
+                    // `StringTable` or a `RexxContext` answers, and answering
+                    // 97.1 for a name the oracle implements is the wrong
+                    // failure. Loud until a task implements those methods.
+                    Body::Native(_) => Err("one of the interpreter's own objects"),
                 },
             },
         }

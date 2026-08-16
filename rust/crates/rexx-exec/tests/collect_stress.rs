@@ -164,6 +164,12 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/directive_constant_expression_installs.rex",
     "lang/directive_constant_expression_needs_class.rex",
     "lang/do_loop_forms.rex",
+    // Both resolve every name they read out of the running package's own
+    // class table, which is consulted ahead of `.environment` and so never
+    // builds it -- the two directory objects are the only allocation a
+    // `.NAME` makes.
+    "lang/environment_package_class.rex",
+    "lang/environment_special_dot_variables_are_not_resolved.rex",
     "lang/exit_no_value.rex",
     "lang/exit_with_value.rex",
     "lang/if_else_chain.rex",
