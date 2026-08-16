@@ -2251,6 +2251,65 @@ above.
   NOT FIXED, decided by Moritz on 2026-08-15. Recorded so that a reader meeting
   the loud message does not conclude the oracle refuses it too.
 
+  A USER CONDITION RAISED IN A ::ROUTINE REACHES THE CALLER'S TRAP ON THE
+  ORACLE AND NOT HERE, WHEN THE RAISE HAS NO TAIL OR AN `EXIT` TAIL. Both
+  engines agree with each other and diverge from the oracle on STDOUT ONLY:
+  rc 0 and empty stderr on the oracle and on both engines, so no gate that
+  partitions failures by rc or by a loud message can see it, and only a
+  differential comparison of stdout can. Measured 2026-08-16 at 72cb6d781,
+  under the standard oracle wrapper from a fresh empty directory,
+  REXX_ENGINE=tree-walker and REXX_ENGINE=ir.
+
+     1  say 'start'
+     2  call on user boom name handler
+     3  call raiser
+     4  say 'back'
+     5  exit
+     6  handler:
+     7  say 'handler ran'
+     8  return
+     9  ::routine raiser
+    10  raise user boom
+
+    oracle            this crate, both engines
+    start             start
+    handler ran       back
+    back
+
+  THE TAIL IS WHAT DECIDES IT, and the whole matrix was run rather than the
+  one program. Same program with `call on` and with `signal on`, and with the
+  raise written three ways:
+
+    tail        CALL ON, oracle    here       SIGNAL ON, oracle   here
+    (none)      handler runs       does not   handler runs        does not
+    RETURN      handler runs       runs       handler runs        runs
+    EXIT        handler runs       does not   handler runs        does not
+
+  So the two agree on `RETURN` and disagree on the other two. On the oracle a
+  ::ROUTINE activation reaches the caller's trap for all three tails alike.
+
+  THE CONTROL THAT SAYS THIS IS THE ROUTINE BOUNDARY AND NOT THE TAIL RULE:
+  the identical matrix with `raiser` written as an INTERNAL LABEL instead of a
+  `::ROUTINE` matches the oracle in every one of its six cells, no tail and
+  `EXIT` included -- both sides print `start` alone and end. That is exactly
+  the rule `Interp::exec_raise`'s delivery table states, so the table is right
+  for a label activation and does not hold across a `::ROUTINE` one; the
+  table's own comment now says so and points here.
+
+  NOT PHASE 5a's AND NOT CAUSED BY IT. Every construct in the program --
+  `::ROUTINE`, `CALL ON`/`SIGNAL ON USER`, `RAISE USER` -- predates this
+  phase, and the handler is never entered at all, which is upstream of the
+  only line Phase 5a Task 7 changed on that path (the `CallType::Subroutine`
+  argument at the trap site). No build older than 72cb6d781 was run to confirm
+  that by measurement, so the attribution is an argument from the code and not
+  a bisection.
+
+  NO OWNER IS ASSIGNED. Closing it belongs to whichever task owns condition
+  delivery across a `::ROUTINE` activation boundary, which is not this phase's
+  and has no task here; it was found by a review of a Phase 5a fix round,
+  which owns no behaviour, so recording it was that review's whole
+  disposition.
+
 CLOSED DEFECTS -- measured wrong, measured again, now matching
 -------------------------------------------------------------
 

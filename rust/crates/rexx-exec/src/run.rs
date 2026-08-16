@@ -3996,6 +3996,15 @@ impl Interp {
     ///   identical program with `raise syntax 40.4 return` reports `SIGL` as
     ///   `fun`'s own `raise` line instead.
     ///
+    /// **The table is a LABEL activation's, and the oracle does not apply it
+    /// across a `::ROUTINE` one.** Measured: `raise user boom` with no tail,
+    /// and with `EXIT`, inside a `::ROUTINE` reached by `CALL` runs the
+    /// caller's enabled USER trap on the oracle, where the same raise from an
+    /// internal label runs no trap on either side. This crate applies the
+    /// table's rule to both, so those two cells diverge on stdout at rc 0 --
+    /// recorded in `docs/superpowers/plans/phase-4-exclusions.txt` with the
+    /// whole matrix and the label control, and owned by no task here.
+    ///
     /// # What the untrapped default action is, per condition
     ///
     /// Measured at top level with no trap enabled: `raise halt` is the fatal
