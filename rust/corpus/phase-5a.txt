@@ -108,3 +108,11 @@ lang/method_attribute_set_body.rex
 # corpus/lang/parse_sources.rex carries the contexts a method is not, and the
 # pair is what stops a single fixed word passing both.
 lang/method_parse_source.rex
+
+# Task 7 fix round 2: what a primitive method does with an argument that has
+# no string value. `.nil` was already refused; a class object and one of the
+# interpreter's own objects were answered `0` at rc 0 where the oracle raises
+# 88.909, and a stem answers as whatever its default holds. The rows that
+# answer are in the same program, so a build refusing every unrecognised
+# argument fails it too.
+lang/message_send_argument_object_not_a_string.rex

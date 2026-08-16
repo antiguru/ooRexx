@@ -1,0 +1,55 @@
+/* A primitive method's argument is converted by stringArgument, which asks
+ * the value for makeString() and raises 88.909 when it answers .nil. So the
+ * objects a program can now write -- a class object and one of the
+ * interpreter's own -- are refused there, while a string, a number and a stem
+ * standing for one are not. Phase 5a Task 7.
+ *
+ * A stem answers as its default value (StemClass::makeString forwards to it),
+ * so which side of the line a stem falls on is decided by what it holds:
+ * rows 3 and 4 are refused and rows 8 and 9 are not.
+ *
+ * The trapped rows and the answering rows are the pair. A build that dropped
+ * the check answers 0 on rows 1 to 5 instead of raising; a build that refused
+ * every argument it could not recognise raises on rows 6 to 9 as well. The
+ * untrapped send at the end pins the bytes the trap hides -- the method's own
+ * traceback line and the 88.909 text. Measured, rc 168.
+ */
+
+signal on syntax name trapped
+n = 0
+
+next:
+n = n + 1
+select
+  when n = 1 then say n 'answered' 'abc'~hasMethod(.String)
+  when n = 2 then say n 'answered' 'abc'~hasMethod(.environment)
+  when n = 3 then do
+    a. = .array
+    say n 'answered' 'abc'~hasMethod(a.)
+  end
+  when n = 4 then do
+    c. = .nil
+    say n 'answered' 'abc'~hasMethod(c.)
+  end
+  when n = 5 then say n 'answered' .k~hasMethod(.String)
+  when n = 6 then say n 'answered' 'abc'~hasMethod('LENGTH')
+  when n = 7 then say n 'answered' 'abc'~hasMethod(5)
+  when n = 8 then do
+    b. = 'LENGTH'
+    say n 'answered' 'abc'~hasMethod(b.)
+  end
+  when n = 9 then say n 'answered' 'abc'~hasMethod(d.)
+  otherwise signal done
+end
+signal next
+
+trapped:
+say n 'raised' rc'.'condition('E')
+signal on syntax name trapped
+signal next
+
+done:
+signal off syntax
+say 'abc'~hasMethod(.String)
+
+::class k

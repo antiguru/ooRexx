@@ -2766,9 +2766,9 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
     a message receiver          resolves the class behaviour  per meth. agrees
     SELF and SUPER, read        stringValue()                 rendering agrees
     a Rexx method's argument    nothing                       rendering agrees
+    a native method's argument  the method's own check        88.909    agrees
     a method's RETURN value     nothing                       rendering agrees
     -------------------------------------------------------------------------
-    a native method's argument  the method's own check        88.909    diverges
 
   THE ROWS A METHOD ACTIVATION ADDED, Phase 5a Task 7. A class object is a
   message receiver now, so a ::METHOD body runs, and that opens the positions
@@ -2778,43 +2778,83 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   its argument and returns `.directory` is byte-identical on all three
   descriptors, on both engines, `>A>` and `>M>` lines included.
 
-  WHERE AN ARGUMENT'S ROW SPLITS, AND WHY THAT HALF DIVERGES. The measurement
-  above is a REXX body, which does nothing to its argument, and that half
-  agrees. A NATIVE method checks its own arguments, and this crate's natives
-  do not, so the argument row splits. Measured, both receiver shapes, both
-  engines:
+  THE ARGUMENT ROW COVERS TWO KINDS OF BODY, AND BOTH AGREE. The measurement
+  above is a REXX body, which does nothing to its argument. A NATIVE method
+  converts its own: `stringArgument` (`runtime/MethodArguments.hpp:136`)
+  reaches `RexxInternalObject::requiredString` (`classes/ObjectClass.cpp:
+  1373`), which asks the value for `makeString()` and raises 88.909 when that
+  answers `.nil`. Only the string-valued primitives answer it, so a class
+  object, one of the interpreter's own objects and `.nil` are all refused
+  there, while a stem is refused or not according to what its default holds --
+  `StemClass::makeString` (`classes/StemClass.cpp:506`) forwards to that
+  value. The oracle's own `hasMethod` is `RexxObject::hasMethodRexx`
+  (`classes/ObjectClass.cpp:2892`), whose first act is `stringArgument(
+  message, ARG_ONE)`, and `crates/rexx-exec/src/dispatch.rs`'s
+  `lacks_a_string_value` applies that test to its argument. Measured, both
+  receiver shapes, both engines, three descriptors read separately:
 
-    say 'abc'~hasMethod(.String)   oracle 88.909 rc 168   crate 0 rc 0
-    say .k~hasMethod(.String)      oracle 88.909 rc 168   crate 0 rc 0
-      (the second with a `::class k`; the oracle's stderr for both is
-       `Error 88.909:  Argument 1 must have a string value.`, announced
-       against `Compiled method "HASMETHOD" with scope "Object"`)
+    say 'abc'~hasMethod(.String)          oracle 88.909 rc 168, crate identical
+    say .k~hasMethod(.String)             oracle 88.909 rc 168, crate identical
+    say 'abc'~hasMethod(.environment)     oracle 88.909 rc 168, crate identical
+    a. = .array; say 'abc'~hasMethod(a.)  oracle 88.909 rc 168, crate identical
+    a. = .nil;   say 'abc'~hasMethod(a.)  oracle 88.909 rc 168, crate identical
+      (the class-receiver row with a `::class k`; the oracle's stderr for
+       every one of them is `Error 88.909:  Argument 1 must have a string
+       value.`, announced against `Compiled method "HASMETHOD" with scope
+       "Object"`)
 
-  and the same argument through a Rexx body is the agreeing half:
+  and the arguments the oracle ACCEPTS still answer, which is what keeps the
+  check from being an over-refusal in the other direction:
 
+    say 'abc'~hasMethod('LENGTH')            oracle `1` rc 0, crate identical
+    say 'abc'~hasMethod(5)                   oracle `0` rc 0, crate identical
+    b. = 'LENGTH'; say 'abc'~hasMethod(b.)   oracle `1` rc 0, crate identical
+    say 'abc'~hasMethod(d.)                  oracle `0` rc 0, crate identical
     say .k~m(.String)  into `::method m class` / `use arg a` / `return a`
                                    oracle `The String class` rc 0, crate same
 
-  THE TWO HALVES ARRIVED HERE DIFFERENTLY, measured against a build of the
-  task's own base (`74921ca7e`) rather than argued: the string-receiver form
-  already answered `0` at rc 0 there, so it is not this task's, while the
-  class-receiver form was `rc 120, a message send to a class object is not
-  implemented` and is now `0` at rc 0 -- a loud refusal turned into a silent
-  wrong answer, which is the same shape as the `PARSE SOURCE` row and reaches
-  the same conclusion about who noticed it.
+  Witnesses: `rust/corpus/lang/message_send_argument_object_not_a_string.rex`
+  runs the refused rows and the answering rows in one program against the live
+  oracle, and `dispatch.rs`'s
+  `an_argument_with_no_string_value_raises_where_one_with_a_string_value_answers`
+  runs the same shapes where the corpus gate does not -- measured, reverting
+  the check reddens that case at `(0, "0\n")` against `(168, "")` and reddens
+  nothing else in the ungated release suite.
 
-  RULING R15 ALL THE SAME: correct the record, do not build the coercion here.
-  A native method's argument check is BIF-ARGUMENT COERCION SURFACE, which is
-  this table's own domain rather than the message layer's -- the oracle's own
-  `hasMethod` is `RexxObject::hasMethodRexx` (`classes/ObjectClass.cpp:2892`),
-  whose first act is `stringArgument(message, ARG_ONE)`, exactly the check a
-  builtin applies to its own argument -- and building it inside the message
-  dispatch would re-open the boundary between the two that cost four fix
-  rounds to close. THE OWNER IS THE PHASE THAT GIVES THE NATIVE METHODS THEIR
-  ARGUMENT CHECKS, not Task 7 and not the builtin rows above; no task is
-  assigned to it here. What closes it is every native method on the message
-  path validating its arguments the way `builtin::` already does, which is a
-  surface rather than a fix.
+  RULING R17, SUPERSEDING R15 ON THIS HALF. R15 said correct the record and do
+  not build the coercion, on the premise that the defect pre-dated the task.
+  That premise held for the STRING receiver, which already answered `0` at rc
+  0 at the task's own base (`74921ca7e`). It was false for the CLASS receiver,
+  which was `rc 120, a message send to a class object is not implemented`
+  there and became `0` at rc 0 -- a loud refusal turned into a silent wrong
+  answer, the same shape as the `PARSE SOURCE` row. R17 required `hasMethod`
+  to stop answering silently, by raising 88.909 or by refusing loudly,
+  whichever was the smaller change. Raising 88.909 was both, and it is the
+  oracle's own answer, so the row agrees rather than refusing. One native
+  serves both receiver shapes, so the string-receiver form changed with it.
+
+  THE GENERAL SURFACE IS STILL THE LATER PHASE'S, exactly as R15 said. What
+  changed is one native's own argument and not the mechanism: a native
+  method's argument check is BIF-ARGUMENT COERCION SURFACE, which is this
+  table's own domain rather than the message layer's, and a general one built
+  inside message dispatch would re-open the boundary between the two that cost
+  four fix rounds to close. THE OWNER IS THE PHASE THAT GIVES THE NATIVE
+  METHODS THEIR ARGUMENT CHECKS, not Task 7 and not the builtin rows above; no
+  task is assigned to it here. What closes it is every native method on the
+  message path validating its arguments the way `builtin::` already does,
+  which is a surface rather than a fix.
+
+  THE NEIGHBOUR CHECK THAT SCOPED IT was measured rather than reasoned about,
+  because going loud where the oracle answers would have been a new divergence
+  in the other direction. Among `dispatch.rs`'s `NATIVE_METHODS` entries,
+  `HASMETHOD` declares an argument while `ISNIL`, `LENGTH` and `REVERSE`
+  declare none, so no other native there has one to check. With a class
+  receiver, `ISNIL` and `HASMETHOD` resolve through the metaclass merge --
+  `.k~isNil` is `0` on both sides -- and `LENGTH` and `REVERSE` are String's
+  INSTANCE methods, which a class object does not answer: the oracle's own
+  97.1 naming `The K class`, matching here. The arity checks that were already
+  in place all still match, measured at rc 163 on both sides: `.k~isNil(1)`,
+  `.k~hasMethod()`, `.k~hasMethod('M','N')` and `.k~isNil(.String)`.
 
   THE RECEIVER ROW IS NOT A COERCION AND SAYS SO. Nothing converts a receiver;
   what happens instead is that the send resolves against the class object's
@@ -2832,8 +2872,8 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   reaches its USE ARG through a message's argument list rather than a CALL's,
   and a RETURN value flows on to `>M>` and to RESULT. Every one of them
   renders through stringValue() and none of them converts -- which is exactly
-  what a NATIVE method's argument does not do, and why that row is split off
-  above.
+  what a NATIVE method's argument does do, and why that row names a conversion
+  where these name none.
 
   WHY `RAISE` SPLITS THE WAY IT DOES, since it is the row that went wrong.
   `RaiseInstruction::execute` calls `requestArray` exactly once, on the
@@ -2910,10 +2950,11 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   `rust/crates/rexx-exec/src/eval.rs`'s `object_operand_tests` pins the
   refusals and the agreements it can reach in-crate;
   `rust/corpus/lang/environment_object_operands.rex`,
-  `environment_object_in_a_loop_header.rex` and
-  `environment_object_in_a_raise.rex` pin agreeing rows against the live
-  oracle, the builtins among them. A refusal cannot be witnessed by a corpus
-  file, which has to match.
+  `environment_object_in_a_loop_header.rex`,
+  `environment_object_in_a_raise.rex` and
+  `message_send_argument_object_not_a_string.rex` pin agreeing rows against
+  the live oracle, the builtins and the native method's argument among them.
+  A refusal cannot be witnessed by a corpus file, which has to match.
 
   `environment.rs`'s `ORACLE_ENVIRONMENT`/`ORACLE_LOCAL` are the two
   directories' contents read off the oracle, and

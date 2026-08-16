@@ -860,12 +860,64 @@ impl Interp {
     }
 }
 
+/// Whether a value has **no** string value, which is what the oracle raises
+/// 88.909 for at an argument that must be text.
+///
+/// `stringArgument` (`runtime/MethodArguments.hpp:136`) reaches
+/// `RexxInternalObject::requiredString` (`classes/ObjectClass.cpp:1373`),
+/// which asks the argument for `makeString()` and raises when that answers
+/// `.nil`. Only the string-valued primitives answer it, so every value shape
+/// a program can put in this argument position is 88.909 there except a
+/// string, a number, and a stem standing for one. Measured, three descriptors
+/// against the oracle:
+///
+/// ```text
+/// 'abc'~hasMethod(5)                oracle `0` rc 0    a number has one
+/// 'abc'~hasMethod(a.)               oracle `0` rc 0    an unset stem is its own name
+/// 'abc'~hasMethod(.nil)             oracle 88.909 rc 168
+/// 'abc'~hasMethod(.String)          oracle 88.909 rc 168
+/// 'abc'~hasMethod(.environment)     oracle 88.909 rc 168
+/// a. = .array; 'abc'~hasMethod(a.)  oracle 88.909 rc 168
+/// a. = .nil;   'abc'~hasMethod(a.)  oracle 88.909 rc 168
+/// ```
+///
+/// **Not [`Interp::operator_operand_gap`], and the difference is `.nil`.**
+/// That predicate passes `.nil` through as text on purpose, because an
+/// operator here compares its rendering; `requiredString` refuses it. The
+/// stem redirect is the same in both and for the same reason -- `to_text`
+/// answers a stem *as* its default, so a test stopping at the stem handle
+/// would let the last two rows above through.
+///
+/// **Scoped to this argument rather than to native arguments in general**:
+/// the surface where each native checks its own is owned by the phase named
+/// against the argument row in `docs/superpowers/plans/phase-4-exclusions.txt`.
+fn lacks_a_string_value(interp: &Interp, value: ObjRef) -> bool {
+    match value.decode() {
+        Decoded::Nil => true,
+        Decoded::SmallInt(_) | Decoded::Text(_) => false,
+        // Asked before the arena is, for the reason `receiver_kind` gives:
+        // a class identity is heap-tagged and names no slot.
+        Decoded::Heap { .. } if value.class_id().is_some() => true,
+        Decoded::Heap { .. } => match interp.heap.get(value) {
+            None => false,
+            Some(object) => match &object.body {
+                Body::Native(_) => true,
+                Body::Stem {
+                    default: Some(default),
+                    ..
+                } => lacks_a_string_value(interp, *default),
+                _ => false,
+            },
+        },
+    }
+}
+
 /// `Object~hasMethod(name)`: whether the receiver's behaviour answers `name`.
 ///
 /// The argument is upcased before the lookup, measured:
-/// `'abc'~hasMethod('length')` is `1`. A value with no string form -- `.nil`
-/// is the only one a program can write -- is 88.909 rather than an answer of
-/// `0`, measured.
+/// `'abc'~hasMethod('length')` is `1`. An argument with no string value is
+/// 88.909 rather than an answer of `0`, measured -- see
+/// [`lacks_a_string_value`] for which shapes those are.
 fn native_has_method(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -875,7 +927,7 @@ fn native_has_method(
     let Some(Some(argument)) = args.first().copied() else {
         return Err(Raised::missing_method_argument(1).into());
     };
-    if argument == ObjRef::NIL {
+    if lacks_a_string_value(interp, argument) {
         return Err(Raised::argument_needs_a_string_value(1).into());
     }
     let name = String::from_utf8_lossy(&interp.to_text(argument).to_ascii_uppercase()).into_owned();
@@ -1172,6 +1224,54 @@ mod tests {
                 String::new()
             )
         );
+    }
+
+    /// A native method's argument that has no string value raises 88.909,
+    /// and the neighbouring arguments that have one still answer.
+    ///
+    /// **Ungated, where the corpus witness is not.**
+    /// `corpus/lang/message_send_argument_object_not_a_string.rex` runs these
+    /// same shapes against the live oracle, and it only fails a run under
+    /// `REXX_CORPUS_GATE`; an argument answered instead of raised passes every
+    /// other gate command without this case.
+    ///
+    /// The pair is what pins the rule to "has a string value" rather than to
+    /// "is not a heap object": a stem answers *as* its default, so the same
+    /// handle shape is on both sides of the line depending on what it holds.
+    #[test]
+    fn an_argument_with_no_string_value_raises_where_one_with_a_string_value_answers() {
+        for source in [
+            "say 'abc'~hasMethod(.String)\n",
+            "say 'abc'~hasMethod(.environment)\n",
+            "say 'abc'~hasMethod(.nil)\n",
+            "a. = .array\nsay 'abc'~hasMethod(a.)\n",
+            "a. = .nil\nsay 'abc'~hasMethod(a.)\n",
+            "say .K~hasMethod(.String)\n::class K\n",
+        ] {
+            let (code, stdout, stderr) = both_engines(source);
+            assert_eq!((code, stdout.as_str()), (168, ""), "{source:?}");
+            assert!(
+                stderr.contains("Error 88.909:  Argument 1 must have a string value."),
+                "{source:?} raised {stderr:?}"
+            );
+            assert!(
+                stderr.contains("Compiled method \"HASMETHOD\" with scope \"Object\"."),
+                "{source:?} lost the method's own traceback line: {stderr:?}"
+            );
+        }
+
+        for (source, expected) in [
+            ("say 'abc'~hasMethod('LENGTH')\n", "1\n"),
+            ("say 'abc'~hasMethod(5)\n", "0\n"),
+            ("a. = 'LENGTH'\nsay 'abc'~hasMethod(a.)\n", "1\n"),
+            ("say 'abc'~hasMethod(d.)\n", "0\n"),
+        ] {
+            assert_eq!(
+                both_engines(source),
+                (0, expected.to_string(), String::new()),
+                "{source:?}"
+            );
+        }
     }
 
     /// The `::METHOD` and `::ATTRIBUTE` shapes whose body this crate cannot

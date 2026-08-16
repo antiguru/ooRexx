@@ -918,6 +918,7 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/method_trace_nested.rex",
     "lang/method_attribute_set_body.rex",
     "lang/method_parse_source.rex",
+    "lang/message_send_argument_object_not_a_string.rex",
 ];
 
 #[test]
