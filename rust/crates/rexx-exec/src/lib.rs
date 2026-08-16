@@ -2589,9 +2589,9 @@ impl Interp {
         // which class the constant is lexically under at all. Computed once,
         // up front, rather than tracked positionally the way
         // `current_class_id` below is for R9's registry attachment, which is
-        // a genuinely different rule: `install_class` still attaches a
-        // `::METHOD`/`::ATTRIBUTE` to the class positionally nearest above
-        // it, only the constant-failure echo uses this file-wide rule.
+        // a genuinely different rule: the `Method` and `Attribute` arms
+        // attach to the class positionally nearest above them, and only the
+        // constant-failure echo uses this file-wide rule.
         let last_class_directive = program
             .directives
             .iter()
@@ -2790,12 +2790,13 @@ impl Interp {
     ///
     /// **The `Plan::default()` handed to `Activation::new` is a different,
     /// unrelated placeholder, not a second copy of the one above.**
-    /// `Activation::new`'s signature requires an `Rc<Plan>` field to exist,
-    /// but a bare [`Interp::eval`] call never reads `Activation::plan` at
-    /// all -- only `Code::plan` (`None`, above) governs how this call
-    /// resolves a name. `Plan::build`ing one from the empty body here would
-    /// compute nothing this call ever reads, since the body it would walk
-    /// has no instructions.
+    /// `Activation::new`'s signature requires an `Rc<Plan>` field to exist.
+    /// [`Interp::slot_of`] does read it, but every read goes through
+    /// `Plan::slot_of`, which answers `None` for a name it does not carry,
+    /// so an empty plan sends each name down the unresolved path. Building
+    /// one from the body here would compute nothing this call could reach:
+    /// the body it would walk has no instructions, so the map comes out
+    /// empty either way.
     fn eval_constant_expression(
         &mut self,
         id: ProgramId,

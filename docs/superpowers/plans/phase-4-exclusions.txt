@@ -2975,10 +2975,10 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   `::class A` / `::constant x (1/0)` / `::class B` blames `B`, not `A`, even
   though the constant sits directly under `A` and before `B` is ever reached.
   `directive_constant_expression_blames_the_last_class.rex` is this shape's
-  witness; every other committed witness here has exactly one ::CLASS
-  directive, which is also the file's last one, so none of them could have
-  told "nearest preceding" from "last in the file" apart -- the first version
-  of this fix used the wrong rule and every witness at the time still passed.
+  witness; no other committed witness has a ::CLASS directive following the
+  failing constant, which is the only shape the two rules disagree on, so
+  none of them could have told them apart -- the first version of this fix
+  used the wrong rule and every witness at the time still passed.
 
   WHAT WE USED TO DO: nothing. `Interp::install_directives` (`rexx-exec/src/
   lib.rs`) matched every `DirectiveKind::Constant` and took no further action,
