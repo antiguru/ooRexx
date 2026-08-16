@@ -96,8 +96,9 @@ lang/method_trace_nested.rex
 
 # Task 7 fix round 1: the `::ATTRIBUTE SET` body nothing was running. Its
 # resolved name carries an appended `=` that the getter's does not, and the
-# >I>/<I< pair is the only place a program can see the two entries apart, so
-# this one joins corpus.rs's RAW_STDERR_COMPARISON.
+# >I>/<I< pair is the only place a program can read that name itself rather
+# than infer it from which body ran, so this one joins corpus.rs's
+# RAW_STDERR_COMPARISON.
 lang/method_attribute_set_body.rex
 
 # Task 7 fix round 1: the calling context a method activation answers to

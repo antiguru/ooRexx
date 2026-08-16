@@ -290,8 +290,8 @@ const RAW_STDERR_COMPARISON: &[&str] = &[
     "lang/method_trace_nested.rex",
     // The `::ATTRIBUTE` accessor pair. Its `>I>`/`<I<` lines sit at the indent
     // the entries above are here for, and they carry the resolved message
-    // name -- `"B"` against `"B="` -- which is the only thing in the corpus
-    // that can tell a setter's dictionary entry from its getter's.
+    // name -- `"B"` against `"B="` -- which is the only place a program can
+    // read that name itself rather than infer it from which body ran.
     "lang/method_attribute_set_body.rex",
 ];
 
