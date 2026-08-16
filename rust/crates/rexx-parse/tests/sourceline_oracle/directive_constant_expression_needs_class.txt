@@ -8,8 +8,8 @@ count 23
  * evaluation gives), stdout EMPTY, stderr ONE clause echo -- there is no
  * enclosing ::CLASS to blame alongside it:
  *
- *      3 *-* ::constant sep (1+2)
- * Error 99 running <path> line 3:  Translation error.
+ *     23 *-* ::constant sep (1+2)
+ * Error 99 running <path> line 23:  Translation error.
  * Error 99.906:  A ::CONSTANT directive with an expression requires a
  * matching ::CLASS directive.
  *

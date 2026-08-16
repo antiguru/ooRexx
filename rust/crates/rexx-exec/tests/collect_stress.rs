@@ -159,6 +159,7 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/comparison_families.rex",
     "lang/comparison_operators_remaining.rex",
     "lang/deep_nested_expr.rex",
+    "lang/directive_constant_expression_blames_the_last_class.rex",
     "lang/directive_constant_expression_fails.rex",
     "lang/directive_constant_expression_installs.rex",
     "lang/directive_constant_expression_needs_class.rex",

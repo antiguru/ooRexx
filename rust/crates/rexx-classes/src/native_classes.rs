@@ -250,12 +250,14 @@ const REMOVED_BY_IMAGE_SAVE: &[&str] = &["DefineClassMethod", "InheritInstanceMe
 fn replay(registry: &mut ClassRegistry, class: rexx_core::ObjRef, def: &ClassDefinition) {
     for op in def.ops {
         match op {
-            Op::AddClassMethod(name) => registry.add_class_method(class, name),
+            Op::AddClassMethod(name) => {
+                registry.add_class_method(class, name);
+            }
             Op::AddInstanceMethod(name) => {
                 if def.name == "Class" && REMOVED_BY_IMAGE_SAVE.contains(name) {
                     continue;
                 }
-                registry.add_instance_method(class, name)
+                registry.add_instance_method(class, name);
             }
             Op::InheritInstanceMethods(source) => {
                 let source_id = registry.lookup(source).unwrap_or_else(|| {

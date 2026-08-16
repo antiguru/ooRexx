@@ -1,0 +1,26 @@
+/* A failing ::CONSTANT expression blames the LAST ::CLASS directive in the
+ * whole file, not the one nearest above it -- review round 1, finding 1.
+ *
+ * Every other ::CONSTANT witness beside this one has exactly one ::CLASS
+ * directive, which is also the last one in the file, so none of them can
+ * tell "nearest preceding" from "last in file" apart. This program can:
+ * ::class A comes first, the failing ::constant is defined under it, and
+ * ::class B follows the constant. Had the blame rule stayed "the most
+ * recently installed ::CLASS at the point the constant was reached", this
+ * would still report A; the oracle reports B instead.
+ *
+ * Measured against this exact file, rc 214, stdout EMPTY, stderr two clause
+ * echoes innermost first:
+ *
+ *     25 *-* ::constant x (1/0)
+ *     26 *-* ::class B
+ * Error 42 running <path> line 25:  Arithmetic overflow/underflow.
+ * Error 42.3:  Arithmetic overflow; divisor must not be zero.
+ */
+
+say 'prolog'
+exit
+
+::class A
+::constant x (1/0)
+::class B

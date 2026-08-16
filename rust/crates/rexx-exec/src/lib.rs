@@ -36,10 +36,12 @@
 //! evaluates or steps through one needs it equally and none of them is a
 //! better owner than the crate root.
 
+use rexx_classes::{ClassKind, MethodId};
 use rexx_core::{Heap, ObjRef, RootSet, SlotRef};
 use rexx_parse::{
-    AnnotationTarget, CodeBody, ConstantValue, Directive, DirectiveKind, Expr, ExprKind,
-    InstructionKind, Operator, Program, SymbolId, SymbolTable, compound_parts, parse_program,
+    AnnotationTarget, AttributeDirective, AttributeStyle, ClassDirective, CodeBody, ConstantValue,
+    Directive, DirectiveKind, Expr, ExprKind, InstructionKind, MethodDirective, Operator, Program,
+    SymbolId, SymbolTable, compound_parts, parse_program,
 };
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
@@ -1645,6 +1647,31 @@ struct Interp {
     /// it cannot load reports 98.903 with **empty stdout** whether or not the
     /// program ever calls it.
     routines: HashMap<Box<[u8]>, InstalledRoutine>,
+    /// The user-class object model `::CLASS`/`::METHOD`/`::ATTRIBUTE`
+    /// install into (R9, Phase 5a Task 4) -- `rexx-classes`' own
+    /// [`rexx_classes::ClassRegistry`], not a second representation of the
+    /// same thing.
+    ///
+    /// **Create and record only.** Nothing in this crate dispatches to a
+    /// class this registry holds, sends it `ACTIVATE`, or enters a method
+    /// body -- those are Tasks 5, 9 and 7's. No corpus program can observe
+    /// this field: observing a user class needs a message send, which does
+    /// not evaluate yet (`ExprKind::Message` still fails loudly). It is
+    /// exercised by unit tests asserting the registry's own state after
+    /// `install_directives` runs.
+    classes: rexx_classes::ClassRegistry,
+    /// Which `(program, directive)` a [`rexx_classes::MethodId`] `install_directives`
+    /// minted names -- the "bodies are stored" half of R9, addressed by the
+    /// same identity `ClassRegistry::add_instance_method`/`add_class_method`
+    /// already returns.
+    ///
+    /// Indexed by [`rexx_classes::MethodId`]'s own `u32`, not keyed by a
+    /// `HashMap`: every mint in this crate goes through
+    /// [`Interp::record_method_body`] immediately after the call that
+    /// produced the id, so the two stay in the same order by construction --
+    /// the invariant a later caller minting a [`rexx_classes::MethodId`]
+    /// through this registry without also pushing here would break.
+    method_bodies: Vec<InstalledMethodBody>,
     /// The output sink. `SAY` writes here and `Outcome::stdout` is what it
     /// becomes.
     out: Vec<u8>,
@@ -2236,6 +2263,26 @@ struct InstalledRoutine {
     directive: usize,
 }
 
+/// Where one installed `::METHOD`/`::ATTRIBUTE` accessor's own body lives --
+/// the same shape as [`InstalledRoutine`], for the same reason: a
+/// [`rexx_classes::MethodId`] alone names neither the program nor the
+/// directive, and both are needed to find the [`rexx_parse::CodeBody`]
+/// (or its absence, for a generated accessor or an `ABSTRACT`/`DELEGATE`
+/// method) later.
+///
+/// `#[allow(dead_code)]`: nothing outside this crate's own tests reads
+/// either field yet, because reading one back needs a resolved message send
+/// (Task 5's) to find the right entry and a method-body invocation (Task
+/// 7's) to do anything with it. Both fields are read by
+/// `tests::method_bodies_names_each_directive_in_minting_order`, so this is
+/// not an unread struct, only one with no production reader before Task 7.
+#[derive(Copy, Clone)]
+#[allow(dead_code)]
+struct InstalledMethodBody {
+    program: ProgramId,
+    directive: usize,
+}
+
 /// The name and arguments of one call in progress.
 ///
 /// One struct rather than two `Interp` fields so that the save-and-restore
@@ -2340,6 +2387,8 @@ impl Interp {
             chunks: HashMap::new(),
             chunks_refused: 0,
             routines: HashMap::new(),
+            classes: rexx_classes::ClassRegistry::new(),
+            method_bodies: Vec::new(),
             out: Vec::new(),
             trace: Vec::new(),
             clause_state: ClauseState::new(),
@@ -2532,52 +2581,195 @@ impl Interp {
         // program with both gets the translation error -- which is what
         // running the whole first pass before any of this reproduces.
         //
-        // `current_class` tracks the most recently seen `::CLASS` directive,
-        // the same positional rule `::METHOD`/`::ATTRIBUTE`/`::CONSTANT`
-        // attach to a class by: a `::CONSTANT` with an expression always has
-        // one here, because the first pass already refused the alternative.
-        let mut current_class: Option<&Directive> = None;
-        for directive in &program.directives {
-            if matches!(directive.kind, DirectiveKind::Class(_)) {
-                current_class = Some(directive);
-            }
+        // **The failing-`::CONSTANT` blame target is the LAST `::CLASS`
+        // directive in the whole file, not the nearest preceding one, and
+        // that is measured rather than assumed.** `::class A` / `::constant
+        // x (1/0)` / `::class B` blames `B`, and adding a third `::class C`
+        // after that blames `C` -- the oracle's blame does not depend on
+        // which class the constant is lexically under at all. Computed once,
+        // up front, rather than tracked positionally the way
+        // `current_class_id` below is for R9's registry attachment, which is
+        // a genuinely different rule: `install_class` still attaches a
+        // `::METHOD`/`::ATTRIBUTE` to the class positionally nearest above
+        // it, only the constant-failure echo uses this file-wide rule.
+        let last_class_directive = program
+            .directives
+            .iter()
+            .rev()
+            .find(|d| matches!(d.kind, DirectiveKind::Class(_)));
+
+        // R9: the class a `::METHOD`/`::ATTRIBUTE` attaches to, tracked
+        // positionally (the most recently installed `::CLASS`) -- ordinary
+        // object-model attachment, unrelated to `last_class_directive` above.
+        let mut current_class_id: Option<ObjRef> = None;
+        for (index, directive) in program.directives.iter().enumerate() {
             if let Some(loud) = directive_gap(&directive.kind) {
                 return Err(loud.into());
             }
-            let DirectiveKind::Constant(constant) = &directive.kind else {
-                continue;
-            };
-            let ConstantValue::Expression(expr) = &constant.value else {
-                continue;
-            };
-            if let Err(failure) = self.eval_constant_expression(id, program, expr) {
-                // Two clause echoes, innermost first, matching the oracle's
-                // own report exactly (measured, `::class K` / `::constant c
-                // (1/0)`):
-                //
-                // ```text
-                //      4 *-* ::constant c (1/0)
-                //      3 *-* ::class K
-                // ```
-                //
-                // `blame_directive` sets `self.failure_site`; `seal_site_level`
-                // is the same mechanism `invoke_call`/`run_fragment` use to
-                // move a level's site into `self.failure_sites` before the
-                // next, enclosing level sets its own -- there is no real
-                // activation nesting here, only the two directives' own
-                // clauses standing in for it.
-                self.blame_directive(program, directive);
-                self.seal_site_level();
-                self.blame_directive(
-                    program,
-                    current_class.expect(
-                        "the first pass already refused an expression with no preceding ::CLASS",
-                    ),
-                );
-                return Err(failure);
+            match &directive.kind {
+                DirectiveKind::Class(class) => {
+                    current_class_id = Some(self.install_class(class));
+                }
+                DirectiveKind::Method(method) => {
+                    if let Some(class_id) = current_class_id {
+                        self.install_method(id, index, class_id, method);
+                    }
+                    // A loose `::METHOD` with no preceding `::CLASS` installs
+                    // on the oracle (measured, rc 0 "main ran") and has
+                    // nothing here to attach to; recording nothing for it is
+                    // the R9 boundary, not a gap -- there is no dispatch yet
+                    // to observe the difference.
+                }
+                DirectiveKind::Attribute(attribute) => {
+                    if let Some(class_id) = current_class_id {
+                        self.install_attribute(id, index, class_id, attribute);
+                    }
+                }
+                DirectiveKind::Constant(constant) => {
+                    let ConstantValue::Expression(expr) = &constant.value else {
+                        continue;
+                    };
+                    if let Err(failure) = self.eval_constant_expression(id, program, expr) {
+                        // Two clause echoes, innermost first, matching the
+                        // oracle's own report exactly (measured, `::class K`
+                        // / `::constant c (1/0)`):
+                        //
+                        // ```text
+                        //      4 *-* ::constant c (1/0)
+                        //      3 *-* ::class K
+                        // ```
+                        //
+                        // `blame_directive` sets `self.failure_site`;
+                        // `seal_site_level` is the same mechanism
+                        // `invoke_call`/`run_fragment` use to move a level's
+                        // site into `self.failure_sites` before the next,
+                        // enclosing level sets its own -- there is no real
+                        // activation nesting here, only the two directives'
+                        // own clauses standing in for it.
+                        self.blame_directive(program, directive);
+                        self.seal_site_level();
+                        self.blame_directive(
+                            program,
+                            last_class_directive.expect(
+                                "the first pass already refused an expression with no \
+                                 preceding ::CLASS",
+                            ),
+                        );
+                        return Err(failure);
+                    }
+                }
+                _ => {}
             }
         }
         Ok(())
+    }
+
+    /// `::CLASS`'s own R9 install: a class object in [`Interp::classes`],
+    /// under the name as written.
+    ///
+    /// **Every `::CLASS` naming a `SUBCLASS`/`METACLASS`/`INHERIT` is still a
+    /// `directive_gap` above and never reaches here** (Phase 5, this crate
+    /// has no environment to resolve one of those against), so a class that
+    /// does reach this point always has no superclass and no metaclass of
+    /// its own to record -- `.Object`/`.Class` are not in this registry
+    /// either (Task 11/13's bootstrap), so there is nothing yet to link a
+    /// root class to even once `SUBCLASS OBJECT` stops being a gap. The
+    /// class's own id doubles as its metaclass, matching the self-referential
+    /// convention `rexx_classes::ClassGraph::define_class`'s own doc
+    /// describes for a root with nothing real to name: with no superclass,
+    /// `cascade_build`'s metaclass-merge branch never dereferences it.
+    ///
+    /// `String::from_utf8_lossy` rather than a hard requirement: a class
+    /// name is close to always ASCII in practice and `ClassRegistry`'s API
+    /// takes `&str`, so a non-UTF-8 literal name (legal Rexx, rare in
+    /// practice) is recorded lossily rather than rejected -- a known,
+    /// narrow limitation rather than a silent wrong answer, since nothing
+    /// downstream can observe a class's name yet either.
+    fn install_class(&mut self, class: &ClassDirective) -> ObjRef {
+        let name = String::from_utf8_lossy(&class.name).into_owned();
+        let id = self.classes.reserve_id();
+        self.classes
+            .define_reserved(id, &name, None, ClassKind::Regular, id);
+        id
+    }
+
+    /// `::METHOD`'s own R9 install: the name lands in `class`'s instance
+    /// dictionary, or its class dictionary for `::METHOD ... CLASS`, and
+    /// [`Interp::record_method_body`] records which directive to read its
+    /// body from later (Task 7's, not entered here).
+    fn install_method(
+        &mut self,
+        program: ProgramId,
+        directive: usize,
+        class: ObjRef,
+        method: &MethodDirective,
+    ) {
+        let name = String::from_utf8_lossy(&method.name).into_owned();
+        let method_id = if method.class_method {
+            self.classes.add_class_method(class, &name)
+        } else {
+            self.classes.add_instance_method(class, &name)
+        };
+        self.record_method_body(method_id, program, directive);
+    }
+
+    /// `::ATTRIBUTE`'s own R9 install: one or two accessor names, per
+    /// [`AttributeStyle`] -- the plain name for a getter, the name with `=`
+    /// appended for a setter, both for the default (neither `GET` nor `SET`)
+    /// style -- landing in `class`'s instance or class dictionary the same
+    /// way [`Interp::install_method`] does.
+    ///
+    /// One [`InstalledMethodBody`] per accessor, even for the `Both` style's
+    /// two generated names sharing one directive: a later reader asking
+    /// "does this method have a written Rexx body" reads
+    /// `attribute.body`, which is `None` for both in that style and `Some`
+    /// for the one style ([`AttributeStyle::Get`]/[`AttributeStyle::Set`])
+    /// that admits a body at all -- [`Interp::record_method_body`] does not
+    /// need to know which.
+    fn install_attribute(
+        &mut self,
+        program: ProgramId,
+        directive: usize,
+        class: ObjRef,
+        attribute: &AttributeDirective,
+    ) {
+        let upper = attribute.name.to_ascii_uppercase();
+        let names: Vec<Vec<u8>> = match attribute.style {
+            AttributeStyle::Both => {
+                let mut setter = upper.clone();
+                setter.push(b'=');
+                vec![upper, setter]
+            }
+            AttributeStyle::Get => vec![upper],
+            AttributeStyle::Set => {
+                let mut setter = upper;
+                setter.push(b'=');
+                vec![setter]
+            }
+        };
+        for name in names {
+            let name = String::from_utf8_lossy(&name).into_owned();
+            let method_id = if attribute.class_method {
+                self.classes.add_class_method(class, &name)
+            } else {
+                self.classes.add_instance_method(class, &name)
+            };
+            self.record_method_body(method_id, program, directive);
+        }
+    }
+
+    /// Records which `(program, directive)` a just-minted
+    /// [`rexx_classes::MethodId`] names, immediately after the call that
+    /// minted it -- see [`Interp::method_bodies`]'s own doc for the ordering
+    /// invariant this keeps.
+    fn record_method_body(&mut self, method: MethodId, program: ProgramId, directive: usize) {
+        debug_assert_eq!(
+            method.0 as usize,
+            self.method_bodies.len(),
+            "a MethodId was minted without record_method_body being its very next call"
+        );
+        self.method_bodies
+            .push(InstalledMethodBody { program, directive });
     }
 
     /// Evaluates a `::CONSTANT` directive's parenthesised expression at
@@ -2589,12 +2781,21 @@ impl Interp {
     /// [`Interp::eval`] both loops call, so `REXX_ENGINE=tree-walker` and the
     /// default IR engine evaluate it identically.
     ///
-    /// `slots: &[]` and `plan: None` are correct rather than merely
-    /// convenient: the expression is evaluated with no enclosing frame at
-    /// all, so every name in it -- there are none in this task's own corpus
-    /// witnesses -- falls through [`Code::slot_for`] to [`Interp::slot_of`]'s
-    /// ordinary resolution exactly as an `INTERPRET` fragment's untranslated
-    /// names do (`run_fragment`, `run.rs`).
+    /// `slots: &[]` and `plan: None` on the [`Code`] below are correct rather
+    /// than merely convenient: the expression is evaluated with no enclosing
+    /// frame at all, so every name in it -- there are none in this task's own
+    /// corpus witnesses -- falls through [`Code::slot_for`] to
+    /// [`Interp::slot_of`]'s ordinary resolution exactly as an `INTERPRET`
+    /// fragment's untranslated names do (`run_fragment`, `run.rs`).
+    ///
+    /// **The `Plan::default()` handed to `Activation::new` is a different,
+    /// unrelated placeholder, not a second copy of the one above.**
+    /// `Activation::new`'s signature requires an `Rc<Plan>` field to exist,
+    /// but a bare [`Interp::eval`] call never reads `Activation::plan` at
+    /// all -- only `Code::plan` (`None`, above) governs how this call
+    /// resolves a name. `Plan::build`ing one from the empty body here would
+    /// compute nothing this call ever reads, since the body it would walk
+    /// has no instructions.
     fn eval_constant_expression(
         &mut self,
         id: ProgramId,
@@ -2602,7 +2803,7 @@ impl Interp {
         expr: &Expr,
     ) -> Result<(), Failure> {
         let empty_body = CodeBody::default();
-        let plan = Rc::new(Plan::build(&empty_body, &program.symbols, None));
+        let plan = Rc::new(Plan::default());
         let frame = self.roots.push_slots(0);
         let activation_id = self.next_activation_id();
         self.activations.push(Activation::new(
@@ -3127,8 +3328,9 @@ fn execute(
 
 #[cfg(test)]
 mod tests {
-    use super::{form_name, run_program};
-    use rexx_parse::{Expr, ExprKind, Operator, PrefixOp};
+    use super::{Interp, ProgramId, form_name, parse_program, run_program};
+    use rexx_parse::{DirectiveKind, Expr, ExprKind, Operator, PrefixOp, Program};
+    use std::rc::Rc;
 
     /// The path these tests report programs under.
     ///
@@ -3603,5 +3805,132 @@ mod tests {
             "the span must come from the chain that reached the maximum, not from the last \
              top-level evaluation to start"
         );
+    }
+
+    // ---- R9: ::CLASS/::METHOD/::ATTRIBUTE create and record in
+    // `Interp::classes`. No corpus program can see this yet -- reading a
+    // class object back needs a message send, and `ExprKind::Message` still
+    // fails loudly (Task 5's), so this is witnessed here, against the
+    // registry `install_directives` leaves behind, instead. ----
+
+    /// Parses `text` and installs its directives against a fresh `Interp`,
+    /// under `ProgramId(0)`, handing both back so a test can read the
+    /// registry state left behind.
+    fn installed(text: &[u8]) -> (Interp, Rc<Program>) {
+        let program = Rc::new(parse_program(text.to_vec()).expect("test program parses"));
+        let mut interp = Interp::new();
+        interp
+            .install_directives(ProgramId(0), &program)
+            .expect("test program installs without a raised condition");
+        (interp, program)
+    }
+
+    /// Had `::CLASS` not created anything in `Interp::classes`, `lookup`
+    /// would answer `None` and the `expect` below would panic.
+    #[test]
+    fn a_bare_class_directive_creates_a_class_object() {
+        let (interp, _program) = installed(b"say 'main ran'\n::class Foo\n");
+        interp
+            .classes
+            .lookup("FOO")
+            .expect("::CLASS Foo is registered under its own upcased name");
+    }
+
+    /// A bare `::CLASS` -- the only shape that reaches this far, since
+    /// `SUBCLASS`/`METACLASS`/`INHERIT` are still `directive_gap` above --
+    /// has no superclass to record: `.Object` is not in this registry until
+    /// Task 11/13's bootstrap exists. Had `install_class` invented a
+    /// superclass edge from nothing, this would catch it; had it failed to
+    /// register the class at all, the `lookup` below would already have
+    /// panicked as the previous test's does.
+    #[test]
+    fn a_bare_class_directive_records_no_superclass() {
+        let (interp, _program) = installed(b"say 'main ran'\n::class Foo\n");
+        let id = interp.classes.lookup("FOO").unwrap();
+        assert_eq!(interp.classes.superclass(id), None);
+    }
+
+    /// Had `::METHOD` landed in the class dictionary instead of the instance
+    /// one (or nowhere), one side of this pair would be wrong.
+    #[test]
+    fn a_method_directive_lands_in_the_classs_instance_dictionary() {
+        let (interp, _program) =
+            installed(b"say 'main ran'\n::class Foo\n::method bar\n  return 1\n");
+        let id = interp.classes.lookup("FOO").unwrap();
+        assert!(interp.classes.instance_method_names(id).contains("BAR"));
+        assert!(!interp.classes.class_method_names(id).contains("BAR"));
+    }
+
+    /// `::METHOD ... CLASS`'s own side of the same pair.
+    #[test]
+    fn a_class_method_directive_lands_in_the_classs_class_dictionary() {
+        let (interp, _program) =
+            installed(b"say 'main ran'\n::class Foo\n::method bar class\n  return 1\n");
+        let id = interp.classes.lookup("FOO").unwrap();
+        assert!(interp.classes.class_method_names(id).contains("BAR"));
+        assert!(!interp.classes.instance_method_names(id).contains("BAR"));
+    }
+
+    /// Neither `GET` nor `SET`: both accessor names install. Had the `=`
+    /// suffix been on the wrong name, or missing, one side of this pair
+    /// would fail.
+    #[test]
+    fn an_attribute_with_no_style_installs_both_accessor_names() {
+        let (interp, _program) = installed(b"say 'main ran'\n::class Foo\n::attribute baz\n");
+        let id = interp.classes.lookup("FOO").unwrap();
+        let names = interp.classes.instance_method_names(id);
+        assert!(names.contains("BAZ"));
+        assert!(names.contains("BAZ="));
+    }
+
+    /// `GET` alone installs only the getter -- had `install_attribute`
+    /// always installed both names regardless of style, `BAZ=` would be
+    /// present here too.
+    #[test]
+    fn an_attribute_get_installs_only_the_getter() {
+        let (interp, _program) = installed(b"say 'main ran'\n::class Foo\n::attribute baz get\n");
+        let id = interp.classes.lookup("FOO").unwrap();
+        let names = interp.classes.instance_method_names(id);
+        assert!(names.contains("BAZ"));
+        assert!(!names.contains("BAZ="));
+    }
+
+    /// A loose `::METHOD` with no preceding `::CLASS` installs on the oracle
+    /// (measured, rc 0 "main ran") and has nothing here to attach to -- had
+    /// `install_directives` recorded it against a stale or default class id
+    /// instead of skipping it, `method_bodies` would be non-empty here.
+    #[test]
+    fn a_loose_method_with_no_preceding_class_is_not_recorded() {
+        let (interp, _program) = installed(b"say 'main ran'\n::method bar\n  return 1\n");
+        assert!(interp.method_bodies.is_empty());
+    }
+
+    /// The "bodies are stored" half of R9: `method_bodies` names the exact
+    /// directive a method's own body came from, in minting order. Had
+    /// `record_method_body` recorded the wrong directive index, or the two
+    /// methods here landed in the opposite order, this would catch it; had
+    /// a mint and its `record_method_body` call come apart entirely, the
+    /// `debug_assert_eq!` inside `record_method_body` catches that first, in
+    /// every debug build including the workspace's own gate.
+    #[test]
+    fn method_bodies_names_each_directive_in_minting_order() {
+        let (interp, program) = installed(
+            b"say 'main ran'\n::class Foo\n::method bar\n  return 1\n::method baz class\n  return 2\n",
+        );
+        let index_of = |name: &[u8]| -> usize {
+            program
+                .directives
+                .iter()
+                .position(|d| matches!(&d.kind, DirectiveKind::Method(m) if &*m.name == name))
+                .expect("the ::METHOD directive is in the program")
+        };
+        assert_eq!(interp.method_bodies.len(), 2);
+        assert_eq!(interp.method_bodies[0].program, ProgramId(0));
+        // A bare symbol's own name is already upcased by the scanner (a
+        // quoted literal is the shape that would keep the source case), so
+        // `bar`/`baz class` in the source above are `BAR`/`BAZ` here.
+        assert_eq!(interp.method_bodies[0].directive, index_of(b"BAR"));
+        assert_eq!(interp.method_bodies[1].program, ProgramId(0));
+        assert_eq!(interp.method_bodies[1].directive, index_of(b"BAZ"));
     }
 }

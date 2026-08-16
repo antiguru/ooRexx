@@ -15,9 +15,9 @@
  * Measured, rc 214, stdout EMPTY (the failure is at install time, before
  * "prolog" is ever said), stderr two clause echoes innermost first:
  *
- *      4 *-* ::constant c (1/0)
- *      3 *-* ::class K
- * Error 42 running <path> line 4:  Arithmetic overflow/underflow.
+ *     28 *-* ::constant c (1/0)
+ *     27 *-* ::class K
+ * Error 42 running <path> line 28:  Arithmetic overflow/underflow.
  * Error 42.3:  Arithmetic overflow; divisor must not be zero.
  */
 

@@ -2952,8 +2952,8 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
                evaluating anything
 
   Before this fix (measured against the release rexx-run built from
-  `c3dbb2021`, the commit immediately preceding this task's own): both shapes
-  were rc 0, stdout "prolog", stderr empty on this crate.
+  `c3dbb2021`): both shapes were rc 0, stdout "prolog", stderr empty on this
+  crate.
 
   THE COMMITTED WITNESSES DO NOT REPRODUCE `.NoSuchClass~m` DIRECTLY, AND THAT
   IS DELIBERATE. `~m` is a message send, and message dispatch (Task 5) does
@@ -2962,7 +2962,7 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   directive_constant_expression_fails.rex` instead uses `1/0`, fully
   implemented on both engines today, and matches the oracle's own 42.3 at rc
   214 byte for byte, two clause echoes included (the ::CONSTANT's own clause,
-  then the ::CLASS it belongs to). `directive_constant_expression_needs_class.rex`
+  then a ::CLASS). `directive_constant_expression_needs_class.rex`
   is the other shape's witness (99.906, rc 157, one clause echo, no ::CLASS
   present at all). `directive_constant_expression_installs.rex` is the
   regression guard: a well-formed expression (`2+3`) still installs silently,
@@ -2970,14 +2970,25 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   this crate can read a ::CONSTANT's value back before message dispatch
   (Task 5) and Rexx method invocation (Task 7) exist.
 
+  THE SECOND CLAUSE ECHO BLAMES THE LAST ::CLASS DIRECTIVE IN THE FILE, NOT
+  THE ONE NEAREST THE FAILING ::CONSTANT (review round 1, finding 1). Measured:
+  `::class A` / `::constant x (1/0)` / `::class B` blames `B`, not `A`, even
+  though the constant sits directly under `A` and before `B` is ever reached.
+  `directive_constant_expression_blames_the_last_class.rex` is this shape's
+  witness; every other committed witness here has exactly one ::CLASS
+  directive, which is also the file's last one, so none of them could have
+  told "nearest preceding" from "last in the file" apart -- the first version
+  of this fix used the wrong rule and every witness at the time still passed.
+
   WHAT WE USED TO DO: nothing. `Interp::install_directives` (`rexx-exec/src/
   lib.rs`) matched every `DirectiveKind::Constant` and took no further action,
   so the `Expression` variant's own payload was parsed and never read again.
 
   WHAT WOULD GO RED IF THE FIX WERE REMOVED: `tests/corpus.rs`'s differential
-  over `directive_constant_expression_fails.rex` and
-  `directive_constant_expression_needs_class.rex`, both rc 0 on this crate
-  without the fix where the oracle is rc 214 and rc 157.
+  over `directive_constant_expression_fails.rex`,
+  `directive_constant_expression_needs_class.rex` and
+  `directive_constant_expression_blames_the_last_class.rex`, all rc 0 on this
+  crate without the fix where the oracle is rc 214, rc 157 and rc 214.
 
   WHY IT MATTERS FOR CoreClasses.orx, RECORDED HERE SO A LATER TASK DOES NOT
   HAVE TO RE-FIND IT. StreamClasses.orx:548-549 are this exact form --

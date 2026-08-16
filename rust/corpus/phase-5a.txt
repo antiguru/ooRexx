@@ -24,3 +24,4 @@ lang/directive_attribute_installs.rex
 lang/directive_constant_expression_installs.rex
 lang/directive_constant_expression_fails.rex
 lang/directive_constant_expression_needs_class.rex
+lang/directive_constant_expression_blames_the_last_class.rex

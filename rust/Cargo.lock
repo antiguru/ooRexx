@@ -447,6 +447,7 @@ name = "rexx-exec"
 version = "0.1.0"
 dependencies = [
  "datadriven",
+ "rexx-classes",
  "rexx-core",
  "rexx-extract",
  "rexx-inventory",

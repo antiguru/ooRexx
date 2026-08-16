@@ -25,6 +25,12 @@ rexx-num = { path = "../rexx-num" }
 # omission spec revision 4 was made to correct.
 rexx-inventory = { path = "../rexx-inventory" }
 
+# The class/method-dictionary model (Phase 5a, R9): `ClassRegistry` and
+# `ClassGraph`, what `::CLASS`/`::METHOD`/`::ATTRIBUTE` install a class and
+# its dictionaries into. This crate does not build a second representation
+# of the same thing.
+rexx-classes = { path = "../rexx-classes" }
+
 [dev-dependencies]
 # Case tables as data files rather than `const` arrays in Rust sources, for
 # tables written from Task 6 onward (the plan's Tech Stack section). Test-only,

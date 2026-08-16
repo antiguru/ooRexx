@@ -234,17 +234,27 @@ impl ClassRegistry {
     /// `define` costs is spent for no reason here -- accepted rather than
     /// building a second populate-then-cascade-once primitive, since no
     /// axis this task is guarded against (D35) ever calls it.
-    pub fn add_instance_method(&mut self, class: ObjRef, name: &str) {
+    ///
+    /// Returns the minted [`MethodId`] -- added for Phase 5a Task 4's own
+    /// caller, which records a `(program, directive)` pair against it so a
+    /// later dispatch can find the method's own body; nothing in this crate
+    /// itself needs the value back.
+    pub fn add_instance_method(&mut self, class: ObjRef, name: &str) -> MethodId {
         let method = self.next_method_id();
         self.graph.define(class, name, method);
+        method
     }
 
     /// Install a directly-added class (static) method -- oracle's
     /// `AddClassMethod`, matching [`ClassGraph::class_define`]'s own
     /// bootstrap-only semantics (no cascade, no handle reallocation).
-    pub fn add_class_method(&mut self, class: ObjRef, name: &str) {
+    ///
+    /// Returns the minted [`MethodId`], for the same reason
+    /// [`Self::add_instance_method`] does.
+    pub fn add_class_method(&mut self, class: ObjRef, name: &str) -> MethodId {
         let method = self.next_method_id();
         self.graph.class_define(class, name, method);
+        method
     }
 
     /// `~inherit` -- see [`ClassGraph::inherit`]. Exposed here because R6's

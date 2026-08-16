@@ -158,8 +158,7 @@ use owners::{
 /// **not** descended into by `each_instruction` below -- coverage inside a
 /// `::CLASS`, `::METHOD` or `::ATTRIBUTE` body, or a `::CONSTANT`'s own
 /// parenthesised expression, is not this criterion's concern until a later
-/// task extends the walk to match; R5, Task 4's own ruling, leaves this
-/// under-walking in place deliberately rather than extending it here).
+/// task extends the walk to match).
 ///
 /// **Exhaustive over `DirectiveKind`'s own nine variants**
 /// (`rexx-parse/src/ast.rs:1353`-`1368`), not a string comparison against a
@@ -834,6 +833,37 @@ fn phase_4b_subset_matches_the_committed_list() {
          witnessed by no other check at all: see EXPECTED_SUBSET_4B's own doc \
          comment for the measurement, and for the case where deleting one \
          program left three gate criteria still reporting MET"
+    );
+}
+
+/// `phase-5a.txt`'s exact line list, the same device [`EXPECTED_SUBSET`],
+/// [`EXPECTED_SUBSET_4B`] and [`EXPECTED_SUBSET_4C`] are for the earlier
+/// phases, and added for the same reason: this file was itself the
+/// still-empty phase subset those three files' own review finding (H2) was
+/// measured against, and Task 4 is the first to give it content -- landing
+/// six entries with no pin at all would repeat exactly the gap H2 found,
+/// on the first commit that could show it.
+const EXPECTED_SUBSET_5A: &[&str] = &[
+    "lang/directive_class_installs.rex",
+    "lang/directive_method_installs.rex",
+    "lang/directive_attribute_installs.rex",
+    "lang/directive_constant_expression_installs.rex",
+    "lang/directive_constant_expression_fails.rex",
+    "lang/directive_constant_expression_needs_class.rex",
+    "lang/directive_constant_expression_blames_the_last_class.rex",
+];
+
+#[test]
+fn phase_5a_subset_matches_the_committed_list() {
+    let corpus_dir = corpus_dir();
+    let subset = read_subset(&[&corpus_dir.join("phase-5a.txt")]);
+    assert_eq!(
+        subset, EXPECTED_SUBSET_5A,
+        "phase-5a.txt's entries drifted from EXPECTED_SUBSET_5A -- adding or \
+         removing a line from the 5a subset is a plan amendment, and must \
+         change both the file and this list together, or a deleted line \
+         shrinks every measurement that reads phase-5a.txt with nothing to \
+         notice it"
     );
 }
 
