@@ -4485,6 +4485,18 @@ impl Interp {
         Ok(resolved)
     }
 
+    /// Takes the shared value buffer, empty and ready to build into.
+    pub(crate) fn take_value_buffer(&mut self) -> Vec<Option<ObjRef>> {
+        let mut buffer = std::mem::take(&mut self.value_buffer);
+        buffer.clear();
+        buffer
+    }
+
+    /// Hands the value buffer back for the next builtin call.
+    pub(crate) fn give_value_buffer(&mut self, buffer: Vec<Option<ObjRef>>) {
+        self.value_buffer = buffer;
+    }
+
     /// Evaluates the arguments of a call already resolved to `resolved` and
     /// runs it, in its own nested activation where it has one.
     ///
@@ -4520,21 +4532,9 @@ impl Interp {
     /// because only the caller knows: a `::ROUTINE` body reached by `CALL`
     /// and the same body reached as a function are the same `Entry::Routine`
     /// and answer different `PARSE SOURCE` second words ([`CallType`]'s own
-    /// doc has the measurement). `Entry::Label` ignores it and inherits the
-    /// enclosing activation's instead, which is measured too and is why it
-    /// travels in [`Inherited`].
-    /// Takes the shared value buffer, empty and ready to build into.
-    pub(crate) fn take_value_buffer(&mut self) -> Vec<Option<ObjRef>> {
-        let mut buffer = std::mem::take(&mut self.value_buffer);
-        buffer.clear();
-        buffer
-    }
-
-    /// Hands the value buffer back for the next builtin call.
-    pub(crate) fn give_value_buffer(&mut self, buffer: Vec<Option<ObjRef>>) {
-        self.value_buffer = buffer;
-    }
-
+    /// doc has the measurement). The label path below ignores it and takes
+    /// the enclosing activation's instead, which is measured too and is why
+    /// the field travels in [`Inherited`].
     pub(crate) fn invoke_call(
         &mut self,
         code: &Code<'_>,
