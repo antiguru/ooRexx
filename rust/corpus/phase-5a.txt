@@ -94,6 +94,12 @@ lang/method_attribute_body.rex
 lang/method_trace_invocation.rex
 lang/method_trace_nested.rex
 
+# Task 7 fix round 1: the `::ATTRIBUTE SET` body nothing was running. Its
+# resolved name carries an appended `=` that the getter's does not, and the
+# >I>/<I< pair is the only place a program can see the two entries apart, so
+# this one joins corpus.rs's RAW_STDERR_COMPARISON.
+lang/method_attribute_set_body.rex
+
 # Task 7 fix round 1: the calling context a method activation answers to
 # PARSE SOURCE, which was `COMMAND` here against the oracle's `METHOD` -- rc 0
 # and empty stderr on both sides, so no refusal named an owner and nothing in

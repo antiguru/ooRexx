@@ -1,7 +1,8 @@
-count 10
-/* A ::ATTRIBUTE GET written in Rexx is a method body like any other: the one
-   ::ATTRIBUTE form that carries a body of its own, against the generated
-   accessors, which read an instance variable and are Phase 5's still. */
+count 11
+/* A ::ATTRIBUTE GET written in Rexx is a method body like any other, against
+   the generated accessors, which read an instance variable and are Phase 5's
+   still. The SET form carries a body of its own the same way, and
+   corpus/lang/method_attribute_set_body.rex is where that one runs. */
 say .K~a
 say .K~a + 1
 

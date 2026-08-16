@@ -288,6 +288,11 @@ const RAW_STDERR_COMPARISON: &[&str] = &[
     // that would pass the default comparison while being wrong.
     "lang/method_trace_invocation.rex",
     "lang/method_trace_nested.rex",
+    // The `::ATTRIBUTE` accessor pair. Its `>I>`/`<I<` lines sit at the indent
+    // the entries above are here for, and they carry the resolved message
+    // name -- `"B"` against `"B="` -- which is the only thing in the corpus
+    // that can tell a setter's dictionary entry from its getter's.
+    "lang/method_attribute_set_body.rex",
 ];
 
 /// Every entry in [`RAW_STDERR_COMPARISON`] is a line some phase subset file
