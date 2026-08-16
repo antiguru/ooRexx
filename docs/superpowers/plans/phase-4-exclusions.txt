@@ -2276,9 +2276,9 @@ above.
     handler ran       back
     back
 
-  THE TAIL IS WHAT DECIDES IT, and the whole matrix was run rather than the
-  one program. Same program with `call on` and with `signal on`, and with the
-  raise written three ways:
+  WHICH CELLS DIVERGE, from the whole matrix rather than the one program.
+  Same program with `call on` and with `signal on`, and with the raise
+  written three ways:
 
     tail        CALL ON, oracle    here       SIGNAL ON, oracle   here
     (none)      handler runs       does not   handler runs        does not
@@ -3163,9 +3163,11 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   `RexxObject::messageSend` sends a protected method through
   `processProtectedMethod` (`classes/ObjectClass.cpp:976`), which asks
   `SecurityManager::checkProtectedMethod` (`execution/SecurityManager.cpp:
-  175`) -- and that returns `false` on its first line when `manager ==
-  OREF_NULL`, so with no manager installed the method simply runs. This is
-  the same seam `dispatch.rs`'s `mod seam` documents as D45 site one.
+  175`) -- and that returns `false` from its first statement when `manager ==
+  OREF_NULL`, so with no manager installed the method simply runs. Both
+  `messageSend` overloads reach it the same way (`classes/ObjectClass.cpp:891`
+  and `:948`). This is the same seam `dispatch.rs`'s `mod seam` documents as
+  D45 site one.
 
   A REXX PROGRAM INSTALLS ONE ONLY BY SENDING `~setSecurityManager` to a
   Package, a Method or a Routine object, and every route to one of those is
@@ -3175,10 +3177,10 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   `.routines['R']` are the same refusal where the oracle answers `a Method`
   and `a Routine`; `.Method~new('x', 'return 1')` is rc 120 (`method "NEW" of
   class "Method" is not implemented`); and `.K~method('M')` is rc 120 (`method
-  "METHOD" of class "Class" is not implemented`). The oracle's remaining
-  `setSecurityManager` calls PROPAGATE a manager that already exists into a
-  `::REQUIRES` package (`package/PackageManager.cpp:806` and `:832`) rather
-  than creating one.
+  "METHOD" of class "Class" is not implemented`). The two call sites in
+  `package/PackageManager.cpp` (`:806` and `:832`) are not a route: they
+  PROPAGATE a manager that already exists into a `::REQUIRES` package rather
+  than creating one, and both are guarded by `securityManager != OREF_NULL`.
 
   THAT IS A LIST OF ROUTES CHECKED HERE TOO, and this half of it is checked
   from the oracle's side rather than from this crate's: `Setup.cpp` adds the

@@ -8,11 +8,13 @@
  * so which side of the line a stem falls on is decided by what it holds:
  * rows 3 and 4 are refused and rows 8 and 9 are not.
  *
- * The trapped rows and the answering rows are the pair. A build that dropped
- * the check answers 0 on rows 1 to 5 instead of raising; a build that refused
- * every argument it could not recognise raises on rows 6 to 9 as well. The
- * untrapped send at the end pins the bytes the trap hides -- the method's own
- * traceback line and the 88.909 text. Measured, rc 168.
+ * The trapped rows and the answering rows are the pair, and the stem rows are
+ * what pin the redirect in both directions. Both halves measured by mutation:
+ * a build with no check at all answers 0 on rows 1 to 5 instead of raising,
+ * and a build treating a stem handle itself as having no string value raises
+ * 88.909 on rows 8 and 9, which the oracle answers. The untrapped send at the
+ * end pins the bytes the trap hides -- the method's own traceback line and
+ * the 88.909 text. Measured, rc 168.
  */
 
 signal on syntax name trapped
