@@ -38,8 +38,8 @@
 
 use rexx_core::{Heap, ObjRef, RootSet, SlotRef};
 use rexx_parse::{
-    AnnotationTarget, CodeBody, Directive, DirectiveKind, ExprKind, InstructionKind, Operator,
-    Program, SymbolId, SymbolTable, compound_parts, parse_program,
+    AnnotationTarget, CodeBody, ConstantValue, Directive, DirectiveKind, Expr, ExprKind,
+    InstructionKind, Operator, Program, SymbolId, SymbolTable, compound_parts, parse_program,
 };
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
@@ -2473,43 +2473,155 @@ impl Interp {
     /// it neither runs code, changes a setting a Phase 4 construct can read,
     /// nor resolves a name against a table this crate does not have.** Each
     /// arm's own comment says which of the three it trips.
+    ///
+    /// **`::CONSTANT`'s parenthesised expression form is the one exception to
+    /// "installing does not run code".** The oracle evaluates it right here,
+    /// before `program.main`'s first clause, so a failing expression refuses
+    /// the program exactly the way the other install-time gaps above do --
+    /// measured, `::class K` then `::constant c (1/0)` is rc 214 with stdout
+    /// EMPTY, both engines, while the same directive with `(2+3)` is rc 0 with
+    /// `program.main`'s own output intact. A well-formed expression's *value*
+    /// is discarded: nothing in this crate can read it back yet, since
+    /// dispatching to a `::CONSTANT` accessor is later work.
     fn install_directives(&mut self, id: ProgramId, program: &Rc<Program>) -> Result<(), Failure> {
+        // **One pass for both translation-time refusals**, because the oracle
+        // finds each by reading the directive list rather than by installing
+        // anything: a duplicate `::ROUTINE` name, and a parenthesised
+        // `::CONSTANT` with no `::CLASS` anywhere before it. Measured,
+        // `::constant sep (1+2)` alone in a file is rc 157 with `Error
+        // 99.906`, where the identical directive under a preceding `::CLASS`
+        // reaches the install-time evaluation below instead.
+        let mut saw_class = false;
         for (index, directive) in program.directives.iter().enumerate() {
-            let DirectiveKind::Routine(routine) = &directive.kind else {
-                continue;
-            };
-            // Resolves nothing outside this file and runs nothing: the body
-            // is already assembled in the AST, so installing it is recording
-            // a name.
-            let name: Box<[u8]> = routine.name.to_ascii_uppercase().into();
-            let installed = InstalledRoutine {
-                program: id,
-                directive: index,
-            };
-            if self.routines.insert(name, installed).is_some() {
-                // A *translation* error on the oracle, not an install one:
-                // measured, two `::routine zork` directives give `Error
-                // 99.903: Duplicate ::ROUTINE directive instruction.` at rc
-                // 157, echoing the second directive's own clause.
-                // `rexx-parse` does not detect it, so it is detected here,
-                // where the accumulated table is what answers.
-                self.blame_directive(program, directive);
-                return Err(Raised::duplicate_routine().into());
+            match &directive.kind {
+                DirectiveKind::Class(_) => saw_class = true,
+                DirectiveKind::Constant(constant) => {
+                    if matches!(constant.value, ConstantValue::Expression(_)) && !saw_class {
+                        self.blame_directive(program, directive);
+                        return Err(Raised::constant_needs_class().into());
+                    }
+                }
+                DirectiveKind::Routine(routine) => {
+                    // Resolves nothing outside this file and runs nothing:
+                    // the body is already assembled in the AST, so installing
+                    // it is recording a name.
+                    let name: Box<[u8]> = routine.name.to_ascii_uppercase().into();
+                    let installed = InstalledRoutine {
+                        program: id,
+                        directive: index,
+                    };
+                    if self.routines.insert(name, installed).is_some() {
+                        // A *translation* error on the oracle, not an install
+                        // one: measured, two `::routine zork` directives give
+                        // `Error 99.903: Duplicate ::ROUTINE directive
+                        // instruction.` at rc 157, echoing the second
+                        // directive's own clause. `rexx-parse` does not
+                        // detect it, so it is detected here, where the
+                        // accumulated table is what answers.
+                        self.blame_directive(program, directive);
+                        return Err(Raised::duplicate_routine().into());
+                    }
+                }
+                _ => {}
             }
         }
 
-        // **A second pass, because the oracle's own two refusals happen at
-        // two different times.** A duplicate `::ROUTINE` is a *translation*
-        // error (99.903, rc 157) and everything below is an *install* one
-        // (98.9xx/43.901), so a program with both gets the translation error
-        // -- which is what running the whole first pass before any of this
-        // reproduces.
+        // **A second pass, because the oracle's own translation-time
+        // refusals above happen before every install-time one below**
+        // (98.9xx/43.901/the `::CONSTANT` expression evaluation), so a
+        // program with both gets the translation error -- which is what
+        // running the whole first pass before any of this reproduces.
+        //
+        // `current_class` tracks the most recently seen `::CLASS` directive,
+        // the same positional rule `::METHOD`/`::ATTRIBUTE`/`::CONSTANT`
+        // attach to a class by: a `::CONSTANT` with an expression always has
+        // one here, because the first pass already refused the alternative.
+        let mut current_class: Option<&Directive> = None;
         for directive in &program.directives {
+            if matches!(directive.kind, DirectiveKind::Class(_)) {
+                current_class = Some(directive);
+            }
             if let Some(loud) = directive_gap(&directive.kind) {
                 return Err(loud.into());
             }
+            let DirectiveKind::Constant(constant) = &directive.kind else {
+                continue;
+            };
+            let ConstantValue::Expression(expr) = &constant.value else {
+                continue;
+            };
+            if let Err(failure) = self.eval_constant_expression(id, program, expr) {
+                // Two clause echoes, innermost first, matching the oracle's
+                // own report exactly (measured, `::class K` / `::constant c
+                // (1/0)`):
+                //
+                // ```text
+                //      4 *-* ::constant c (1/0)
+                //      3 *-* ::class K
+                // ```
+                //
+                // `blame_directive` sets `self.failure_site`; `seal_site_level`
+                // is the same mechanism `invoke_call`/`run_fragment` use to
+                // move a level's site into `self.failure_sites` before the
+                // next, enclosing level sets its own -- there is no real
+                // activation nesting here, only the two directives' own
+                // clauses standing in for it.
+                self.blame_directive(program, directive);
+                self.seal_site_level();
+                self.blame_directive(
+                    program,
+                    current_class.expect(
+                        "the first pass already refused an expression with no preceding ::CLASS",
+                    ),
+                );
+                return Err(failure);
+            }
         }
         Ok(())
+    }
+
+    /// Evaluates a `::CONSTANT` directive's parenthesised expression at
+    /// install time: a throwaway activation with default `NUMERIC` settings
+    /// and `TRACE` off, no bindings of its own, torn down immediately after.
+    /// Mirrors the oracle's own moment for this (before `program.main`'s
+    /// first clause), and is engine-agnostic: it runs once, before either
+    /// engine's own instruction loop starts, and reaches the same shared
+    /// [`Interp::eval`] both loops call, so `REXX_ENGINE=tree-walker` and the
+    /// default IR engine evaluate it identically.
+    ///
+    /// `slots: &[]` and `plan: None` are correct rather than merely
+    /// convenient: the expression is evaluated with no enclosing frame at
+    /// all, so every name in it -- there are none in this task's own corpus
+    /// witnesses -- falls through [`Code::slot_for`] to [`Interp::slot_of`]'s
+    /// ordinary resolution exactly as an `INTERPRET` fragment's untranslated
+    /// names do (`run_fragment`, `run.rs`).
+    fn eval_constant_expression(
+        &mut self,
+        id: ProgramId,
+        program: &Rc<Program>,
+        expr: &Expr,
+    ) -> Result<(), Failure> {
+        let empty_body = CodeBody::default();
+        let plan = Rc::new(Plan::build(&empty_body, &program.symbols, None));
+        let frame = self.roots.push_slots(0);
+        let activation_id = self.next_activation_id();
+        self.activations.push(Activation::new(
+            activation_id,
+            Rc::clone(program),
+            id,
+            plan,
+            frame,
+        ));
+        let code = Code {
+            body: &empty_body,
+            symbols: &program.symbols,
+            slots: &[],
+            plan: None,
+        };
+        let result = self.eval(&code, expr);
+        self.activations.pop();
+        self.roots.pop_slots(frame);
+        result.map(|_| ())
     }
 
     /// Records `directive`'s own clause as the site a directive-time

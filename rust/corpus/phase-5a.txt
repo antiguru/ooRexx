@@ -7,13 +7,20 @@
 # phase files, and read by the same `read_subset`, which unions the files in
 # first-seen order and drops a repeat.
 #
-# EMPTY AS OF TASK 1. Phase 5a's own scope -- `::CLASS`/`::METHOD`
-# installation, Rexx method-body invocation, EXPOSE and class-scope instance
-# variables, up to `CoreClasses.orx`'s prologue completing -- is not
-# implemented by any task yet, so there is nothing this crate can run to
-# agreement with the oracle. Task 1 only builds the harness plumbing later
-# tasks need (an unnormalised stderr comparison mode, a directive walker that
-# admits `::CLASS`/`::METHOD` without panicking, and this file wired into
-# every harness that reads a phase subset list); it adds no corpus program of
-# its own. Each later task appends its own witness here as its own construct
-# starts agreeing with the oracle.
+# Task 1 built the harness plumbing this file needs (an unnormalised stderr
+# comparison mode, a directive walker admitting `::CLASS`/`::METHOD` without
+# panicking, and this file wired into every harness that reads a phase subset
+# list) and added no corpus program of its own. Each later task appends its
+# own witness here as its own construct starts agreeing with the oracle.
+
+# Task 4: the directives that install. `::CLASS`, `::METHOD` and `::ATTRIBUTE`
+# installing under it, and `::CONSTANT`'s two shapes -- a well-formed
+# parenthesised expression (evaluated and discarded, since nothing can read
+# it back before message dispatch exists) and the two ways it fails: the
+# expression itself raising, and the structural "no preceding ::CLASS" check.
+lang/directive_class_installs.rex
+lang/directive_method_installs.rex
+lang/directive_attribute_installs.rex
+lang/directive_constant_expression_installs.rex
+lang/directive_constant_expression_fails.rex
+lang/directive_constant_expression_needs_class.rex

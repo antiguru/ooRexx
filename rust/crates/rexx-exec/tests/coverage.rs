@@ -102,10 +102,10 @@
 //! subset's *programs* construct, not about running them -- the differential
 //! half in `tests/corpus.rs` is what proves they execute correctly. The walk
 //! below is `rexx-parse/tests/gate_walk`'s shared module, trimmed to what the
-//! subset actually contains (`::ROUTINE`, `::CLASS` and `::METHOD` and no
-//! other directive -- `assert_program_has_only_admitted_directives` guards
-//! that assumption rather than silently ignoring one, and only `::ROUTINE`'s
-//! body is actually walked) and reproduced
+//! subset actually contains (`::ROUTINE`, `::CLASS`, `::METHOD`, `::ATTRIBUTE`
+//! and `::CONSTANT`, and no other directive -- `assert_program_has_only_admitted_directives`
+//! guards that assumption rather than silently ignoring one, and only
+//! `::ROUTINE`'s body is actually walked) and reproduced
 //! here rather than imported, because an integration test cannot reach
 //! another crate's `tests/` module and this crate's own `Cargo.toml`
 //! deliberately keeps `rexx-parse` as a normal, not dev, dependency for
@@ -144,20 +144,22 @@ use owners::{
 
 // ---------------------------------------------------------------------------
 // The walk. Trimmed from `rexx-parse/tests/gate_walk/mod.rs` to what the
-// subset actually contains: `::ROUTINE` bodies, plus `::CLASS` and `::METHOD`
-// directives admitted but not descended into (Phase 5a).
-// `assert_program_has_only_admitted_directives` guards that assumption at
-// every parse rather than silently under-walking a program that gained a
-// directive kind this walker does not know about.
+// subset actually contains: `::ROUTINE` bodies, plus `::CLASS`, `::METHOD`,
+// `::ATTRIBUTE` and `::CONSTANT` directives admitted but not descended into
+// (Phase 5a). `assert_program_has_only_admitted_directives` guards that
+// assumption at every parse rather than silently under-walking a program
+// that gained a directive kind this walker does not know about.
 // ---------------------------------------------------------------------------
 
 /// Whether `kind` is one of the directive kinds this walker admits without
 /// panicking: `::ROUTINE` (walked into -- `each_instruction` descends into a
-/// `::ROUTINE` body) and `::CLASS`/`::METHOD` (Phase 5a's, admitted so a
-/// subset program carrying one does not panic, but **not** descended into by
-/// `each_instruction` below -- coverage inside a `::CLASS` or `::METHOD` body
-/// is not this criterion's concern until a later task extends the walk to
-/// match).
+/// `::ROUTINE` body) and `::CLASS`/`::METHOD`/`::ATTRIBUTE`/`::CONSTANT`
+/// (Phase 5a's, admitted so a subset program carrying one does not panic, but
+/// **not** descended into by `each_instruction` below -- coverage inside a
+/// `::CLASS`, `::METHOD` or `::ATTRIBUTE` body, or a `::CONSTANT`'s own
+/// parenthesised expression, is not this criterion's concern until a later
+/// task extends the walk to match; R5, Task 4's own ruling, leaves this
+/// under-walking in place deliberately rather than extending it here).
 ///
 /// **Exhaustive over `DirectiveKind`'s own nine variants**
 /// (`rexx-parse/src/ast.rs:1353`-`1368`), not a string comparison against a
@@ -169,10 +171,12 @@ use owners::{
 /// to track.
 fn is_admitted_directive_kind(kind: &DirectiveKind) -> bool {
     match kind {
-        DirectiveKind::Routine(_) | DirectiveKind::Class(_) | DirectiveKind::Method(_) => true,
-        DirectiveKind::Annotate(_)
+        DirectiveKind::Routine(_)
+        | DirectiveKind::Class(_)
+        | DirectiveKind::Method(_)
         | DirectiveKind::Attribute(_)
-        | DirectiveKind::Constant(_)
+        | DirectiveKind::Constant(_) => true,
+        DirectiveKind::Annotate(_)
         | DirectiveKind::Options(_)
         | DirectiveKind::Requires(_)
         | DirectiveKind::Resource(_) => false,
@@ -220,9 +224,9 @@ fn assert_program_has_only_admitted_directives(path: &Path, p: &Program) {
 fn every_directive_keyword_is_correctly_admitted_or_refused() {
     let cases: &[(&str, &str, bool)] = &[
         ("::annotate package\n", "ANNOTATE", false),
-        ("::attribute a\n", "ATTRIBUTE", false),
+        ("::attribute a\n", "ATTRIBUTE", true),
         ("::class c\n", "CLASS", true),
-        ("::constant k 1\n", "CONSTANT", false),
+        ("::constant k 1\n", "CONSTANT", true),
         ("::method m\n  return 1\n", "METHOD", true),
         ("::options noprolog\n", "OPTIONS", false),
         ("::requires \"nosuch\"\n", "REQUIRES", false),
@@ -273,7 +277,7 @@ fn a_class_directive_is_admitted_without_panicking() {
 #[test]
 #[should_panic(expected = "has a `::` directive this walker does not admit")]
 fn an_unadmitted_directive_still_panics() {
-    let p = parse_program(b"::ATTRIBUTE k\n".to_vec()).expect("::ATTRIBUTE k parses");
+    let p = parse_program(b"::OPTIONS NOPROLOG\n".to_vec()).expect("::OPTIONS NOPROLOG parses");
     assert_program_has_only_admitted_directives(Path::new("<phase-5a-task-1-demo>"), &p);
 }
 
@@ -503,11 +507,12 @@ fn exprs_of_loop<'a>(l: &'a Loop, f: &mut impl FnMut(&'a Expr)) {
 /// also admitting a hole: the guard exists to stop a subset program hiding
 /// constructs from criterion 1 inside a body nothing walks, and `::ROUTINE`
 /// is the one directive kind whose body this function actually visits.
-/// `::CLASS` and `::METHOD` are admitted by that guard too (Phase 5a), but
-/// their bodies are **not** descended into here -- a construct that appears
-/// only inside one is not yet counted toward criterion 1's coverage, which is
-/// a fact about this walker's current reach rather than a claim that nothing
-/// else is admitted.
+/// `::CLASS`, `::METHOD`, `::ATTRIBUTE` and `::CONSTANT` are admitted by that
+/// guard too (Phase 5a), but neither a `::METHOD`/`::ATTRIBUTE` body nor a
+/// `::CONSTANT`'s own parenthesised expression is descended into here -- a
+/// construct that appears only inside one is not yet counted toward
+/// criterion 1's coverage, which is a fact about this walker's current reach
+/// rather than a claim that nothing else is admitted.
 fn each_instruction<'a>(p: &'a Program, visit: &mut impl FnMut(&'a Instruction)) {
     for i in &p.main.instructions {
         visit(i);

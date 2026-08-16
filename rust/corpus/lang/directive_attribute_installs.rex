@@ -1,0 +1,13 @@
+/* A ::ATTRIBUTE directive under a ::CLASS installs, its generated accessor
+ * pair never entered. Phase 5a Task 4.
+ *
+ * No GET/SET/EXTERNAL/DELEGATE option, so both accessor methods are
+ * generated rather than written in Rexx, and nothing in this program ever
+ * sends BAZ or BAZ= to anything -- dispatch is Task 5's. Measured, rc 0,
+ * stdout "main ran".
+ */
+
+say 'main ran'
+
+::class Foo
+::attribute baz

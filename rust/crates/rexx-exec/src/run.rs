@@ -7926,7 +7926,7 @@ impl Interp {
     /// untrapped one. The two-raise transcript in
     /// `a_second_raise_after_a_trapped_one_reports_its_own_site` is what
     /// observes that.
-    fn seal_site_level(&mut self) {
+    pub(crate) fn seal_site_level(&mut self) {
         if let Some(site) = self.failure_site.take() {
             self.failure_sites.push(site);
         }

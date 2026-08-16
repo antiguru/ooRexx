@@ -2250,42 +2250,6 @@ above.
   NOT FIXED, decided by Moritz on 2026-08-15. Recorded so that a reader meeting
   the loud message does not conclude the oracle refuses it too.
 
-  A ::CONSTANT DIRECTIVE'S PARENTHESISED EXPRESSION IS NEVER EVALUATED, AND THE
-  ORACLE EVALUATES IT WHEN THE DIRECTIVE INSTALLS. The simple form runs on both
-  sides. The expression form is accepted here and silently does nothing, where
-  the oracle evaluates it before the program starts, so an error inside the
-  expression stops the oracle and not us. This is the opposite shape from the
-  row above: not an over-refusal but a silent under-refusal, which is the worse
-  of the two because nothing is loud.
-
-  Measured 2026-08-15 with the release rexx-run built from b029abe77. That
-  binary's code is this file's revision's code: every commit since b029abe77
-  touches only docs/ and rust/bench-baselines/, neither of which is compiled.
-  Under the standard oracle wrapper from a fresh empty directory, three
-  descriptors read separately, on a program whose
-  prologue is say "prolog" followed by exit, then ::CLASS K and
-  ::CONSTANT c (.NoSuchClass~m):
-
-    oracle               rc 159, stdout empty, stderr naming the ::CONSTANT
-                         line and then the ::CLASS line
-    ir (default engine)  rc 0, stdout "prolog", stderr empty
-
-  A well-formed expression hides the difference: ::CONSTANT c (.K~m) with a
-  class method m returning 7 is rc 0 with stdout "prolog" on BOTH sides, which
-  is why a probe over valid programs alone cannot see this. The discriminating
-  probe has to make the expression fail.
-
-  WHY IT IS PHASE 5'S AND WHY IT MATTERS THERE. StreamClasses.orx:548-549 are
-  this exact form -- ::constant separator (.File~getSeparator) -- and their
-  targets at :546-:547 are external natives, so the bootstrap CALLS a native
-  while installing a directive. A Phase 5 that installs that file without
-  evaluating the constants passes the install and leaves .File without either
-  of them.
-
-  NOT FIXED. Found 2026-08-15 by the adversarial review of the Phase 5 design
-  spec, which put it in criterion 1's own path;
-  docs/superpowers/specs/2026-08-15-phase-5-object-model.md records it as D38.
-
 CLOSED DEFECTS -- measured wrong, measured again, now matching
 -------------------------------------------------------------
 
@@ -2964,3 +2928,60 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   `5-69`, `ITERATE::test_12`, `LEAVE::test_11`) are no longer in
   `rust/corpus/keyword-exempt.txt`; `the_exempt_set_matches_the_current_
   failures` is the witness that all seven now pass.
+
+  A ::CONSTANT DIRECTIVE'S PARENTHESISED EXPRESSION NOW EVALUATES AT INSTALL,
+  MATCHING THE ORACLE (fixed, Phase 5a Task 4). The oracle evaluates a
+  ::CONSTANT's parenthesised expression when the directive installs, before
+  the program's own first clause runs. This row was a silent under-refusal:
+  the expression form used to be accepted and never evaluated, so a failing
+  expression that stops the oracle did not stop this crate at all, and a
+  well-formed one produced the identical bytes either way -- which is why the
+  gap needed a probe designed to make the expression fail rather than a probe
+  over valid programs.
+
+  TWO SHAPES, TWO EXIT CODES. Measured 2026-08-16, standard oracle wrapper,
+  fresh empty directory, three descriptors read separately, on a program
+  whose prologue is say "prolog" followed by exit:
+
+    ::CLASS K then ::CONSTANT c (.NoSuchClass~m)
+      oracle   rc 159, stdout empty, stderr naming the ::CONSTANT line and
+               then the ::CLASS line, Error 97.1 on the expression
+    ::CONSTANT sep (...) with no ::CLASS
+      oracle   rc 157, stdout empty, one clause echo, Error 99.906,
+               structural -- checked by reading the directive list, not by
+               evaluating anything
+
+  Before this fix (measured against the release rexx-run built from
+  `c3dbb2021`, the commit immediately preceding this task's own): both shapes
+  were rc 0, stdout "prolog", stderr empty on this crate.
+
+  THE COMMITTED WITNESSES DO NOT REPRODUCE `.NoSuchClass~m` DIRECTLY, AND THAT
+  IS DELIBERATE. `~m` is a message send, and message dispatch (Task 5) does
+  not exist yet -- reproducing it here would fail for the wrong reason, a
+  loud "not implemented" rather than the oracle's own 97.1. `rust/corpus/lang/
+  directive_constant_expression_fails.rex` instead uses `1/0`, fully
+  implemented on both engines today, and matches the oracle's own 42.3 at rc
+  214 byte for byte, two clause echoes included (the ::CONSTANT's own clause,
+  then the ::CLASS it belongs to). `directive_constant_expression_needs_class.rex`
+  is the other shape's witness (99.906, rc 157, one clause echo, no ::CLASS
+  present at all). `directive_constant_expression_installs.rex` is the
+  regression guard: a well-formed expression (`2+3`) still installs silently,
+  matching the oracle's own rc 0 -- its value is discarded, since nothing in
+  this crate can read a ::CONSTANT's value back before message dispatch
+  (Task 5) and Rexx method invocation (Task 7) exist.
+
+  WHAT WE USED TO DO: nothing. `Interp::install_directives` (`rexx-exec/src/
+  lib.rs`) matched every `DirectiveKind::Constant` and took no further action,
+  so the `Expression` variant's own payload was parsed and never read again.
+
+  WHAT WOULD GO RED IF THE FIX WERE REMOVED: `tests/corpus.rs`'s differential
+  over `directive_constant_expression_fails.rex` and
+  `directive_constant_expression_needs_class.rex`, both rc 0 on this crate
+  without the fix where the oracle is rc 214 and rc 157.
+
+  WHY IT MATTERS FOR CoreClasses.orx, RECORDED HERE SO A LATER TASK DOES NOT
+  HAVE TO RE-FIND IT. StreamClasses.orx:548-549 are this exact form --
+  ::constant separator (.File~getSeparator) -- and their targets at
+  :546-:547 are external natives, so the bootstrap CALLS a native while
+  installing a directive. Evaluation happens now; resolving that particular
+  native call is Task 10's (the entry-point registry), not this one's.

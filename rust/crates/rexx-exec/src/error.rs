@@ -442,6 +442,21 @@ impl Raised {
         Raised::syntax(99, 903, Vec::new())
     }
 
+    /// 99.906: a `::CONSTANT` directive's parenthesised expression form with
+    /// no `::CLASS` directive anywhere before it in the file. No
+    /// substitutions -- the message names neither directive.
+    ///
+    /// Measured: `::constant sep (1+2)` alone in a file gives rc 157, the
+    /// directive's own clause echoed, `Error 99 ... Translation error.` and
+    /// `Error 99.906:  A ::CONSTANT directive with an expression requires a
+    /// matching ::CLASS directive.` A translation-time refusal, exactly like
+    /// [`Raised::duplicate_routine`] beside it, and for the same reason: the
+    /// oracle finds this by reading the directive list, not by installing
+    /// anything.
+    pub(crate) fn constant_needs_class() -> Raised {
+        Raised::syntax(99, 906, Vec::new())
+    }
+
     /// 16.1: `SIGNAL`/`SIGNAL VALUE` named a target that matches no label in
     /// the running activation's own body. `name` is the resolved target's
     /// own bytes -- already upcased for a bare symbol, verbatim for a quoted
