@@ -4552,7 +4552,11 @@ impl Interp {
     /// interleaved sitting, `instructions:u` per pass, against the sitting
     /// before it -- `strings` calls four builtins per pass and moved +4.0004
     /// (tw) / +4.0000 (ir); `alloc4c` calls one and moved +0.67 (tw) / +1.01
-    /// (ir); `emptyloop` and `varlookup` call none and moved by under a
+    /// (ir), where the tw figure is inside that arm's own round spread for
+    /// the sitting and so does not resolve an effect this small -- it is the
+    /// ir arm that carries `alloc4c`'s agreement with the model, and
+    /// `strings` that carries the model; `emptyloop` and `varlookup` call
+    /// none and moved by under a
     /// thousandth; `arith` and `compound` call none and moved by less than
     /// the unchanged pinned build's own drift on those axes. That is 0.030%
     /// of `strings` and 0.009% (tw) of `alloc4c`, an order of magnitude under

@@ -2764,8 +2764,8 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   A row DIVERGES when it is neither: this crate answers, at rc 0, and the
   answer is not the oracle's. That is a third status and the worst of them,
   because the crate hands a program an answer to go on with rather than
-  failing, and nothing in the tree names the gap -- no refusal, no owner and
-  no message, so a gate that partitions failures by a loud message has
+  failing, and nothing in the tree names the gap -- no refusal and no
+  message, so a gate that partitions failures by a loud message has
   nothing of the row to partition. Whether the ORACLE is loud on the same
   program is a property of the individual row and not of the status: it may
   be, in which case a differential run comparing the three descriptors would
@@ -3099,6 +3099,13 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   true, so each limb below says it. This entry is about those three by name
   and does not claim to enumerate the ::METHOD options this crate leaves
   unmodelled.
+
+  EVERY MEASUREMENT BELOW IS ON A CLASS METHOD, and that restriction is not a
+  choice of program. Reaching an INSTANCE method needs an instance, an
+  instance needs `~new`, and `~new` is Phase 5b's -- so the instance-method
+  reading of each sentence below is untested here rather than confirmed, and
+  a route that is loud on a class method is not thereby known to be loud on
+  an instance one. Whichever task lands `~new` inherits re-measuring these.
 
   `PRIVATE` IS MODELLED AS A REFUSAL, WHICH IS AN OVER-REFUSAL. The oracle
   refuses the send only from outside the defining scope; from inside one of
