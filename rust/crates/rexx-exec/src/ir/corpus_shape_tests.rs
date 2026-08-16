@@ -137,6 +137,7 @@ impl Root {
             | Op::Return { .. }
             | Op::Queue { .. }
             | Op::Call { .. }
+            | Op::Message { .. }
             | Op::TraceFunction { .. }
             | Op::EndBranch
             | Op::EnterWhen { .. }
@@ -176,6 +177,7 @@ fn promoted_as(kind: &InstructionKind, index: usize, listed: &[usize]) -> Option
         InstructionKind::Push { .. } => Some("PUSH"),
         InstructionKind::Queue { .. } => Some("QUEUE"),
         InstructionKind::Call(call) if matches!(&**call, Call::Named { .. }) => Some("CALL name"),
+        InstructionKind::Message { .. } => Some("message send"),
         _ => None,
     }
 }
@@ -697,6 +699,7 @@ fn sweep_every_corpus_body() {
         "PUSH",
         "QUEUE",
         "CALL name",
+        "message send",
     ] {
         assert!(
             seen.constructs.contains_key(construct),

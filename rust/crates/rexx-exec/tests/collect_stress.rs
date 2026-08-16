@@ -175,6 +175,8 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/message_send_scope_override.rex",
     "lang/message_send_too_many_arguments.rex",
     "lang/message_send_unknown_method.rex",
+    "lang/message_send_unknown_method_on_a_number.rex",
+    "lang/message_send_unknown_method_on_nil.rex",
     "lang/mutation_controlled_order.rex",
     "lang/no_trailing_newline.rex",
     "lang/prefix_dotvar_logical_over_label.rex",

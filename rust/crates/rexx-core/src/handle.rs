@@ -68,6 +68,25 @@ const GEN_BITS: u32 = 30;
 /// retired rather than reused, so a stale handle can never alias a live one.
 pub const GENERATION_MAX: u32 = (1 << GEN_BITS) - 1;
 
+/// The first slot index reserved for a class object's identity, which the
+/// arena may never allocate.
+///
+/// **A class object is not in the arena and its identity is still an
+/// `ObjRef`** (D29: "a class's identity is an `ObjRef`; `BehaviourId` stays a
+/// `u16` index for the primitive fast path"). Both counters used to start at
+/// zero, so the first class and the first heap slot were the same sixty-four
+/// bits -- and the failure mode is silent rather than loud: a class handle
+/// arriving where a value is expected resolves to whatever object holds that
+/// slot, so a send would answer from an unrelated value's class and the
+/// collector would be handed a root the program never named.
+///
+/// Splitting the slot space is what separates them, and the tag space cannot:
+/// all four tag values are taken. The arena counts up from zero and
+/// [`crate::Heap`] asserts it never reaches here; classes count up from here.
+/// Nothing is taken from the generation budget, and the arena's half is still
+/// far past what an allocation of `Slot`s could exhaust.
+pub const CLASS_SLOT_BASE: u32 = 1 << 31;
+
 /// Inclusive bounds of the inline integer range.
 pub const SMALL_INT_MAX: i64 = (1 << 61) - 1;
 pub const SMALL_INT_MIN: i64 = -(1 << 61);
@@ -138,6 +157,33 @@ impl ObjRef {
         Some(ObjRef(
             (data << TEXT_DATA_SHIFT) | ((bytes.len() as u64) << TEXT_LEN_SHIFT) | TAG_TEXT,
         ))
+    }
+
+    /// The `id`th class object's identity, or `None` for an `id` the reserved
+    /// range does not hold.
+    ///
+    /// Generation zero, always: a class identity names no slot, so it has no
+    /// generation to move on, and fixing it at zero is what lets
+    /// [`ObjRef::class_id`] read the range back exactly.
+    pub const fn class(id: u32) -> Option<Self> {
+        if id >= CLASS_SLOT_BASE {
+            return None;
+        }
+        Some(ObjRef::heap(CLASS_SLOT_BASE | id, 0))
+    }
+
+    /// This handle's own class index, or `None` for anything the arena could
+    /// have produced.
+    ///
+    /// **The one predicate that tells a class identity from a value**, and
+    /// what a receiver's decode has to ask before it reaches for the arena.
+    pub const fn class_id(self) -> Option<u32> {
+        match self.decode() {
+            Decoded::Heap { slot, generation } if generation == 0 && slot >= CLASS_SLOT_BASE => {
+                Some(slot - CLASS_SLOT_BASE)
+            }
+            _ => None,
+        }
     }
 
     pub const fn decode(self) -> Decoded {

@@ -1185,12 +1185,6 @@ impl Raised {
         Raised::syntax(93, 902, vec![arity.to_string().into_bytes()])
     }
 
-    /// 88.909: a method argument has no string value. `position` is
-    /// 1-based in the method's own argument list.
-    ///
-    /// Measured at rc 168: `'abc'~hasMethod(.nil)` reports `Argument 1 must
-    /// have a string value.`, where `'abc'~hasMethod(5)` answers `0` --
-    /// a number has a string value and `.nil` does not.
     /// 88.914: a `target~name:scope` override whose scope expression did not
     /// evaluate to a class object.
     ///
@@ -1203,6 +1197,12 @@ impl Raised {
         Raised::syntax(88, 914, vec![b"SCOPE".to_vec(), b"Class".to_vec()])
     }
 
+    /// 88.909: a method argument has no string value. `position` is
+    /// 1-based in the method's own argument list.
+    ///
+    /// Measured at rc 168: `'abc'~hasMethod(.nil)` reports `Argument 1 must
+    /// have a string value.`, where `'abc'~hasMethod(5)` answers `0` --
+    /// a number has a string value and `.nil` does not.
     pub(crate) fn argument_needs_a_string_value(position: usize) -> Raised {
         Raised::syntax(88, 909, vec![position.to_string().into_bytes()])
     }

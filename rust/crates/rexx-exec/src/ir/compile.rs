@@ -887,6 +887,24 @@ pub(crate) fn compile(
                 });
                 close_region(&mut ops, at)?;
             }
+            // A message send as a whole clause, all three forms. No register
+            // and no expression slot: `Interp::exec_message` evaluates the
+            // term itself, exactly as the tree-walker's own arm does, so what
+            // this promotion decides is the clause region around it and
+            // nothing about the send.
+            InstructionKind::Message { .. } => {
+                let at = op_index(&ops)?;
+                let echo = echoes(trace, instruction);
+                ops.push(Op::Clause {
+                    index: instruction_index(index)?,
+                    end: 0,
+                });
+                push_echo(&mut ops, echo, instruction_index(index)?);
+                ops.push(Op::Message {
+                    index: instruction_index(index)?,
+                });
+                close_region(&mut ops, at)?;
+            }
             _ => ops.push(Op::Generic {
                 index: instruction_index(index)?,
             }),
@@ -1791,6 +1809,7 @@ fn assert_region_ops_name_their_clause(ops: &[Op]) {
                 | Op::Queue { index, .. }
                 | Op::WhenTest { index, .. }
                 | Op::Call { index, .. }
+                | Op::Message { index }
                 | Op::CallExpr { index, .. }
                 | Op::TraceFunction { index, .. }
                 | Op::Condition { index, .. }

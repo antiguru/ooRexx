@@ -267,6 +267,17 @@ impl Heap {
             }
             None => {
                 let slot = u32::try_from(self.slots.len()).expect("heap exceeds 2^32 slots");
+                // **The arena never reaches the range a class identity lives
+                // in**, which is what makes a class handle and a value handle
+                // distinguishable at all -- see `CLASS_SLOT_BASE`. Asserted
+                // rather than argued from the arithmetic: an arena that grew
+                // this far would start handing out handles equal to class
+                // identities, and the failure mode is a wrong answer rather
+                // than a crash.
+                assert!(
+                    slot < crate::CLASS_SLOT_BASE,
+                    "the arena reached the slot range reserved for class identities"
+                );
                 self.slots.push(Slot::Live {
                     object,
                     generation: 0,

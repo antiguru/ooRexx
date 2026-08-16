@@ -1584,3 +1584,44 @@ fn every_setup_class_is_native_or_deferred_with_a_reason() {
         );
     }
 }
+
+/// **Every identity this registry mints is a class identity**, disjoint from
+/// anything `rexx_core::Heap` can allocate.
+///
+/// The registry's `ObjRef`s travel out of this crate -- a resolved send hands
+/// one back as its scope, and a later phase makes a class object a value -- so
+/// a handle that could equal an arena slot is one a consumer would resolve
+/// against the arena. `rexx_core::CLASS_SLOT_BASE`'s own doc has the failure
+/// mode; `rexx-core`'s `a_class_identity_is_never_an_arena_handle` is the
+/// other half of the pair, over the handle type itself.
+///
+/// **Before `reserve_id` used `ObjRef::class`** it minted `ObjRef::heap(n, 0)`
+/// from a counter starting at zero, so every assertion below answered `None`
+/// and this test fails on the first class it looks at.
+#[test]
+fn every_registered_class_identity_is_outside_the_arenas_slot_range() {
+    let registry = rexx_classes::native_classes();
+    // Named rather than swept, so a lookup that started answering `None`
+    // fails here instead of silently shrinking what this reads. The two
+    // bootstrap classes plus a plain one and a donation recipient, which is
+    // every construction path `native_classes` has.
+    for name in ["Object", "Class", "String", "Array", "Bag"] {
+        let class = registry
+            .lookup(name)
+            .unwrap_or_else(|| panic!("{name} is a native class"));
+        assert!(
+            class.class_id().is_some(),
+            "the class registered for {name} has an identity the arena could also produce"
+        );
+    }
+    // A class installed after the bootstrap takes its identity from the same
+    // counter, so the property has to hold past the native set too.
+    let mut registry = registry;
+    let object = registry.lookup("Object").expect("Object is a native class");
+    let metaclass = registry.lookup("Class").expect("Class is a native class");
+    let user = registry.define_class("Widget", Some(object), ClassKind::Regular, metaclass);
+    assert!(
+        user.class_id().is_some(),
+        "a class installed after the bootstrap has an arena-shaped identity"
+    );
+}

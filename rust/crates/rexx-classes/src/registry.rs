@@ -67,7 +67,13 @@ impl ClassRegistry {
     /// [`ClassGraph::define_class`]'s own doc comment for why a forward
     /// reference like this is safe).
     pub fn reserve_id(&mut self) -> ObjRef {
-        let id = ObjRef::heap(self.next_id, 0);
+        // **A class identity comes out of `rexx-core`'s reserved range, not
+        // out of the arena's.** Both counters used to start at zero, so the
+        // first class and the first heap slot were the same sixty-four bits;
+        // `ObjRef::class` is what keeps them disjoint, and `ObjRef::class_id`
+        // is what a consumer asks before treating a handle as a value. See
+        // `rexx_core::CLASS_SLOT_BASE`.
+        let id = ObjRef::class(self.next_id).expect("a program declares fewer than 2^31 classes");
         self.next_id += 1;
         id
     }

@@ -2428,7 +2428,7 @@ impl Interp {
     /// (`MessageInstruction.cpp:76-88`), which is why it shares this arm
     /// rather than having one of its own -- and why the scope-override check
     /// applies to it too, measured: `x~a:super = 2` is 88.914.
-    fn exec_message(
+    pub(crate) fn exec_message(
         &mut self,
         code: &Code<'_>,
         term: &Expr,

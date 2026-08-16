@@ -640,7 +640,7 @@ impl Loud {
     /// there is no behaviour to resolve the name against at all.
     ///
     /// The reachable case is a stem: `rexx_classes::deferred_classes` leaves
-    /// `.Stem` out because its `Setup.cpp` block hides six comparison
+    /// `.Stem` out because its `Setup.cpp` block hides the comparison
     /// methods and `MethodDict` models no removal. The oracle answers a send
     /// to one -- `a. = 'dflt'; say a.~length` is `4`, forwarded through
     /// `StemClass`'s own `UNKNOWN` -- so 97.1 would be a wrong answer that a
@@ -2756,6 +2756,13 @@ impl Interp {
     /// [`Interp::install_attribute`] generates. `MethodDirective::name` keeps
     /// the as-written spelling, which is the method object's own name and a
     /// different thing from its lookup key.
+    ///
+    /// **Nothing observes the difference yet**, and no test pins it:
+    /// `MethodDict::add_method` upcases its own key, so `::method "abc"`
+    /// answers `~abc` either way and the stored key is the same string either
+    /// way. The upcasing here is alignment with the oracle's own parser
+    /// ahead of the first reader that can tell -- the method object's own
+    /// name, which is the task that enters a method body.
     fn install_method(
         &mut self,
         program: ProgramId,
@@ -3966,23 +3973,6 @@ mod tests {
                 .own_instance_method_names(id)
                 .contains("BAR")
         );
-    }
-
-    /// A quoted `::METHOD` name installs under its **upcased** spelling,
-    /// which is what `LanguageParser::methodDirective`'s own
-    /// `internalname = commonString(name->upper())` hands `addMethod`. Had
-    /// `install_method` passed the name as written, the dictionary would
-    /// still answer `ABC` (`MethodDict::add_method` upcases its own key),
-    /// so this reads `own_instance_method_names`, which reports the key as
-    /// stored.
-    #[test]
-    fn a_quoted_method_name_installs_upcased() {
-        let (mut interp, _program) =
-            installed(b"say 'main ran'\n::class Foo\n::method \"abc\"\n  return 1\n");
-        let id = interp.classes().lookup("FOO").unwrap();
-        let names = interp.classes().own_instance_method_names(id);
-        assert!(names.contains("ABC"));
-        assert!(!names.contains("abc"));
     }
 
     /// Neither `GET` nor `SET`: both accessor names install. Had the `=`

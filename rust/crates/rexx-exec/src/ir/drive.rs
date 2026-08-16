@@ -1179,6 +1179,23 @@ impl Interp {
                                         };
                                     break 'region Ok(RegionEnd::Flowed(flow));
                                 }
+                                // A message send that is a whole clause, in
+                                // any of its three forms. `exec_message` is
+                                // the tree-walker's own arm, entered here
+                                // with the same two fields: the term and the
+                                // message-assignment form's value.
+                                Op::Message { index } => {
+                                    debug_assert_names_the_clause(code, *index, clause, "Message");
+                                    let InstructionKind::Message { term, value } = &clause.kind
+                                    else {
+                                        break 'region Err(Loud::instruction(&clause.kind).into());
+                                    };
+                                    let flow = match self.exec_message(code, term, value.as_ref()) {
+                                        Ok(flow) => flow,
+                                        Err(failure) => break 'region Err(failure),
+                                    };
+                                    break 'region Ok(RegionEnd::Flowed(flow));
+                                }
                                 // An `IF`'s or a plain `WHEN`'s condition
                                 // validation and its `>>>` line, through the
                                 // same `Interp::condition_value` the
@@ -1472,6 +1489,7 @@ impl Interp {
                 Op::Return { .. } => return Err(Loud::op_not_driven("Return").into()),
                 Op::Queue { .. } => return Err(Loud::op_not_driven("Queue").into()),
                 Op::Call { .. } => return Err(Loud::op_not_driven("Call").into()),
+                Op::Message { .. } => return Err(Loud::op_not_driven("Message").into()),
                 Op::CallExpr { .. } => return Err(Loud::op_not_driven("CallExpr").into()),
                 Op::TraceFunction { .. } => {
                     return Err(Loud::op_not_driven("TraceFunction").into());

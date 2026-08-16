@@ -854,6 +854,8 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/message_send_native.rex",
     "lang/message_send_inherited_scope.rex",
     "lang/message_send_unknown_method.rex",
+    "lang/message_send_unknown_method_on_nil.rex",
+    "lang/message_send_unknown_method_on_a_number.rex",
     "lang/message_send_scope_override.rex",
     "lang/message_send_too_many_arguments.rex",
     "lang/message_send_missing_argument.rex",

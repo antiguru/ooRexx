@@ -818,6 +818,35 @@ pub(crate) enum Op {
     /// `site` is this call site's own slot in [`Chunk::calls`], **not** a
     /// position in the op stream, for the reason [`Op::Arith`]'s `hint` is not.
     Call { index: u32, site: u16 },
+    /// Runs the message-send clause at `index`: the receiver, the scope
+    /// override, the arguments and their `>A>` lines, the send, the `>M>`
+    /// line, and `RESULT`. All of it through `Interp::exec_message`, the
+    /// same function the tree-walker's own `step` arm calls.
+    ///
+    /// **No `site`, and that is D28 rather than an omission.** Message
+    /// resolution is dynamic with no per-call-site cache, so this op has
+    /// nothing to keep between executions -- which is the one field that
+    /// separates it from [`Op::Call`], whose `site` is a classic-call cache.
+    ///
+    /// **What the promotion buys is the clause region, not a cache.** An
+    /// instruction left as [`Op::Generic`] cannot sit inside one (see
+    /// [`Op::Clause`]'s own rule), so the clause echo, the `SIGL` line, the
+    /// temps frame, the condition-delivery boundary and the failing clause's
+    /// own site would all come from `Interp::step_in_temps_frame` instead of
+    /// this stream. With the op, `tests/ir_dual.rs` compares two genuinely
+    /// different routes to the same clause for every corpus program that
+    /// sends a message as a whole clause.
+    ///
+    /// **The last op of a [`Op::Clause`] region, and inside it**, for the
+    /// reason [`Op::Call`] is: the send runs inside the clause exactly as it
+    /// does on the tree-walker, so the clause boundary that follows it is
+    /// where a handler queued during the send is delivered.
+    ///
+    /// **Both forms**: `q~append(1)`, `q~~append(1)`, and the
+    /// message-assignment `q[1] = 2`, which is one `InstructionKind::Message`
+    /// with a value and is decided inside `exec_message` rather than by two
+    /// ops.
+    Message { index: u32 },
     /// Continues at op `target`.
     Jump { target: u32 },
     /// Continues at op `target` unless register `reg` holds the logical value

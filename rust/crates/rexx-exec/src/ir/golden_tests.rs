@@ -76,6 +76,65 @@ fn traced() -> ChunkTrace {
 /// call writes the `dst` its parent gave it and takes no register of its own,
 /// so two calls over one operator cost what `zb + zc` costs; a call that
 /// allocated a register for itself would render the same ops and reserve more.
+/// A message send as a whole clause compiles to a `Clause` region ending in
+/// one `Op::Message`, in all three of its forms.
+///
+/// **The op carries the clause index and nothing else**, which is D28 in the
+/// stream: `Op::Call` renders a `site=` because a classic call keeps its
+/// resolution, and a send keeps none. A field added here would show as a
+/// rendered `site=` in these strings.
+///
+/// **What the region itself is worth**: an `Op::Generic` instruction may not
+/// sit inside a `Clause` region, so a compiler that left this construct
+/// general would render `0: Generic index=0` alone and every line below would
+/// differ. `corpus_shape_tests` states the same property over every corpus
+/// program; this states the exact stream for the three forms, which that one
+/// does not read.
+///
+/// No `Op::EvalExpr` and no register: `Interp::exec_message` evaluates the
+/// term itself, exactly as the tree-walker's own arm does, so the term is not
+/// an expression slot this instruction offers to `push_native`.
+#[test]
+fn a_message_send_clause_compiles_to_a_region_ending_in_one_message_op() {
+    for source in [
+        &b"'abc'~length"[..],
+        &b"'abc'~~length"[..],
+        &b"zz = 'abc'; zz[1] = 2"[..],
+    ] {
+        let chunk = compile_for_test(source).expect("the chunk fits");
+        let rendered = render(&chunk);
+        let last = rendered
+            .lines()
+            .next_back()
+            .expect("the stream is not empty");
+        let at = rendered.lines().count() - 1;
+        assert_eq!(
+            last,
+            format!(
+                "{at}: Message index={}",
+                if source.starts_with(b"zz") { 1 } else { 0 }
+            ),
+            "the stream for {:?} is
+{rendered}",
+            String::from_utf8_lossy(source)
+        );
+        assert!(
+            !rendered.contains("Generic"),
+            "the stream for {:?} holds a Generic op:
+{rendered}",
+            String::from_utf8_lossy(source)
+        );
+    }
+
+    // The whole stream for the plain form, so that the region's own bounds and
+    // the absence of any expression op are stated rather than implied.
+    assert_eq!(
+        render(&compile_for_test(b"'abc'~length").expect("the chunk fits")),
+        "0: Clause index=0 end=2\n\
+         1: Message index=0\n"
+    );
+}
+
 #[test]
 fn a_call_promotes_at_the_root_and_below_it() {
     let root = compile_for_test(b"zz = length('abc')").expect("the chunk fits");

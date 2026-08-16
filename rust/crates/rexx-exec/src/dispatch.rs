@@ -35,12 +35,17 @@
 //! one; what this module owes is the **place** one would hook, and the
 //! guarantee that there is exactly one of them.
 //!
-//! That guarantee is carried by the type system rather than by convention.
-//! [`seam::Cleared`] has a private field, so [`seam::clear`] is the only
-//! expression in the crate that can produce one, and a [`NativeMethod`]
-//! cannot be called without one. A second dispatch path reaching a native
-//! method therefore has to call `seam::clear`, and
-//! `tests/dispatch_seam.rs` counts those calls.
+//! **What the type system carries**: [`seam::Cleared`] has a private field
+//! and is neither `Copy` nor `Clone`, and a [`NativeMethod`] takes one by
+//! value, so no primitive method runs without a value produced inside
+//! [`mod seam`](seam) -- the compiler refuses the token's tuple-struct
+//! constructor written anywhere else, `error[E0423]`.
+//!
+//! **What it does not carry** is how many producers that module holds: a
+//! second `fn` inside it is as legal as the first. `tests/dispatch_seam.rs`
+//! is what bounds that, by reading the module's items rather than by
+//! counting two token spellings, and its own module doc states what the
+//! reading still cannot see.
 //!
 //! # The native method table
 //!
@@ -135,10 +140,10 @@ static NATIVE_METHODS: &[(&str, &str, usize, NativeMethod)] = &[
 /// The class model this crate dispatches against, and the implementations
 /// its `MethodId`s name.
 ///
-/// One struct rather than two `Interp` fields because the second is derived
-/// from the first: the `MethodId`s in `natives` are minted by `classes`, so a
-/// registry built without the matching table would resolve every name and
-/// implement none.
+/// One struct rather than separate `Interp` fields because the table is
+/// derived from the registry: the `MethodId`s in `natives` are minted by
+/// `classes`, so a registry built without the matching table would resolve
+/// every name and implement none.
 pub(crate) struct ObjectModel {
     classes: ClassRegistry,
     natives: HashMap<MethodId, NativeEntry>,
@@ -196,8 +201,8 @@ impl ObjectModel {
     }
 }
 
-/// Which native class a value answers to. Two arms, because those are the two
-/// classes a value this crate can build belongs to.
+/// Which native class a value answers to -- the classes a value this crate
+/// can build belongs to, and no others.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum Primitive {
     /// Every string-valued receiver: a literal of any length, and a number.
@@ -212,10 +217,10 @@ enum Primitive {
 
 /// One message term's own parts, as the two call sites already hold them.
 ///
-/// A struct rather than six parameters: `super_class` and `assigned` are both
-/// `Option<&Expr>` and `cascade` is a bare `bool`, so a positional signature
-/// invites exactly the transposition that would show up as wrong output
-/// rather than as a compile error.
+/// A struct rather than a positional parameter list: `super_class` and
+/// `assigned` are both `Option<&Expr>` and `cascade` is a bare `bool`, so a
+/// positional signature invites exactly the transposition that would show up
+/// as wrong output rather than as a compile error.
 #[derive(Copy, Clone)]
 pub(crate) struct MessageTerm<'a> {
     pub(crate) target: &'a Expr,
@@ -273,17 +278,21 @@ impl Interp {
     ///
     /// A stem answers `Stem` on the oracle, and
     /// `rexx_classes::deferred_classes` does not build that class (its
-    /// `Setup.cpp` block hides six comparison methods, and `MethodDict`
+    /// `Setup.cpp` block hides the comparison methods, and `MethodDict`
     /// models no removal), so a stem receiver resolves nothing and fails
-    /// loudly rather than answering from the wrong class. The other three
-    /// heap shapes are unreachable as a receiver today -- nothing in this
-    /// crate constructs a `Body::Array`, a `Body::Instance` or a
-    /// `Body::WeakRef` -- and are named rather than folded together so that
-    /// whichever task makes one reachable gets a message naming it.
+    /// loudly rather than answering from the wrong class. Every other heap
+    /// shape gets a refusal naming itself rather than a shared one, so
+    /// whichever task makes one reachable as a receiver gets a message that
+    /// says which.
     fn receiver_kind(&self, receiver: ObjRef) -> Result<Primitive, &'static str> {
         match receiver.decode() {
             Decoded::Nil => Ok(Primitive::Object),
             Decoded::SmallInt(_) | Decoded::Text(_) => Ok(Primitive::String),
+            // **Asked before the arena is**, which is the whole point of
+            // `rexx_core::CLASS_SLOT_BASE`: a class identity is heap-tagged
+            // and names no slot, so reaching for the arena with one answers
+            // from whatever object happens to hold that index.
+            Decoded::Heap { .. } if receiver.class_id().is_some() => Err("a class object"),
             Decoded::Heap { .. } => match self.heap.get(receiver) {
                 // A handle whose slot is gone. Not reachable from a running
                 // program -- a receiver is rooted by the term that evaluated
@@ -422,7 +431,6 @@ impl Interp {
     /// `>A>   "1"`. The scope override is validated **before** the arguments
     /// are evaluated, so a bad scope refuses without them
     /// (`RexxExpressionMessage::evaluate`, `ExpressionMessage.cpp:158-181`).
-    ///
     pub(crate) fn message_term(
         &mut self,
         code: &crate::Code<'_>,
@@ -545,9 +553,16 @@ fn native_has_method(
         return Err(Raised::argument_needs_a_string_value(1).into());
     }
     let name = String::from_utf8_lossy(&interp.to_text(argument).to_ascii_uppercase()).into_owned();
-    let answers = interp
-        .class_of_receiver(receiver)
-        .is_ok_and(|class| interp.object_model().classes.has_method(class, &name));
+    // **A receiver with no class here is loud, not `0`.** `send_message`
+    // screens for it before any method runs, so this arm is unreachable
+    // today; answering `0` from it anyway would make this the one place in
+    // the module where a gap becomes an answer, and the answer would be one
+    // the oracle contradicts.
+    let class = match interp.class_of_receiver(receiver) {
+        Ok(class) => class,
+        Err(kind) => return Err(Loud::receiver_class(kind).into()),
+    };
+    let answers = interp.object_model().classes.has_method(class, &name);
     Ok(interp.counted(usize::from(answers)))
 }
 
@@ -683,6 +698,37 @@ mod tests {
         assert!(matches!(
             interp.send_message(receiver, b"NOSUCHMETHOD", None, &[]),
             Err(Failure::Raised(_))
+        ));
+    }
+
+    /// **A class identity used as a receiver is refused, not resolved through
+    /// the arena.**
+    ///
+    /// No expression yields a class object as a value in this phase, so this
+    /// is unreachable from a program -- and it is the arm that decides what
+    /// happens on the first day one does. Before class identities moved to
+    /// `rexx_core::CLASS_SLOT_BASE`'s reserved range, a class handle decoded
+    /// as an ordinary heap handle, `heap.get` answered whatever object held
+    /// that slot, and the send resolved against **that value's** class: a
+    /// silent wrong answer. With the range, `class_id()` is `Some` and this
+    /// is loud.
+    ///
+    /// Had the range not been reserved, the allocation below would put a
+    /// `Body::Text` in slot 0 and the class-0 handle would resolve to it, so
+    /// this send would answer `3` instead of failing.
+    #[test]
+    fn a_class_identity_used_as_a_receiver_is_loud() {
+        let mut interp = Interp::new();
+        // Long enough not to fit in the handle, so it really does take the
+        // arena's slot 0 -- which is the slot the first class identity used
+        // to be equal to.
+        let occupant = interp.text(b"abcdefghijklmno");
+        assert!(interp.heap.get(occupant).is_some());
+        let class = interp.classes().lookup("String").expect("String is native");
+        assert!(class.class_id().is_some());
+        assert!(matches!(
+            interp.send_message(class, b"LENGTH", None, &[]),
+            Err(Failure::Loud(_))
         ));
     }
 

@@ -11,50 +11,62 @@
 
 //! **D45, site one: dispatch passes through exactly one chokepoint.**
 //!
-//! # What this test counts, and what it cannot see
+//! # The half the compiler enforces
 //!
-//! It counts, over every `.rs` file under `crates/rexx-exec/src/`:
+//! `dispatch::seam::Cleared` is a struct with a private field, and
+//! `dispatch::NativeMethod`'s signature takes one by value. It is neither
+//! `Copy` nor `Clone` and has no other constructor. So **a primitive method
+//! cannot be called at all without a value produced inside `mod seam`** --
+//! measured, not argued: writing `native_length(interp, Cleared(()), ..)`
+//! anywhere else in the crate is `error[E0423]: cannot initialize a tuple
+//! struct which contains private fields`.
 //!
-//! * occurrences of the token `seam::clear(`, the call to the chokepoint:
-//!   exactly one;
-//! * occurrences of `Cleared(())`, which is both the token's own tuple-struct
-//!   declaration and the only expression that builds one: exactly two, of
-//!   which exactly one is the declaration -- so exactly one construction.
+//! That is the whole of the compiler's contribution, and it bounds *whether*
+//! the seam is reachable around, not *how many* producers there are.
 //!
-//! Counting text is worth something here **only
-//! because of a type-system property that stands behind it**:
-//! `dispatch::seam::Cleared` is a struct with a private field declared in a
-//! module whose whole body is those few lines, and
-//! `dispatch::NativeMethod`'s signature takes one. So a second path that
-//! invokes a primitive method cannot be written without either calling
-//! `seam::clear` (counted) or adding a second `Cleared(())` (counted) --
-//! the compiler refuses every other spelling. That is what makes "exactly
-//! one" a property rather than an inspection.
+//! # The half this test enforces, and how it is evadable
 //!
-//! **What would pass this while a second dispatch path existed**, stated
-//! plainly rather than argued away:
+//! Everything below is a lexical scan, and the previous version of this
+//! comment claimed more: it said "the compiler refuses every other
+//! spelling", which is false. A second producer written **inside** `mod
+//! seam` -- the one place the private field permits -- evades a needle
+//! search entirely:
 //!
+//! ```ignore
+//! pub(super) fn clear_for(..) -> Cleared { let ok = (); Cleared(ok) }
+//! ```
+//!
+//! `Cleared(ok)` is not the text `Cleared(())`, and `seam::clear_for(` does
+//! not contain `seam::clear(`. So the producer count is bounded by reading
+//! the module rather than by counting two tokens, which is what
+//! [`the_seam_module_holds_one_struct_and_one_function`] does: the module
+//! body is extracted by brace matching and its item keywords are counted, so
+//! **any** second producer -- a second `fn`, an `impl` block, a `const` of
+//! that type -- is a second item and fails.
+//!
+//! What that still cannot see, stated rather than argued away:
+//!
+//! * **An item introduced by a macro expansion inside the module**, or a
+//!   second `mod seam` in another file. Neither exists; both would pass.
 //! * **A path that invokes something other than a primitive method.** The
 //!   token guards `NativeMethod` calls. Phase 5a Task 7 enters Rexx method
-//!   bodies, and if it enters them without going through
-//!   `Interp::invoke`, this test stays green with two dispatch paths in the
-//!   tree. The remedy is for that task to route its invocation through the
-//!   same `Interp::invoke`, and this comment is where the requirement is
-//!   written down; nothing here can enforce it today, because the second
-//!   kind of method does not exist yet.
+//!   bodies, and if it enters them without going through `Interp::invoke`,
+//!   this test stays green with two dispatch paths in the tree. Nothing here
+//!   can enforce it today, because the second kind of method does not exist
+//!   yet; this comment is where the requirement is written down.
 //! * **A path in another crate.** The scan reads `rexx-exec/src` only.
 //!   Nothing outside this crate can call `Interp::invoke` (it is
 //!   `pub(crate)`) or build a `Cleared`, so a second path elsewhere would
 //!   have to reimplement the object model rather than reuse it -- which R9
 //!   already forbids for a different reason, and which this test does not
 //!   check.
-//! * **A second call added inside a comment or a string.** That is counted
-//!   too, so it fails rather than passes -- the safe direction, and the
-//!   reason this file's own text says `seam` and `clear` separately below
-//!   rather than spelling the call.
+//! * **A mention inside a comment or a string** counts toward the needle
+//!   tallies, so a stray one fails rather than passes -- the safe direction,
+//!   and the reason this file builds its needles with `format!` rather than
+//!   spelling them.
 //!
-//! The counts are over `src/` and not over this file, so nothing here can
-//! satisfy its own assertion.
+//! The scan reads `src/` and never this file, so nothing here can satisfy its
+//! own assertion.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -153,5 +165,88 @@ fn the_scan_can_tell_a_present_token_from_an_absent_one() {
     assert!(
         occurrences("no_such_token_exists_in_this_crate").is_empty(),
         "the scan matched a token that is not in the crate, so its counts mean nothing"
+    );
+}
+
+/// The seam module's own body, by brace matching from its `mod` line.
+///
+/// Read rather than counted from the outside, because the private field puts
+/// every possible producer of the token inside these lines and nowhere else.
+fn seam_module_body() -> String {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/dispatch.rs");
+    let text = fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let header = format!("mod {} {{", "seam");
+    let start = text
+        .find(&header)
+        .unwrap_or_else(|| panic!("{} declares no {header}", path.display()))
+        + header.len();
+    let mut depth = 1usize;
+    for (offset, byte) in text[start..].bytes().enumerate() {
+        match byte {
+            b'{' => depth += 1,
+            b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return text[start..start + offset].to_string();
+                }
+            }
+            _ => {}
+        }
+    }
+    panic!(
+        "{}: the seam module's braces do not balance",
+        path.display()
+    );
+}
+
+/// **The producer bound: the seam module holds one struct and one function,
+/// and no other item at all.**
+///
+/// The private field means every producer of the token must be written here;
+/// counting the items here therefore counts the producers, where counting two
+/// token spellings does not -- the module doc has the evasion that motivated
+/// this.
+///
+/// Had a second producer been added -- `fn clear_for(..) -> Cleared { let ok
+/// = (); Cleared(ok) }`, the exact shape the needle tallies miss -- the `fn`
+/// count below is 2 and this fails.
+#[test]
+fn the_seam_module_holds_one_struct_and_one_function() {
+    let body = seam_module_body();
+    // Comments and doc comments are stripped first, so a keyword inside the
+    // module's own prose is not counted as an item.
+    let code: String = body
+        .lines()
+        .map(str::trim_start)
+        .filter(|line| !line.starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    for (keyword, expected) in [
+        ("struct ", 1usize),
+        ("fn ", 1),
+        ("impl ", 0),
+        ("const ", 0),
+        ("static ", 0),
+        ("mod ", 0),
+        ("macro_rules!", 0),
+        ("trait ", 0),
+        ("union ", 0),
+        ("enum ", 0),
+    ] {
+        assert_eq!(
+            code.matches(keyword).count(),
+            expected,
+            "the seam module holds an unexpected number of `{}` items, so the producers of \
+             its token are no longer bounded by reading it:\n{code}",
+            keyword.trim()
+        );
+    }
+    // Neither derive can be present: a `Copy` or `Clone` token would let one
+    // clearance reach two invocations, which is the same defect the item
+    // count is here to bound.
+    assert!(
+        !code.contains("derive"),
+        "the seam token derives something; `Copy` or `Clone` on it would let one clearance \
+         serve more than one invocation:\n{code}"
     );
 }
