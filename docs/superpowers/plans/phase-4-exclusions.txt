@@ -2749,6 +2749,35 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
     RAISE ARRAY (x)             stringValue()                 40.1      agrees
     RAISE ARRAY (x, y)          stringValue()                 40.1      agrees
     RAISE USER ADDITIONAL       stringValue()                 rc 0      agrees
+    a message receiver          resolves the class behaviour  per meth. agrees
+    SELF and SUPER, read        stringValue()                 rendering agrees
+    a method argument           nothing                       rendering agrees
+    a method's RETURN value     nothing                       rendering agrees
+
+  THE FOUR ROWS A METHOD ACTIVATION ADDED, Phase 5a Task 7. A class object is
+  a message receiver now, so a ::METHOD body runs, and that opens four
+  positions one of these objects can stand in that no earlier task had. All
+  four agree, and all four were measured rather than reasoned about --
+  `trace i` over `say .K~m(.array)` into a class method that says SELF, says
+  its argument and returns `.directory` is byte-identical on all three
+  descriptors, on both engines, `>A>` and `>M>` lines included.
+
+  THE RECEIVER ROW IS NOT A COERCION AND SAYS SO. Nothing converts a receiver;
+  what happens instead is that the send resolves against the class object's
+  own class behaviour. A name it answers with a Rexx body runs, a name it
+  answers with a native method this phase has no code for is loud under D37's
+  standing rule (measured, `.K~class` is rc 120 where the oracle answers `The
+  Class class`), and a name neither side answers is the oracle's own 97.1
+  quoting the class's default name. That last one is a corpus witness,
+  `method_class_side_lookup.rex`.
+
+  THE OTHER THREE ARE THE "ASSIGNMENT THEN READ" ROW UNDER NEW NAMES, and they
+  are written out rather than folded into it because the positions are new
+  even though the conversion is not: SELF and SUPER are the first slots this
+  interpreter fills with an object of its own accord, an argument reaches a
+  callee's USE ARG through a message's argument list rather than a CALL's, and
+  a RETURN value flows on to `>M>` and to RESULT. Every one of them renders
+  through stringValue() and none of them converts.
 
   WHY `RAISE` SPLITS THE WAY IT DOES, since it is the row that went wrong.
   `RaiseInstruction::execute` calls `requestArray` exactly once, on the
@@ -2782,8 +2811,10 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   implemented", where the oracle answers 88.913. Whichever task makes one
   reachable owes it a row above:
 
-    ForwardInstruction.cpp:185        FORWARD ARGUMENTS -- a FORWARD in a
-                                      ::METHOD body never executes yet
+    ForwardInstruction.cpp:185        FORWARD ARGUMENTS -- the FORWARD
+                                      instruction itself is loud (measured,
+                                      rc 120 inside a ::METHOD body that does
+                                      now run)
     CommandIOConfiguration.cpp:367    ADDRESS ... WITH INPUT USING (expr) --
                                       loud, Phase 7
     ObjectClass.cpp:2136              ~sendWith / ~startWith's message NAME

@@ -74,3 +74,22 @@ lang/environment_object_in_a_loop_header.rex
 # that does not convert, and every line of it was refused by the first
 # version of that fix.
 lang/environment_object_in_a_raise.rex
+
+# Task 7: invoking a Rexx method body. A class method is the one kind a
+# program can reach in this phase -- every other receiver whose behaviour
+# could answer a ::METHOD is an instance, and nothing builds one until ~new
+# lands -- so these witness a class object as a receiver, the activation a
+# ::METHOD body runs in, `self` and `super`, RETURN with and without a value,
+# EXIT, an untrapped condition inside a body, a `::ATTRIBUTE GET` whose
+# accessor is written in Rexx, and the `>I>`/`<I<` pair a method activation
+# adds around the callee's own clause echoes. The last two are compared raw
+# (see corpus.rs's RAW_STDERR_COMPARISON), because the indents are the point.
+lang/method_class_body.rex
+lang/method_returns_no_value.rex
+lang/method_no_result_is_an_error.rex
+lang/method_exit_returns_to_the_sender.rex
+lang/method_body_raises.rex
+lang/method_class_side_lookup.rex
+lang/method_attribute_body.rex
+lang/method_trace_invocation.rex
+lang/method_trace_nested.rex

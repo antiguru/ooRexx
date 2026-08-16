@@ -1,0 +1,15 @@
+count 14
+/* A send whose method returns nothing: as a whole clause it drops RESULT, and
+   ~~ yields the target even though the send itself had no value. */
+result = 'before'
+.K~quiet
+say '[' || result || ']'
+say symbol('RESULT')
+say .K~~quiet
+say 'main done'
+
+::class K
+
+::method quiet class
+  say 'quiet ran'
+  return

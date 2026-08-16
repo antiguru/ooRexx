@@ -1,0 +1,9 @@
+/* An untrapped condition inside a method body: the method's own failing
+   clause is echoed first and the sending clause second. */
+say 'before'
+say .K~boom
+
+::class K
+
+::method boom class
+  say 1/0

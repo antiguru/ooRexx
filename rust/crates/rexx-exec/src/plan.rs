@@ -75,8 +75,9 @@ pub(crate) struct BodyKey {
     /// into a `&CodeBody`.
     ///
     /// `Interp::run` builds the main body's plan under `None`;
-    /// `Interp::invoke_call`'s `::ROUTINE` step builds a routine's under
-    /// `Some(index)`. A routine gets a plan of its own rather than sharing
+    /// `Interp::invoke_call`'s `::ROUTINE` step and
+    /// `Interp::enter_method_body`'s `::METHOD`/`::ATTRIBUTE` step build
+    /// theirs under `Some(index)`. Each gets a plan of its own rather than sharing
     /// the caller's, and that is what makes its pool safe to isolate: a
     /// different `CodeBody` means a different name-to-slot map, so the
     /// slot-index identity `PROCEDURE EXPOSE`'s alias bitset rests on does

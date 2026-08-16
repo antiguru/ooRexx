@@ -1,0 +1,11 @@
+count 10
+trace i
+say .K~m(3)
+say 'after'
+
+::class K
+
+::method m class
+  trace i
+  use arg n
+  return n + 1

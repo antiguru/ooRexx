@@ -74,7 +74,7 @@ use crate::eval::logical_value;
 use crate::ir::{BodyEngine, NodePath};
 use crate::plan::BodyKey;
 use crate::trace::{
-    is_whole_number, mode_from_setting, raised_invalid_trace_letter,
+    Announced, is_whole_number, mode_from_setting, raised_invalid_trace_letter,
     raised_numeric_trace_interactive_only,
 };
 use crate::value::{exact_small_int, within_digits};
@@ -441,7 +441,7 @@ enum Entered {
 /// The value is deliberately not the oracle's 27,314: that is above our own
 /// debug abort in every row above, so matching it would mean shipping a
 /// counter that never fires.
-const MAX_ACTIVATION_DEPTH: usize = 10_000;
+pub(crate) const MAX_ACTIVATION_DEPTH: usize = 10_000;
 
 /// The longest `ADDRESS` environment name accepted, beyond which the
 /// instruction raises 29.1.
@@ -2430,12 +2430,11 @@ impl Interp {
     /// replacement of the result by the target happens before `RESULT` is
     /// set, not after.
     ///
-    /// **The oracle's other branch, dropping `RESULT` for a send that
-    /// produced no value, is not written here**, because no send can reach
-    /// it: a primitive method's implementation returns an `ObjRef` by its own
-    /// signature, and a `::METHOD` body is not entered at all yet. The task
-    /// that enters one is the task that can produce a valueless send, and it
-    /// owes the drop.
+    /// **The oracle's other branch drops `RESULT` for a send that produced no
+    /// value**, and only a Rexx body can produce one -- a primitive method's
+    /// implementation returns an `ObjRef` by its own signature. Measured on
+    /// `::method quiet class` ending in a bare `return`: after `result =
+    /// 'unset'` and `.K~quiet`, `symbol('RESULT')` is `LIT`.
     ///
     /// **There is no `>>>` line**, measured: the clause's own value is not a
     /// result the instruction reports, so `>M>` is the last line a traced
@@ -2453,49 +2452,63 @@ impl Interp {
         term: &Expr,
         value: Option<&Expr>,
     ) -> Result<Flow, Failure> {
-        let result = match value {
-            // No assignment: the term is an ordinary expression, so `eval`
-            // runs it -- reaching the same `Interp::message_term` the arm
-            // below calls directly, which is what emits the `>M>` line.
-            None => self.eval(code, term)?,
+        let ExprKind::Message {
+            target,
+            name,
+            super_class,
+            args,
+            cascade,
+        } = &term.kind
+        else {
+            // `rexx-parse` builds this variant only from a message term
+            // (`instruction.rs`'s `message`), so nothing else can arrive;
+            // loud rather than a panic, on the standing rule that a parser
+            // guarantee the type system does not carry must not abort.
+            return Err(Loud::expression(&term.kind).into());
+        };
+        // **`message_term` directly rather than through `eval`**, even for
+        // the form that is an ordinary expression. `eval`'s own
+        // `ExprKind::Message` arm now turns a valueless send into 91.999,
+        // which is the expression position's error and not this one's:
+        // measured, a whole-clause `.K~m` on a method ending in a bare
+        // `return` is rc 0. Reaching the term's own function is what keeps
+        // the two positions' answers apart.
+        let mut assigned_name;
+        let (name, assigned, cascade) = match value {
+            None => (&name[..], None, *cascade),
             Some(value) => {
-                let ExprKind::Message {
-                    target,
-                    name,
-                    super_class,
-                    args,
-                    ..
-                } = &term.kind
-                else {
-                    // `rexx-parse` builds this variant only from a message
-                    // term (`instruction.rs`'s `message`), so nothing else
-                    // can arrive; loud rather than a panic, on the standing
-                    // rule that a parser guarantee the type system does not
-                    // carry must not abort.
-                    return Err(Loud::expression(&term.kind).into());
-                };
-                let mut assigned = name.to_vec();
-                assigned.push(b'=');
-                self.message_term(
-                    code,
-                    &crate::dispatch::MessageTerm {
-                        target,
-                        name: &assigned,
-                        super_class: super_class.as_deref(),
-                        args,
-                        // The oracle builds this form as `KEYWORD_MESSAGE`
-                        // whatever the term's own tilde count, so a `~~`
-                        // written here is not a cascade.
-                        cascade: false,
-                        assigned: Some(value),
-                    },
-                )?
+                assigned_name = name.to_vec();
+                assigned_name.push(b'=');
+                // The oracle builds this form as `KEYWORD_MESSAGE` whatever
+                // the term's own tilde count, so a `~~` written here is not
+                // a cascade.
+                (&assigned_name[..], Some(value), false)
             }
         };
-        self.roots.push_temp(result);
+        let result = self.message_term(
+            code,
+            &crate::dispatch::MessageTerm {
+                target,
+                name,
+                super_class: super_class.as_deref(),
+                args,
+                cascade,
+                assigned,
+            },
+        )?;
         let slot = self.slot_of(b"RESULT");
         let frame = self.activation().frame;
-        self.roots.set_slot(frame, slot, result);
+        // **A send that produced no value drops `RESULT`** rather than
+        // leaving the previous one in place -- the same rule a bare `return`
+        // from a `CALL` follows. Measured: `result = 'unset'` then `.K~m`
+        // then `symbol('RESULT')` is `LIT`.
+        match result {
+            Some(result) => {
+                self.roots.push_temp(result);
+                self.roots.set_slot(frame, slot, result);
+            }
+            None => self.roots.clear_slot(frame, slot),
+        }
         Ok(Flow::Next)
     }
 
@@ -2552,7 +2565,7 @@ impl Interp {
         // has the table, including the `::METHOD` row.
         let entered_by_internal_call = match self.activation().entry {
             Entry::InternalCall => true,
-            Entry::TopLevel | Entry::Routine => false,
+            Entry::TopLevel | Entry::Routine | Entry::Method => false,
         };
         if !(first_instruction && entered_by_internal_call) {
             return Err(Raised::procedure_out_of_place().into());
@@ -2737,8 +2750,17 @@ impl Interp {
                 // same answer the top-level shape gets.
                 let method_invocation = match self.activation().entry {
                     Entry::TopLevel | Entry::InternalCall | Entry::Routine => false,
+                    Entry::Method => true,
                 };
-                if first_instruction && !method_invocation {
+                if first_instruction && method_invocation {
+                    // The one shape the oracle **runs**: measured, `use
+                    // local` as a `::METHOD`'s first instruction is rc 0.
+                    // What it does is bind every name in its list as a
+                    // local, which is `EXPOSE`'s own machinery seen from the
+                    // other side, so it is loud until that lands rather than
+                    // answering a condition the oracle does not raise.
+                    Err(Loud::use_local_in_a_method().into())
+                } else if first_instruction {
                     Err(Raised::use_local_outside_method().into())
                 } else {
                     Err(Raised::use_local_not_first().into())
@@ -8357,7 +8379,7 @@ impl Interp {
         if !self.activation().trace_entry.may_announce() {
             return;
         }
-        let Some(name) = self.invocation_routine_name() else {
+        let Some(subject) = self.invocation_subject() else {
             return;
         };
         if !self.trace_mode().labels {
@@ -8365,7 +8387,7 @@ impl Interp {
         }
         self.activation_mut().trace_entry = TraceEntry::Done;
         let package = self.program_path.clone().into_bytes();
-        self.trace_invocation(">I>", &name, &package);
+        self.trace_invocation(">I>", &subject, &package);
     }
 
     /// `<I<`, on every way a routine activation can end.
@@ -8380,18 +8402,18 @@ impl Interp {
     /// `tracingLabels()` is re-read here rather than assumed from
     /// the `Done` state: measured, a routine whose body is `trace l` then
     /// `trace off` announces `>I>` and no `<I<`.
-    fn trace_invocation_exit(&mut self) {
+    pub(crate) fn trace_invocation_exit(&mut self) {
         if self.activation().trace_entry != TraceEntry::Done {
             return;
         }
-        let Some(name) = self.invocation_routine_name() else {
+        let Some(subject) = self.invocation_subject() else {
             return;
         };
         if !self.trace_mode().labels {
             return;
         }
         let package = self.program_path.clone().into_bytes();
-        self.trace_invocation("<I<", &name, &package);
+        self.trace_invocation("<I<", &subject, &package);
     }
 
     /// Gives a fragment its own `>I>` count, and answers with the enclosing
@@ -8437,19 +8459,30 @@ impl Interp {
         }
     }
 
-    /// The `::ROUTINE` name the running activation announces itself under, or
-    /// `None` when the running activation is not a routine at all -- which is
-    /// the `isMethodOrRoutine()` half of the gate, expressed as the lookup
-    /// that would supply the substitution.
+    /// What the running activation announces itself as, or `None` when it
+    /// announces nothing at all -- which is the `isMethodOrRoutine()` half of
+    /// the gate, expressed as the lookup that would supply the substitutions.
     ///
-    /// The directive's own spelling, verbatim. Measured: `::routine 'zork'`
-    /// announces `"zork"` and `::routine MiXeD` announces `"MIXED"`, the
-    /// second because the scanner upcases a bare symbol before the directive
-    /// parser sees it.
-    fn invocation_routine_name(&self) -> Option<Vec<u8>> {
+    /// A `::ROUTINE` names itself by the **directive's** own spelling,
+    /// verbatim. Measured: `::routine 'zork'` announces `"zork"` and
+    /// `::routine MiXeD` announces `"MIXED"`, the second because the scanner
+    /// upcases a bare symbol before the directive parser sees it.
+    ///
+    /// A `::METHOD` names itself by the **message** name and its defining
+    /// scope instead, both taken from `Activation::method_identity` --
+    /// see [`MethodIdentity`] for why neither is read off the directive.
+    fn invocation_subject(&self) -> Option<Announced> {
+        if let Some(identity) = &self.activation().method_identity {
+            return Some(Announced::Method {
+                name: identity.name.to_vec(),
+                scope: self.class_id_text(identity.scope).as_bytes().to_vec(),
+            });
+        }
         let index = self.activation().body?;
         match &self.activation().program.directives.get(index)?.kind {
-            DirectiveKind::Routine(routine) => Some(routine.name.to_vec()),
+            DirectiveKind::Routine(routine) => Some(Announced::Routine {
+                name: routine.name.to_vec(),
+            }),
             _ => None,
         }
     }

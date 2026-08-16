@@ -13,13 +13,15 @@
 //!
 //! # The half the compiler enforces
 //!
-//! `dispatch::seam::Cleared` is a struct with a private field, and
-//! `dispatch::NativeMethod`'s signature takes one by value. It is neither
-//! `Copy` nor `Clone` and has no other constructor. So **a primitive method
-//! cannot be called at all without a value produced inside `mod seam`** --
-//! measured, not argued: writing `native_length(interp, Cleared(()), ..)`
-//! anywhere else in the crate is `error[E0423]: cannot initialize a tuple
-//! struct which contains private fields`.
+//! `dispatch::seam::Cleared` is a struct with a private field, and both
+//! things a resolved method can be take one by value: `dispatch::NativeMethod`
+//! is the signature of a primitive method, and `Interp::enter_method_body` is
+//! the one function that runs a `::METHOD` directive's Rexx body. It is
+//! neither `Copy` nor `Clone` and has no other constructor. So **neither kind
+//! of method can be called at all without a value produced inside `mod
+//! seam`** -- measured, not argued: writing `native_length(interp,
+//! Cleared(()), ..)` anywhere else in the crate is `error[E0423]: cannot
+//! initialize a tuple struct which contains private fields`.
 //!
 //! That is the whole of the compiler's contribution, and it bounds *whether*
 //! the seam is reachable around, not *how many* producers there are.
@@ -66,12 +68,16 @@
 //!   free to build as many as it likes. Nothing defends against this and
 //!   nothing is going to; it is here because the list is what the honest
 //!   answer to "what could pass this" consists of.
-//! * **A path that invokes something other than a primitive method.** The
-//!   token guards `NativeMethod` calls. Phase 5a Task 7 enters Rexx method
-//!   bodies, and if it enters them without going through `Interp::invoke`,
-//!   this test stays green with two dispatch paths in the tree. Nothing here
-//!   can enforce it today, because the second kind of method does not exist
-//!   yet; this comment is where the requirement is written down.
+//! * **A path that invokes a third kind of method.** This entry used to read
+//!   "something other than a primitive method", against the day Rexx method
+//!   bodies became invocable; they now are, and that half is closed rather
+//!   than deferred: `Interp::enter_method_body` takes a `Cleared` by value
+//!   just as a `NativeMethod` does, so the compiler binds it too, and
+//!   [`the_seam_token_is_named_only_by_the_dispatch_module`] pins that every
+//!   function which can take one is written in the file this test reads. What
+//!   is **not** closed is a *third* invocable kind added later with no
+//!   `Cleared` parameter at all: nothing here can require a signature that
+//!   does not exist yet, and the same sentence will be true of the fourth.
 //! * **A path in another crate.** The scan reads `rexx-exec/src` only.
 //!   Nothing outside this crate can call `Interp::invoke` (it is
 //!   `pub(crate)`) or build a `Cleared`, so a second path elsewhere would
@@ -129,6 +135,29 @@ fn occurrences(needle: &str) -> Vec<String> {
     found
 }
 
+/// Every occurrence of `needle` on a line that is not a whole-line comment,
+/// as `(path, line number)` pairs.
+///
+/// The comment stripping is the same rule [`seam_module_body`] applies for
+/// the same reason, one scope wider: `Cleared` is an ordinary English word
+/// and appears in two of `run.rs`'s doc comments, neither of which can name
+/// a type.
+fn code_occurrences(needle: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    for path in source_files() {
+        let text = fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        for (index, line) in text.lines().enumerate() {
+            if line.trim_start().starts_with("//") {
+                continue;
+            }
+            for _ in line.matches(needle) {
+                found.push(format!("{}:{}", path.display(), index + 1));
+            }
+        }
+    }
+    found
+}
+
 /// The whole of D45's site-one claim: one call to the seam, and one way to
 /// build the token it hands out.
 #[test]
@@ -163,6 +192,40 @@ fn dispatch_passes_through_exactly_one_chokepoint() {
         "the seam's token must have exactly one construction site beside its \
          one declaration, or counting calls to the seam stops bounding the \
          paths that reach a native method; {construct} appears at {mentions:?}"
+    );
+}
+
+/// **Every consumer of the seam's token is written in `dispatch.rs`**, which
+/// is what lets the item read below bound the producers *and* the file above
+/// bound the consumers.
+///
+/// The token's type is `pub(super)` inside `mod seam`, so `dispatch.rs` is
+/// the widest scope that can name it -- but "widest scope" is a fact about
+/// the module tree, and this asserts the fact about the tree as it stands:
+/// no other file in the crate mentions `Cleared` at all. A second invocation
+/// path funded by a clearance would therefore have to be written beside the
+/// two that exist, in the one file this test already reads.
+///
+/// It does not, and cannot, stop a path that takes **no** clearance; the
+/// module doc's own list says so.
+#[test]
+fn the_seam_token_is_named_only_by_the_dispatch_module() {
+    let token = format!("{}{}", "Clea", "red");
+    let sites = code_occurrences(&token);
+    let elsewhere: Vec<&String> = sites
+        .iter()
+        .filter(|site| !site.contains("dispatch.rs"))
+        .collect();
+    assert!(
+        elsewhere.is_empty(),
+        "the seam's token is named in code outside `dispatch.rs`, at {elsewhere:?}, \
+         so the functions that can consume a clearance are no longer bounded by \
+         reading that one file"
+    );
+    assert!(
+        sites.len() >= 2,
+        "the scan found fewer than two code mentions of the token inside \
+         dispatch.rs, so the filter above is passing by finding nothing"
     );
 }
 

@@ -7858,3 +7858,148 @@ fn a_message_sends_two_indents_are_the_oracles_own_and_normalisation_cannot_see_
         )
     );
 }
+
+/// The corpus program `rel` reads as a source string, so that a trace
+/// expectation and the program it was captured from cannot drift apart:
+/// editing the `.rex` file changes what this test runs, and the assertion
+/// below then names the line it no longer matches.
+macro_rules! corpus_source {
+    ($rel:literal) => {
+        include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../corpus/", $rel))
+    };
+}
+
+/// Runs `source` under both engines at `path` and asserts stderr is exactly
+/// `expected` on each.
+///
+/// Both arms rather than one, and it is not redundant with `tests/ir_dual.rs`
+/// -- that harness compares the two engines against *each other*, and both
+/// format trace through one `crate::trace`, so an indent that is wrong is
+/// wrong identically on both and the comparison stays green. What this
+/// function adds is a third party: bytes the oracle produced.
+fn assert_stderr_on_both_engines(path: &str, source: &str, expected: &str) {
+    for engine in [crate::Engine::Ir, crate::Engine::TreeWalker] {
+        let outcome = crate::run_program(
+            path,
+            source.as_bytes().to_vec(),
+            crate::Invocation::none().with_engine(engine),
+        );
+        assert_eq!(
+            String::from_utf8(outcome.stderr).expect("the trace is UTF-8"),
+            expected,
+            "{engine:?} arm"
+        );
+    }
+}
+
+/// **A `::METHOD` activation's own trace indents, pinned here because
+/// nothing else in the tree can pin them.**
+///
+/// `tests/corpus.rs` does compare these two programs' stderr raw, which is
+/// what `RAW_STDERR_COMPARISON` was built for -- but that comparison needs
+/// the C++ oracle on the machine and the corpus gate switched on, and this
+/// one runs in every `cargo test`. `tests/trace_oracle.rs` cannot substitute
+/// for either: it compares through DEVIATION 0's `normalize_stderr`, which
+/// collapses exactly the space run these lines differ in.
+///
+/// Every byte below is the oracle's, captured with `cat -A` from the corpus
+/// program named beside it, run verbatim from a scratch directory. The **one**
+/// substitution is the package path, which is the file's own absolute
+/// location: the capture's scratch path is replaced by the path this test
+/// hands `run_program`, and nothing else is retyped.
+///
+/// What the shape says, and what a plausible wrong implementation gets wrong:
+///
+/// * the callee's clause echoes are at indent **0** while the sending clause
+///   sits at 2 -- a method activation inherits no indent, exactly as a
+///   `::ROUTINE` does not;
+/// * so are its own value lines: `>E>   .K` inside `OUTER` against
+///   `>E>     .K` in the caller;
+/// * `>I>` and `<I<` take no indent at all, at any depth;
+/// * `>M>` and the enclosing `>>>` are back at the **sending** clause's
+///   indent once the activation has ended, which is what shows the level
+///   state was restored rather than left at the callee's.
+#[test]
+fn a_method_activations_trace_indents_are_the_oracles_own_and_normalisation_cannot_see_them() {
+    assert_stderr_on_both_engines(
+        "/abs/method_trace_invocation.rex",
+        corpus_source!("lang/method_trace_invocation.rex"),
+        concat!(
+            "     2 *-* say .K~m(3)\n",
+            "       >E>   .K => \"The K class\"\n",
+            "       >L>   \"3\"\n",
+            "       >A>   \"3\"\n",
+            "       >I> Method \"M\" with scope \"K\" in package \"/abs/method_trace_invocation.rex\".\n",
+            "     9 *-* use arg n\n",
+            "       >>>   \"3\"\n",
+            "       >=>   N <= \"3\"\n",
+            "    10 *-* return n + 1\n",
+            "       >V>   N => \"3\"\n",
+            "       >L>   \"1\"\n",
+            "       >O>   \"+\" => \"4\"\n",
+            "       >>>   \"4\"\n",
+            "       <I< Method \"M\" with scope \"K\" in package \"/abs/method_trace_invocation.rex\".\n",
+            "       >M>   \"M\" => \"4\"\n",
+            "       >>>   \"4\"\n",
+            "     3 *-* say 'after'\n",
+            "       >L>   \"after\"\n",
+            "       >>>   \"after\"\n",
+        ),
+    );
+
+    assert_stderr_on_both_engines(
+        "/abs/method_trace_nested.rex",
+        corpus_source!("lang/method_trace_nested.rex"),
+        concat!(
+            "     2 *-* do i = 1 to 1\n",
+            "       >L>   \"1\"\n",
+            "       >L>   \"1\"\n",
+            "       >K>   \"TO\" => \"1\"\n",
+            "       >=>   I <= \"1\"\n",
+            "     3 *-*   say .K~outer\n",
+            "       >E>     .K => \"The K class\"\n",
+            "       >I> Method \"OUTER\" with scope \"K\" in package \"/abs/method_trace_nested.rex\".\n",
+            "    10 *-* return .K~inner\n",
+            "       >E>   .K => \"The K class\"\n",
+            "       >I> Method \"INNER\" with scope \"K\" in package \"/abs/method_trace_nested.rex\".\n",
+            "    14 *-* return 'deep'\n",
+            "       >L>   \"deep\"\n",
+            "       >>>   \"deep\"\n",
+            "       <I< Method \"INNER\" with scope \"K\" in package \"/abs/method_trace_nested.rex\".\n",
+            "       >M>   \"INNER\" => \"deep\"\n",
+            "       >>>   \"deep\"\n",
+            "       <I< Method \"OUTER\" with scope \"K\" in package \"/abs/method_trace_nested.rex\".\n",
+            "       >M>     \"OUTER\" => \"deep\"\n",
+            "       >>>     \"deep\"\n",
+            "     4 *-* end\n",
+            "     2 *-* do i = 1 to 1\n",
+            "       >V>     I => \"1\"\n",
+            "       >>>     \"1\"\n",
+            "       >>>     \"2\"\n",
+            "       >=>     I <= \"2\"\n",
+        ),
+    );
+}
+
+/// **An untrapped condition inside a `::METHOD` body echoes two clauses,
+/// innermost first, and neither carries an indent from the other.**
+///
+/// The oracle's own bytes, captured from `corpus/lang/method_body_raises.rex`
+/// with the package path substituted as above. A method activation that
+/// failed to seal its level would print the send's clause only, and one that
+/// contributed a `Compiled method` traceback line -- which a *native* method
+/// does -- would print a third line the oracle does not.
+#[test]
+fn a_condition_inside_a_method_body_echoes_the_body_and_then_the_send() {
+    assert_stderr_on_both_engines(
+        "/abs/method_body_raises.rex",
+        corpus_source!("lang/method_body_raises.rex"),
+        concat!(
+            "     9 *-* say 1/0\n",
+            "     4 *-* say .K~boom\n",
+            "Error 42 running /abs/method_body_raises.rex line 9:  \
+             Arithmetic overflow/underflow.\n",
+            "Error 42.3:  Arithmetic overflow; divisor must not be zero.\n",
+        ),
+    );
+}

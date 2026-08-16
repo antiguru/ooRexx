@@ -1009,38 +1009,65 @@ impl Interp {
     /// bytes 7..10 (`traceEntryOrExit`, `RexxActivation.cpp:3678`-`3713`), so
     /// the content always begins at byte 11 regardless of nesting.
     ///
-    /// The text is message 101018, `Routine <q>&1</q> in package <q>&2</q>.`
-    /// (`interpreter/messages/rexxmsg.xml:6470`-`6471`), where `<q>` is a
-    /// double quote. Confirmed with `cat -A`, and there is no trailing
-    /// whitespace:
+    /// The text is one of two messages, chosen by `traceEntryOrExit`'s own
+    /// `context->isMethod()` test (`RexxActivation.cpp:3696`-`3702`): message
+    /// 101018, `Routine <q>&1</q> in package <q>&2</q>.`
+    /// (`interpreter/messages/rexxmsg.xml:6471`), or the method form,
+    /// `Method <q>&1</q> with scope <q>&2</q> in package <q>&3</q>.`
+    /// (`:6480`), where `<q>` is a double quote. Confirmed with `cat -A`, and
+    /// there is no trailing whitespace on either:
     ///
     /// ```text
     ///        >I> Routine "RTN" in package "/abs/path/own_a.rex".$
     ///        <I< Routine "RTN" in package "/abs/path/own_a.rex".$
+    ///        >I> Method "M" with scope "K" in package "/abs/path/p5.rex".$
+    ///        <I< Method "M" with scope "K" in package "/abs/path/p5.rex".$
     /// ```
     ///
     /// Seven blanks, the prefix, **one** blank, then the message, and the
-    /// trailing period is outside the closing quote. `name` is the
-    /// `::ROUTINE` directive's own spelling -- upcased for the bare symbol
-    /// form because the scanner upcases it, and left alone for the quoted
-    /// form (measured: `::routine 'zork'` announces `"zork"` and `::routine
-    /// MiXeD` announces `"MIXED"`).
+    /// trailing period is outside the closing quote. [`Announced`] carries
+    /// what each form's substitutions are and where they come from.
     ///
     /// Unguarded, unlike every formatter above: both callers
     /// (`trace_invocation_entry`/`trace_invocation_exit`, `run.rs`) have a
     /// two-part gate of their own that no `TraceMode` field expresses on its
     /// own, and a third partial gate here would be a second place to keep it.
-    pub(crate) fn trace_invocation(&mut self, prefix: &str, name: &[u8], package: &[u8]) {
+    pub(crate) fn trace_invocation(&mut self, prefix: &str, subject: &Announced, package: &[u8]) {
         let line_start = self.trace.len();
         self.trace.extend(std::iter::repeat_n(b' ', 7));
         self.trace.extend_from_slice(prefix.as_bytes());
-        self.trace.extend_from_slice(b" Routine \"");
-        self.trace.extend_from_slice(name);
+        match subject {
+            Announced::Routine { name } => {
+                self.trace.extend_from_slice(b" Routine \"");
+                self.trace.extend_from_slice(name);
+            }
+            Announced::Method { name, scope } => {
+                self.trace.extend_from_slice(b" Method \"");
+                self.trace.extend_from_slice(name);
+                self.trace.extend_from_slice(b"\" with scope \"");
+                self.trace.extend_from_slice(scope);
+            }
+        }
         self.trace.extend_from_slice(b"\" in package \"");
         self.trace.extend_from_slice(package);
         self.trace.extend_from_slice(b"\".\n");
         make_displayable(&mut self.trace, line_start);
     }
+}
+
+/// What a `>I>`/`<I<` pair names, and which of the two messages it takes.
+pub(crate) enum Announced {
+    /// A `::ROUTINE`. `name` is the directive's own spelling -- upcased for
+    /// the bare symbol form because the scanner upcases it, and left alone
+    /// for the quoted form (measured: `::routine 'zork'` announces `"zork"`
+    /// and `::routine MiXeD` announces `"MIXED"`).
+    Routine { name: Vec<u8> },
+    /// A `::METHOD`. `name` is the **message** name, already upcased
+    /// (measured: `::method MiXeD class` announces `"MIXED"` and `::method
+    /// "quoted" class` announces `"QUOTED"`), and `scope` is the defining
+    /// class's `~id`, unmodified (measured: `::class 'k'` announces
+    /// `with scope "k"`).
+    Method { name: Vec<u8>, scope: Vec<u8> },
 }
 
 #[cfg(test)]

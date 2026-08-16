@@ -1,0 +1,10 @@
+count 9
+/* EXIT inside a ::METHOD ends the method and hands its value to the sender,
+   exactly as it does inside a ::ROUTINE. */
+say .K~m
+say 'main runs on'
+
+::class K
+
+::method m class
+  exit 5

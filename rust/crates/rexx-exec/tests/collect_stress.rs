@@ -183,6 +183,18 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/message_send_unknown_method.rex",
     "lang/message_send_unknown_method_on_a_number.rex",
     "lang/message_send_unknown_method_on_nil.rex",
+    // A `::METHOD` activation allocates nothing of its own: the frame is
+    // slots, the `SELF`/`SUPER` bindings are handles the caller already
+    // held, and these bodies produce only small integers, short strings and
+    // refusals. `method_class_body.rex` and `method_returns_no_value.rex`
+    // are the two that do allocate, and both do it for a concatenation
+    // rather than for the activation.
+    "lang/method_attribute_body.rex",
+    "lang/method_body_raises.rex",
+    "lang/method_class_side_lookup.rex",
+    "lang/method_no_result_is_an_error.rex",
+    "lang/method_trace_invocation.rex",
+    "lang/method_trace_nested.rex",
     "lang/mutation_controlled_order.rex",
     "lang/no_trailing_newline.rex",
     "lang/prefix_dotvar_logical_over_label.rex",

@@ -1,0 +1,9 @@
+count 8
+/* The same valueless send in an expression, which is 91.999 and not rc 0. */
+say 'before'
+say .K~quiet
+
+::class K
+
+::method quiet class
+  return

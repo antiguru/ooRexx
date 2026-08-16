@@ -1219,6 +1219,17 @@ impl Raised {
         Raised::syntax(97, 1, vec![target.to_vec(), name.to_vec()])
     }
 
+    /// 91.999: a message used where a value was wanted returned none.
+    /// `name` is the message as the send spells it, already upcased.
+    ///
+    /// Measured at rc 165, on `::class K` with `::method m class` ending in a
+    /// bare `return`: `say .K~m` reports `No result object.` and `Message
+    /// "M" did not return a result.` The same send as a whole clause is rc 0,
+    /// so this belongs to the expression position and not to the send.
+    pub(crate) fn no_result(name: &[u8]) -> Raised {
+        Raised::syntax(91, 999, vec![name.to_vec()])
+    }
+
     /// The traceback line a native (C++-implemented, here Rust-implemented)
     /// method activation contributes, rendered whole.
     ///

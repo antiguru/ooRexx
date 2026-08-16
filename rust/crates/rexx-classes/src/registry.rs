@@ -306,6 +306,36 @@ impl ClassRegistry {
         )
     }
 
+    /// A scope-override message resolution against the class object itself --
+    /// the class-behaviour twin of [`Self::lookup_instance_method_from_scope`].
+    ///
+    /// `RexxObject::superMethod` reads the *receiver's* behaviour, and for a
+    /// send to a class object that behaviour is the class behaviour, so the
+    /// override applies on this side as well as the instance side.
+    pub fn lookup_class_method_from_scope(
+        &self,
+        class: ObjRef,
+        name: &str,
+        start_scope: ObjRef,
+    ) -> Option<(ObjRef, MethodId)> {
+        self.graph
+            .lookup_from_scope_at(self.graph.class_behaviour_handle(class), name, start_scope)
+    }
+
+    /// The scope a `SUPER` reference resolves to for a method found at `scope`
+    /// in `class`'s instance behaviour -- `RexxObject::superScope`.
+    pub fn instance_super_scope(&self, class: ObjRef, scope: ObjRef) -> Option<ObjRef> {
+        self.graph
+            .resolve_super_scope_at(self.graph.instance_behaviour_handle(class), scope)
+    }
+
+    /// The same for a method found in `class`'s class behaviour, which is
+    /// what a class method's own `SUPER` reads.
+    pub fn class_super_scope(&self, class: ObjRef, scope: ObjRef) -> Option<ObjRef> {
+        self.graph
+            .resolve_super_scope_at(self.graph.class_behaviour_handle(class), scope)
+    }
+
     /// `~hasMethod` against the class's current instance behaviour.
     pub fn has_method(&self, class: ObjRef, name: &str) -> bool {
         self.graph.has_method(class, name)

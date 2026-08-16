@@ -597,23 +597,31 @@ impl Interp {
             // for the send itself. The **expression** form only: the
             // message-assignment form is an instruction and never an
             // expression, so `assigned` is `None` here.
+            //
+            // **91.999 is the expression position's own error and not the
+            // send's**, which is why it is raised here rather than inside
+            // `message_term`: measured, `::method m class` ending in a bare
+            // `return` is rc 0 as a whole clause and 91.999 at rc 165 under
+            // `say`.
             ExprKind::Message {
                 target,
                 name,
                 super_class,
                 args,
                 cascade,
-            } => self.message_term(
-                code,
-                &crate::dispatch::MessageTerm {
-                    target,
-                    name,
-                    super_class: super_class.as_deref(),
-                    args,
-                    cascade: *cascade,
-                    assigned: None,
-                },
-            ),
+            } => self
+                .message_term(
+                    code,
+                    &crate::dispatch::MessageTerm {
+                        target,
+                        name,
+                        super_class: super_class.as_deref(),
+                        args,
+                        cascade: *cascade,
+                        assigned: None,
+                    },
+                )?
+                .ok_or_else(|| Raised::no_result(name).into()),
 
             other => Err(Loud::expression(other).into()),
         }

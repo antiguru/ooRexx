@@ -33,7 +33,7 @@
 use crate::Interp;
 use crate::plan::{BodyKey, Plan, ProgramId};
 use crate::trace::TraceMode;
-use rexx_core::SlotFrame;
+use rexx_core::{ObjRef, SlotFrame};
 use rexx_num::Settings;
 use rexx_parse::{CodeBody, DirectiveKind, Program};
 use std::collections::HashMap;
@@ -370,9 +370,12 @@ pub(crate) struct Activation {
     /// [`body_of`] is the one function that turns the pair into a
     /// `&CodeBody`, so the two spellings cannot come apart.
     ///
-    /// `Some(i)` is a `::ROUTINE` activation, built by [`Activation::routine`]
-    /// from `Interp::resolve_call`'s third resolution step. The order in
-    /// front of it is load-bearing rather than
+    /// `Some(i)` is a `::ROUTINE` activation built by [`Activation::routine`]
+    /// from `Interp::resolve_call`'s third resolution step, or a
+    /// `::METHOD`/`::ATTRIBUTE` activation built by [`Activation::method`]
+    /// from a resolved message send. [`Entry`] is what tells the two apart
+    /// where it matters. The resolution order in
+    /// front of the routine step is load-bearing rather than
     /// tidy -- internal label, then builtin, then `::ROUTINE` -- because a
     /// routine name that **collides** with a builtin must go to the builtin.
     /// Measured: `::routine max` alongside `call max 1, 9` still calls the
@@ -434,6 +437,13 @@ pub(crate) struct Activation {
     /// How this activation was entered -- what an instruction whose legality
     /// depends on the entry reads. [`Entry`] carries the oracle's own table.
     pub(crate) entry: Entry,
+    /// `Some` exactly for an [`Entry::Method`] activation: what its
+    /// `>I>`/`<I<` lines name.
+    ///
+    /// Carried on the activation rather than recovered from
+    /// [`Activation::body`], because neither substitution is in the directive:
+    /// [`MethodIdentity`]'s own doc has the two measurements.
+    pub(crate) method_identity: Option<MethodIdentity>,
     /// Whether no instruction has yet been executed in this activation --
     /// where a label does not count as an instruction.
     ///
@@ -650,6 +660,27 @@ pub(crate) enum Entry {
     InternalCall,
     /// A `::ROUTINE` directive's body, reached either way.
     Routine,
+    /// A `::METHOD` directive's body, reached by a message send.
+    Method,
+}
+
+/// What `>I>`/`<I<` name for a `::METHOD` activation.
+///
+/// The two substitutions message 101018's method form takes
+/// (`rexxmsg.xml:6480`, `Method <q>&1</q> with scope <q>&2</q> in package
+/// <q>&3</q>.`), and neither is recoverable from the directive alone: the
+/// oracle's first substitution is `getMessageName()`, the name the *send*
+/// used, which is the dictionary key and so differs from the directive's own
+/// spelling for an `::ATTRIBUTE` setter; the second is the scope the
+/// resolution came from.
+pub(crate) struct MethodIdentity {
+    /// The message name, already upcased by the parser -- measured,
+    /// `::method MiXeD` announces `"MIXED"` and `::method "quoted"`
+    /// announces `"QUOTED"`.
+    pub(crate) name: Box<[u8]>,
+    /// The defining class, whose `~id` is printed unmodified -- measured,
+    /// `::class 'k'` announces `with scope "k"`.
+    pub(crate) scope: ObjRef,
 }
 
 impl Activation {
@@ -679,6 +710,7 @@ impl Activation {
             frame,
             owns_frame: true,
             entry: Entry::TopLevel,
+            method_identity: None,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc: 0,
@@ -785,6 +817,7 @@ impl Activation {
             frame,
             owns_frame: false,
             entry: Entry::InternalCall,
+            method_identity: None,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc,
@@ -837,6 +870,55 @@ impl Activation {
             frame,
             owns_frame: true,
             entry: Entry::Routine,
+            method_identity: None,
+            first_instruction_pending: true,
+            trace_entry: TraceEntry::Pending,
+            pc: 0,
+            settings: Settings::default(),
+            trace_mode: TraceMode::NORMAL,
+            address: AddressState::default(),
+            traps: HashMap::new(),
+            condition: None,
+            cached_clock: None,
+            clock_stale: true,
+        }
+    }
+
+    /// The activation a message send into a `::METHOD` body pushes.
+    ///
+    /// **Everything [`Activation::routine`] settles, settled the same way**,
+    /// and each half is measured rather than carried over by analogy:
+    ///
+    /// * it inherits nothing -- `trace i` in the caller does not echo the
+    ///   method's own clauses, and the method's clauses echo at indent 0 even
+    ///   when the sending clause sits two `DO` levels deep;
+    /// * it owns its frame, because the body is a different [`CodeBody`] with
+    ///   a plan of its own;
+    /// * `PROCEDURE` as its first instruction is 17.1, the same answer a
+    ///   `::ROUTINE` gets ([`Entry`]'s own table has the row).
+    ///
+    /// What differs is [`Entry::Method`], which `USE LOCAL` reads, and
+    /// `method_identity`, which the `>I>`/`<I<` pair reads.
+    pub(crate) fn method(
+        id: ActivationId,
+        program: Rc<Program>,
+        program_id: ProgramId,
+        body: usize,
+        plan: Rc<Plan>,
+        frame: SlotFrame,
+        identity: MethodIdentity,
+    ) -> Activation {
+        Activation {
+            id,
+            program,
+            program_id,
+            body: Some(body),
+            plan,
+            extra: HashMap::new(),
+            frame,
+            owns_frame: true,
+            entry: Entry::Method,
+            method_identity: Some(identity),
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc: 0,
@@ -899,16 +981,23 @@ pub(crate) struct Inherited {
 /// caller holds an `Rc<Program>` in a local and passes `&local`, so the
 /// `&CodeBody` is rooted in the local and not in `self`.
 ///
-/// `None` on a selector that names something other than a routine with a
-/// body, rather than a panic: `Some(i)` can only be built from a resolution
+/// `None` on a selector that names a directive with no body of its own,
+/// rather than a panic: `Some(i)` can only be built from a resolution
 /// step that already looked at `directives[i]`, so a mismatch is an internal
 /// inconsistency, and this crate's rule for those is to fail loudly at the
 /// caller rather than abort the process here.
+///
+/// A `::METHOD`'s and a `::ATTRIBUTE`'s bodies are here beside `::ROUTINE`'s
+/// because a method activation runs one: the directive kinds that own a
+/// [`CodeBody`] are exactly the three, and each field's own doc says when it
+/// is `None` (a generating option, for both method forms).
 pub(crate) fn body_of(program: &Program, selector: Option<usize>) -> Option<&CodeBody> {
     match selector {
         None => Some(&program.main),
         Some(index) => match &program.directives.get(index)?.kind {
             DirectiveKind::Routine(routine) => routine.body.as_ref(),
+            DirectiveKind::Method(method) => method.body.as_ref(),
+            DirectiveKind::Attribute(attribute) => attribute.body.as_ref(),
             _ => None,
         },
     }

@@ -39,9 +39,9 @@
 use rexx_classes::{ClassKind, MethodId};
 use rexx_core::{Heap, ObjRef, RootSet, SlotRef};
 use rexx_parse::{
-    AnnotationTarget, AttributeDirective, AttributeStyle, ClassDirective, CodeBody, ConstantValue,
-    Directive, DirectiveKind, Expr, ExprKind, InstructionKind, MethodDirective, Operator, Program,
-    SymbolId, SymbolTable, compound_parts, parse_program,
+    Access, AnnotationTarget, AttributeDirective, AttributeStyle, ClassDirective, CodeBody,
+    ConstantValue, Directive, DirectiveKind, Expr, ExprKind, InstructionKind, MethodDirective,
+    Operator, Program, SymbolId, SymbolTable, compound_parts, parse_program,
 };
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
@@ -771,6 +771,48 @@ impl Loud {
         }
     }
 
+    /// A message that resolved to a `::METHOD` or `::ATTRIBUTE` directive
+    /// whose body this crate cannot run -- see [`method_body_gap`], which
+    /// enumerates the cases and supplies `what`.
+    fn method_body(what: &str) -> Loud {
+        Loud {
+            message: owned_message(what, Some("Phase 5")),
+        }
+    }
+
+    /// A `target~name:scope` override whose scope really is a class object.
+    ///
+    /// Loud rather than answered, because the oracle does two things here
+    /// this phase has neither of: it checks the receiver against the
+    /// override's scope (measured, `'abc'~length:.Array` is 93.957, `Target
+    /// object "abc" is not a subclass of the message override scope (The
+    /// Array class).`), and it then starts the lookup at that scope. Answering
+    /// the un-overridden method instead would be a silent wrong answer for
+    /// exactly the sends the override exists to redirect.
+    ///
+    /// A scope that is **not** a class object never reaches here: that is the
+    /// oracle's own 88.914 and this crate raises it.
+    fn scope_override(scope: &str) -> Loud {
+        Loud {
+            message: owned_message(
+                &format!("a message scope override on \"{scope}\""),
+                Some("Phase 5"),
+            ),
+        }
+    }
+
+    /// `USE LOCAL` as a `::METHOD`'s first instruction, which is the one
+    /// placement the oracle runs (measured, rc 0).
+    ///
+    /// What it does there is bind its list as locals against the method's
+    /// scope pool, which is `EXPOSE`'s own machinery -- also a declared gap
+    /// -- so this is loud rather than the 99.910 the other placements get.
+    fn use_local_in_a_method() -> Loud {
+        Loud {
+            message: owned_message("USE LOCAL in a ::METHOD body", Some("Phase 5")),
+        }
+    }
+
     /// `PROCEDURE EXPOSE` naming a single compound tail.
     ///
     /// **Both spellings reach here, and the second is easy to miss.** The
@@ -1204,6 +1246,61 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
         | DirectiveKind::Method(_)
         | DirectiveKind::Resource(_)
         | DirectiveKind::Routine(_) => None,
+    }
+}
+
+/// Why a resolved method's directive cannot be entered, or `None` when it
+/// can -- the gate `Interp::enter_method_body` (`dispatch.rs`) takes before
+/// it pushes anything.
+///
+/// **Exhaustive over the directive kinds a `MethodId` can name**, which are
+/// the two that `Interp::install_method` and `Interp::install_attribute` mint
+/// ids for. Anything else arriving here is an internal inconsistency and gets
+/// a refusal of its own rather than a panic, on the reasoning
+/// [`Loud::instruction`]'s doc gives.
+///
+/// Each row is measured on the oracle, one program each, `::class K` with the
+/// named directive and a `.K~m` send:
+///
+/// ```text
+/// ::method m class private        97.2, rc 159   cannot accept private message
+/// ::method m class abstract       93.965, rc 163 is ABSTRACT and cannot be invoked
+/// ::method m class protected      runs, rc 0
+/// ::method m class unguarded      runs, rc 0
+/// ::attribute a class             reads and writes an instance variable, rc 0
+/// ```
+///
+/// The first two are conditions a program could trap, and answering them
+/// would be the wrong kind of right: `PRIVATE` needs the caller's own scope
+/// to decide, which nothing here tracks, so a build that raised 97.2 for
+/// every private send would also refuse the ones the oracle allows. The last
+/// needs Task 8's instance variables.
+///
+/// [`Loud::instruction`]: Loud::instruction
+fn method_body_gap(kind: &DirectiveKind) -> Option<Loud> {
+    match kind {
+        DirectiveKind::Method(method) => {
+            if method.access == Access::Private {
+                Some(Loud::method_body("a PRIVATE ::METHOD"))
+            } else if method.body.is_none() {
+                Some(Loud::method_body("a ::METHOD with no body of its own"))
+            } else {
+                None
+            }
+        }
+        DirectiveKind::Attribute(attribute) => {
+            if attribute.access == Access::Private {
+                Some(Loud::method_body("a PRIVATE ::ATTRIBUTE"))
+            } else if attribute.body.is_none() {
+                Some(Loud::method_body("a generated ::ATTRIBUTE accessor"))
+            } else {
+                None
+            }
+        }
+        other => Some(Loud::method_body(&format!(
+            "a method installed by ::{}",
+            other.keyword()
+        ))),
     }
 }
 
@@ -2430,14 +2527,11 @@ struct InstalledRoutine {
 /// (or its absence, for a generated accessor or an `ABSTRACT`/`DELEGATE`
 /// method) later.
 ///
-/// `#[allow(dead_code)]`: nothing outside this crate's own tests reads
-/// either field yet, because reading one back needs a resolved message send
-/// (Task 5's) to find the right entry and a method-body invocation (Task
-/// 7's) to do anything with it. Both fields are read by
-/// `tests::method_bodies_names_each_directive_in_minting_order`, so this is
-/// not an unread struct, only one with no production reader before Task 7.
+/// `Interp::enter_method_body` (`dispatch.rs`) is the reader: it turns the
+/// pair into the `Rc<Program>` an activation holds and the `BodyKey` its plan
+/// is cached under, which is why both halves are needed and why they travel
+/// together.
 #[derive(Copy, Clone)]
-#[allow(dead_code)]
 struct InstalledMethodBody {
     program: ProgramId,
     directive: usize,
@@ -2881,12 +2975,15 @@ impl Interp {
     /// the as-written spelling, which is the method object's own name and a
     /// different thing from its lookup key.
     ///
-    /// **Nothing observes the difference yet**, and no test pins it:
+    /// **Nothing observes the difference**, and no test pins it:
     /// `MethodDict::add_method` upcases its own key, so `::method "abc"`
     /// answers `~abc` either way and the stored key is the same string either
-    /// way. The upcasing here is alignment with the oracle's own parser
-    /// ahead of the first reader that can tell -- the method object's own
-    /// name, which is the task that enters a method body.
+    /// way. Entering the body did not change that -- the `>I>`/`<I<` pair
+    /// names the **message**, measured on the oracle, so `::method MiXeD` and
+    /// `::method "quoted"` announce `"MIXED"` and `"QUOTED"`. What would tell
+    /// the two spellings apart is a method object with a readable name, which
+    /// nothing here builds. The upcasing is alignment with the oracle's own
+    /// parser.
     fn install_method(
         &mut self,
         program: ProgramId,

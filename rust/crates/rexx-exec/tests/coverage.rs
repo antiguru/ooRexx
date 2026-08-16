@@ -104,8 +104,8 @@
 //! below is `rexx-parse/tests/gate_walk`'s shared module, trimmed to what the
 //! subset actually contains (`::ROUTINE`, `::CLASS`, `::METHOD`, `::ATTRIBUTE`
 //! and `::CONSTANT`, and no other directive -- `assert_program_has_only_admitted_directives`
-//! guards that assumption rather than silently ignoring one, and only
-//! `::ROUTINE`'s body is actually walked) and reproduced
+//! guards that assumption rather than silently ignoring one, and
+//! `each_instruction` walks the body of each kind that has one) and reproduced
 //! here rather than imported, because an integration test cannot reach
 //! another crate's `tests/` module and this crate's own `Cargo.toml`
 //! deliberately keeps `rexx-parse` as a normal, not dev, dependency for
@@ -144,21 +144,17 @@ use owners::{
 
 // ---------------------------------------------------------------------------
 // The walk. Trimmed from `rexx-parse/tests/gate_walk/mod.rs` to what the
-// subset actually contains: `::ROUTINE` bodies, plus `::CLASS`, `::METHOD`,
-// `::ATTRIBUTE` and `::CONSTANT` directives admitted but not descended into
-// (Phase 5a). `assert_program_has_only_admitted_directives` guards that
+// subset actually contains: the bodies of `::ROUTINE`, `::METHOD` and
+// `::ATTRIBUTE`, plus `::CLASS` and `::CONSTANT` admitted as directives that
+// carry no body. `assert_program_has_only_admitted_directives` guards that
 // assumption at every parse rather than silently under-walking a program
 // that gained a directive kind this walker does not know about.
 // ---------------------------------------------------------------------------
 
 /// Whether `kind` is one of the directive kinds this walker admits without
-/// panicking: `::ROUTINE` (walked into -- `each_instruction` descends into a
-/// `::ROUTINE` body) and `::CLASS`/`::METHOD`/`::ATTRIBUTE`/`::CONSTANT`
-/// (Phase 5a's, admitted so a subset program carrying one does not panic, but
-/// **not** descended into by `each_instruction` below -- coverage inside a
-/// `::CLASS`, `::METHOD` or `::ATTRIBUTE` body, or a `::CONSTANT`'s own
-/// parenthesised expression, is not this criterion's concern until a later
-/// task extends the walk to match).
+/// panicking: `::ROUTINE`, `::METHOD` and `::ATTRIBUTE`, each walked into by
+/// `each_instruction` below, plus `::CLASS` and `::CONSTANT`, which own no
+/// body for it to walk.
 ///
 /// **Exhaustive over `DirectiveKind`'s own nine variants**
 /// (`rexx-parse/src/ast.rs:1353`-`1368`), not a string comparison against a
@@ -191,11 +187,10 @@ fn assert_program_has_only_admitted_directives(path: &Path, p: &Program) {
         .collect();
     assert!(
         others.is_empty(),
-        "{} has a `::` directive this walker does not admit ({others:?}) -- \
-         only ::ROUTINE, ::CLASS and ::METHOD are (see `is_admitted_directive_kind`), \
-         and only `::ROUTINE`'s body is actually descended into by \
-         `each_instruction`; either the subset gained a directive kind by \
-         mistake or this walker needs widening",
+        "{} has a `::` directive this walker does not admit ({others:?}) -- see \
+         `is_admitted_directive_kind` for the set and `each_instruction` for \
+         which of them carry a body it descends into; either the subset gained \
+         a directive kind by mistake or this walker needs widening",
         path.display()
     );
 }
@@ -268,6 +263,35 @@ fn every_directive_keyword_is_correctly_admitted_or_refused() {
 fn a_class_directive_is_admitted_without_panicking() {
     let p = parse_program(b"::CLASS K\n".to_vec()).expect("::CLASS K parses");
     assert_program_has_only_admitted_directives(Path::new("<phase-5a-task-1-demo>"), &p);
+}
+
+/// **[`each_instruction`] descends into a `::METHOD` and a `::ATTRIBUTE`
+/// body**, which is what makes a construct written only inside one count
+/// toward criterion 1.
+///
+/// Paired with a `::ROUTINE` in the same program, so the assertion cannot be
+/// satisfied by a walk that visits every directive's body indiscriminately
+/// and one that visits none reads differently from one that visits only the
+/// routine: the three keywords are distinct, and all three must arrive.
+#[test]
+fn the_walker_descends_into_a_method_body_and_an_attribute_body() {
+    let p = parse_program(
+        b"nop\n\
+          ::routine r\n  iterate\n\
+          ::class K\n\
+          ::method m class\n  leave\n\
+          ::attribute a get\n  return 1\n"
+            .to_vec(),
+    )
+    .expect("the program parses");
+    let mut seen: Vec<&str> = Vec::new();
+    each_instruction(&p, &mut |i| seen.push(instruction_tag(&i.kind).0));
+    assert_eq!(
+        seen,
+        vec!["Nop", "Iterate", "Leave", "Return"],
+        "the walk did not visit exactly the main body's instruction and one \
+         from each directive body, in directive order"
+    );
 }
 
 /// Pairs with the success above: a directive kind [`is_admitted_directive_kind`]
@@ -504,22 +528,33 @@ fn exprs_of_loop<'a>(l: &'a Loop, f: &mut impl FnMut(&'a Expr)) {
 /// Descending into a routine is what lets
 /// `assert_program_has_only_admitted_directives` admit `::ROUTINE` without
 /// also admitting a hole: the guard exists to stop a subset program hiding
-/// constructs from criterion 1 inside a body nothing walks, and `::ROUTINE`
-/// is the one directive kind whose body this function actually visits.
-/// `::CLASS`, `::METHOD`, `::ATTRIBUTE` and `::CONSTANT` are admitted by that
-/// guard too (Phase 5a), but neither a `::METHOD`/`::ATTRIBUTE` body nor a
-/// `::CONSTANT`'s own parenthesised expression is descended into here -- a
-/// construct that appears only inside one is not yet counted toward
-/// criterion 1's coverage, which is a fact about this walker's current reach
-/// rather than a claim that nothing else is admitted.
+/// constructs from criterion 1 inside a body nothing walks.
+///
+/// **Every directive kind that owns a `CodeBody` is descended into**, which
+/// is the same set `rexx_exec`'s own `body_of` turns into a `&CodeBody`:
+/// `::ROUTINE`, `::METHOD` and `::ATTRIBUTE`. `::CLASS` owns no body of its
+/// own, and a `::CONSTANT`'s parenthesised value is an expression rather than
+/// an instruction, so neither can carry an `Instruction` for this walk to
+/// miss; both are admitted by the guard above and visited here as nothing.
+///
+/// Descending into a method body **cannot hide anything**, in either
+/// direction: the only consumer, `every_in_scope_variant_is_witnessed_by_the_
+/// phase_subsets`, reports `Coverage::unwitnessed`, so a wider walk can only
+/// move a variant from unwitnessed to witnessed. What it changes is that a
+/// construct written only inside a `::METHOD` body now counts as a witness,
+/// where before the same program witnessed nothing at all.
 fn each_instruction<'a>(p: &'a Program, visit: &mut impl FnMut(&'a Instruction)) {
     for i in &p.main.instructions {
         visit(i);
     }
     for directive in &p.directives {
-        if let DirectiveKind::Routine(routine) = &directive.kind
-            && let Some(body) = &routine.body
-        {
+        let body = match &directive.kind {
+            DirectiveKind::Routine(routine) => routine.body.as_ref(),
+            DirectiveKind::Method(method) => method.body.as_ref(),
+            DirectiveKind::Attribute(attribute) => attribute.body.as_ref(),
+            _ => None,
+        };
+        if let Some(body) = body {
             for i in &body.instructions {
                 visit(i);
             }
@@ -872,6 +907,15 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/environment_object_operands.rex",
     "lang/environment_object_in_a_loop_header.rex",
     "lang/environment_object_in_a_raise.rex",
+    "lang/method_class_body.rex",
+    "lang/method_returns_no_value.rex",
+    "lang/method_no_result_is_an_error.rex",
+    "lang/method_exit_returns_to_the_sender.rex",
+    "lang/method_body_raises.rex",
+    "lang/method_class_side_lookup.rex",
+    "lang/method_attribute_body.rex",
+    "lang/method_trace_invocation.rex",
+    "lang/method_trace_nested.rex",
 ];
 
 #[test]

@@ -170,10 +170,9 @@
 //!
 //! [`RAW_STDERR_COMPARISON`] names corpus programs compared byte-for-byte on
 //! `stderr`, through `support::oracle::StderrComparison::Raw`, rather than
-//! through DEVIATION 0's normalisation. Empty as of Phase 5a's Task 1, which
-//! only builds the mechanism; a later task adds a program's path here the
-//! moment it needs to claim a stricter comparison than the default gives
-//! every other entry.
+//! through DEVIATION 0's normalisation. A program belongs here when the run
+//! of spaces normalisation collapses is the thing the program exists to
+//! witness, and its own entry says which indent that is.
 
 mod support;
 
@@ -281,7 +280,15 @@ fn excerpt(bytes: &[u8]) -> String {
 /// Corpus programs compared byte-for-byte on `stderr` rather than through
 /// DEVIATION 0's normalisation. See the module doc's "Opting a program out
 /// of DEVIATION 0".
-const RAW_STDERR_COMPARISON: &[&str] = &[];
+const RAW_STDERR_COMPARISON: &[&str] = &[
+    // Phase 5a Task 7's two traced method activations. The indent a
+    // `::METHOD` body's clauses echo at is the thing under test -- 0,
+    // whatever the sending clause's own indent was -- and normalisation
+    // erases exactly that difference, so these two are the first programs
+    // that would pass the default comparison while being wrong.
+    "lang/method_trace_invocation.rex",
+    "lang/method_trace_nested.rex",
+];
 
 /// Every entry in [`RAW_STDERR_COMPARISON`] is a line some phase subset file
 /// actually names.
