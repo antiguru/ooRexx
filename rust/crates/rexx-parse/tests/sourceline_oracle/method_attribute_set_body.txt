@@ -6,19 +6,19 @@ count 58
    body of their own when they are written this way; only the generated
    accessors, which read an instance variable, do not.
 
-   The `a` pair is the untraced half. S4 is the setter's own line, so an
-   engine that resolved the assignment to the getter's entry, or dropped the
-   `=`, prints S3 twice and S4 never -- and one that ran no body at all is
-   loud, since nothing else answers either name.
+   The `a` pair is the untraced half. S4 is the setter's own line and S3 is
+   the getter's, so which body ran is visible on stdout: measured, an engine
+   whose assignment resolves to the getter's entry instead prints S3 twice and
+   S4 never.
 
    The `b` pair is why this program is in RAW_STDERR_COMPARISON. The >I> and
-   <I< lines carry the RESOLVED name, and `"B"` from the getter against `"B="`
-   from the setter is the only place a program can see that the two entries
-   are distinct; an engine announcing the directive's own spelling prints
-   `"B"` for both, on stderr alone, at rc 0. The bodies turn TRACE I on
-   themselves rather than inheriting it, because trace does not cross into a
-   method activation -- measured, a traced sending clause echoes its own
-   >E>/>L>/>A> lines and no >I> at all.
+   <I< lines carry the RESOLVED name, so `"B"` from the getter against `"B="`
+   from the setter is the only place a program can read the name itself rather
+   than infer it from which body ran; an engine announcing the directive's own
+   spelling prints `"B"` for both, on stderr alone, at rc 0. The bodies turn
+   TRACE I on themselves rather than inheriting it, because trace does not
+   cross into a method activation -- measured, a traced sending clause echoes
+   its own >E>/>L>/>A> lines and no >I> at all.
 
    Neither accessor stores anything: a method activation's frame is its own,
    so a name assigned in the setter is not the name the getter reads, and a
