@@ -71,6 +71,7 @@
 //! convert into the one type `step` and everything above it propagate,
 //! `Failure`.
 
+use crate::activation::CallType;
 use crate::error::Raised;
 use crate::run::{Ended, Resolved};
 use crate::value::{exact_small_int, within_digits};
@@ -697,7 +698,11 @@ impl Interp {
         name: &[u8],
         args: &[Option<Expr>],
     ) -> Result<ObjRef, Failure> {
-        match self.invoke_call(code, resolved, name, args)? {
+        // `CallType::Function`: this is the function-invocation route, and a
+        // `::ROUTINE` reached this way answers `FUNCTION` as `PARSE SOURCE`'s
+        // second word where the same body reached by `CALL` answers
+        // `SUBROUTINE`. Measured in one program, the same routine both ways.
+        match self.invoke_call(code, resolved, name, args, CallType::Function)? {
             // `EXIT` inside the routine, or the routine falling off its own
             // end, ends the whole program exactly as it does when the same
             // routine is reached through `CALL` (`Interp::invoke_call`'s

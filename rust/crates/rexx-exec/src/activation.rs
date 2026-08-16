@@ -437,6 +437,15 @@ pub(crate) struct Activation {
     /// How this activation was entered -- what an instruction whose legality
     /// depends on the entry reads. [`Entry`] carries the oracle's own table.
     pub(crate) entry: Entry,
+    /// What `PARSE SOURCE`'s second word answers while this activation runs.
+    ///
+    /// A field rather than a function of [`entry`], because [`Entry::Routine`]
+    /// carries two answers and the entry cannot tell them apart:
+    /// [`CallType`]'s own doc has the measured table and the program for each
+    /// row.
+    ///
+    /// [`entry`]: Activation::entry
+    pub(crate) call_type: CallType,
     /// `Some` exactly for an [`Entry::Method`] activation: what its
     /// `>I>`/`<I<` lines name.
     ///
@@ -664,6 +673,63 @@ pub(crate) enum Entry {
     Method,
 }
 
+/// `PARSE SOURCE`'s second word: the *calling context* the running activation
+/// was entered under, which the oracle keeps as `settings.calltype`
+/// (`execution/ActivationSettings.hpp:179`) and renders straight into the
+/// source string (`RexxActivation.cpp:4601`).
+///
+/// **This is not [`Entry`] under another name**, and reducing it to one would
+/// reintroduce the defect it was written for. Measured on the oracle, one
+/// program per row in a clean directory, each printing the second word from
+/// the body named:
+///
+/// ```text
+/// the program itself                          COMMAND
+/// an internal label, by CALL                  the enclosing activation's
+/// an internal label, as a function            the enclosing activation's
+/// a ::ROUTINE, by CALL                        SUBROUTINE
+/// a ::ROUTINE, as a function                  FUNCTION
+/// a ::METHOD, by a message send               METHOD
+/// a ::ATTRIBUTE GET or SET, by a message send METHOD
+/// ```
+///
+/// `Entry::Routine` covers the two `::ROUTINE` rows alike and cannot tell
+/// them apart, which is why this is carried beside it rather than derived
+/// from it: measured, one `::routine` body reached both ways in one program
+/// answers `SUBROUTINE` from the `CALL` and `FUNCTION` from the function
+/// invocation. And the label rows inherit rather than answering a value of
+/// their own -- measured, a `::routine` invoked as a function whose body then
+/// `CALL`s an internal label reads `FUNCTION` inside that label -- which is
+/// [`Inherited`]'s job and why this field is one of its members.
+///
+/// An `INTERPRET` fragment has no row because it pushes no activation, so it
+/// reads whatever its enclosing one answers; measured all the same, a
+/// fragment inside a `::METHOD` body reads `METHOD`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum CallType {
+    /// A program run as a command, which is how the `rexx` front end starts
+    /// the top-level activation (`RexxStartDispatcher.cpp:104`, `RXCOMMAND`).
+    Command,
+    /// A `::ROUTINE` body reached by `CALL`.
+    Subroutine,
+    /// A `::ROUTINE` body reached as a function.
+    Function,
+    /// A `::METHOD` or `::ATTRIBUTE` body reached by a message send.
+    Method,
+}
+
+impl CallType {
+    /// The word itself, as `PARSE SOURCE` spells it.
+    pub(crate) fn token(self) -> &'static [u8] {
+        match self {
+            CallType::Command => b"COMMAND",
+            CallType::Subroutine => b"SUBROUTINE",
+            CallType::Function => b"FUNCTION",
+            CallType::Method => b"METHOD",
+        }
+    }
+}
+
 /// What `>I>`/`<I<` name for a `::METHOD` activation.
 ///
 /// The substitutions message 101018's method form takes
@@ -710,6 +776,9 @@ impl Activation {
             frame,
             owns_frame: true,
             entry: Entry::TopLevel,
+            // The word `rexx p.rex` puts here: the front end starts a program
+            // as `RXCOMMAND`, whose string is `COMMAND`.
+            call_type: CallType::Command,
             method_identity: None,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
@@ -817,6 +886,7 @@ impl Activation {
             frame,
             owns_frame: false,
             entry: Entry::InternalCall,
+            call_type: inherited.call_type,
             method_identity: None,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
@@ -852,6 +922,12 @@ impl Activation {
     /// therefore a different [`Plan`], so a name means a different slot index
     /// on each side and a binding carried across would land on an unrelated
     /// variable.
+    ///
+    /// `call_type` is the one thing the *invocation form* decides rather than
+    /// the directive: [`CallType::Subroutine`] for `CALL name` and
+    /// [`CallType::Function`] for `name(...)`, which is why it is a parameter
+    /// where every other field here is fixed. [`CallType`]'s own doc has the
+    /// measurement.
     pub(crate) fn routine(
         id: ActivationId,
         program: Rc<Program>,
@@ -859,6 +935,7 @@ impl Activation {
         body: usize,
         plan: Rc<Plan>,
         frame: SlotFrame,
+        call_type: CallType,
     ) -> Activation {
         Activation {
             id,
@@ -870,6 +947,7 @@ impl Activation {
             frame,
             owns_frame: true,
             entry: Entry::Routine,
+            call_type,
             method_identity: None,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
@@ -897,8 +975,12 @@ impl Activation {
     /// * `PROCEDURE` as its first instruction is 17.1, the same answer a
     ///   `::ROUTINE` gets ([`Entry`]'s own table has the row).
     ///
-    /// What differs is [`Entry::Method`], which `USE LOCAL` reads, and
-    /// `method_identity`, which the `>I>`/`<I<` pair reads.
+    /// What differs is [`Entry::Method`], which `USE LOCAL` reads,
+    /// `method_identity`, which the `>I>`/`<I<` pair reads, and
+    /// [`CallType::Method`], which `PARSE SOURCE`'s second word reads -- and
+    /// that last one is fixed here where [`Activation::routine`] takes it as
+    /// a parameter, because a message send is a single form while a routine
+    /// call's own form -- `CALL name` against `name(...)` -- decides it.
     pub(crate) fn method(
         id: ActivationId,
         program: Rc<Program>,
@@ -918,6 +1000,7 @@ impl Activation {
             frame,
             owns_frame: true,
             entry: Entry::Method,
+            call_type: CallType::Method,
             method_identity: Some(identity),
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
@@ -965,6 +1048,7 @@ impl Activation {
 /// it is moved back into the caller on return for a shared-pool callee
 /// (`owns_frame`'s own doc comment), which is the opposite of one-way.
 pub(crate) struct Inherited {
+    pub(crate) call_type: CallType,
     pub(crate) settings: Settings,
     pub(crate) trace_mode: TraceMode,
     pub(crate) address: AddressState,

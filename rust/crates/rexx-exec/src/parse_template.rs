@@ -75,14 +75,6 @@ use rexx_parse::{ExprKind, Parse, ParseSource, ParseTrigger, TriggerKind};
 /// measured, since one machine cannot show it.
 const PLATFORM: &[u8] = b"LINUX";
 
-/// `PARSE SOURCE`'s second word, the calling *context*.
-///
-/// Measured, and the distinction is context rather than call depth: `LINUX
-/// COMMAND` at the top level, inside an internal subroutine and inside an
-/// internal function alike, and `LINUX METHOD` for a `::method` body's own
-/// context.
-const CONTEXT: &[u8] = b"COMMAND";
-
 /// `PARSE VERSION`'s string.
 ///
 /// **This is the oracle's own build identity, and it is a claim about a
@@ -508,10 +500,14 @@ impl Interp {
                 self.roots.push_temp(value);
                 ("VAR", self.to_text(value).to_vec())
             }
+            // The second word is the *calling context* rather than the call
+            // depth, and it is the running activation's rather than this
+            // clause's: `crate::activation::CallType` carries the measured
+            // table and is set where each activation is built.
             ParseSource::Source => {
                 let mut source = PLATFORM.to_vec();
                 source.push(b' ');
-                source.extend_from_slice(CONTEXT);
+                source.extend_from_slice(self.activation().call_type.token());
                 source.push(b' ');
                 source.extend_from_slice(self.program_path.as_bytes());
                 ("SOURCE", source)

@@ -30,8 +30,16 @@
    absolute path, which would put the filesystem in this program's output and
    break the corpus's determinism rule; corpus/lang/source_arg.rex projects it
    away the same way. The second word is the calling CONTEXT and not the call
-   depth: measured, it is COMMAND at the top level and inside an internal
-   routine alike, which is what D1 and D2 together pin.
+   depth, and the context is the ACTIVATION's rather than the clause's. D1 and
+   D2 pin that a program and an internal label reached from it both read
+   COMMAND, so depth alone changes nothing. D3 and D4 are the pair that says
+   the word is not a constant: the SAME ::routine body reads SUBROUTINE when
+   CALL reached it and FUNCTION when a function invocation did. D5 is printed
+   from an internal label that routine calls, so it appears once per route and
+   reads whatever the ::routine that reached it reads -- a label inherits the
+   context rather than answering for itself, which is also why D2 reads
+   COMMAND. An engine that renders one fixed word prints COMMAND on every D
+   line, at rc 0, with nothing on stderr to say so.
 
    PARSE VERSION is deliberately absent. Every field it carries is the
    interpreter's own build identity, the third one a build DATE, so a
@@ -81,6 +89,9 @@ say 'C6 ['||cc||']['||cd||']'
 parse source sys context .
 say 'D1 ['||sys||']['||context||']'
 call context_in_a_routine
+call context_directive
+say 'D3 ['||result||']'
+say 'D4 ['||context_directive()||']'
 
 trace r
 parse value 'one two three' with t1 . t2
@@ -109,4 +120,13 @@ args:
 context_in_a_routine:
   parse source sys2 context2 .
   say 'D2 ['||sys2||']['||context2||']'
+  return
+
+::routine context_directive
+  parse source sys3 context3 .
+  call context_in_a_directive
+  return context3
+context_in_a_directive:
+  parse source sys4 context4 .
+  say 'D5 ['||context4||']'
   return

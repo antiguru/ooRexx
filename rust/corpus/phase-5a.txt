@@ -93,3 +93,11 @@ lang/method_class_side_lookup.rex
 lang/method_attribute_body.rex
 lang/method_trace_invocation.rex
 lang/method_trace_nested.rex
+
+# Task 7 fix round 1: the calling context a method activation answers to
+# PARSE SOURCE, which was `COMMAND` here against the oracle's `METHOD` -- rc 0
+# and empty stderr on both sides, so no refusal named an owner and nothing in
+# the tree ran the program that would have shown it.
+# corpus/lang/parse_sources.rex carries the contexts a method is not, and the
+# pair is what stops a single fixed word passing both.
+lang/method_parse_source.rex

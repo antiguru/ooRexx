@@ -65,7 +65,7 @@
 //! at both.
 
 use crate::activation::{
-    Activation, Entry, Inherited, TraceEntry, Trap, TrappedCondition, body_of,
+    Activation, CallType, Entry, Inherited, TraceEntry, Trap, TrappedCondition, body_of,
 };
 use crate::builtin;
 use crate::clause::{ClauseEntry, ClauseOutcome, ClauseValue, HandlerExit};
@@ -3855,7 +3855,13 @@ impl Interp {
             description: pending.description.clone(),
         });
         let queued_before = self.pending_traps.len();
-        let ended = self.resolve_and_run_call(code, &trap.label, true, &[]);
+        // `CallType::Subroutine` because a `CALL ON` handler is a `CALL`, and
+        // that reaches `PARSE SOURCE` when the trap's name resolves to a
+        // `::ROUTINE` rather than to a label. Measured: a trapped `USER`
+        // condition whose handler is a `::routine` running `parse source`
+        // answers `SUBROUTINE`, where the same handler written as a label
+        // answers whatever the trapping activation answers.
+        let ended = self.resolve_and_run_call(code, &trap.label, true, &[], CallType::Subroutine);
         // A trap queued by the handler that just ran is not one the
         // interrupted clause owes, and `in_clause`'s tripwire has to be able
         // to tell the two apart -- see the field's own doc comment.
@@ -4509,6 +4515,14 @@ impl Interp {
     ///
     /// `code` is the body the **argument expressions** are written in, which
     /// is the caller's own and is not what `resolve_call` searched.
+    ///
+    /// `call_type` is which invocation form got here, and it is a parameter
+    /// because only the caller knows: a `::ROUTINE` body reached by `CALL`
+    /// and the same body reached as a function are the same `Entry::Routine`
+    /// and answer different `PARSE SOURCE` second words ([`CallType`]'s own
+    /// doc has the measurement). `Entry::Label` ignores it and inherits the
+    /// enclosing activation's instead, which is measured too and is why it
+    /// travels in [`Inherited`].
     /// Takes the shared value buffer, empty and ready to build into.
     pub(crate) fn take_value_buffer(&mut self) -> Vec<Option<ObjRef>> {
         let mut buffer = std::mem::take(&mut self.value_buffer);
@@ -4527,6 +4541,7 @@ impl Interp {
         resolved: Resolved,
         name: &[u8],
         args: &[Option<Expr>],
+        call_type: CallType,
     ) -> Result<Ended, Failure> {
         // **Evaluated in the caller, before anything is pushed**, which is
         // where the argument expressions' own variables live. Observable
@@ -4687,6 +4702,13 @@ impl Interp {
                 let caller = self.activation();
                 let plan = Rc::clone(&caller.plan);
                 let frame = caller.frame;
+                // The `call_type` parameter is deliberately not read here: an
+                // internal label answers `PARSE SOURCE`'s second word from the
+                // activation it was called out of, whichever form called it.
+                // Measured, a `::routine` invoked as a function whose body
+                // `CALL`s a label reads `FUNCTION` inside that label, not
+                // `SUBROUTINE`.
+                let caller_call_type = caller.call_type;
                 let settings = caller.settings.clone();
                 let trace_mode = caller.trace_mode;
                 let extra = caller.extra.clone();
@@ -4714,6 +4736,7 @@ impl Interp {
                     frame,
                     target,
                     Inherited {
+                        call_type: caller_call_type,
                         settings,
                         trace_mode,
                         address,
@@ -4757,6 +4780,7 @@ impl Interp {
                     installed.directive,
                     plan,
                     frame,
+                    call_type,
                 ));
             }
         }
@@ -4937,9 +4961,10 @@ impl Interp {
         name: &[u8],
         search_labels: bool,
         args: &[Option<Expr>],
+        call_type: CallType,
     ) -> Result<Ended, Failure> {
         let resolved = self.resolve_call(name, search_labels)?;
-        self.invoke_call(code, resolved, name, args)
+        self.invoke_call(code, resolved, name, args, call_type)
     }
 
     /// Evaluates one call argument, keeping the caller's slot when the
@@ -5063,7 +5088,7 @@ impl Interp {
         // clause's own printed indent, needed below for the caller-side
         // `RESULT` trace.
         let base_indent = self.clause_state.current_value_indent;
-        let ended = self.invoke_call(code, resolved, name, args)?;
+        let ended = self.invoke_call(code, resolved, name, args, CallType::Subroutine)?;
 
         let value = match ended {
             // `EXIT` inside the callee ends the program rather than the

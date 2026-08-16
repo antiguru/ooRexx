@@ -916,6 +916,7 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/method_attribute_body.rex",
     "lang/method_trace_invocation.rex",
     "lang/method_trace_nested.rex",
+    "lang/method_parse_source.rex",
 ];
 
 #[test]
