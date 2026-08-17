@@ -508,11 +508,11 @@ showed the gap is wider than the one keyword, and that the plan does not mention
 | `::CLASS`/`::METHOD` option | in `CoreClasses.orx` | this crate | owner |
 |---|---|---|---|
 | `SUBCLASS <class>` | `Alarm`, `CircularQueue`, `Properties`, `TraceObject` | was rc 120 | **Task 8**, ruling R26 |
-| `MIXINCLASS` | used | rc 120, `::CLASS naming another class` | **none** |
-| `INHERIT` | `DateTime`, `TimeSpan` | rc 120, same message | **none** |
+| `MIXINCLASS` | used | rc 120, `::CLASS naming another class` | **Task 15** |
+| `INHERIT` | `DateTime`, `TimeSpan` | rc 120, same message | **Task 15** |
 | `ABSTRACT` | used | rc 0, agrees | none needed for the gate |
 | `UNGUARDED` | used | rc 0, agrees | none needed for the gate |
-| `PRIVATE` | used | rc 120 | **none** (see the `KNOWN GAP` in `phase-4-exclusions.txt`) |
+| `PRIVATE` | used | **installs at rc 0**; a *send* is rc 120 | **Task 16** |
 | `EXTERNAL` | used | -- | Task 10 |
 | `::ATTRIBUTE` | used | -- | Task 4 |
 
@@ -532,11 +532,21 @@ word across `CoreClasses.orx` answers two; both are inside a comment describing 
 and no `::CLASS` line in the file uses the keyword. The wrong version came from counting a word
 instead of reading the lines that would have to run.
 
-**What this costs Task 14.** Its gate is `CoreClasses.orx` parsing and executing. `MIXINCLASS`,
-`INHERIT` and `PRIVATE` each stop that today, and none of them has a task. **Placing them is the next
-scoping decision this plan needs** -- as tasks here, or as an explicit deferral that moves Task 14's
-gate with it. Deciding it by letting whichever task trips over them absorb them is how Task 8 came to
-be asked for a differential it could not run.
+**`PRIVATE`'s row was wrong when this table was first written, and the correction is instructive.**
+It read "rc 120", implying the declaration is refused. Measured: `::method m class private` **installs
+at rc 0** on both sides, and only a *send* is refused. So `PRIVATE` does not stop `CoreClasses.orx`
+at all. What it stops is **`StreamClasses.orx:548`**, `::constant separator (.File~getSeparator)` --
+an install-time constant whose expression sends the private class method declared at `:546`. The
+oracle answers rc 0; this crate is rc 120. **That shape is an install-time send, not a program's
+send**, and Task 16's verification must contain it.
+
+**The tables here cover `CoreClasses.orx` only, and both gates need `StreamClasses.orx` too.**
+That file carries `MIXINCLASS` and `INHERIT` on one directive and a quoted `SUBCLASS` target, neither
+of which this survey looked at. Task 17's derived table owns closing that.
+
+**These three are placed**, in Tasks 15 and 16 -- the table's owner column is authoritative and this
+paragraph is not a second copy of it. What remains the next scoping decision is the work the plan
+still does not own at all, which the review of this revision enumerates.
 
 ---
 
