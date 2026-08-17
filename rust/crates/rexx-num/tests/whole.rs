@@ -195,3 +195,52 @@ fn acceptance_and_conversion_are_separate_questions() {
     assert!(Number::parse("-1e").is_none());
     assert!(Number::parse("9 5").is_none());
 }
+
+/// `whole_i64` answers what building the `Number` and asking it answers.
+///
+/// **Equal on both outcomes, not only where the fast answer fires.** An
+/// `i64` has no fractional part, so the only question `whole_value` asks of
+/// it is width, and it applies the same ceiling in its rounding branch as in
+/// its direct one -- so a value too wide is `None` from both. The counts
+/// below refuse the two degenerate readings of that: a `whole_i64` answering
+/// `Some` for everything, and one answering `None` for everything.
+#[test]
+fn whole_i64_agrees_with_building_the_number() {
+    let mut converted = 0usize;
+    let mut refused = 0usize;
+    for digits in [1usize, 2, 3, 9, 17, 18, 19, 40] {
+        for value in [
+            0i64,
+            1,
+            -1,
+            9,
+            -9,
+            10,
+            99,
+            -100,
+            1000,
+            1234,
+            -1234,
+            999_999_999,
+            1_000_000_000,
+            999_999_999_999_999_999,
+            1_000_000_000_000_000_000,
+            -999_999_999_999_999_999,
+            -1_000_000_000_000_000_000,
+            i64::MAX,
+            i64::MIN,
+        ] {
+            let built = Number::from_i64(value).whole_value(digits);
+            let fast = rexx_num::whole_i64(value, digits);
+            assert_eq!(fast, built, "value {value}, digits {digits}");
+            if fast.is_some() {
+                assert_eq!(fast, Some(value), "value {value}, digits {digits}");
+                converted += 1;
+            } else {
+                refused += 1;
+            }
+        }
+    }
+    assert!(converted > 0, "nothing in the grid converted");
+    assert!(refused > 0, "nothing in the grid was refused");
+}

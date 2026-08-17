@@ -69,7 +69,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 
-use rexx_core::ObjRef;
+use rexx_core::{Decoded, ObjRef};
 
 use crate::error::{Failure, Raised};
 use crate::value::Rendered;
@@ -898,6 +898,16 @@ fn whole_number(
     let Some(value) = arg(args, position) else {
         return Ok(None);
     };
+    // **A tagged integer already is the answer**, when it is small enough
+    // that `whole_value` would round nothing -- which is what `whole_i64`
+    // decides. Going the long way builds a `Number` out of the tag and takes
+    // the `i64` straight back out of it. A `None` here means only that the
+    // rounding rule has to run, so the general path below still does.
+    if let Decoded::SmallInt(small) = value.decode()
+        && let Some(whole) = rexx_num::whole_i64(small, ARGUMENT_DIGITS)
+    {
+        return Ok(Some(whole));
+    }
     // `to_number` hands back an owned `Number`, so the borrow of `interp` is
     // over before `to_text` below needs its own.
     if let Ok(number) = interp.to_number(value)

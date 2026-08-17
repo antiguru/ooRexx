@@ -285,6 +285,22 @@ fn max_value_for_digits(digits: usize) -> i64 {
     max
 }
 
+/// [`Number::whole_value`] for a value a caller already holds as an `i64`,
+/// where that answer needs no [`Number`] built to reach it.
+///
+/// **The bound is `whole_value`'s own, both times it applies it.** An `i64`
+/// has no fractional part, so the only question is width: inside `digits`
+/// the first branch converts it unchanged, and outside, the rounding branch
+/// scales a `digits`-wide mantissa back up by at least ten and fails the same
+/// ceiling. So the two agree on `None` as well as on `Some`, and
+/// `whole_i64_agrees_with_building_the_number` asserts that over a grid --
+/// which is evidence over those inputs rather than a proof over all of them,
+/// which is why the caller in `builtin::whole_number` still falls through
+/// rather than answering `None` itself.
+pub fn whole_i64(value: i64, digits: usize) -> Option<i64> {
+    (value.unsigned_abs() <= max_value_for_digits(digits) as u64).then_some(value)
+}
+
 /// `NumberString::createUnsignedValue` (`NumberStringClass.cpp:788`): the first
 /// `length` digits, plus a carry, scaled by `10^exponent`.
 ///
@@ -865,10 +881,6 @@ impl Number {
         self.exponent.saturating_add(self.digits.len() as i32 - 1)
     }
 
-    /// Rounds to at most `digits` significant digits, half-up.
-    ///
-    /// Rounding is an arithmetic operation, not a display one -- it happens at
-    /// the `DIGITS` boundary when a result is produced. It is exposed here
     /// The value as a machine integer under `digits` precision, or `None` if it
     /// has none.
     ///
@@ -989,6 +1001,10 @@ impl Number {
         Some(converted * sign)
     }
 
+    /// Rounds to at most `digits` significant digits, half-up.
+    ///
+    /// Rounding is an arithmetic operation, not a display one -- it happens at
+    /// the `DIGITS` boundary when a result is produced. It is exposed here
     /// because every operator needs it.
     ///
     /// `digits == 0` is a deliberate no-op sentinel, not an accident: there
