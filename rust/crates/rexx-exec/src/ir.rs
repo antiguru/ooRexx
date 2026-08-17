@@ -41,12 +41,11 @@ use crate::trace::ChunkTrace;
 mod compile;
 mod drive;
 pub(crate) use compile::compile;
+pub(crate) use golden::render_annotated;
 
-// `render`, the golden-test serialiser, is a test-only rendering of the op
-// stream: nothing the interpreter does at run time reads a chunk back as text.
-// Gated here rather than carrying a permanent `#[allow(dead_code)]`, so a
-// production caller for it would not compile rather than passing unnoticed.
-#[cfg(test)]
+// `render` serialises an op stream back to text. Nothing the interpreter does
+// at run time reads a chunk that way; its callers are the golden tests and
+// `crate::render_ir`, which the `rexx-ir` binary prints.
 mod golden;
 
 #[cfg(test)]
@@ -175,6 +174,13 @@ pub(crate) enum Op {
     /// delivered at, the GC temps frame, and the failing clause's own site.
     /// None of it may be elided with the echo, which is why the split is two
     /// ops rather than one op with a flag.
+    ///
+    /// **A marker instruction is this op and nothing else**, its region empty
+    /// but for the [`Op::TraceClause`] a setting that echoes puts in it.
+    /// `NOP` and `THEN` execute as `Ok(Flow::Next)` and compute nothing at
+    /// all, so the clause boundary and the echo *are* the instruction, and
+    /// this op is the whole of both. Falling off the end of an empty region
+    /// leaves the counter at `end`, which is where a one-clause op leaves it.
     ///
     /// **No `Generic` op may sit inside `(here, end)`**, which `compile`
     /// asserts: it runs a whole clause through `step_in_temps_frame`, which
@@ -864,6 +870,31 @@ pub(crate) enum Op {
     /// **The last op of a [`Op::Clause`] region, and inside it**, for the
     /// reason [`Op::Message`] is.
     Expose { index: u32 },
+    /// Answers the `Flow` the `LEAVE`/`ITERATE` at `index` resolves to: the
+    /// instruction's own name, if it has one, and the [`crate::run::
+    /// LeaveOrigin`] captured here rather than reconstructed later.
+    ///
+    /// `Interp::leave_origin` is the capture, entered from here and from
+    /// `step`'s own two arms, so the clause and the static indent a failing
+    /// search is blamed on are one implementation rather than a second one
+    /// beside it.
+    ///
+    /// **One op for both keywords, with the keyword read off the clause**, on
+    /// [`ConditionKeyword`]'s terms: the two arms would otherwise be the same
+    /// arm twice, differing only in which `Flow` constructor the origin goes
+    /// into. The name goes the same way, which is what keeps this op four
+    /// bytes wide -- [`Op::Message`] and [`Op::Expose`] read their clause's
+    /// fields for the same reason.
+    ///
+    /// **Whether the name matches anything is not decided here**, exactly as
+    /// it is not decided in `step`: this op resolves to data, and whichever
+    /// `DO`/`SELECT` frame inspects the `Flow` answers it (`Flow::Leave`'s own
+    /// doc comment).
+    ///
+    /// **The last op of a [`Op::Clause`] region, and inside it**, for
+    /// [`Op::Return`]'s reason: the region ends with `RegionEnd::Flowed`, and
+    /// whatever follows this op in the stream is unreachable through it.
+    Escape { index: u32 },
     /// Continues at op `target`.
     Jump { target: u32 },
     /// Continues at op `target` unless register `reg` holds the logical value

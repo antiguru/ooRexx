@@ -4049,6 +4049,82 @@ pub fn run_program_collect_every_alloc(
     on_interpreter_thread(move || execute(&path, text, true, invocation))
 }
 
+/// Every body of `text`, compiled to a chunk and rendered as text: what the
+/// `rexx-ir` binary prints.
+///
+/// **This is a view of the compiler, not of a run.** It reaches `ir::compile`
+/// through the same `Plan::build` an activation does, so the stream it renders
+/// is the stream that body would run -- but nothing is executed, no activation
+/// exists, and a construct whose shape depends on run-time state is not
+/// resolved here. `setting` is the `TRACE` word the chunk is compiled under,
+/// which is an input to compilation rather than a display option (D23): under a
+/// setting that echoes, each promoted clause carries an `Op::TraceClause` that
+/// the same body compiled untraced does not have.
+///
+/// **A body that `compile` refuses is reported rather than skipped**, because
+/// a refusal is exactly what a reader printing the IR wants to see: that body
+/// runs on the tree-walker.
+///
+/// `Err` is a parse failure, rendered the way `execute` would report it.
+///
+/// **On the caller's thread.** `compile`'s expression walk takes a frame per
+/// operator, so a deeply nested expression can outrun an ordinary stack --
+/// `corpus_shape_tests`' own sweep measured the boundary and asks for
+/// [`INTERPRETER_STACK_BYTES`]. The binary spawns such a thread; this function
+/// does not, so that a caller already on one does not stack a second.
+pub fn render_ir(text: Vec<u8>, setting: &[u8]) -> Result<String, String> {
+    let mode = trace::mode_from_setting(setting).map_err(|byte| {
+        format!(
+            "not a TRACE setting: {} (at {:?})",
+            String::from_utf8_lossy(setting),
+            char::from(byte)
+        )
+    })?;
+    let trace = trace::ChunkTrace::of(mode);
+    let program = rexx_parse::parse_program(text).map_err(|error| format!("{error:?}"))?;
+
+    let mut out = String::new();
+    for (body, what) in ir_bodies(&program) {
+        out.push_str(&format!("=== {what} ===\n"));
+        let plan = plan::Plan::build(body, &program.symbols, Some(&program.source));
+        match ir::compile(body, &plan, trace) {
+            Ok(chunk) => out.push_str(&ir::render_annotated(&chunk, body, &program.source)),
+            Err(error) => out.push_str(&format!("(refused: {error:?}; runs on the tree-walker)\n")),
+        }
+    }
+    Ok(out)
+}
+
+/// Every body [`render_ir`] compiles, in source order, each with the name it is
+/// printed under.
+///
+/// The main body always, and one per directive that carries code. A directive
+/// with no body of its own -- a `::CLASS`, a `::REQUIRES` -- contributes
+/// nothing, which is why the arms are spelled out rather than reached through a
+/// catch-all: a directive kind that gains a body should have to be named here.
+fn ir_bodies(program: &rexx_parse::Program) -> Vec<(&rexx_parse::CodeBody, String)> {
+    use rexx_parse::DirectiveKind;
+
+    let mut out = vec![(&program.main, "main".to_string())];
+    for directive in &program.directives {
+        let (body, what) = match &directive.kind {
+            DirectiveKind::Method(method) => (method.body.as_ref(), "::METHOD"),
+            DirectiveKind::Attribute(attribute) => (attribute.body.as_ref(), "::ATTRIBUTE"),
+            DirectiveKind::Routine(routine) => (routine.body.as_ref(), "::ROUTINE"),
+            DirectiveKind::Annotate(_)
+            | DirectiveKind::Class(_)
+            | DirectiveKind::Constant(_)
+            | DirectiveKind::Options(_)
+            | DirectiveKind::Requires(_)
+            | DirectiveKind::Resource(_) => (None, ""),
+        };
+        if let Some(body) = body {
+            out.push((body, what.to_string()));
+        }
+    }
+    out
+}
+
 /// Runs `body` on a thread with `INTERPRETER_STACK_BYTES` of stack.
 ///
 /// A panic on that thread is resumed on the caller's rather than converted
@@ -4225,6 +4301,117 @@ mod tests {
     /// none of these programs produces. `tests/spike.rs`'s own copy of this
     /// constant carries the fuller note, beside the test that does assert it.
     const TEST_PATH: &str = "/nonexistent/lib-test-program.rex";
+
+    /// A program with a body per directive kind that carries one, which is what
+    /// [`super::render_ir`] walks.
+    ///
+    /// The `::ATTRIBUTE` is written `GET` with instructions under it: a bare
+    /// `::attribute a` declares accessors and has no body of its own, so it
+    /// would exercise the walk's `None` arm rather than its `Some` one.
+    const EVERY_BODY: &[u8] = b"\
+say 1
+::class k
+::method m
+  return 1
+::attribute a get
+  return 3
+::routine r
+  return 2
+";
+
+    /// [`super::render_ir`] renders every body a program has, each under its
+    /// own heading -- not the main body alone.
+    ///
+    /// The `::CLASS` contributes none and is here for that: a walk that pushed
+    /// a heading per directive rather than per body would show one for it.
+    #[test]
+    fn the_ir_render_covers_every_body_and_only_the_ones_that_exist() {
+        let rendered = super::render_ir(EVERY_BODY.to_vec(), b"n").expect("the program parses");
+        let headings: Vec<&str> = rendered
+            .lines()
+            .filter(|line| line.starts_with("==="))
+            .collect();
+        assert_eq!(
+            headings,
+            vec![
+                "=== main ===",
+                "=== ::METHOD ===",
+                "=== ::ATTRIBUTE ===",
+                "=== ::ROUTINE ==="
+            ],
+            "the render walked the wrong set of bodies\n{rendered}"
+        );
+        // Each body's own ops are there, not just its heading: the three
+        // directive bodies each return a literal, so each owes a load and a
+        // `Return`, and the main body owes a `Say`.
+        assert_eq!(rendered.matches("Return").count(), 3, "{rendered}");
+        assert_eq!(rendered.matches("Say").count(), 1, "{rendered}");
+    }
+
+    /// **The `TRACE` setting is an input to compilation, not a display
+    /// option** (D23), and the render shows the difference.
+    ///
+    /// Under a setting that echoes, each promoted clause carries an
+    /// `Op::TraceClause`; under `N` the stream holds none at all. A `render_ir`
+    /// that ignored its `setting` argument would answer the same text twice.
+    #[test]
+    fn the_ir_render_compiles_under_the_setting_it_is_given() {
+        let untraced = super::render_ir(EVERY_BODY.to_vec(), b"n").expect("the program parses");
+        let traced = super::render_ir(EVERY_BODY.to_vec(), b"r").expect("the program parses");
+        assert!(
+            !untraced.contains("TraceClause"),
+            "a chunk compiled under N carries a clause echo op\n{untraced}"
+        );
+        assert!(
+            traced.contains("TraceClause"),
+            "a chunk compiled under R carries no clause echo op\n{traced}"
+        );
+    }
+
+    /// **A clause-opening op carries the source clause it stands for, and an
+    /// op inside a region does not.**
+    ///
+    /// That split is the whole of what the annotation decides -- one line of
+    /// source per clause, rather than the same clause repeated on every op of
+    /// its region -- and both halves are asserted, because a renderer that
+    /// annotated everything satisfies the first alone.
+    #[test]
+    fn the_ir_render_names_the_clause_a_generic_op_stands_for() {
+        // `DROP` is unpromoted and `SAY` is promoted, so this program has one
+        // op of each kind with a region of computing ops behind the second.
+        let rendered = super::render_ir(b"drop zn\nsay 'x'\n".to_vec(), b"n").expect("parses");
+        let lines: Vec<&str> = rendered.lines().collect();
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.starts_with("0: Generic") && line.ends_with("; 1: drop zn")),
+            "the Generic op does not name its own clause\n{rendered}"
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.starts_with("1: Clause") && line.ends_with("; 2: say 'x'")),
+            "the Clause op does not name its own clause\n{rendered}"
+        );
+        assert!(
+            lines
+                .iter()
+                .filter(|line| line.starts_with("2: ") || line.starts_with("3: "))
+                .all(|line| !line.contains(';')),
+            "an op inside a region repeats its region's clause\n{rendered}"
+        );
+    }
+
+    /// A setting that is not a `TRACE` setting is reported, rather than
+    /// silently compiling under some other one.
+    #[test]
+    fn the_ir_render_refuses_a_setting_that_is_not_one() {
+        let refused = super::render_ir(EVERY_BODY.to_vec(), b"zz");
+        assert!(
+            refused.is_err_and(|report| report.contains("not a TRACE setting")),
+            "an unusable TRACE setting was accepted"
+        );
+    }
 
     fn literal() -> Expr {
         Expr::new(ExprKind::Literal(Box::from(&b"1"[..])), 0..1)

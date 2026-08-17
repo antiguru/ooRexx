@@ -5839,7 +5839,7 @@ impl Interp {
     /// `self.failure_site` immediately, since a `LEAVE`/`ITERATE` might
     /// still be consumed by an enclosing `Do`/`Select` rather than ever
     /// becoming a failure at all.
-    fn leave_origin(
+    pub(crate) fn leave_origin(
         &self,
         code: &Code<'_>,
         index: usize,

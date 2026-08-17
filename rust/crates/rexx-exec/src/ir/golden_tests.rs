@@ -241,14 +241,15 @@ fn a_call_nested_past_the_paths_width_leaves_the_slot_general() {
 /// An instruction whose clause this compiler emits [`super::Op::Generic`] for
 /// gets exactly one op, carrying its own index.
 ///
-/// `NOP` and `DROP` are two such instructions, and the choice is load-bearing
-/// rather than arbitrary: a program written out of promoted instructions says
-/// nothing about `Generic` at all. **Promoting either of these is what should
-/// redden this test**, and the answer then is a different unpromoted
-/// instruction rather than a new expectation.
+/// `DROP` and `NUMERIC` are two such instructions, and the choice is
+/// load-bearing rather than arbitrary: a program written out of promoted
+/// instructions says nothing about `Generic` at all. **Promoting either of
+/// these is what should redden this test**, and the answer then is a different
+/// unpromoted instruction rather than a new expectation. It has happened once
+/// already: this body was two `NOP`s and a `DROP` until `NOP` was promoted.
 #[test]
 fn every_instruction_of_an_all_generic_body_compiles_to_one_generic_op() {
-    let chunk = compile_for_test(b"nop\nnop\ndrop n1\n").expect("compiles");
+    let chunk = compile_for_test(b"drop n1\ndrop n2\nnumeric digits 5\n").expect("compiles");
     assert_eq!(
         render(&chunk),
         "0: Generic index=0\n\
@@ -670,10 +671,17 @@ fn the_value_shapes_outside_the_native_set_stay_general() {
 fn every_binary_operator_but_arithmetic_compiles_to_one_op() {
     // One operator per family, over the same two operands, so the streams
     // differ in the operator alone.
+    //
+    // **`blank` is a name and the other three are spellings**, which is
+    // `render_operator`'s split: a blank concatenation's own spelling is one
+    // space, so a row reading `op= ` would be indistinguishable from a
+    // rendering that dropped the field. Abuttal is the same case and is below,
+    // separately, because its operands are not two reads.
     for (source, spelling) in [
         (&b"za = zb || zc\n"[..], "||"),
         (&b"za = zb = zc\n"[..], "="),
         (&b"za = zb & zc\n"[..], "&"),
+        (&b"za = zb zc\n"[..], "blank"),
     ] {
         let chunk = compile_for_test(source).expect("compiles");
         assert_eq!(
@@ -809,7 +817,7 @@ fn a_counted_loop_compiles_its_header_to_a_clause_region_and_its_body_to_generic
          6: TraceKeyword role=To src=1\n\
          7: LoopHeaderValue role=To src=1\n\
          8: LoopRun index=0\n\
-         9: Generic index=1\n\
+         9: Clause index=1 end=10\n\
          10: Generic index=2\n"
     );
     // One register per header expression, and they are **not** released at the
@@ -841,8 +849,9 @@ fn a_traced_counted_loop_echoes_its_do_clause_from_the_stream() {
          7: TraceKeyword role=To src=1\n\
          8: LoopHeaderValue role=To src=1\n\
          9: LoopRun index=0\n\
-         10: Generic index=1\n\
-         11: Generic index=2\n"
+         10: Clause index=1 end=12\n\
+         11: TraceClause index=1\n\
+         12: Generic index=2\n"
     );
     assert_eq!(chunk.registers, 2);
 }
@@ -864,7 +873,7 @@ fn a_block_has_an_empty_header_region_and_a_do_over_for_echoes_both_its_target_a
         render(&block),
         "0: Clause index=0 end=2\n\
          1: LoopRun index=0\n\
-         2: Generic index=1\n\
+         2: Clause index=1 end=3\n\
          3: Generic index=2\n"
     );
     assert_eq!(block.registers, 0, "a block evaluates nothing to hold");
@@ -882,7 +891,7 @@ fn a_block_has_an_empty_header_region_and_a_do_over_for_echoes_both_its_target_a
          7: TraceKeyword role=OverFor src=1\n\
          8: LoopHeaderValue role=OverFor src=1\n\
          9: LoopRun index=0\n\
-         10: Generic index=1\n\
+         10: Clause index=1 end=11\n\
          11: Generic index=2\n"
     );
     assert_eq!(over.registers, 2);
@@ -912,7 +921,7 @@ fn a_header_bound_that_is_a_symbol_and_one_that_is_a_call_take_their_own_ops() {
          6: TraceKeyword role=To src=1\n\
          7: LoopHeaderValue role=To src=1\n\
          8: LoopRun index=0\n\
-         9: Generic index=1\n\
+         9: Clause index=1 end=10\n\
          10: Generic index=2\n"
     );
 
@@ -928,7 +937,7 @@ fn a_header_bound_that_is_a_symbol_and_one_that_is_a_call_take_their_own_ops() {
          6: TraceKeyword role=To src=1\n\
          7: LoopHeaderValue role=To src=1\n\
          8: LoopRun index=0\n\
-         9: Generic index=1\n\
+         9: Clause index=1 end=10\n\
          10: Generic index=2\n"
     );
 }
@@ -953,7 +962,7 @@ fn a_header_slot_outside_the_native_set_leaves_the_other_slots_native() {
          5: TraceKeyword role=To src=1\n\
          6: LoopHeaderValue role=To src=1\n\
          7: LoopRun index=0\n\
-         8: Generic index=1\n\
+         8: Clause index=1 end=9\n\
          9: Generic index=2\n"
     );
 }
@@ -1063,7 +1072,7 @@ fn a_nested_loops_registers_sit_above_the_enclosing_loops_and_a_later_loops_reus
          15: TraceKeyword role=To src=3\n\
          16: LoopHeaderValue role=To src=3\n\
          17: LoopRun index=1\n\
-         18: Generic index=2\n\
+         18: Clause index=2 end=19\n\
          19: Generic index=3\n\
          20: Generic index=4\n"
     );
@@ -1134,7 +1143,7 @@ fn an_if_with_an_else_compiles_to_a_clause_region_and_two_jumps() {
          6: TraceOperator op== src=0\n\
          7: Condition index=0 reg=0 keyword=IF\n\
          8: JumpUnless reg=0 target=16\n\
-         9: Generic index=1\n\
+         9: Clause index=1 end=10\n\
          10: Clause index=2 end=14\n\
          11: Const dst=0 konst=0\n\
          12: TraceLiteral src=0\n\
@@ -1191,7 +1200,7 @@ fn an_if_with_no_else_emits_no_branch_end_jump() {
          6: TraceOperator op== src=0\n\
          7: Condition index=0 reg=0 keyword=IF\n\
          8: JumpUnless reg=0 target=15\n\
-         9: Generic index=1\n\
+         9: Clause index=1 end=10\n\
          10: Clause index=2 end=14\n\
          11: Const dst=0 konst=0\n\
          12: TraceLiteral src=0\n\
@@ -1222,8 +1231,8 @@ fn a_condition_outside_the_native_set_stays_one_eval_expr() {
         "0: Clause index=0 end=3\n\
          1: EvalExpr index=0 slot=0 dst=0\n\
          2: JumpUnless reg=0 target=6\n\
-         3: Generic index=1\n\
-         4: Generic index=2\n\
+         3: Clause index=1 end=4\n\
+         4: Clause index=2 end=5\n\
          5: EndBranch\n"
     );
     assert_eq!(chunk.registers, 1);
@@ -1268,7 +1277,7 @@ fn nested_ifs_reuse_their_registers() {
          6: TraceOperator op== src=0\n\
          7: Condition index=0 reg=0 keyword=IF\n\
          8: JumpUnless reg=0 target=26\n\
-         9: Generic index=1\n\
+         9: Clause index=1 end=10\n\
          10: Clause index=2 end=19\n\
          11: LoadConstant dst=0\n\
          12: TraceLiteral src=0\n\
@@ -1278,7 +1287,7 @@ fn nested_ifs_reuse_their_registers() {
          16: TraceOperator op== src=0\n\
          17: Condition index=2 reg=0 keyword=IF\n\
          18: JumpUnless reg=0 target=26\n\
-         19: Generic index=3\n\
+         19: Clause index=3 end=20\n\
          20: Clause index=4 end=24\n\
          21: Const dst=0 konst=0\n\
          22: TraceLiteral src=0\n\
@@ -1346,7 +1355,7 @@ fn a_select_with_an_otherwise_compiles_to_a_scan_chain_and_two_frames() {
          9: Condition index=1 reg=0 keyword=WHEN\n\
          10: JumpUnless reg=0 target=17\n\
          11: EnterWhen select=0 when=1\n\
-         12: Generic index=2\n\
+         12: Clause index=2 end=13\n\
          13: Clause index=3 end=17\n\
          14: Const dst=0 konst=0\n\
          15: TraceLiteral src=0\n\
@@ -1361,7 +1370,7 @@ fn a_select_with_an_otherwise_compiles_to_a_scan_chain_and_two_frames() {
          24: Condition index=4 reg=0 keyword=WHEN\n\
          25: JumpUnless reg=0 target=32\n\
          26: EnterWhen select=0 when=4\n\
-         27: Generic index=5\n\
+         27: Clause index=5 end=28\n\
          28: Clause index=6 end=32\n\
          29: Const dst=0 konst=1\n\
          30: TraceLiteral src=0\n\
@@ -1419,7 +1428,7 @@ fn a_select_cases_own_value_outlives_the_registers_its_whens_take() {
          4: WhenTest index=1 case=0 dst=1\n\
          5: JumpUnless reg=1 target=12\n\
          6: EnterWhen select=0 when=1\n\
-         7: Generic index=2\n\
+         7: Clause index=2 end=8\n\
          8: Clause index=3 end=12\n\
          9: Const dst=1 konst=0\n\
          10: TraceLiteral src=1\n\
@@ -1428,7 +1437,7 @@ fn a_select_cases_own_value_outlives_the_registers_its_whens_take() {
          13: WhenTest index=4 case=0 dst=1\n\
          14: JumpUnless reg=1 target=21\n\
          15: EnterWhen select=0 when=4\n\
-         16: Generic index=5\n\
+         16: Clause index=5 end=17\n\
          17: Clause index=6 end=21\n\
          18: Const dst=1 konst=1\n\
          19: TraceLiteral src=1\n\
@@ -1472,7 +1481,7 @@ fn a_select_with_no_otherwise_scans_out_onto_its_own_end() {
          9: Condition index=1 reg=0 keyword=WHEN\n\
          10: JumpUnless reg=0 target=17\n\
          11: EnterWhen select=0 when=1\n\
-         12: Generic index=2\n\
+         12: Clause index=2 end=13\n\
          13: Clause index=3 end=17\n\
          14: Const dst=0 konst=0\n\
          15: TraceLiteral src=0\n\
@@ -1506,8 +1515,8 @@ fn a_when_condition_outside_the_native_set_stays_one_when_test() {
          3: WhenTest index=1 case=- dst=0\n\
          4: JumpUnless reg=0 target=8\n\
          5: EnterWhen select=0 when=1\n\
-         6: Generic index=2\n\
-         7: Generic index=3\n\
+         6: Clause index=2 end=7\n\
+         7: Clause index=3 end=8\n\
          8: Generic index=4\n"
     );
 }
@@ -1542,8 +1551,8 @@ fn a_call_in_a_whens_condition_is_addressed_at_the_conditions_slot() {
          13: Condition index=2 reg=0 keyword=WHEN\n\
          14: JumpUnless reg=0 target=18\n\
          15: EnterWhen select=1 when=2\n\
-         16: Generic index=3\n\
-         17: Generic index=4\n\
+         16: Clause index=3 end=17\n\
+         17: Clause index=4 end=18\n\
          18: Generic index=5\n"
     );
 }
@@ -1578,10 +1587,10 @@ fn an_absorbed_when_compiles_to_generic() {
          9: Condition index=1 reg=0 keyword=WHEN\n\
          10: JumpUnless reg=0 target=16\n\
          11: EnterWhen select=0 when=1\n\
-         12: Generic index=2\n\
+         12: Clause index=2 end=13\n\
          13: Generic index=3\n\
-         14: Generic index=4\n\
-         15: Generic index=5\n\
+         14: Clause index=4 end=15\n\
+         15: Clause index=5 end=16\n\
          16: Generic index=6\n"
     );
 }
@@ -1601,7 +1610,7 @@ fn an_absorbed_when_compiles_to_generic() {
 /// settles on -- follows the `*-*` line; an echo emitted after the condition's
 /// ops would reverse them and no register or jump would move.
 ///
-/// **The whole traced order of a promoted `SAY` is readable off ops 11 to 15**:
+/// **The whole traced order of a promoted `SAY` is readable off ops 12 to 16**:
 /// the clause echo, the constant load, the literal's own `>L>` line, and the
 /// print with its `>>>`. Three of those four lines come from three different
 /// ops, and the oracle prints them in exactly that order
@@ -1622,31 +1631,32 @@ fn a_traced_if_carries_its_clause_echo_as_an_op_of_the_region() {
          6: Binary op== lhs=0 rhs=1 dst=0\n\
          7: TraceOperator op== src=0\n\
          8: Condition index=0 reg=0 keyword=IF\n\
-         9: JumpUnless reg=0 target=18\n\
-         10: Generic index=1\n\
-         11: Clause index=2 end=16\n\
-         12: TraceClause index=2\n\
-         13: Const dst=0 konst=0\n\
-         14: TraceLiteral src=0\n\
-         15: Say index=2 src=0\n\
-         16: EndBranch\n\
-         17: Jump target=24\n\
-         18: Generic index=3\n\
-         19: Clause index=4 end=24\n\
-         20: TraceClause index=4\n\
-         21: Const dst=0 konst=1\n\
-         22: TraceLiteral src=0\n\
-         23: Say index=4 src=0\n\
-         24: Clause index=5 end=29\n\
-         25: TraceClause index=5\n\
-         26: Const dst=0 konst=2\n\
-         27: TraceLiteral src=0\n\
-         28: Say index=5 src=0\n"
+         9: JumpUnless reg=0 target=19\n\
+         10: Clause index=1 end=12\n\
+         11: TraceClause index=1\n\
+         12: Clause index=2 end=17\n\
+         13: TraceClause index=2\n\
+         14: Const dst=0 konst=0\n\
+         15: TraceLiteral src=0\n\
+         16: Say index=2 src=0\n\
+         17: EndBranch\n\
+         18: Jump target=25\n\
+         19: Generic index=3\n\
+         20: Clause index=4 end=25\n\
+         21: TraceClause index=4\n\
+         22: Const dst=0 konst=1\n\
+         23: TraceLiteral src=0\n\
+         24: Say index=4 src=0\n\
+         25: Clause index=5 end=30\n\
+         26: TraceClause index=5\n\
+         27: Const dst=0 konst=2\n\
+         28: TraceLiteral src=0\n\
+         29: Say index=5 src=0\n"
     );
     // The echo op addresses no register, so the extra op changes nothing the
     // driver has to reserve.
     assert_eq!(chunk.registers, 2);
-    assert_eq!(chunk.op_of, vec![0, 10, 11, 16, 19, 24, 29]);
+    assert_eq!(chunk.op_of, vec![0, 10, 12, 17, 20, 25, 30]);
 }
 
 /// A traced `SELECT CASE`: **one echo per promoted clause, and exactly one**.
@@ -1659,11 +1669,11 @@ fn a_traced_if_carries_its_clause_echo_as_an_op_of_the_region() {
 /// * `SelectCaseText` stays **outside** the region, one op further along than
 ///   it was untraced -- it is not part of the clause and the echo must not
 ///   have pulled it in;
-/// * a `THEN` marker and the `END` get no echo op at all. They are `Generic`,
-///   so their echo comes from the tree-walker's own clause unit and a second
-///   one here would print every such clause twice. Each branch body is its own
-///   promoted clause and so does carry one, which is the pair that says the op
-///   follows the region rather than the construct.
+/// * the `END` gets no echo op at all. It is `Generic`, so its echo comes from
+///   the tree-walker's own clause unit and a second one here would print that
+///   clause twice. Every promoted clause in the stream does carry one -- the
+///   `THEN` markers among them, whose whole region is the echo -- which is the
+///   pair that says the op follows the region rather than the construct.
 #[test]
 fn a_traced_select_echoes_its_header_and_each_listed_when() {
     let chunk = compile_for_test_under(
@@ -1680,31 +1690,33 @@ fn a_traced_select_echoes_its_header_and_each_listed_when() {
          4: Clause index=1 end=8\n\
          5: TraceClause index=1\n\
          6: WhenTest index=1 case=0 dst=1\n\
-         7: JumpUnless reg=1 target=15\n\
+         7: JumpUnless reg=1 target=16\n\
          8: EnterWhen select=0 when=1\n\
-         9: Generic index=2\n\
-         10: Clause index=3 end=15\n\
-         11: TraceClause index=3\n\
-         12: Const dst=1 konst=0\n\
-         13: TraceLiteral src=1\n\
-         14: Say index=3 src=1\n\
-         15: Clause index=4 end=19\n\
-         16: TraceClause index=4\n\
-         17: WhenTest index=4 case=0 dst=1\n\
-         18: JumpUnless reg=1 target=26\n\
-         19: EnterWhen select=0 when=4\n\
-         20: Generic index=5\n\
-         21: Clause index=6 end=26\n\
-         22: TraceClause index=6\n\
-         23: Const dst=1 konst=1\n\
-         24: TraceLiteral src=1\n\
-         25: Say index=6 src=1\n\
-         26: Generic index=7\n\
-         27: Clause index=8 end=32\n\
-         28: TraceClause index=8\n\
-         29: Const dst=0 konst=2\n\
-         30: TraceLiteral src=0\n\
-         31: Say index=8 src=0\n"
+         9: Clause index=2 end=11\n\
+         10: TraceClause index=2\n\
+         11: Clause index=3 end=16\n\
+         12: TraceClause index=3\n\
+         13: Const dst=1 konst=0\n\
+         14: TraceLiteral src=1\n\
+         15: Say index=3 src=1\n\
+         16: Clause index=4 end=20\n\
+         17: TraceClause index=4\n\
+         18: WhenTest index=4 case=0 dst=1\n\
+         19: JumpUnless reg=1 target=28\n\
+         20: EnterWhen select=0 when=4\n\
+         21: Clause index=5 end=23\n\
+         22: TraceClause index=5\n\
+         23: Clause index=6 end=28\n\
+         24: TraceClause index=6\n\
+         25: Const dst=1 konst=1\n\
+         26: TraceLiteral src=1\n\
+         27: Say index=6 src=1\n\
+         28: Generic index=7\n\
+         29: Clause index=8 end=34\n\
+         30: TraceClause index=8\n\
+         31: Const dst=0 konst=2\n\
+         32: TraceLiteral src=0\n\
+         33: Say index=8 src=0\n"
     );
     assert_eq!(
         chunk.registers, 2,

@@ -139,6 +139,7 @@ impl Root {
             | Op::Call { .. }
             | Op::Message { .. }
             | Op::Expose { .. }
+            | Op::Escape { .. }
             | Op::TraceFunction { .. }
             | Op::EndBranch
             | Op::EnterWhen { .. }
@@ -179,6 +180,10 @@ fn promoted_as(kind: &InstructionKind, index: usize, listed: &[usize]) -> Option
         InstructionKind::Queue { .. } => Some("QUEUE"),
         InstructionKind::Call(call) if matches!(&**call, Call::Named { .. }) => Some("CALL name"),
         InstructionKind::Message { .. } => Some("message send"),
+        InstructionKind::Leave { .. } => Some("LEAVE"),
+        InstructionKind::Iterate { .. } => Some("ITERATE"),
+        InstructionKind::Nop => Some("NOP"),
+        InstructionKind::Then => Some("THEN"),
         _ => None,
     }
 }
@@ -701,6 +706,10 @@ fn sweep_every_corpus_body() {
         "QUEUE",
         "CALL name",
         "message send",
+        "LEAVE",
+        "ITERATE",
+        "NOP",
+        "THEN",
     ] {
         assert!(
             seen.constructs.contains_key(construct),

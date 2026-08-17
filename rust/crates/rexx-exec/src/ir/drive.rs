@@ -1210,6 +1210,30 @@ impl Interp {
                                     }
                                     break 'region Ok(RegionEnd::Flowed(Flow::Next));
                                 }
+                                // `LEAVE`/`ITERATE`. `leave_origin` is the
+                                // tree-walker's own capture, entered here with
+                                // the clause this region has open; which `Flow`
+                                // carries it is the only thing the two keywords
+                                // differ in, and the clause is what says which.
+                                Op::Escape { index: at } => {
+                                    debug_assert_names_the_clause(code, *at, clause, "Escape");
+                                    let origin =
+                                        Box::new(self.leave_origin(code, index, source, clause));
+                                    let flow = match clause.kind {
+                                        InstructionKind::Leave { name } => {
+                                            Flow::Leave(name, origin)
+                                        }
+                                        InstructionKind::Iterate { name } => {
+                                            Flow::Iterate(name, origin)
+                                        }
+                                        _ => {
+                                            break 'region Err(
+                                                Loud::instruction(&clause.kind).into()
+                                            );
+                                        }
+                                    };
+                                    break 'region Ok(RegionEnd::Flowed(flow));
+                                }
                                 // An `IF`'s or a plain `WHEN`'s condition
                                 // validation and its `>>>` line, through the
                                 // same `Interp::condition_value` the
@@ -1505,6 +1529,7 @@ impl Interp {
                 Op::Call { .. } => return Err(Loud::op_not_driven("Call").into()),
                 Op::Message { .. } => return Err(Loud::op_not_driven("Message").into()),
                 Op::Expose { .. } => return Err(Loud::op_not_driven("Expose").into()),
+                Op::Escape { .. } => return Err(Loud::op_not_driven("Escape").into()),
                 Op::CallExpr { .. } => return Err(Loud::op_not_driven("CallExpr").into()),
                 Op::TraceFunction { .. } => {
                     return Err(Loud::op_not_driven("TraceFunction").into());

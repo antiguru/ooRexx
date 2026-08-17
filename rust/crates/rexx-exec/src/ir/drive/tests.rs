@@ -341,10 +341,11 @@ sub:
     let echoed = trace_op_echoes() - before;
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(
-        echoed, 2,
+        echoed, 4,
         "the compiled stream emitted {echoed} clause echoes from a trace op where the callee's \
-         promoted clauses -- its IF and its RETURN -- owe one each, so either its chunk was not \
-         compiled for the setting it was entered under or the ops it carries did not run"
+         promoted clauses -- its IF, its THEN, its NOP and its RETURN -- owe one each, so either \
+         its chunk was not compiled for the setting it was entered under or the ops it carries \
+         did not run"
     );
 }
 

@@ -924,6 +924,45 @@ pub(crate) fn compile(
                 });
                 close_region(&mut ops, at)?;
             }
+            // `LEAVE`/`ITERATE`. No register and no expression slot: the name
+            // is in the instruction and the origin is captured at run time
+            // from the clause the region has open, exactly as the
+            // tree-walker's own two arms capture it.
+            InstructionKind::Leave { .. } | InstructionKind::Iterate { .. } => {
+                let at = op_index(&ops)?;
+                let echo = echoes(trace, instruction);
+                ops.push(Op::Clause {
+                    index: instruction_index(index)?,
+                    end: 0,
+                });
+                push_echo(&mut ops, echo, instruction_index(index)?);
+                ops.push(Op::Escape {
+                    index: instruction_index(index)?,
+                });
+                close_region(&mut ops, at)?;
+            }
+            // The marker instructions: `step` answers `Ok(Flow::Next)` for
+            // each and computes nothing, so the clause region is the whole of
+            // what they do and it holds no op but its own echo
+            // ([`Op::Clause`]'s own doc comment).
+            //
+            // **`ELSE`, `OTHERWISE` and `LABEL` execute the same way and are
+            // not here.** Each is reached through machinery this arm does not
+            // touch -- an `ELSE` through the `IF`'s own false target, an
+            // `OTHERWISE` through the [`Op::EnterOtherwise`] that sits at its
+            // entry, a `LABEL` through a `SIGNAL`'s or a `CALL`'s jump -- so
+            // each is its own promotion with its own witnesses rather than a
+            // fourth name in this pattern.
+            InstructionKind::Nop | InstructionKind::Then => {
+                let at = op_index(&ops)?;
+                let echo = echoes(trace, instruction);
+                ops.push(Op::Clause {
+                    index: instruction_index(index)?,
+                    end: 0,
+                });
+                push_echo(&mut ops, echo, instruction_index(index)?);
+                close_region(&mut ops, at)?;
+            }
             _ => ops.push(Op::Generic {
                 index: instruction_index(index)?,
             }),
@@ -1830,6 +1869,7 @@ fn assert_region_ops_name_their_clause(ops: &[Op]) {
                 | Op::Call { index, .. }
                 | Op::Message { index }
                 | Op::Expose { index }
+                | Op::Escape { index }
                 | Op::CallExpr { index, .. }
                 | Op::TraceFunction { index, .. }
                 | Op::Condition { index, .. }
