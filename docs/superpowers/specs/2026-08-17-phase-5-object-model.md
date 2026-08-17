@@ -46,7 +46,13 @@ that structure names, and the gate is two tables whose **rows** come from the do
      concept floor.** Its section tree is enumerated below and is the row set of gate table C.
    * `rexxref/en-US/dire.xml` — the directive reference; the row set of gate table D.
    * `rexxref/en-US/fundclasses.xml` and its siblings `collclasses.xml`, `utilityclasses.xml`,
-     `streamclasses.xml`, and the `*classmethods.xml` includes — the per-class method sets.
+     `streamclasses.xml` — the per-class method sets, as `<section id="mth…">` definitions. The
+     `*classmethods.xml` files beside them are **not** definitions: each is a `$GENERATED`
+     `rexxrefClassRow(X)` `<simplelist>` of `<xref linkend="mth…"/>`, i.e. a per-class *index*, and
+     they carry no `cls*` or `mth*` section at all. They are the authority for which methods belong
+     to a class — an `xi:include` of `comparableclassmethods.xml` inside `clsDateTime` is how
+     `compareTo` joins DateTime's set — while the four books above are the authority for what each
+     method is.
    * `rexxpg/en-US/classes.xml` — the Programming Guide's conceptual account. Useful, subordinate to
      the two above, and in one place (the method search order) it states something the
      implementation contradicts.
@@ -107,7 +113,7 @@ visible.
 
 | mechanism | authority | implementation | phase | today |
 |---|---|---|---|---|
-| object / mixin / abstract / metaclass as four kinds | `provide.xml` `typcla`,`objcla`,`xmixin`,`abscla`,`xmetac` | `ClassClass.hpp:176-186` flags | 5a (`ABSTRACT` enforcement 5b) | partial |
+| object / mixin / abstract / metaclass as four kinds | `provide.xml` `typcla`,`objcla`,`xmixin`,`abscla`,`xmetac` | `ClassClass.hpp:180-189` `ClassFlag` | 5a (`ABSTRACT` enforcement 5b) | partial |
 | a class carries two behaviours, class-side and instance-side | `dire.xml` `clasdi` (metaclass merge position); D44 | `createClassBehaviour :1119`, `createInstanceBehaviour :1148` | 5a | built (Task 2) |
 | the metaclass graph and its circularity | `provide.xml` `xmetac` | `RexxClass::createInstance :1854`, `buildFinalClassBehaviour :654` | 5a | built (Task 3) |
 | a mixin's base class, and who may inherit it | `provide.xml` `xmixin` | `mixinClass() :1514`, `inherit() :1322` | 5a | refused |
@@ -121,9 +127,9 @@ visible.
 | `~define` / `~defineMethods` / `~delete` / `~uninherit` / `~enhanced` | one `fundclasses.xml` section each | `ClassClass.cpp:819,518,952,1379,1440` | 5a (`~enhanced` 5b — it builds an instance) | partial |
 | **`::CLASS` option surface** — `METACLASS PUBLIC PRIVATE SUBCLASS MIXINCLASS INHERIT ABSTRACT` | `dire.xml` `clasdi`, `<option>` + indexterms | `classDirective` `DirectiveParser.cpp:334-490` | 5a | `SUBCLASS`/`PUBLIC`/`ABSTRACT` built; rest refused |
 | **`::METHOD` option surface** — `ATTRIBUTE CLASS PUBLIC PACKAGE PRIVATE GUARDED UNGUARDED PROTECTED UNPROTECTED ABSTRACT DELEGATE EXTERNAL` | `dire.xml` `methd` | `methodDirective :629-812` | 5a (`DELEGATE` 5b) | partial |
-| **`::ATTRIBUTE` option surface** — the `::METHOD` set plus `GET` and `SET`, and the rule that `GET`/`SET` may carry a body overriding the generated one | `dire.xml` `attrd` | `attributeDirective :1457-1850` | 5a (`DELEGATE` 5b) | partial |
+| **`::ATTRIBUTE` option surface** — the `::METHOD` set **minus `ATTRIBUTE`**, plus `GET` and `SET`, and the rule that `GET`/`SET` may carry a body overriding the generated one | `dire.xml` `attrd` | `attributeDirective :1457-1850` | 5a (`DELEGATE` 5b) | partial |
 | **`::CONSTANT` creates an instance method *and* a class method** | `dire.xml` `constantd` | `createConstantGetterMethod :2518` | 5a | not built — no readable method at all |
-| `::CONSTANT`'s parenthesised expression runs at install with `self` bound to the class | `dire.xml` `constantd`; `ClassDirective::resolveConstants :243` calling `setScope` | second install pass | 5a | evaluated, not readable |
+| `::CONSTANT`'s parenthesised expression runs at install with `self` bound to the class | `dire.xml` `constantd`; `instructions/ClassDirective.cpp:257` `resolveConstants`, its `setScope` at `:273` | second install pass | 5a | evaluated, not readable |
 | `::CONSTANT` forward references to calculated constants are refused; a floating one may not use the parenthesised form | `dire.xml` `constantd` | `resolveConstants` | 5a | the floating rule agrees (99.906) |
 | **`::ANNOTATE`'s six targets and `~annotation`/`~annotations`** | `dire.xml` `annotd` indexterms `ATTRIBUTE CLASS CONSTANT METHOD PACKAGE ROUTINE`; `fundclasses.xml` `mthClassAnnotation(s)` | `annotateDirective :1940`, `RexxClass::setAnnotations :343` | 5a | **over-refused** — see [the false claim](#the-annotate-claim) |
 | **install is three passes over a dependency-ordered class list; a cycle is 98.911** | `dire.xml` `clasdi` example "CLASS directive deferred processing"; `fundclasses.xml` `mthClassActivate` | `processInstall :1268-1298`, `resolveDependencies :1801` | 5a | ordering and cycles built (Task 8); the three passes are not |
@@ -131,7 +137,7 @@ visible.
 | floating `::METHOD`/`::ATTRIBUTE`/`::CONSTANT` reach `.METHODS` | `dire.xml`, once per directive | `LanguageParser::addMethod :610` | 5a | built (Task 6) |
 | **the complete method search order: per-object, own class, superclasses, `UNKNOWN`, NOMETHOD** | `provide.xml` `xmeths` and `unkno` | `messageSend :866`, `processUnknown :1002` | 5a (per-object arm 5b) | steps 2-3 built; **`UNKNOWN` missing, silently wrong** |
 | **changing the search order — `~m:scope`, `~m:super`** | `provide.xml` `chsrod` | `messageSend :919` → `superMethod`; `validateScopeOverride :1950` | 5a | built (Task 5) |
-| `SELF`, `SUPER` | `rexxpg/classes.xml` `spvar` | `Setup.cpp:325-329` | 5a | built (Tasks 5, 7) |
+| `SELF`, `SUPER` | `rexxpg/classes.xml` `spvar` | `Setup.cpp:331` (`SELF`), `:332` (`SUPER`) | 5a | built (Tasks 5, 7) |
 | **`PUBLIC` / `PACKAGE` / `PRIVATE` as three access scopes** | `provide.xml` `pubpri` | `checkPrivate :609`, `checkPackage :659` | 5a | `PRIVATE` refused; `PACKAGE` agrees in the same-package case |
 | `PROTECTED` routes the send through the security manager | `provide.xml` `pubpri` | `processProtectedMethod :976` | 5a seam (D45); semantics with the manager | agrees today |
 | scope-keyed instance variables, `EXPOSE`, lazy creation | `provide.xml` `xscope`; D40 | `getObjectVariables :2489` | 5a | built (Task 8) |
@@ -142,10 +148,10 @@ visible.
 | `.environment`, `.local`, `.context`, `.methods` as objects | `rexxpg/classes.xml` `pubobj`; D33 | `Setup.cpp`, `DirectoryClass` | 5a | built (Task 6) |
 | **Directory entry methods** — `.environment~local` answers while `hasMethod("LOCAL")` is 0 | measured; `Setup.cpp:1781` via `setMethodRexx` | `DirectoryClass::setMethodRexx :480`, `unknownValue :591` | 5a | not built |
 | **the eight-step environment-symbol search order, including the package-local directory** | `rexxpg/classes.xml` `searchord` | `PackageClass::findClass :1086` | 5a; steps 3 and 5 with 5c | steps 2 and 7 built (Task 6) |
-| `.Package` — `addClass`, `addPublicClass`, `publicClasses`, `~name`, `~local`, install | `fundclasses.xml` `clsPackage` | `PackageClass.cpp:1401,1432,1567,1227` | 5a; `~local` 5c | not built |
+| `.Package` — `addClass`, `addPublicClass`, `publicClasses`, `~name`, `~local`, install | `fundclasses.xml` `clsPackage` | `PackageClass.cpp` — `addPublicClassRexx :1944`, `getPackageLocal :2169` | 5a; `~local` 5c | not built |
 | the native entry-point registry for `EXTERNAL 'LIBRARY REXX name'` | D37 | eager bind at install | 5a | not built |
-| **Initialization of an instance — `~new`, `init`, `self~init:super`** | `provide.xml` `creo` | `completeNewObject :1882` | **5b** | refused |
-| **Object Destruction and Uninitialization — `UNINIT` and its propagation flags** | `provide.xml` `obdes`; `rexxpg/classes.xml` `uninit` | `checkUninit :1210`, `ObjectClass.cpp:2579,2604`; flags propagate through `subclass`/`mixinClass`/`inherit` | **5b**, flags carried by 5a's code | not built |
+| **Initialization of an instance — `~new`, `init`, `self~init:super`** | `provide.xml` `creo` | `ClassClass.cpp:1882` `completeNewObject` | **5b** | refused |
+| **Object Destruction and Uninitialization — `UNINIT` and its propagation flags** | `provide.xml` `obdes`; `rexxpg/classes.xml` `uninit` | `ClassClass.cpp:1210` `checkUninit`, `ObjectClass.cpp:2579,2604`; flags propagate through `subclass`/`mixinClass`/`inherit` | **5b**, flags carried by 5a's code | not built |
 | **per-object methods — `SETMETHOD` and `ENHANCED`, and the scope they create** | `provide.xml` `usesem` | `ObjectClass.cpp:1829,1891`; `checkRestrictedMethod :697` | **5b** | refused |
 | `FORWARD`, and therefore `DELEGATE` | `provide.xml` `creo` uses `FORWARD` to define multi-`INIT`; `dire.xml` defines `DELEGATE` as `expose`+`forward to()` | `RexxInstructionForward`; `createDelegateMethod :2438` | **5b** | refused |
 | abstract-method and abstract-class enforcement | `provide.xml` `abscla` | `makeAbstract :1754`, `checkAbstract :1741` | **5b** (needs `~new`) | installs, unenforced |
@@ -156,7 +162,7 @@ visible.
 | `::ROUTINE` `EXTERNAL PRIVATE PUBLIC`, `.ROUTINES` | `dire.xml` `routd` | `routineDirective :2565` | **5c** | partial |
 | `Package~local`, and the package-local directory as a search step | `fundclasses.xml` `clsPackage`; `rexxpg/classes.xml` `searchord` | `PackageClass` | **5c** | not built |
 | **the documented per-class method sets** | `fundclasses.xml`, `collclasses.xml`, `utilityclasses.xml`, `streamclasses.xml`, `*classmethods.xml` | everywhere | **5c** | the acceptance set of gate table C |
-| `GUARDED`/`UNGUARDED`, `REPLY`, `GUARD` legality | `provide.xml` `concurr`; `dire.xml` `methd`; D32 | `RexxInstructionReply::execute` | 5a legality, **Phase 6** semantics | over-refused inside a method |
+| `GUARDED`/`UNGUARDED`, `REPLY`, `GUARD` legality | `provide.xml` `concurr`; `dire.xml` `methd`; D32 | `RexxInstructionReply::execute` | 5a legality, **Phase 6** semantics | `GUARD` and `REPLY` over-refused inside a method; `UNGUARDED` **agrees** — measured, `::METHOD go CLASS UNGUARDED` is rc 0 with identical stdout on both engines, so it has no Phase-5-observable effect in the reachable shape |
 | the `*-* Compiled method "X" with scope "Y".` traceback line | every error transcript through a method frame | error path | 5a | native-send half built (Task 5); the operator half is open |
 | `>M>` and `>N>` trace prefixes | `trace_oracle.rs` `PREFIX_COVERAGE` | `traceMessage` | 5a (`>M>` landed), `>N>` with class resolution | partial |
 
@@ -168,9 +174,11 @@ it falls there is that no single documented mechanism crosses it.
 ### 5a — a class exists and answers a message
 
 Everything from a `::CLASS` directive to a method body running, and the objects the install path
-needs. It is one mechanism chain because **installing a directive runs Rexx code** and because the
-documented method search order is a single ordered list that cannot be split without leaving a step
-unowned.
+needs. It is one mechanism chain because **installing a directive runs Rexx code**, and it takes the
+documented method search order whole except for its per-object first step, which needs an instance
+and is therefore 5b's. That is a split, it is named here and in the enumeration row, and both halves
+are owned — which is what D46 requires. What is *not* allowed is a step that lands nowhere, and the
+step most at risk is `UNKNOWN`, which the superseded spec's plan left unowned entirely.
 
 Contents: class construction and the whole class graph; the option surface of `::CLASS`, `::METHOD`,
 `::ATTRIBUTE`, `::CONSTANT` and `::ANNOTATE`, minus `DELEGATE`; the three install passes over the
@@ -189,8 +197,21 @@ object's `INIT` in 5b. `fundclasses.xml` explains `ACTIVATE` by contrast with `I
 > initialization is possible at that time. The activate method is the preferred method for
 > initializing a class object."
 
-— and the contrast is the specification. Measured this session, on `::CLASS M MIXINCLASS Object` plus
-`::CLASS K INHERIT M` carrying both:
+— and the contrast is the specification. Measured this session. The program, in full, because the
+natural abbreviation of it falsifies the result:
+
+```
+say "prologue"
+::CLASS M MIXINCLASS Object
+::METHOD mm CLASS                      -- CLASS-side, and this is load-bearing
+  return 1
+::CLASS K INHERIT M
+::METHOD init CLASS
+  forward class (super) continue
+  say "K init,     hasMethod MM =" self~hasMethod("MM")
+::METHOD activate CLASS
+  say "K activate, hasMethod MM =" self~hasMethod("MM")
+```
 
 ```
 oracle rc 0:   K init,     hasMethod MM = 0
@@ -202,25 +223,49 @@ crate  rc 120: ::CLASS MIXINCLASS is not implemented (Phase 5)
 `INIT` fires **before** the `INHERIT` merge and `ACTIVATE` after it. A phase that owns one and not the
 other owns neither: the discriminator is the pair.
 
+**`M`'s method must carry `CLASS`.** `self` in a class-side `init`/`activate` is the class object, so
+`self~hasMethod` asks about the *class* behaviour; with a plain `::METHOD mm` on the mixin, measured,
+both lines read `0` and the transcript no longer discriminates. The 5a/5b line rests on this
+transcript, so the program is pinned here rather than described.
+
 **Why the line is here and not further forward.** Instance creation is a separate documented
 mechanism with its own section, and nothing 5a needs reaches it — established by reading, not
 assumed. The only Rexx bodies either `.orx` file runs at install are `TraceObject`'s
 `::method activate class` (`CoreClasses.orx:3996`) and the two parenthesised `::CONSTANT`s at
 `StreamClasses.orx:548`-`549`. Neither sends `~new`.
 
-The derivation, stated because the first version of it was wrong: **case-insensitively**,
-`^[[:space:]]*::constant[[:space:]].*\(` over `CoreClasses.orx`, `StreamClasses.orx` and
-`platform/unix/PlatformObjects.orx` returns those two `StreamClasses.orx` lines and nothing else, and
-`^[[:space:]]*::(method|attribute)[[:space:]]+["']?(init|activate)["']?` returns that one `activate`
-line plus a family of bare `::METHOD init` lines — eleven in `CoreClasses.orx`, four in
-`StreamClasses.orx` — **none of which carries `CLASS`**, so every one of them is an *instance* `init`
-that runs at `~new` and not at install. A case-**sensitive** version of the same pair of greps sees
-one `init` line instead of fifteen and would have supported the same conclusion by luck. And the
-check for `CLASS` on those fifteen lines has to run over `cat`ed content, not over a multi-file
-`grep`: the filename prefixes are `CoreClasses.orx` and `StreamClasses.orx`, so a second `grep -c
-class` down the pipe answers **fifteen** for the filenames rather than **zero** for the directives.
+The derivation, stated in full because three separate versions of it were wrong. All greps are
+**case-insensitive** and run over `CoreClasses.orx`, `StreamClasses.orx` and
+`platform/unix/PlatformObjects.orx`:
+
+1. `^[[:space:]]*::constant[[:space:]].*\(` returns those two `StreamClasses.orx` lines and nothing
+   else.
+2. `^[[:space:]]*::(method|attribute)[[:space:]]+["']?(init|activate)["']?([[:space:]]|$)` returns
+   `CoreClasses.orx:3996`'s `::method activate class` plus bare `::METHOD init` lines — eleven in
+   `CoreClasses.orx`, four in `StreamClasses.orx` — **none carrying `CLASS`**.
+3. `^[[:space:]]*::class.*metaclass` returns **nothing in either file**.
+
+Grep 3 is what makes grep 2's conclusion sound, and the first version of this paragraph omitted it.
+"No `CLASS` keyword implies an instance method" is **false in general**: `CoreClasses.orx:3976` is a
+bare `::method new` under `::class "Singleton" mixinclass class public` (`:3974`), which is class-side
+for anything taking `Singleton` as its metaclass. It is only because grep 3 is empty that no class in
+either file has a metaclass other than `.Class`, and therefore that a `CLASS`-less `::METHOD` in
+these two files is an instance method. That is a measurement about these files, not a language rule —
+and it is the same mechanism D44 pulls into 5a, so the omission was not incidental.
+
+Three derivation hazards these greps carry, each met while writing this:
+
+* the **right anchor** in grep 2 is load-bearing. Without `([[:space:]]|$)` it also matches
+  `CoreClasses.orx:987`'s `::METHOD initInstance`, which is not an `init` at all.
+* a case-**sensitive** grep 2 sees one `init` line instead of fifteen and would have supported the
+  same conclusion by luck.
+* the check for `CLASS` on those fifteen lines has to run over `cat`ed content, not over a multi-file
+  `grep`: the filename prefixes are `CoreClasses.orx` and `StreamClasses.orx`, so a second
+  `grep -c class` down the pipe answers **fifteen** for the filenames rather than **zero** for the
+  directives.
+
 The tables in [the gate](#the-two-gate-tables) are derived by the same kind of extraction and inherit
-the same hazard, which is why their verdicts come from running programs and not from matching text.
+the same hazards, which is why their verdicts come from running programs and not from matching text.
 
 ### 5b — an instance exists
 
@@ -251,6 +296,12 @@ class or an object — `dire.xml`'s remaining four directives, `fundclasses.xml`
 "the bootstrap does not use it", which is an ordering and not a boundary; the mechanism reason
 reaches the same place and also collects `::OPTIONS`, `::RESOURCE`, `NAMESPACE` and `Package~local`,
 which the old cut left with no owner at all.
+
+**5c depends on 5b having landed, and that dependency is load-bearing rather than incidental.** The
+only readback that can ask whether a class answers its documented method set is on an instance —
+`.K~new~hasMethod("DONATED")`, measured — because `~method` sees a class's own scope only. So the
+class-library half of 5c cannot be measured at all until `~new` exists. The delivery order inside
+Phase 5 is therefore 5a, then 5b, then 5c, and it is a real ordering constraint, not a preference.
 
 ### The bootstrap is a milestone, not a boundary
 
@@ -292,10 +343,37 @@ Diffed against the shipped oracle's `.environment` this session:
 `RegularExpression` (no library on this build's path) and minus `RexxInfo`-as-an-environment-entry
 (whose `.environment` entry must be an instance whose `~class~id` is `RexxInfo`), plus `ArgUtil`, is
 an `.environment` class; each answers `~id`, `~class`, `~superClass`, `~superClasses`, `~metaClass`
-and `~isA(.Class)` byte-identically to the oracle; each documented edge in the hierarchy list appears
-in that class's `~superClasses` answer; and each class answers its documented method set under the
-readback rule below. That is gate table C's class half, and it is the Phase 5 exit criterion the
-roadmap row is amended to.
+and `~isA(.Class)` byte-identically to the oracle; and each documented edge in the hierarchy list
+appears in that class's `~superClasses` answer. The hierarchy list gives **one** edge per class by
+construction — its own prose says "Classes inheriting from multiple mixin classes are only listed
+below one of these mixin classes" — so the criterion is that the documented edge is *present in*
+`~superClasses`, never that it is the whole answer. That is gate table C's **wiring half**, it is
+class-level, and it is 5a's.
+
+**The method half is a separate criterion and it is 5b's, because no class-level readback can
+express it.** `~method` reads the class's *own scope*, so it raises for every documented method a
+class receives from a mixin or a superclass — measured: with `::CLASS M MIXINCLASS Object` defining
+`donated` and `::CLASS K INHERIT M` defining `ownm`, `.K~method("OWNM")` is `The Method class` and
+`.K~method("DONATED")` **raises 97.1**; `.DateTime~method("<")` raises 97.1 too, and `<` *is* in
+DateTime's documented set because `comparableclassmethods.xml` and `orderableclassmethods.xml` are
+`xi:include`d inside `clsDateTime`. `~instanceMethod` does not rescue it: measured,
+`.Array~instanceMethod("APPEND")` is `.nil` while `.Array~instanceMethod("STRING")` answers, so it
+answers about the receiver *and* returns `.nil` instead of raising, which discriminates nothing.
+
+The readback that does reach the documented set is on an instance — measured,
+`.K~new~hasMethod("DONATED")` and `.Array~new~hasMethod("APPEND")` are both `1` — and `~new` is 5b.
+So: **the wiring half gates 5a; the method half gates 5c and depends on 5b having landed `~new`.**
+That dependency is now load-bearing rather than incidental, and the plan owes the ordering.
+
+**Which criterion each half is, said plainly, because the two are not the same test.** The wiring
+half is *the oracle's answer is reproduced*, with the documentation supplying the row keys. The
+method half is *the documented set answers*, with the documentation as the acceptance authority and
+`instance~hasMethod` as the instrument — a documented method the oracle does not answer is an
+upstream finding under the plan's three-signal rule, not a row we silently drop. Anywhere the class
+object's **own scope** is the question rather than its whole set, `~method` and `~hasMethod` are the
+instrument, and that is a different row class — see [table C](#table-c--the-concept-and-class-surface).
+
+The roadmap's Phase 5 exit row is amended to the wiring half plus the method half's deferral.
 
 **The correlation review's version of this diff recorded four disagreements and 59 agreeing names.**
 Re-derived here it is five and 58: `ArgUtil` was missed, and the trio said to be "in the image, absent
@@ -311,11 +389,69 @@ place and catches nothing; `corpus/keyword-exempt.txt` is the precedent that wor
 because its `unblocked_by` column is "re-derived on every run" from executed bodies, as its own
 header says.
 
-Three verdicts, computed and never written: **agree**, **loud** (the crate refuses at rc 120 naming a
-phase), **diverge** — and `diverge` is split into `diverge-loud` (exit status differs) and
-**`diverge-silent`** (exit status and stderr match, stdout does not). `diverge-silent` is the verdict
-the superseded gate had no way to express and the reason both `UNKNOWN` and `makeString` survived
-three reviews.
+### The verdict function
+
+Computed from the three descriptors and never written. It must be **total over the three-channel
+comparison**, because a state with no verdict is a row that reads as nothing:
+
+| verdict | exit status | stdout | stderr |
+|---|---|---|---|
+| **agree** | same | same | same |
+| **loud** | crate rc 120 with a `rexx-exec:` message naming a phase | — | — |
+| **diverge-status** | differs | — | — |
+| **diverge-stdout** | same | differs | same |
+| **diverge-stderr** | same | same | differs |
+| **diverge-both** | same | differs | differs |
+
+`diverge-stdout` is the verdict the superseded gate had no way to express and the reason both
+`UNKNOWN` and `makeString` survived three reviews. **`diverge-stderr` is a live 5a state and the
+first draft of this taxonomy had no cell for it** — measured, `say b. + 1` with `b.` untouched is
+**rc 215 with empty stdout on both sides**, and the oracle's stderr opens with
+`*-* Compiled method "+" with scope "String".` where ours does not. That is this spec's own
+enumeration row for the operator-frame traceback line, and under a three-verdict function it computed
+to nothing at all.
+
+### The stderr comparison mode, which is part of the verdict function
+
+**Both tables compare stderr as `support::oracle::StderrComparison::Raw`, every row.** The default is
+`Normalized`, which is DEVIATION 0: it collapses the run of ASCII spaces between a trace line's
+three-byte prefix marker and its content, for any of the oracle's nineteen markers
+(`tests/support/mod.rs`'s scope paragraph). That erasure is deliberate and pinned for the corpus, and
+it is wrong here for two compounding reasons: the enumeration keeps `>M>` and `>N>` as rows, so an
+off-by-two indent is exactly the divergence a trace row exists to catch and `Normalized` reads it as
+"stderr matches"; and stderr equality is an **input to the verdict function**, so a normalised
+comparison silently converts `diverge-stderr` into `agree` and `diverge-both` into `diverge-stdout`.
+`ir_dual` cannot cover for it either — both engines format trace through one `trace.rs`, so a wrong
+indent is wrong identically on both arms.
+
+`Raw` costs nothing on a row whose program emits no trace line, because DEVIATION 0 touches only
+those lines. Rows that *do* run under `TRACE` are named in the table as such, and each one is also
+listed in `corpus.rs`'s `RAW_STDERR_COMPARISON` if it is a corpus program, so the two instruments
+agree about which programs are byte-exact.
+
+### What makes a table red, which is two different things
+
+The first draft of this section said both "a row without a probe fails the table" and "table C reads
+red for most of Phase 5 and that is correct". Under one predicate those contradict each other: a
+table that is red by design makes `cargo test --release --workspace` red for most of the phase, and
+the first thing anyone does with a permanently red test is stop reading it. Two predicates, and
+`corpus.rs` already carries the shape — its `GATE_ENV` doc is *"Env var that flips this test from a
+progress report into the phase gate"*.
+
+* **Structural failure — always red, in both modes, in every phase.** A row whose probe program is
+  missing; a row whose probe does not run on one of the two engines; a derived row set that does not
+  match the committed data file; a verdict the function cannot compute. These are defects in the
+  instrument, not in the implementation, and they are the failure the tables exist to be incapable of
+  hiding.
+* **Verdict failure — red only under `REXX_CORPUS_GATE=1`, and only for the rows the closing phase
+  owns.** Each row carries its owning phase, from the enumeration. At 5a's gate, a 5a row whose
+  verdict is anything but `agree` or an explicitly recorded `loud` is red; a 5b or 5c row is
+  reported and not gated. At 5c's gate every row is gated. So the table is a progress report by
+  default, is legible the whole way through, and becomes the phase gate at exactly one boundary per
+  phase.
+
+The report is written identically in both modes, following `corpus.rs`: the assertion is what turns
+a mismatch into a non-zero exit, not what makes it visible.
 
 ### Table D — the directive and option surface
 
@@ -344,7 +480,8 @@ stderr, **on both engines**; the verdict; and which of `CoreClasses.orx` / `Stre
 the shape, derived by scanning both files rather than asserted.
 
 **The probe corpus is the row set's own obligation.** One committed program per row, under
-`rust/corpus/`, and a row without one fails the table — not "is skipped". Shapes the file scan must
+`rust/corpus/`, and a row without one is a **structural** failure — red in both modes, never
+"skipped". Shapes the file scan must
 reach, each already known to exist: both keywords on one directive with mixin targets
 (`StreamClasses.orx:115`), a quoted class target (`:371`), an install-time `::CONSTANT` sending a
 private class method of its own class (`:546`-`:549`), and a directive carrying its body on the same
@@ -372,27 +509,48 @@ test asserts flips a stated row:
 
 *Concepts.* One row per `<section id>` under `provide.xml`'s `provide` chapter, at every nesting
 level — the tree printed above. Each row names the corpus program that exercises the mechanism and
-carries the same measured columns as table D. A section with no program is a **failing** row.
+carries the same measured columns as table D. A section with no program is a **structural** failure,
+red in both modes; a section whose program disagrees is a verdict failure, gated at its owning
+phase's boundary.
 This half is what would have caught `unkno` and `reqstr`: neither is a directive keyword, so table D
 cannot see either, and the superseded gate had only table D's shape.
 
-*Classes and methods.* One row per (class, method) pair, derived from the `cls*`/`mth*` section
-structure of `fundclasses.xml`, `collclasses.xml`, `utilityclasses.xml`, `streamclasses.xml` and the
-`*classmethods.xml` includes, plus one row per class for the six wiring answers and per documented
-hierarchy edge.
+*Classes and methods.* Two row classes, and they are read back by different instruments and gated at
+different boundaries — see [the class-set criterion](#the-class-set-criterion-which-replaces-32-classes).
 
-**The readback rule, measured this session, because getting it wrong makes the table unbuildable:**
+* **Wiring rows, one per class plus one per documented hierarchy edge.** 5a's. Row set from the
+  `cls*` sections of `fundclasses.xml`, `collclasses.xml`, `utilityclasses.xml` and
+  `streamclasses.xml`, and from the `chi` hierarchy list's indentation.
+* **Method rows, one per (class, method) pair.** 5c's, and dependent on 5b. Membership comes from the
+  `mth*` sections inside a class's own `cls*` section **plus every `*classmethods.xml` that section
+  `xi:include`s** — the includes are index lists, not definitions, so the extractor resolves them to
+  `mth*` ids and takes the definition from the four books. Two traps in that route: the definitions
+  for the Object class are the `mth*` sections inline in `clsObject`, because
+  **`objectclassmethods.xml` is `xi:include`d by nothing in the checkout** — an extractor that
+  follows includes misses Object entirely and one that globs the directory picks up an orphan; and
+  the `cls*` titles carry their own parenthetical (`Class Class (Metaclass)`,
+  `Singleton Class (Metaclass)`), which is not a method kind marker.
 
-| what to ask | how | measured on the oracle |
+**The probe corpus is one program per class, not one per pair.** Every method row for a class is
+answered inside a single run that asks the whole documented set and prints one line per name; the
+verdicts are identical and the cost is a per-class subprocess pair rather than a per-pair one, which
+matters because these tables run inside `cargo test --release --workspace` and every oracle run is a
+`sh -c 'ulimit -v … && exec …'` launch.
+
+**The readback rules, measured this session, and they are two different questions:**
+
+| the question | how | measured on the oracle |
 |---|---|---|
-| does class X have documented **instance** method m | `.X~method("M")` | `.Array~method("APPEND")~class` is `The Method class`; `.Array~method("ZZNOSUCH")` raises 97.1 |
-| does class X have documented **class** method m | `.X~hasMethod("M")` | `.Array~hasMethod("OF")` is 1; `.Array~hasMethod("APPEND")` is 0 |
+| does class X **answer** its documented method m — the acceptance question, 5c | `.X~new~hasMethod("M")` | `.K~new~hasMethod("DONATED")` is 1 for a mixin-donated method; `.Array~new~hasMethod("APPEND")` is 1 |
+| is m defined **at X's own scope** — the scope question, 5a | `.X~method("M")` for an instance method, `.X~hasMethod("M")` for a class method | `.Array~method("APPEND")~class` is `The Method class`, `.Array~method("ZZNOSUCH")` raises 97.1; `.Array~hasMethod("OF")` is 1, `.Array~hasMethod("APPEND")` is 0 |
 
 `~method` reads `instanceMethodDictionary`, the methods "defined at this level"
-(`ClassClass.cpp:984`, comment at `:988`-`:990`), so it is per-scope and discriminating: measured,
-`.Array~method("STRING")` **raises 97.1** although every Array instance answers `STRING`, while
-`.String~method("COMPARETO")` answers. A build that flattened every scope onto one class would answer
-the first and redden.
+(`ClassClass.cpp:984`, comment at `:988`-`:990`), so it is per-scope. **That makes it a good scope
+discriminator and a bad acceptance check, and the first draft of this spec used it for both.**
+Measured, `.Array~method("STRING")` **raises 97.1** although every Array instance answers `STRING`;
+a build that flattened every scope onto one class would answer it, so it is exactly the right
+instrument for the scope question. And measured, `.K~method("DONATED")` raises 97.1 for a method the
+class genuinely has, so it is exactly the wrong instrument for the acceptance question.
 
 **`~instanceMethods` is not the readback**, and the measurement that says so is worth committing
 beside the rule: `.Array~instanceMethods` collected into a Set contains `DEFINE`, `ID` and `OF` and
@@ -400,22 +558,32 @@ does **not** contain `APPEND` — it answers about the receiver, which is a clas
 instances of it. `.Array~instanceMethods(.nil)` is empty. Either would have produced a table that
 looked derived and measured the wrong thing.
 
-Which half of the pair a documented method belongs to is derivable: `fundclasses.xml` and its
-siblings suffix a method's `<title>` with `(Class Method)`, `(Abstract Method)`, `(Private Method)`
-or `(Attribute)` where it applies, and the suffix is systematic — with one case wobble (`Class
-method` occurs beside `Class Method`) and one `(Inherited Class Method)`, so the match is
-case-insensitive and the four unusual titles are pinned by name in the extractor.
+Whether a documented method is class-side or instance-side is derivable: the four books suffix a
+method's `<title>` with `(Class Method)`, `(Abstract Method)`, `(Private Method)` or `(Attribute)`
+where it applies, and the suffix is systematic — with one case wobble (`Class method` occurs beside
+`Class Method`), one `(Inherited Class Method)`, and one parenthetical that is not a kind marker at
+all (`? (inline if)`), so the match is case-insensitive and those unusual titles are pinned by name
+in the extractor.
+
+**A third derivation artifact, in the half of the derivation that has no parser to settle it: the
+hierarchy extractor must strip XML comments before reading `<member>`s.** `provide.xml:844` is
+`<member><xref linkend="clsArgUtil" …/></member>` sitting inside a comment at `:843`/`:845` — and
+*inside* the `$GENERATED` block the extractor is pointed at. A per-`<member>` extraction that does
+not strip comments yields a hierarchy containing `ArgUtil` and contradicts this spec's own row
+saying `ArgUtil` is documented nowhere.
 
 **How it fails in the direction that matters.**
 
 1. Drop a class from the registry — its wiring row cannot produce an answer and reddens.
-2. Answer a class's methods from a flattened all-scopes dictionary — `.Array~method("STRING")`
-   answers where the oracle raises, and that row reddens.
+2. Answer a class's own-scope query from a flattened all-scopes dictionary — `.Array~method("STRING")`
+   answers where the oracle raises, and that scope row reddens.
 3. Implement a section's mechanism wrongly but silently — the concept row's program is compared on
-   three descriptors, so `makeString` returning the wrong string reddens at rc 0.
+   three descriptors under `Raw`, so `makeString` returning the wrong string reddens at rc 0.
 4. Delete the `UNKNOWN` step from dispatch — the `unkno` row reddens. Delete the `makeString` limb —
    the `reqstr` row reddens. Both of those are the negative controls that prove the two rows this
    spec exists for are live, and both must be recorded as having been run.
+5. Drop the operator-frame `*-* Compiled method "+" with scope "String".` line — the row computes
+   `diverge-stderr`, which is the cell the first taxonomy did not have.
 
 ### What the gate must also cover, which the old one did not
 
@@ -439,10 +607,22 @@ case-insensitive and the four unusual titles are pinned by name in the extractor
   `xmeths` states the rule ("places methods of a class **before** methods of its superclasses") and
   `fundclasses.xml`'s `inherit` states its consequence ("Inherited methods can take precedence **only
   over** methods defined at or above the base class"). Measured, and **reachable at class level with
-  no `~new`**, which the plan's instance-shaped version of this probe is not: with `::CLASS P`,
-  `::CLASS M1 MIXINCLASS Object` and `::CLASS K SUBCLASS P INHERIT M1` each carrying
-  `::METHOD m CLASS`, `say .K~m` is **`parent`** at rc 0 — not `M1`. The mixin winning is its negative
-  control. It is load-bearing rather than academic: `CoreClasses.orx:93` is
+  no `~new`**, which the plan's instance-shaped version of this probe is not. The program, in full,
+  because its exact shape is the whole point:
+
+  ```
+  say .K~m
+  ::CLASS P                     ::METHOD m CLASS -> return "parent"
+  ::CLASS M1 MIXINCLASS Object  ::METHOD m CLASS -> return "M1"
+  ::CLASS K SUBCLASS P INHERIT M1        -- K defines no m of its own
+  ```
+
+  `say .K~m` is **`parent`** at rc 0, not `M1`. The mixin winning is its negative control.
+  **`K` must define no `m`.** Measured: add `::METHOD m CLASS -> return "own"` to `K` and the answer
+  is `own`, which is what K's own method does under *any* merge order — so the variant with three
+  `m`s is green against an implementation that has superclass-versus-mixin backwards, which is the
+  failure this row exists to catch. An earlier draft of this paragraph described that variant.
+  It is load-bearing rather than academic: `CoreClasses.orx:93` is
   `.string~inherit(.Comparable)`, and `Comparable`'s `compareTo` (`:1300`, under
   `::CLASS 'Comparable' MIXINCLASS Object Public` at `:1299`) is a real
   `(self~identityHash - other~identityHash)~sign` body rather than `ABSTRACT`, so if the mixin won,
@@ -505,7 +685,7 @@ Every decision, one row, no gaps.
 | **D27** — new crates `rexx-classes` and `rexx-lib`; the boundary is a trait; `resolve` takes a start scope and a per-object table | **amended** | `rexx-classes` exists and holds. `resolve`'s inputs widen: the `UNKNOWN` step needs the receiver's own dictionary consulted after the miss, and `PRIVATE`/`PACKAGE` need the **caller's scope and the caller's package**, neither of which the old signature carries. `rexx-lib` does not exist yet |
 | **D28** — resolution dynamic, no per-call-site cache; amends D24 | **carried** | |
 | **D29** — dictionary flattened at class-definition time, scope ordering retained, cascade, monotonic version stamp | **carried, extended** | Extended by a witness the old table could not produce — see D43 |
-| **D30** — `::REQUIRES` lands last in this phase | **superseded** | Replaced by the 5c boundary. "Lands last" is an ordering; the re-cut needs a mechanism, and `::REQUIRES` is the package mechanism, which also collects `NAMESPACE`, `::RESOURCE`, `::OPTIONS` and `Package~local` — all unowned under the old cut |
+| **D30** — `::REQUIRES` lands last in this phase | **superseded** | Replaced by the 5c boundary. "Lands last" is an ordering; the re-cut needs a mechanism, and `::REQUIRES` is the package mechanism, which also collects `NAMESPACE`, `::RESOURCE`, `::OPTIONS` and `Package~local` — all unowned under the old cut. **The reason quoted here is the old spec's body ("the bootstrap does not use it") and not old D30's own bullet**, which gives the `CallSite` append-only argument — a reason the same body withdraws two paragraphs earlier. The old document self-contradicts on this point; the body is the later and surviving statement, and this row quotes it deliberately rather than by oversight |
 | **D31** — `::OPTIONS` and the `OPTIONS` instruction stay in this phase, sequenced independently of dispatch | **amended** | They stay in Phase 5 and are now **placed**, in 5c with the other package-settings directives, instead of "whenever the plan finds room" — which produced zero mentions in the plan. The option list in the superseded spec is confirmed against `dire.xml` `optionsd`; `ENGINEERING`/`SCIENTIFIC` and `INHERIT`/`NOINHERIT` are values of `FORM` and `NUMERIC`, not additional options |
 | **D32** — `REPLY`/`GUARD` get a run-time legality check, not a translation-time one, at rc 157 with the oracle's bytes; bare `GUARD` keeps its syntactic check | **carried** | Its open question is closed by D55 below |
 | **D33** — the four directories are real objects; `.NAME` consults the running package's class table before `.environment`; `VALUE`'s one-argument form resolves through them | **amended** | The summary is steps 2 and 7 of the eight `rexxpg/classes.xml` `searchord` specifies. The **package-local directory** is a step and it wins over both: measured, with `MYTHING` set in all three, `say .MYTHING` is `from package local`. And the directories *do* something D33 does not mention — measured, `.environment~local~class` is `The Directory class` while `.environment~hasMethod("LOCAL")` is **0**, through `DirectoryClass`'s own `methodTable`/`unknownValue` |
@@ -513,7 +693,7 @@ Every decision, one row, no gaps.
 | **D35** — the six guard axes and the 1% floor rule | **carried** | |
 | **D36** — the gate is the nine criteria; L2 reported not gated | **superseded** | The gate is the two derived tables plus the criteria restated in [the gate](#the-two-gate-tables) and [the class-set criterion](#the-class-set-criterion-which-replaces-32-classes). L2 stays reported, not gated, for the reason the old spec gives: it cannot start without `SysFileExists`, `.File` and `SysFileTree`, all Phase 7's |
 | **D37** — the native entry-point registry; `file_separator` and `file_path_separator` implemented here as a stated scope addition from Phase 7 | **carried** | |
-| **D38** — `::CONSTANT` is this phase's, specifically its parenthesised expression form | **amended** | Three documented rules the old text does not carry, all in `dire.xml` `constantd` and all confirmed: a `::CONSTANT` creates **both an instance method and a class method** — measured, `.K~c` and `.K~new~c` are both `42`; the expression form runs **as a method against the class object with `self` bound** (`ClassDirective::resolveConstants :243` calls `setScope`); forward references to calculated constants are refused. The floating-form refusal the old spec measured (99.906, rc 157) is confirmed by the documentation as a rule rather than being an oracle quirk |
+| **D38** — `::CONSTANT` is this phase's, specifically its parenthesised expression form | **amended** | Three documented rules the old text does not carry, all in `dire.xml` `constantd` and all confirmed: a `::CONSTANT` creates **both an instance method and a class method** — measured, `.K~c` and `.K~new~c` are both `42`; the expression form runs **as a method against the class object with `self` bound** (`instructions/ClassDirective.cpp:257`'s `resolveConstants` calls `setScope` at `:273`); forward references to calculated constants are refused. The floating-form refusal the old spec measured (99.906, rc 157) is confirmed by the documentation as a rule rather than being an oracle quirk |
 | **D39** — the bootstrap has no oracle transcript; the two setup methods are provided during it and removed after | **carried, extended** | Its sibling is the REXX_DEFINED lock, which neither spec nor plan mentions. `liveGeneral` (`ClassClass.cpp:134`) sets `setRexxDefined()` under `PREPARINGIMAGE` and repoints `package` to `TheRexxPackage`; measured, `.Array~package~name` is `REXX` and `.Array~define("ZORK", .methods["Z"])` is rc 158 with `*-* Compiled method "DEFINE" with scope "Class".` and `Error 98.985: User additions are not allowed to the REXX language classes.` A bootstrap that finishes without setting it lets `.string~inherit(...)` succeed at rc 0 where the oracle raises — a divergence any corpus program can see |
 | **D40** — `Body::Instance`'s association list replaced by a scope-keyed variable pool; `EXPOSE` is not new machinery | **carried** | Landed in Task 8 |
 | **D41** — object identity is not modelled; handle equality, licensed as deviation 4 | **carried** | Observable only once `.IdentityTable` and `~identityHash` exist, which is 5c |
@@ -525,12 +705,74 @@ Every decision, one row, no gaps.
 **Buckets: carried 13, amended 6, superseded 2, withdrawn 0.** Carried: D26, D28, D29, D32, D34,
 D35, D37, D39, D40, D41, D42, D43, D45. Amended: D25, D27, D31, D33, D38, D44. Superseded: D30, D36.
 
+## The superseded spec's other two inventories
+
+The `D` list is not the only thing the old document carried, and the first draft of this spec
+disposed of it and dropped the rest. **A dropped constraint is a dropped decision wearing a different
+label**, so both remaining inventories get the same treatment: carried, amended, superseded or
+withdrawn, with a reason.
+
+### Its open questions
+
+| the old spec asked | disposition |
+|---|---|
+| what a `REPLY` or `GUARD` **inside** a Phase 5 method does | **closed** by D55, on two measured programs |
+| `::ANNOTATE`, unmeasured, with the first task to measure it | **closed** by D54; it is measured here and is a live over-refusal |
+| **D24's three surviving forward constraints** — selectors interned at compile time, a `SmallInt` behaviour arm, a receiver in the calling convention | **carried, unchanged and still 5a's.** D28 disposed of D24's other two by declining the send cache; these three are not disposed of by anything in this spec, none is designed here, and the plan owes a task for each. Naming them here is the point: they are the concrete residue of D24 and they had no other home |
+| whether `createInstance()`'s order is load-bearing — only four of its positions carry a stated reason | **carried, narrowed.** D25's amendment removes that list as the *enumeration*, which is what it was mostly being used for; the ordering question survives as a construction-order question for the native layer and is unanswered |
+| what plays the oracle for a native method | **carried.** A collection primitive implemented in Rust has one through a Rexx program; a method `CoreClasses.orx` defines has one by construction; the plan should still say there is no third case rather than leave it implied |
+| which `CoreClasses.orx` classes the phase leaves unexercisable | **amended.** The old answer named `Alarm` and `Ticker`, because `REPLY`/`GUARD` were Phase 6's. D55 makes both run in a single-threaded Phase 5, so the list is smaller than the old spec assumed and the plan must re-derive it rather than inherit it |
+| the roadmap's first-listed reason for the IR — that it "founds OO dispatch for Phase 5 by making a call site a patchable slot" | **carried.** D28 sends no send through that slot, so the sentence needs amending or a recorded reason it survives. It is at `2026-07-27-rust-rewrite.md:492`; the old spec cites `:482` |
+| where the phase subset's programs come from, given that a subset chosen by the implementer is a weak instrument | **amended.** Partly answered: both gate tables' row sets come from the documentation, so the *choice* of what to cover is no longer the implementer's. Which program satisfies a given row still is, and that residue stands |
+
+### Its gate criteria not restated above
+
+D36 supersedes the nine criteria as *the gate*, and the two tables plus the class-set criterion
+replace criteria 1, 2, 3 and 7. The rest are not superseded, they were simply not restated, so they
+are restated here:
+
+* **Criterion 8 — the unsafe-block count and the crate roots carrying `deny` rather than `forbid`,
+  reported at every phase exit.** Carried. It survives independently as the roadmap's Global
+  Constraint at `2026-07-27-rust-rewrite.md:36`, so this is a restatement gap rather than a live
+  hole — but the old spec added it back *because a draft had dropped it*, which is a reason to write
+  it down rather than rely on the other copy.
+* **Criterion 4's instrument for `>M>` and `>N>`** — in-crate exact-stderr assertions with expected
+  bytes **captured from the oracle rather than typed**, plus the `PREFIX_COVERAGE` row edits, plus
+  the finding that neither `descriptor_diffs` (under `Normalized`) nor `ir_dual` can see an indent
+  divergence. Carried; it is the same subject as the comparison-mode section above, and `Raw` is what
+  makes the table's version of it able to fail.
+* **Criterion 6 and criterion 9** — the performance guard and the cold-start measurement — carried
+  through D35 and the untouched D2 obligation.
+* **The committed tables that have to move when a row starts passing**: `assertions.rs`'s `EXEMPT`,
+  `corpus/bif-exempt.txt` and its attribution column, `owners.rs`'s five pinned items,
+  `corpus/builtin-status.txt`, `trace_oracle.rs`'s `PREFIX_COVERAGE`. Carried; the plan owes an edit
+  per table rather than a surprise.
+* **The subset-file wiring hazard, restated because it has changed shape.** The old spec said
+  `trace_oracle.rs` has no directory-listing guard and would silently keep measuring the 4a/4b/4c
+  union. Task 1 wired `phase-5a.txt` into it, and the hazard is now written down in the file itself:
+  its literal is still unguarded, and its own doc says "a phase subset file added and forgotten
+  *here* would silently keep this check measuring the union as it stood before". So it is handled for
+  5a and live for 5b and 5c, which must each add their file to that literal by hand.
+* **`Body`'s ≤ 80-byte assertion and Q4's boxing rule** — a new kind arrives boxed in its own variant
+  unless a recorded measurement says widening is worth it — and **`apply_binary`'s object check**,
+  which the required-string protocol now makes unavoidable. Both carried.
+
 ## New decisions
 
 * **D46.** **Phase 5 is cut into 5a, 5b and 5c along documented mechanisms**, as specified above: 5a
   is a class existing and answering a message, 5b is an instance existing, 5c is the package and the
-  class library. No documented mechanism crosses a boundary, and the test of a proposed change to the
-  cut is whether it splits one.
+  class library. The rule is **not** "no documented mechanism crosses a boundary" — an earlier draft
+  said that and this spec's own enumeration contradicts it. `provide.xml` `xmeths` is one ordered
+  list and its per-object first step is 5b's while the rest is 5a's; and the enumeration carries
+  two-phase cells for `ABSTRACT` enforcement, `~enhanced`, `DELEGATE`, `~copy`, environment search
+  steps 3 and 5, `Package~local`, the UNINIT propagation flags, `PROTECTED`, `REPLY`/`GUARD` and
+  `~start`.
+
+  **The rule is: no mechanism is split without the split being named in the enumeration and both
+  halves owned.** That is what the table does, and it is the stronger test, because it is the one the
+  old cut failed — `ACTIVATE` in 5a and the class object's `INIT` in 5b was a split nobody had
+  written down, so neither half was owned as half of anything. A proposed change to the cut is tested
+  by asking whether it creates an unnamed split, not whether it creates a split.
 * **D47.** **"The bootstrap runs" is a milestone inside 5a**, not a phase boundary and not the gate.
   Established by reading both `.orx` files: the only Rexx bodies either runs at install are
   `TraceObject~activate` and two parenthesised `::CONSTANT`s, and none sends `~new`.
@@ -631,7 +873,7 @@ which name a bootstrap that runs later than they do.
 | 5a is now larger than the superseded 5a | it never closes | it is larger by mechanisms that were unowned, not by new work; the two gates inside it (core, then bootstrap) stay, and the added items are individually small — `UNKNOWN` is one search step, `PACKAGE` one limb, `METACLASS` one directive keyword |
 | `METACLASS` entering 5a reopens the class-behaviour side late | D44's witness lands after the code it witnesses | it is the *only* program-level route, measured; the alternative is deferring D44's witness explicitly, which the superseded plan did by accident |
 | the required-string protocol touches every instruction that takes a string | a long tail across Phase 4 surface | `provide.xml` `reqstr` enumerates the contexts, so the tail is bounded and countable before it starts |
-| a documented method set is large and mostly 5c's | table C reads red for most of Phase 5 | that is correct and is the point; the table reports per-row status and only the class half's *wiring* rows gate 5a |
+| a documented method set is large and mostly 5c's | table C reads red for most of Phase 5, nobody reads it, and the workspace gate is red by design | the two-predicate rule above: structural failures are always red, verdict failures are red only under `REXX_CORPUS_GATE=1` and only for the closing phase's rows. Default `cargo test` stays green and the table stays legible |
 
 ## What I could not check
 
@@ -649,13 +891,25 @@ which name a bootstrap that runs later than they do.
   `object-model-correlation.md`, and is not re-verified here. **Both inherited `.orx` citations I did
   check were wrong** — `CoreClasses.orx:66`-`71` for the `.methods` index, which is `:73`, and `:92`
   for `.string~inherit(.Comparable)`, which is `:93` — so the plan should re-read a citation before
-  leaning on it rather than treating the inherited ones as sound.
-* **Whether `~method` reaches every mixin-donated name.** Measured on two points —
-  `.String~method("COMPARETO")` answers, `.Array~method("STRING")` raises — and the mechanism is
-  `instanceMethodDictionary` (`ClassClass.cpp:984`). I did not read how `inherit` populates that
-  dictionary, so the exact inclusion rule for a donated name is stated as a measurement, not a rule,
-  and the extractor's expected column must be validated against the oracle per class rather than
-  reasoned from the hierarchy.
+  leaning on it rather than treating the inherited ones as sound. **A review sampling the inherited
+  C++ citations found four more wrong**, each corrected in place above: `ClassDirective::
+  resolveConstants :243` (which is `setAnnotations`; `resolveConstants` is
+  `instructions/ClassDirective.cpp:257` and its `setScope` is `:273`), `Setup.cpp:325-329` for
+  `SELF`/`SUPER` (which are `:331`/`:332`), `ClassClass.hpp:176-186` for the class flags (the
+  `ClassFlag` enum is `:180`-`:189`, and the cited range stopped before `PARENT_HAS_UNINIT` and
+  `ABSTRACT`, the two flags the Object-Destruction and abstract rows depend on), and
+  `PackageClass.cpp:1432` (`addInstalledRoutine`, which is none of that row's names). Two more were
+  numerically right and file-ambiguous — `checkUninit :1210` and `completeNewObject :1882` are both
+  **ClassClass.cpp** — and are now qualified. The roadmap's patchable-slot sentence is `:492`, which
+  the superseded spec cites as `:482`.
+* ~~**Whether `~method` reaches every mixin-donated name.**~~ **Closed, in the direction this spec
+  did not expect.** Measured: `.K~method("DONATED")` for a `MIXINCLASS`-donated method raises 97.1,
+  and so does `.DateTime~method("<")`, a method DateTime genuinely has. `~method` reaches the class's
+  own scope only, and `.String~method("COMPARETO")` answering is String defining its own `compareTo`
+  natively (`Setup.cpp:688`, `AddMethod("CompareTo", RexxString::compareToRexx, 3)`) rather than
+  `~method` reaching a donated one. That moved the class-set criterion's method half to
+  an instance readback and to 5c; it is recorded here as an open question that closed rather than
+  deleted, because the answer is what changed the criterion.
 * **The crate column throughout.** Every crate reading is from
   `rust/target/release/rexx-run` as built at 07:06 on 2026-08-17, at `b360783cb`. I did not build. A
   task landing between then and the plan will move some of these rows, which is what the tables are
