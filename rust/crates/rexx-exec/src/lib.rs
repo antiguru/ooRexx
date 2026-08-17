@@ -3225,12 +3225,73 @@ impl Interp {
     /// is an uninitialised variable -- a silent wrong answer, and the reason
     /// the `RootSet` names say `frame`.
     ///
+    /// **Split in two, and the split is a measurement rather than a
+    /// preference.** Every read and write of every variable comes through
+    /// here, and folding the pool lookup into the same function put its heap
+    /// access on that path: at the shape below's predecessor the six-axis
+    /// `rexx-arms` sitting read +5.0% to +8.6% `instructions:u` on five of six
+    /// axes, `varlookup` at 2752.000 per pass against 2947.000, on programs
+    /// that declare no class and run no method. What is left inline is the
+    /// question "does this activation expose anything at all", which is one
+    /// load and one branch; the pool itself is [`Interp::exposed_variable`]
+    /// and its two siblings, out of line.
+    #[inline(always)]
+    fn variable(&self, frame: SlotFrame, slot: usize) -> Option<ObjRef> {
+        if self.activation_exposes(frame) {
+            return self.exposed_variable(frame, slot);
+        }
+        self.roots.frame_slot(frame, slot)
+    }
+
+    /// Assigns the variable slot `slot` of `frame` names.
+    #[inline(always)]
+    fn set_variable(&mut self, frame: SlotFrame, slot: usize, value: ObjRef) {
+        if self.activation_exposes(frame) {
+            return self.set_exposed_variable(frame, slot, value);
+        }
+        self.roots.set_frame_slot(frame, slot, value);
+    }
+
+    /// Returns the variable slot `slot` of `frame` names to the uninitialised
+    /// state, which is what `DROP` does. Measured on the oracle: a class
+    /// method that exposes `v`, assigns it and drops it leaves a later `expose
+    /// v` reading the derived name `V`.
+    #[inline(always)]
+    fn clear_variable(&mut self, frame: SlotFrame, slot: usize) {
+        if self.activation_exposes(frame) {
+            return self.clear_exposed_variable(frame, slot);
+        }
+        self.roots.clear_frame_slot(frame, slot);
+    }
+
+    /// Whether the running activation has bound any name at all to a scope
+    /// pool over `frame` -- the whole of what the three accessors above test
+    /// before taking the frame, and the reason each of them is two functions.
+    ///
+    /// **A cheaper first test was measured and bought nothing.** An
+    /// interpreter-wide "has anything ever been exposed" flag, checked ahead
+    /// of the activation so that a program declaring no class never reaches
+    /// it, produced ratios equal to these to six decimal places on both axes
+    /// and both arms, so the state it would have to be kept in step with is
+    /// not paid for by anything.
+    ///
     /// **The frame is compared, not assumed.** A `PROCEDURE` callee has an
     /// exposure list of its own over a frame of its own, and `exec_procedure`
     /// resolves names against the *caller's* frame before swapping; a list
     /// consulted for the wrong frame would redirect a name that is a plain
     /// local there.
-    fn variable(&self, frame: SlotFrame, slot: usize) -> Option<ObjRef> {
+    #[inline(always)]
+    fn activation_exposes(&self, frame: SlotFrame) -> bool {
+        let activation = self.activations.last().expect("an activation is running");
+        !activation.exposed.is_empty() && activation.frame == frame
+    }
+
+    /// [`Interp::variable`]'s exposed half. A slot the list does not name is
+    /// still an ordinary local, so this falls back rather than answering
+    /// unset.
+    #[cold]
+    #[inline(never)]
+    fn exposed_variable(&self, frame: SlotFrame, slot: usize) -> Option<ObjRef> {
         match self.exposure(frame, slot) {
             Some(var) => self
                 .pools_of(var.owner)
@@ -3239,8 +3300,10 @@ impl Interp {
         }
     }
 
-    /// Assigns the variable slot `slot` of `frame` names.
-    fn set_variable(&mut self, frame: SlotFrame, slot: usize, value: ObjRef) {
+    /// [`Interp::set_variable`]'s exposed half.
+    #[cold]
+    #[inline(never)]
+    fn set_exposed_variable(&mut self, frame: SlotFrame, slot: usize, value: ObjRef) {
         // Field by field rather than through `Interp::exposure`, because the
         // name borrowed out of the activation has to stay live across the
         // `&mut self.heap` below; disjoint fields borrow independently where a
@@ -3262,11 +3325,10 @@ impl Interp {
         pools.set(var.scope, &var.name, value);
     }
 
-    /// Returns the variable slot `slot` of `frame` names to the uninitialised
-    /// state, which is what `DROP` does. Measured on the oracle: a class
-    /// method that exposes `v`, assigns it and drops it leaves a later `expose
-    /// v` reading the derived name `V`.
-    fn clear_variable(&mut self, frame: SlotFrame, slot: usize) {
+    /// [`Interp::clear_variable`]'s exposed half.
+    #[cold]
+    #[inline(never)]
+    fn clear_exposed_variable(&mut self, frame: SlotFrame, slot: usize) {
         let activation = self.activations.last().expect("an activation is running");
         let Some(var) = Interp::exposure_in(activation, frame, slot) else {
             self.roots.clear_frame_slot(frame, slot);
