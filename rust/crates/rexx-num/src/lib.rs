@@ -670,10 +670,25 @@ impl Number {
     /// `'+ .5'` and tab variants all convert, while `'+ 3 e2'`, `'3 4'`,
     /// `'3e 2'` and a LF/VT/FF/CR anywhere are all error 41.
     pub fn parse(text: &str) -> Option<Self> {
+        Self::parse_bytes(text.as_bytes())
+    }
+
+    /// [`parse`], over the bytes a Rexx string actually is.
+    ///
+    /// **Validating the bytes as UTF-8 first cannot change the answer, so a
+    /// caller holding bytes should not pay for it.** Every byte this accepts
+    /// is ASCII -- blank, sign, digit, `.`, `e`/`E` -- so a byte above 0x7F
+    /// leaves the digit loop and is refused as trailing junk, which is the
+    /// same `None` a failed `from_utf8` produced. `rexx-core`'s `NotNumeric`
+    /// says the same thing from the other side: nothing observable
+    /// distinguishes "not UTF-8" from "not numeric text", because error 41.1
+    /// substitutes the value and never the reason.
+    ///
+    /// [`parse`]: Number::parse
+    pub fn parse_bytes(bytes: &[u8]) -> Option<Self> {
         fn is_blank(byte: u8) -> bool {
             byte == b' ' || byte == b'\t'
         }
-        let bytes = text.as_bytes();
         let mut i = 0;
         while i < bytes.len() && is_blank(bytes[i]) {
             i += 1;

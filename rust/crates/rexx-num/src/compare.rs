@@ -190,13 +190,14 @@ pub fn compare_decoded(
     Ok(op.holds(ord))
 }
 
-/// `Number::parse` over bytes that may not be valid UTF-8. A Rexx number's
-/// characters are ASCII by definition (`rexx-core`'s `NotNumeric` doc
-/// comment makes the same point for the same reason), so invalid UTF-8 can
-/// never be one and is treated as a parse failure exactly like malformed
-/// ASCII text already is -- there is no third outcome to invent here.
+/// `Number::parse_bytes`, named locally for the call sites above.
+///
+/// A Rexx number's characters are ASCII by definition (`rexx-core`'s
+/// `NotNumeric` doc comment makes the same point for the same reason), so
+/// invalid UTF-8 can never be one; the parser refuses it as the malformed
+/// ASCII it also refuses, and there is no third outcome to invent here.
 fn parse_bytes(bytes: &[u8]) -> Option<Number> {
-    std::str::from_utf8(bytes).ok().and_then(Number::parse)
+    Number::parse_bytes(bytes)
 }
 
 /// Numeric ordering per `NumberString::comp` (`NumberStringClass.cpp:3194`).

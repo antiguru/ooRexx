@@ -28,16 +28,14 @@ impl BehaviourId {
     pub const STEM: BehaviourId = BehaviourId(3);
 }
 
-/// A byte string that failed `Number::parse`, or whose bytes are not even
-/// UTF-8 -- both collapse into this one marker (D15), and that is not a
-/// simplification paid for later: nothing observable distinguishes the two
-/// causes. A Rexx program that uses a non-numeric value in arithmetic gets
-/// error 41.1, "Nonnumeric value ("val") used in arithmetic operation",
-/// which substitutes the *value* and never says why it failed to parse. The
-/// distinction is also about to get thinner still: once `rexx-num` gains a
-/// byte-slice parse entry point (a later task), there is no separate
-/// `from_utf8` step left to fail on its own -- a parse over bytes either
-/// yields a number or does not.
+/// A byte string that failed `Number::parse_bytes` (D15). One marker and no
+/// cause, which is not a simplification paid for later: nothing observable
+/// distinguishes one cause from another. A Rexx program that uses a
+/// non-numeric value in arithmetic gets error 41.1, "Nonnumeric value
+/// ("val") used in arithmetic operation", which substitutes the *value* and
+/// never says why it failed to parse. There is no separate `from_utf8` step
+/// able to fail on its own either -- a parse over bytes either yields a
+/// number or does not.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct NotNumeric;
 

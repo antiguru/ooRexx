@@ -27,9 +27,9 @@
 //! `text`/`number` construct a value; `to_text`/`to_number` read one back.
 //! Every conversion is total: `to_text` always produces bytes (`.nil` has a
 //! string value, `The NIL object`), and `to_number`'s only failure is
-//! `NotNumeric`, collapsing "not UTF-8" and "not a number" into one marker
-//! because nothing observable distinguishes the two (`rexx-core`'s own doc
-//! comment on `NotNumeric`).
+//! `NotNumeric` -- one marker, because nothing observable distinguishes why a
+//! byte string is not a number (`rexx-core`'s own doc comment on
+//! `NotNumeric`).
 
 use crate::Interp;
 use rexx_core::{
@@ -509,10 +509,10 @@ impl Interp {
     /// never why arithmetic wanted one or what number to raise.
     ///
     /// A `Body::Text`'s `num` cache holds the exact parse and is filled at
-    /// most once: `std::str::from_utf8` then `Number::parse`, with both
-    /// failures collapsing into `NotNumeric` because a Rexx number's
-    /// characters are ASCII by definition, so "not UTF-8" and "not numeric
-    /// text" are the same failure. Nothing here rounds the parse to any
+    /// most once, by `Number::parse_bytes`. There is no UTF-8 step in front
+    /// of it: a Rexx number's characters are ASCII by definition, so a parse
+    /// over bytes refuses everything a `from_utf8` guard would have refused
+    /// and answers the one `NotNumeric` either way. Nothing here rounds the parse to any
     /// `DIGITS` -- rounding belongs to the operation that reads the result,
     /// which is what lets the same cached parse answer `1.2346` at `DIGITS
     /// 5` and the full value at `DIGITS 20`.
@@ -542,10 +542,7 @@ impl Interp {
             // Parsed on every ask, where a `Body::Text` parses once and
             // caches it. See `text_bytes` for what that trade was measured
             // at, and why the cache turned out to be worth so little.
-            Decoded::Text(inline) => match std::str::from_utf8(&inline) {
-                Ok(text) => Number::parse(text).ok_or(NotNumeric),
-                Err(_) => Err(NotNumeric),
-            },
+            Decoded::Text(inline) => Number::parse_bytes(&inline).ok_or(NotNumeric),
             Decoded::Heap { .. } => {
                 // Mirrors `to_text`'s own stem redirect above: decided, and
                 // the borrow on `self.heap` dropped, before the recursive
@@ -574,9 +571,8 @@ impl Interp {
                     Body::Num { value, .. } => Ok(value.clone()),
                     Body::Text { bytes, num } => {
                         let bytes = bytes.as_slice();
-                        let cached = num.get_or_insert_with(|| match std::str::from_utf8(bytes) {
-                            Ok(text) => Number::parse(text).map(Box::new).ok_or(NotNumeric),
-                            Err(_) => Err(NotNumeric),
+                        let cached = num.get_or_insert_with(|| {
+                            Number::parse_bytes(bytes).map(Box::new).ok_or(NotNumeric)
                         });
                         match cached {
                             Ok(number) => Ok((**number).clone()),
@@ -594,10 +590,7 @@ impl Interp {
                     // costly to memoise in the common case, and a cache
                     // field added just for this would be new state on
                     // `Body::Stem` no other rule needs.
-                    Body::Stem { name, .. } => match std::str::from_utf8(name) {
-                        Ok(text) => Number::parse(text).ok_or(NotNumeric),
-                        Err(_) => Err(NotNumeric),
-                    },
+                    Body::Stem { name, .. } => Number::parse_bytes(name).ok_or(NotNumeric),
                     // A directory's rendering is `a Directory`-shaped text
                     // and never numeric, so this answers the marker rather
                     // than parsing what `to_text` would produce.

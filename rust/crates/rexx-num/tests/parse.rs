@@ -212,3 +212,56 @@ fn from_i64_builds_what_parsing_the_same_spelling_builds() {
         );
     }
 }
+
+/// `parse_bytes` refuses a byte string that is not UTF-8, which is what lets
+/// the `from_utf8` guard in front of it go.
+///
+/// The refusing and the accepting halves are both here on purpose. A parser
+/// that simply refused everything would satisfy the first alone, and one that
+/// let a high byte through as a digit or as ignorable padding would satisfy
+/// neither -- each row's ASCII neighbour is the number the same bytes spell
+/// once the offending byte is gone, so the pair says the refusal is about
+/// that byte and not about the shape around it.
+///
+/// `0x80` and `0xFF` are each invalid UTF-8 alone in any position; `0xC3`
+/// begins a two-byte sequence and is invalid unfinished, which is the case a
+/// length check would miss.
+#[test]
+fn a_byte_string_that_is_not_utf8_is_not_a_number() {
+    for (bytes, ascii) in [
+        (b"\x801".as_slice(), "1"),
+        (b"1\x80".as_slice(), "1"),
+        (b"1\xff2".as_slice(), "12"),
+        (b"\xc3".as_slice(), ""),
+        (b"1.\xc3".as_slice(), "1."),
+        (b"1e\x802".as_slice(), "1e2"),
+        (b" \xff 3 ".as_slice(), "  3 "),
+    ] {
+        assert_eq!(
+            Number::parse_bytes(bytes),
+            None,
+            "{bytes:?} is not UTF-8 and must not parse"
+        );
+        if !ascii.is_empty() {
+            assert!(
+                Number::parse_bytes(ascii.as_bytes()).is_some(),
+                "{ascii:?} is the same bytes without the offending one and must parse"
+            );
+        }
+    }
+}
+
+/// `parse_bytes` is what `parse` is, over the same input.
+///
+/// Every `&str` in `CANONICAL` reaches the parser as bytes either way, so a
+/// disagreement here means the two entry points stopped sharing a body.
+#[test]
+fn the_byte_entry_point_agrees_with_the_str_one() {
+    for (input, _) in CANONICAL {
+        assert_eq!(
+            Number::parse(input),
+            Number::parse_bytes(input.as_bytes()),
+            "{input}"
+        );
+    }
+}
