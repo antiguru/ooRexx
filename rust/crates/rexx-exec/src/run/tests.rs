@@ -7731,6 +7731,79 @@ fn a_gap_the_oracle_diagnoses_before_a_class_refuses_ahead_of_the_class_error() 
     }
 }
 
+/// **A `::CLASS` keyword gap is raised inside the class pass, and that is
+/// asserted here rather than left incidental.**
+///
+/// `MIXINCLASS`, `METACLASS`, `INHERIT` and `SUBCLASS ns:` need no stage of
+/// their own: `Interp::install_class_at` consults [`directive_gap`] itself, so
+/// the refusal is raised while the classes are being created -- which is where
+/// the oracle diagnoses them too. Nothing asserted that until this test, so a
+/// change to `install_class_at` could have moved them with nothing going red.
+///
+/// Each form appears in two programs and they pin opposite sides:
+///
+/// * **above a `::CLASS` that cannot install**, the gap must win, because the
+///   class pass reaches the gap's own directive first. Without
+///   `install_class_at`'s check the class error answers instead -- a wrong
+///   answer, since the oracle blames the gap's line.
+/// * **above a cyclic `::CLASS` pair**, the *cycle* must win at 98.911 rc 158,
+///   because `class_install_order` runs before any class is created. Measured
+///   on the oracle, which agrees. This row is what would redden if one of
+///   these forms were ever hoisted into the first walk with `::ANNOTATE` and
+///   the `EXTERNAL` forms, where it does not belong.
+#[test]
+fn a_class_keyword_gap_is_raised_inside_the_class_pass() {
+    let failing_class = "::class a subclass zzznotaclass\n";
+    let cycle = "::class a subclass b\n::class b subclass a\n";
+    let cases: &[(&str, &str)] = &[
+        (
+            "::class q mixinclass zzzm\n",
+            "::CLASS MIXINCLASS is not implemented (Phase 5)",
+        ),
+        (
+            "::class q metaclass zzzm\n",
+            "::CLASS METACLASS is not implemented (Phase 5)",
+        ),
+        (
+            "::class q inherit zzzi\n",
+            "::CLASS INHERIT is not implemented (Phase 5)",
+        ),
+        (
+            "::class q subclass ns:other\n",
+            "::CLASS SUBCLASS naming a namespace is not implemented (Phase 5)",
+        ),
+    ];
+    for (gap, message) in cases {
+        let source = format!("say 'main ran'\n{gap}{failing_class}");
+        let outcome = routine_program(source.as_bytes());
+        assert_eq!(
+            outcome.exit_code,
+            crate::NOT_IMPLEMENTED_EXIT,
+            "{source}: exit code, stderr {}",
+            String::from_utf8_lossy(&outcome.stderr)
+        );
+        assert_eq!(outcome.stdout, b"", "{source}: stdout");
+        assert_eq!(
+            outcome.stderr,
+            format!("rexx-exec: {message}\n").into_bytes(),
+            "{source}: stderr"
+        );
+
+        let source = format!("say 'main ran'\n{gap}{cycle}");
+        let outcome = routine_program(source.as_bytes());
+        let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
+        assert_eq!(
+            outcome.exit_code, 158,
+            "{source}: exit code, stderr {stderr}"
+        );
+        assert_eq!(outcome.stdout, b"", "{source}: stdout");
+        assert!(
+            stderr.contains("Error 98.911:  Cyclic inheritance in program"),
+            "{source}: stderr {stderr}"
+        );
+    }
+}
+
 /// A builtin's result is a value whose rendering `NUMERIC DIGITS` cannot
 /// reach, and D15 is still visible on it from the other side.
 ///

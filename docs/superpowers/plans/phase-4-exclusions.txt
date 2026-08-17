@@ -462,19 +462,24 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
     ::class a / ::constant kk (1/0) / ::requires 'helper.rex', present
                                                           42.3 rc 214
 
-  The ::CONSTANT rows put the gap AFTER the failing directive, which is what
-  makes them losses: with the gap first, this crate refused at 62de43c0f too.
+  Those rows put the gap AFTER the failing directive, which is what makes them
+  losses: with the gap first, this crate refused at 62de43c0f too. THE SAME
+  SHAPE WITH AN EXTERNAL DIRECTIVE WHOSE LIBRARY LOADS IS REASONED, NOT
+  PROBED -- it follows the same code path, but no library in this tree loads,
+  so nothing has measured it and it must not be read as a measurement.
   Telling the installable case from the failing one means resolving the
   target, opening the file and loading the library. OWNER: Phase 5, with the
   rest of ::REQUIRES and ::ANNOTATE, and Phase 7 for EXTERNAL.
 
-  KNOWN DIVERGENCE THE STAGING DOES NOT CLOSE, AND IT PREDATES THIS TASK. The
-  oracle walks the directive list once, in source order, and takes whichever
-  of an ::ANNOTATE target, an EXTERNAL library, a duplicate ::ROUTINE name or
-  a class-less ::CONSTANT expression it reaches first.
-  `Interp::install_directives` runs the latter pair in a pass of its own,
-  ahead of the staged gap check, so a gap directive standing EARLIER in the
-  file loses to a translation error standing later. Measured:
+  CLOSED BY R33, AND IT WAS RECORDED HERE FIRST AS UNFIXED. The oracle walks
+  the directive list once, in source order, and takes whichever of an
+  ::ANNOTATE target, an EXTERNAL library, a duplicate ::ROUTINE name or a
+  class-less ::CONSTANT expression it reaches first.
+  `Interp::install_directives` used to run the latter pair in a pass of its
+  own, ahead of the staged gap check, so a gap directive standing EARLIER in
+  the file lost to a translation error standing later. Measured before the
+  fold, all four reproducing against a build of b360783cb, so none of them was
+  the class-install work's:
 
     ::annotate routine nosuchrtn above a duplicate ::routine pair
                             oracle 99.945 rc 157, crate 99.903 rc 157
@@ -485,13 +490,29 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
     ::routine zz external ... above a class-less ::constant kk (1/0)
                             oracle 98.903 rc 158, crate 99.906 rc 157
 
-  Reversing each pair matches on both sides. All four reproduce against a
-  build of b360783cb, so none of them is the class-install work's. THE FIX IS
-  TO FOLD THE STAGED GAP CHECK INTO THAT FIRST WALK, which would turn all four
-  into loud refusals; its cost is the same shape as the paragraph above --
-  a file whose ::ANNOTATE target does resolve, standing above a duplicate
-  ::ROUTINE, matches today and would refuse. Not taken here because it is
-  pre-existing and outside this round. OWNER: unplaced.
+  R33 folded the staged check into that walk, so all four are loud rc-120
+  refusals now and all four reversals still match. A fifth shape went with
+  them: `::routine dup external ...` above a plain `::routine dup` is the
+  oracle's 98.903 at the EXTERNAL line, was 99.903 at the duplicate's line,
+  and is a refusal now.
+
+  WHERE THE GAP CHECK SITS INSIDE THAT WALK IS ITSELF MEASURED. One directive
+  can owe both a translation error and a gap, and the oracle answers the
+  translation error: `::routine dup` followed by `::routine dup external
+  "LIBRARY nosuchlib nosuchfn"` is 99.903 rc 157 echoing the second directive,
+  not 98.903, and this crate matches it because the gap check runs after the
+  loop's own arms rather than before them.
+
+  WHAT R33 COST, MEASURED AT 3ee6e4bf7 AND REFUSED NOW: a gap that the oracle
+  would have installed, standing above a translation error, used to match.
+
+    ::routine r / ::annotate routine r / a duplicate ::routine pair
+                            oracle 99.903 rc 157, matched at 3ee6e4bf7
+    ::routine r / ::annotate routine r / a class-less ::constant kk (1/0)
+                            oracle 99.906 rc 157, matched at 3ee6e4bf7
+
+  Taken on this table's standing trade: a refusal is visible and a wrong
+  answer is not.
 
   KNOWN GAP, NOT THIS TASK'S: A ::CONSTANT EXPRESSION CANNOT SEND TO A CLASS
   DECLARED LATER IN THE SAME FILE. Measured, and it does not involve SUBCLASS

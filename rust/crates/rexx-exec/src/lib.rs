@@ -1334,6 +1334,13 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
 /// `::CONSTANT` expressions last. `::OPTIONS` is applied in the first walk and
 /// has no diagnosis of its own, which is why its refusal can stay late.
 ///
+/// **That first walk is [`Interp::install_directives`]' own first loop, and
+/// this function is not what runs it** -- the gap check for the forms it
+/// carries is inline there, beside the duplicate-`::ROUTINE` and class-less-
+/// `::CONSTANT` refusals it shares the walk with, so first in source order
+/// wins across all of them (R33). What is left for this function is
+/// `::REQUIRES`, whose stage is its own.
+///
 /// **What is measured and what is not.** Every row above is a probe, both
 /// engines, three descriptors. The placement of `::CLASS MIXINCLASS`,
 /// `::CLASS INHERIT` and `::CLASS SUBCLASS ns:` is *not* probed against a
@@ -1344,18 +1351,12 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
 /// inherit a stage: place it by probing it against a failing `::CLASS` and
 /// against a cycle, both orders, and add a row here.
 ///
-/// **The first walk is shared with translation-time errors this crate finds
-/// in a pass of its own, and there this crate is still wrong.** The oracle
-/// takes whichever of an `::ANNOTATE` target, an `EXTERNAL` library, a
-/// duplicate `::ROUTINE` name or a class-less `::CONSTANT` expression comes
-/// first in the file; [`Interp::install_directives`] runs the latter pair
-/// ahead of this stage instead. Measured: `::annotate routine nosuchrtn`
-/// above a duplicate `::ROUTINE` pair is 99.945 rc 157 on the oracle against
-/// 99.903 here, and above a class-less `::constant kk (1/0)` it is 99.945
-/// against 99.906; `::routine zz external` in the same positions is 98.903
-/// against the same two. Reversing each pair matches. Present at
-/// `b360783cb`, so it predates the staging; the fix is to fold this stage
-/// into that first walk, and its cost is the paragraph below.
+/// **The first walk is shared with the translation-time errors this crate
+/// finds in the same loop, and one directive can owe both.** When it does the
+/// oracle answers the translation error: measured, `::routine dup` followed
+/// by `::routine dup external "LIBRARY nosuchlib nosuchfn"` is 99.903 rc 157
+/// echoing the second directive, not 98.903. The loop's own comment says
+/// where that puts the gap check relative to its arms.
 ///
 /// **The cost is a refusal wherever the oracle would have carried on**, and
 /// it is not confined to the class error. With the `::ANNOTATE` target
@@ -1368,15 +1369,21 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
 /// ::routine r / ::annotate routine r / ::class a subclass zzznotaclass  98.909 rc 158
 /// ::class a / ::constant kk (1/0) / ::routine r / ::annotate routine r  42.3 rc 214
 /// ::class a / ::constant kk (1/0) / ::requires 'helper.rex', present    42.3 rc 214
+/// ::routine r / ::annotate routine r / a duplicate ::ROUTINE pair       99.903 rc 157
+/// ::routine r / ::annotate routine r / a class-less ::constant (1/0)    99.906 rc 157
+/// an EXTERNAL directive whose library loads, in any of the above      REASONED, NOT PROBED
 /// ```
 ///
-/// The `::CONSTANT` rows put the gap **after** the failing directive, and
-/// that is what makes them losses: with the gap first this crate refused at
-/// `62de43c0f` too, because the source-order pass reached it before the
-/// constant. Telling the installable case from the failing one means
-/// resolving the target, opening the file and loading the library, which is
-/// the work Phase 5 and Phase 7 own; until then a refusal is the answer that
-/// cannot be wrong.
+/// The last row is **reasoned rather than probed**: it follows the same code
+/// path as the rows above it, but no library in this tree loads, so nothing
+/// here has measured it and it must not be read as a measurement.
+///
+/// The rows put the gap **after** the failing directive, which is what makes
+/// them losses: with the gap first this crate refused before any of this
+/// staging existed too. Telling the installable case from the failing one
+/// means resolving the target, opening the file and loading the library,
+/// which is the work Phase 5 and Phase 7 own; until then a refusal is the
+/// answer that cannot be wrong.
 fn staged_gap(program: &Program, stage: fn(&DirectiveKind) -> bool) -> Option<Loud> {
     program
         .directives
@@ -3264,13 +3271,23 @@ impl Interp {
     /// is discarded: nothing in this crate can read it back yet, since
     /// dispatching to a `::CONSTANT` accessor is later work.
     fn install_directives(&mut self, id: ProgramId, program: &Rc<Program>) -> Result<(), Failure> {
-        // **One pass for both translation-time refusals**, because the oracle
-        // finds each by reading the directive list rather than by installing
-        // anything: a duplicate `::ROUTINE` name, and a parenthesised
-        // `::CONSTANT` with no `::CLASS` anywhere before it. Measured,
+        // **The oracle's first walk, and everything it can answer is answered
+        // here in source order** -- a duplicate `::ROUTINE` name, a
+        // parenthesised `::CONSTANT` with no `::CLASS` before it, an
+        // `::ANNOTATE` target and an `EXTERNAL` library. Measured,
         // `::constant sep (1+2)` alone in a file is rc 157 with `Error
         // 99.906`, where the identical directive under a preceding `::CLASS`
-        // reaches the install-time evaluation below instead.
+        // reaches the install-time evaluation below instead; and see
+        // `staged_gap` for the stage order this walk is the first of, and for
+        // every probe placing a form in it.
+        //
+        // **One walk rather than a walk and then a gap pass, because the
+        // oracle takes whichever of the four it reaches first.** Measured,
+        // `::annotate routine nosuchrtn` above a duplicate `::routine` pair
+        // is the oracle's 99.945 and `::routine zz external` in the same
+        // position is its 98.903, where a separate later pass answers the
+        // duplicate's 99.903 instead -- which is a wrong answer where this is
+        // a refusal (R33).
         let mut saw_class = false;
         for (index, directive) in program.directives.iter().enumerate() {
             match &directive.kind {
@@ -3304,29 +3321,30 @@ impl Interp {
                 }
                 _ => {}
             }
-        }
 
-        // The oracle's own walk over the directive list resolves `::ANNOTATE`
-        // targets and loads `EXTERNAL` libraries, ahead of the cycle check
-        // below: measured, each directive's own 99.945 or 98.903 answers a
-        // file whose classes form a cycle. Between themselves they go in
-        // source order, which one pass in source order gives for free. See
-        // `staged_gap`.
-        //
-        // The kinds are named rather than their EXTERNAL-ness, so the
-        // discrimination stays in `directive_gap` alone: it answers `None`
-        // for a `::ROUTINE`, `::METHOD` or `::ATTRIBUTE` with no `EXTERNAL`
-        // and for `::ANNOTATE PACKAGE`, and those are skipped here.
-        if let Some(loud) = staged_gap(program, |kind| {
-            matches!(
-                kind,
+            // **After the arms above, not before them**, because when one
+            // directive is both a duplicate `::ROUTINE` and an `EXTERNAL`
+            // the oracle answers the duplicate: measured, `::routine dup`
+            // followed by `::routine dup external "LIBRARY nosuchlib
+            // nosuchfn"` is 99.903 rc 157 echoing the second directive, not
+            // 98.903. Reverse that pair and the `EXTERNAL` comes first in the
+            // file and wins, which the walk gives.
+            //
+            // The kinds are named rather than their EXTERNAL-ness, so the
+            // discrimination stays in `directive_gap` alone: it answers
+            // `None` for a `::ROUTINE`, `::METHOD` or `::ATTRIBUTE` with no
+            // `EXTERNAL` and for `::ANNOTATE PACKAGE`, and those fall
+            // through here.
+            if matches!(
+                directive.kind,
                 DirectiveKind::Annotate(_)
                     | DirectiveKind::Routine(_)
                     | DirectiveKind::Method(_)
                     | DirectiveKind::Attribute(_)
-            )
-        }) {
-            return Err(loud.into());
+            ) && let Some(loud) = directive_gap(&directive.kind)
+            {
+                return Err(loud.into());
+            }
         }
 
         // **A second pass, because the oracle's own translation-time
