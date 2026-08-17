@@ -144,7 +144,9 @@ visible.
 | class-scope instance variables | `provide.xml` `xscope`; `TraceObject~activate` | same chain on the class object | 5a | built (Task 8) |
 | **Required String Values — `request("STRING")` → `makeString` → NOSTRING → `defaultName`** | `provide.xml` `reqstr`, which lists every context | `requestString :1235`, `requestStringNoNOSTRING :1302`, `defaultName :1760` | 5a | **`defaultName` limb only; `makeString` limb silently wrong** |
 | `~objectName`, `~objectName=`, `~string`, `~request` | `fundclasses.xml`, one section each | `ObjectClass.cpp:1696,1733,1760` | 5a | `~objectName=` planned; the rest rc 120 |
-| **the `Object`/`Class` native protocol** — `~class`, `~id`, `~superClass`, `~superClasses`, `~metaClass`, `~isA`, `~isSubclassOf`, `~hasMethod`, `~method`, `~copy`, `~identityHash` | `fundclasses.xml` `clsObject`, `clsClass` | `ObjectClass.cpp`, `ClassClass.cpp` | 5a (`~copy` 5b) | only `~hasMethod` answers |
+| **the `Object`/`Class` native protocol** — `~class`, `~id`, `~superClass`, `~superClasses`, `~metaClass`, `~isA`, `~isSubclassOf`, `~hasMethod`, `~method` | `fundclasses.xml` `clsObject`, `clsClass` | `ObjectClass.cpp`, `ClassClass.cpp` | 5a | only `~hasMethod` answers |
+| `~copy` | `fundclasses.xml` `clsObject` | `ObjectClass.cpp` | **5b** — it needs an instance to copy | not built |
+| **`~identityHash`, split along the line D41 draws** | `fundclasses.xml` `clsObject`; D41 | `ObjectClass.cpp` | **the message answering is 5a**; **the identity *semantics* — what two answers being equal means — are 5c**, because they are observable only once `.IdentityTable` exists | not built |
 | `.environment`, `.local`, `.context`, `.methods` as objects | `rexxpg/classes.xml` `pubobj`; D33 | `Setup.cpp`, `DirectoryClass` | 5a | built (Task 6) |
 | **Directory entry methods** — `.environment~local` answers while `hasMethod("LOCAL")` is 0 | measured; `Setup.cpp:1781` via `setMethodRexx` | `DirectoryClass::setMethodRexx :480`, `unknownValue :591` | 5a | not built |
 | **the eight-step environment-symbol search order, including the package-local directory** | `rexxpg/classes.xml` `searchord` | `PackageClass::findClass :1086` | 5a; steps 3 and 5 with 5c | steps 2 and 7 built (Task 6) |
@@ -154,7 +156,8 @@ visible.
 | **Object Destruction and Uninitialization — `UNINIT` and its propagation flags** | `provide.xml` `obdes`; `rexxpg/classes.xml` `uninit` | `ClassClass.cpp:1210` `checkUninit`, `ObjectClass.cpp:2579,2604`; flags propagate through `subclass`/`mixinClass`/`inherit` | **5b**, flags carried by 5a's code | not built |
 | **per-object methods — `SETMETHOD` and `ENHANCED`, and the scope they create** | `provide.xml` `usesem` | `ObjectClass.cpp:1829,1891`; `checkRestrictedMethod :697` | **5b** | refused |
 | `FORWARD`, and therefore `DELEGATE` | `provide.xml` `creo` uses `FORWARD` to define multi-`INIT`; `dire.xml` defines `DELEGATE` as `expose`+`forward to()` | `RexxInstructionForward`; `createDelegateMethod :2438` | **5b** | refused |
-| abstract-method and abstract-class enforcement | `provide.xml` `abscla` | `makeAbstract :1754`, `checkAbstract :1741` | **5b** (needs `~new`) | installs, unenforced |
+| **abstract-*method* enforcement** | `provide.xml` `abscla` | `makeAbstract :1754`, `checkAbstract :1741` | **5a** — it needs no instance | reachable and diverging: measured, `::METHOD m CLASS ABSTRACT` **installs at rc 0 on both sides**, and the send is oracle rc 163 `93.965 Method M is ABSTRACT and cannot be directly invoked` against this crate's rc 120 |
+| **abstract-*class* enforcement** | `provide.xml` `abscla` | `checkAbstract` inside the `~new` path | **5b** — the check lives inside `~new` | installs, unenforced |
 | `~run`, `~send`/`~sendWith`, `~start`/`~startWith` | `fundclasses.xml` `clsObject` | `ObjectClass.cpp:2185` and neighbours | **5b** (`~start`'s concurrency Phase 6) | not built |
 | `::REQUIRES` `LIBRARY NAMESPACE`, and namespace-qualified class references `ns:Class` | `dire.xml` `requ`; `clasdi` calls each class name an "optionally-qualified symbol" | `requiresDirective :2779`, `parseClassReference :287` | **5c** | refused |
 | `::OPTIONS` and the `OPTIONS` instruction | `dire.xml` `optionsd` | `optionsDirective :948` | **5c** | refused |
@@ -164,7 +167,8 @@ visible.
 | **the documented per-class method sets** | `fundclasses.xml`, `collclasses.xml`, `utilityclasses.xml`, `streamclasses.xml`, `*classmethods.xml` | everywhere | **5c** | the acceptance set of gate table C |
 | `GUARDED`/`UNGUARDED`, `REPLY`, `GUARD` legality | `provide.xml` `concurr`; `dire.xml` `methd`; D32 | `RexxInstructionReply::execute` | 5a legality, **Phase 6** semantics | `GUARD` and `REPLY` over-refused inside a method; `UNGUARDED` **agrees** — measured, `::METHOD go CLASS UNGUARDED` is rc 0 with identical stdout on both engines, so it has no Phase-5-observable effect in the reachable shape |
 | the `*-* Compiled method "X" with scope "Y".` traceback line | every error transcript through a method frame | error path | 5a | native-send half built (Task 5); the operator half is open |
-| `>M>` and `>N>` trace prefixes | `trace_oracle.rs` `PREFIX_COVERAGE` | `traceMessage` | 5a (`>M>` landed), `>N>` with class resolution | partial |
+| `>M>` trace prefix | `trace_oracle.rs` `PREFIX_COVERAGE` | `traceMessage` | 5a | landed (Task 5) |
+| **`>N>` trace prefix** | `trace_oracle.rs` `PREFIX_COVERAGE` | `RexxActivation.hpp:357` `traceClassResolution`, whose **only** caller is `ExpressionClassResolver.cpp:135` | **5c** — ruled 2026-08-17. The prefix can only be emitted by a `ClassResolver`, which the parser builds only in its qualified-class-lookup branch (`LanguageParser.cpp:3292`), so it requires a namespace-qualified symbol and therefore `::REQUIRES … NAMESPACE`, which is 5c's. Measured: `.rexx:array` with no `::REQUIRES` is rc 158, `98.987 Namespace ".REXX" not found` | not reachable before 5c |
 
 ## The mechanism boundaries
 
@@ -200,14 +204,14 @@ object's `INIT` in 5b. `fundclasses.xml` explains `ACTIVATE` by contrast with `I
 — and the contrast is the specification. Measured this session. The program, in full, because the
 natural abbreviation of it falsifies the result:
 
-```
+```rexx
 say "prologue"
 ::CLASS M MIXINCLASS Object
 ::METHOD mm CLASS                      -- CLASS-side, and this is load-bearing
   return 1
 ::CLASS K INHERIT M
 ::METHOD init CLASS
-  forward class (super) continue
+  self~init:super                      -- a scope-override send, NOT `forward`
   say "K init,     hasMethod MM =" self~hasMethod("MM")
 ::METHOD activate CLASS
   say "K activate, hasMethod MM =" self~hasMethod("MM")
@@ -227,6 +231,29 @@ other owns neither: the discriminator is the pair.
 `self~hasMethod` asks about the *class* behaviour; with a plain `::METHOD mm` on the mixin, measured,
 both lines read `0` and the transcript no longer discriminates. The 5a/5b line rests on this
 transcript, so the program is pinned here rather than described.
+
+**And the chaining send must be `self~init:super`, not `forward class (super) continue`.** An earlier
+draft of this program used `FORWARD`, which this spec's own boundary puts in 5b — a verification
+demanding something its own phase forbids, which is the exact failure that broke two tasks of the
+superseded plan. `self~init:super` is a scope-override send, which is 5a's, and measured it gives the
+three lines above byte for byte at rc 0. **A program pinned as the reason for a boundary has to be
+runnable on the near side of it**, and reading this one did not reveal that; running it did.
+
+**A second discriminator for the passes, which needs no bootstrap and no mixin.** Install ordering is
+also observable through a constant that reaches forward:
+
+```rexx
+say .A~c
+::CLASS A
+::CONSTANT c (.B~m)
+::CLASS B
+::METHOD m CLASS
+  return "from B"
+```
+
+Oracle rc 0, stdout `from B`; this crate rc 159, `97.1 … does not understand message "M"`. It is
+strictly better evidence for a claim about install ordering than a program that needs the bootstrap
+to be interesting, and it is a live divergence today.
 
 **Why the line is here and not further forward.** Instance creation is a separate documented
 mechanism with its own section, and nothing 5a needs reaches it — established by reading, not
@@ -272,7 +299,8 @@ the same hazards, which is why their verdicts come from running programs and not
 Instance construction and the whole of instance initialization (`~new`, `init`, `self~init:super`
 chaining); Object Destruction and Uninitialization; per-object methods (`SETMETHOD`, `ENHANCED`,
 `unsetMethod`) and the object-own scope they create; `FORWARD` and therefore `DELEGATE`;
-abstract-class enforcement, which is a check inside `~new`; `~copy`; the alternative invocation paths
+abstract-**class** enforcement, which is a check inside `~new` — the abstract-**method** arm needs no
+instance and stays in 5a; `~copy`; the alternative invocation paths
 `~run`, `~send`/`~sendWith`, `~start`/`~startWith` minus their concurrency; and **the instance-side
 reading of every 5a limit that could only be measured on a class object**, which Task 7 already
 recorded as a debt.
@@ -287,8 +315,9 @@ specification; splitting `DELEGATE` from `FORWARD` would be the `ACTIVATE`/`INIT
 `::REQUIRES` with `LIBRARY` and `NAMESPACE`, and therefore namespace-qualified class references on
 `METACLASS`/`SUBCLASS`/`MIXINCLASS`/`INHERIT`; `::OPTIONS` and the `OPTIONS` instruction; `::RESOURCE`
 and `.RESOURCES`; `::ROUTINE`'s option surface and `.ROUTINES`; `Package~local` and the two steps of
-the documented environment search order that cross a package boundary; and **the documented per-class
-method sets answering**, which is the acceptance set Phases 6, 7 and 8 enter on.
+the documented environment search order that cross a package boundary; **the `>N>` trace prefix**,
+which only a namespace-qualified symbol can emit; and **the documented per-class method sets
+answering**, which is the acceptance set Phases 6, 7 and 8 enter on.
 
 **Why the line is here.** Everything in 5c is a mechanism whose unit is a *package* rather than a
 class or an object — `dire.xml`'s remaining four directives, `fundclasses.xml`'s Package Class, and
@@ -623,9 +652,9 @@ these tables exist to catch.
 `Normalized`, which is DEVIATION 0: it collapses the run of ASCII spaces between a trace line's
 three-byte prefix marker and its content, for any of the oracle's nineteen markers
 (`tests/support/mod.rs`'s scope paragraph). That erasure is deliberate and pinned for the corpus, and
-it is wrong here for two compounding reasons: the enumeration keeps `>M>` and `>N>` as rows, so an
-off-by-two indent is exactly the divergence a trace row exists to catch and `Normalized` reads it as
-"stderr matches"; and stderr equality is an **input to the verdict function**, so a normalised
+it is wrong here for two compounding reasons: the enumeration carries trace-prefix rows — `>M>` in
+5a, `>N>` in 5c — so an off-by-two indent is exactly the divergence a trace row exists to catch and
+`Normalized` reads it as "stderr matches"; and stderr equality is an **input to the verdict function**, so a normalised
 comparison silently converts `diverge-stderr` into `agree` and `diverge-both` into `diverge-stdout`.
 `ir_dual` cannot cover for it either — both engines format trace through one `trace.rs`, so a wrong
 indent is wrong identically on both arms.
@@ -1055,14 +1084,31 @@ Every decision, one row, no gaps.
 | **D38** — `::CONSTANT` is this phase's, specifically its parenthesised expression form | **amended** | Three documented rules the old text does not carry, all in `dire.xml` `constantd` and all confirmed: a `::CONSTANT` creates **both an instance method and a class method** — measured, `.K~c` and `.K~new~c` are both `42`; the expression form runs **as a method against the class object with `self` bound** (`instructions/ClassDirective.cpp:257`'s `resolveConstants` calls `setScope` at `:273`); forward references to calculated constants are refused. The floating-form refusal the old spec measured (99.906, rc 157) is confirmed by the documentation as a rule rather than being an oracle quirk |
 | **D39** — the bootstrap has no oracle transcript; the two setup methods are provided during it and removed after | **carried, extended** | Its sibling is the REXX_DEFINED lock, which neither spec nor plan mentions. `liveGeneral` (`ClassClass.cpp:134`) sets `setRexxDefined()` under `PREPARINGIMAGE` and repoints `package` to `TheRexxPackage`; measured, `.Array~package~name` is `REXX` and `.Array~define("ZORK", .methods["Z"])` is rc 158 with `*-* Compiled method "DEFINE" with scope "Class".` and `Error 98.985: User additions are not allowed to the REXX language classes.` A bootstrap that finishes without setting it lets `.string~inherit(...)` succeed at rc 0 where the oracle raises — a divergence any corpus program can see |
 | **D40** — `Body::Instance`'s association list replaced by a scope-keyed variable pool; `EXPOSE` is not new machinery | **carried** | Landed in Task 8 |
-| **D41** — object identity is not modelled; handle equality, licensed as deviation 4 | **carried** | Observable only once `.IdentityTable` and `~identityHash` exist, which is 5c |
+| **D41** — object identity is not modelled; handle equality, licensed as deviation 4 | **carried** | Observable only once `.IdentityTable` exists, which is 5c. **Named as a split under D46 rather than left as a single cell**: `~identityHash` *answering* is 5a's, since it is one more message on the `Object` protocol; what its answers *mean* is 5c's, and only the second half is what D41 declines to model. An earlier draft put the whole row at 5c, which read as contradicting the enumeration's own 5a placement of the protocol |
 | **D42** — literals pooled by value, one object per distinct literal per compiled unit; not global; fresh per `INTERPRET`; `.true`/`.false` through the value path | **carried** | Its `.true`/`.false` half landed with Task 6 |
 | **D43** — an object holds a behaviour reference; `define` copies before mutating, `inherit` mutates in place | **carried, extended** | The old spec's witness was one mutation at a time. Measured this session, the **pair in sequence** discriminates a version-stamped rebuild-in-place from the real thing: with `o = .K~new` first, `define` **then** `inherit` leaves `o~hasMethod("FROMMIXIN")` and `o~hasMethod("LATER")` both `0`, while `inherit` **then** `define` leaves them `1` and `0`. A rebuild-in-place answers `1 0` to both orderings and reddens only the first program, so both orderings are required |
-| **D44** — a class carries two behaviours; `updateInstanceSubClasses` rebuilds one, `updateSubClasses` both; `phase-5.txt` needs a class-behaviour witness | **amended** | The witness is reachable from a program **only** through `::CLASS ... METACLASS`. Measured: `::CLASS S MIXINCLASS Class` + `::CLASS K METACLASS S` gives `say .K~classSideHi` = `class-side hi` at rc 0, while the `~inherit` route is refused by the oracle itself — `.K~inherit(.S)` is rc 158, `98.943 Class "The K class" is not a subclass of "The S class" base class "The Class class"`. So **`METACLASS` enters the phase**; the superseded plan kept it refused by design and named it uncovered, which made D44's own witness unreachable |
+| **D44** — a class carries two behaviours; `updateInstanceSubClasses` rebuilds one, `updateSubClasses` both; `phase-5.txt` needs a class-behaviour witness | **amended** | The witness is reachable from a program **only** through `::CLASS ... METACLASS` — the `~inherit` route is refused by the oracle itself, `.K~inherit(.S)` being rc 158, `98.943 Class "The K class" is not a subclass of "The S class" base class "The Class class"`. So **`METACLASS` enters the phase**; the superseded plan kept it refused by design and named it uncovered, which made D44's own witness unreachable. **The witness program is pinned below rather than described**, because the natural way to write it does not work |
 | **D45** — the security manager is seam only; exactly one chokepoint at dispatch and one at directory lookup, each asserted | **carried, extended** | The dispatch chokepoint is the one `PROTECTED` routes through (`processProtectedMethod :976`), which is what makes the seam's placement checkable rather than nominal, and the access-scope checks (`checkPrivate :609`, `checkPackage :659`) must sit inside it rather than beside it |
 
 **Buckets: carried 13, amended 6, superseded 2, withdrawn 0.** Carried: D26, D28, D29, D32, D34,
 D35, D37, D39, D40, D41, D42, D43, D45. Amended: D25, D27, D31, D33, D38, D44. Superseded: D30, D36.
+
+**D44's class-behaviour witness, in full, because the obvious variant of it does not work:**
+
+```rexx
+say .k~classSideHi
+::CLASS S MIXINCLASS Class
+::METHOD classSideHi                   -- NO `CLASS` keyword; see below
+  return "class-side hi"
+::CLASS K METACLASS S
+```
+
+Oracle rc 0, stdout `class-side hi`. **`classSideHi` must not carry `CLASS`.** A metaclass donates
+its *instance* methods to the class object, so a method declared `CLASS` on the mixin lands on the
+metaclass's own class side and never reaches `.K`: measured, adding the keyword gives rc 159,
+`97.1 … does not understand message "CLASSSIDEHI"`. An earlier draft of this row described the
+program without saying which form it used, and got the right answer only because the probe happened
+to be written the working way — which is not a reason to trust it.
 
 ## The superseded spec's other two inventories
 
