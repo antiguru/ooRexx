@@ -5,8 +5,11 @@ D45 live there and are not restated.
 **Evidence:** `docs/superpowers/specs/2026-08-15-phase-5-inherited-surface.md`, a dated reading of
 `11638b91e`.
 **Entry:** met. `perf-baseline.md`'s "The pre-Phase-5 baseline" pins the standing at `b029abe77`.
-**Exit:** a driver program that calls `CoreClasses.orx` with a Package object runs it to `exit` on
-both engines, with `StreamClasses.orx` and `PlatformObjects.orx` installed on the way.
+**Exit: two gates, not one. Split 2026-08-17 by Moritz** -- see "Why this plan is split" below.
+**5a-core** exits when the object model is demonstrated on its own terms, task by task, against the
+oracle. **5a-bootstrap** exits when a driver program that calls `CoreClasses.orx` with a Package
+object runs it to `exit` on both engines, with `StreamClasses.orx` and `PlatformObjects.orx`
+installed on the way.
 
 **Revised once, after a four-reviewer panel demolished the first draft's scope.** The reports are in
 `.superpowers/sdd/2026-08-15-phase-5a-native-layer/` and committed under
@@ -45,6 +48,41 @@ speculatively for 5b.
 `CoreClasses.orx`'s prologue to complete. **5b** is the rest of the object surface -- `~new` and
 `init`, `FORWARD`, per-object `~setMethod`, and the collection classes' own Rexx method bodies.
 **5c** is the library classes and the corpus gate.
+
+## Why this plan is split, 2026-08-17
+
+**The first version of this plan had holes of a specific shape, and the shape is the finding.** Its
+task list was derived top-down from the object-model spec; its gate was bottom-up, `CoreClasses.orx`
+parsing and executing. **Nobody reconciled the two**, so the tasks enumerate what the design expected
+the object model to need rather than what that file actually demands. `ABSTRACT` and `UNGUARDED`
+appear nowhere in this plan; `MIXINCLASS` appears once, in Task 3's prose about the C++. The section
+before Task 14 records the measured table.
+
+**Plan review cannot reliably find that**, and the record shows it: a four-reviewer panel demolished
+the first draft's scope and did not find these. The gap between a top-down task list and a bottom-up
+gate is closed by enumerating the workload and diffing it against the tree -- a mechanical check, not
+a reading -- which is why the finding surfaced only when Task 8 tripped over it.
+
+**So the gate splits in two, and the workload becomes an instrument rather than an oracle.**
+
+* **5a-core -- the object model, measured directly.** Tasks 1 to 9, plus Tasks 15 and 16, gated by
+  Task 17. Each construct is demonstrated against the oracle on a program written for it, so signal
+  arrives per task instead of once at the end, and "the object model is right" is defined by
+  differentials rather than by whether one large file happens to run.
+* **5a-bootstrap -- `CoreClasses.orx` and the run.** Tasks 10 to 14, gated by Task 14 as before.
+
+**`CoreClasses.orx` is demoted from gate to coverage instrument for 5a-core**, and that demotion has
+a mechanism rather than an intention: **a derived, committed table of every directive and option that
+file uses against what this crate refuses, which fails when the two disagree.** Prose describing the
+same thing rots -- `INSTRUCTION_WITNESSES`' count comment rotted four times while
+`corpus/keyword-exempt.txt`, which derives the same kind of fact and polices it in both directions,
+needed no correction across thirteen tasks. Task 17 owns building it.
+
+**Task numbers are stable and append-only, deliberately.** Tasks 1 to 7 are complete and reviewed,
+and their ledger entries, briefs and commit messages all cite these numbers; renumbering would
+invalidate the recovery map for a cosmetic gain. **So numbering does not imply execution order
+here**, and the order is stated once: 1-9, then 15 and 16, then 17 closes 5a-core; then 10-14, with
+14 closing 5a-bootstrap.
 
 **Two spec decisions are deliberately not 5a's, and saying so is the point.** **D41**'s
 `identityHash` rule and **D42**'s literal pooling are both observable only once `.IdentityTable` and
@@ -522,3 +560,100 @@ new crates; and every committed table this plan edited.
 unnormalised, and the report names what 5a did **not** cover -- `~new` and `init`, `FORWARD`,
 per-object `~setMethod`, and the collection classes' own Rexx bodies -- so 5b starts from a stated
 boundary rather than an assumption.
+
+---
+
+## Task 15: `::CLASS ... MIXINCLASS` and `::CLASS ... INHERIT`
+
+**Goal.** The two class-directive keywords that install a mixin and inherit one, on both engines.
+
+**This is 5a-core because the graph is**, not because `CoreClasses.orx` uses them. Task 3 built the
+class graph and its merge order; this task is the directive that reaches it. `DateTime` and
+`TimeSpan` inheriting `Comparable` and `Orderable` is the workload's evidence that the pair matters,
+not the reason the task exists.
+
+**Measured 2026-08-17, this crate, before the task:** `::class m mixinclass object` is rc 120,
+`rexx-exec: ::CLASS naming another class is not implemented (Phase 5)` -- the same refusal
+`SUBCLASS` had, from the same gate at `lib.rs:1226`, which fires on `subclass`, `metaclass` and
+`inherit` together. Task 8 narrowed that gate when it closed `SUBCLASS`; this task narrows it again
+and **`METACLASS` remains refused after it**, loudly, at rc 120 with a message naming only what it
+still refuses.
+
+**`INHERIT` has no pre-task measurement against the oracle and that is stated rather than hidden.**
+The probe written for it used a plain class as the inherit target, which the oracle answers 158, so
+the program was wrong; `INHERIT` cannot be exercised until `MIXINCLASS` installs. **Take its oracle
+transcript as the first step of this task**, before writing any code, and record it.
+
+**Verification.** Oracle-differential, both engines: a mixin installed and inherited by one class; a
+class inheriting two mixins, where the merge order is observable; and the diamond Task 14's subset
+already calls for, discriminating merge order from a chain walk. Plus the refusal side -- `METACLASS`
+still loud, with its message naming what it refuses and not what it now allows.
+
+**Done when** the inheritance differentials match the oracle byte for byte on both engines, and a
+negative control that walks the chain instead of merging reddens the diamond.
+
+---
+
+## Task 16: `PRIVATE` by caller scope
+
+**Goal.** A private method is refused from outside its defining scope and **allowed from inside it**.
+
+**This is 5a-core because a caller's scope is the object model's**, and it is currently modelled as
+nothing: this crate refuses every private send. `phase-4-exclusions.txt`'s `KNOWN GAP` on `PRIVATE`,
+`GUARD` and `PROTECTED` carries the measurement and is this task's starting point -- read it first,
+and move the `PRIVATE` limb out of it in this task's own commit under the ownership rule.
+
+**Measured, both engines** (from that entry, and reproduced 2026-08-16):
+
+    say .K~m       with `::method m class private`
+                   oracle 97.2 rc 159, `Object "The K class" cannot accept private
+                   message "M" from this context.`   crate rc 120
+    say .K~pub     where `pub` sends `self~m` from inside the class
+                   oracle rc 0 printing `private ran`   crate rc 120
+
+**The second line is the one that matters**: this crate refuses a send the oracle allows, so the
+gap is an over-refusal and not a missing check. Pair the refusal with its adjacent success, which is
+what pins the rule to caller scope rather than to something coincidental.
+
+**Every measurement in that `KNOWN GAP` entry is on a class method**, because reaching an instance
+method needs `~new`, which is 5b's. **This task inherits that limit and must restate it** rather than
+implying the instance case was covered.
+
+**Verification.** Oracle-differential on both lines above, both engines; a private send from a
+*sibling* class in the same package, which is outside the defining scope and must refuse; and a
+subclass's method sending a superclass's private method, whose answer is measured rather than
+assumed.
+
+**Done when** both lines match the oracle byte for byte on both engines, and a negative control that
+allows every private send reddens the outside-scope case.
+
+---
+
+## Task 17: the 5a-core gate
+
+**Goal.** Prove the object model rather than assert it, and hand 5a-bootstrap a measured statement of
+what it inherits.
+
+**The derived coverage table, which is this gate's own instrument and the reason the split happened.**
+Build a committed, derived table of every directive and option `CoreClasses.orx` uses against what
+this crate refuses, checked by a test that fails when the two disagree. It is derived from the file
+and from the crate's own loud refusals, so it cannot rot the way prose does -- the contrast that
+justifies it is `corpus/keyword-exempt.txt`, which polices the same kind of fact in both directions
+and needed no correction across thirteen tasks, against a one-line prose count beside it that rotted
+four times.
+
+**What the table is for, and what it is not.** It reports what 5a-bootstrap will meet; it does **not**
+gate 5a-core on that file running. A row this crate still refuses is a finding to be placed, not a
+failure -- the failure case is the table disagreeing with the tree, which means either the file uses
+something nobody enumerated or the crate refuses something the table says it allows.
+
+**Report, each a number or a named absence:** the five gate commands; the subset in `phase-5a.txt`
+passing on both engines with traced cases unnormalised; the derived table with every row's status;
+the `rexx-arms` standing against `bench-baselines/phase-5a-arms.tsv`, stating plainly that no axis
+sends a message so the sitting witnesses the classic paths and nothing more; and the object-model
+differentials task by task.
+
+**Done when** all five gate commands pass, the derived table agrees with the tree in both directions,
+and the report names what 5a-core did **not** cover -- `~new` and `init`, `FORWARD`, per-object
+`~setMethod`, `METACLASS`, and the instance-method reading of every limit measured only on class
+methods -- so 5a-bootstrap and 5b both start from a stated boundary rather than an assumption.
