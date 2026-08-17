@@ -1,0 +1,29 @@
+/* EXPOSE binds a name to the receiving object's variable pool, so a value
+   written by one send is there for the next one. The receiver here is a class
+   object, which is the only kind of object a program reaches in this phase.
+   Also: a name the pool has never held reads as its own derived name and is
+   LIT to SYMBOL, DROP returns it to that state, VALUE reaches it by name, and
+   a name listed twice binds once. */
+say '['.K~read']'
+say .K~write('first')
+say '['.K~read']'
+say .K~write('second')
+say '['.K~read']'
+say .K~forget
+say '['.K~read']'
+
+::class K
+
+::method write class
+  expose kept kept
+  use arg kept
+  return 'wrote' kept
+
+::method read class
+  expose kept
+  return kept symbol('KEPT') value('KEPT')
+
+::method forget class
+  expose kept
+  drop kept
+  return 'dropped' symbol('KEPT')

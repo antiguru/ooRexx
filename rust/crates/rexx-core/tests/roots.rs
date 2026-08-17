@@ -81,7 +81,7 @@ fn registers_in_the_temps_region_leave_the_variable_frame_growable() {
 
     // The growth the rejected design could not survive.
     let grown = roots.grow_slots(variables);
-    roots.set_slot(variables, grown, ObjRef::heap(8, 0));
+    roots.set_frame_slot(variables, grown, ObjRef::heap(8, 0));
 
     assert_eq!(roots.temp_at(registers, 3), live);
     assert!(roots.iter().any(|r| r == live));

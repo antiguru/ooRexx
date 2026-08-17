@@ -216,11 +216,6 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
         category: Category::Instruction,
     },
     Witness {
-        tag: "Expose",
-        source: "expose x\n",
-        category: Category::Instruction,
-    },
-    Witness {
         tag: "Options",
         source: "options 'x'\n",
         category: Category::Instruction,
@@ -380,7 +375,7 @@ fn assert_witness_set_is_complete() {
          InstructionKind variant (per arm, for Call and Address), no more \
          and no fewer"
     );
-    assert_eq!(expected_instructions.len(), 8);
+    assert_eq!(expected_instructions.len(), 7);
 
     let expected_exprs: Vec<&str> = EXPR_TAGS
         .iter()
@@ -411,7 +406,7 @@ fn in_scope_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        36
+        37
     );
     assert_eq!(
         EXPR_TAGS

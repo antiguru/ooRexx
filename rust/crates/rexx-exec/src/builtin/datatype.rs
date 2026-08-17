@@ -337,7 +337,7 @@ pub(crate) fn datatype(
 fn slot_has_value(interp: &mut Interp, name: &[u8]) -> bool {
     let slot = interp.slot_of(name);
     let frame = interp.activation().frame;
-    interp.roots.slot(frame, slot).is_some()
+    interp.variable(frame, slot).is_some()
 }
 
 /// Splits `tail_source` -- the text after a compound name's first period --
@@ -513,7 +513,7 @@ pub(crate) fn value(
             if let Some(new) = newvalue {
                 let slot = interp.slot_of(&upper);
                 let frame = interp.activation().frame;
-                interp.roots.set_slot(frame, slot, new);
+                interp.set_variable(frame, slot, new);
             }
             Ok(old)
         }

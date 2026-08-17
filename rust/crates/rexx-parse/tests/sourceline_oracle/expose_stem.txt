@@ -1,0 +1,27 @@
+count 26
+/* An exposed name is a full variable, so an instance variable can be a stem
+   with tails of its own: the tails written by one send are all there in the
+   next, a tail nobody wrote reads as its own derived name, and the stem
+   object -- not a copy of it -- is what the pool holds. */
+say .K~fill
+say .K~tails
+say .K~alias
+
+::class K
+
+::method fill class
+  expose s.
+  s.1 = 'one'
+  s.beta = 'two'
+  s.0 = 2
+  return 'filled' s.0
+
+::method tails class
+  expose s.
+  return s.1 s.beta s.3
+
+::method alias class
+  expose s.
+  copy. = s.
+  s.1 = 'changed'
+  return copy.1 copy.beta

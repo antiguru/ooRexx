@@ -1825,7 +1825,7 @@ mod tests {
         let two = interp.text(b"2");
         let b_slot = interp.slot_of(b"B");
         let frame = interp.activation().frame;
-        interp.roots.set_slot(frame, b_slot, two);
+        interp.roots.set_frame_slot(frame, b_slot, two);
 
         let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
         let code = planned_code(&program, &plan);
@@ -1872,7 +1872,7 @@ mod tests {
         );
         let x_slot = interp.slot_of(b"X");
         let frame = interp.activation().frame;
-        interp.roots.set_slot(frame, x_slot, one);
+        interp.roots.set_frame_slot(frame, x_slot, one);
 
         // `drop (v)` resolves its target *by the current value of v*, not by
         // the literal text "v" -- here that value is "X", so this names the
@@ -1916,7 +1916,7 @@ mod tests {
         let abc = interp.text(b"abc");
         let i_slot = interp.slot_of(b"I");
         let frame = interp.activation().frame;
-        interp.roots.set_slot(frame, i_slot, abc);
+        interp.roots.set_frame_slot(frame, i_slot, abc);
 
         let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
         let code = planned_code(&program, &plan);

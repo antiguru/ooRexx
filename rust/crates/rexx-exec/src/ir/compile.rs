@@ -906,6 +906,24 @@ pub(crate) fn compile(
                 });
                 close_region(&mut ops, at)?;
             }
+            // `EXPOSE`. No register and no expression slot: the names come
+            // out of the instruction, and a `VariableRef::Indirect` reads its
+            // selector through `Interp::read` exactly as the tree-walker's
+            // own arm does, so what this promotion decides is the clause
+            // region around it and nothing about the binding.
+            InstructionKind::Expose { .. } => {
+                let at = op_index(&ops)?;
+                let echo = echoes(trace, instruction);
+                ops.push(Op::Clause {
+                    index: instruction_index(index)?,
+                    end: 0,
+                });
+                push_echo(&mut ops, echo, instruction_index(index)?);
+                ops.push(Op::Expose {
+                    index: instruction_index(index)?,
+                });
+                close_region(&mut ops, at)?;
+            }
             _ => ops.push(Op::Generic {
                 index: instruction_index(index)?,
             }),
@@ -1811,6 +1829,7 @@ fn assert_region_ops_name_their_clause(ops: &[Op]) {
                 | Op::WhenTest { index, .. }
                 | Op::Call { index, .. }
                 | Op::Message { index }
+                | Op::Expose { index }
                 | Op::CallExpr { index, .. }
                 | Op::TraceFunction { index, .. }
                 | Op::Condition { index, .. }

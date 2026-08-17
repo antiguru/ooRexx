@@ -172,6 +172,9 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/environment_special_dot_variables_are_not_resolved.rex",
     "lang/exit_no_value.rex",
     "lang/exit_with_value.rex",
+    // Every value it names is short enough to live in the handle, so the run
+    // reaches its 98.992 without asking the arena for anything.
+    "lang/expose_outside_a_method.rex",
     "lang/if_else_chain.rex",
     "lang/iterate_from_select.rex",
     "lang/message_assignment_form.rex",

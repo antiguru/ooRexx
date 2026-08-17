@@ -175,8 +175,12 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     // crate has no code for (a receiver whose class is deferred, a primitive
     // method with no implementation) fail loudly rather than silently.
     InstructionKind::Message { .. } => ("Message", Owner::InScope),
+    // Binds its names to the receiving object's scope pool. In scope in the
+    // same sense `Message` is: the variant executes, and the sub-cases with no
+    // code -- a single compound tail, a receiver that is not a class object --
+    // fail loudly rather than silently.
+    InstructionKind::Expose { .. } => ("Expose", Owner::InScope),
     // ---- Phase 5's ----
-    InstructionKind::Expose { .. } => ("Expose", Owner::Phase("Phase 5")),
     InstructionKind::Options { .. } => ("Options", Owner::Phase("Phase 5")),
     InstructionKind::Guard(_) => ("Guard", Owner::Phase("Phase 5")),
     InstructionKind::Reply { .. } => ("Reply", Owner::Phase("Phase 5")),
@@ -376,7 +380,6 @@ pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     // not here.
     ("InstructionKind", "Call::Qualified", "Phase 5"),
     ("InstructionKind", "Address::Command", "Phase 7"),
-    ("InstructionKind", "Expose", "Phase 5"),
     ("InstructionKind", "Options", "Phase 5"),
     ("InstructionKind", "Guard", "Phase 5"),
     ("InstructionKind", "Reply", "Phase 5"),
@@ -491,18 +494,18 @@ fn variant_counts_match_the_audited_split() {
     // police the rows themselves; these are the totals.
     //
     // "In scope" means this crate answers the same bytes the oracle answers,
-    // not that every spelling of the keyword runs. `USE LOCAL` can only ever
-    // fail here, because this crate has no method invocations for it to be
-    // legal in -- but it fails with the oracle's own 98.993/99.910,
-    // measured, which is the same distinction `Procedure` draws for a
-    // misplaced `PROCEDURE`: error 17.1, and not a gap.
+    // not that every spelling of the keyword runs. `USE LOCAL` still only
+    // fails here -- its one legal placement, first in a `::METHOD` body, is
+    // loud -- but the placements that fail do so with the oracle's own
+    // 98.993/99.910, measured, which is the same distinction `Procedure`
+    // draws for a misplaced `PROCEDURE`: error 17.1, and not a gap.
     assert_eq!(INSTRUCTION_TAGS.len(), 44);
     assert_eq!(
         INSTRUCTION_TAGS
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        36
+        37
     );
     assert_eq!(
         INSTRUCTION_TAGS
@@ -523,7 +526,7 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::Phase("Phase 5"))
             .count(),
-        6
+        5
     );
     assert_eq!(
         INSTRUCTION_TAGS

@@ -144,7 +144,7 @@ fn slot_frames_keep_locals_alive_and_release_them_on_pop() {
         bytes: Bytes::from_slice(b"local"),
         num: None,
     });
-    roots.set_slot(frame, 0, v);
+    roots.set_frame_slot(frame, 0, v);
     heap.collect(&roots);
     assert!(heap.get(v).is_some(), "a live local was swept");
     roots.pop_slots(frame);
@@ -222,7 +222,7 @@ fn popping_a_frame_that_is_not_the_top_one_panics() {
 /// A variable holding `.nil` and a dropped variable render differently, so a
 /// single `ObjRef` slot has no spare value to mean "no value". D16 rejected
 /// storing slots in `temps` for exactly this reason and the same argument
-/// reaches `set_slot`.
+/// reaches `set_frame_slot`.
 #[test]
 fn a_cleared_slot_is_unset_and_differs_from_one_holding_nil() {
     let mut heap = Heap::new();
@@ -233,22 +233,26 @@ fn a_cleared_slot_is_unset_and_differs_from_one_holding_nil() {
         bytes: Bytes::from_slice(b"5"),
         num: None,
     });
-    roots.set_slot(frame, 0, five);
-    roots.set_slot(frame, 1, ObjRef::NIL);
+    roots.set_frame_slot(frame, 0, five);
+    roots.set_frame_slot(frame, 1, ObjRef::NIL);
 
-    assert_eq!(roots.slot(frame, 0), Some(five));
+    assert_eq!(roots.frame_slot(frame, 0), Some(five));
     assert_eq!(
-        roots.slot(frame, 1),
+        roots.frame_slot(frame, 1),
         Some(ObjRef::NIL),
         "a variable assigned .nil holds a value"
     );
 
-    roots.clear_slot(frame, 0);
-    roots.clear_slot(frame, 1);
+    roots.clear_frame_slot(frame, 0);
+    roots.clear_frame_slot(frame, 1);
 
-    assert_eq!(roots.slot(frame, 0), None, "drop a leaves the slot unset");
     assert_eq!(
-        roots.slot(frame, 1),
+        roots.frame_slot(frame, 0),
+        None,
+        "drop a leaves the slot unset"
+    );
+    assert_eq!(
+        roots.frame_slot(frame, 1),
         None,
         "drop y on a .nil-holding variable leaves it unset, not holding NIL"
     );
@@ -258,9 +262,10 @@ fn a_cleared_slot_is_unset_and_differs_from_one_holding_nil() {
 /// collectable.
 ///
 /// This is the half the operation exists for and the half a naive wrapper
-/// gets wrong. A `clear_slot` that only changed what `slot` returns, while
-/// `iter` went on yielding the old value, would keep the object alive with
-/// nothing pointing at it and nothing failing: the damage would surface as a
+/// gets wrong. A `clear_frame_slot` that only changed what `frame_slot`
+/// returns, while `iter` went on yielding the old value, would keep the
+/// object alive with nothing pointing at it and nothing failing: the damage
+/// would surface as a
 /// heap that does not shrink, at whatever unrelated moment a collection
 /// finally lands.
 #[test]
@@ -273,13 +278,13 @@ fn a_cleared_slot_stops_being_a_root() {
         bytes: Bytes::from_slice(b"dropped"),
         num: None,
     });
-    roots.set_slot(frame, 0, v);
+    roots.set_frame_slot(frame, 0, v);
 
     let stats = heap.collect(&roots);
     assert_eq!(stats.swept, 0, "a slot still holding the value is a root");
     assert!(heap.get(v).is_some());
 
-    roots.clear_slot(frame, 0);
+    roots.clear_frame_slot(frame, 0);
 
     let stats = heap.collect(&roots);
     assert_eq!(stats.swept, 1, "a cleared slot must stop rooting its value");
@@ -311,18 +316,18 @@ fn growth_does_not_recycle_a_cleared_slot() {
         bytes: Bytes::from_slice(b"a"),
         num: None,
     });
-    roots.set_slot(frame, 0, v);
-    roots.clear_slot(frame, 0);
+    roots.set_frame_slot(frame, 0, v);
+    roots.clear_frame_slot(frame, 0);
 
     let grown = roots.grow_slots(frame);
     assert_eq!(grown, 1, "growth appends rather than reusing the cleared 0");
 
     // The cleared slot is still addressable and still its own name's, so a
     // later assignment to that name lands where the plan says it should.
-    roots.set_slot(frame, 0, v);
-    assert_eq!(roots.slot(frame, 0), Some(v));
+    roots.set_frame_slot(frame, 0, v);
+    assert_eq!(roots.frame_slot(frame, 0), Some(v));
     assert_eq!(
-        roots.slot(frame, grown),
+        roots.frame_slot(frame, grown),
         None,
         "growth yields an unset slot"
     );

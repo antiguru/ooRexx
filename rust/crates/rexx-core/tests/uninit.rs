@@ -1,10 +1,10 @@
-use rexx_core::{Body, Bytes, Heap, ObjRef, RootSet};
+use rexx_core::{Body, Bytes, Heap, ObjRef, RootSet, ScopePools};
 
 #[test]
 fn an_object_with_uninit_is_reported_rather_than_swept_immediately() {
     let mut heap = Heap::new();
     let roots = RootSet::new();
-    let obj = heap.alloc(Body::Instance(vec![]));
+    let obj = heap.alloc(Body::Instance(ScopePools::new()));
     heap.get_mut(obj).unwrap().has_uninit = true;
     let stats = heap.collect(&roots);
     assert_eq!(stats.pending_uninit, vec![obj]);
@@ -52,7 +52,7 @@ fn a_weak_reference_to_an_uninit_pending_object_is_still_cleared() {
     // See RexxMemory.cpp:422-426.
     let mut heap = Heap::new();
     let mut roots = RootSet::new();
-    let target = heap.alloc(Body::Instance(vec![]));
+    let target = heap.alloc(Body::Instance(ScopePools::new()));
     heap.get_mut(target).unwrap().has_uninit = true;
     let weak = heap.alloc(Body::WeakRef(target));
     roots.add_global(".WEAK", weak);

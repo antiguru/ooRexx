@@ -65,7 +65,8 @@
 //! at both.
 
 use crate::activation::{
-    Activation, CallType, Entry, Inherited, TraceEntry, Trap, TrappedCondition, body_of,
+    Activation, CallType, Entry, Inherited, InstanceVar, TraceEntry, Trap, TrappedCondition,
+    body_of,
 };
 use crate::builtin;
 use crate::clause::{ClauseEntry, ClauseOutcome, ClauseValue, HandlerExit};
@@ -80,9 +81,9 @@ use crate::trace::{
 use crate::value::{exact_small_int, within_digits};
 use crate::{
     ActiveCondition, Argument, CallContext, Code, Engine, Failure, InstalledRoutine, Interp, Loud,
-    Novalue, PendingTrap,
+    Novalue, PendingTrap, VarHome,
 };
-use rexx_core::{Decoded, FrameId, ObjRef, SlotFrame, SlotRef};
+use rexx_core::{BehaviourId, Body, Decoded, FrameId, ObjRef, ScopePools, SlotFrame};
 use rexx_num::{ArithError, CompareOp, Number, SettingsError, compare_decoded};
 use rexx_parse::{
     ConditionTrap, ControlExpr, DirectiveKind, EndStyle, Expr, ExprKind, Fragment, Instruction,
@@ -1504,7 +1505,7 @@ impl Interp {
                 Ok(Flow::Next)
             }
 
-            // A simple variable back to unset (`RootSet::clear_slot`, added
+            // A simple variable back to unset (`Interp::clear_variable`, added
             // expressly for this and never `ObjRef::NIL`, which is a value
             // and not an absence -- `x = .nil; say x` and `y = .nil; drop y;
             // say y` render differently, measured in `drop_variable`'s own
@@ -2330,6 +2331,14 @@ impl Interp {
                 Ok(Flow::Next)
             }
 
+            // `EXPOSE`: binds this method's names to the receiving object's
+            // pool for the scope the method was declared in. See
+            // `exec_expose`.
+            InstructionKind::Expose { variables } => {
+                self.exec_expose(code, variables)?;
+                Ok(Flow::Next)
+            }
+
             // `USE ARG`/`USE STRICT ARG`/`USE LOCAL`. See `exec_use`.
             InstructionKind::Use(use_) => {
                 self.exec_use(code, use_, first_instruction)?;
@@ -2532,9 +2541,9 @@ impl Interp {
         match result {
             Some(result) => {
                 self.roots.push_temp(result);
-                self.roots.set_slot(frame, slot, result);
+                self.set_variable(frame, slot, result);
             }
-            None => self.roots.clear_slot(frame, slot),
+            None => self.clear_variable(frame, slot),
         }
         Ok(Flow::Next)
     }
@@ -2616,17 +2625,25 @@ impl Interp {
         // Resolved against the pool still in force, which is the caller's:
         // this activation has not swapped in a frame of its own yet.
         let outer = self.activation().frame;
-        let mut bindings: Vec<(Box<[u8]>, usize, SlotRef)> = Vec::with_capacity(names.len());
+        let mut bindings: Vec<(Box<[u8]>, usize, VarHome)> = Vec::with_capacity(names.len());
         for name in names {
             // Whole stems alias fine -- the stem object lives in one slot,
             // so aliasing that slot shares the object and every measured
             // stem transcript falls out of it. A single tail does not; see
             // `Loud::compound_expose`.
             if shape_of(&name) == NameShape::Compound {
-                return Err(Loud::compound_expose(&name).into());
+                return Err(Loud::compound_expose("PROCEDURE EXPOSE", &name).into());
             }
             let slot = self.slot_of(&name);
-            let target = self.roots.slot_ref(outer, slot);
+            // A name the enclosing method exposed has no frame storage to
+            // alias: its home is the object's pool, and the callee gets the
+            // same home rather than a slot. Measured -- a class method
+            // exposing `v` and calling `inner: procedure expose v`, which
+            // assigns `v` -- the object variable is what changes.
+            let target = match self.exposure(outer, slot) {
+                Some(var) => VarHome::Instance(var.clone()),
+                None => VarHome::Slot(self.roots.slot_ref(outer, slot)),
+            };
             bindings.push((name, slot, target));
         }
 
@@ -2658,8 +2675,12 @@ impl Interp {
         // the alias too.
         let len = self.roots.frame_len(outer);
         let inner = self.roots.push_slots(len);
+        let mut exposed: Vec<(usize, InstanceVar)> = Vec::new();
         for (_, slot, target) in &bindings {
-            self.roots.alias_slot(inner, *slot, *target);
+            match target {
+                VarHome::Slot(target) => self.roots.alias_slot(inner, *slot, *target),
+                VarHome::Instance(var) => exposed.push((*slot, var.clone())),
+            }
         }
 
         // The callee's own run-time bindings start empty -- that is the
@@ -2677,7 +2698,149 @@ impl Interp {
         activation.frame = inner;
         activation.owns_frame = true;
         activation.extra = extra;
+        // **Replaced, not extended.** This activation inherited the caller's
+        // exposures when it was pushed, and a `PROCEDURE` isolates the pool:
+        // a name the caller exposed and this list does not name is an
+        // ordinary local here. Measured -- a class method exposing `v` and
+        // calling `inner: procedure` with no list, which assigns `v` -- the
+        // object variable is unchanged.
+        activation.exposed = exposed;
         Ok(())
+    }
+
+    /// `EXPOSE`: bind every name it lists to the receiving object's variable
+    /// pool for the scope the running method was declared in.
+    ///
+    /// **The scope, not the receiver's class**, and that is the whole of what
+    /// keys a pool. Measured on the oracle with `sub subclass sup`, a class
+    /// method on each exposing `v`, and both sent to `.sub`: the two writes
+    /// stand at once and read back as `S B`, one object holding one name at
+    /// two values. That program needs `::CLASS ... SUBCLASS` to install, which
+    /// `directive_gap` still refuses, so what pins the keying here is
+    /// `rexx-core`'s `scope_pools.rs` against the storage and
+    /// `a_pool_entry_belongs_to_one_scope_and_not_to_another` against this
+    /// function.
+    ///
+    /// **The binding is per slot and lasts the activation**, so every later
+    /// route to the name -- a plan-resolved read, an `INTERPRET` fragment, a
+    /// `VALUE('V')` call, a `DROP` -- reaches the pool without knowing this
+    /// ran. `Interp::variable` and its two siblings are where that redirect is
+    /// applied.
+    ///
+    /// **Placement is the parser's rule and is not restated here.** An
+    /// `EXPOSE` that is not a method body's first instruction is 99.907 at
+    /// translation, measured, so what can reach this function is an `EXPOSE`
+    /// first in a body -- and a body that is not a method's, which is 98.992.
+    pub(crate) fn exec_expose(
+        &mut self,
+        code: &Code<'_>,
+        variables: &[VariableRef],
+    ) -> Result<(), Failure> {
+        let Some(identity) = self.activation().method_identity.as_ref() else {
+            return Err(Raised::expose_outside_method().into());
+        };
+        let scope = identity.scope;
+        let receiver = identity.receiver;
+        let owner = self.pool_owner(receiver)?;
+        for variable in variables {
+            match variable {
+                VariableRef::Direct(id) => {
+                    let name = code.symbols.name(*id).as_bytes().into();
+                    self.bind_exposed(owner, scope, name)?;
+                }
+                // **The selector's own name is bound before its value is
+                // read**, and the order is observable rather than tidy.
+                // Measured: with a class-scope `LISTER` holding `'BETA'` and a
+                // class-scope `BETA` holding `'beta-value'`, `expose (lister)`
+                // in a third method reads `[BETA][beta-value]` -- so `LISTER`
+                // was read out of the object's pool and `BETA` was exposed
+                // from it. Reading the selector first, out of the frame, gets
+                // `[BETA][BETA]`: the frame's `LISTER` is unset, so its
+                // derived name `LISTER` is what spells the list.
+                //
+                // The selector is exposed itself as well as the words it
+                // spells, which is the same plurality `PROCEDURE EXPOSE` has
+                // and is what the reads above rest on.
+                VariableRef::Indirect(id) => {
+                    let name = code.symbols.name(*id).as_bytes().into();
+                    self.bind_exposed(owner, scope, name)?;
+                    let (value, _novalue) = self.read(code, *id);
+                    let text = self.to_text(value).into_owned();
+                    for word in split_indirect_words(&text) {
+                        let word = validate_indirect_word(word)?;
+                        self.bind_exposed(owner, scope, word.into())?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Binds one name to `scope`'s pool on `owner`, for the rest of this
+    /// activation.
+    fn bind_exposed(
+        &mut self,
+        owner: ObjRef,
+        scope: ObjRef,
+        name: Box<[u8]>,
+    ) -> Result<(), Failure> {
+        // A whole stem is one value in one pool entry, so it binds like any
+        // other name; a single tail is aliasing *inside* a stem object, which
+        // this crate has no representation for. Measured on the oracle,
+        // `expose a.1` in one class method assigning `a.1` and `a.2` and the
+        // same in another reading them back: `[tail-one][A.2]`, so tail 1 is
+        // shared and tail 2 is the method's own local. Exposing the whole stem
+        // instead would be a silent wrong answer.
+        if shape_of(&name) == NameShape::Compound {
+            return Err(Loud::compound_expose("EXPOSE", &name).into());
+        }
+        let slot = self.slot_of(&name);
+        let var = InstanceVar { owner, scope, name };
+        let activation = self.activation_mut();
+        // Replaced rather than appended: `expose v v` is legal and rc 0 on the
+        // oracle, and two entries for one slot would leave every later read
+        // deciding between them by list order.
+        match activation.exposed.iter_mut().find(|(at, _)| *at == slot) {
+            Some(bound) => bound.1 = var,
+            None => activation.exposed.push((slot, var)),
+        }
+        Ok(())
+    }
+
+    /// The object whose [`rexx_core::ScopePools`] a send to `receiver` binds
+    /// into.
+    ///
+    /// **A class object gets one made for it.** `RexxClass` is an ordinary
+    /// object in the C++ and carries `objectVariables` like any other, which
+    /// is why `::method m class` may `EXPOSE` at all; here a class identity
+    /// names no arena slot, so the pools live in an arena object created on
+    /// first use and rooted for as long as the class is -- which is for ever
+    /// in this phase.
+    ///
+    /// **Any other receiver is refused rather than given one**, and the reason
+    /// is the root rather than the storage: an instance's pools live in its
+    /// own body and are reached by tracing it, so they are safe exactly while
+    /// something roots the instance -- and the receiver of a running send is
+    /// rooted here only by the `SELF` slot, which the body may assign over.
+    /// The task that creates instances (`~new`) is the one that can settle
+    /// that, and no send in this phase reaches a `::METHOD` body with a
+    /// non-class receiver.
+    fn pool_owner(&mut self, receiver: ObjRef) -> Result<ObjRef, Failure> {
+        let Some(class) = receiver.class_id() else {
+            return Err(Loud::expose_receiver().into());
+        };
+        if let Some(owner) = self.class_variables.get(&receiver) {
+            return Ok(*owner);
+        }
+        let owner = self.alloc_with(BehaviourId::OBJECT, Body::Instance(ScopePools::new()));
+        // Rooted before anything else can allocate, the rule `.environment`
+        // and `.local` are created under. The key is per class and starts with
+        // a period, so it can collide neither with another class's nor with a
+        // Rexx variable name.
+        self.roots
+            .add_global(&format!(".class-variables {class}"), owner);
+        self.class_variables.insert(receiver, owner);
+        Ok(owner)
     }
 
     /// Every name one `PROCEDURE EXPOSE` list names, in source order.
@@ -2926,7 +3089,19 @@ impl Interp {
             if !self.target_is_uninitialised(&name, frame, index) {
                 return Err(Raised::variable_reference_not_uninitialised(&name).into());
             }
-            self.roots.alias_slot(frame, index, slot);
+            match slot {
+                VarHome::Slot(slot) => self.roots.alias_slot(frame, index, slot),
+                // The same binding `EXPOSE` makes, on this activation's own
+                // slot: the target names the caller's object variable rather
+                // than any frame storage, so there is nothing to alias to.
+                VarHome::Instance(var) => {
+                    let activation = self.activation_mut();
+                    match activation.exposed.iter_mut().find(|(at, _)| *at == index) {
+                        Some(bound) => bound.1 = var,
+                        None => activation.exposed.push((index, var)),
+                    }
+                }
+            }
             // `>R>`, the alias's own line and the **only** trace line this
             // branch emits: no `>>>` and no `>=>`, because nothing was
             // evaluated and nothing was assigned (`UseInstruction.cpp:164`-
@@ -3031,7 +3206,7 @@ impl Interp {
     /// simple variable that happens to hold a stem; `Q.` is a stem variable
     /// nobody has written.
     fn target_is_uninitialised(&self, name: &[u8], frame: SlotFrame, index: usize) -> bool {
-        match self.roots.slot(frame, index) {
+        match self.variable(frame, index) {
             None => true,
             Some(value) => shape_of(name) == NameShape::Stem && self.is_uninitialised_stem(value),
         }
@@ -3313,7 +3488,7 @@ impl Interp {
                     None => self.slot_of(name),
                 };
                 let frame = self.activation().frame;
-                self.roots.set_slot(frame, slot, value);
+                self.set_variable(frame, slot, value);
                 if let Some(rendered) = rendered {
                     self.trace_assignment(indent, name, rendered);
                 }
@@ -3417,7 +3592,7 @@ impl Interp {
             NameShape::Simple => {
                 let slot = self.slot_of(name);
                 let frame = self.activation().frame;
-                self.roots.set_slot(frame, slot, value);
+                self.set_variable(frame, slot, value);
             }
             NameShape::Stem => self.stem_assign(name, value),
             NameShape::Compound => {
@@ -4746,6 +4921,15 @@ impl Interp {
                 let settings = caller.settings.clone();
                 let trace_mode = caller.trace_mode;
                 let extra = caller.extra.clone();
+                // Cloned with `extra`, and for the same reason: a label
+                // reached without `PROCEDURE` shares the caller's pool, and an
+                // exposed name is part of that pool. Measured -- a class
+                // method exposing `v`, calling a label that assigns `v`, and a
+                // second class method reading `v` back -- the assignment
+                // reaches the object variable. Without this the label writes
+                // the frame slot the exposure left empty and the write is
+                // lost.
+                let exposed = caller.exposed.clone();
                 // Cloned in and never written back, exactly like `settings`
                 // and `trace_mode` beside it -- `Activation::traps`' own doc
                 // comment has the three probes that measure the inheritance
@@ -4779,6 +4963,7 @@ impl Interp {
                     },
                 );
                 callee.extra = extra;
+                callee.exposed = exposed;
                 self.activations.push(callee);
             }
             // **A pool of its own, and not one of the five inheritances**
@@ -5044,11 +5229,17 @@ impl Interp {
             None => self.slot_of(code.symbols.name(id).as_bytes()),
         };
         let frame = self.activation().frame;
-        // Chased here, in the caller, where any alias the caller itself
-        // holds is still addressable -- the same one-step chase exposure
-        // uses, and what makes `>p` work when the caller's own `p` is
-        // already exposed from *its* caller.
-        let target = self.roots.slot_ref(frame, slot);
+        // Resolved here, in the caller, where the name's own home is: an
+        // alias the caller itself holds is still addressable, which is what
+        // makes `>p` work when the caller's own `p` came from *its* caller,
+        // and an `EXPOSE` binding is still on this activation, which is what
+        // makes it work on an object variable. Chasing the slot for an
+        // exposed name would hand the callee the empty slot the exposure left
+        // behind.
+        let target = match self.exposure(frame, slot) {
+            Some(var) => VarHome::Instance(var.clone()),
+            None => VarHome::Slot(self.roots.slot_ref(frame, slot)),
+        };
         let value = self.eval(code, expr)?;
         // The referenced variable's own spelling travels with the reference:
         // it is the reference's *kind* (`P` against `P.`) for the
@@ -5156,9 +5347,9 @@ impl Interp {
                 if let Some(rendered) = self.result_text(value) {
                     self.trace_result(base_indent, &rendered);
                 }
-                self.roots.set_slot(frame, slot, value);
+                self.set_variable(frame, slot, value);
             }
-            None => self.roots.clear_slot(frame, slot),
+            None => self.clear_variable(frame, slot),
         }
         Ok(Flow::Next)
     }
@@ -7535,7 +7726,7 @@ impl Interp {
                     None => self.slot_of(name),
                 };
                 let frame = self.activation().frame;
-                self.roots.set_slot(frame, slot, value);
+                self.set_variable(frame, slot, value);
                 // `trace_assignment` carries its own `intermediates` gate, so
                 // the check below is not a second decision about whether to
                 // *print*: it decides whether to *build* the two `Vec`s, and
@@ -8316,7 +8507,7 @@ impl Interp {
             NameShape::Simple => {
                 let slot = self.slot_of(name);
                 let frame = self.activation().frame;
-                self.roots.clear_slot(frame, slot);
+                self.clear_variable(frame, slot);
             }
             NameShape::Stem => self.stem_drop(name),
             NameShape::Compound => {

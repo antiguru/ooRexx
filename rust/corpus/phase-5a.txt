@@ -116,3 +116,22 @@ lang/method_parse_source.rex
 # answer are in the same program, so a build refusing every unrecognised
 # argument fails it too.
 lang/message_send_argument_object_not_a_string.rex
+
+# Task 8: EXPOSE and scope-keyed instance variables. A class object's own
+# variable pool round-tripped across sends, with the uninitialised state, DROP
+# and the two builtins that read a variable by name; a stem as an instance
+# variable, tails and object identity included; the four ways an internal CALL
+# meets an exposed name; the EXPOSE (list) form, whose selector is bound before
+# its value is read; and EXPOSE where there is no method invocation to expose
+# into.
+lang/expose_class_variable.rex
+lang/expose_stem.rex
+lang/expose_internal_call.rex
+lang/expose_indirect_list.rex
+lang/expose_outside_a_method.rex
+
+# Task 8: the coercion audit's own question, asked of the position EXPOSE
+# adds. An instance variable is somewhere one of the interpreter's own objects
+# can be put and taken out again, and the table's rule is whether this crate
+# already produces the oracle's bytes there.
+lang/expose_object_value.rex

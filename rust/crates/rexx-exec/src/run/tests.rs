@@ -63,6 +63,47 @@ fn run_source(interp: &mut Interp, source: &[u8]) -> Result<Option<ObjRef>, Fail
     run_activated(interp, &program)
 }
 
+/// `run_source`, with the program's directives installed first.
+///
+/// **In `Interp::run`'s own order** -- install, then activate, then run --
+/// because a `::CLASS` must exist before the main body's first clause can
+/// send it a message, which is exactly what these programs do.
+fn run_source_with_directives(
+    interp: &mut Interp,
+    source: &[u8],
+) -> Result<Option<ObjRef>, Failure> {
+    let program = parse_program(source.to_vec()).expect("test program parses");
+    let program = Rc::new(program);
+    let program_id = ProgramId(interp.programs.len());
+    interp.programs.push(Rc::clone(&program));
+    interp.install_directives(program_id, &program)?;
+    let plan = interp.plan_for(
+        BodyKey {
+            program: program_id,
+            directive: None,
+        },
+        &program.main,
+        &program.symbols,
+        &program.source,
+    );
+    let frame = interp.roots.push_slots(plan.len());
+    let id = interp.next_activation_id();
+    interp.activations.push(Activation::new(
+        id,
+        Rc::clone(&program),
+        program_id,
+        plan,
+        frame,
+    ));
+    run_activated(interp, &program)
+}
+
+/// [`run_source_with_directives`], keeping what the program printed.
+fn say_output_with_directives(interp: &mut Interp, source: &[u8]) -> Vec<u8> {
+    run_source_with_directives(interp, source).expect("test program runs");
+    std::mem::take(&mut interp.out)
+}
+
 /// `run_source`'s second half, split out so `run_source_traced` can put a
 /// `TRACE` setting on the activation between the push and the run.
 ///
@@ -165,7 +206,7 @@ fn drop_of_a_variable_returns_it_to_unset() {
         b"A\n".to_vec()
     );
 
-    // The `.nil`-versus-dropped distinction `RootSet::clear_slot` exists
+    // The `.nil`-versus-dropped distinction `RootSet::clear_frame_slot` exists
     // for: `x = .nil` renders "The NIL object"; a dropped variable
     // derives its own name instead, never that string.
     let mut interp = Interp::new();
@@ -360,7 +401,7 @@ fn drop_of_the_indirect_form_validates_before_dropping_any_of_it() {
     let frame = interp.activation().frame;
     let a_value = interp
         .roots
-        .slot(frame, a_slot)
+        .frame_slot(frame, a_slot)
         .expect("a must still be set");
     assert_eq!(
         &*interp.to_text(a_value),
@@ -5361,6 +5402,122 @@ fn procedure_expose_of_a_single_compound_tail_fails_loudly() {
         loud.message.contains("A.1"),
         "the message must name the tail it refused: {}",
         loud.message
+    );
+}
+
+// ---- EXPOSE and the scope-keyed variable pool ----
+//
+// **No value below equals its own variable's derived name**, the same rule
+// the `PROCEDURE EXPOSE` block above states: an unbound exposed read yields
+// the upcased name, so a witness holding `V` in `v` cannot tell a pool that
+// works from one that does nothing.
+//
+// The programs that agree with the oracle byte for byte are in
+// `corpus/lang/expose_*.rex` and are run by the corpus differential on both
+// engines. What is here is what a corpus program cannot carry: a loud
+// refusal, and the pool's own keying, which a program cannot reach because
+// two scopes on one object need a superclass and `::CLASS ... SUBCLASS` is
+// still a `directive_gap`.
+
+/// `EXPOSE` of a single compound tail fails loudly, the same refusal
+/// `PROCEDURE EXPOSE` makes and for the same reason.
+///
+/// Measured on the oracle: with `expose a.1` in a class method that assigns
+/// both `a.1` and `a.2`, and `expose a.1` in a second one reading them back,
+/// the answer is `[tail-one][A.2]` -- tail 1 is the object's and tail 2 is
+/// the method's own local. That is aliasing inside a stem object, and a whole
+/// name is what this crate's pool holds.
+#[test]
+fn expose_of_a_single_compound_tail_fails_loudly() {
+    let mut interp = Interp::new();
+    let failure = run_source_with_directives(
+        &mut interp,
+        b"say .K~m\n::class K\n::method m class\nexpose a.1\nreturn 1\n",
+    )
+    .unwrap_err();
+    let Failure::Loud(loud) = failure else {
+        panic!("expected Loud, got {failure:?}");
+    };
+    assert!(
+        loud.message.contains("A.1") && loud.message.starts_with("EXPOSE "),
+        "the message must name EXPOSE and the tail it refused: {}",
+        loud.message
+    );
+}
+
+/// The neighbouring success, which is what pins the refusal above to the
+/// *tail* rather than to a compound having been mentioned at all: the whole
+/// stem binds and round-trips through the pool.
+#[test]
+fn expose_of_a_whole_stem_binds_rather_than_refusing() {
+    let mut interp = Interp::new();
+    assert_eq!(
+        say_output_with_directives(
+            &mut interp,
+            b"x = .K~set\nsay .K~get\n::class K\n::method set class\n\
+              expose a.\na.1 = 'tail-one'\nreturn 1\n::method get class\n\
+              expose a.\nreturn a.1\n",
+        ),
+        b"tail-one\n".to_vec()
+    );
+}
+
+/// The pool is keyed on a scope, and a name bound in one scope is not in
+/// another's.
+///
+/// **What this can and cannot see.** It reads the pool a class method's own
+/// `EXPOSE` wrote and asks a *different* class identity for the same name: an
+/// implementation holding one flat table per object, or ignoring the scope
+/// altogether, answers the value for both and fails here. What it cannot see
+/// is the scope being confused with the *receiver*, because for a class
+/// method on `::class K` those are the same handle -- separating them needs a
+/// method inherited from a superclass, and `::CLASS ... SUBCLASS` does not
+/// install yet. `rexx-core`'s `scope_pools.rs` carries that half against the
+/// storage directly, with the transcript the oracle answers for the
+/// two-scope program (`S B`, against `B B` for a pool keyed on the object
+/// alone).
+#[test]
+fn a_pool_entry_belongs_to_one_scope_and_not_to_another() {
+    let mut interp = Interp::new();
+    assert_eq!(
+        say_output_with_directives(
+            &mut interp,
+            b"say .K~m\n::class K\n::method m class\nexpose v\n\
+              v = 'pool-value'\nreturn 'ran'\n",
+        ),
+        b"ran\n".to_vec()
+    );
+    // Read out of the package's own installed-class table rather than out of
+    // `class_variables`, whose key is the receiver: taking the scope from the
+    // map under test would make the positive half true by construction.
+    let scope = *interp
+        .package_classes
+        .values()
+        .next()
+        .expect("the program installed a package class")
+        .get(b"K".as_slice())
+        .expect("the program declared class K");
+    let owner = *interp
+        .class_variables
+        .get(&scope)
+        .expect("the EXPOSE gave K a variable object");
+    let held = interp
+        .pools_of(owner)
+        .expect("that object holds pools")
+        .get(scope, b"V")
+        .expect("K's own scope holds V");
+    assert_eq!(interp.to_text(held).into_owned(), b"pool-value".to_vec());
+    let other = interp
+        .classes()
+        .lookup("Array")
+        .expect("Array is a native class");
+    assert_eq!(
+        interp
+            .pools_of(owner)
+            .expect("that object holds pools")
+            .get(other, b"V"),
+        None,
+        "V belongs to K's pool; another scope's pool must not answer it"
     );
 }
 

@@ -1197,6 +1197,19 @@ impl Interp {
                                     };
                                     break 'region Ok(RegionEnd::Flowed(flow));
                                 }
+                                // `EXPOSE`. `exec_expose` is the tree-walker's
+                                // own arm, entered here with the one field it
+                                // reads.
+                                Op::Expose { index } => {
+                                    debug_assert_names_the_clause(code, *index, clause, "Expose");
+                                    let InstructionKind::Expose { variables } = &clause.kind else {
+                                        break 'region Err(Loud::instruction(&clause.kind).into());
+                                    };
+                                    if let Err(failure) = self.exec_expose(code, variables) {
+                                        break 'region Err(failure);
+                                    }
+                                    break 'region Ok(RegionEnd::Flowed(Flow::Next));
+                                }
                                 // An `IF`'s or a plain `WHEN`'s condition
                                 // validation and its `>>>` line, through the
                                 // same `Interp::condition_value` the
@@ -1491,6 +1504,7 @@ impl Interp {
                 Op::Queue { .. } => return Err(Loud::op_not_driven("Queue").into()),
                 Op::Call { .. } => return Err(Loud::op_not_driven("Call").into()),
                 Op::Message { .. } => return Err(Loud::op_not_driven("Message").into()),
+                Op::Expose { .. } => return Err(Loud::op_not_driven("Expose").into()),
                 Op::CallExpr { .. } => return Err(Loud::op_not_driven("CallExpr").into()),
                 Op::TraceFunction { .. } => {
                     return Err(Loud::op_not_driven("TraceFunction").into());

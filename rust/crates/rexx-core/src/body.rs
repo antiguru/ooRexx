@@ -109,8 +109,9 @@ pub enum Body {
         tails: HashMap<Vec<u8>, Option<ObjRef>>,
     },
     Array(Vec<ObjRef>),
-    /// A user-defined object: its instance variables.
-    Instance(Vec<(String, ObjRef)>),
+    /// A user-defined object: its instance variables, one pool per scope
+    /// (D40).
+    Instance(ScopePools),
     /// An object the interpreter builds for itself rather than one a program
     /// constructs: `.environment`, `.local`, a package's `.methods` table and
     /// an activation's `.context`.
@@ -125,6 +126,104 @@ pub enum Body {
     /// that is the whole point -- and the collector rewrites the target to
     /// `ObjRef::NIL` once it dies.
     WeakRef(ObjRef),
+}
+
+/// Every variable pool one object holds: one per scope that has bound a name
+/// in it, found by walking the list (`ObjectClass.cpp:2489`, whose
+/// `objectVariables` is a linked list of `VariableDictionary`s chained by
+/// `nextDictionary` and searched the same way).
+///
+/// **A pool is a full variable pool, not a table of scalars**, and that is
+/// measured rather than assumed: with `s.` exposed in a class method,
+/// `s.1`/`s.2`/`s.beta` assigned in one send and `do i over s.` run in
+/// another, the oracle prints ` 1=one BETA=three 2=two` at rc 0. So a value
+/// here is whatever a local variable can hold, a stem object with its own
+/// tails included, and nothing about tails belongs to this type -- the stem
+/// object carries them, exactly as it does in a slot. What holds one entry to
+/// being the stem *object* rather than a copy of it is
+/// `corpus/lang/expose_stem.rex`, where a second variable takes the exposed
+/// stem and sees a later write through it.
+///
+/// **Addressed by scope and name at every access rather than by an index
+/// taken once.** An index would be one number smaller per binding and would
+/// silently address another object's pool if the two ever came apart; the
+/// name is what the language actually keys on, and a pool holds few enough
+/// names that walking them is what the C++ does too.
+#[derive(Clone, Debug, Default)]
+pub struct ScopePools {
+    /// The scope's class identity, and the names it has bound. A name with no
+    /// value is **absent** rather than present-and-empty: `DROP` removes the
+    /// entry, and a reader cannot tell the two apart -- measured, a class
+    /// method exposing `v`, assigning it, and dropping it leaves a later
+    /// `expose v` reading the derived name `V`, which is what a never-bound
+    /// name reads as.
+    pools: Vec<(ObjRef, Vec<(Box<[u8]>, ObjRef)>)>,
+}
+
+impl ScopePools {
+    pub fn new() -> ScopePools {
+        ScopePools { pools: Vec::new() }
+    }
+
+    /// The value `name` holds in `scope`'s pool, or `None` when the pool does
+    /// not hold it -- which is the uninitialised state and not an error.
+    pub fn get(&self, scope: ObjRef, name: &[u8]) -> Option<ObjRef> {
+        let pool = self.pool(scope)?;
+        pool.iter()
+            .find(|(bound, _)| **bound == *name)
+            .map(|(_, value)| *value)
+    }
+
+    /// Binds `name` in `scope`'s pool, creating the pool and the entry if
+    /// this is the first write to either.
+    pub fn set(&mut self, scope: ObjRef, name: &[u8], value: ObjRef) {
+        let pool = match self.pools.iter().position(|(s, _)| *s == scope) {
+            Some(index) => &mut self.pools[index].1,
+            None => {
+                self.pools.push((scope, Vec::new()));
+                &mut self.pools.last_mut().expect("the pool just pushed").1
+            }
+        };
+        match pool.iter_mut().find(|(bound, _)| **bound == *name) {
+            Some(entry) => entry.1 = value,
+            None => pool.push((name.into(), value)),
+        }
+    }
+
+    /// Returns `name` to the uninitialised state in `scope`'s pool, which is
+    /// what `DROP` on an exposed variable does. A name the pool never held is
+    /// a no-op, exactly as `DROP` on a never-assigned local is.
+    pub fn clear(&mut self, scope: ObjRef, name: &[u8]) {
+        let Some(index) = self.pools.iter().position(|(s, _)| *s == scope) else {
+            return;
+        };
+        self.pools[index].1.retain(|(bound, _)| **bound != *name);
+    }
+
+    fn pool(&self, scope: ObjRef) -> Option<&Vec<(Box<[u8]>, ObjRef)>> {
+        self.pools
+            .iter()
+            .find(|(s, _)| *s == scope)
+            .map(|(_, pool)| pool)
+    }
+
+    /// Appends every object these pools reach: each scope's own identity and
+    /// every value bound in it.
+    ///
+    /// **Called from [`Body::trace`]'s `Instance` arm and nowhere else**, so
+    /// that the collector's reachability for an object's variables is stated
+    /// beside the storage it walks rather than a match arm away from it. A
+    /// scope identity is a class handle and names no arena slot today
+    /// ([`crate::CLASS_SLOT_BASE`]), which is the same position
+    /// [`Body::Native`]'s class handle is in and is traced for the same
+    /// reason: the arm stays correct on the day a class object is allocated
+    /// like anything else.
+    fn trace(&self, out: &mut Vec<ObjRef>) {
+        for (scope, pool) in &self.pools {
+            out.push(*scope);
+            out.extend(pool.iter().map(|(_, value)| *value));
+        }
+    }
 }
 
 /// The payload of a [`Body::Native`]: what class the object answers to, the
@@ -214,7 +313,9 @@ impl Body {
                 out.extend(tails.values().filter_map(|t| *t));
             }
             Body::Array(items) => out.extend_from_slice(items),
-            Body::Instance(vars) => out.extend(vars.iter().map(|(_, v)| *v)),
+            // Every scope's pool, walked by the storage's own type -- see
+            // [`ScopePools::trace`] for why the walk lives there.
+            Body::Instance(pools) => pools.trace(out),
             Body::Native(native) => {
                 // The class handle travels with the values. It names no arena
                 // slot today ([`crate::CLASS_SLOT_BASE`]), so the collector

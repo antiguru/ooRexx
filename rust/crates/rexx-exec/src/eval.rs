@@ -1997,7 +1997,7 @@ mod tests {
         let five = interp.text(b"5");
         let slot = interp.slot_of(b"X");
         let frame = interp.activation().frame;
-        interp.roots.set_slot(frame, slot, five);
+        interp.roots.set_frame_slot(frame, slot, five);
         let expr = match &program.main.instructions[0].kind {
             InstructionKind::Say {
                 expression: Some(expr),
@@ -2215,7 +2215,7 @@ mod tests {
         let a = interp.text(b"a");
         let slot = interp.slot_of(b"X");
         let frame = interp.activation().frame;
-        interp.roots.set_slot(frame, slot, a);
+        interp.roots.set_frame_slot(frame, slot, a);
         let expr = match &program.main.instructions[0].kind {
             InstructionKind::Say {
                 expression: Some(expr),
@@ -2325,7 +2325,7 @@ mod tests {
         interp.to_number(x).expect("007 parses, filling its cache");
         let slot = interp.slot_of(b"X");
         let frame = interp.activation().frame;
-        interp.roots.set_slot(frame, slot, x);
+        interp.roots.set_frame_slot(frame, slot, x);
         assert_eq!(eval_in_place_text(&mut interp, b"say (x = '7')"), b"1");
     }
 

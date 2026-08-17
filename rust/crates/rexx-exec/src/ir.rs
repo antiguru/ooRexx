@@ -847,6 +847,23 @@ pub(crate) enum Op {
     /// with a value and is decided inside `exec_message` rather than by an op
     /// of its own.
     Message { index: u32 },
+    /// Binds the `EXPOSE` at `index` -- its names to the receiving object's
+    /// pool for the running method's scope, through `Interp::exec_expose`,
+    /// which is the tree-walker's own arm.
+    ///
+    /// **What the promotion buys is the clause region**, exactly as
+    /// [`Op::Message`]'s does: an instruction left as [`Op::Generic`] cannot
+    /// sit inside one, so the clause echo, the `SIGL` line, the temps frame
+    /// and the failing clause's own site would come from
+    /// `Interp::step_in_temps_frame` instead of this stream. `EXPOSE` echoes
+    /// its clause and emits nothing else -- measured under `::options trace i`,
+    /// the line is `     5 *-* expose v` with no `>V>` beside it -- so there
+    /// is no trace op to emit here and the region's own echo is the whole of
+    /// it.
+    ///
+    /// **The last op of a [`Op::Clause`] region, and inside it**, for the
+    /// reason [`Op::Message`] is.
+    Expose { index: u32 },
     /// Continues at op `target`.
     Jump { target: u32 },
     /// Continues at op `target` unless register `reg` holds the logical value

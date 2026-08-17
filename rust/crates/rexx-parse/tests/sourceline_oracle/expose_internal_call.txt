@@ -1,0 +1,45 @@
+count 44
+/* An exposed name and the four ways an internal CALL can meet it. A label
+   called with no PROCEDURE shares the whole pool and its write lands in the
+   object variable; a bare PROCEDURE isolates it, so the same write is the
+   callee's own local; PROCEDURE EXPOSE takes it back; and a variable
+   reference argument carries the object variable into a callee that never
+   names it. */
+say .K~run
+say .K~read
+
+::class K
+
+::method run class
+  expose v
+  v = 'start'
+  call shared
+  say 'after shared:' v
+  call isolated
+  say 'after isolated:' v
+  call reexposed
+  say 'after reexposed:' v
+  call byreference >v
+  say 'after byreference:' v
+  return 'ran'
+
+shared:
+  v = 'shared'
+  return
+
+isolated: procedure
+  v = 'isolated'
+  return
+
+reexposed: procedure expose v
+  v = 'reexposed'
+  return
+
+byreference: procedure
+  use arg >p
+  p = 'byreference'
+  return
+
+::method read class
+  expose v
+  return 'pool holds' v

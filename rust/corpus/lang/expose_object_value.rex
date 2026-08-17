@@ -1,0 +1,23 @@
+/* An instance variable is a new position an interpreter-built object can
+   reach, so the coercion audit's own question gets asked of it: written into
+   a class object's pool by one send and read back by the next, a directory, a
+   class object and one held in a stem tail all render as they do anywhere
+   else. */
+say .K~put
+say .K~get
+
+::class K
+
+::method put class
+  expose obj cls stem.
+  obj = .environment
+  cls = .Array
+  stem.1 = .local
+  return 'put'
+
+::method get class
+  expose obj cls stem.
+  say obj
+  say cls
+  say stem.1
+  return 'got'

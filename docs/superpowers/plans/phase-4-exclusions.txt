@@ -2739,6 +2739,15 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   more. `.QUEUE`, whose class `rexx-classes` defers, and every entry of
   `.local` are in it today.
 
+  THE INSTANCE-VARIABLE ROW IS TASK 8'S ADDITION and is a storage position
+  rather than a coercion: `EXPOSE` binds a name to a pool on the receiving
+  object, so one of these objects can be written there by one send and read
+  back by the next. Measured on both engines, a class method writing
+  `.environment`, `.Array` and `.local` (the last into a stem tail) and a
+  second one reading all three back: the renderings are the oracle's byte for
+  byte at rc 0, which is what the rule above calls agreement.
+  `corpus/lang/expose_object_value.rex` is the row's witness.
+
   MOST OPERATORS ARE LOUD ON ONE OF THESE OBJECTS, and that is a separate
   defect the fix rounds found. The oracle sends the operator to its LEFT
   operand as a message, so `.array == "The Array class"` is 0 and
@@ -2827,6 +2836,7 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
     a Rexx method's argument    nothing                       rendering agrees
     a native method's argument  the method's own check        88.909    agrees
     a method's RETURN value     nothing                       rendering agrees
+    an instance variable        nothing                       rendering agrees
     -------------------------------------------------------------------------
 
   THE ROWS A METHOD ACTIVATION ADDED, Phase 5a Task 7. A class object is a

@@ -37,7 +37,7 @@
 //! better owner than the crate root.
 
 use rexx_classes::{ClassKind, MethodId};
-use rexx_core::{Heap, ObjRef, RootSet, SlotRef};
+use rexx_core::{Body, Heap, ObjRef, RootSet, SlotFrame, SlotRef};
 use rexx_parse::{
     Access, AnnotationTarget, AttributeDirective, AttributeStyle, ClassDirective, CodeBody,
     ConstantValue, Directive, DirectiveKind, Expr, ExprKind, InstructionKind, MethodDirective,
@@ -79,7 +79,7 @@ use plan::{BodyKey, CompoundName, Plan, ProgramId};
 
 // One activation: everything about the frame currently executing (D16).
 mod activation;
-use activation::{Activation, ActivationId};
+use activation::{Activation, ActivationId, InstanceVar};
 use clause::ClauseState;
 
 // `Raised` (the payload of a real Rexx condition) and `Failure` (either a
@@ -801,19 +801,44 @@ impl Loud {
         }
     }
 
+    /// `EXPOSE` in a method whose receiver is not a class object.
+    ///
+    /// **The gap is the root, not the storage.** An instance keeps its pools
+    /// in its own `Body::Instance` and the collector reaches them by tracing
+    /// it, so they are safe exactly while something roots the instance -- and
+    /// a running send's receiver is rooted here only by the `SELF` slot, which
+    /// the body may assign over. `~new` is where instances start existing and
+    /// is where that root belongs; until then this is unreachable from any
+    /// program, since every `::METHOD` body a send can enter in this phase is
+    /// reached through a class object.
+    fn expose_receiver() -> Loud {
+        Loud {
+            message: owned_message("EXPOSE on an object other than a class", Some("Phase 5")),
+        }
+    }
+
     /// `USE LOCAL` as a `::METHOD`'s first instruction, which is the one
     /// placement the oracle runs (measured, rc 0).
     ///
-    /// What it does there is bind its list as locals against the method's
-    /// scope pool, which is `EXPOSE`'s own machinery -- also a declared gap
-    /// -- so this is loud rather than the 99.910 the other placements get.
+    /// What it does there is invert `EXPOSE`: with a `USE LOCAL` present every
+    /// name the body mentions is bound to the method's scope pool *except*
+    /// the ones it lists (`autoExpose`, `LanguageParser.cpp:2232`). The pool
+    /// exists here and the inversion does not, so this is loud rather than the
+    /// 99.910 the other placements get.
     fn use_local_in_a_method() -> Loud {
         Loud {
             message: owned_message("USE LOCAL in a ::METHOD body", Some("Phase 5")),
         }
     }
 
-    /// `PROCEDURE EXPOSE` naming a single compound tail.
+    /// `EXPOSE` or `PROCEDURE EXPOSE` naming a single compound tail.
+    ///
+    /// **Both instructions reach here and `keyword` is which**, because the
+    /// gap is the same one and the measurement is the same on both sides:
+    /// with `expose a.1` in one class method assigning `a.1` and `a.2`, and
+    /// `expose a.1` in another reading them back, the oracle prints
+    /// `[tail-one][A.2]` -- tail 1 is the object's and tail 2 is the method's
+    /// own local.
     ///
     /// **Both spellings reach here, and the second is easy to miss.** The
     /// direct one is `procedure expose a.1`; the indirect one is `v = 'A.1'`
@@ -840,10 +865,10 @@ impl Loud {
     /// build them. `owned_message` is deliberately not used, since its shape
     /// belongs to the variant-keyed owner tables (`instruction_owner`) and
     /// this is a sub-case within a variant those tables call implemented.
-    fn compound_expose(name: &[u8]) -> Loud {
+    fn compound_expose(keyword: &str, name: &[u8]) -> Loud {
         Loud {
             message: format!(
-                "PROCEDURE EXPOSE of the single compound tail \"{}\" is not implemented",
+                "{keyword} of the single compound tail \"{}\" is not implemented",
                 String::from_utf8_lossy(name)
             ),
         }
@@ -1447,8 +1472,14 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // the sub-cases with no code here fail loudly through `Loud::
         // receiver_class`/`Loud::native_method` rather than answering.
         InstructionKind::Message { .. } => None,
-        InstructionKind::Expose { .. }
-        | InstructionKind::Options { .. }
+        // `EXPOSE` binds its names to the receiving object's scope pool.
+        // `None` in the same sense `Message` above is: the variant executes,
+        // and the two sub-cases with no code here -- a single compound tail,
+        // and a receiver that is not a class object -- fail loudly through
+        // `Loud::compound_expose`/`Loud::expose_receiver` rather than
+        // answering.
+        InstructionKind::Expose { .. } => None,
+        InstructionKind::Options { .. }
         | InstructionKind::Guard(_)
         | InstructionKind::Reply { .. }
         | InstructionKind::Forward(_) => Some("Phase 5"),
@@ -1909,6 +1940,24 @@ struct Interp {
     /// (D33). `None` until a `.NAME` is resolved, for the reason
     /// [`Interp::object_model`] is: building it forces the native class set.
     environment: Option<environment::EnvironmentModel>,
+    /// The arena object holding each class object's own variable pools, by
+    /// class identity.
+    ///
+    /// **A class object needs somewhere to keep object variables and has no
+    /// `Body` of its own.** `RexxClass` is an ordinary object in the C++ and
+    /// carries `objectVariables` like any other, which is why `::method m
+    /// class` can `EXPOSE`; here a class identity comes out of
+    /// [`rexx_core::CLASS_SLOT_BASE`] and names no arena slot, so the pools go
+    /// in an arena object created on first use and reached through this map.
+    /// Everything downstream then sees one shape -- a
+    /// [`rexx_core::Body::Instance`] -- whichever kind of receiver a method
+    /// was sent to.
+    ///
+    /// **Rooted through [`rexx_core::RootSet::add_global`]**, because a class
+    /// is never collected in this phase and neither, therefore, is what it
+    /// holds. An instance's pools need no such root: they are in the
+    /// instance's own body and the collector reaches them by tracing it.
+    class_variables: HashMap<ObjRef, ObjRef>,
     /// The classes each program's own `::CLASS` directives installed, keyed by
     /// the uppercased name -- `PackageClass`'s installed-class table, which
     /// `.NAME` resolution consults ahead of `.local` and `.environment`.
@@ -2561,20 +2610,37 @@ struct CallContext {
     arguments: Vec<Option<Argument>>,
 }
 
+/// Where a variable lives: a frame slot, or a name in a scope pool on some
+/// object.
+///
+/// **What a `>name` argument has to carry**, and one of the two arms is not
+/// derivable from the other. A `SlotRef` addresses `RootSet` storage, and an
+/// `EXPOSE`d name has none -- its value is in the receiving object's pool, so
+/// a reference resolved as a slot would bind the callee to an empty slot the
+/// caller never reads. Measured: a class method exposing `v`, `call inner >v`
+/// into `use arg >p`, and `p` assigned in the callee -- the oracle reads the
+/// callee's write back through `v` at rc 0.
+#[derive(Clone, Debug)]
+enum VarHome {
+    Slot(SlotRef),
+    Instance(InstanceVar),
+}
+
 /// One evaluated call argument.
 ///
 /// Two variants and not a bare `ObjRef`, because `USE ARG >name` needs
-/// something an ordinary value cannot carry: which of the *caller's* slots
-/// the argument named, so the callee's own variable can be aliased to it.
-/// Measured -- `call sub2 >p` into `use arg >q` makes the callee's `q =
+/// something an ordinary value cannot carry: where in the *caller* the
+/// argument's variable lives, so the callee's own variable can be bound to
+/// it. Measured -- `call sub2 >p` into `use arg >q` makes the callee's `q =
 /// 'aliased'` visible as the caller's `p`, while the same call into a plain
-/// `use arg q` merely copies the value.
+/// `use arg q` merely copies the value. [`VarHome`] is that "where", and it
+/// is not always a slot.
 ///
-/// `Reference` carries a value as well as a slot, and that is not
+/// `Reference` carries a value as well as a home, and that is not
 /// redundancy: a variable reference used as an ordinary argument **decays
 /// to the referenced variable's value**, measured -- `say >p` prints `p`'s
 /// value, and `call sub2 >p` into a plain `use arg q` binds that value.
-/// So every argument has a value and only some have a slot.
+/// So every argument has a value and only some have a home.
 ///
 /// `Reference` also carries the referenced variable's **name**, which is
 /// there for two distinct jobs and neither is cosmetic. Its *shape* is the
@@ -2594,7 +2660,7 @@ struct CallContext {
 enum Argument {
     Value(ObjRef),
     Reference {
-        target: SlotRef,
+        target: VarHome,
         value: ObjRef,
         /// The referenced variable's own spelling, upcased as the scanner
         /// interned it, including a stem's trailing period (`P`, `P.`).
@@ -2642,6 +2708,7 @@ impl Interp {
             chunks_refused: 0,
             routines: HashMap::new(),
             object_model: None,
+            class_variables: HashMap::new(),
             environment: None,
             package_classes: HashMap::new(),
             method_bodies: HashMap::new(),
@@ -3147,6 +3214,106 @@ impl Interp {
     // `fragment_plan` and `slot_of` live in `plan.rs` (Task 6), beside
     // `Plan` itself.
 
+    /// The variable slot `slot` of `frame` names: the frame's own storage,
+    /// unless an `EXPOSE` in this activation bound that slot to a pool on the
+    /// receiving object.
+    ///
+    /// **The three functions here are the only route to a Rexx variable**, and
+    /// `RootSet`'s own `frame_slot`/`set_frame_slot`/`clear_frame_slot` are
+    /// the frame half of the decision rather than a shortcut to it. Reading
+    /// the frame directly for an exposed name answers `None` for ever, which
+    /// is an uninitialised variable -- a silent wrong answer, and the reason
+    /// the `RootSet` names say `frame`.
+    ///
+    /// **The frame is compared, not assumed.** A `PROCEDURE` callee has an
+    /// exposure list of its own over a frame of its own, and `exec_procedure`
+    /// resolves names against the *caller's* frame before swapping; a list
+    /// consulted for the wrong frame would redirect a name that is a plain
+    /// local there.
+    fn variable(&self, frame: SlotFrame, slot: usize) -> Option<ObjRef> {
+        match self.exposure(frame, slot) {
+            Some(var) => self
+                .pools_of(var.owner)
+                .and_then(|pools| pools.get(var.scope, &var.name)),
+            None => self.roots.frame_slot(frame, slot),
+        }
+    }
+
+    /// Assigns the variable slot `slot` of `frame` names.
+    fn set_variable(&mut self, frame: SlotFrame, slot: usize, value: ObjRef) {
+        // Field by field rather than through `Interp::exposure`, because the
+        // name borrowed out of the activation has to stay live across the
+        // `&mut self.heap` below; disjoint fields borrow independently where a
+        // method taking `&self` would not.
+        let activation = self.activations.last().expect("an activation is running");
+        let Some(var) = Interp::exposure_in(activation, frame, slot) else {
+            self.roots.set_frame_slot(frame, slot, value);
+            return;
+        };
+        let pools = self
+            .heap
+            .get_mut(var.owner)
+            .map(|object| &mut object.body)
+            .and_then(|body| match body {
+                Body::Instance(pools) => Some(pools),
+                _ => None,
+            })
+            .expect("an exposed variable's owner is a rooted Body::Instance");
+        pools.set(var.scope, &var.name, value);
+    }
+
+    /// Returns the variable slot `slot` of `frame` names to the uninitialised
+    /// state, which is what `DROP` does. Measured on the oracle: a class
+    /// method that exposes `v`, assigns it and drops it leaves a later `expose
+    /// v` reading the derived name `V`.
+    fn clear_variable(&mut self, frame: SlotFrame, slot: usize) {
+        let activation = self.activations.last().expect("an activation is running");
+        let Some(var) = Interp::exposure_in(activation, frame, slot) else {
+            self.roots.clear_frame_slot(frame, slot);
+            return;
+        };
+        let pools = self
+            .heap
+            .get_mut(var.owner)
+            .map(|object| &mut object.body)
+            .and_then(|body| match body {
+                Body::Instance(pools) => Some(pools),
+                _ => None,
+            })
+            .expect("an exposed variable's owner is a rooted Body::Instance");
+        pools.clear(var.scope, &var.name);
+    }
+
+    /// What an `EXPOSE` bound slot `slot` of `frame` to, if anything.
+    fn exposure(&self, frame: SlotFrame, slot: usize) -> Option<&InstanceVar> {
+        Interp::exposure_in(
+            self.activations.last().expect("an activation is running"),
+            frame,
+            slot,
+        )
+    }
+
+    /// [`Interp::exposure`] over one activation, so that a caller holding a
+    /// `&mut` borrow of another `Interp` field can still ask.
+    fn exposure_in(activation: &Activation, frame: SlotFrame, slot: usize) -> Option<&InstanceVar> {
+        if activation.exposed.is_empty() || activation.frame != frame {
+            return None;
+        }
+        activation
+            .exposed
+            .iter()
+            .find(|(at, _)| *at == slot)
+            .map(|(_, var)| var)
+    }
+
+    /// The scope pools `owner` holds, for a reader.
+    fn pools_of(&self, owner: ObjRef) -> Option<&rexx_core::ScopePools> {
+        match self.heap.get(owner).map(|object| &object.body) {
+            Some(Body::Instance(pools)) => Some(pools),
+            _ => None,
+        }
+    }
+
     /// Reads a variable, resolving its slot here.
     fn read(&mut self, code: &Code<'_>, id: SymbolId) -> (ObjRef, Novalue) {
         self.read_at(code, id, None)
@@ -3178,7 +3345,7 @@ impl Interp {
             },
         };
         let frame = self.activation().frame;
-        match self.roots.slot(frame, slot) {
+        match self.variable(frame, slot) {
             Some(value) => (value, Novalue::Set),
             // An uninitialised read yields the derived name, which for a
             // simple variable is its own upcased spelling.

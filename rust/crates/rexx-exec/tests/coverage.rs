@@ -919,6 +919,13 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/method_attribute_set_body.rex",
     "lang/method_parse_source.rex",
     "lang/message_send_argument_object_not_a_string.rex",
+    // Task 8: EXPOSE and the scope-keyed variable pool behind it.
+    "lang/expose_class_variable.rex",
+    "lang/expose_stem.rex",
+    "lang/expose_internal_call.rex",
+    "lang/expose_indirect_list.rex",
+    "lang/expose_outside_a_method.rex",
+    "lang/expose_object_value.rex",
 ];
 
 #[test]

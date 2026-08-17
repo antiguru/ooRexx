@@ -245,7 +245,7 @@ impl Interp {
             None => self.slot_of(name),
         };
         let frame = self.activation().frame;
-        match self.roots.slot(frame, slot) {
+        match self.variable(frame, slot) {
             Some(value) => value,
             None => self.text(name),
         }
@@ -309,7 +309,7 @@ impl Interp {
             None => self.slot_of(name),
         };
         let frame = self.activation().frame;
-        if let Some(value) = self.roots.slot(frame, slot) {
+        if let Some(value) = self.variable(frame, slot) {
             return value;
         }
         let stem = self.alloc_with(
@@ -320,7 +320,7 @@ impl Interp {
                 tails: HashMap::new(),
             },
         );
-        self.roots.set_slot(frame, slot, stem);
+        self.set_variable(frame, slot, stem);
         stem
     }
 
@@ -439,7 +439,7 @@ impl Interp {
     ) -> (ObjRef, Novalue) {
         let slot = self.stem_slot(stem_name, at);
         let frame = self.activation().frame;
-        let stem_value = match self.roots.slot(frame, slot) {
+        let stem_value = match self.variable(frame, slot) {
             Some(v) => v,
             // No object at all: the read site's own spelling is all there
             // is to derive from.
@@ -510,7 +510,7 @@ impl Interp {
     ) {
         let slot = self.stem_slot(stem_name, at);
         let frame = self.activation().frame;
-        match self.roots.slot(frame, slot) {
+        match self.variable(frame, slot) {
             Some(stem_value) => {
                 let object = self.heap.get_mut(stem_value).expect("a live value");
                 let Body::Stem { tails, .. } = &mut object.body else {
@@ -550,7 +550,7 @@ impl Interp {
                         tails,
                     },
                 );
-                self.roots.set_slot(frame, slot, stem);
+                self.set_variable(frame, slot, stem);
             }
         }
     }
@@ -571,7 +571,7 @@ impl Interp {
     pub(crate) fn stem_drop_tail_at(&mut self, stem_name: &[u8], at: Option<usize>, key: &[u8]) {
         let slot = self.stem_slot(stem_name, at);
         let frame = self.activation().frame;
-        if let Some(stem_value) = self.roots.slot(frame, slot) {
+        if let Some(stem_value) = self.variable(frame, slot) {
             let object = self.heap.get_mut(stem_value).expect("a live value");
             let Body::Stem { tails, .. } = &mut object.body else {
                 unreachable!(
@@ -615,7 +615,7 @@ impl Interp {
         if self.is_stem(value) {
             let slot = self.stem_slot(stem_name, at);
             let frame = self.activation().frame;
-            self.roots.set_slot(frame, slot, value);
+            self.set_variable(frame, slot, value);
         } else {
             self.replace_stem(stem_name, at, Some(value));
         }
@@ -625,10 +625,9 @@ impl Interp {
     /// (`default: None`, no tails) and rebinds the variable -- the same
     /// "replace and rebind" `stem_assign` uses, with nothing to wrap.
     ///
-    /// Not `RootSet::clear_slot`, even though one exists (added, after this
-    /// was first written, for plain `DROP` on a simple variable, whose read
-    /// path has to tell "unset" apart from every other value for 4b's
-    /// `NOVALUE`). A stem's slot is not "empty or not" the way a simple
+    /// Not `RootSet::clear_frame_slot`, even though one exists (for plain
+    /// `DROP` on a simple variable, whose read path has to tell "unset" apart
+    /// from every other value for `NOVALUE`). A stem's slot is not "empty or not" the way a simple
     /// variable's is: replacing the object is the literal reading of
     /// D15a's own wording, and it is what makes `stem_assign`'s wrap branch
     /// and this function one shared operation (`replace_stem`) rather than
@@ -713,7 +712,7 @@ impl Interp {
                 tails: HashMap::new(),
             },
         );
-        self.roots.set_slot(frame, slot, stem);
+        self.set_variable(frame, slot, stem);
     }
 
     /// The derived name for a tail with no value to answer: the stem's own
@@ -924,11 +923,11 @@ mod tests {
         // the target is not a stem.
         let u_slot = interp.slot_of(b"U");
         let frame = interp.activation().frame;
-        interp.roots.set_slot(frame, u_slot, r_value);
+        interp.roots.set_frame_slot(frame, u_slot, r_value);
 
         interp.stem_drop(b"R.");
 
-        let u_value = interp.roots.slot(frame, u_slot).expect("u was set");
+        let u_value = interp.roots.frame_slot(frame, u_slot).expect("u was set");
         assert_eq!(&*interp.to_text(u_value), b"rd");
     }
 
@@ -943,12 +942,12 @@ mod tests {
         let s_value = interp.read_stem(b"S.");
         let t_slot = interp.slot_of(b"T");
         let frame = interp.activation().frame;
-        interp.roots.set_slot(frame, t_slot, s_value);
+        interp.roots.set_frame_slot(frame, t_slot, s_value);
 
         let other = interp.text(b"other");
         interp.stem_assign(b"S.", other);
 
-        let t_value = interp.roots.slot(frame, t_slot).expect("t was set");
+        let t_value = interp.roots.frame_slot(frame, t_slot).expect("t was set");
         assert_eq!(&*interp.to_text(t_value), b"def");
     }
 
@@ -1031,7 +1030,7 @@ mod tests {
         let i_slot = interp.slot_of(b"I");
         let frame = interp.activation().frame;
         assert!(
-            interp.roots.slot(frame, i_slot).is_none(),
+            interp.roots.frame_slot(frame, i_slot).is_none(),
             "an unset tail piece must not bind anything into its own slot"
         );
     }
@@ -1044,7 +1043,7 @@ mod tests {
         let abc = interp.text(b"abc");
         let i_slot = interp.slot_of(b"I");
         let frame = interp.activation().frame;
-        interp.roots.set_slot(frame, i_slot, abc);
+        interp.roots.set_frame_slot(frame, i_slot, abc);
 
         let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
         let code = crate::planned_code(&program, &plan);
@@ -1073,9 +1072,9 @@ mod tests {
         let two = interp.text(b"2");
         let frame = interp.activation().frame;
         let i_slot = interp.slot_of(b"I");
-        interp.roots.set_slot(frame, i_slot, one);
+        interp.roots.set_frame_slot(frame, i_slot, one);
         let j_slot = interp.slot_of(b"J");
-        interp.roots.set_slot(frame, j_slot, two);
+        interp.roots.set_frame_slot(frame, j_slot, two);
 
         let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
         let code = crate::planned_code(&program, &plan);

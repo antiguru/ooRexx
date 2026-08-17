@@ -138,6 +138,7 @@ impl Root {
             | Op::Queue { .. }
             | Op::Call { .. }
             | Op::Message { .. }
+            | Op::Expose { .. }
             | Op::TraceFunction { .. }
             | Op::EndBranch
             | Op::EnterWhen { .. }

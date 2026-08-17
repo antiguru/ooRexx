@@ -624,6 +624,7 @@ impl Interp {
             MethodIdentity {
                 name: name.into(),
                 scope: resolution.scope,
+                receiver,
             },
         ));
 
@@ -640,12 +641,11 @@ impl Interp {
         // `SELF`. `slot_of` grows the frame only when the plan has no slot,
         // so a body that does mention them pays nothing.
         let self_slot = self.slot_of(b"SELF");
-        self.roots.set_slot(frame, self_slot, receiver);
+        self.set_variable(frame, self_slot, receiver);
         let super_slot = self.slot_of(b"SUPER");
         // `.nil` for the topmost scope, which is what `superScope` answers
         // there.
-        self.roots
-            .set_slot(frame, super_slot, super_scope.unwrap_or(ObjRef::NIL));
+        self.set_variable(frame, super_slot, super_scope.unwrap_or(ObjRef::NIL));
 
         // The same level state `Interp::invoke_call` saves and restores, set
         // to the same values its `::ROUTINE` arm uses -- that function's own

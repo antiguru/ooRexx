@@ -16,12 +16,12 @@ use crate::ObjRef;
 pub struct FrameId(usize);
 
 /// A handle to one activation's range of local-variable slots inside
-/// `RootSet` (D16). `push_slots`/`pop_slots` bracket its lifetime. `slot`,
-/// `set_slot` and `grow_slots` address within it. `depth` is the frame
-/// stack's length at the moment this frame was pushed, and is how
-/// `grow_slots` recognises "the top frame" even when two frames happen to
-/// start at the same offset (both pushed with `initial_len` 0).
-#[derive(Copy, Clone, Debug)]
+/// `RootSet` (D16). `push_slots`/`pop_slots` bracket its lifetime.
+/// `frame_slot`, `set_frame_slot` and `grow_slots` address within it.
+/// `depth` is the frame stack's length at the moment this frame was pushed,
+/// and is how `grow_slots` recognises "the top frame" even when two frames
+/// happen to start at the same offset (both pushed with `initial_len` 0).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct SlotFrame {
     start: usize,
     depth: usize,
@@ -308,7 +308,8 @@ impl RootSet {
 
     /// `frame`'s slot `index` as an absolute position, following an alias if
     /// one is in force. The one place the redirect is applied, so that
-    /// `slot`/`set_slot`/`clear_slot` cannot come apart on it.
+    /// `frame_slot`/`set_frame_slot`/`clear_frame_slot` cannot come apart on
+    /// it.
     fn resolve(&self, frame: SlotFrame, index: usize) -> usize {
         let position = frame.start + index;
         // `unwrap_or` and not a loop: see `slot_ref`.
@@ -317,11 +318,22 @@ impl RootSet {
 
     /// Reads slot `index` within `frame`: `None` for an unassigned or
     /// `DROP`ped variable, which is a legal outcome and not an error.
-    pub fn slot(&self, frame: SlotFrame, index: usize) -> Option<ObjRef> {
+    ///
+    /// **Frame storage, which is not the same thing as a Rexx variable**, and
+    /// the three accessors here say `frame` in their names for that reason. A
+    /// name an `EXPOSE` bound to a scope pool on the receiving object lives in
+    /// that object's `Body::Instance` and never in a slot, so a caller that
+    /// wants the variable rather than the slot goes through `rexx-exec`'s own
+    /// `Interp::variable`/`set_variable`/`clear_variable`, which decide
+    /// between the two. Asking this function for such a name answers `None`
+    /// for as long as the binding lasts -- an uninitialised variable, which
+    /// is a wrong answer nothing announces. The names are what makes a caller
+    /// choose.
+    pub fn frame_slot(&self, frame: SlotFrame, index: usize) -> Option<ObjRef> {
         self.slots[self.resolve(frame, index)]
     }
 
-    pub fn set_slot(&mut self, frame: SlotFrame, index: usize, value: ObjRef) {
+    pub fn set_frame_slot(&mut self, frame: SlotFrame, index: usize, value: ObjRef) {
         let position = self.resolve(frame, index);
         self.slots[position] = Some(value);
     }
@@ -329,21 +341,20 @@ impl RootSet {
     /// Returns slot `index` within `frame` to the unset state, which is what
     /// `DROP` on a simple variable does.
     ///
-    /// **A separate operation rather than `set_slot` taking an
+    /// **A separate operation rather than `set_frame_slot` taking an
     /// `Option<ObjRef>`**, and the choice is about call sites rather than
     /// about this file. `DROP` is a construct the language has, so a caller
-    /// that spells it `clear_slot(frame, i)` says what it means, while
-    /// `set_slot(frame, i, None)` reads at a glance like a caller that forgot
-    /// to compute a value. The read side already carries the `Option` shape,
-    /// since `slot` returns one, so nothing is hidden by keeping the common
-    /// write monomorphic. It also leaves every existing `set_slot` call
-    /// untouched, where the alternative was a mechanical `Some(...)` wrap
-    /// across the crate for no gain.
+    /// that spells it `clear_frame_slot(frame, i)` says what it means, while
+    /// `set_frame_slot(frame, i, None)` reads at a glance like a caller that
+    /// forgot to compute a value. The read side already carries the `Option`
+    /// shape, since `frame_slot` returns one, so nothing is hidden by keeping
+    /// the common write monomorphic, and the alternative would be a
+    /// mechanical `Some(...)` wrap at every write in the crate for no gain.
     ///
     /// The other half of the operation is that a cleared slot **stops being a
     /// root**, which `iter` gets right because it filters on the `Option` and
     /// this writes `None` rather than some in-band marker. That is the half
-    /// worth stating: a clearing operation that only changed what `slot`
+    /// worth stating: a clearing operation that only changed what `frame_slot`
     /// answers, while `iter` went on yielding the old value, would keep an
     /// unreachable object alive with nothing failing until a collection
     /// happened to land later, somewhere unrelated.
@@ -365,7 +376,7 @@ impl RootSet {
     /// Clearing a slot that is already unset is a no-op rather than an error,
     /// because `DROP` on a never-assigned variable is legal Rexx and does
     /// nothing.
-    pub fn clear_slot(&mut self, frame: SlotFrame, index: usize) {
+    pub fn clear_frame_slot(&mut self, frame: SlotFrame, index: usize) {
         let position = self.resolve(frame, index);
         self.slots[position] = None;
     }
@@ -428,9 +439,10 @@ impl RootSet {
     ///
     /// **Aliased slots need no filtering either, and that is a property of
     /// how they are written rather than of this loop.** A write through an
-    /// alias lands in the target's storage (`set_slot` resolves first), so an
-    /// aliasing slot never accumulates values of its own and the exposed
-    /// value is yielded exactly once, from the frame that really holds it --
+    /// alias lands in the target's storage (`set_frame_slot` resolves
+    /// first), so an aliasing slot never accumulates values of its own and
+    /// the exposed value is yielded exactly once, from the frame that really
+    /// holds it --
     /// not twice, which would merely be wasted work, and not zero times,
     /// which would collect a live object.
     ///

@@ -453,6 +453,27 @@ pub(crate) struct Activation {
     /// [`Activation::body`], because neither substitution is in the directive:
     /// [`MethodIdentity`]'s own doc has the measurements.
     pub(crate) method_identity: Option<MethodIdentity>,
+    /// Every name an `EXPOSE` in this activation bound to a scope pool on the
+    /// receiving object, by the slot index that name resolves to here.
+    ///
+    /// **Empty for all but a method activation that ran an `EXPOSE`**, and the
+    /// emptiness is the fast path: `Interp::variable` and its two siblings ask
+    /// this first and fall straight through to the frame when there is nothing
+    /// in it.
+    ///
+    /// **Keyed on the slot index rather than on the name** so that every route
+    /// to the variable agrees without re-deriving anything. A plan-resolved
+    /// read, an `INTERPRET` fragment's read and a `VALUE('V')` call all reach
+    /// `Interp::slot_of` (or the plan's own map, which is the same answer), so
+    /// keying on what they all produce is what makes the exposure invisible to
+    /// them.
+    ///
+    /// **Inherited by an internal `CALL` that shares this pool**, measured: a
+    /// class method exposing `v`, calling an internal label with no
+    /// `PROCEDURE`, and the label assigning `v`, leaves the object variable
+    /// changed. A `PROCEDURE` callee starts from an empty list and
+    /// `exec_procedure` puts back only what its own `EXPOSE` list names.
+    pub(crate) exposed: Vec<(usize, InstanceVar)>,
     /// Whether no instruction has yet been executed in this activation --
     /// where a label does not count as an instruction.
     ///
@@ -731,15 +752,17 @@ impl CallType {
     }
 }
 
-/// What `>I>`/`<I<` name for a `::METHOD` activation.
+/// What a `::METHOD` activation knows about the send that entered it.
 ///
-/// The substitutions message 101018's method form takes
-/// (`rexxmsg.xml:6480`, `Method <q>&1</q> with scope <q>&2</q> in package
-/// <q>&3</q>.`), and neither is recoverable from the directive alone: the
-/// oracle's first substitution is `getMessageName()`, the name the *send*
-/// used, which is the dictionary key and so differs from the directive's own
-/// spelling for an `::ATTRIBUTE` setter; the second is the scope the
-/// resolution came from.
+/// **Two of the three are what `>I>`/`<I<` name**: the substitutions message
+/// 101018's method form takes (`rexxmsg.xml:6480`, `Method <q>&1</q> with
+/// scope <q>&2</q> in package <q>&3</q>.`), and neither is recoverable from
+/// the directive alone -- the oracle's first substitution is
+/// `getMessageName()`, the name the *send* used, which is the dictionary key
+/// and so differs from the directive's own spelling for an `::ATTRIBUTE`
+/// setter; the second is the scope the resolution came from. The third,
+/// `receiver`, is what `EXPOSE` binds against, and the scope is read twice
+/// over because it decides that as well.
 pub(crate) struct MethodIdentity {
     /// The message name, already upcased by the parser -- measured,
     /// `::method MiXeD` announces `"MIXED"` and `::method "quoted"`
@@ -747,7 +770,43 @@ pub(crate) struct MethodIdentity {
     pub(crate) name: Box<[u8]>,
     /// The defining class, whose `~id` is printed unmodified -- measured,
     /// `::class 'k'` announces `with scope "k"`.
+    ///
+    /// **Also the pool `EXPOSE` binds into**, which is what makes one object
+    /// hold one name at two values at once: the scope is where the method was
+    /// declared, not where the send arrived, so a method inherited from a
+    /// superclass reaches that superclass's pool on the same receiver.
     pub(crate) scope: ObjRef,
+    /// The object the send was addressed to -- `SELF`.
+    ///
+    /// Here rather than read back out of the `SELF` slot when `EXPOSE` wants
+    /// it. The slot is an ordinary variable a body may assign to, so reading
+    /// it would make the pool `EXPOSE` binds depend on what the body has done
+    /// to a name, and the pool is a property of the send.
+    pub(crate) receiver: ObjRef,
+}
+
+/// One variable an `EXPOSE` bound: which object's pools hold it, which of that
+/// object's pools, and under what name.
+///
+/// **All three travel together and none of them is derivable at the point of
+/// use.** The owner is not `SELF` (a body may reassign that name), the scope
+/// is the method's declaring class rather than the receiver's own, and the
+/// name is the spelling the pool is keyed on rather than the slot index the
+/// activation reached it by.
+#[derive(Clone, Debug)]
+pub(crate) struct InstanceVar {
+    /// The object whose [`rexx_core::ScopePools`] hold this variable.
+    ///
+    /// **Not the receiver.** A class object is not an arena object, so it has
+    /// no `Body::Instance` of its own to hold pools; `Interp` gives it one and
+    /// this names that object. A class object is the only receiver an `EXPOSE`
+    /// accepts here -- `Loud::expose_receiver` refuses the rest -- so this is
+    /// always such an object, and always one `Interp::class_variables` roots.
+    pub(crate) owner: ObjRef,
+    /// Which of the owner's pools -- the running method's declaring class.
+    pub(crate) scope: ObjRef,
+    /// The name the pool is keyed on, upcased as every variable name here is.
+    pub(crate) name: Box<[u8]>,
 }
 
 impl Activation {
@@ -781,6 +840,7 @@ impl Activation {
             // as `RXCOMMAND`, whose string is `COMMAND`.
             call_type: CallType::Command,
             method_identity: None,
+            exposed: Vec::new(),
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc: 0,
@@ -889,6 +949,7 @@ impl Activation {
             entry: Entry::InternalCall,
             call_type: inherited.call_type,
             method_identity: None,
+            exposed: Vec::new(),
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc,
@@ -950,6 +1011,7 @@ impl Activation {
             entry: Entry::Routine,
             call_type,
             method_identity: None,
+            exposed: Vec::new(),
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc: 0,
@@ -1003,6 +1065,7 @@ impl Activation {
             entry: Entry::Method,
             call_type: CallType::Method,
             method_identity: Some(identity),
+            exposed: Vec::new(),
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc: 0,

@@ -237,6 +237,9 @@ pub(crate) fn render(chunk: &Chunk) -> String {
             Op::Message { index: at } => {
                 out.push_str(&format!("{index}: Message index={at}\n"));
             }
+            Op::Expose { index: at } => {
+                out.push_str(&format!("{index}: Expose index={at}\n"));
+            }
             Op::EndBranch => {
                 out.push_str(&format!("{index}: EndBranch\n"));
             }

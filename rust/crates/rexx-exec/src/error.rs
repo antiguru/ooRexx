@@ -1375,14 +1375,30 @@ impl Raised {
         Raised::syntax(98, 995, vec![name.to_vec()])
     }
 
+    /// 98.992: `EXPOSE` outside a method invocation. No substitutions.
+    ///
+    /// Measured, rc 158, in two shapes: as a program's own first instruction,
+    /// and as a `::ROUTINE`'s. Both give `The EXPOSE instruction may only be
+    /// used from method invocations.`
+    ///
+    /// **The other refusal, 99.907, is the parser's**, and is a translation
+    /// error rather than a condition: an `EXPOSE` that is not a method body's
+    /// first instruction never runs at all, which `rexx-parse` already
+    /// enforces (a label ahead of it and a `SAY` ahead of it were both
+    /// measured at 99.907, rc 157, with the program's own output empty). So
+    /// the placement rule is not restated here; what reaches this function is
+    /// an `EXPOSE` in a body that is not a method's.
+    pub(crate) fn expose_outside_method() -> Raised {
+        Raised::syntax(98, 992, Vec::new())
+    }
+
     /// 98.993: `USE LOCAL` as the first instruction executed of a top-level
     /// program. No substitutions.
     ///
     /// Measured, rc 158: `use local outer` on line 1 of a program gives `The
-    /// USE LOCAL instruction may only be used from method invocations.` This
-    /// crate has no method invocations at all, so `USE LOCAL` is never legal
-    /// here -- implementing it means implementing which of its two refusals
-    /// applies, and [`use_local_not_first`] is the other one.
+    /// USE LOCAL instruction may only be used from method invocations.`
+    /// [`use_local_not_first`] is the other of the two refusals, and what
+    /// decides between them is the entry kind -- `exec_use`'s own arm.
     ///
     /// [`use_local_not_first`]: Raised::use_local_not_first
     pub(crate) fn use_local_outside_method() -> Raised {
@@ -1399,10 +1415,6 @@ impl Raised {
     /// still "not first after a *method* invocation", so it lands here rather
     /// than on 98.993.
     ///
-    /// The shape that would separate "is a method" from "was entered by a
-    /// call" cannot be written in this phase, since no method invocation
-    /// exists to write it with; both errors are reproduced from the four
-    /// shapes that can be.
     pub(crate) fn use_local_not_first() -> Raised {
         Raised::syntax(99, 910, Vec::new())
     }
