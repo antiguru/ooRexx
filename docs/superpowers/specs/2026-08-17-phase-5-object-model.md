@@ -399,11 +399,13 @@ four books this session:
   1013 `mth*` titles. A text-level extractor derives `&ADDED50;SIZE` and the oracle has no such
   method on either arm. `rexxref.ent` defines all four as the empty string, so a DTD-resolving parser
   would be immune — **but that escape is not available here, and an earlier draft was wrong to offer
-  it.** `&nbsp;`, which the hierarchy list's indentation depends on, is **not** in `rexxref.ent`; it
-  comes only from the external DocBook DTD the DOCTYPE names by `http` URL, and `oodocs/` is a
-  read-only checkout with no DTD and no catalog, so a resolving parse fails on `provide.xml`
-  outright. **The text-level route is forced, not chosen**, and the extractor task must assume it:
-  the entity-prefix rule, the hierarchy's comment stripping and its literal `&nbsp;` counting are all
+  it.** `provide.xml` uses **four** entities `rexxref.ent` does not define: `apos`, `mdash`, `nbsp`
+  and `quot`. They come only from the external DocBook DTD the DOCTYPE names by `http` URL, and
+  `oodocs/` is a read-only checkout with no DTD and no catalog — so a local-entity-only parse dies at
+  `&mdash;` on `provide.xml:59`, long before it reaches the first `&nbsp;` at `:849`. **The
+  text-level route is forced by a family, not by one entity**, which closes the "just define that one
+  entity" repair a later reader would otherwise try. The extractor task must assume it: the
+  entity-prefix rule, the hierarchy's comment stripping and its literal `&nbsp;` counting are all
   consequences of one unavoidable choice.
 * **Group-heading titles.** Eleven `mth*` sections have a `<title>` that is not a method name:
   `Comparison Methods` on `Class`, `Object`, `String`, `Orderable` and `Pointer`; `Arithmetic
@@ -710,6 +712,7 @@ is as red as a body not listed that starts failing.
 |---|---|---|
 | **table D's rows** | the union of `dire.xml`'s per-section `<option>` and subkeyword-indexterm names with `DirectiveParser.cpp`'s per-function `SUBDIRECTIVE_*` arms | caught. The row set is committed, and the structural check compares the re-derivation against the committed file **in both directions**: a row that stops being derived is as red as one that appears |
 | **table C's concept rows** | the `<section id>` set under `provide.xml`'s `provide` chapter | caught, the same way and by the same check |
+| **table C's method rows** | every `mth*` section in the four books, **plus every `<member>` of every `xi:include`d `*classmethods.xml`** — each one either a row or a named exception | caught, the same way. R32's "every derived row answers on one arm or the other" is a *soundness* check and belongs beside this, not instead of it: it cannot see a method that was never emitted, which is the entire failure the extractor task exists to avoid |
 | **the wiring edge set** | the `chi` `<member>` list | caught the same way, **plus the `ArgUtil` assertion above**, because the oracle end-to-end run cannot see a member that was never emitted and would confirm a wrong 60-edge set |
 | **this document's own enumeration** | **nothing** | **not caught.** See below |
 
@@ -725,11 +728,47 @@ bound the damage and neither closes it:
   be missed exactly as the first two nearly were**, and the only instrument that has ever found this
   class of thing here is reading an authority end to end.
 
-**One shared residual limit on the three that are caught.** The both-directions check compares a
-derivation against a committed file, so it fires when one side moves. It does not fire when both move
-together — a regeneration committed in the same change. That is a diff for a human to read, which is
-the standing R32 chose deliberately, and it is the reason the committed row sets must be reviewed as
-artifacts rather than waved through as generated output.
+**So that instrument gets a denominator of a different kind.** Not "is the enumeration complete",
+which is unanswerable, but **which authorities have been read end to end, by whom, at which
+revision** — which is checkable, and is the shape D56 already uses for `oodocs/` and `ootest/`. This
+spec states the obligation; **a plan task owns the reading and commits the ledger** (the same split
+R32 draws, for the same reason). Each row needs a stopping point, because "read it" without one is
+not a claim anyone can check:
+
+| authority | read end to end means | status here |
+|---|---|---|
+| `rexxref/en-US/provide.xml` | every section of the `provide` chapter | **done** — that reading is what produced the concept floor |
+| `rexxref/en-US/dire.xml` | every one of its nine directive sections | **done** |
+| `fundclasses.xml`, `collclasses.xml`, `utilityclasses.xml`, `streamclasses.xml` | every `cls*` section's own prose — not every `mth*` | **not done**; sampled only |
+| `rexxpg/en-US/classes.xml` | every section of "A Closer Look at Objects" | **not done**; two sections read |
+| `ootest/` | every `testGroup` the enumeration names | **not done** — no test group was read in producing this spec |
+| the C++ | not readable end to end; the bounded stopping point is instead **every `file:line` this document cites, verified** | **not done** — most are inherited, and of those sampled, four were wrong and two file-ambiguous |
+
+The ledger is revision-stamped per row, as `corpus/keyword-exempt.txt` stamps ooTest's. A row that is
+`not done` is not a defect; a row whose stamp is older than the checkout is.
+
+**And the enumeration is a coverage device, not the last line of defence** — worth saying plainly
+beside a named hole, so nobody reads the hole as bigger than it is. The differential corpus,
+`ir_dual` and the assertion harnesses all run against the same crate, and **none of them depends on
+this enumeration being complete**. What an incomplete enumeration costs is *attribution and
+ordering*: a mechanism nobody enumerated has no owning phase and no gate row, so it surfaces late and
+as somebody's surprise rather than as a red row. That is exactly what happened to `UNKNOWN` and to
+Required String Values, and it is the cost this document exists to reduce rather than to eliminate.
+
+**Two shared residual limits on the four that are caught, and the larger one is not the obvious one.**
+
+The obvious one: the both-directions check compares a derivation against a committed file, so it
+fires when one side moves and not when both move together — a regeneration committed in the same
+change. That is a diff for a human to read, which is the standing R32 chose deliberately, and it is
+why the committed row sets must be reviewed as artifacts rather than waved through as generated
+output.
+
+The larger one: **every one of these derivations reads `oodocs/`, and [D56](#new-decisions) licenses
+a run "explicitly marked docs-less".** `oodocs/` is a git-ignored, out-of-tree checkout that none of
+CI's five platforms has, so all four checks fire only where it is present — in practice one developer
+machine per gate, on the recorded re-derivation run D56 requires. That standing is deliberate and D56
+argues for it, but D56 sits several hundred lines from the checks it governs, and a reader who meets
+this table first would take these as continuously-enforced. They are not.
 
 ### Table D — the directive and option surface
 
@@ -878,6 +917,13 @@ zero failures while the member set is wrong. **So the derivation additionally as
 is absent from the derived edge set.** An earlier draft said instead that a missing rule 1 would be
 caught by contradicting this spec's own prose about `ArgUtil`, which is prose review of a program —
 the instrument R32 rules out.
+
+That assertion is co-extensive with rule 1's whole observable effect rather than merely adjacent to
+it: measured, **the `chi` `$GENERATED` block contains exactly one XML comment, and it is the
+`ArgUtil` member** — 59 live `<member>`s plus that one, which is the entire 59-versus-60 arithmetic.
+So the assertion covers initial correctness, and a comment added upstream later is caught by the
+both-directions check instead, since the derived set moves and the committed file does not. The pair
+is complete; neither alone is.
 
 **How it fails in the direction that matters.**
 
@@ -1195,7 +1241,10 @@ which name a bootstrap that runs later than they do.
 
 ## What I could not check
 
-* **`ootest/` as a gate.** I read no test group in this session. Every `ootest` citation in the
+* **`ootest/` as a gate.** I read no test group in this session. **This and the C++ citations below
+  are the two rows the reading ledger above already carries as `not done`** — recorded there as an
+  obligation with a stopping point, and here as what that means for this document's own claims.
+  Neither is restated in a third place. Every `ootest` citation in the
   enumeration above is inherited from `.superpowers/sdd/2026-08-15-phase-5a-native-layer/object-model-correlation.md`
   and is **not independently verified here**. The three-signal rule for declaring an oracle defect
   needs `ootest` read directly, and the plan owes that reading.
