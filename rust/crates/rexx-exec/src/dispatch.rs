@@ -1394,7 +1394,7 @@ mod tests {
             Body::Stem {
                 name: b"A."[..].into(),
                 default: None,
-                tails: std::collections::HashMap::new(),
+                tails: rexx_core::NameMap::default(),
             },
         );
         assert!(matches!(

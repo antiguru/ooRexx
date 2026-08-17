@@ -35,7 +35,6 @@ use rexx_parse::{
     ParseSource, ProgramSource, Redirection, Signal, SymbolId, SymbolTable, Tail, Trace, Use,
     VariableRef, compound_parts,
 };
-use std::collections::HashMap;
 use std::rc::Rc;
 
 /// A loaded program's identity.
@@ -222,7 +221,7 @@ impl CompoundName {
 /// is worth its own measurement, not a side effect of an unrelated change.
 #[derive(Debug, Default)]
 pub(crate) struct Plan {
-    pub(crate) names: HashMap<Box<[u8]>, usize>,
+    pub(crate) names: rexx_core::NameMap<Box<[u8]>, usize>,
     pub(crate) by_symbol: Vec<Option<usize>>,
     /// The static clause indent of every instruction in this body, by index.
     ///

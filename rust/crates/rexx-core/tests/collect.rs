@@ -1,5 +1,4 @@
 use rexx_core::{BehaviourId, Body, Bytes, Heap, ObjRef, RootSet};
-use std::collections::HashMap;
 
 #[test]
 fn unreachable_objects_are_swept() {
@@ -117,7 +116,7 @@ fn a_stems_tails_and_default_are_traced() {
         bytes: Bytes::from_slice(b"dflt"),
         num: None,
     });
-    let mut tails = HashMap::new();
+    let mut tails = rexx_core::NameMap::default();
     tails.insert(b"1".to_vec(), Some(tail));
     // A tombstone: present, and reaching nothing.
     tails.insert(b"2".to_vec(), None);

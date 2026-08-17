@@ -11,6 +11,10 @@ license.workspace = true
 # object model depends on the arithmetic core.
 rexx-num = { path = "../rexx-num" }
 
+# The hasher behind `NameMap`, the two hot name-keyed tables. See that alias
+# for what it replaces and why the default one costs what it does.
+rustc-hash = "2.1.2"
+
 [dev-dependencies]
 criterion = "0.8.2"
 

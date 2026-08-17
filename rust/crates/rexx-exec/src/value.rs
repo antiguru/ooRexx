@@ -867,7 +867,6 @@ mod tests {
     use super::*;
     use rexx_core::INLINE_TEXT;
     use rexx_num::DivOp;
-    use std::collections::HashMap;
 
     /// `to_text` renders a tagged integer exactly as `i64`'s `Display` does,
     /// and the scratch it renders into is wide enough for every one of them.
@@ -1308,7 +1307,7 @@ mod tests {
             Body::Stem {
                 name: b"A.".to_vec().into(),
                 default: Some(five),
-                tails: HashMap::new(),
+                tails: rexx_core::NameMap::default(),
             },
         );
         let bare = interp.alloc_with(
@@ -1316,7 +1315,7 @@ mod tests {
             Body::Stem {
                 name: b"Q.".to_vec().into(),
                 default: None,
-                tails: HashMap::new(),
+                tails: rexx_core::NameMap::default(),
             },
         );
         let aliasing = interp.alloc_with(
@@ -1324,7 +1323,7 @@ mod tests {
             Body::Stem {
                 name: b"B.".to_vec().into(),
                 default: Some(with_default),
-                tails: HashMap::new(),
+                tails: rexx_core::NameMap::default(),
             },
         );
 
@@ -1391,7 +1390,7 @@ mod tests {
             Body::Stem {
                 name: b"A.".to_vec().into(),
                 default: Some(small),
-                tails: HashMap::new(),
+                tails: rexx_core::NameMap::default(),
             },
         );
         assert_eq!(interp.try_text(stem), None, "the default is a SmallInt");
@@ -1403,7 +1402,7 @@ mod tests {
             Body::Stem {
                 name: b"B.".to_vec().into(),
                 default: Some(text),
-                tails: HashMap::new(),
+                tails: rexx_core::NameMap::default(),
             },
         );
         assert_eq!(
@@ -1499,7 +1498,7 @@ mod tests {
             Body::Stem {
                 name: b"A.".to_vec().into(),
                 default: Some(five),
-                tails: HashMap::new(),
+                tails: rexx_core::NameMap::default(),
             },
         );
         let value = interp.to_number(stem).unwrap();
@@ -1520,7 +1519,7 @@ mod tests {
             Body::Stem {
                 name: b"Q.".to_vec().into(),
                 default: None,
-                tails: HashMap::new(),
+                tails: rexx_core::NameMap::default(),
             },
         );
         assert_eq!(interp.to_number(stem), Err(NotNumeric));
@@ -1543,7 +1542,7 @@ mod tests {
             Body::Stem {
                 name: b"A.".to_vec().into(),
                 default: Some(five),
-                tails: HashMap::new(),
+                tails: rexx_core::NameMap::default(),
             },
         );
         let b = interp.alloc_with(
@@ -1551,7 +1550,7 @@ mod tests {
             Body::Stem {
                 name: b"B.".to_vec().into(),
                 default: Some(a),
-                tails: HashMap::new(),
+                tails: rexx_core::NameMap::default(),
             },
         );
         let value = interp.to_number(b).unwrap();

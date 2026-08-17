@@ -68,7 +68,6 @@ use crate::plan::{CompoundName, TailPiece};
 use crate::{Code, Interp, Novalue};
 use rexx_core::{BehaviourId, Body, Decoded, ObjRef};
 use rexx_parse::SymbolId;
-use std::collections::HashMap;
 
 /// Names a `Body` variant without printing it.
 ///
@@ -317,7 +316,7 @@ impl Interp {
             Body::Stem {
                 name: name.into(),
                 default: None,
-                tails: HashMap::new(),
+                tails: rexx_core::NameMap::default(),
             },
         );
         self.set_variable(frame, slot, stem);
@@ -540,7 +539,7 @@ impl Interp {
                 }
             }
             None => {
-                let mut tails = HashMap::new();
+                let mut tails = rexx_core::NameMap::default();
                 tails.insert(key.to_vec(), Some(value));
                 let stem = self.alloc_with(
                     BehaviourId::STEM,
@@ -710,7 +709,7 @@ impl Interp {
             Body::Stem {
                 name: stem_name.into(),
                 default,
-                tails: HashMap::new(),
+                tails: rexx_core::NameMap::default(),
             },
         );
         self.set_variable(frame, slot, stem);

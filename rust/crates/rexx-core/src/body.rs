@@ -104,7 +104,7 @@ pub enum Body {
     Stem {
         name: Box<[u8]>,
         default: Option<ObjRef>,
-        tails: HashMap<Vec<u8>, Option<ObjRef>>,
+        tails: crate::NameMap<Vec<u8>, Option<ObjRef>>,
     },
     Array(Vec<ObjRef>),
     /// A user-defined object: its instance variables, one pool per scope
