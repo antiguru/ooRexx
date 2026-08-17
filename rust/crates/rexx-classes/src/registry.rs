@@ -416,8 +416,12 @@ impl ClassRegistry {
         self.graph.inherit_instance_methods(class, source);
     }
 
-    /// See [`ClassGraph::refresh_class_behaviour`] -- bootstrapping `.Class`
-    /// needs this once, nothing else does.
+    /// See [`ClassGraph::refresh_class_behaviour`] for what it is for.
+    /// Bootstrapping `.Class` is one caller; `rexx-exec`'s directive install
+    /// is the other, and its reason is different -- a `::CLASS` naming a
+    /// `SUBCLASS` declared later in the same file is created before that
+    /// superclass's own class methods are added, which
+    /// [`ClassGraph::class_define`] does not cascade.
     pub fn refresh_class_behaviour(&mut self, class: ObjRef) {
         self.graph.refresh_class_behaviour(class);
     }

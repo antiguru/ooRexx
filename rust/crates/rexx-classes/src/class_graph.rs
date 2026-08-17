@@ -508,11 +508,13 @@ impl ClassGraph {
         self.classes[&class].metaclass
     }
 
-    /// Force a class-behaviour rebuild without adding a method -- a
-    /// bootstrap-only escape hatch [`ClassGraph::define`]/[`ClassGraph::class_define`]
-    /// don't need and don't provide. It exists for exactly one caller-side
-    /// situation: a class whose own metaclass is *itself* (`.Class`, D44's
-    /// self-reference). Every other class's metaclass merge
+    /// Force a class-behaviour rebuild without adding a method -- an escape
+    /// hatch [`ClassGraph::define`]/[`ClassGraph::class_define`] don't need
+    /// and don't provide.
+    ///
+    /// **The bootstrap situation it was written for** is a class whose own
+    /// metaclass is *itself* (`.Class`, D44's self-reference). Every other
+    /// class's metaclass merge
     /// ([`ClassGraph::cascade_build`]'s `Side::Class` arm) reads an
     /// *already-fully-built* different class's instance behaviour, because
     /// bootstrap code builds a class's metaclass before the class itself.
@@ -523,8 +525,16 @@ impl ClassGraph {
     /// (`update_instance_sub_classes`), never the class side. Bootstrap code
     /// must call this once after populating `.Class`'s own instance
     /// methods, or `.class~hasmethod('SUBCLASS')`-shaped facts come out
-    /// false for `.Class` alone while every ordinary class gets them right --
-    /// exactly the trap this task's brief names.
+    /// false for `.Class` alone while every ordinary class gets them right.
+    ///
+    /// **The other situation is `class_define`'s own restriction being
+    /// broken.** That function is `RexxClass::defineClassMethod`, which
+    /// cascades to nothing because its own doc comment restricts it to image
+    /// build, before any subclass exists. A `::CLASS` naming a `SUBCLASS`
+    /// declared later in the same file is created before that superclass's
+    /// class methods are added, so the subclass never sees them; `rexx-exec`
+    /// rebuilds each class a program installs once that program's directives
+    /// are all in.
     pub fn refresh_class_behaviour(&mut self, class: ObjRef) {
         self.rebuild_behaviour(class, Side::Class);
     }

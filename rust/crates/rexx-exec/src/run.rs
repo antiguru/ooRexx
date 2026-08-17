@@ -2712,14 +2712,14 @@ impl Interp {
     /// pool for the scope the running method was declared in.
     ///
     /// **The scope, not the receiver's class**, and that is the whole of what
-    /// keys a pool. Measured on the oracle with `sub subclass sup`, a class
-    /// method on each exposing `v`, and both sent to `.sub`: the two writes
-    /// stand at once and read back as `S B`, one object holding one name at
-    /// two values. That program needs `::CLASS ... SUBCLASS` to install, which
-    /// `directive_gap` still refuses, so what pins the keying here is
-    /// `rexx-core`'s `scope_pools.rs` against the storage and
-    /// `a_pool_entry_belongs_to_one_scope_and_not_to_another` against this
-    /// function.
+    /// keys a pool. With `sub subclass sup`, a class method on each exposing
+    /// `v`, and both sent to `.sub`, the two writes stand at once -- one
+    /// object holding one name at two values.
+    /// `corpus/lang/expose_two_scopes.rex` is that program, run against the
+    /// oracle on both engines; `rexx-core`'s `scope_pools.rs` holds the same
+    /// property against the storage directly, and
+    /// `a_pool_entry_belongs_to_one_scope_and_not_to_another` holds it against
+    /// this function.
     ///
     /// **The binding is per slot and lasts the activation**, so every later
     /// route to the name -- a plan-resolved read, an `INTERPRET` fragment, a
@@ -9617,7 +9617,9 @@ pub(crate) fn shape_of(name: &[u8]) -> NameShape {
     }
 }
 
-/// Splits a `DROP (v)` wrapper's value into its subsidiary list's words.
+/// Splits an indirect wrapper's value into its subsidiary list's words --
+/// `DROP (v)`, `EXPOSE (v)` and `PROCEDURE EXPOSE (v)` all spell the same
+/// list and reach the same split.
 ///
 /// A blank (`' '`) or a tab (`'\t'`) separates words, any run of either
 /// counts as one separator, and an empty word never results -- measured,
@@ -9642,8 +9644,8 @@ fn is_symbol_byte(b: u8) -> bool {
     matches!(b, b'!' | b'.' | b'?' | b'_' | b'0'..=b'9' | b'A'..=b'Z' | b'a'..=b'z')
 }
 
-/// Validates one word of an indirect `DROP`'s subsidiary list and answers
-/// its upcased name, or the condition the oracle raises for it.
+/// Validates one word of an indirect subsidiary list and answers its upcased
+/// name, or the condition the oracle raises for it.
 ///
 /// Three ways a word can fail, checked in the order the oracle's own error
 /// numbers imply (a character-set check before either shape check, since a
