@@ -7804,6 +7804,75 @@ fn a_class_keyword_gap_is_raised_inside_the_class_pass() {
     }
 }
 
+/// **When one directive owes both a translation error and a gap, the
+/// translation error is the answer**, which is where the gap check sits
+/// relative to `Interp::install_directives`' first loop.
+///
+/// That loop walks the directives once and answers whichever of a duplicate
+/// `::ROUTINE` name, a class-less `::CONSTANT` expression, an `::ANNOTATE`
+/// target or an `EXTERNAL` library it reaches first -- the oracle's own order.
+/// A single `::ROUTINE` can owe two of those at once, and then the position of
+/// the gap check **inside** the loop body decides, which is a choice the
+/// source-order rule does not make for us.
+///
+/// Measured on the oracle, and this crate matches it byte for byte:
+///
+/// ```text
+/// say 'main ran'                                     rc 157
+/// ::routine dup                                        4 *-* ::routine dup external ...
+///   return 1                                         Error 99.903: Duplicate ::ROUTINE
+/// ::routine dup external "LIBRARY nosuchlib ..."     directive instruction.
+/// ```
+///
+/// So the check runs **after** the loop's own arms. Putting it at the top of
+/// the body -- the obvious place, and the one this test exists to catch --
+/// refuses that program at [`NOT_IMPLEMENTED_EXIT`] instead, turning a match
+/// into an over-refusal that no other test and no gate would see: no corpus
+/// subset program pairs the two, and every standalone `EXTERNAL` witness
+/// refuses either way.
+///
+/// The second source is the control that keeps the first from passing for the
+/// wrong reason. Reverse the pair and the `EXTERNAL` directive is what the
+/// walk reaches first, so the refusal is right there and the oracle agrees
+/// about which directive is at fault -- 98.903 rc 158 echoing line 2. Without
+/// this row a build that never consulted `directive_gap` in the loop at all
+/// would still pass the first row.
+///
+/// [`NOT_IMPLEMENTED_EXIT`]: crate::NOT_IMPLEMENTED_EXIT
+#[test]
+fn a_directive_owing_both_a_translation_error_and_a_gap_answers_the_translation_error() {
+    let outcome = routine_program(
+        b"say 'main ran'\n::routine dup\n  return 1\n          ::routine dup external \"LIBRARY nosuchlib nosuchfn\"\n",
+    );
+    let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
+    assert_eq!(outcome.exit_code, 157, "exit code, stderr {stderr}");
+    assert_eq!(outcome.stdout, b"", "stdout");
+    assert!(
+        stderr.contains("Error 99.903:  Duplicate ::ROUTINE directive instruction."),
+        "stderr {stderr}"
+    );
+    assert!(
+        stderr.contains("     4 *-* ::routine dup external"),
+        "the blamed clause must be the second directive, not the first: stderr {stderr}"
+    );
+
+    let outcome = routine_program(
+        b"say 'main ran'\n::routine dup external \"LIBRARY nosuchlib nosuchfn\"\n          ::routine dup\n  return 1\n",
+    );
+    assert_eq!(
+        outcome.exit_code,
+        crate::NOT_IMPLEMENTED_EXIT,
+        "exit code, stderr {}",
+        String::from_utf8_lossy(&outcome.stderr)
+    );
+    assert_eq!(outcome.stdout, b"", "stdout");
+    assert_eq!(
+        outcome.stderr,
+        b"rexx-exec: ::ROUTINE EXTERNAL is not implemented (Phase 7)\n".to_vec(),
+        "stderr"
+    );
+}
+
 /// A builtin's result is a value whose rendering `NUMERIC DIGITS` cannot
 /// reach, and D15 is still visible on it from the other side.
 ///
