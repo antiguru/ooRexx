@@ -1212,6 +1212,83 @@ fn owned_message(name: &str, owner: Option<&'static str>) -> String {
 /// body a send can enter. What makes a form a gap here is that installing it
 /// is something this crate cannot do at all, not that nothing reads it
 /// afterwards.
+/// The order a file's `::CLASS` directives install in: each class after the
+/// one its `SUBCLASS` names, when that target is declared in the same file.
+///
+/// **Not source order, and the oracle's is not either.** Measured, rc 0:
+/// `::class c subclass b` / `::class b subclass a` / `::class a` runs a class
+/// method declared on `a` through `.c`, so a target declared later in the file
+/// resolves. The order is also observable when nothing fails to resolve: a
+/// `::CONSTANT` whose expression raises blames the class installed **last**,
+/// and `::class b subclass a` / `::constant c (1/0)` / `::class a` blames `b`
+/// -- last in dependency order, and last in neither direction of source order.
+///
+/// **`Err` is a cycle**, carrying the directive to blame: the root of the walk
+/// that closed the loop, which is what the oracle echoes. Measured, rc 158
+/// with stdout empty and the **first** of the directives echoed, on `::class a
+/// subclass b` with `::class b subclass a`, and on `::class a subclass a`
+/// alone.
+///
+/// Depth-first over source order rather than repeated sweeps, so that the
+/// walk that finds a cycle still holds the root that started it.
+fn class_install_order(
+    program: &Program,
+    declared: &HashMap<Box<[u8]>, usize>,
+) -> Result<Vec<usize>, usize> {
+    /// Where a directive is in the walk. Absent from the map is "not yet
+    /// looked at".
+    enum Visit {
+        OnStack,
+        Done,
+    }
+    let mut state: HashMap<usize, Visit> = HashMap::new();
+    let mut order = Vec::new();
+    for root in 0..program.directives.len() {
+        if !matches!(program.directives[root].kind, DirectiveKind::Class(_)) {
+            continue;
+        }
+        // The walk from this root, innermost pending class last.
+        let mut stack = vec![root];
+        while let Some(index) = stack.last().copied() {
+            if matches!(state.get(&index), Some(Visit::Done)) {
+                stack.pop();
+                continue;
+            }
+            let DirectiveKind::Class(class) = &program.directives[index].kind else {
+                state.insert(index, Visit::Done);
+                stack.pop();
+                continue;
+            };
+            // The class this one names, when the file declares it. A target
+            // the file does not declare is the registry's and is nobody's
+            // predecessor here.
+            let target = class
+                .subclass
+                .as_ref()
+                .and_then(|target| declared.get(target.name.as_ref()).copied());
+            match target {
+                // Already on this walk without having finished, so every
+                // class from it up to here is waiting on it. A class naming
+                // itself reaches this on its second visit, which is the
+                // one-entry case of the same thing.
+                Some(target) if matches!(state.get(&target), Some(Visit::OnStack)) => {
+                    return Err(root);
+                }
+                Some(target) if !matches!(state.get(&target), Some(Visit::Done)) => {
+                    state.insert(index, Visit::OnStack);
+                    stack.push(target);
+                }
+                _ => {
+                    state.insert(index, Visit::Done);
+                    order.push(index);
+                    stack.pop();
+                }
+            }
+        }
+    }
+    Ok(order)
+}
+
 fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
     let gap = |name: &str, owner: &'static str| {
         Some(Loud {
@@ -2942,27 +3019,6 @@ impl Interp {
         // program with both gets the translation error -- which is what
         // running the whole first pass before any of this reproduces.
         //
-        // **The failing-`::CONSTANT` blame target is the LAST `::CLASS`
-        // directive in the whole file, not the nearest preceding one, and
-        // that is measured rather than assumed.** `::class A` / `::constant
-        // x (1/0)` / `::class B` blames `B`, and adding a third `::class C`
-        // after that blames `C` -- the oracle's blame does not depend on
-        // which class the constant is lexically under at all. Computed once,
-        // up front, rather than tracked positionally the way
-        // `current_class_id` below is for R9's registry attachment, which is
-        // a genuinely different rule: the `Method` and `Attribute` arms
-        // attach to the class positionally nearest above them, and only the
-        // constant-failure echo uses this file-wide rule.
-        let last_class_directive = program
-            .directives
-            .iter()
-            .rev()
-            .find(|d| matches!(d.kind, DirectiveKind::Class(_)));
-
-        // R9: the class a `::METHOD`/`::ATTRIBUTE` attaches to, tracked
-        // positionally (the most recently installed `::CLASS`) -- ordinary
-        // object-model attachment, unrelated to `last_class_directive` above.
-        let mut current_class_id: Option<ObjRef> = None;
         // Every `::CLASS` name this file declares, upcased, so that a
         // `SUBCLASS` target can be told from a name the registry answers.
         // First wins, matching the class a later `.NAME` resolves to.
@@ -2974,22 +3030,57 @@ impl Interp {
                     .or_insert(index);
             }
         }
+
+        // **The order the file's classes are installed in**, which is not
+        // source order once a `SUBCLASS` names a class declared later. See
+        // `class_install_order`; a cycle is 98.911 and never reaches the
+        // installs below.
+        let order = match class_install_order(program, &declared) {
+            Ok(order) => order,
+            Err(blame) => {
+                self.blame_directive(program, &program.directives[blame]);
+                let path = self.program_path.clone();
+                return Err(Raised::cyclic_inheritance(&path).into());
+            }
+        };
+
+        // **The failing-`::CONSTANT` blame target is the class the oracle
+        // installed LAST, not the last one in the file and not the nearest
+        // preceding one, and every part of that is measured.** `::class A` /
+        // `::constant x (1/0)` / `::class B` blames `B`, and a third
+        // `::class C` after it blames `C`, so the blame does not depend on
+        // which class the constant is lexically under. `::class b subclass a`
+        // / `::constant c (1/0)` / `::class a` blames **`b`**, which is last
+        // in neither source order nor reverse source order but is last in
+        // dependency order, and `::class c subclass b` / `::class a` /
+        // `::constant x (1/0)` / `::class b subclass a` blames `c`, first in
+        // the file. Tracked separately from `current_class_id` below, which
+        // is R9's registry attachment and a genuinely different rule: the
+        // `Method` and `Attribute` arms attach to the class positionally
+        // nearest above them.
+        let last_class_directive = order.last().map(|index| &program.directives[*index]);
+
+        // **Classes install before anything else in the file is processed**,
+        // because their order is not the file's. A `::METHOD` still attaches
+        // positionally, which the pass below does; what happens here is only
+        // the creation of the class objects, in the order `order` gives.
         let mut classes: HashMap<usize, ObjRef> = HashMap::new();
+        for index in &order {
+            let class_id = self.install_class_at(id, program, *index, &declared, &classes)?;
+            classes.insert(*index, class_id);
+        }
+
+        // R9: the class a `::METHOD`/`::ATTRIBUTE` attaches to, tracked
+        // positionally (the most recently declared `::CLASS`) -- ordinary
+        // object-model attachment, unrelated to `last_class_directive` above.
+        let mut current_class_id: Option<ObjRef> = None;
         for (index, directive) in program.directives.iter().enumerate() {
             if let Some(loud) = directive_gap(&directive.kind) {
                 return Err(loud.into());
             }
             match &directive.kind {
                 DirectiveKind::Class(_) => {
-                    let mut resolving = Vec::new();
-                    current_class_id = Some(self.install_class_at(
-                        id,
-                        program,
-                        index,
-                        &declared,
-                        &mut classes,
-                        &mut resolving,
-                    )?);
+                    current_class_id = classes.get(&index).copied();
                 }
                 DirectiveKind::Method(method) => {
                     if let Some(class_id) = current_class_id {
@@ -3112,24 +3203,8 @@ impl Interp {
         id
     }
 
-    /// Installs the `::CLASS` at `index`, and whatever `SUBCLASS` chain it
-    /// depends on, first.
-    ///
-    /// **A file's classes are not installed in source order, and the oracle's
-    /// own are not either.** Measured, rc 0: `::class c subclass b` followed
-    /// by `::class b subclass a` followed by `::class a` runs a class method
-    /// declared on `a` through `.c`, so a target declared later in the file is
-    /// resolved all the same. This function pulls such a target forward rather
-    /// than pre-installing every class, which is what keeps every other
-    /// directive's refusal in source order.
-    ///
-    /// **`resolving` is the chain currently being pulled, and finding `index`
-    /// in it is the cycle.** Measured, rc 158 with stdout empty and the
-    /// **first** of the directives echoed: `::class a subclass b` with
-    /// `::class b subclass a`, and `::class a subclass a` alone, are both
-    /// `Error 98.911: Cyclic inheritance in program "<path>".` The first entry
-    /// of `resolving` is that directive, which is why the blame is taken from
-    /// there rather than from `index`.
+    /// Installs the `::CLASS` at `index`, whose `SUBCLASS` chain
+    /// [`class_install_order`] has already put before it.
     ///
     /// **A target the file does not declare is the registry's**, and one the
     /// registry does not hold is 98.909 naming it -- measured, rc 158 with
@@ -3138,26 +3213,17 @@ impl Interp {
     /// method, with `::class k2 subclass array` under it, answers that method
     /// through `.k2`.
     ///
-    /// **The pulled directive's own gap is checked here** rather than left to
-    /// the caller's loop, which has not reached it yet.
+    /// **The directive's own gap is checked here** rather than left to the
+    /// pass that walks source order, which runs after every class is
+    /// installed.
     fn install_class_at(
         &mut self,
         program_id: ProgramId,
         program: &Rc<Program>,
         index: usize,
         declared: &HashMap<Box<[u8]>, usize>,
-        classes: &mut HashMap<usize, ObjRef>,
-        resolving: &mut Vec<usize>,
+        installed: &HashMap<usize, ObjRef>,
     ) -> Result<ObjRef, Failure> {
-        if let Some(id) = classes.get(&index) {
-            return Ok(*id);
-        }
-        if resolving.contains(&index) {
-            let first = resolving[0];
-            self.blame_directive(program, &program.directives[first]);
-            let path = self.program_path.clone();
-            return Err(Raised::cyclic_inheritance(&path).into());
-        }
         let directive = &program.directives[index];
         if let Some(loud) = directive_gap(&directive.kind) {
             return Err(loud.into());
@@ -3168,14 +3234,14 @@ impl Interp {
         let superclass = match &class.subclass {
             None => self.root_and_metaclass().0,
             Some(target) => match declared.get(target.name.as_ref()) {
-                Some(other) => {
-                    resolving.push(index);
-                    let resolved = self.install_class_at(
-                        program_id, program, *other, declared, classes, resolving,
-                    );
-                    resolving.pop();
-                    resolved?
-                }
+                // Already installed, because `class_install_order` put it
+                // ahead of this one; a `None` here would be that ordering and
+                // this loop disagreeing, which is an internal inconsistency
+                // and gets this crate's loud refusal rather than a panic.
+                Some(other) => match installed.get(other) {
+                    Some(id) => *id,
+                    None => return Err(Loud::missing_body().into()),
+                },
                 None => {
                     let name = String::from_utf8_lossy(&target.name).into_owned();
                     match self.classes().lookup(&name) {
@@ -3188,9 +3254,7 @@ impl Interp {
                 }
             },
         };
-        let id = self.install_class(program_id, class, superclass);
-        classes.insert(index, id);
-        Ok(id)
+        Ok(self.install_class(program_id, class, superclass))
     }
 
     /// `::METHOD`'s own R9 install: the name lands in `class`'s instance

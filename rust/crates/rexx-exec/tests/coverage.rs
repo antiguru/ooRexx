@@ -932,6 +932,9 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/class_subclass_not_found.rex",
     "lang/class_subclass_cycle.rex",
     "lang/expose_two_scopes.rex",
+    // Task 8 fix round 1: the failing-::CONSTANT blame target under a
+    // dependency-ordered class install.
+    "lang/directive_constant_blames_the_last_installed_class.rex",
 ];
 
 #[test]

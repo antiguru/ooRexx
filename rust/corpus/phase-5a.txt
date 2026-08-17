@@ -150,3 +150,9 @@ lang/class_subclass_cycle.rex
 # subclass and its parent each exposing the same name, both sends addressed to
 # the subclass's class object, holding different values at once.
 lang/expose_two_scopes.rex
+
+# Task 8 fix round 1: which ::CLASS a failing ::CONSTANT expression is blamed
+# against once the file's classes no longer install in source order. The blame
+# is the class installed last, which this program makes the first one in the
+# file -- so neither source order nor its reverse produces it.
+lang/directive_constant_blames_the_last_installed_class.rex

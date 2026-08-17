@@ -422,6 +422,36 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
     ::routine z external "LIBRARY nosuchlib nosuchfn"  98.903 rc 158
     ::method m external "LIBRARY nosuchlib nosuchfn"   98.903 rc 158
 
+  KNOWN GAP, NOT THIS TASK'S: A ::CONSTANT EXPRESSION CANNOT SEND TO A CLASS
+  DECLARED LATER IN THE SAME FILE. Measured, and it does not involve SUBCLASS
+  at all:
+
+    say 'main'                       oracle rc 0, prints `main`
+    ::class a                        crate  rc 159, 97.1 `Object ".LATER" does
+    ::constant c (.later~m)                 not understand message "M".`
+    ::class later
+    ::method m class
+    return 'from a later class'
+
+  So the ORACLE has every class installed, with its methods, before it
+  evaluates any ::CONSTANT expression, and this crate evaluates each one as it
+  walks the directive list. The row is DIVERGES by this table's rule: rc 159
+  against rc 0, an answer rather than a refusal.
+
+  PRESENT AT 83fa81b3b, verified by running the same program against a build of
+  that commit, so it is not the class-install work's. It is recorded here
+  because it was found while measuring that work and because the table's rule
+  is that a diverging row carries its own measurement rather than staying
+  undisclosed. OWNER: unplaced. Closing it means installing every class and its
+  methods before the first ::CONSTANT expression runs, which is a restructure
+  of the directive install rather than a fix to one arm.
+
+  THE BLAME TARGET OF A FAILING ::CONSTANT IS A DIFFERENT QUESTION AND IS
+  CLOSED. The oracle blames the class it installed LAST, which is not the last
+  in source order once a SUBCLASS names a class declared later;
+  `corpus/lang/directive_constant_blames_the_last_installed_class.rex` is the
+  witness, and it makes the blame the FIRST class directive in the file.
+
   CLOSED DEFECT: ::CLASS ... SUBCLASS <class> WAS ONE OF THE OVER-REFUSALS
   AND IS NOT ANY MORE. It was refused whether or not the named class
   existed, on the reasoning that 4c had no class table to tell the two
