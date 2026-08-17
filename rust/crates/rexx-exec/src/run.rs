@@ -8107,8 +8107,24 @@ impl Interp {
             }
             Self::condition_holds(checked, &text, raise)
         } else {
-            let text = self.to_text(value);
-            Self::condition_holds(checked, &text, raise)
+            // **Off the tracing path the bytes need not be moved anywhere.**
+            // `to_text` would copy them into the interpreter's scratch slot
+            // and hand back a borrow of it; for a value that carries its own
+            // bytes that copy buys nothing. A condition's value is one byte --
+            // `0` or `1` -- far more often than it is anything else, and one
+            // byte always rides in the handle.
+            match value.decode() {
+                Decoded::Text(inline) => Self::condition_holds(checked, &inline, raise),
+                // `to_text` renders these two as `"0"` and `"1"`, which both
+                // arms of `condition_holds` then read as this same answer.
+                // Every other integer falls to the arm below, so the failure
+                // it raises still names the value as the oracle spells it.
+                Decoded::SmallInt(number) if number == 0 || number == 1 => Ok(number == 1),
+                _ => {
+                    let text = self.to_text(value);
+                    Self::condition_holds(checked, &text, raise)
+                }
+            }
         };
         // After the rendering above is out of scope, so the borrow it may hold
         // on `self` has ended. The decision itself touches neither `self` nor
