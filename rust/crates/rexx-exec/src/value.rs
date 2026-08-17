@@ -701,7 +701,7 @@ impl Interp {
 /// overflow `parse` refused, so the value that comes out is the same or there
 /// is none; `the_tag_test_agrees_with_parsing_the_same_bytes` holds the two
 /// spellings against each other rather than this paragraph doing it.
-fn canonical_small_int(bytes: &[u8]) -> Option<i64> {
+pub(crate) fn canonical_small_int(bytes: &[u8]) -> Option<i64> {
     let (negative, digits) = match bytes.split_first() {
         Some((b'-', rest)) => (true, rest),
         _ => (false, bytes),
