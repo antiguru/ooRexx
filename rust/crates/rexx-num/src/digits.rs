@@ -203,8 +203,17 @@ impl Digits {
 
     /// Drops `count` digits from the front, which is what stripping leading
     /// zeros does.
+    ///
+    /// **Zero returns at once, and that is the common call.** Every
+    /// `Number::assemble` ends here, and a number written without a leading
+    /// zero -- almost all of them -- asks for nothing to be dropped. Without
+    /// this the inline arm still runs `copy_within(0..len, 0)`, which is a
+    /// `memmove` of the live digits onto themselves.
     #[inline(always)]
     pub(crate) fn drop_front(&mut self, count: usize) {
+        if count == 0 {
+            return;
+        }
         match self {
             Digits::Inline { len, buf } => {
                 let count = count.min(*len as usize);

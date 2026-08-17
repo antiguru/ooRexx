@@ -841,12 +841,15 @@ impl Number {
     }
 
     /// Strips leading zeros and collapses any zero to the canonical form.
+    ///
+    /// One scan, not two: counting the leading zeros answers "is every digit
+    /// zero?" as well, since that is the count reaching the end.
     #[inline(always)]
     pub(crate) fn assemble(negative: bool, mut digits: Digits, exponent: i32) -> Self {
-        if digits.iter().all(|d| *d == 0) {
+        let lead = digits.iter().take_while(|d| **d == 0).count();
+        if lead == digits.len() {
             return Number::zero();
         }
-        let lead = digits.iter().take_while(|d| **d == 0).count();
         digits.drop_front(lead);
         Number {
             negative,
