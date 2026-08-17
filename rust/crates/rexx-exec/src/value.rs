@@ -52,8 +52,21 @@ impl Interp {
     /// allocates at all, where a `to_vec` first would allocate a buffer only
     /// to free it again.
     ///
+    /// **The handle test comes before the `Bytes`, not after it.**
+    /// [`text_bytes`] makes the same test, but by then the bytes have been
+    /// copied into a `Bytes` whose inline arm is `INLINE_BYTES` wide, and a
+    /// value that fits in the handle needs no storage at all -- so that copy
+    /// is written and discarded. [`text_bytes`]' own doc has how often: the
+    /// handle takes about two thirds to three quarters of the strings this
+    /// interpreter creates. The test there stays, because [`text_owned`]
+    /// arrives already holding a `Bytes` and cannot reach this one.
+    ///
     /// [`text_owned`]: Interp::text_owned
+    /// [`text_bytes`]: Interp::text_bytes
     pub(crate) fn text(&mut self, bytes: &[u8]) -> ObjRef {
+        if let Some(inline) = ObjRef::inline_text(bytes) {
+            return inline;
+        }
         self.text_bytes(Bytes::from_slice(bytes))
     }
 
