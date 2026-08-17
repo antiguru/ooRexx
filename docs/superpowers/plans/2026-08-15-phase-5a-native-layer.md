@@ -458,7 +458,47 @@ post-bootstrap checks match the oracle.
 
 ---
 
-## Task 14: the 5a gate
+## Unowned work `CoreClasses.orx` needs, found 2026-08-17 during Task 8
+
+**This section is a finding, not a task.** Task 8's implementer reported that its own acceptance
+criterion was unreachable because `::CLASS b SUBCLASS a` is refused, and that no task owns closing it.
+Checking that against `CoreClasses.orx` -- the file Task 14's gate requires to parse and execute --
+showed the gap is wider than the one keyword, and that the plan does not mention some of it at all.
+
+**Measured against the oracle and this crate, one program per keyword**, from a fresh empty directory:
+
+| `::CLASS`/`::METHOD` option | in `CoreClasses.orx` | this crate | owner |
+|---|---|---|---|
+| `SUBCLASS <class>` | `Alarm`, `CircularQueue`, `Properties`, `TraceObject` | was rc 120 | **Task 8**, ruling R26 |
+| `MIXINCLASS` | used | rc 120, `::CLASS naming another class` | **none** |
+| `INHERIT` | `DateTime`, `TimeSpan` | rc 120, same message | **none** |
+| `ABSTRACT` | used | rc 0, agrees | none needed for the gate |
+| `UNGUARDED` | used | rc 0, agrees | none needed for the gate |
+| `PRIVATE` | used | rc 120 | **none** (see the `KNOWN GAP` in `phase-4-exclusions.txt`) |
+| `EXTERNAL` | used | -- | Task 10 |
+| `::ATTRIBUTE` | used | -- | Task 4 |
+
+**`ABSTRACT` and `UNGUARDED` are the reason this is a measured table rather than a reasoned one.**
+Neither appears anywhere in this plan, and the natural inference -- unmentioned means unimplemented
+means blocking -- is wrong for both: each runs at rc 0 and agrees with the oracle today. Their
+*semantics* are a different question, and an abstract class refusing instantiation is 5b's along with
+`~new`; what the table records is only whether the gate's own file can get past them.
+
+**`INHERIT`'s row is the weakest and says so.** The probe used `::class d inherit c` with a plain
+class as the target, which the oracle answers 158 -- the program was wrong, not the finding. `INHERIT`
+cannot be probed properly until `MIXINCLASS` installs, so its row records the crate's refusal and
+nothing about agreement.
+
+**`METACLASS` is not on this list, and an earlier draft of this finding had it there.** A count of the
+word across `CoreClasses.orx` answers two; both are inside a comment describing a Singleton metaclass,
+and no `::CLASS` line in the file uses the keyword. The wrong version came from counting a word
+instead of reading the lines that would have to run.
+
+**What this costs Task 14.** Its gate is `CoreClasses.orx` parsing and executing. `MIXINCLASS`,
+`INHERIT` and `PRIVATE` each stop that today, and none of them has a task. **Placing them is the next
+scoping decision this plan needs** -- as tasks here, or as an explicit deferral that moves Task 14's
+gate with it. Deciding it by letting whichever task trips over them absorb them is how Task 8 came to
+be asked for a differential it could not run.
 
 **Goal.** Prove 5a rather than assert it, and leave 5b a stated boundary.
 
