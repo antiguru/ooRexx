@@ -7579,22 +7579,25 @@ fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
 /// answer, measured in a clean directory, is the same in either order:
 ///
 /// ```text
-/// ::annotate routine nosuchrtn     99.945 rc 157, echoing the ::ANNOTATE line
-/// ::requires 'zzznosuchfile.rex'   43.901 rc 213, echoing the ::REQUIRES line
-/// ::options digits 12              98.909 rc 158, echoing the ::CLASS line
+/// ::annotate routine nosuchrtn                          99.945 rc 157, the ::ANNOTATE line
+/// ::requires 'zzznosuchfile.rex'                        43.901 rc 213, the ::REQUIRES line
+/// ::routine zz external "LIBRARY nosuchlib nosuchfn"    98.903 rc 158, the ::ROUTINE line
+/// ::method mm external "LIBRARY nosuchlib nosuchfn"     98.903 rc 158, the ::METHOD line
+/// ::attribute aa external "LIBRARY nosuchlib nosuchfn"  98.903 rc 158, the ::ATTRIBUTE line
+/// ::options digits 12                                   98.909 rc 158, the ::CLASS line
 /// ```
 ///
-/// So the `::ANNOTATE` and `::REQUIRES` sources must refuse and the
-/// `::OPTIONS` ones must reach the class error, and the halves fail in
-/// opposite directions: dropping `staged_gap` reddens the refusing rows,
-/// and hoisting the whole gap check to the front instead reddens the
-/// `::OPTIONS` rows. One half alone does not say where the boundary is.
+/// So every source but the `::OPTIONS` pair must refuse, and those must reach
+/// the class error. **The halves fail in opposite directions**: dropping
+/// `staged_gap` reddens the refusing rows, and hoisting the whole gap check
+/// to the front instead reddens the `::OPTIONS` rows. One half alone does not
+/// say where the boundary is.
 ///
-/// **A refusal here is not a match** -- the oracle answers 99.945 and 43.901
-/// and this crate answers neither. It is the honest half of the trade
-/// `staged_gap`'s doc states, and the corpus differential cannot see any of
-/// it, because no program in the subset carries a `::REQUIRES` or an
-/// `::ANNOTATE` with a target.
+/// **A refusal here is not a match** -- the oracle answers 99.945, 43.901 and
+/// 98.903, and this crate answers none of them. It is the honest half of the
+/// trade `staged_gap`'s doc states, and the corpus differential cannot see
+/// any of it, because no program in any corpus subset carries a `::REQUIRES`,
+/// an `EXTERNAL` directive or an `::ANNOTATE` with a target.
 #[test]
 fn a_gap_the_oracle_diagnoses_before_a_class_refuses_ahead_of_the_class_error() {
     let failing_class = "::class a subclass zzznotaclass\n";
@@ -7606,6 +7609,18 @@ fn a_gap_the_oracle_diagnoses_before_a_class_refuses_ahead_of_the_class_error() 
         (
             "::requires 'zzznosuchfile.rex'\n",
             "::REQUIRES is not implemented (Phase 5)",
+        ),
+        (
+            "::routine zz external \"LIBRARY nosuchlib nosuchfn\"\n",
+            "::ROUTINE EXTERNAL is not implemented (Phase 7)",
+        ),
+        (
+            "::class kk\n::method mm external \"LIBRARY nosuchlib nosuchfn\"\n",
+            "::METHOD EXTERNAL is not implemented (Phase 7)",
+        ),
+        (
+            "::class kk\n::attribute aa external \"LIBRARY nosuchlib nosuchfn\"\n",
+            "::ATTRIBUTE EXTERNAL is not implemented (Phase 7)",
         ),
     ];
     for (gap, message) in refusing {

@@ -1295,35 +1295,78 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
 ///
 /// **[`Interp::install_directives`] consults [`directive_gap`] in stages,
 /// because the oracle does not diagnose every gap form at the same point.**
-/// Each row below is one program, the named gap form beside a `::CLASS` that
-/// fails to install, measured on the oracle both ways round:
+/// A refusal owed at an earlier stage has to be raised before this crate
+/// installs anything: leave it to the source-order pass and a class error
+/// preempts the diagnosis the oracle issues first, which turns a loud refusal
+/// into a wrong answer. That is the trade `518cd6de7` made by accident.
+///
+/// **The oracle's stages, as measured** -- each row a program pairing the
+/// named form with the named other directive, run both ways round, and the
+/// answer is the same in both orders unless the row says otherwise:
 ///
 /// ```text
-/// gap form                   beside                oracle answers
-/// ::annotate routine nosuch  a failing ::CLASS     99.945 rc 157, the ::ANNOTATE line
-/// ::annotate routine nosuch  a ::CLASS cycle       99.945 rc 157, the ::ANNOTATE line
-/// ::requires 'nosuch.rex'    a failing ::CLASS     43.901 rc 213, the ::REQUIRES line
-/// ::requires 'nosuch.rex'    a ::CLASS cycle       98.911 rc 158, the cycle's root
-/// ::options digits 12        a failing ::CLASS     98.909 rc 158, the ::CLASS line
-/// ::class q metaclass zzz    a failing ::CLASS     98.908 or 98.909, source order
+/// ::routine/::method/::attribute EXTERNAL  vs a failing ::CLASS  98.903 rc 158, the EXTERNAL line
+/// ::routine/::method/::attribute EXTERNAL  vs a ::CLASS cycle    98.903 rc 158, the EXTERNAL line
+/// ::routine EXTERNAL                       vs ::requires         98.903 rc 158, the EXTERNAL line
+/// ::annotate routine nosuch                vs a failing ::CLASS  99.945 rc 157, the ::ANNOTATE line
+/// ::annotate routine nosuch                vs a ::CLASS cycle    99.945 rc 157, the ::ANNOTATE line
+/// ::annotate routine nosuch                vs ::routine EXTERNAL whichever is FIRST in the file
+/// ::requires 'nosuch.rex'                  vs a failing ::CLASS  43.901 rc 213, the ::REQUIRES line
+/// ::requires 'nosuch.rex'                  vs a ::CLASS cycle    98.911 rc 158, the cycle's root
+/// ::options digits 12                      vs a failing ::CLASS  98.909 rc 158, the ::CLASS line
+/// ::class q metaclass zzz                  vs a failing ::CLASS  98.908 or 98.909, whichever is first
 /// ```
 ///
-/// So the oracle resolves an `::ANNOTATE` target before it looks for a cycle,
-/// opens a `::REQUIRES` file after that and before it creates any class, and
-/// reaches the rest only while creating them. A refusal owed at an earlier
-/// stage has to be raised before this crate installs anything: leave it to
-/// the source-order pass and a class error preempts the diagnosis the oracle
-/// issues first, which turns a loud refusal into a wrong answer. That is the
-/// trade `518cd6de7` made by accident and this undoes.
+/// So the oracle walks the directive list once, in source order, resolving
+/// `::ANNOTATE` targets and loading `EXTERNAL` libraries as it reaches them;
+/// then looks for a cycle; then opens `::REQUIRES` files; then creates the
+/// classes, resolving `SUBCLASS` and `METACLASS` in that pass; and evaluates
+/// `::CONSTANT` expressions last. `::OPTIONS` is applied in the first walk and
+/// has no diagnosis of its own, which is why its refusal can stay late.
 ///
-/// **The cost is a refusal where the oracle carries on.** With the target
-/// declared above the `::ANNOTATE`, or the `::REQUIRES` file present, the
-/// oracle reaches the class error and this crate refuses at the earlier stage
-/// instead -- measured, `::routine r` / `::annotate routine r` / `::class a
-/// subclass zzznotaclass` is 98.909 rc 158 on the oracle and this crate
-/// matched it before this staging existed. Telling those apart means
-/// resolving the target and opening the file, which is the work Phase 5 owns;
-/// until then a refusal is the answer that cannot be wrong.
+/// **What is measured and what is not.** Every row above is a probe, both
+/// engines, three descriptors. The placement of `::CLASS MIXINCLASS`,
+/// `::CLASS INHERIT` and `::CLASS SUBCLASS ns:` is *not* probed against a
+/// cycle here; they need no stage of their own because
+/// `Interp::install_class_at` consults [`directive_gap`] itself, so their
+/// refusal is raised inside the class pass wherever the oracle would have
+/// diagnosed them. A form added to [`directive_gap`] later does **not**
+/// inherit a stage: place it by probing it against a failing `::CLASS` and
+/// against a cycle, both orders, and add a row here.
+///
+/// **The first walk is shared with translation-time errors this crate finds
+/// in a pass of its own, and there this crate is still wrong.** The oracle
+/// takes whichever of an `::ANNOTATE` target, an `EXTERNAL` library, a
+/// duplicate `::ROUTINE` name or a class-less `::CONSTANT` expression comes
+/// first in the file; [`Interp::install_directives`] runs the latter pair
+/// ahead of this stage instead. Measured: `::annotate routine nosuchrtn`
+/// above a duplicate `::ROUTINE` pair is 99.945 rc 157 on the oracle against
+/// 99.903 here, and above a class-less `::constant kk (1/0)` it is 99.945
+/// against 99.906; `::routine zz external` in the same positions is 98.903
+/// against the same two. Reversing each pair matches. Present at
+/// `b360783cb`, so it predates the staging; the fix is to fold this stage
+/// into that first walk, and its cost is the paragraph below.
+///
+/// **The cost is a refusal wherever the oracle would have carried on**, and
+/// it is not confined to the class error. With the `::ANNOTATE` target
+/// declared above it, the `::REQUIRES` file present, or the `EXTERNAL`
+/// library loadable, the oracle installs the directive and goes on to
+/// whatever the file fails at next. Measured; each row matched the oracle
+/// byte for byte at `62de43c0f` and refuses here:
+///
+/// ```text
+/// ::routine r / ::annotate routine r / ::class a subclass zzznotaclass  98.909 rc 158
+/// ::class a / ::constant kk (1/0) / ::routine r / ::annotate routine r  42.3 rc 214
+/// ::class a / ::constant kk (1/0) / ::requires 'helper.rex', present    42.3 rc 214
+/// ```
+///
+/// The `::CONSTANT` rows put the gap **after** the failing directive, and
+/// that is what makes them losses: with the gap first this crate refused at
+/// `62de43c0f` too, because the source-order pass reached it before the
+/// constant. Telling the installable case from the failing one means
+/// resolving the target, opening the file and loading the library, which is
+/// the work Phase 5 and Phase 7 own; until then a refusal is the answer that
+/// cannot be wrong.
 fn staged_gap(program: &Program, stage: fn(&DirectiveKind) -> bool) -> Option<Loud> {
     program
         .directives
@@ -3072,10 +3115,26 @@ impl Interp {
             }
         }
 
-        // The oracle resolves an `::ANNOTATE` target at the same stage, and
-        // ahead of the cycle check below: measured, the directive's own
-        // 99.945 answers a file whose classes form a cycle. See `staged_gap`.
-        if let Some(loud) = staged_gap(program, |kind| matches!(kind, DirectiveKind::Annotate(_))) {
+        // The oracle's own walk over the directive list resolves `::ANNOTATE`
+        // targets and loads `EXTERNAL` libraries, ahead of the cycle check
+        // below: measured, each directive's own 99.945 or 98.903 answers a
+        // file whose classes form a cycle. Between themselves they go in
+        // source order, which one pass in source order gives for free. See
+        // `staged_gap`.
+        //
+        // The kinds are named rather than their EXTERNAL-ness, so the
+        // discrimination stays in `directive_gap` alone: it answers `None`
+        // for a `::ROUTINE`, `::METHOD` or `::ATTRIBUTE` with no `EXTERNAL`
+        // and for `::ANNOTATE PACKAGE`, and those are skipped here.
+        if let Some(loud) = staged_gap(program, |kind| {
+            matches!(
+                kind,
+                DirectiveKind::Annotate(_)
+                    | DirectiveKind::Routine(_)
+                    | DirectiveKind::Method(_)
+                    | DirectiveKind::Attribute(_)
+            )
+        }) {
             return Err(loud.into());
         }
 

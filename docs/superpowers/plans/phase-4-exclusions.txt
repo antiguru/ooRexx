@@ -410,38 +410,88 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
     a loose ::method with no ::class
 
   REFUSED BY THE ORACLE BEFORE main, stdout EMPTY in every case -- and
-  refused here, loudly, naming Phase 5 (or Phase 7 for the two that need a
-  library loaded):
+  refused here, loudly, naming Phase 5 (or Phase 7 for the EXTERNAL forms,
+  which need a library loaded):
 
-    ::class foo mixinclass zzznotaclass                98.909 rc 158
-    ::class foo metaclass zzznotaclass                 98.908 rc 158
-    ::class bar inherit zzznotaclass                   98.909 rc 158
-    ::class foo subclass ns:other                      98.987 rc 158
-    ::annotate routine nosuchrtn                       99.945 rc 157
-    ::requires 'no_such_file_zz.rex'                   43.901 rc 213
-    ::routine z external "LIBRARY nosuchlib nosuchfn"  98.903 rc 158
-    ::method m external "LIBRARY nosuchlib nosuchfn"   98.903 rc 158
+    ::class foo mixinclass zzznotaclass                   98.909 rc 158
+    ::class foo metaclass zzznotaclass                    98.908 rc 158
+    ::class bar inherit zzznotaclass                      98.909 rc 158
+    ::class foo subclass ns:other                         98.987 rc 158
+    ::annotate routine nosuchrtn                          99.945 rc 157
+    ::requires 'no_such_file_zz.rex'                      43.901 rc 213
+    ::routine z external "LIBRARY nosuchlib nosuchfn"     98.903 rc 158
+    ::method m external "LIBRARY nosuchlib nosuchfn"      98.903 rc 158
+    ::attribute a external "LIBRARY nosuchlib nosuchfn"   98.903 rc 158
 
-  A DELIBERATE OVER-REFUSAL ADDED BY TASK 8 FIX ROUND 2: A FILE HOLDING A
-  ::ANNOTATE WITH A TARGET, OR A ::REQUIRES, BESIDE A ::CLASS THAT CANNOT
-  INSTALL, IS REFUSED RATHER THAN GIVEN THE CLASS ERROR.
-  `Interp::install_directives` raises those gaps before it creates any class,
-  because the oracle diagnoses each of them before it creates one -- measured,
-  `::annotate routine nosuchrtn` is 99.945 rc 157 and `::requires
-  'zzznosuchfile.rex'` is 43.901 rc 213 whichever side of `::class a subclass
-  zzznotaclass` they sit on. At 62de43c0f this crate answered 98.909 rc 158 to
-  every one of those programs, which 518cd6de7's install reordering had turned
-  into a wrong answer for the shapes where the gap directive comes first --
-  they were a loud refusal before it. Answering 98.909 there is a wrong
-  answer; refusing is not, so the refusal is raised at the oracle's own stage.
+  A DELIBERATE OVER-REFUSAL ADDED BY TASK 8 FIX ROUNDS 2 AND 3: A FILE HOLDING
+  A ::ANNOTATE WITH A TARGET, AN EXTERNAL DIRECTIVE OR A ::REQUIRES, BESIDE A
+  ::CLASS THAT CANNOT INSTALL OR A ::CLASS CYCLE, IS REFUSED RATHER THAN GIVEN
+  THE CLASS ERROR. `Interp::install_directives` raises those gaps before it
+  creates any class, because the oracle diagnoses each of them before it
+  creates one. Measured, and the oracle's answer does not depend on which side
+  of `::class a subclass zzznotaclass` or of a cyclic ::CLASS pair the
+  directive sits:
 
-  THE COST IS A REFUSAL WHERE THE ORACLE CARRIES ON. With the ::ANNOTATE
-  target declared above it, or the ::REQUIRES file present, the oracle reaches
-  the class error instead -- measured, `::routine r` / `::annotate routine r`
-  / `::class a subclass zzznotaclass` is 98.909 rc 158, which this crate
-  matched byte for byte at 62de43c0f and now refuses. Telling the two apart
-  means resolving the target and opening the file, which is Phase 5's own
-  work. OWNER: Phase 5, with the rest of ::REQUIRES and ::ANNOTATE.
+    ::annotate routine nosuchrtn                          99.945 rc 157
+    ::routine z external "LIBRARY nosuchlib nosuchfn"     98.903 rc 158
+    ::method m external "LIBRARY nosuchlib nosuchfn"      98.903 rc 158
+    ::attribute a external "LIBRARY nosuchlib nosuchfn"   98.903 rc 158
+    ::requires 'zzznosuchfile.rex'                        43.901 rc 213,
+                                                          except against a
+                                                          cycle, which wins
+
+  At 62de43c0f this crate answered 98.909 or 98.911 to every one of those
+  programs. 518cd6de7's install reordering is what turned the shapes with the
+  gap directive FIRST into wrong answers -- measured against a build of
+  b360783cb, they were loud rc-120 refusals there -- and the shapes with the
+  gap directive second were already wrong answers at b360783cb. Answering the
+  class error there is a wrong answer; refusing is not, so the refusal is
+  raised at the oracle's own stage. `staged_gap`'s doc in rexx-exec/src/lib.rs
+  carries the full stage order and every probe behind it.
+
+  THE COST IS A REFUSAL WHEREVER THE ORACLE WOULD HAVE CARRIED ON, AND IT IS
+  NOT CONFINED TO THE CLASS ERROR. With the ::ANNOTATE target declared above
+  it, the ::REQUIRES file present or the EXTERNAL library loadable, the oracle
+  installs the directive and goes on to whatever the file fails at next. Each
+  row below matched the oracle byte for byte at 62de43c0f and refuses now:
+
+    ::routine r / ::annotate routine r / ::class a subclass zzznotaclass
+                                                          98.909 rc 158
+    ::class a / ::constant kk (1/0) / ::routine r / ::annotate routine r
+                                                          42.3 rc 214
+    ::class a / ::constant kk (1/0) / ::requires 'helper.rex', present
+                                                          42.3 rc 214
+
+  The ::CONSTANT rows put the gap AFTER the failing directive, which is what
+  makes them losses: with the gap first, this crate refused at 62de43c0f too.
+  Telling the installable case from the failing one means resolving the
+  target, opening the file and loading the library. OWNER: Phase 5, with the
+  rest of ::REQUIRES and ::ANNOTATE, and Phase 7 for EXTERNAL.
+
+  KNOWN DIVERGENCE THE STAGING DOES NOT CLOSE, AND IT PREDATES THIS TASK. The
+  oracle walks the directive list once, in source order, and takes whichever
+  of an ::ANNOTATE target, an EXTERNAL library, a duplicate ::ROUTINE name or
+  a class-less ::CONSTANT expression it reaches first.
+  `Interp::install_directives` runs the latter pair in a pass of its own,
+  ahead of the staged gap check, so a gap directive standing EARLIER in the
+  file loses to a translation error standing later. Measured:
+
+    ::annotate routine nosuchrtn above a duplicate ::routine pair
+                            oracle 99.945 rc 157, crate 99.903 rc 157
+    ::annotate routine nosuchrtn above a class-less ::constant kk (1/0)
+                            oracle 99.945 rc 157, crate 99.906 rc 157
+    ::routine zz external ... above a duplicate ::routine pair
+                            oracle 98.903 rc 158, crate 99.903 rc 157
+    ::routine zz external ... above a class-less ::constant kk (1/0)
+                            oracle 98.903 rc 158, crate 99.906 rc 157
+
+  Reversing each pair matches on both sides. All four reproduce against a
+  build of b360783cb, so none of them is the class-install work's. THE FIX IS
+  TO FOLD THE STAGED GAP CHECK INTO THAT FIRST WALK, which would turn all four
+  into loud refusals; its cost is the same shape as the paragraph above --
+  a file whose ::ANNOTATE target does resolve, standing above a duplicate
+  ::ROUTINE, matches today and would refuse. Not taken here because it is
+  pre-existing and outside this round. OWNER: unplaced.
 
   KNOWN GAP, NOT THIS TASK'S: A ::CONSTANT EXPRESSION CANNOT SEND TO A CLASS
   DECLARED LATER IN THE SAME FILE. Measured, and it does not involve SUBCLASS
