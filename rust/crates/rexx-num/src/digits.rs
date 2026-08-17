@@ -110,7 +110,8 @@ impl Digits {
 
     /// One digit, which is every canonical zero and every single-digit
     /// mantissa.
-    pub(crate) fn single(digit: u8) -> Self {
+    #[inline(always)]
+    pub(crate) const fn single(digit: u8) -> Self {
         let mut buf = [0u8; INLINE_DIGITS];
         buf[0] = digit;
         Digits::Inline { len: 1, buf }
@@ -202,6 +203,7 @@ impl Digits {
 
     /// Drops `count` digits from the front, which is what stripping leading
     /// zeros does.
+    #[inline(always)]
     pub(crate) fn drop_front(&mut self, count: usize) {
         match self {
             Digits::Inline { len, buf } => {

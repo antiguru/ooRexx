@@ -135,7 +135,7 @@ impl Number {
         // order matters: it changes where the intermediate roundings fall,
         // and the reciprocal below exposes the accumulator's last working
         // digits, not just the rounded result.
-        let mut acc = left.clone();
+        let mut acc = Number::clone(&left);
         let top = 63 - power.leading_zeros();
         for i in (0..top).rev() {
             acc = acc.mul(&acc, work)?;
@@ -155,7 +155,8 @@ impl Number {
             acc = divide_power(&acc, work);
         }
 
-        let mut result = acc.round_to(digits).check_range()?;
+        let mut result = acc.into_round(digits);
+        result.check_range()?;
         // Trailing zeros come off, by the same rule division uses.
         while result.digits.len() > 1 && *result.digits.last().unwrap() == 0 {
             result.digits.pop();

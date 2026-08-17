@@ -176,7 +176,7 @@ pub(crate) fn abs(
     // The rounding is the oracle's `copyForCurrentSettings`, and it is not
     // skipped for an already-positive value: measured, `numeric digits 3 ;
     // abs(1.23456)` is `1.23`, the same answer `abs(-1.23456)` gives.
-    Ok(interp.number(value.abs().round_to(digits), saturate(digits), form))
+    Ok(interp.number(value.abs().into_round(digits), saturate(digits), form))
 }
 
 /// `SIGN(number)`.
@@ -449,7 +449,7 @@ fn max_min(
         return Ok(answer);
     }
 
-    let mut best = target_number(interp, name, args)?.round_to(digits);
+    let mut best = target_number(interp, name, args)?.into_round(digits);
     let mut best_text = required_string(interp, args, 1);
     for (index, slot) in rest.iter().enumerate() {
         let Some(candidate) = slot else {
@@ -459,7 +459,7 @@ fn max_min(
         let Ok(number) = interp.to_number(*candidate) else {
             return Err(Raised::method_argument_not_a_number(index + 1, &found).into());
         };
-        let number = number.round_to(digits);
+        let number = number.into_round(digits);
         // Both sides are already parsed, so the byte slices are never read
         // for these two non-strict operators; they are the real renderings
         // anyway rather than a placeholder that would become wrong if a

@@ -31,10 +31,13 @@
 //! Stripping the zero first, which is the obvious thing to do, gets every
 //! such case wrong.
 
+use std::borrow::Cow;
+
 use crate::{ArithError, Digits, Number};
 
 impl Number {
     /// Extends the digit vector downward so both operands share an exponent.
+    #[inline(always)]
     fn aligned_to(&self, exponent: i32) -> Digits {
         let pad = (self.exponent - exponent).max(0) as usize;
         let mut digits = self.digits.clone();
@@ -42,10 +45,12 @@ impl Number {
         digits
     }
 
+    #[inline]
     pub fn add(&self, other: &Number, digits: u64) -> Result<Number, ArithError> {
         self.add_signed(other, false, digits)
     }
 
+    #[inline]
     pub fn sub(&self, other: &Number, digits: u64) -> Result<Number, ArithError> {
         self.add_signed(other, true, digits)
     }
@@ -96,9 +101,10 @@ impl Number {
             None
         };
         if let Some((value, negative)) = fast {
-            let mut result = value.round_to(digits);
+            let mut result = value.round_to(digits).into_owned();
             result.negative = negative && !result.is_zero();
-            return result.check_range();
+            result.check_range()?;
+            return Ok(result);
         }
 
         // Alignment adjustment, ported from addSub. When the two operands
@@ -185,22 +191,24 @@ impl Number {
             digits: raw_digits,
             exponent: min_exp,
         };
-        let rounded = raw.round_to(digits);
-        Number::assemble(rounded.negative, rounded.digits, rounded.exponent).check_range()
+        let rounded = raw.into_round(digits);
+        let result = Number::assemble(rounded.negative, rounded.digits, rounded.exponent);
+        result.check_range()?;
+        Ok(result)
     }
 
     /// Shortens an over-long operand to the working precision, as
     /// `addSub` and `checkNumber` both do. Truncation, not rounding.
-    pub(crate) fn truncated_to(&self, max_length: usize) -> Number {
+    pub(crate) fn truncated_to(&self, max_length: usize) -> Cow<'_, Number> {
         if self.digits.len() <= max_length {
-            return self.clone();
+            return Cow::Borrowed(self);
         }
         let dropped = self.digits.len() - max_length;
-        Number {
+        Cow::Owned(Number {
             negative: self.negative,
             digits: Digits::from_slice(&self.digits[..max_length]),
             exponent: self.exponent + dropped as i32,
-        }
+        })
     }
 }
 
@@ -220,6 +228,7 @@ fn compare_magnitudes(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
 /// and throws the real digits away -- `1 + 1` at DIGITS 1 comes out as 0.
 /// Subtraction is different: its leading zero is a real digit produced by the
 /// borrow, and must be kept.
+#[inline(always)]
 fn add_magnitudes(a: &[u8], b: &[u8]) -> Digits {
     let n = a.len().max(b.len());
     let mut out = Digits::zeros(n);
@@ -238,6 +247,7 @@ fn add_magnitudes(a: &[u8], b: &[u8]) -> Digits {
 }
 
 /// `a - b`, where `a >= b` by magnitude.
+#[inline(always)]
 fn sub_magnitudes(a: &[u8], b: &[u8]) -> Digits {
     let n = a.len();
     let mut out = Digits::zeros(n);

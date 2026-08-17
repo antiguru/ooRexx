@@ -67,8 +67,10 @@ impl Number {
             digits: kept,
             exponent,
         };
-        let rounded = raw.round_to(digits);
-        Number::assemble(rounded.negative, rounded.digits, rounded.exponent).check_range()
+        let rounded = raw.into_round(digits);
+        let result = Number::assemble(rounded.negative, rounded.digits, rounded.exponent);
+        result.check_range()?;
+        Ok(result)
     }
 }
 
@@ -138,7 +140,7 @@ impl Number {
             return Ok(match op {
                 DivOp::IntegerDivide => Number::zero(),
                 _ => {
-                    let mut r = left.clone();
+                    let mut r = left.into_owned();
                     r.negative = self.negative && !r.is_zero();
                     r
                 }
@@ -228,7 +230,8 @@ impl Number {
             // quotient of 1.0120 sits one power of ten lower than the 1.012
             // it prints as, and that is the difference between representable
             // and not.
-            let mut rounded = raw.round_to(digits).check_range()?;
+            let mut rounded = raw.into_round(digits);
+            rounded.check_range()?;
             // Division strips trailing zeros; `1 / 7.7` at DIGITS 3 is 0.13,
             // not 0.130. Addition and the remainder operators do the
             // opposite and keep them -- `1.50 + 0.50` is 2.00 and
@@ -238,8 +241,9 @@ impl Number {
                 rounded.digits.pop();
                 rounded.exponent += 1;
             }
-            return Number::assemble(rounded.negative, rounded.digits, rounded.exponent)
-                .check_range();
+            let result = Number::assemble(rounded.negative, rounded.digits, rounded.exponent);
+            result.check_range()?;
+            return Ok(result);
         }
 
         // For % and //, keep only the integer part of the quotient.
@@ -291,7 +295,7 @@ impl Number {
                 let product = int_digits.mul(&right, exact)?;
                 let mut r = left.sub(&product, exact)?;
                 r.negative = self.negative && !r.is_zero();
-                r.round_to(digits)
+                r.into_round(digits)
             }
         })
     }

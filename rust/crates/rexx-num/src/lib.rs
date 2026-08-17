@@ -19,11 +19,14 @@
 //! than taken from the standard; where they differ, the interpreter wins.
 //! See `rust/corpus/num/` for the programs that pin it.
 
+use std::borrow::Cow;
+
 mod addsub;
 mod compare;
 mod digits;
 mod muldiv;
 mod pow;
+
 pub use compare::{CompareOp, compare, compare_bytes, compare_decoded};
 pub(crate) use digits::Digits;
 pub use muldiv::DivOp;
@@ -433,7 +436,8 @@ const _: () = assert!(size_of::<Number>() <= 40);
 impl Number {
     /// The canonical zero. Every spelling of zero collapses to this: the
     /// oracle prints `0` for `-0`, `0.0` and `00.00` alike.
-    pub fn zero() -> Self {
+    #[inline(always)]
+    pub const fn zero() -> Self {
         Number {
             negative: false,
             digits: Digits::single(0),
@@ -441,6 +445,7 @@ impl Number {
         }
     }
 
+    #[inline(always)]
     pub fn is_zero(&self) -> bool {
         self.digits.iter().all(|d| *d == 0)
     }
@@ -788,6 +793,7 @@ impl Number {
     /// minimum. Testing one exponent at both ends accepts numbers the
     /// interpreter rejects -- `123456789e999999999` at the top,
     /// `.96329e-999999995` at the bottom.
+    #[inline(always)]
     pub(crate) fn in_range(&self) -> bool {
         self.adjusted_exponent() <= MAX_EXPONENT && self.exponent >= MIN_EXPONENT
     }
@@ -803,9 +809,10 @@ impl Number {
     /// two -- this only needs to pick the variant and hand it the one field
     /// each carries; the message rendering that used to happen here now
     /// happens on demand, in `ArithError::message`.
-    pub(crate) fn check_range(self) -> Result<Self, ArithError> {
+    #[inline(always)]
+    pub(crate) fn check_range(&self) -> Result<(), ArithError> {
         if self.is_zero() || self.in_range() {
-            return Ok(self);
+            return Ok(());
         }
         if self.adjusted_exponent() > MAX_EXPONENT {
             Err(ArithError::Overflow {
@@ -819,6 +826,7 @@ impl Number {
     }
 
     /// Strips leading zeros and collapses any zero to the canonical form.
+    #[inline(always)]
     pub(crate) fn assemble(negative: bool, mut digits: Digits, exponent: i32) -> Self {
         if digits.iter().all(|d| *d == 0) {
             return Number::zero();
@@ -834,6 +842,7 @@ impl Number {
 
     /// The power of ten of the most significant digit. This is what the
     /// display thresholds are expressed in terms of.
+    #[inline(always)]
     fn adjusted_exponent(&self) -> i32 {
         self.exponent.saturating_add(self.digits.len() as i32 - 1)
     }
@@ -970,12 +979,36 @@ impl Number {
     /// difference -- needs "no rounding at all" rather than "round to
     /// nothing". Reachable from the public `compare(a, b, d, d, op)` entry
     /// point, so the sentinel is load-bearing.
-    pub fn round_to(&self, digits: u64) -> Self {
+    ///
+    /// Borrows when the value already satisfies `digits`, so a caller that
+    /// only reads the result pays nothing for the rounding that did not
+    /// happen. [`into_round`] is the same rule for a caller holding the value.
+    ///
+    /// [`into_round`]: Number::into_round
+    pub fn round_to(&self, digits: u64) -> Cow<'_, Self> {
+        match self.round_change(digits) {
+            None => Cow::Borrowed(self),
+            Some(rounded) => Cow::Owned(rounded),
+        }
+    }
+
+    /// [`round_to`] for a value the caller already owns, where "unchanged"
+    /// can hand the value straight back instead of copying it.
+    ///
+    /// [`round_to`]: Number::round_to
+    pub fn into_round(self, digits: u64) -> Self {
+        self.round_change(digits).unwrap_or(self)
+    }
+
+    /// The rounded value, or `None` when rounding would return `self`
+    /// unchanged. Both public spellings above are this plus an ownership
+    /// decision, so the rule lives in one place.
+    fn round_change(&self, digits: u64) -> Option<Self> {
         // Saturated, not truncated: a bare `digits` past usize can only mean
         // "keep everything", which the length test below then decides.
         let keep = usize::try_from(digits).unwrap_or(usize::MAX);
         if keep == 0 || self.digits.len() <= keep || self.is_zero() {
-            return self.clone();
+            return None;
         }
         let dropped = self.digits.len() - keep;
         let mut kept = Digits::from_slice(&self.digits[..keep]);
@@ -1001,7 +1034,7 @@ impl Number {
                 }
             }
         }
-        Self::assemble(self.negative, kept, exponent)
+        Some(Self::assemble(self.negative, kept, exponent))
     }
 
     /// Renders the number as the interpreter would at this `DIGITS` setting.

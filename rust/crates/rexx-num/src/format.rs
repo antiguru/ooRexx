@@ -550,7 +550,7 @@ fn post_carry_exponent_error(
     // -- is `mathRound`'s; `round_to_places` (used for the successful
     // render) grows the digit vector instead. See this function's doc
     // comment for why that difference matters here specifically.
-    let rounded = pre_round.round_to((len - excess) as u64);
+    let rounded = pre_round.into_round((len - excess) as u64);
     // Back to true scale: `rounded` is still relative to `eng_exp0`.
     let true_scale = Number {
         negative: rounded.negative,
@@ -600,7 +600,7 @@ fn reported_value(
     let framed = reframe(n1, eng_exp0.unwrap_or(0));
     let cut = match after {
         None => framed,
-        Some(places) => math_round_places(&framed, places),
+        Some(places) => math_round_places(framed, places),
     };
     let true_scale = Number {
         negative: cut.negative,
@@ -627,18 +627,18 @@ fn reported_value(
 /// otherwise -- measured, `format(0.005,0,2)` reports `"0.01"`,
 /// `format(0.05,0,0)` reports `"0"`, and `format(-0.5,1,0)` reports `"-1"`
 /// with its sign intact.
-fn math_round_places(n: &Number, places: u32) -> Number {
+fn math_round_places(n: Number, places: u32) -> Number {
     if n.exponent >= 0 {
-        return n.clone();
+        return n;
     }
     let adjusted_decimals = -i64::from(n.exponent);
     if adjusted_decimals <= i64::from(places) {
-        return n.clone();
+        return n;
     }
     let excess = adjusted_decimals - i64::from(places);
     let len = n.digits.len() as i64;
     if excess < len {
-        return n.round_to((len - excess) as u64);
+        return n.into_round((len - excess) as u64);
     }
     if excess == len && n.digits[0] >= 5 {
         // `excess < adjusted_decimals` always holds here, and
