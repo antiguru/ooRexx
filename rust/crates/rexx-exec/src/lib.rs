@@ -2888,6 +2888,7 @@ const _: () = assert!(size_of::<Argument>() == 40);
 impl Argument {
     /// The argument's value, which every form has. `USE ARG` without `>`
     /// and `ARG()` both want only this.
+    #[inline]
     fn value(&self) -> ObjRef {
         match self {
             Argument::Value(value) | Argument::Reference { value, .. } => *value,

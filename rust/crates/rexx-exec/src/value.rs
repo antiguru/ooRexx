@@ -110,6 +110,7 @@ impl Interp {
     ///
     /// [`text_owned`]: Interp::text_owned
     /// [`text_bytes`]: Interp::text_bytes
+    #[inline]
     pub(crate) fn text(&mut self, bytes: &[u8]) -> ObjRef {
         if let Some(inline) = ObjRef::inline_text(bytes) {
             return inline;

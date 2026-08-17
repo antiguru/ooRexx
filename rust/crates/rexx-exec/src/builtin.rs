@@ -888,6 +888,7 @@ fn optional_string(
 /// `Ok(None)` is "the call supplied nothing here"; the caller then applies
 /// that argument's own default, which differs per builtin and is never a
 /// single shared value.
+#[inline]
 fn whole_number(
     interp: &mut Interp,
     name: &[u8],
@@ -934,11 +935,13 @@ fn pad_byte(
 // layers.
 
 /// A converted argument used as a length: zero or positive.
+#[inline]
 fn length_of(value: i64) -> Result<usize, Failure> {
     usize::try_from(value).map_err(|_| Raised::invalid_length(value.to_string().as_bytes()).into())
 }
 
 /// A converted argument used as a position: strictly positive.
+#[inline]
 fn position_of(value: i64) -> Result<usize, Failure> {
     match usize::try_from(value) {
         Ok(position) if position > 0 => Ok(position),
@@ -949,6 +952,7 @@ fn position_of(value: i64) -> Result<usize, Failure> {
 /// A converted argument used as a repetition or replacement count: zero or
 /// positive. `method_position` is the position the oracle's message names,
 /// which is the *operation's* own numbering rather than the call's.
+#[inline]
 fn count_of(value: i64, method_position: usize) -> Result<usize, Failure> {
     usize::try_from(value).map_err(|_| {
         Raised::argument_not_non_negative(method_position, value.to_string().as_bytes()).into()
