@@ -4729,9 +4729,9 @@ The two differ because the marker is a body clause reached with `GRANTING` false
 
 **`ELSE` and `OTHERWISE` are markers and are still general.** Each is reached through machinery the marker arm does not touch -- an `ELSE` through the `IF`'s own false target, an `OTHERWISE` through the `Op::EnterOtherwise` at its entry -- so each needs its own witnesses. Corpus counts are 6 and 7.
 
-#### A divergence found while probing, which this phase does not own
+#### A divergence found while probing -- **and the conclusion drawn from it was wrong. See entry 62.**
 
-**A label inside a `DO` body is legal and this crate refuses it.** Measured 2026-08-17:
+The measurement stands and the conclusion does not. Measured 2026-08-17:
 
 ```rexx
 do zi = 1 to 5
@@ -4740,7 +4740,11 @@ end
 say 'done'
 ```
 
-The oracle prints `done` and exits 0. `rexx-run` answers `rexx-exec: 47.2: Unexpected label.` at rc 120. It is a parse-time refusal, so it belongs to `rexx-parse`'s block builder rather than to anything here. It also means there is no fixed-work axis shaped like `emptyloop` for a label, which is why the label axis above goes through a call.
+The oracle prints `done` and exits 0. `rexx-run` answers `rexx-exec: 47.2: Unexpected label.` at rc 120.
+
+This entry originally read that a label inside a `DO` body is legal, that this crate is therefore wrong, and that the defect belongs to `rexx-parse`'s block builder. **All three are false.** This crate is right, the oracle binary on this machine is a 2021 source tree, and the check it lacks was added upstream in 2024. Entry 62 has the provenance and what follows from it.
+
+What survives unchanged is the consequence for measurement: there is no fixed-work axis shaped like `emptyloop` for a label, which is why the label axis above goes through a call.
 
 #### Tooling
 
@@ -4751,3 +4755,37 @@ The oracle prints `done` and exits 0. `rexx-run` answers `rexx-exec: 47.2: Unexp
 * **`PARSE` is now the largest `Op::Generic` member by a factor of 1.6 over everything else left**, 1,120,002 entries on `rexxcps` against 700,002 for the whole marker family that just landed. It has expressions and targets, so it is not a marker-shaped promotion.
 * `TRACE` (140,200) and `ADDRESS` (140,000) are next, and both are `rexxcps` artifacts rather than general hot paths.
 * The arena and collector, `caller.traps` and the `Heap::slots` chunking carry over from entry 60 unchanged, including the instruction to measure growth before writing the chunked table.
+
+### Entry 62 -- the oracle on this machine is a 2021 tree, and entry 61 misread it
+
+No commits. This entry corrects entry 61 and records an environment fact that changes how every oracle differential taken on this machine must be read.
+
+#### The correction
+
+Entry 61 reported that a label inside a `DO`/`IF`/`SELECT` block is legal, that this crate's 47.2/47.3/47.4 refusals are therefore a defect, and that the defect belongs to `rexx-parse`'s block builder. **This crate is right and the oracle is old.**
+
+`interpreter/parser/LanguageParser.cpp:1240` raises `Error_Unexpected_label_if` / `_select` / `_do` for exactly these shapes, and `interpreter/messages/RexxErrorMessages.h:452` spells 47.2 "Labels are not allowed within a DO/LOOP block; found \"&1\"." So the crate implements the C++ in this repository, which is the specification.
+
+Upstream: `eca92b86c`, 2024-09-05, *"fix code, add messages, update rexxref, fix test groups for [bugs:#1945] No labels should be allowed inside of DO/LOOP, IF, and SELECT groups"*.
+
+`crates/rexx-parse/src/block/tests.rs`'s `a_label_inside_a_block_picks_its_number_from_the_block_kind` was correct as committed and needed no change.
+
+#### The provenance that explains it
+
+| | oracle build on this machine | recorded in `phase-4f-oracle-64a7a7aa4.md` |
+|---|---|---|
+| `build/bin/rexx` size | 17,144 | 62,600 |
+| `build/bin/rexx` mtime | 2025-02-21 | 2026-08-05 |
+| `build/bin/rexx` sha256 | `4ed170ca7a1ed053a581e0d20ab62923746a37feb6ebac020ab20b8357b2b4cd` | `bb5bb8ccbb96c376e329b91aafdad891f975ba06c941dbceba82c3848fa13019` |
+| `build/lib/librexx.so.4` size | 3,801,176 | 17,853,856 |
+
+**They are not the same binary.** `/home/moritz/dev/repos/ooRexx` is checked out at `f975dde4`, dated **2021-02-13**, and `parse version` answers `REXX-ooRexx_5.0.0(MT)_64-bit 6.05 21 Feb 2025`. That commit is an ancestor of this repository's own tree, so the oracle here is ooRexx as of 2021 and the C++ this crate is written against is three and a half years ahead of it.
+
+Confirming rather than inferring: `/home/moritz/dev/repos/ooRexx/interpreter/parser/LanguageParser.cpp` is 4,371 lines and contains no `Error_Unexpected_label` at all; this repository's is 4,398 lines and raises it.
+
+#### What follows
+
+* **A difference between this crate and the oracle binary is not evidence of a defect in this crate until the oracle's own source is checked.** Entry 61 skipped that step. The rule that catches it is the one already in `CLAUDE.md` about running rather than reasoning, applied one level up: the instrument itself needed checking, not just the claim it made.
+* **The 12 corpus programs that disagree under `REXX_CORPUS_GATE=1` on this machine have not been re-examined against this fact.** Some may be the same artifact. Nothing in entries 60 or 61 depends on them -- every result there is base-against-head with the disagreeing set held equal -- but a session that reads "12 disagree" as "12 gaps" would be repeating entry 61's mistake at scale.
+* **`phase-4f-oracle-64a7a7aa4.md` records a hash and an mtime for the oracle and does not say which upstream commit it was built from.** A hash identifies a binary; it does not say what the binary implements. The commit is what a later reader needs, and it is why this entry records `f975dde4` rather than only the checksum above.
+* Five shapes were measured on this machine, all rejected here and all accepted by the oracle, each read as three separate descriptors: a label in a counted `DO`, in a bare `DO`, in a bounded `LOOP`, in an `IF` branch, and in a `SELECT` both before the first `WHEN` and between two `WHEN`s. `loop forever` with no `LEAVE` was also written and **must not be run** -- it hangs the oracle, which cost ten minutes of this sitting.
