@@ -211,12 +211,11 @@ fn parse_bytes(bytes: &[u8]) -> Option<Number> {
 ///    digits) or, failing that, an actual subtraction at `digits - fuzz`
 ///    whose sign is the answer.
 ///
-/// Path 3's fast case is a pure optimisation: comparing two digit arrays
-/// that already fit the working precision is provably the same answer as
-/// subtracting them, because no rounding could occur either way. So rather
-/// than port the digit-array memcmp separately, this always takes the
-/// subtraction route for same-sign operands -- it is the general case the
-/// fast path is short-circuiting, not a different rule.
+/// Path 3's fast case is a pure optimisation, and [`magnitude_order`] is it:
+/// comparing two digit arrays that already fit the working precision gives
+/// the same answer as subtracting them, because no rounding can occur either
+/// way. `the_two_routes_agree_wherever_both_apply` holds the two against
+/// each other rather than trusting that sentence.
 ///
 /// Path 1 is not a mere optimisation, though, and must stay separate: it is
 /// the reason two enormous, opposite-signed, individually in-range operands
@@ -242,10 +241,22 @@ fn numeric_order(a: &Number, b: &Number, digits: u64, fuzz: u64) -> Result<Order
         return Ok(Ordering::Equal);
     }
 
+    let working_digits = digits.saturating_sub(fuzz);
+
+    // Both operands share a sign, so ordering them by magnitude orders them
+    // by value once that sign is applied -- a larger magnitude is the larger
+    // number when both are positive and the smaller when both are negative.
+    if let Some(magnitude) = magnitude_order(a, b, working_digits) {
+        return Ok(if sign_a < 0 {
+            magnitude.reverse()
+        } else {
+            magnitude
+        });
+    }
+
     // Same non-zero sign: subtracting can only shrink or preserve magnitude
     // relative to the larger operand, which is already within range, so this
     // cannot itself overflow.
-    let working_digits = digits.saturating_sub(fuzz);
     let diff = a.sub(b, working_digits)?;
     Ok(if diff.is_zero() {
         Ordering::Equal
@@ -253,6 +264,62 @@ fn numeric_order(a: &Number, b: &Number, digits: u64, fuzz: u64) -> Result<Order
         Ordering::Less
     } else {
         Ordering::Greater
+    })
+}
+
+/// Orders two operands by magnitude without subtracting them, or `None` when
+/// the pair does not fit the working precision and only the subtraction
+/// decides.
+///
+/// Ported from the shortcut inside `NumberString::comp`
+/// (`NumberStringClass.cpp:3230-3319`). Aligning both operands on the lower
+/// of the two exponents gives each an *adjusted length* -- its digit count
+/// plus the distance its exponent sits above that floor -- which is how many
+/// digits it would occupy in the aligned subtraction. When both fit the
+/// working precision, that subtraction would round nothing away, so the
+/// digits decide the answer on their own.
+///
+/// The alignment also makes the digit arrays directly comparable: equal
+/// adjusted lengths mean the most significant digits line up at index zero,
+/// so a shared-prefix compare is the whole ordering, and a difference in
+/// digit count past that prefix only matters where the extra digits are not
+/// all zero. That last clause is what keeps `1.5` and `1.50` equal.
+///
+/// **This does not truncate its operands, and the subtraction route does.**
+/// The C++ does not either, and it cannot matter: an operand longer than the
+/// working precision has an adjusted length above it too, which is exactly
+/// the case handed to the subtraction.
+fn magnitude_order(a: &Number, b: &Number, working_digits: u64) -> Option<Ordering> {
+    // In i64 like the C++'s `wholenumber_t`, and saturating for `working_
+    // digits`: a `DIGITS` setting legitimately reaches 10^18 - 1, which no
+    // narrower comparison holds, and the adjusted lengths below span the
+    // whole exponent range twice over.
+    let min_exponent = i64::from(a.exponent.min(b.exponent));
+    let adjusted = |n: &Number| i64::from(n.exponent) - min_exponent + n.digits.len() as i64;
+    let (adjusted_a, adjusted_b) = (adjusted(a), adjusted(b));
+    let limit = i64::try_from(working_digits).unwrap_or(i64::MAX);
+    if adjusted_a > limit || adjusted_b > limit {
+        return None;
+    }
+    if adjusted_a != adjusted_b {
+        return Some(adjusted_a.cmp(&adjusted_b));
+    }
+
+    let (digits_a, digits_b) = (a.digits.as_slice(), b.digits.as_slice());
+    let shared = digits_a.len().min(digits_b.len());
+    let prefix = digits_a[..shared].cmp(&digits_b[..shared]);
+    if prefix != Ordering::Equal {
+        return Some(prefix);
+    }
+    // The prefix decided nothing, so the longer operand is larger only if it
+    // carries a non-zero digit past it. At most one of these tails is
+    // non-empty, the adjusted lengths being equal.
+    Some(if digits_a[shared..].iter().any(|digit| *digit != 0) {
+        Ordering::Greater
+    } else if digits_b[shared..].iter().any(|digit| *digit != 0) {
+        Ordering::Less
+    } else {
+        Ordering::Equal
     })
 }
 
@@ -307,5 +374,152 @@ fn string_order(a: &[u8], b: &[u8]) -> Ordering {
             }
         }
         other => other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Spellings, not values. The two routes can only disagree on a pair
+    /// whose digit arrays differ while their values do not -- a trailing
+    /// zero, a shifted exponent, one operand shorter than the other -- and a
+    /// grid of distinct values would never produce those.
+    const SPELLINGS: &[&str] = &[
+        "1",
+        "1.0",
+        "1.00",
+        "01",
+        "1.5",
+        "1.50",
+        "1.500",
+        "15",
+        "150",
+        "1.5e1",
+        "0.15",
+        "0.150",
+        "2",
+        "2.0",
+        "9",
+        "9.9",
+        "10",
+        "100",
+        "1e2",
+        "1.0e2",
+        "99",
+        "123456789",
+        "1234567890",
+        "999999999",
+        "0.000015",
+        "1.0000001",
+        "1.0000002",
+        "1e-9",
+        "1e9",
+    ];
+
+    /// The subtraction this exists to avoid, kept whole as the reference.
+    fn subtraction_order(a: &Number, b: &Number, working_digits: u64) -> Ordering {
+        let diff = a.sub(b, working_digits).expect("the grid stays in range");
+        if diff.is_zero() {
+            Ordering::Equal
+        } else if diff.negative {
+            Ordering::Less
+        } else {
+            Ordering::Greater
+        }
+    }
+
+    /// `magnitude_order` answers what subtracting answers, on every pair
+    /// where it answers at all.
+    ///
+    /// The taken/skipped counts are asserted, not printed: an implementation
+    /// that returned `None` for everything would satisfy the equality above
+    /// vacuously, and one that answered everything would be claiming the
+    /// subtraction is never needed. Both are refused here.
+    #[test]
+    fn the_two_routes_agree_wherever_both_apply() {
+        let mut taken = 0usize;
+        let mut skipped = 0usize;
+        for digits in [1u64, 2, 3, 9, 20] {
+            for fuzz in [0u64, 1, 2] {
+                let working = digits.saturating_sub(fuzz);
+                for a_text in SPELLINGS {
+                    for b_text in SPELLINGS {
+                        for negative in [false, true] {
+                            let mut a = Number::parse(a_text).expect("a spelling");
+                            let mut b = Number::parse(b_text).expect("a spelling");
+                            a.negative = negative;
+                            b.negative = negative;
+                            let reference = subtraction_order(&a, &b, working);
+                            match magnitude_order(&a, &b, working) {
+                                Some(magnitude) => {
+                                    taken += 1;
+                                    let fast = if negative {
+                                        magnitude.reverse()
+                                    } else {
+                                        magnitude
+                                    };
+                                    assert_eq!(
+                                        fast, reference,
+                                        "{a_text} vs {b_text}, negative {negative}, \
+                                         digits {digits}, fuzz {fuzz}"
+                                    );
+                                }
+                                None => skipped += 1,
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            taken > 0,
+            "the fast route never fired, so nothing was compared"
+        );
+        assert!(
+            skipped > 0,
+            "the fast route fired everywhere, so the grid never reached the subtraction"
+        );
+    }
+
+    /// The pairs the fast route must call equal despite differing digit
+    /// arrays, and the neighbouring ones it must not.
+    ///
+    /// Trailing zeros are the whole difficulty: `1.5` and `1.50` are the same
+    /// value with different digit counts, and the tail scan is what tells
+    /// them apart from `1.5` and `1.51`, which are not.
+    #[test]
+    fn a_trailing_zero_is_not_a_difference_but_a_trailing_digit_is() {
+        let order = |a: &str, b: &str| {
+            magnitude_order(
+                &Number::parse(a).expect("a spelling"),
+                &Number::parse(b).expect("a spelling"),
+                9,
+            )
+        };
+        assert_eq!(order("1.5", "1.50"), Some(Ordering::Equal));
+        assert_eq!(order("1.50", "1.5"), Some(Ordering::Equal));
+        assert_eq!(order("1.5", "1.51"), Some(Ordering::Less));
+        assert_eq!(order("1.51", "1.5"), Some(Ordering::Greater));
+        assert_eq!(order("15", "1.5"), Some(Ordering::Greater));
+        assert_eq!(order("1.5", "15"), Some(Ordering::Less));
+        assert_eq!(order("1", "1.00000000"), Some(Ordering::Equal));
+        // One zero further and the pair spans ten digits, which is past the
+        // working precision, so the shortcut declines it rather than
+        // answering -- the zeros are counted before they are read.
+        assert_eq!(order("1", "1.000000000"), None);
+    }
+
+    /// An operand wider than the working precision goes to the subtraction,
+    /// which is the case the shortcut is not allowed to answer.
+    #[test]
+    fn an_operand_past_the_working_precision_is_left_to_the_subtraction() {
+        let wide = Number::parse("1234567890").expect("a spelling");
+        let narrow = Number::parse("1").expect("a spelling");
+        assert_eq!(magnitude_order(&wide, &narrow, 9), None);
+        assert_eq!(magnitude_order(&narrow, &wide, 9), None);
+        // The adjacent success: the same pair fits once the precision covers
+        // the wider operand, and then the shortcut does answer.
+        assert_eq!(magnitude_order(&wide, &narrow, 10), Some(Ordering::Greater));
     }
 }
