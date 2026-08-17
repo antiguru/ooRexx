@@ -4901,3 +4901,19 @@ So the control is inside the same comparison rather than beside it, and that is 
 * **Per-call activation setup is the largest byte count**, 74 MB of the 194 MB over 140,000 calls: `RawVecInner::finish_grow` at 352 bytes a call, `HashMap::fallible_with_capacity`, and a `HashMap<Box<[u8]>, usize>::clone`.
 * **`LeaveOrigin` costs two allocations per `LEAVE`/`ITERATE`**, 280,001 each: the clause text `Interp::clause_site` builds and the 48-byte box around it. The text is read only if the label search fails, so it could be recovered from the instruction index instead of captured.
 * The arena itself, at 1.69% plus 1.37%, is no longer worth the queue position entry 60 gave it.
+
+### Entry 65 -- one more for the queue: a loop pass that is a jump rather than a call
+
+No commits. Moritz's suggestion, added here rather than to entry 64's queue because this file is appended to and not rewritten.
+
+**A loop's body is entered by re-entering the driver, once per pass.** `run_repeating`'s own pass loop calls `Interp::run_bounded` for the body range on every iteration, and `run_bounded`'s `BodyEngine::Chunk` arm calls `run_bounded_from_chunk`, which enters `Interp::run_ops` again. So a pass costs a nested Rust frame, a fresh `frames` vector, the range bookkeeping `run_ops` sets up at entry, and an `absorb` on the way out -- where a flattened loop would cost one backward `Op::Jump` inside the driver that is already running.
+
+**This is the one construct the phase flattened only halfway.** `IF` and `SELECT` compile to conditions and jumps in the op stream, and `Op::EnterWhen`/`Op::EnterOtherwise`/`Op::EndBranch` are what replaced their nested `run_bounded` calls. `Op::LoopRun` did not do that: its own doc comment says the construct is resolved by `run_loop_with_header` for both engines and that the one line it changes is which driver steps the body. That was the right call for the task that landed it -- a loop's header re-evaluation, `WHILE`/`UNTIL`, the `LEAVE`/`ITERATE` search and every trace echo are one implementation because of it -- and it is also why the per-pass entry is still there.
+
+**What to measure first**, so this is not queued on structure alone:
+
+* `bench-programs/emptyloop.rex` is the axis that can price it. Its body is one clause, so the per-pass cost is nearly the whole measurement -- it is the same axis that gave entry 61 its 21-instruction figure for a promoted marker clause, by the same argument.
+* `Interp::run_loop_with_header` is 4.21% self on the pinned `rexxcps` profile, and the re-entries themselves are inside `run_ops`' own 18.24% rather than beside it, so the flat profile understates the target.
+* Count the nested entries before changing anything. `run_chunk_entries` already counts driver entries but is `#[cfg(test)]`; `rexxcps` runs roughly 560,000 loop passes and `emptyloop` runs 50,000,000, so the two axes differ by two orders of magnitude in exactly the quantity at stake.
+
+**The hard part is not the jump, it is what the nested call currently carries.** `run_repeating` re-evaluates the header inside a clause unit of its own each pass, `do_body_outcome` decides `LEAVE`/`ITERATE`/fall-through from the `Flow` the nested call answered, and `HeaderClause` tracks which clause a failing re-test is blamed on -- all of it keyed to the call returning. A flat form has to express those as ops and stream position instead, which is the same shape `Op::EnterWhen` took for `SELECT` and is why that one needed a frame stack in the driver.
