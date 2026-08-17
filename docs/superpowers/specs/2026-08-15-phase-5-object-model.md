@@ -1,5 +1,18 @@
 # Phase 5 -- the object model
 
+**SUPERSEDED 2026-08-17 by `docs/superpowers/specs/2026-08-17-phase-5-object-model.md`, which is the
+binding authority. Do not plan against this file.**
+
+It was written without the ooRexx documentation, which nobody had checked out until 2026-08-17; the
+documentation lives in the same SVN repository as `ootest/` and is now at `oodocs/`. Two of
+`provide.xml`'s thirteen object-model sections -- `UNKNOWN` and Required String Values -- are absent
+from this file entirely, and both are silent wrong answers at rc 0 in surface Phase 5a had already
+made reachable. A five-reviewer panel, a two-reviewer re-review and three rounds of plan review all
+failed to find them; reading the documentation found them.
+
+Kept for its record of how this phase is easy to get wrong, and because the replacement's D25-D45
+disposition table cites it row by row.
+
 **Status:** design, revised twice -- after a five-reviewer adversarial panel, then after a two-reviewer
 re-review of that revision. Not planned.
 **Entry:** met. Phase 4f closed; `perf-baseline.md`'s "The pre-Phase-5 baseline" pins the standing at `b029abe77`.

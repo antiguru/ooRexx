@@ -1,7 +1,10 @@
 # Phase 5a -- the object model runs Rexx code
 
-**Spec:** `docs/superpowers/specs/2026-08-15-phase-5-object-model.md`, the binding authority. D25 to
-D45 live there and are not restated.
+**Spec:** `docs/superpowers/specs/2026-08-17-phase-5-object-model.md`, the binding authority as of
+2026-08-17. D25 to D56 live there and are not restated. **This plan predates it and has not yet been
+rebuilt against it** -- where the two disagree the spec wins, and the rebuild is the next scoping
+step. The superseded `2026-08-15` spec is kept for its record and for the disposition table's
+citations.
 **Evidence:** `docs/superpowers/specs/2026-08-15-phase-5-inherited-surface.md`, a dated reading of
 `11638b91e`.
 **Entry:** met. `perf-baseline.md`'s "The pre-Phase-5 baseline" pins the standing at `b029abe77`.
