@@ -4604,3 +4604,81 @@ Five probes against the oracle are byte-identical on stdout, stderr and exit sta
 #### What is deliberately not done
 
 The other free space is `0b10`: `NIL` is one value occupying a whole 62-bit tag, and tightening `decode` to "zero payload is `NIL`" would open a second inline kind -- five bytes plus a seventeen-bit value, which is the widest split that lets the value field cover any string the byte field can hold. That would restore a parse cache for short numeric strings. It is not built here because the cache it would restore was measured at 22,400 hits on one axis and none on four, and because this change is worth measuring alone before a second one is laid on top of it.
+
+### Entry 60 -- fourteen changes on a different instrument, and the axes as the control
+
+**Read the instrument note before the numbers.** This entry does not use the harness the configuration block above pins, and none of its figures is comparable with entries 1 to 59.
+
+| | this entry | the pinned configuration |
+|---|---|---|
+| instrument | `perf stat -e instructions:u,cycles:u` | wall clock |
+| harness | `perf stat` over one process, plus `rexx-arms` | `rexx-bench-suite` |
+| reference | the immediately preceding build of this crate | the oracle |
+| axes | a pinned-count copy of `samples/rexxcps.rex`, plus `arith`, `varlookup`, `compound`, `strings` | the six classic-Rexx axes |
+
+**So nothing here is a claim against the bar.** No oracle comparison was taken in this sitting. What every figure below says is "this build against the one before it", which is the loop's accept rule, on an instrument the accept rule does not name. The reason for the swap is in the first finding.
+
+The base is `e81d3497db2688adb5f585af57303180c418892f`; the head is `5775ea7d422403f15de7544e531290d663056e65`. Instructions retired on the pinned `rexxcps`: **18,885,258,713 to 14,405,866,386, -23.7%**.
+
+#### Finding 1 -- wall clock could not resolve these changes, and `rexxcps` auto-scales
+
+The sitting began on wall clock and abandoned it. A change measured at +2.3% median was ahead in only **6 of 10** alternating pairs, against an 11% spread within that same sitting; the machine was noticeably noisier than the one entries 1 to 59 were taken on. Retired instructions have a 0.02% spread between runs of one binary here, which is what made a 0.4% change decidable at all.
+
+**`samples/rexxcps.rex` cannot be measured on instructions as it ships.** Line 163, `count=(1%total + 1) * count`, scales its trial-2 loop bound by its own measured time, so a faster build runs *more* of it and the counts do not compare. Every figure below is against a scratch copy with that line pinned, which makes the work fixed and the count meaningful. The reported clauses-per-second is still the right metric for the program as shipped; it is the instrument that had to change, not the program.
+
+#### Finding 2 -- the fixed-work axes are the control, and they killed two changes
+
+**Three separate changes read as a clear win on `rexxcps` and a regression on every fixed-work axis.** The axes caught all three; `rexxcps` alone would have shipped all three.
+
+* **`Rc<TrapTable>` for `caller.traps`, discarded.** `invoke_call` clones the caller's trap table per call; 117 of `int_malloc`'s 131 samples came from that one stack, and the inheritance is documented one-way, so copy-on-write fits. Measured: `rexxcps` +0.48% instructions but **-4.56% cycles**, against `varlookup` +1.2/+1.7% instructions and **+5.4/+12.5% cycles**, `compound` +1.0/+1.4%, `strings` +0.7/+0.9%. A shared empty singleton was tried to remove the `Rc::default()` allocation per activation; it moved `arith` slightly and left `varlookup` and `compound` **identical**, which is what says the cost is the indirection on reads and not the allocation. Discarded. The ceiling it was chasing is still there: 94 samples, 1.0%.
+* **Rendering a tagged integer through `i64`'s `Display` into a fixed `fmt::Write` sink, discarded in favour of a digit loop.** Allocation-free and states the contract directly, but reaches the buffer through `core::fmt` where `to_string` has a specialised integer path: 17,415,036,226 against the 17,272,447,974 it replaced, **+0.85%**. The digit loop that replaced it read -4.49%.
+* **Widening `arith_small_int` to an operand that spells an integer, rescued by outlining.** Folded into the caller: `rexxcps` -1.70%, every fixed-work axis between +0.3% and +2.2%. With the tagged pair kept in its own arm and the widening behind `#[inline(never)]`: `rexxcps` **-2.53%**, and the IR arm improves on all four axes. The same trick had already worked on `to_number`.
+
+**The general rule this sitting earned:** a change that helps one program and costs the fixed-work axes is usually a function that got too big to inline, not a bad idea. Try outlining the new work before discarding it -- and if outlining does not rescue it, discard it, because `rexxcps` is one program and the axes are the ones the bar is stated against.
+
+#### Finding 3 -- the two instruments disagree in sign, reproducibly
+
+Removing an allocation or a call into libc reads as **more instructions and fewer cycles**; `Rc<TrapTable>` (+0.48% / -4.56%) and the `memcpy` removal (-0.37% / -3.06%) both do it. `malloc`, `free` and a PLT call into a dispatching `memcpy` are few instructions and many cycles. Neither instrument alone would have read those two changes correctly, and the entries below say which instrument each result rests on rather than quoting whichever moved further.
+
+#### Accepted, in order
+
+| commit | change | instructions on pinned `rexxcps` |
+|---|---|---:|
+| `d6870a358` | `Cow` for `truncated_to`/`round_to`, `into_round`, `check_range(&self)`, inline hints | -2.5% *(wall clock; taken before the instrument swap)* |
+| `5a622ac9b` | `Interp::text` asks whether the handle fits **before** building a `Bytes` | -1.52% |
+| `aa1eaf1ce` | `Number::parse_bytes`; four callers drop a `from_utf8` guard | -1.45% |
+| `54e695632` | `magnitude_order` -- same-signed operands ordered by digits, not by subtracting | -5.74% |
+| `dec900730` | a tagged integer rendered into storage the reader already owns | -4.49% |
+| `17c3ae4e6` | six small hot-path helpers marked `#[inline]` | -1.08% |
+| `089b6c344` | a condition decided from the handle when the handle carries its bytes | -1.09% |
+| `838668429` | `FxHash` for `Plan::names` and `Body::Stem`'s tails | -2.21% |
+| `a84a3c62e` | a literal's digits validated and accumulated in one pass | -2.78% |
+| `4ebf699d5` | `ObjRef::inline_text` copies by a bounded loop, not `memcpy` | -0.37% *(and -3.06% cycles)* |
+| `262fa6d68` | `to_number`'s arena arm outlined so the tagged arms inline | -1.13% |
+| `d9599bda4` | `assemble` scans once and `drop_front(0)` returns | -0.84% |
+| `633dc747c` | a builtin's integer argument answered from the tag | -1.40% |
+| `5775ea7d4` | the integer path taken when an operand *spells* an integer | -2.53% |
+
+**One shape accounts for four of them.** `from_utf8` or `str::parse` run over bytes already known to be ASCII digits: `Number::parse` (`aa1eaf1ce`), `to_number`'s three arms (same), `compare.rs`'s own `parse_bytes` helper (same), and `canonical_small_int` (`a84a3c62e`, the most expensive at 169 samples on one line). Worth grepping for the fifth.
+
+**`a84a3c62e` is the only change in the sitting that moved every fixed-work axis** -- `varlookup` 0.965, `compound` 0.976, `arith` 0.983, `strings` 0.991 -- because a literal is evaluated whatever the program is doing.
+
+#### Two claims a test falsified
+
+**`whole_i64`'s doc comment was wrong when written.** It said a value the fast test defers is one `whole_value` still converts by rounding, citing `1234` at `digits` 3 answering `1230`. The test written to assert that **failed**: `whole_value`'s rounding branch applies the same ceiling, so for an `i64` input the two agree on `None` as well as on `Some`. The doc now says that and the test holds both outcomes.
+
+**`1.000000000` is not equal to `1` under the comparison shortcut**, and the first version of `a_trailing_zero_is_not_a_difference_but_a_trailing_digit_is` asserted it was. Ten digits is one past the working precision, so the shortcut correctly declines and defers to the subtraction. The code was right and the expectation was wrong.
+
+#### Environment, for the next sitting
+
+* **`memcap` is not installed on this machine and cannot be reconstructed**: `/sys/fs/cgroup` is empty, so no cgroup can be made. Every `cargo test --workspace` in this sitting ran **uncapped**, contrary to `CLAUDE.md`'s gate.
+* **`cargo --offline` twice downgraded `crunchy` 0.2.4 to 0.2.2** in `Cargo.lock` as a side effect of resolving a new dependency; restored both times with `cargo update --offline -p crunchy --precise 0.2.4`.
+* **`838668429` is the workspace's first external runtime dependency.** Everything before it was a path dependency plus `criterion` as a dev-dependency. `seahash` was tried first and is **worse than the `RandomState` it replaces** (+0.22%); `foldhash` reads 0.018% better than `rustc-hash` and carries thirteen `unsafe` blocks against its none.
+* The gated suite ran 1604 to 1606 passing with **30 failing throughout, the same 30 by name at every step**: 26 are a missing `ootest/` checkout and the rest are pre-existing `gc`/`condition`/`trace` differentials. Every entry above was checked by diffing the failure-name list against the previous build's, not by reading the count.
+
+#### The queue this leaves, with ceilings
+
+* **`Op::Generic` falls back to the tree-walker, 17.6% of the thread through `step_in_temps_frame`.** `compile.rs` has native ops for `Do`/`Loop`, `If`, `Select`, `When`, `Assignment`, `Say`, `Return`/`Exit`, `Push`/`Queue`, `Call::Named`, `Message` and `Expose`; everything else delegates. In `rexxcps`'s inner loop that is `ITERATE`, `LEAVE`, `NOP`, `PARSE VAR` and labels. The first three are cheap to promote -- no expression, no register, one control-flow edge.
+* **The arena and the collector, about 8.5%.** `alloc_with` 5.8% total, `Heap::collect` 2.7%.
+* **`caller.traps`, 1.0%**, with the `Rc` route closed. Two shapes not tried: move-with-write-back on first mutation, which keeps reads as direct field accesses; or making the clone allocation-free by giving `Trap::label` an `Rc<[u8]>` and indexing the fixed condition set by an enum, which leaves the eager clone alone.
+* **Chunking `Heap::slots` into `Vec<Vec<Slot>>` with power-of-two inner lengths** (Moritz's suggestion) so growth never moves a slot. **Measure the growth cost first**: every slot access would gain a dependent load, `Heap::get`/`get_mut` sit under nearly everything, and three changes in this sitting were decided by exactly that kind of per-access tax showing up on the fixed-work axes. Nothing here separates *growth* from *sweeping* inside `Heap::collect`'s 2.7%, and `rexxcps` reaches steady state early. The larger prize if slots stop moving is that handles may not need generation validation per deref and the sweep could go chunk-wise -- a change to the arena's contract, not its layout.
