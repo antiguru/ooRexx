@@ -398,9 +398,13 @@ four books this session:
   `&added52;` glued to the name with no space — `&added50;size`, `&changed50;send` — in 232 of the
   1013 `mth*` titles. A text-level extractor derives `&ADDED50;SIZE` and the oracle has no such
   method on either arm. `rexxref.ent` defines all four as the empty string, so a DTD-resolving parser
-  is immune; a text-level one needs an explicit rule. Whichever route the task takes, it takes it for
-  the whole extraction — the hierarchy list's comment stripping and its literal `&nbsp;` counting are
-  the same choice.
+  would be immune — **but that escape is not available here, and an earlier draft was wrong to offer
+  it.** `&nbsp;`, which the hierarchy list's indentation depends on, is **not** in `rexxref.ent`; it
+  comes only from the external DocBook DTD the DOCTYPE names by `http` URL, and `oodocs/` is a
+  read-only checkout with no DTD and no catalog, so a resolving parse fails on `provide.xml`
+  outright. **The text-level route is forced, not chosen**, and the extractor task must assume it:
+  the entity-prefix rule, the hierarchy's comment stripping and its literal `&nbsp;` counting are all
+  consequences of one unavoidable choice.
 * **Group-heading titles.** Eleven `mth*` sections have a `<title>` that is not a method name:
   `Comparison Methods` on `Class`, `Object`, `String`, `Orderable` and `Pointer`; `Arithmetic
   Methods` on `String`, `DateTime` and `TimeSpan`; `Concatenation Methods` on `String` and `Object`;
@@ -455,7 +459,11 @@ Such a program is **hand-written and validated by running** — never described 
 documentation cannot serve as its source: nine of the nineteen argument-takers have no `mth*New`
 section at all and document their constructor under `init`, and **no `mth*New` section anywhere
 states its call shape in text** — nearly all give it only as an `images/classes/*.svg` railroad
-diagram, and `mthSingletonNew` gives no signature at all.
+diagram, and two, `mthSingletonNew` and `mthTraceObjectNew`, give no signature at all.
+`mthTraceObjectNew` is the transferable half of that: its diagram sits **outside** the `</section>`
+that closes it, so a span heuristic running to the next `mth*` section overshoots and credits it with
+one. That single section is the entire difference between two otherwise identical counts of this
+property — which is why the property is stated here and the count is not.
 
 **Two further reasons a constructor table was not worth building, both measured.** Running a recipe
 validates that it constructs *an* instance, not a *representative* one — `.File~new('nosuch_zz.txt')`
@@ -515,8 +523,11 @@ Said plainly, because they are not the same test. The **wiring half** is *the or
 reproduced*, with the documentation supplying the row keys; it is class-level and gates 5a. The
 **method half** is *the documented set answers*, with the documentation as the acceptance authority
 and `hasMethod` as the instrument on both arms; it gates 5c, and only its instance-side arm waits on
-5b. A documented method the oracle does not answer is an upstream finding under the plan's
-three-signal rule, not a row we silently drop.
+5b. A documented method the oracle does not answer **on either arm is an extraction defect first**:
+every one of the neither-arm rows measured so far was an artifact of how the row set was built, not a
+statement about ooRexx. Only once the row's name is confirmed to be a method name the oracle should
+have does it become an upstream finding under the plan's three-signal rule — and then it is a
+finding, not a row we silently drop.
 
 A third, separate question — *is m defined at X's **own** scope* — is what `~method` answers, and it
 is a different row class with a different owner; see
@@ -633,8 +644,9 @@ progress report into the phase gate"*.
 
 * **Structural failure — always red, in both modes, in every phase.** A row whose probe program is
   missing; a row whose probe does not run on one of the two engines; a derived row set that does not
-  match the committed data file; **the two crate engines disagreeing with each other**; an oracle run
-  that did not exit normally.
+  match the committed data file **in either direction — a row that stops being derived is as red as
+  one that appears**, which is the property that gives the counting checks a denominator; **the two
+  crate engines disagreeing with each other**; an oracle run that did not exit normally.
   These are defects in the instrument, not in the implementation, and they are the failure the tables
   exist to be incapable of hiding. (An earlier draft listed "a verdict the function cannot compute"
   here. Against the total five-cell function above that is unreachable by construction — an item on
@@ -668,14 +680,56 @@ progress report into the phase gate"*.
 
   **A row with no verdict is not a verdict failure**, and that distinction is what keeps "at 5c's
   gate every row is gated" from being a gate that cannot pass. A `not-covered` or `unreachable`
-  method row runs no program and has no verdict, so gating cannot redden it; what is gated is its
-  *status*, which is re-derived and must match what is committed. `Alarm` and `Ticker` are the worked
-  example: both construct on the oracle and neither can in Phase 5, because their `init` reaches a
-  native D37 defers — so they are `not-covered`, and their method rows neither pass nor fail rather
-  than diverging on every name.
+  method row runs no program and has no verdict, so gating cannot redden it. **And nothing else
+  gates it either** — an earlier draft said what was gated was the row's status, "re-derived and must
+  match what is committed", and that re-derivation was withdrawn when it turned out it could not
+  distinguish `String` from `Buffer`. So a `not-covered` row is gated on nothing, and the only thing
+  standing behind it is the stated reason committed beside it and read by a human. That is a real
+  limit on what "every row is gated" means at 5c and it is listed as one below. `Alarm` and `Ticker`
+  are the worked example: both construct on the oracle and neither can in Phase 5, because their
+  `init` reaches a native D37 defers — so they are `not-covered`, and their method rows neither pass
+  nor fail rather than diverging on every name.
 
 The report is written identically in both modes, following `corpus.rs`: the assertion is what turns
 a mismatch into a non-zero exit, not what makes it visible.
+
+### What supplies each check's denominator
+
+**A check that counts has a denominator, and the denominator is also a program.** Three checks in
+this document are soundness checks offered where completeness is needed — the hierarchy run's zero
+failures, the arm-agreement evidence the previous drafts leaned on, and R32's own "every derived row
+answers on one arm or the other". Each is true and worth having, and **none can see a member that was
+never emitted**. So the question is asked of every counting check here, and where the answer is
+"nothing", that is written down rather than filled with a mechanism.
+
+The remedy, where one exists, is the property `corpus/keyword-exempt.txt` already has and which R32
+cited without taking: it is policed in **both** directions — a body listed there that starts passing
+is as red as a body not listed that starts failing.
+
+| check | its denominator | if that silently shrinks |
+|---|---|---|
+| **table D's rows** | the union of `dire.xml`'s per-section `<option>` and subkeyword-indexterm names with `DirectiveParser.cpp`'s per-function `SUBDIRECTIVE_*` arms | caught. The row set is committed, and the structural check compares the re-derivation against the committed file **in both directions**: a row that stops being derived is as red as one that appears |
+| **table C's concept rows** | the `<section id>` set under `provide.xml`'s `provide` chapter | caught, the same way and by the same check |
+| **the wiring edge set** | the `chi` `<member>` list | caught the same way, **plus the `ArgUtil` assertion above**, because the oracle end-to-end run cannot see a member that was never emitted and would confirm a wrong 60-edge set |
+| **this document's own enumeration** | **nothing** | **not caught.** See below |
+
+**The enumeration has no denominator, and that is the honest answer rather than a gap to fill.** It
+is a hand-made list of mechanisms; nothing derives it and no check can say it is complete. Two things
+bound the damage and neither closes it:
+
+* every mechanism that **has** a `provide.xml` section is inside table C's denominator, so its
+  absence from the enumeration still surfaces there;
+* a mechanism with **no** documented section is outside every denominator in this document. The
+  REXX_DEFINED lock and the operator-frame traceback line are both in that class, and both reached
+  this document because someone read the C++, not because anything derived them. **A third one would
+  be missed exactly as the first two nearly were**, and the only instrument that has ever found this
+  class of thing here is reading an authority end to end.
+
+**One shared residual limit on the three that are caught.** The both-directions check compares a
+derivation against a committed file, so it fires when one side moves. It does not fire when both move
+together — a regeneration committed in the same change. That is a diff for a human to read, which is
+the standing R32 chose deliberately, and it is the reason the committed row sets must be reviewed as
+artifacts rather than waved through as generated output.
 
 ### Table D — the directive and option surface
 
@@ -813,9 +867,17 @@ the indented members alone.
 
 **Run end to end, the criterion holds.** Measured this session: the `chi` block yields **59** naive
 edges; rules 2 and 3 drop exactly `Object → Object` and `RexxInfo → Object`; and all **57** remaining
-edges appear in the child's `~superClasses` on the shipped oracle, zero failures. Without the rules
-it yields those two failing rows and, without rule 1, a member set containing `ArgUtil` — so the
-wiring half is satisfiable *and* falsifiable, demonstrated rather than asserted.
+edges appear in the child's `~superClasses` on the shipped oracle, zero failures. Rules 2 and 3 are
+witnessed by that run, because their edges fail against the oracle when present —
+`.Object~superClasses~items` is `0` and `.RexxInfo~superClasses` raises `97.1`.
+
+**Rule 1 is not witnessed by it, and that gap needs its own assertion.** Measured,
+`.ArgUtil~superClasses` is exactly `The Object class`, so an extractor that skips the comment
+stripping emits **60** edges and the oracle confirms every one of them — the end-to-end run stays at
+zero failures while the member set is wrong. **So the derivation additionally asserts that `ArgUtil`
+is absent from the derived edge set.** An earlier draft said instead that a missing rule 1 would be
+caught by contradicting this spec's own prose about `ArgUtil`, which is prose review of a program —
+the instrument R32 rules out.
 
 **How it fails in the direction that matters.**
 
@@ -1158,6 +1220,17 @@ which name a bootstrap that runs later than they do.
   numerically right and file-ambiguous — `checkUninit :1210` and `completeNewObject :1882` are both
   **ClassClass.cpp** — and are now qualified. The roadmap's patchable-slot sentence is `:492`, which
   the superseded spec cites as `:482`.
+* **The opt-in set can lose rows, and no check sees it.** Deleting a construction program that has
+  gone red deletes its rows: the row goes from red to absent and the gate goes green. Both sides of
+  the committed-versus-derived check move together, so it does not fire. Visible only in a diff.
+* **A class's membership of the 38 is not re-measured by the tables.** An earlier draft specified a
+  per-run `~new` sweep and it was withdrawn, because its only test could not distinguish a class that
+  raises on arguments from one with no `~new` at all. So the 38 is a measurement taken once, recorded
+  here, and re-taken by a human when something suggests it moved.
+* **`not-covered` and `unreachable` are gated on nothing.** Their rows run no program and have no
+  verdict; what stands behind them is a committed reason and a reader. `unreachable` is at least
+  grounded in a sentence from the reference (`utilityclasses.xml:429`, `:6910`), which is checkable
+  against a book; `not-covered` is grounded only in the reason committed beside it.
 * ~~**Whether `Buffer`, `Pointer` and `VariableReference` can be reached at all.**~~ **Closed for
   `VariableReference`, and it is closed against me.** An earlier draft treated its `93.967` as
   possible evidence of unreachability; it is reachable at rc 0 with empty stderr through the
