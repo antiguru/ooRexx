@@ -7567,6 +7567,85 @@ fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
     }
 }
 
+/// **A gap the oracle diagnoses before it creates any class refuses before
+/// this crate creates one either**, so a `::CLASS` that cannot install does
+/// not answer in its place.
+///
+/// Every source below pairs one gap form with `::class a subclass
+/// zzznotaclass`, in each order. That `::CLASS` raises 98.909, and since
+/// `518cd6de7` this crate installs the file's classes ahead of the
+/// source-order pass that reads `directive_gap` -- so without `staged_gap`
+/// the class error is what a reader of these programs gets. The oracle's own
+/// answer, measured in a clean directory, is the same in either order:
+///
+/// ```text
+/// ::annotate routine nosuchrtn     99.945 rc 157, echoing the ::ANNOTATE line
+/// ::requires 'zzznosuchfile.rex'   43.901 rc 213, echoing the ::REQUIRES line
+/// ::options digits 12              98.909 rc 158, echoing the ::CLASS line
+/// ```
+///
+/// So the `::ANNOTATE` and `::REQUIRES` sources must refuse and the
+/// `::OPTIONS` ones must reach the class error, and the halves fail in
+/// opposite directions: dropping `staged_gap` reddens the refusing rows,
+/// and hoisting the whole gap check to the front instead reddens the
+/// `::OPTIONS` rows. One half alone does not say where the boundary is.
+///
+/// **A refusal here is not a match** -- the oracle answers 99.945 and 43.901
+/// and this crate answers neither. It is the honest half of the trade
+/// `staged_gap`'s doc states, and the corpus differential cannot see any of
+/// it, because no program in the subset carries a `::REQUIRES` or an
+/// `::ANNOTATE` with a target.
+#[test]
+fn a_gap_the_oracle_diagnoses_before_a_class_refuses_ahead_of_the_class_error() {
+    let failing_class = "::class a subclass zzznotaclass\n";
+    let refusing: &[(&str, &str)] = &[
+        (
+            "::annotate routine nosuchrtn\n",
+            "::ANNOTATE naming a target is not implemented (Phase 5)",
+        ),
+        (
+            "::requires 'zzznosuchfile.rex'\n",
+            "::REQUIRES is not implemented (Phase 5)",
+        ),
+    ];
+    for (gap, message) in refusing {
+        for source in [
+            format!("say 'main ran'\n{gap}{failing_class}"),
+            format!("say 'main ran'\n{failing_class}{gap}"),
+        ] {
+            let outcome = routine_program(source.as_bytes());
+            assert_eq!(
+                outcome.exit_code,
+                crate::NOT_IMPLEMENTED_EXIT,
+                "{source}: exit code, stderr {}",
+                String::from_utf8_lossy(&outcome.stderr)
+            );
+            assert_eq!(outcome.stdout, b"", "{source}: stdout");
+            assert_eq!(
+                outcome.stderr,
+                format!("rexx-exec: {message}\n").into_bytes(),
+                "{source}: stderr"
+            );
+        }
+    }
+    for source in [
+        format!("say 'main ran'\n::options digits 12\n{failing_class}"),
+        format!("say 'main ran'\n{failing_class}::options digits 12\n"),
+    ] {
+        let outcome = routine_program(source.as_bytes());
+        let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
+        assert_eq!(
+            outcome.exit_code, 158,
+            "{source}: exit code, stderr {stderr}"
+        );
+        assert_eq!(outcome.stdout, b"", "{source}: stdout");
+        assert!(
+            stderr.contains("Error 98.909:  Class \"ZZZNOTACLASS\" not found."),
+            "{source}: stderr {stderr}"
+        );
+    }
+}
+
 /// A builtin's result is a value whose rendering `NUMERIC DIGITS` cannot
 /// reach, and D15 is still visible on it from the other side.
 ///

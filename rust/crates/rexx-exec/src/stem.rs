@@ -627,11 +627,12 @@ impl Interp {
     ///
     /// Not `RootSet::clear_frame_slot`, even though one exists (for plain
     /// `DROP` on a simple variable, whose read path has to tell "unset" apart
-    /// from every other value for `NOVALUE`). A stem's slot is not "empty or not" the way a simple
-    /// variable's is: replacing the object is the literal reading of
-    /// D15a's own wording, and it is what makes `stem_assign`'s wrap branch
-    /// and this function one shared operation (`replace_stem`) rather than
-    /// two independently-written ones that happen to agree today.
+    /// from every other value for `NOVALUE`). A stem's slot is not "empty or
+    /// not" the way a simple variable's is: replacing the object is the
+    /// literal reading of D15a's own wording, and it is what makes
+    /// `stem_assign`'s wrap branch and this function one shared operation
+    /// (`replace_stem`) rather than independently-written ones that happen to
+    /// agree today.
     ///
     /// Measured, and it is the only case this task found where "dropped"
     /// and "never touched" turn out to be indistinguishable rather than

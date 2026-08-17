@@ -1437,7 +1437,6 @@ impl Raised {
     /// makes this the wider case -- a called routine's first instruction is
     /// still "not first after a *method* invocation", so it lands here rather
     /// than on 98.993.
-    ///
     pub(crate) fn use_local_not_first() -> Raised {
         Raised::syntax(99, 910, Vec::new())
     }

@@ -154,5 +154,9 @@ lang/expose_two_scopes.rex
 # Task 8 fix round 1: which ::CLASS a failing ::CONSTANT expression is blamed
 # against once the file's classes no longer install in source order. The blame
 # is the class installed last, which this program makes the first one in the
-# file -- so neither source order nor its reverse produces it.
+# file. That alone is also what reading source order backwards gives, so this
+# program pins the rule only together with
+# directive_constant_expression_blames_the_last_class.rex above, which reddens
+# under exactly the backwards reading this one is green under. Measured, each
+# positional rule built in turn: 105 of 106, one program differing each time.
 lang/directive_constant_blames_the_last_installed_class.rex

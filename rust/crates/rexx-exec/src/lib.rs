@@ -1212,6 +1212,126 @@ fn owned_message(name: &str, owner: Option<&'static str>) -> String {
 /// body a send can enter. What makes a form a gap here is that installing it
 /// is something this crate cannot do at all, not that nothing reads it
 /// afterwards.
+fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
+    let gap = |name: &str, owner: &'static str| {
+        Some(Loud {
+            message: owned_message(name, Some(owner)),
+        })
+    };
+    match kind {
+        // Loads a shared library and binds an entry point in it, before
+        // `main` and whether or not the routine is ever called -- measured,
+        // 98.903 rc 158 with stdout empty in both shapes. Phase 7 owns
+        // library loading.
+        DirectiveKind::Routine(routine) if routine.external.is_some() => {
+            gap("::ROUTINE EXTERNAL", "Phase 7")
+        }
+        DirectiveKind::Method(method) if method.external.is_some() => {
+            gap("::METHOD EXTERNAL", "Phase 7")
+        }
+        DirectiveKind::Attribute(attribute) if attribute.external.is_some() => {
+            gap("::ATTRIBUTE EXTERNAL", "Phase 7")
+        }
+        // Loads a file and **runs its prolog** before `main`: measured, a
+        // helper whose first clause is `say 'PROLOG RAN'` prints that line
+        // above the requiring program's own output at rc 0. So presence is
+        // use, and this refuses a program the oracle runs whenever the
+        // prolog happens to be empty -- the trade `phase-4-exclusions.txt`
+        // states, taken because the alternative is silently dropping both
+        // that output and the public routines the file imports.
+        DirectiveKind::Requires(_) => gap("::REQUIRES", "Phase 5"),
+        // Applies package settings unconditionally, and there is no unused
+        // form: measured, `::options digits 12` makes `digits()` report 12,
+        // and `::options trace labels` makes every `::ROUTINE` in the file
+        // emit its own `>I>`/`<I<` pair.
+        DirectiveKind::Options(_) => gap("::OPTIONS", "Phase 5"),
+        // **Three keywords and three messages, because the three are at
+        // different stages.** `SUBCLASS` installs (`class_install_order`
+        // orders the file's own classes by it and `Interp::install_class_at`
+        // resolves the target); `MIXINCLASS` fills the same field with
+        // `mixin` set and is a different construct -- `setMixinClass` makes
+        // the class a mixin as well as setting the superclass -- and
+        // `INHERIT` and `METACLASS` are their own. One message covering all
+        // of them would name a construct this crate installs.
+        DirectiveKind::Class(class) if class.mixin => gap("::CLASS MIXINCLASS", "Phase 5"),
+        // `SUBCLASS ns:name`. The namespace is a package this crate does not
+        // load, so the target names nothing here whatever it names on the
+        // oracle -- unlike a bare name, which `Interp::install_class_at`
+        // resolves against the file's own classes and then the registry.
+        DirectiveKind::Class(class)
+            if class
+                .subclass
+                .as_ref()
+                .is_some_and(|target| target.namespace.is_some()) =>
+        {
+            gap("::CLASS SUBCLASS naming a namespace", "Phase 5")
+        }
+        DirectiveKind::Class(class) if class.metaclass.is_some() => {
+            gap("::CLASS METACLASS", "Phase 5")
+        }
+        DirectiveKind::Class(class) if !class.inherit.is_empty() => {
+            gap("::CLASS INHERIT", "Phase 5")
+        }
+        // Resolves its target against the accumulated package: measured,
+        // `::annotate routine nosuchrtn` is 99.945 rc 157. `::ANNOTATE
+        // PACKAGE` names nothing and is ignored with the rest.
+        DirectiveKind::Annotate(annotate)
+            if !matches!(annotate.target, AnnotationTarget::Package) =>
+        {
+            gap("::ANNOTATE naming a target", "Phase 5")
+        }
+        DirectiveKind::Annotate(_)
+        | DirectiveKind::Attribute(_)
+        | DirectiveKind::Class(_)
+        | DirectiveKind::Constant(_)
+        | DirectiveKind::Method(_)
+        | DirectiveKind::Resource(_)
+        | DirectiveKind::Routine(_) => None,
+    }
+}
+
+/// The refusal a directive stage owes, or `None` when every directive the
+/// stage selects installs.
+///
+/// **[`Interp::install_directives`] consults [`directive_gap`] in stages,
+/// because the oracle does not diagnose every gap form at the same point.**
+/// Each row below is one program, the named gap form beside a `::CLASS` that
+/// fails to install, measured on the oracle both ways round:
+///
+/// ```text
+/// gap form                   beside                oracle answers
+/// ::annotate routine nosuch  a failing ::CLASS     99.945 rc 157, the ::ANNOTATE line
+/// ::annotate routine nosuch  a ::CLASS cycle       99.945 rc 157, the ::ANNOTATE line
+/// ::requires 'nosuch.rex'    a failing ::CLASS     43.901 rc 213, the ::REQUIRES line
+/// ::requires 'nosuch.rex'    a ::CLASS cycle       98.911 rc 158, the cycle's root
+/// ::options digits 12        a failing ::CLASS     98.909 rc 158, the ::CLASS line
+/// ::class q metaclass zzz    a failing ::CLASS     98.908 or 98.909, source order
+/// ```
+///
+/// So the oracle resolves an `::ANNOTATE` target before it looks for a cycle,
+/// opens a `::REQUIRES` file after that and before it creates any class, and
+/// reaches the rest only while creating them. A refusal owed at an earlier
+/// stage has to be raised before this crate installs anything: leave it to
+/// the source-order pass and a class error preempts the diagnosis the oracle
+/// issues first, which turns a loud refusal into a wrong answer. That is the
+/// trade `518cd6de7` made by accident and this undoes.
+///
+/// **The cost is a refusal where the oracle carries on.** With the target
+/// declared above the `::ANNOTATE`, or the `::REQUIRES` file present, the
+/// oracle reaches the class error and this crate refuses at the earlier stage
+/// instead -- measured, `::routine r` / `::annotate routine r` / `::class a
+/// subclass zzznotaclass` is 98.909 rc 158 on the oracle and this crate
+/// matched it before this staging existed. Telling those apart means
+/// resolving the target and opening the file, which is the work Phase 5 owns;
+/// until then a refusal is the answer that cannot be wrong.
+fn staged_gap(program: &Program, stage: fn(&DirectiveKind) -> bool) -> Option<Loud> {
+    program
+        .directives
+        .iter()
+        .filter(|directive| stage(&directive.kind))
+        .find_map(|directive| directive_gap(&directive.kind))
+}
+
 /// The order a file's `::CLASS` directives install in: each class after the
 /// one its `SUBCLASS` names, when that target is declared in the same file.
 ///
@@ -1220,8 +1340,25 @@ fn owned_message(name: &str, owner: Option<&'static str>) -> String {
 /// method declared on `a` through `.c`, so a target declared later in the file
 /// resolves. The order is also observable when nothing fails to resolve: a
 /// `::CONSTANT` whose expression raises blames the class installed **last**,
-/// and `::class b subclass a` / `::constant c (1/0)` / `::class a` blames `b`
-/// -- last in dependency order, and last in neither direction of source order.
+/// and `::class b subclass a` / `::constant c (1/0)` / `::class a` blames `b`,
+/// which source order reaches first.
+///
+/// **The corpus programs named below pin that blame rule together; none of
+/// them does alone.** Each is also produced by reading source order in one
+/// direction or the other, which is what an earlier version of this comment
+/// got wrong when it claimed one of them was produced by neither. Measured,
+/// by putting a single positional rule where `order.last()` is read below and
+/// running the corpus differential:
+///
+/// ```text
+/// blame the LAST ::CLASS directive in the file:
+///     directive_constant_blames_the_last_installed_class.rex differs, 105 of 106
+/// blame the FIRST ::CLASS directive in the file:
+///     directive_constant_expression_blames_the_last_class.rex differs, 105 of 106
+/// ```
+///
+/// So each direction of source order is excluded by one witness, and the
+/// dependency order this function computes is what answers every one of them.
 ///
 /// **`Err` is a cycle**, carrying the directive to blame: the root of the walk
 /// that closed the loop, which is what the oracle echoes. Measured, rc 158
@@ -1287,84 +1424,6 @@ fn class_install_order(
         }
     }
     Ok(order)
-}
-
-fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
-    let gap = |name: &str, owner: &'static str| {
-        Some(Loud {
-            message: owned_message(name, Some(owner)),
-        })
-    };
-    match kind {
-        // Loads a shared library and binds an entry point in it, before
-        // `main` and whether or not the routine is ever called -- measured,
-        // 98.903 rc 158 with stdout empty in both shapes. Phase 7 owns
-        // library loading.
-        DirectiveKind::Routine(routine) if routine.external.is_some() => {
-            gap("::ROUTINE EXTERNAL", "Phase 7")
-        }
-        DirectiveKind::Method(method) if method.external.is_some() => {
-            gap("::METHOD EXTERNAL", "Phase 7")
-        }
-        DirectiveKind::Attribute(attribute) if attribute.external.is_some() => {
-            gap("::ATTRIBUTE EXTERNAL", "Phase 7")
-        }
-        // Loads a file and **runs its prolog** before `main`: measured, a
-        // helper whose first clause is `say 'PROLOG RAN'` prints that line
-        // above the requiring program's own output at rc 0. So presence is
-        // use, and this refuses a program the oracle runs whenever the
-        // prolog happens to be empty -- the trade `phase-4-exclusions.txt`
-        // states, taken because the alternative is silently dropping both
-        // that output and the public routines the file imports.
-        DirectiveKind::Requires(_) => gap("::REQUIRES", "Phase 5"),
-        // Applies package settings unconditionally, and there is no unused
-        // form: measured, `::options digits 12` makes `digits()` report 12,
-        // and `::options trace labels` makes every `::ROUTINE` in the file
-        // emit its own `>I>`/`<I<` pair.
-        DirectiveKind::Options(_) => gap("::OPTIONS", "Phase 5"),
-        // **Three keywords and three messages, because the three are at
-        // different stages.** `SUBCLASS` installs (`Interp::order_classes`
-        // resolves its target and orders the file's own classes by it);
-        // `MIXINCLASS` fills the same field with `mixin` set and is a
-        // different construct -- `setMixinClass` makes the class a mixin as
-        // well as setting the superclass -- and `INHERIT` and `METACLASS` are
-        // their own. One message covering all of them would name a construct
-        // this crate installs.
-        DirectiveKind::Class(class) if class.mixin => gap("::CLASS MIXINCLASS", "Phase 5"),
-        // `SUBCLASS ns:name`. The namespace is a package this crate does not
-        // load, so the target names nothing here whatever it names on the
-        // oracle -- unlike a bare name, which `Interp::install_class_at`
-        // resolves against the file's own classes and then the registry.
-        DirectiveKind::Class(class)
-            if class
-                .subclass
-                .as_ref()
-                .is_some_and(|target| target.namespace.is_some()) =>
-        {
-            gap("::CLASS SUBCLASS naming a namespace", "Phase 5")
-        }
-        DirectiveKind::Class(class) if class.metaclass.is_some() => {
-            gap("::CLASS METACLASS", "Phase 5")
-        }
-        DirectiveKind::Class(class) if !class.inherit.is_empty() => {
-            gap("::CLASS INHERIT", "Phase 5")
-        }
-        // Resolves its target against the accumulated package: measured,
-        // `::annotate routine nosuchrtn` is 99.945 rc 157. `::ANNOTATE
-        // PACKAGE` names nothing and is ignored with the rest.
-        DirectiveKind::Annotate(annotate)
-            if !matches!(annotate.target, AnnotationTarget::Package) =>
-        {
-            gap("::ANNOTATE naming a target", "Phase 5")
-        }
-        DirectiveKind::Annotate(_)
-        | DirectiveKind::Attribute(_)
-        | DirectiveKind::Class(_)
-        | DirectiveKind::Constant(_)
-        | DirectiveKind::Method(_)
-        | DirectiveKind::Resource(_)
-        | DirectiveKind::Routine(_) => None,
-    }
 }
 
 /// Why a resolved method's directive cannot be entered, or `None` when it
@@ -2760,17 +2819,6 @@ enum VarHome {
 /// Not `Copy`, only `Clone`, because of that owned name. The one read site
 /// (`exec_use_arg`) clones per target, which is one small allocation per
 /// `USE ARG >` position and nothing at all for an ordinary argument.
-/// **One of these is built per evaluated call argument, so its width is a
-/// property of every call a program makes rather than of the `>name` form.**
-/// `bench-programs/strings.rex` builds nine per pass. Measured across
-/// [`VarHome::Instance`]'s payload being boxed or not: 40 bytes here against
-/// 56 inline, and the `strings` axis at +0.58%/+0.62% `instructions:u`
-/// against +1.39%/+1.68%. An equality rather than a bound, for the reason
-/// `crate::ir::Op`'s own width assertion is one: a variant that outgrows this
-/// widens every argument there is, and that should be a compile error at the
-/// moment it happens rather than a measurement somebody has to take again.
-const _: () = assert!(size_of::<Argument>() == 40);
-
 #[derive(Clone)]
 enum Argument {
     Value(ObjRef),
@@ -2782,6 +2830,17 @@ enum Argument {
         name: Box<[u8]>,
     },
 }
+
+/// **One of these is built per evaluated call argument, so its width is a
+/// property of every call a program makes rather than of the `>name` form.**
+/// `bench-programs/strings.rex` builds nine per pass. Measured across
+/// [`VarHome::Instance`]'s payload being boxed or not: 40 bytes here against
+/// 56 inline, and the `strings` axis at +0.58%/+0.62% `instructions:u`
+/// against +1.39%/+1.68%. An equality rather than a bound, for the reason
+/// `crate::ir::Op`'s own width assertion is one: a variant that outgrows this
+/// widens every argument there is, and that should be a compile error at the
+/// moment it happens rather than a measurement somebody has to take again.
+const _: () = assert!(size_of::<Argument>() == 40);
 
 impl Argument {
     /// The argument's value, which every form has. `USE ARG` without `>`
@@ -3013,6 +3072,13 @@ impl Interp {
             }
         }
 
+        // The oracle resolves an `::ANNOTATE` target at the same stage, and
+        // ahead of the cycle check below: measured, the directive's own
+        // 99.945 answers a file whose classes form a cycle. See `staged_gap`.
+        if let Some(loud) = staged_gap(program, |kind| matches!(kind, DirectiveKind::Annotate(_))) {
+            return Err(loud.into());
+        }
+
         // **A second pass, because the oracle's own translation-time
         // refusals above happen before every install-time one below**
         // (98.9xx/43.901/the `::CONSTANT` expression evaluation), so a
@@ -3044,20 +3110,29 @@ impl Interp {
             }
         };
 
+        // A `::REQUIRES` file is opened after the cycle check and before any
+        // class is created -- measured, 43.901 against a file whose first
+        // directive is a `::CLASS` that fails to resolve, and 98.911 against
+        // one whose classes form a cycle. See `staged_gap`.
+        if let Some(loud) = staged_gap(program, |kind| matches!(kind, DirectiveKind::Requires(_))) {
+            return Err(loud.into());
+        }
+
         // **The failing-`::CONSTANT` blame target is the class the oracle
         // installed LAST, not the last one in the file and not the nearest
         // preceding one, and every part of that is measured.** `::class A` /
         // `::constant x (1/0)` / `::class B` blames `B`, and a third
         // `::class C` after it blames `C`, so the blame does not depend on
         // which class the constant is lexically under. `::class b subclass a`
-        // / `::constant c (1/0)` / `::class a` blames **`b`**, which is last
-        // in neither source order nor reverse source order but is last in
-        // dependency order, and `::class c subclass b` / `::class a` /
+        // / `::constant c (1/0)` / `::class a` blames **`b`**, which source
+        // order reaches first, and `::class c subclass b` / `::class a` /
         // `::constant x (1/0)` / `::class b subclass a` blames `c`, first in
-        // the file. Tracked separately from `current_class_id` below, which
-        // is R9's registry attachment and a genuinely different rule: the
-        // `Method` and `Attribute` arms attach to the class positionally
-        // nearest above them.
+        // the file. Which positional rules the corpus excludes, and which
+        // witness excludes which, is in `class_install_order`'s own doc.
+        // Tracked separately from `current_class_id` below, which is R9's
+        // registry attachment and a genuinely different rule: the `Method`
+        // and `Attribute` arms attach to the class positionally nearest above
+        // them.
         let last_class_directive = order.last().map(|index| &program.directives[*index]);
 
         // **Classes install before anything else in the file is processed**,

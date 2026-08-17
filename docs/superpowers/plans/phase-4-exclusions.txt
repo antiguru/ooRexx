@@ -422,14 +422,35 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
     ::routine z external "LIBRARY nosuchlib nosuchfn"  98.903 rc 158
     ::method m external "LIBRARY nosuchlib nosuchfn"   98.903 rc 158
 
+  A DELIBERATE OVER-REFUSAL ADDED BY TASK 8 FIX ROUND 2: A FILE HOLDING A
+  ::ANNOTATE WITH A TARGET, OR A ::REQUIRES, BESIDE A ::CLASS THAT CANNOT
+  INSTALL, IS REFUSED RATHER THAN GIVEN THE CLASS ERROR.
+  `Interp::install_directives` raises those gaps before it creates any class,
+  because the oracle diagnoses each of them before it creates one -- measured,
+  `::annotate routine nosuchrtn` is 99.945 rc 157 and `::requires
+  'zzznosuchfile.rex'` is 43.901 rc 213 whichever side of `::class a subclass
+  zzznotaclass` they sit on. At 62de43c0f this crate answered 98.909 rc 158 to
+  every one of those programs, which 518cd6de7's install reordering had turned
+  into a wrong answer for the shapes where the gap directive comes first --
+  they were a loud refusal before it. Answering 98.909 there is a wrong
+  answer; refusing is not, so the refusal is raised at the oracle's own stage.
+
+  THE COST IS A REFUSAL WHERE THE ORACLE CARRIES ON. With the ::ANNOTATE
+  target declared above it, or the ::REQUIRES file present, the oracle reaches
+  the class error instead -- measured, `::routine r` / `::annotate routine r`
+  / `::class a subclass zzznotaclass` is 98.909 rc 158, which this crate
+  matched byte for byte at 62de43c0f and now refuses. Telling the two apart
+  means resolving the target and opening the file, which is Phase 5's own
+  work. OWNER: Phase 5, with the rest of ::REQUIRES and ::ANNOTATE.
+
   KNOWN GAP, NOT THIS TASK'S: A ::CONSTANT EXPRESSION CANNOT SEND TO A CLASS
   DECLARED LATER IN THE SAME FILE. Measured, and it does not involve SUBCLASS
   at all:
 
     say 'main'                       oracle rc 0, prints `main`
-    ::class a                        crate  rc 159, 97.1 `Object ".LATER" does
-    ::constant c (.later~m)                 not understand message "M".`
-    ::class later
+    ::class a                        crate  rc 159, 97.1 `Object "The LATER
+    ::constant c (.later~m)                 class" does not understand
+    ::class later                           message "M".`
     ::method m class
     return 'from a later class'
 
@@ -437,6 +458,15 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
   evaluates any ::CONSTANT expression, and this crate evaluates each one as it
   walks the directive list. The row is DIVERGES by this table's rule: rc 159
   against rc 0, an answer rather than a refusal.
+
+  THE TRANSCRIPT ABOVE IS THE ONE 62de43c0f ANSWERS. The row as first written
+  recorded `Object ".LATER" does not understand message "M".`, which is the
+  message at 518cd6de7's own base: there the class objects were created as the
+  directive walk reached them, so `.LATER` was still unresolved when the
+  constant ran. Since 518cd6de7 every class in the file is created before the
+  walk starts, so the class object exists and only its methods are missing,
+  and the receiver renders as itself. rc 159 either way, oracle rc 0 either
+  way, so the verdict never moved -- only the bytes did.
 
   PRESENT AT 83fa81b3b, verified by running the same program against a build of
   that commit, so it is not the class-install work's. It is recorded here
@@ -448,9 +478,14 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
 
   THE BLAME TARGET OF A FAILING ::CONSTANT IS A DIFFERENT QUESTION AND IS
   CLOSED. The oracle blames the class it installed LAST, which is not the last
-  in source order once a SUBCLASS names a class declared later;
-  `corpus/lang/directive_constant_blames_the_last_installed_class.rex` is the
-  witness, and it makes the blame the FIRST class directive in the file.
+  in source order once a SUBCLASS names a class declared later.
+  `corpus/lang/directive_constant_blames_the_last_installed_class.rex` makes
+  the blame the FIRST class directive in the file, and
+  `directive_constant_expression_blames_the_last_class.rex` makes it the last
+  one; each direction of source order gets one of them right and the other
+  wrong, so the rule is pinned by the programs together and by neither alone.
+  Measured, each positional rule built in place of the dependency order: 105
+  of 106, with exactly the program the rule contradicts differing.
 
   CLOSED DEFECT: ::CLASS ... SUBCLASS <class> WAS ONE OF THE OVER-REFUSALS
   AND IS NOT ANY MORE. It was refused whether or not the named class
