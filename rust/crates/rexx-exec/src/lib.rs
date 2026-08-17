@@ -2636,10 +2636,21 @@ struct CallContext {
 /// caller never reads. Measured: a class method exposing `v`, `call inner >v`
 /// into `use arg >p`, and `p` assigned in the callee -- the oracle reads the
 /// callee's write back through `v` at rc 0.
+///
+/// **`Instance` is boxed and `Slot` is not, and the asymmetry is measured on
+/// both sides.** This enum is a field of [`Argument`], one of which is built
+/// per evaluated call argument -- `bench-programs/strings.rex` builds nine per
+/// pass -- so an unboxed [`InstanceVar`], at three words plus a `Box<[u8]>`,
+/// widens every argument any program passes. Inline it took `Argument` from 32
+/// bytes to 56 and the `strings` axis to +1.39%/+1.68% `instructions:u`
+/// against this branch's base; boxed, `Argument` is 40 and the axis is
+/// +0.58%/+0.62%, with `compound` unmoved. The pointer chase is paid where a
+/// method reaches an instance variable, which is the rare case, rather than on
+/// every builtin call, which is the common one.
 #[derive(Clone, Debug)]
 enum VarHome {
     Slot(SlotRef),
-    Instance(InstanceVar),
+    Instance(Box<InstanceVar>),
 }
 
 /// One evaluated call argument.
@@ -2672,6 +2683,17 @@ enum VarHome {
 /// Not `Copy`, only `Clone`, because of that owned name. The one read site
 /// (`exec_use_arg`) clones per target, which is one small allocation per
 /// `USE ARG >` position and nothing at all for an ordinary argument.
+/// **One of these is built per evaluated call argument, so its width is a
+/// property of every call a program makes rather than of the `>name` form.**
+/// `bench-programs/strings.rex` builds nine per pass. Measured across
+/// [`VarHome::Instance`]'s payload being boxed or not: 40 bytes here against
+/// 56 inline, and the `strings` axis at +0.58%/+0.62% `instructions:u`
+/// against +1.39%/+1.68%. An equality rather than a bound, for the reason
+/// `crate::ir::Op`'s own width assertion is one: a variant that outgrows this
+/// widens every argument there is, and that should be a compile error at the
+/// moment it happens rather than a measurement somebody has to take again.
+const _: () = assert!(size_of::<Argument>() == 40);
+
 #[derive(Clone)]
 enum Argument {
     Value(ObjRef),

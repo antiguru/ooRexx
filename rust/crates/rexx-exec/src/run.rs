@@ -2641,7 +2641,7 @@ impl Interp {
             // exposing `v` and calling `inner: procedure expose v`, which
             // assigns `v` -- the object variable is what changes.
             let target = match self.exposure(outer, slot) {
-                Some(var) => VarHome::Instance(var.clone()),
+                Some(var) => VarHome::Instance(Box::new(var.clone())),
                 None => VarHome::Slot(self.roots.slot_ref(outer, slot)),
             };
             bindings.push((name, slot, target));
@@ -2679,7 +2679,7 @@ impl Interp {
         for (_, slot, target) in &bindings {
             match target {
                 VarHome::Slot(target) => self.roots.alias_slot(inner, *slot, *target),
-                VarHome::Instance(var) => exposed.push((*slot, var.clone())),
+                VarHome::Instance(var) => exposed.push((*slot, (**var).clone())),
             }
         }
 
@@ -3097,8 +3097,8 @@ impl Interp {
                 VarHome::Instance(var) => {
                     let activation = self.activation_mut();
                     match activation.exposed.iter_mut().find(|(at, _)| *at == index) {
-                        Some(bound) => bound.1 = var,
-                        None => activation.exposed.push((index, var)),
+                        Some(bound) => bound.1 = *var,
+                        None => activation.exposed.push((index, *var)),
                     }
                 }
             }
@@ -5237,7 +5237,7 @@ impl Interp {
         // exposed name would hand the callee the empty slot the exposure left
         // behind.
         let target = match self.exposure(frame, slot) {
-            Some(var) => VarHome::Instance(var.clone()),
+            Some(var) => VarHome::Instance(Box::new(var.clone())),
             None => VarHome::Slot(self.roots.slot_ref(frame, slot)),
         };
         let value = self.eval(code, expr)?;
