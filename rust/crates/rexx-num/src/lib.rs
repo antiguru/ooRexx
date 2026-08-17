@@ -27,7 +27,7 @@ mod digits;
 mod muldiv;
 mod pow;
 
-pub use compare::{CompareOp, compare, compare_bytes, compare_decoded};
+pub use compare::{CompareOp, compare, compare_bytes, compare_decoded, compare_numbers};
 pub(crate) use digits::Digits;
 pub use muldiv::DivOp;
 mod settings;

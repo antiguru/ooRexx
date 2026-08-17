@@ -1095,6 +1095,25 @@ impl Interp {
             self.to_number(right_value).ok()
         };
 
+        // **Both operands parsed means the bytes have no reader**, so they are
+        // not produced. `compare_decoded`'s own `(Some, Some)` arm is
+        // `compare_numbers` and nothing else, and it is handed the same two
+        // values this would have passed it -- so this is where the rendering
+        // happens rather than what the comparison answers. What it skips is
+        // `render` plus `text` on both sides, whose result reaches only the
+        // string fallback below.
+        //
+        // Measured on `samples/rexxcps.rex`: 2,520,002 comparisons reach this
+        // point and 1,680,001 of them take this arm, which is 3,360,002
+        // renderings not performed.
+        if let (Some(left), Some(right)) = (&left_number, &right_number) {
+            let holds = rexx_num::compare_numbers(left, right, digits, fuzz, compare_op(op))
+                .map_err(Raised::from)?;
+            return Ok(self.text(if holds { b"1" } else { b"0" }));
+        }
+        // Either operand failed to parse, or the operator is strict and neither
+        // was parsed at all. Both routes compare the operands' own text, which
+        // is what these two renderings are for.
         let left_rendered = self.render(left_value);
         let right_rendered = self.render(right_value);
         let left_bytes = left_rendered.text(self);
