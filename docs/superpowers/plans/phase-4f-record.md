@@ -4789,3 +4789,51 @@ Confirming rather than inferring: `/home/moritz/dev/repos/ooRexx/interpreter/par
 * **The 12 corpus programs that disagree under `REXX_CORPUS_GATE=1` on this machine have not been re-examined against this fact.** Some may be the same artifact. Nothing in entries 60 or 61 depends on them -- every result there is base-against-head with the disagreeing set held equal -- but a session that reads "12 disagree" as "12 gaps" would be repeating entry 61's mistake at scale.
 * **`phase-4f-oracle-64a7a7aa4.md` records a hash and an mtime for the oracle and does not say which upstream commit it was built from.** A hash identifies a binary; it does not say what the binary implements. The commit is what a later reader needs, and it is why this entry records `f975dde4` rather than only the checksum above.
 * Five shapes were measured on this machine, all rejected here and all accepted by the oracle, each read as three separate descriptors: a label in a counted `DO`, in a bare `DO`, in a bounded `LOOP`, in an `IF` branch, and in a `SELECT` both before the first `WHEN` and between two `WHEN`s. `loop forever` with no `LEAVE` was also written and **must not be run** -- it hangs the oracle, which cost ten minutes of this sitting.
+
+### Entry 63 -- the chunked slot table, measured and declined
+
+No commits: the experiment was built, measured and reverted. `Vec<Vec<Slot>>` with power-of-two inner lengths, so a slot never moves once written (Moritz's suggestion, carried in entries 60 and 61 with the instruction to measure growth first).
+
+#### The growth it would remove
+
+Counted under a scratch build that noted every reallocation of `Heap::slots` and every `Heap::resolve`. `Slot` is 96 bytes.
+
+| program | reallocations | bytes moved | peak slots | `resolve` calls |
+|---|---:|---:|---:|---:|
+| `rexxcps` (pinned) | 14 | 6,291,072 | 32,768 | 13,684,907 |
+| `strings` | 14 | 6,291,072 | 32,768 | 30,001,227 |
+| `alloc4c` | 14 | 6,291,072 | 32,768 | 10,877,231 |
+| `arith` | 14 | 6,291,072 | 32,768 | 7,605,868 |
+| `compound` | 0 | 0 | 0 | 10,000,500 |
+| `emptyloop` | 0 | 0 | 0 | 0 |
+| `varlookup` | 0 | 0 | 0 | 0 |
+
+**The arena's entire growth cost for a whole run is 14 reallocations and 6.29 MB moved.** It reaches 32,768 slots -- 3 MiB -- and stops; the free list serves every allocation after that. `emptyloop` and `varlookup` never touch the arena at all, which is the tagged-handle model working.
+
+#### The tax it would add
+
+Built for real -- a `Slots` type with `locate(i) = (i.bit_width(), i with its highest set bit cleared)`, `push`, `Index`, `IndexMut` -- and `cargo test -p rexx-core` passes under it, so these are numbers from a working implementation rather than from a sketch.
+
+| axis | flat | chunked | delta |
+|---|---:|---:|---:|
+| `rexxcps` | 14,406,617,615 | 14,776,588,321 | **+2.57%** |
+| `strings` | 29,283,644,811 | 30,038,361,177 | **+2.58%** |
+| `alloc4c` | 5,537,712,405 | 5,624,108,867 | **+1.56%** |
+| `compound` | 16,243,366,482 | 16,403,195,624 | **+0.98%** |
+
+Cycles on `rexxcps`, 7,309,984,762 -> 7,395,997,211, +1.18%, losing every interleaved pair. Every figure is far outside the +/-0.66% layout floor entry 61 established, so these are work rather than layout.
+
+**+369,970,706 instructions on `rexxcps` to remove 6,291,072 bytes of one-time `memcpy`.** Per `resolve` the added cost is 27 instructions on `rexxcps`, 25 on `strings`, 16 on `compound` and 8 on `alloc4c`; the spread is how many of each program's accesses are `get`/`get_mut`, which locate twice -- once inside `resolve` and once in the index that follows it.
+
+**The conclusion does not depend on the implementation being good.** This one costs three dependent loads where the flat table costs one, and a tuned version holding raw chunk pointers in a fixed array could plausibly halve it. Even a perfect one adds at least one dependent load per access, which on `rexxcps` is at least 27,000,000 instructions against a growth cost that is under a million. The margin is about two orders of magnitude.
+
+#### The two secondary prizes, and why neither follows
+
+Entry 60 recorded that the larger prize, if slots stopped moving, is that "handles may not need generation validation per deref and the sweep could go chunk-wise". **Both are wrong, and the first is wrong for a reason already written down.**
+
+* `handle.rs`'s own module doc says the generation exists because **slots are recycled through a free list** -- "without it a handle held across a collection would silently name whatever is allocated into that slot next". That is recycling, not relocation. A chunked table recycles exactly as the flat one does, so the check stays.
+* `Heap::collect` already walks `0..slots.len()` over a contiguous array with a flat `marks: Vec<bool>` beside it. That is the best case for a linear sweep; chunking makes it worse, not better.
+
+#### What this does not cover
+
+Every program measured has a live set at or under 32,768 objects, so the largest single copy a reallocation performs here is 3 MiB. A program holding millions of live objects moves proportionally more, and a doubling's last copy is half the final size -- which is a **latency** argument rather than a throughput one, and this sitting measured throughput. Nothing here says anything about a pause-time bound. It says that on every axis this project currently measures, growth is not where the arena's time goes.
