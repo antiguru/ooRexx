@@ -184,6 +184,7 @@ fn promoted_as(kind: &InstructionKind, index: usize, listed: &[usize]) -> Option
         InstructionKind::Iterate { .. } => Some("ITERATE"),
         InstructionKind::Nop => Some("NOP"),
         InstructionKind::Then => Some("THEN"),
+        InstructionKind::Label { .. } => Some("label"),
         _ => None,
     }
 }
@@ -710,6 +711,7 @@ fn sweep_every_corpus_body() {
         "ITERATE",
         "NOP",
         "THEN",
+        "label",
     ] {
         assert!(
             seen.constructs.contains_key(construct),

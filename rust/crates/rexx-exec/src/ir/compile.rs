@@ -946,14 +946,35 @@ pub(crate) fn compile(
             // what they do and it holds no op but its own echo
             // ([`Op::Clause`]'s own doc comment).
             //
-            // **`ELSE`, `OTHERWISE` and `LABEL` execute the same way and are
-            // not here.** Each is reached through machinery this arm does not
+            // **A `LABEL` is one of them, and it is the one with machinery
+            // around it.** It is a jump target, so `Chunk::op_of` has to keep
+            // naming it -- which it does, because a region opens at the
+            // instruction's own entry exactly where its `Generic` op sat. It
+            // echoes under `TRACE L` where an ordinary clause does not, which
+            // [`echoes`] already asks through `ChunkTrace::echoes` and
+            // `Interp::echo_compiled_clause` already answers by passing
+            // `is_label` through. And it must not spend the activation's
+            // first-instruction permission, which is
+            // `Interp::grant_procedure_permission`'s own label arm: it never
+            // grants for a label, so `procedure_permitted` is false when this
+            // region takes it and `first_instruction_pending` survives to the
+            // instruction after -- which is what makes `sub:` followed by
+            // `PROCEDURE` legal.
+            //
+            // **`ELSE` and `OTHERWISE` execute the same way and are not
+            // here.** Each is reached through machinery this arm does not
             // touch -- an `ELSE` through the `IF`'s own false target, an
             // `OTHERWISE` through the [`Op::EnterOtherwise`] that sits at its
-            // entry, a `LABEL` through a `SIGNAL`'s or a `CALL`'s jump -- so
-            // each is its own promotion with its own witnesses rather than a
-            // fourth name in this pattern.
-            InstructionKind::Nop | InstructionKind::Then => {
+            // entry -- so each is its own promotion with its own witnesses.
+            //
+            // **`END` is not here, and that is a measurement.** It is not a
+            // marker: its `EndStyle::Select` arm raises 7.3. It is also barely
+            // executed, because every construct returns a `Flow` that resumes
+            // *past* its own `END` -- counted under a scratch build, zero
+            // `END` clauses are stepped over a whole run of
+            // `samples/rexxcps.rex` and six over the whole corpus, against
+            // 700,002 `THEN` on `rexxcps` alone.
+            InstructionKind::Nop | InstructionKind::Then | InstructionKind::Label { .. } => {
                 let at = op_index(&ops)?;
                 let echo = echoes(trace, instruction);
                 ops.push(Op::Clause {
