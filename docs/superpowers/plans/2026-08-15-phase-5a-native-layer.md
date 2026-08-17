@@ -508,8 +508,8 @@ showed the gap is wider than the one keyword, and that the plan does not mention
 | `::CLASS`/`::METHOD` option | in `CoreClasses.orx` | this crate | owner |
 |---|---|---|---|
 | `SUBCLASS <class>` | `Alarm`, `CircularQueue`, `Properties`, `TraceObject` | was rc 120 | **Task 8**, ruling R26 |
-| `MIXINCLASS` | used | rc 120, `::CLASS naming another class` | **Task 15** |
-| `INHERIT` | `DateTime`, `TimeSpan` | rc 120, same message | **Task 15** |
+| `MIXINCLASS` | used | rc 120, `::CLASS MIXINCLASS` | **Task 15** |
+| `INHERIT` | `DateTime`, `TimeSpan` | rc 120, `::CLASS INHERIT` | **Task 15** |
 | `ABSTRACT` | used | rc 0, agrees | none needed for the gate |
 | `UNGUARDED` | used | rc 0, agrees | none needed for the gate |
 | `PRIVATE` | used | **installs at rc 0**; a *send* is rc 120 | **Task 16** |
@@ -589,10 +589,37 @@ not the reason the task exists.
 and **`METACLASS` remains refused after it**, loudly, at rc 120 with a message naming only what it
 still refuses.
 
-**`INHERIT` has no pre-task measurement against the oracle and that is stated rather than hidden.**
-The probe written for it used a plain class as the inherit target, which the oracle answers 158, so
-the program was wrong; `INHERIT` cannot be exercised until `MIXINCLASS` installs. **Take its oracle
-transcript as the first step of this task**, before writing any code, and record it.
+**`INHERIT`'s validity ladder, measured 2026-08-17 -- three cases, three answers, and the first draft
+of this task recorded only the weakest.** The target of an `INHERIT` must exist *and* must be a mixin,
+and the oracle says so with different errors:
+
+| program | oracle |
+|---|---|
+| `::class d inherit c` with no `c` declared | rc 158, `98.909 Class "C" not found.` |
+| `::class d inherit c` with `::class c` declared | rc 158, `98.942 Class "The C class" must be a MIXINCLASS for INHERIT.` |
+| `::CLASS K INHERIT M PUBLIC` | rc 158, `98.909` -- `dire.xml`'s "INHERIT must be last" is **not** a syntax check; the trailing keyword is read as a class name |
+
+so the success case cannot be exercised until `MIXINCLASS` installs, which is why the two keywords are
+one task. **All three refusal shapes are this task's to reproduce**, not just the success path.
+
+**What Task 8 leaves behind, reported from inside the code by the implementer that wrote it.**
+*Cheaper than it looks:* `ClassKind::Mixin` and `ClassGraph::inherit` -- with its validity assertions
+and its `update_sub_classes` cascade -- already exist, so the graph work is largely present; what is
+missing is directive wiring of the same shape as `d988b2632`, plus passing `ClassKind::Mixin` where
+`install_class` hard-codes `Regular`. The end-of-install class-behaviour rebuild that commit added for
+forward `SUBCLASS` references serves `INHERIT` too.
+*Harder, and the reason this paragraph exists:* **`install_class_at` orders on `subclass` alone.** An
+`INHERIT a b c` target is equally a dependency -- a class must exist before it can be inherited -- so
+this task has to extend the dependency set to the inherit list or a forward `INHERIT` target will not
+resolve. The cycle detection generalises unchanged; it is the *set* that has to grow.
+
+**Keep the in-crate refusal rows when they move.** `MIXINCLASS`'s and `INHERIT`'s current refusals are
+held by `every_directive_this_crate_cannot_install_refuses_before_the_first_clause`, and **a corpus
+program can never hold this case**: our answer is rc 120 where the oracle's is rc 0, so a differential
+cannot express it. Task 8 proved that table live by deleting the guarding arm, at which point the
+`MIXINCLASS` programs answered rc 0 with `ran` and empty stderr -- agreeing with the oracle on all
+three descriptors. When these rows move to passing, the instrument that replaces them has to be able
+to fail the same way.
 
 **Verification.** Oracle-differential, both engines: a mixin installed and inherited by one class; a
 class inheriting two mixins, where the merge order is observable; and the diamond Task 14's subset
