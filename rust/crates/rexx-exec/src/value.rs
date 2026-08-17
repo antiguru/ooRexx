@@ -592,6 +592,7 @@ impl Interp {
         reason = "the interface name is D15's, and `&mut self` is load-bearing \
                    for the lazy cache fill, not a style slip"
     )]
+    #[inline]
     pub(crate) fn to_number(&mut self, value: ObjRef) -> Result<Number, NotNumeric> {
         match value.decode() {
             Decoded::Nil => Err(NotNumeric),
@@ -600,65 +601,79 @@ impl Interp {
             // caches it. See `text_bytes` for what that trade was measured
             // at, and why the cache turned out to be worth so little.
             Decoded::Text(inline) => Number::parse_bytes(&inline).ok_or(NotNumeric),
-            Decoded::Heap { .. } => {
-                // Mirrors `to_text`'s own stem redirect above: decided, and
-                // the borrow on `self.heap` dropped, before the recursive
-                // call below, which cannot overlap it. The class arm rides
-                // this lookup's own `None`, as it does there.
-                let stem_default = {
-                    let Some(object) = self.heap.get(value) else {
-                        // A class object is not a number. The call is for the
-                        // tripwire it carries, not for the bytes.
-                        let _ = self.not_in_arena(value);
-                        return Err(NotNumeric);
-                    };
-                    match &object.body {
-                        Body::Stem {
-                            default: Some(d), ..
-                        } => Some(*d),
-                        _ => None,
-                    }
-                };
-                if let Some(default) = stem_default {
-                    return self.to_number(default);
-                }
+            Decoded::Heap { .. } => self.heap_to_number(value),
+        }
+    }
 
-                let object = self.heap.get_mut(value).expect("a live value");
-                match &mut object.body {
-                    Body::Num { value, .. } => Ok(value.clone()),
-                    Body::Text { bytes, num } => {
-                        let bytes = bytes.as_slice();
-                        let cached = num.get_or_insert_with(|| {
-                            Number::parse_bytes(bytes).map(Box::new).ok_or(NotNumeric)
-                        });
-                        match cached {
-                            Ok(number) => Ok((**number).clone()),
-                            Err(marker) => Err(*marker),
-                        }
-                    }
-                    // Reached for a `Body::Stem` with `default: None` too
-                    // (the `stem_default` check above only short-circuits
-                    // the `Some` case): parses the object's own name, the
-                    // same fallback `to_text` renders. No cache field
-                    // exists on `Body::Stem` to hold the parse the way
-                    // `Body::Text`'s `num` does, so this reparses on every
-                    // call rather than memoising -- a stem's derived name
-                    // almost never parses as a number, so there is nothing
-                    // costly to memoise in the common case, and a cache
-                    // field added just for this would be new state on
-                    // `Body::Stem` no other rule needs.
-                    Body::Stem { name, .. } => Number::parse_bytes(name).ok_or(NotNumeric),
-                    // A directory's rendering is `a Directory`-shaped text
-                    // and never numeric, so this answers the marker rather
-                    // than parsing what `to_text` would produce.
-                    Body::Native(_) => Err(NotNumeric),
-                    other => {
-                        unreachable!(
-                            "the value model only creates Text, Num, Stem and Native, got \
-                             {other:?}"
-                        )
-                    }
+    /// [`to_number`]'s arm for a value that lives in the arena.
+    ///
+    /// **Outlined so that [`to_number`] is small enough to inline.** The
+    /// three arms it leaves behind are a tag test and one call each; this
+    /// one is a heap lookup, a stem redirect that recurses, and four body
+    /// shapes. Inlining that at every `to_number` call site would cost far
+    /// more than the arms worth inlining save. Not `#[cold]`: a `Body::Num`
+    /// reaches this on any value produced by earlier arithmetic, which is
+    /// ordinary rather than exceptional.
+    ///
+    /// [`to_number`]: Interp::to_number
+    #[inline(never)]
+    fn heap_to_number(&mut self, value: ObjRef) -> Result<Number, NotNumeric> {
+        // Mirrors `to_text`'s own stem redirect above: decided, and
+        // the borrow on `self.heap` dropped, before the recursive
+        // call below, which cannot overlap it. The class arm rides
+        // this lookup's own `None`, as it does there.
+        let stem_default = {
+            let Some(object) = self.heap.get(value) else {
+                // A class object is not a number. The call is for the
+                // tripwire it carries, not for the bytes.
+                let _ = self.not_in_arena(value);
+                return Err(NotNumeric);
+            };
+            match &object.body {
+                Body::Stem {
+                    default: Some(d), ..
+                } => Some(*d),
+                _ => None,
+            }
+        };
+        if let Some(default) = stem_default {
+            return self.to_number(default);
+        }
+
+        let object = self.heap.get_mut(value).expect("a live value");
+        match &mut object.body {
+            Body::Num { value, .. } => Ok(value.clone()),
+            Body::Text { bytes, num } => {
+                let bytes = bytes.as_slice();
+                let cached = num.get_or_insert_with(|| {
+                    Number::parse_bytes(bytes).map(Box::new).ok_or(NotNumeric)
+                });
+                match cached {
+                    Ok(number) => Ok((**number).clone()),
+                    Err(marker) => Err(*marker),
                 }
+            }
+            // Reached for a `Body::Stem` with `default: None` too
+            // (the `stem_default` check above only short-circuits
+            // the `Some` case): parses the object's own name, the
+            // same fallback `to_text` renders. No cache field
+            // exists on `Body::Stem` to hold the parse the way
+            // `Body::Text`'s `num` does, so this reparses on every
+            // call rather than memoising -- a stem's derived name
+            // almost never parses as a number, so there is nothing
+            // costly to memoise in the common case, and a cache
+            // field added just for this would be new state on
+            // `Body::Stem` no other rule needs.
+            Body::Stem { name, .. } => Number::parse_bytes(name).ok_or(NotNumeric),
+            // A directory's rendering is `a Directory`-shaped text
+            // and never numeric, so this answers the marker rather
+            // than parsing what `to_text` would produce.
+            Body::Native(_) => Err(NotNumeric),
+            other => {
+                unreachable!(
+                    "the value model only creates Text, Num, Stem and Native, got \
+                     {other:?}"
+                )
             }
         }
     }
