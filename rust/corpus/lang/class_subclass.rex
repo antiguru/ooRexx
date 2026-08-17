@@ -1,0 +1,27 @@
+/* ::CLASS ... SUBCLASS <class>: a class method declared on the parent answers
+   through the child, a target declared later in the same file resolves, a
+   chain of three resolves through it, and a class this file declares wins over
+   the environment entry of the same name. */
+say .child~fromparent
+say .child~ofitsown
+say .grandchild~fromparent
+say .shadow~which
+
+::class child subclass parent
+
+::method ofitsown class
+  return 'the child declares this one'
+
+::class parent
+
+::method fromparent class
+  return 'the parent declares this one'
+
+::class grandchild subclass child
+
+::class array
+
+::method which class
+  return 'this package declares Array' self
+
+::class shadow subclass array

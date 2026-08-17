@@ -1,0 +1,8 @@
+count 7
+/* SUBCLASS targets that cannot be put in an order. The blame is the first of
+   the two directives, not the one whose target closed the loop. */
+say 'main ran'
+
+::class first subclass second
+
+::class second subclass first

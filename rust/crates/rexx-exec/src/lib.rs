@@ -1207,11 +1207,11 @@ fn owned_message(name: &str, owner: Option<&'static str>) -> String {
 /// and `phase-4-exclusions.txt`'s directive section carries the two arms that
 /// deliberately over-refuse and why.
 ///
-/// A directive that installs cleanly is **ignored**, not implemented: 4c has
-/// no object model, so a `::CLASS` that names nothing and a `::METHOD` with a
-/// body are unreachable from any construct this phase runs. That is why they
-/// are not a gap -- a program containing one and never using it produces the
-/// oracle's own bytes.
+/// A directive that installs cleanly is not thereby a no-op: a `::CLASS`
+/// creates a class object a `.NAME` can resolve and a `::METHOD` records a
+/// body a send can enter. What makes a form a gap here is that installing it
+/// is something this crate cannot do at all, not that nothing reads it
+/// afterwards.
 fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
     let gap = |name: &str, owner: &'static str| {
         Some(Loud {
@@ -1245,16 +1245,32 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
         // and `::options trace labels` makes every `::ROUTINE` in the file
         // emit its own `>I>`/`<I<` pair.
         DirectiveKind::Options(_) => gap("::OPTIONS", "Phase 5"),
-        // Resolves a class name against the environment, which 4c has no
-        // table for -- so this cannot tell `subclass object` (rc 0 on the
-        // oracle) from `subclass zzznotaclass` (98.909 rc 158) and refuses
-        // both.
+        // **Three keywords and three messages, because the three are at
+        // different stages.** `SUBCLASS` installs (`Interp::order_classes`
+        // resolves its target and orders the file's own classes by it);
+        // `MIXINCLASS` fills the same field with `mixin` set and is a
+        // different construct -- `setMixinClass` makes the class a mixin as
+        // well as setting the superclass -- and `INHERIT` and `METACLASS` are
+        // their own. One message covering all of them would name a construct
+        // this crate installs.
+        DirectiveKind::Class(class) if class.mixin => gap("::CLASS MIXINCLASS", "Phase 5"),
+        // `SUBCLASS ns:name`. The namespace is a package this crate does not
+        // load, so the target names nothing here whatever it names on the
+        // oracle -- unlike a bare name, which `Interp::install_class_at`
+        // resolves against the file's own classes and then the registry.
         DirectiveKind::Class(class)
-            if class.subclass.is_some()
-                || class.metaclass.is_some()
-                || !class.inherit.is_empty() =>
+            if class
+                .subclass
+                .as_ref()
+                .is_some_and(|target| target.namespace.is_some()) =>
         {
-            gap("::CLASS naming another class", "Phase 5")
+            gap("::CLASS SUBCLASS naming a namespace", "Phase 5")
+        }
+        DirectiveKind::Class(class) if class.metaclass.is_some() => {
+            gap("::CLASS METACLASS", "Phase 5")
+        }
+        DirectiveKind::Class(class) if !class.inherit.is_empty() => {
+            gap("::CLASS INHERIT", "Phase 5")
         }
         // Resolves its target against the accumulated package: measured,
         // `::annotate routine nosuchrtn` is 99.945 rc 157. `::ANNOTATE
@@ -2925,13 +2941,33 @@ impl Interp {
         // positionally (the most recently installed `::CLASS`) -- ordinary
         // object-model attachment, unrelated to `last_class_directive` above.
         let mut current_class_id: Option<ObjRef> = None;
+        // Every `::CLASS` name this file declares, upcased, so that a
+        // `SUBCLASS` target can be told from a name the registry answers.
+        // First wins, matching the class a later `.NAME` resolves to.
+        let mut declared: HashMap<Box<[u8]>, usize> = HashMap::new();
+        for (index, directive) in program.directives.iter().enumerate() {
+            if let DirectiveKind::Class(class) = &directive.kind {
+                declared
+                    .entry(class.name.to_ascii_uppercase().into())
+                    .or_insert(index);
+            }
+        }
+        let mut classes: HashMap<usize, ObjRef> = HashMap::new();
         for (index, directive) in program.directives.iter().enumerate() {
             if let Some(loud) = directive_gap(&directive.kind) {
                 return Err(loud.into());
             }
             match &directive.kind {
-                DirectiveKind::Class(class) => {
-                    current_class_id = Some(self.install_class(id, class));
+                DirectiveKind::Class(_) => {
+                    let mut resolving = Vec::new();
+                    current_class_id = Some(self.install_class_at(
+                        id,
+                        program,
+                        index,
+                        &declared,
+                        &mut classes,
+                        &mut resolving,
+                    )?);
                 }
                 DirectiveKind::Method(method) => {
                     if let Some(class_id) = current_class_id {
@@ -2984,6 +3020,25 @@ impl Interp {
                 _ => {}
             }
         }
+
+        // **The class side of every class this file installed, rebuilt once
+        // the file's methods are all in.** `ClassRegistry::add_class_method`
+        // is `RexxClass::defineClassMethod`, which adds to the class's own
+        // behaviour and deliberately cascades to nothing -- its own doc
+        // comment restricts it to image build, before any subclass exists.
+        // A `::CLASS` naming a `SUBCLASS` declared **later** in the file
+        // breaks that restriction: the subclass is created first, so the
+        // superclass's class methods arrive after it. Measured on the oracle,
+        // rc 0: `::class c subclass b` / `::class b subclass a` / `::class a`
+        // with a class method on `a` answers that method through `.c`.
+        //
+        // One rebuild per class and no ordering between them: `cascade_build`
+        // walks the superclass chain and merges each ancestor's **own**
+        // dictionary rather than its built behaviour, so a chain is complete
+        // after its last class is rebuilt whichever order the rebuilds ran in.
+        for class in classes.values() {
+            self.classes().refresh_class_behaviour(*class);
+        }
         Ok(())
     }
 
@@ -2991,13 +3046,14 @@ impl Interp {
     /// carrying the name as written, and an entry in the running package's own
     /// class table under the uppercased one.
     ///
-    /// **Every `::CLASS` naming a `SUBCLASS`/`METACLASS`/`INHERIT` is still a
-    /// `directive_gap` above and never reaches here** (Phase 5, this crate
-    /// resolves no class-name expression yet), so a class that does reach
-    /// this point is the bare form: `subclass Object`, `metaclass Class`,
-    /// which is what `RexxClass::subclass`'s own defaults give it
+    /// **`superclass` is the caller's, and `metaclass` is not.** A `::CLASS`
+    /// naming a `METACLASS`, a `MIXINCLASS` or an `INHERIT` is still a
+    /// `directive_gap` above and never reaches here, so the metaclass is
+    /// always the default `RexxClass::subclass` gives it
     /// (`ClassClass.cpp:1562`, and `Setup.cpp`'s every `StartClassDefinition`
-    /// block passes the same pair).
+    /// block passes the same pair). The superclass is `.Object` for the bare
+    /// form and whatever `SUBCLASS` named otherwise, which
+    /// [`Interp::install_class_at`] has already resolved.
     ///
     /// `String::from_utf8_lossy` rather than a hard requirement: a class
     /// name is close to always ASCII in practice and `ClassRegistry`'s API
@@ -3008,16 +3064,21 @@ impl Interp {
     /// not UTF-8 renders replacement characters where the oracle renders the
     /// bytes. The package table's key below is taken from the directive's own
     /// bytes and is not lossy.
-    fn install_class(&mut self, program: ProgramId, class: &ClassDirective) -> ObjRef {
+    fn install_class(
+        &mut self,
+        program: ProgramId,
+        class: &ClassDirective,
+        superclass: ObjRef,
+    ) -> ObjRef {
         let name = String::from_utf8_lossy(&class.name).into_owned();
-        let (object, metaclass) = self.root_and_metaclass();
+        let metaclass = self.root_and_metaclass().1;
         // `define_unregistered_class`, not `define_class`: an installed class
         // does not go into `.environment`, and registering it there would let
         // `::class array` displace the environment's own `Array` for every
         // later lookup rather than only for this package's.
         let id = self.classes().define_unregistered_class(
             &name,
-            Some(object),
+            Some(superclass),
             ClassKind::Regular,
             metaclass,
         );
@@ -3027,6 +3088,87 @@ impl Interp {
         // that.
         self.record_package_class(program, &class.name, id);
         id
+    }
+
+    /// Installs the `::CLASS` at `index`, and whatever `SUBCLASS` chain it
+    /// depends on, first.
+    ///
+    /// **A file's classes are not installed in source order, and the oracle's
+    /// own are not either.** Measured, rc 0: `::class c subclass b` followed
+    /// by `::class b subclass a` followed by `::class a` runs a class method
+    /// declared on `a` through `.c`, so a target declared later in the file is
+    /// resolved all the same. This function pulls such a target forward rather
+    /// than pre-installing every class, which is what keeps every other
+    /// directive's refusal in source order.
+    ///
+    /// **`resolving` is the chain currently being pulled, and finding `index`
+    /// in it is the cycle.** Measured, rc 158 with stdout empty and the
+    /// **first** of the directives echoed: `::class a subclass b` with
+    /// `::class b subclass a`, and `::class a subclass a` alone, are both
+    /// `Error 98.911: Cyclic inheritance in program "<path>".` The first entry
+    /// of `resolving` is that directive, which is why the blame is taken from
+    /// there rather than from `index`.
+    ///
+    /// **A target the file does not declare is the registry's**, and one the
+    /// registry does not hold is 98.909 naming it -- measured, rc 158 with
+    /// stdout empty. A target the file *does* declare wins over a registry
+    /// entry of the same name, measured: `::class array` carrying a class
+    /// method, with `::class k2 subclass array` under it, answers that method
+    /// through `.k2`.
+    ///
+    /// **The pulled directive's own gap is checked here** rather than left to
+    /// the caller's loop, which has not reached it yet.
+    fn install_class_at(
+        &mut self,
+        program_id: ProgramId,
+        program: &Rc<Program>,
+        index: usize,
+        declared: &HashMap<Box<[u8]>, usize>,
+        classes: &mut HashMap<usize, ObjRef>,
+        resolving: &mut Vec<usize>,
+    ) -> Result<ObjRef, Failure> {
+        if let Some(id) = classes.get(&index) {
+            return Ok(*id);
+        }
+        if resolving.contains(&index) {
+            let first = resolving[0];
+            self.blame_directive(program, &program.directives[first]);
+            let path = self.program_path.clone();
+            return Err(Raised::cyclic_inheritance(&path).into());
+        }
+        let directive = &program.directives[index];
+        if let Some(loud) = directive_gap(&directive.kind) {
+            return Err(loud.into());
+        }
+        let DirectiveKind::Class(class) = &directive.kind else {
+            return Err(Loud::missing_body().into());
+        };
+        let superclass = match &class.subclass {
+            None => self.root_and_metaclass().0,
+            Some(target) => match declared.get(target.name.as_ref()) {
+                Some(other) => {
+                    resolving.push(index);
+                    let resolved = self.install_class_at(
+                        program_id, program, *other, declared, classes, resolving,
+                    );
+                    resolving.pop();
+                    resolved?
+                }
+                None => {
+                    let name = String::from_utf8_lossy(&target.name).into_owned();
+                    match self.classes().lookup(&name) {
+                        Some(id) => id,
+                        None => {
+                            self.blame_directive(program, directive);
+                            return Err(Raised::class_not_found(&target.name).into());
+                        }
+                    }
+                }
+            },
+        };
+        let id = self.install_class(program_id, class, superclass);
+        classes.insert(index, id);
+        Ok(id)
     }
 
     /// `::METHOD`'s own R9 install: the name lands in `class`'s instance

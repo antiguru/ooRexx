@@ -1,0 +1,5 @@
+/* A SUBCLASS target no name resolves to: refused before the program's first
+   clause, so stdout is empty even though the first clause is a SAY. */
+say 'main ran'
+
+::class orphan subclass zzznotaclass

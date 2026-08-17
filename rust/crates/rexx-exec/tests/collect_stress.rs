@@ -156,6 +156,11 @@ const SUBSET_FILES: &[&str] = &[
 /// A program belongs here because of what it contains, not because it was
 /// inconvenient -- see the both-directions assertion at the use site.
 const NO_ALLOCATION_PROGRAMS: &[&str] = &[
+    // Both refuse before the main body's first clause: the class directive
+    // whose target does not resolve, and the pair whose targets cannot be
+    // ordered. Nothing has been asked of the arena by then.
+    "lang/class_subclass_cycle.rex",
+    "lang/class_subclass_not_found.rex",
     "lang/comparison_families.rex",
     "lang/comparison_operators_remaining.rex",
     "lang/deep_nested_expr.rex",

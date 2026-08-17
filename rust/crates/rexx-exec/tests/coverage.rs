@@ -926,6 +926,12 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/expose_indirect_list.rex",
     "lang/expose_outside_a_method.rex",
     "lang/expose_object_value.rex",
+    // Task 8, ruling R26: `::CLASS ... SUBCLASS`, and the two-scope program
+    // it makes reachable.
+    "lang/class_subclass.rex",
+    "lang/class_subclass_not_found.rex",
+    "lang/class_subclass_cycle.rex",
+    "lang/expose_two_scopes.rex",
 ];
 
 #[test]

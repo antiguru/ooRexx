@@ -7503,11 +7503,7 @@ fn every_directive_this_crate_can_install_leaves_the_program_alone() {
 /// its first clause, and the oracle prints nothing for the five it also
 /// refuses.
 ///
-/// `::CLASS foo SUBCLASS object` is the one source here the oracle runs
-/// at rc 0 -- deliberate, and `phase-4-exclusions.txt`'s directive
-/// section carries the argument. It is in this list rather than exempted
-/// from it because a refusal that is not asserted is one a later change
-/// can drop silently. The `::REQUIRES` row is not the over-refusal case:
+/// The `::REQUIRES` row is not the over-refusal case:
 /// no `helper.rex` sits beside these programs, so the oracle refuses that
 /// source too, and the over-refusal (a helper that *is* present) is
 /// measured in the exclusions file instead -- this crate never opens the
@@ -7516,20 +7512,20 @@ fn every_directive_this_crate_can_install_leaves_the_program_alone() {
 fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
     let cases: &[(&[u8], &str)] = &[
         (
-            b"say 'main ran'\n::class foo subclass zzznotaclass\n",
-            "::CLASS naming another class is not implemented (Phase 5)",
+            b"say 'main ran'\n::class foo mixinclass zzznotaclass\n",
+            "::CLASS MIXINCLASS is not implemented (Phase 5)",
         ),
         (
             b"say 'main ran'\n::class foo metaclass zzznotaclass\n",
-            "::CLASS naming another class is not implemented (Phase 5)",
+            "::CLASS METACLASS is not implemented (Phase 5)",
         ),
         (
             b"say 'main ran'\n::class bar inherit zzznotaclass\n",
-            "::CLASS naming another class is not implemented (Phase 5)",
+            "::CLASS INHERIT is not implemented (Phase 5)",
         ),
         (
-            b"say 'main ran'\n::class foo subclass object\n",
-            "::CLASS naming another class is not implemented (Phase 5)",
+            b"say 'main ran'\n::class foo subclass ns:other\n",
+            "::CLASS SUBCLASS naming a namespace is not implemented (Phase 5)",
         ),
         (
             b"say 'main ran'\n::requires 'helper.rex'\n",

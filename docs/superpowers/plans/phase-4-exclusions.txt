@@ -413,24 +413,32 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
   refused here, loudly, naming Phase 5 (or Phase 7 for the two that need a
   library loaded):
 
-    ::class foo subclass zzznotaclass                  98.909 rc 158
+    ::class foo mixinclass zzznotaclass                98.909 rc 158
     ::class foo metaclass zzznotaclass                 98.908 rc 158
     ::class bar inherit zzznotaclass                   98.909 rc 158
+    ::class foo subclass ns:other                      98.987 rc 158
     ::annotate routine nosuchrtn                       99.945 rc 157
     ::requires 'no_such_file_zz.rex'                   43.901 rc 213
     ::routine z external "LIBRARY nosuchlib nosuchfn"  98.903 rc 158
     ::method m external "LIBRARY nosuchlib nosuchfn"   98.903 rc 158
 
-  THE TWO DELIBERATE OVER-REFUSALS, both of which reject a program the
-  oracle runs. Neither is silent: both name a phase and exit with
-  NOT_IMPLEMENTED_EXIT, which is this file's standing trade -- a declared
-  gap over a wrong answer.
+  CLOSED DEFECT: ::CLASS ... SUBCLASS <class> WAS ONE OF THE OVER-REFUSALS
+  AND IS NOT ANY MORE. It was refused whether or not the named class
+  existed, on the reasoning that 4c had no class table to tell the two
+  apart -- which stopped being true when the class registry landed, and the
+  stale reason is a large part of why the gap looked owned. `::class foo
+  subclass object` is now rc 0 "main ran" on both sides, `::class foo
+  subclass zzznotaclass` is 98.909 rc 158 on both, and a target declared
+  later in the same file resolves. `corpus/lang/class_subclass.rex` and
+  `corpus/lang/class_subclass_not_found.rex` are the witnesses; the two
+  errors a bad target reaches, 98.909 and 98.911 (cyclic), have their own
+  measurements on `Raised::class_not_found` and `Raised::cyclic_inheritance`.
+  MIXINCLASS, METACLASS and INHERIT are still refused, each under its own
+  message now rather than one covering all four.
 
-    ::CLASS NAMING ANOTHER CLASS is refused whether or not that class
-    exists, because 4c has no class table to tell the two apart. Measured,
-    `::class foo subclass object` is rc 0 "main ran" on the oracle and loud
-    here. The alternative is running the zzznotaclass program above at rc 0
-    where the oracle produces nothing at rc 158.
+  THE ONE DELIBERATE OVER-REFUSAL, which rejects a program the oracle runs.
+  It is not silent: it names a phase and exits with NOT_IMPLEMENTED_EXIT,
+  which is this file's standing trade -- a declared gap over a wrong answer.
 
     ::REQUIRES IS REFUSED EVEN WHEN THE FILE IS PRESENT. This one
     contradicts a measurement the task brief recorded as a requirement, and

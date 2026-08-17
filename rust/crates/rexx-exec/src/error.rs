@@ -442,6 +442,29 @@ impl Raised {
         Raised::syntax(99, 903, Vec::new())
     }
 
+    /// 98.909: a `::CLASS` directive naming a `SUBCLASS` no name resolves to.
+    /// One substitution, the target's upcased spelling.
+    ///
+    /// Measured, rc 158 with stdout empty: `::class b subclass zzznotaclass`
+    /// after `say 'main'` gives `Error 98.909:  Class "ZZZNOTACLASS" not
+    /// found.` with the directive's own clause echoed and the program's first
+    /// clause never run.
+    pub(crate) fn class_not_found(name: &[u8]) -> Raised {
+        Raised::syntax(98, 909, vec![name.to_vec()])
+    }
+
+    /// 98.911: `::CLASS` directives whose `SUBCLASS` targets cannot be put in
+    /// an order. One substitution, the program's own path.
+    ///
+    /// Measured, rc 158 with stdout empty, on two shapes: `::class a subclass
+    /// b` with `::class b subclass a`, and `::class a subclass a` on its own.
+    /// Both give `Error 98.911:  Cyclic inheritance in program "<path>".` and
+    /// both echo the **first** of the class directives, which is what a
+    /// resolver reporting the first target it could not place reports.
+    pub(crate) fn cyclic_inheritance(path: &str) -> Raised {
+        Raised::syntax(98, 911, vec![path.as_bytes().to_vec()])
+    }
+
     /// 99.906: a `::CONSTANT` directive's parenthesised expression form with
     /// no `::CLASS` directive anywhere before it in the file. No
     /// substitutions -- the message names neither directive.

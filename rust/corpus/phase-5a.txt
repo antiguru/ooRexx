@@ -135,3 +135,18 @@ lang/expose_outside_a_method.rex
 # can be put and taken out again, and the table's rule is whether this crate
 # already produces the oracle's bytes there.
 lang/expose_object_value.rex
+
+# Task 8, ruling R26: `::CLASS ... SUBCLASS <class>`, which is what makes a
+# second scope reach one object at all -- and is used by `CoreClasses.orx`
+# itself. A parent's class method answering through the child, a target
+# declared later in the same file, a chain of three, a package class winning
+# over the environment entry of the same name, and the two ways a target
+# fails: no name resolves to it, and the targets cannot be put in an order.
+lang/class_subclass.rex
+lang/class_subclass_not_found.rex
+lang/class_subclass_cycle.rex
+
+# Task 8's own acceptance criterion, which needs the three above to run: a
+# subclass and its parent each exposing the same name, both sends addressed to
+# the subclass's class object, holding different values at once.
+lang/expose_two_scopes.rex
