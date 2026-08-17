@@ -677,20 +677,38 @@ impl Interp {
 ///
 /// Returns `None` rather than clamping when the value is outside the tag's
 /// range, because the caller's fallback is a correct heap string.
+/// **One pass over the digits, which validates and accumulates together.**
+/// This used to check `is_ascii_digit` over the whole slice, then hand the
+/// same bytes to `from_utf8` and `str::parse` -- three traversals, one of
+/// them re-establishing that bytes already known to be ASCII digits are valid
+/// UTF-8, and one of them the general `FromStr` machinery for a number whose
+/// shape is already known. `checked_mul`/`checked_add` refuse the same
+/// overflow `parse` refused, so the value that comes out is the same or there
+/// is none; `the_tag_test_agrees_with_parsing_the_same_bytes` holds the two
+/// spellings against each other rather than this paragraph doing it.
 fn canonical_small_int(bytes: &[u8]) -> Option<i64> {
     let (negative, digits) = match bytes.split_first() {
         Some((b'-', rest)) => (true, rest),
         _ => (false, bytes),
     };
-    if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {
+    let (&first, rest) = digits.split_first()?;
+    if !first.is_ascii_digit() {
         return None;
     }
     // `-0` is excluded by the same clause that excludes `05`: both render as
     // something other than their own source bytes.
-    if digits[0] == b'0' && (digits.len() > 1 || negative) {
+    if first == b'0' && (!rest.is_empty() || negative) {
         return None;
     }
-    let magnitude: i64 = std::str::from_utf8(digits).ok()?.parse().ok()?;
+    let mut magnitude = i64::from(first - b'0');
+    for &byte in rest {
+        if !byte.is_ascii_digit() {
+            return None;
+        }
+        magnitude = magnitude
+            .checked_mul(10)?
+            .checked_add(i64::from(byte - b'0'))?;
+    }
     let value = if negative { -magnitude } else { magnitude };
     (SMALL_INT_MIN..=SMALL_INT_MAX)
         .contains(&value)
@@ -994,6 +1012,100 @@ mod tests {
     /// The count floors are what stop it passing vacuously, and the second is
     /// the one that matters: a decision equal to `plain_integer` plus the
     /// range check satisfies every assertion below without it.
+    /// The single-pass accumulation answers what the validate-then-`parse`
+    /// spelling it replaced answered, on every input either of them can see.
+    ///
+    /// The reference below is that previous spelling, kept whole. Holding the
+    /// two against each other is the whole test: a grid of expected answers
+    /// written out by hand would be a third opinion, and the one thing that
+    /// matters is that this rewrite changed no answer.
+    ///
+    /// The grid is chosen for the edges the rewrite could plausibly move:
+    /// both `i64` limits and one past each, both tag limits and one past
+    /// each, the leading-zero and `-0` refusals, a non-digit in the first
+    /// position and in a later one (the two now handled by different
+    /// branches), and the empty and bare-sign inputs.
+    #[test]
+    fn the_tag_test_agrees_with_parsing_the_same_bytes() {
+        fn reference(bytes: &[u8]) -> Option<i64> {
+            let (negative, digits) = match bytes.split_first() {
+                Some((b'-', rest)) => (true, rest),
+                _ => (false, bytes),
+            };
+            if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {
+                return None;
+            }
+            if digits[0] == b'0' && (digits.len() > 1 || negative) {
+                return None;
+            }
+            let magnitude: i64 = std::str::from_utf8(digits).ok()?.parse().ok()?;
+            let value = if negative { -magnitude } else { magnitude };
+            (SMALL_INT_MIN..=SMALL_INT_MAX)
+                .contains(&value)
+                .then_some(value)
+        }
+
+        let mut cases: Vec<Vec<u8>> = vec![
+            b"".to_vec(),
+            b"-".to_vec(),
+            b"0".to_vec(),
+            b"-0".to_vec(),
+            b"00".to_vec(),
+            b"05".to_vec(),
+            b"-05".to_vec(),
+            b"1".to_vec(),
+            b"-1".to_vec(),
+            b"9".to_vec(),
+            b"10".to_vec(),
+            b"123456789".to_vec(),
+            b"-123456789".to_vec(),
+            b"+1".to_vec(),
+            b"1.0".to_vec(),
+            b"1e5".to_vec(),
+            b"1a".to_vec(),
+            b"a1".to_vec(),
+            b" 1".to_vec(),
+            b"1 ".to_vec(),
+            b"1\xff".to_vec(),
+            b"\xff1".to_vec(),
+            b"99999999999999999999999999".to_vec(),
+            b"-99999999999999999999999999".to_vec(),
+        ];
+        for edge in [
+            i64::MAX,
+            i64::MIN,
+            SMALL_INT_MAX,
+            SMALL_INT_MIN,
+            SMALL_INT_MAX - 1,
+            SMALL_INT_MIN + 1,
+        ] {
+            cases.push(edge.to_string().into_bytes());
+        }
+        // One past each tag limit, and one past `i64::MAX`, spelled out
+        // because they are not themselves representable in the type.
+        for spelled in [
+            "2305843009213693952",
+            "-2305843009213693953",
+            "9223372036854775808",
+            "-9223372036854775809",
+        ] {
+            cases.push(spelled.as_bytes().to_vec());
+        }
+
+        let mut answered = 0usize;
+        for case in &cases {
+            let got = canonical_small_int(case);
+            assert_eq!(got, reference(case), "{:?}", String::from_utf8_lossy(case));
+            if got.is_some() {
+                answered += 1;
+            }
+        }
+        assert!(
+            answered > 0,
+            "every case was refused, so the agreement above is vacuous"
+        );
+    }
+
     #[test]
     fn the_tag_decision_is_the_rendering_read_back() {
         fn by_rendering(value: &Number, created_digits: u32) -> Option<i64> {
