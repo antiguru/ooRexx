@@ -4837,3 +4837,67 @@ Entry 60 recorded that the larger prize, if slots stopped moving, is that "handl
 #### What this does not cover
 
 Every program measured has a live set at or under 32,768 objects, so the largest single copy a reallocation performs here is 3 MiB. A program holding millions of live objects moves proportionally more, and a doubling's last copy is half the final size -- which is a **latency** argument rather than a throughput one, and this sitting measured throughput. Nothing here says anything about a pause-time bound. It says that on every axis this project currently measures, growth is not where the arena's time goes.
+
+### Entry 64 -- following the allocator instead of the arena
+
+`01880fdbb` (one string per rendered number) and `f95e48d97` (compare two parsed numbers without rendering either), against `a28edf4ea`.
+
+Same instrument caveat as entries 60 to 63: `perf stat`, not the pinned wall-clock suite against the oracle.
+
+#### The 5.8% in entry 60's queue does not exist on this build
+
+Entry 60 queued "the arena and the collector, about 8.5% -- `alloc_with` 5.8% total, `Heap::collect` 2.7%". Re-profiled here at `a28edf4ea` on the pinned `rexxcps`:
+
+| symbol | self |
+|---|---:|
+| `Interp::run_ops::<false>` | 18.24% |
+| `Interp::step` | 6.06% |
+| `Interp::apply_binary` | 4.67% |
+| `Interp::run_loop_with_header` | 4.21% |
+| `Interp::alloc_with` | **1.69%** |
+| `Heap::collect` | 1.37% |
+| `malloc` + `_int_malloc` + `cfree` | **3.18%** |
+
+`alloc_with` inlines `alloc_with_uncollected`, so 1.69% is the whole arena allocation path. **The general-purpose allocator behind the arena is larger than the arena.** Entry 60's figure was another machine and a build fourteen changes older; it was not re-measured before being carried into two later queues, which is the same mistake entry 62 records at a larger scale.
+
+#### Where the allocations are
+
+`LD_PRELOAD` shim over `malloc` recording `__builtin_return_address(0)`, symbolised with `addr2line`. `rexxcps` makes **6,443,166 allocations for 3,770,581 arena objects**, 194.6 MB, and 56% of the calls are seven bytes or fewer.
+
+| allocs | bytes | site |
+|---:|---:|---|
+| 840,000 | 20,580,000 | `Interp::step` |
+| 420,003 x3 | 5,600,045 | `rexx_num::format::render_integer_padded` |
+| 280,001 | 1,960,005 | `Interp::clause_site` |
+| 280,001 | 13,440,048 | `box_new_uninit`, 48 bytes |
+| 280,000 | 4,620,000 | `Interp::step` |
+| 280,000 | 1,400,000 | `HashMap<Box<[u8]>, usize>::clone` |
+| 140,026 | 49,289,434 | `RawVecInner::finish_grow`, 352 bytes each |
+| 140,018 | 25,211,396 | `HashMap::fallible_with_capacity` |
+
+The arena census beside it: 2,800,375 `Body::Text`, 830,205 `Body::Num`, 140,001 other, and 57 collections.
+
+#### The two taken
+
+**`01880fdbb`, three strings per rendered number down to one.** 6,443,166 allocations -> 5,183,158, exactly the 1,260,008 predicted from three per call over 420,003 calls. **-166,583,151 instructions, -1.16%**, which is 132 per allocation removed.
+
+**`f95e48d97`, a comparison of two parsed numbers renders neither.** Of 2,520,002 comparisons reaching the rendering, 1,680,001 had both operands parsed and discarded both renderings; 140,000 are strict and 700,001 genuinely need the fallback. **-380,482,682 instructions, -2.67%**, cycles -3.86%.
+
+**A prediction was written down before the second one and was low.** It said 0.2% to 0.7%, reasoning that `Body::Num` caches its rendered text so a repeat render is a cache read. Measured, a skipped rendering is worth about 226 instructions. The reasoning was not wrong about the cache; it was wrong that the cache was the expensive part.
+
+#### The control that finally worked
+
+Entry 61 had to establish a +/-0.66% layout floor because every axis moved under a change none of them could reach. **Neither change here moved any axis at all**: `arith`, `strings`, `compound` and `varlookup` reach `render_integer_padded` zero times and `compare_values`' rendering zero times, and all four are unchanged to within a few hundred instructions out of seventeen to forty billion.
+
+So the control is inside the same comparison rather than beside it, and that is a property of the *change*, not of better measuring: a change confined to a function the axes never call has its own null result built in. **Prefer a change with that shape when one is available**, because the alternative is entry 61's, where the effect and the relayout are the same size.
+
+#### Running total for the session
+
+`94c4f6464` 14,405,881,606 -> `f95e48d97` 13,859,561,191 on the pinned `rexxcps`, **-546,320,415, -3.79%**, across five commits.
+
+#### Queue
+
+* **`PARSE` is the largest `Op::Generic` member**, 1,120,002 entries, and `Interp::step` is still 6.06% of the profile and 1.12M allocations. The two are the same thing.
+* **Per-call activation setup is the largest byte count**, 74 MB of the 194 MB over 140,000 calls: `RawVecInner::finish_grow` at 352 bytes a call, `HashMap::fallible_with_capacity`, and a `HashMap<Box<[u8]>, usize>::clone`.
+* **`LeaveOrigin` costs two allocations per `LEAVE`/`ITERATE`**, 280,001 each: the clause text `Interp::clause_site` builds and the 48-byte box around it. The text is read only if the label search fails, so it could be recovered from the instruction index instead of captured.
+* The arena itself, at 1.69% plus 1.37%, is no longer worth the queue position entry 60 gave it.
