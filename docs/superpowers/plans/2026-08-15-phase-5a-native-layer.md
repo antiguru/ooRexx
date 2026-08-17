@@ -500,6 +500,10 @@ scoping decision this plan needs** -- as tasks here, or as an explicit deferral 
 gate with it. Deciding it by letting whichever task trips over them absorb them is how Task 8 came to
 be asked for a differential it could not run.
 
+---
+
+## Task 14: the 5a gate
+
 **Goal.** Prove 5a rather than assert it, and leave 5b a stated boundary.
 
 **The subset** in `phase-5a.txt` must by now contain, added task by task: native sends to each
