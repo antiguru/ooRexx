@@ -382,32 +382,72 @@ from a mixin or a superclass — measured, `.K~method("DONATED")` **raises 97.1*
 `.Array~instanceMethod("STRING")` answers, so it answers about the receiver *and* returns `.nil`
 instead of raising, which discriminates nothing.
 
-### Getting an instance, which a quarter of the classes will not give you
+### Getting an instance, and what the criterion covers
 
-The instance-side arm needs an instance, and a bare `~new` does not produce one for every class.
-Measured by iterating `.environment` and sending `~new` to every entry answering `~isA(.Class)`:
-**38 succeed, 24 raise.**
+The instance-side arm needs an instance. Measured by iterating `.environment` and sending a bare
+`~new` to every entry answering `~isA(.Class)`: **38 succeed, 24 raise** — nineteen on arguments
+(`93.901`, `93.903`, `88.901`, `97.1`) and five because the class has no `~new` at all
+(`.Buffer~new` is rc 163, `Error 93.967: NEW method is not supported for the Buffer class`).
 
-* **Nineteen raise on arguments** — `Alarm`, `CaselessColumnComparator`, `CircularQueue`, `Class`,
-  `ColumnComparator`, `File`, `InvertingComparator`, `Message`, `Method`, `Package`, `Routine`,
-  `Singleton`, `Stream`, `StreamSupplier`, `String`, `Supplier`, `Ticker`, `TimeSpan`,
-  `WeakReference`, at `93.901`, `93.903`, `88.901` or `97.1`. **The criterion owes a committed
-  per-class construction recipe** for each, derived from that class's documented `new` signature in
-  its own `mth*New` section and validated by running it — a recipe that stops working is a row that
-  reddens, not one that is skipped.
-* **Five have no `~new` at all** — `Buffer`, `Pointer`, `RexxContext`, `StackFrame`,
-  `VariableReference`. Measured, `.Buffer~new` is rc 163, `Error 93.967: NEW method is not supported
-  for the Buffer class.` Two of the five have a measured non-`~new` route and take it:
-  `.context` is a live `RexxContext` and `.context~stackFrames[1]` is a `StackFrame`. For the rest I
-  found no route this session — which is **not** the same as there being none, a claim this project
-  has got wrong from true premises before.
+**The criterion covers, by default, exactly what needs no construction argument** (ruled 2026-08-17):
 
-**`unreachable` is therefore a declared row status, and it is policed in both directions.** A row
-declared unreachable names the class, the arm, and what would have to exist to reach it; the table
-re-derives the reachable set on every run and reddens if a declared-unreachable row turns out to be
-reachable, or if a row acquires the status without being declared. Without that, "unreachable" is a
-place to put rows that are merely inconvenient — which is the same defect as a criterion the oracle
-fails, with the failure hidden instead of loud.
+* **the class-side arm for every class in the set**, which needs no instance and is measurable from
+  5a; and
+* **the instance-side arm for the 38 classes a bare `~new` constructs.**
+
+That is most of the criterion for none of the maintenance, and it lands without any table of
+constructor arguments existing. **A class outside the 38 enters coverage one at a time, opt-in**,
+with a committed construction program and a stated reason that class's method set is worth the row.
+Such a program is **hand-written and validated by running** — never described as derived.
+
+**Why not derived, since that is what an earlier draft claimed.** The stated source was "the class's
+documented `new` signature in its own `mth*New` section", and measured against the four books that
+source does not exist for half the list and is an image for nearly all the rest:
+
+* **Nine of the nineteen have no `mth*New` section at all** — `Alarm`, `CaselessColumnComparator`,
+  `CircularQueue`, `ColumnComparator`, `File`, `InvertingComparator`, `StreamSupplier`, `Ticker`,
+  `TimeSpan`. Each documents its constructor under `init` instead, and all nine `mth<Class>Init`
+  sections exist.
+* **30 of the 31 `mth*New` sections carry the signature only as a railroad diagram**, an
+  `<imagedata fileref="images/classes/*.svg"/>`; only `mthSingletonNew` does not. The argument names
+  are recoverable from the SVG's `<text>` runs, but that is a second extractor over an image tree,
+  and neither it nor the `init` fallback was named.
+
+A word like "derived" is load-bearing here: a later reader trusts it and stops checking. So the word
+goes, and with it the obligation it was covering.
+
+**Two further reasons the table was not worth building, both measured.** Running a recipe validates
+that it constructs *an* instance, not a *representative* one — `.File~new('nosuch_zz.txt')` and
+`.Stream~new('nosuch_zz.txt')` both succeed against files that do not exist, and every File and
+Stream method row would then be measured on an object no program would use. And two of the nineteen
+are hostile: `.Ticker~new(1000, .Message~new(.Object~new,'STRING'))` **constructs and then never
+terminates** — measured rc 137 under `timeout -s KILL 10`, with `constructed: TICKER` complete on
+stdout and stderr empty, against `.Alarm~new(1, msg)` at rc 0 — and `.StreamSupplier~new` is rc 159
+(see [the disagreements](#documented-versus-implemented)).
+
+**What the row statuses are, and what each one may mean.** Three, and the distinction between the
+last two is the point:
+
+* **covered** — in the 38, or opted in with a committed program.
+* **not-covered** — no construction program is committed for this class. It is a statement about
+  *this project's* coverage and carries no claim about the oracle. `Alarm` and `Ticker` sit here:
+  both construct on the oracle, and neither can in Phase 5, because their `init` reaches a native
+  D37 defers.
+* **unreachable** — **the oracle itself yields no instance.** Measured today for `Buffer` and
+  `Pointer`; `RexxContext` and `StackFrame` are *not* unreachable, because `.context` and
+  `.context~stackFrames[1]` are instances, and `VariableReference` has a documented `USE ARG >name`
+  route I could not drive from a caller I controlled — so it is `not-covered`, not `unreachable`.
+
+An earlier draft made `unreachable` the destination for all nineteen argument-takers. That is worse
+than either option: it would drop `String`, `Class`, `Method`, `Routine`, `Package` and `Message`
+from the criterion, and it would turn a status meaning *the oracle has no instance* into one meaning
+*we did not get to it* — the exact hatch it exists to prevent.
+
+**The re-derivation is defined, which an earlier draft left open.** On every run the table sends a
+bare `~new` to every class in the set and recomputes the 38. A class entering or leaving that set
+reddens; a class marked `unreachable` that answers `~new` reddens. So the check fires on discovery
+and not only on the author's own inconsistency. What it cannot see is a route that is neither `~new`
+nor a committed program — a limit, stated, rather than a claim that none exists.
 
 **Mixin classes are not the problem they look like.** Measured, `.Collection~new` and
 `.Comparable~new` succeed, so the mixins need no recipe.
@@ -456,6 +496,18 @@ comparison**, because a state with no verdict is a row that reads as nothing:
 
 Five cells, mutually exclusive and jointly exhaustive over the three-channel comparison, so exactly
 one applies to every row and no precedence question arises.
+
+**One verdict, two crate runs, and the rule that reconciles them.** Every row runs the crate on both
+engines (`REXX_ENGINE` selects one; `crates/rexx-exec/src/bin/rexx-run.rs` documents why it is an
+environment variable and not a flag). **The two crate outcomes must agree with each other on all
+three descriptors before any verdict is computed; a disagreement is a structural failure**, in the
+same class as a probe that does not run — not a verdict. That is `ir_dual`'s own premise rather than
+a new rule, and making it structural is what stops a row averaging the two arms into a single cell.
+The verdict is then computed once, from the agreed crate outcome against the oracle. This matters
+most where it is least visible: the comparison-mode section below exists because `ir_dual` **cannot**
+see a trace-indent divergence, since both engines format trace through one `trace.rs` — so an indent
+bug shows up as agreement between the arms and a `diverge-stderr` against the oracle, which is
+exactly the path this rule keeps open.
 
 `diverge-stdout` is the verdict the superseded gate had no way to express and the reason both
 `UNKNOWN` and `makeString` survived three reviews. **`diverge-stderr` is a live 5a state and the
@@ -519,14 +571,31 @@ progress report into the phase gate"*.
 
 * **Structural failure — always red, in both modes, in every phase.** A row whose probe program is
   missing; a row whose probe does not run on one of the two engines; a derived row set that does not
-  match the committed data file; an oracle run that did not yield three descriptors, whether from a
-  launch failure or a timeout, which must fail rather than be recorded as a divergence; a row whose
-  declared `unreachable` status disagrees with the re-derived reachable set. These are defects in the
-  instrument, not in the implementation, and they are the failure the tables exist to be incapable of
-  hiding. (An earlier draft listed "a verdict the function cannot compute" here. Against the total
-  five-cell function above that is unreachable by construction — an item on this list that cannot
-  fire is exactly the shape this project keeps finding in its own instruments, so it is replaced
-  rather than kept as belt-and-braces.)
+  match the committed data file; **the two crate engines disagreeing with each other**; an oracle run
+  that did not exit normally; a class's `~new` reachability disagreeing with its committed status.
+  These are defects in the instrument, not in the implementation, and they are the failure the tables
+  exist to be incapable of hiding. (An earlier draft listed "a verdict the function cannot compute"
+  here. Against the total five-cell function above that is unreachable by construction — an item on
+  this list that cannot fire is exactly the shape this project keeps finding in its own instruments,
+  so it is replaced rather than kept as belt-and-braces.)
+
+  **"Did not exit normally" has to be tested on the status, not the exit code.**
+  `tests/support/oracle.rs:189` and `:214` build the outcome with
+  `exit_code: output.status.code().unwrap_or(-1)`, so a run killed by a signal still yields three
+  descriptors and an exit code of `-1`, which the verdict function reads as `diverge-status` — the
+  divergence-instead-of-failure this check exists to prevent. The structural test is
+  `output.status.code().is_none()`. This is a live category here rather than a hypothetical:
+  `rust/corpus/oracle-crashes.txt` exists because programs that kill the C++ interpreter are a
+  standing class of finding on this project.
+
+  **A hang is the third way a run does not finish, and the harness cannot currently catch it — that
+  is a plan prerequisite, not spec text** (ruled 2026-08-17). There is no timeout anywhere in
+  `crates/rexx-exec/tests/support/`: `oracle.rs` uses `command.output()`, and a grep of that
+  directory for `timeout`, `wait_timeout`, `Duration` and `.kill(` is empty. So a hanging probe hangs
+  `cargo test --release --workspace` rather than reddening. Not hypothetical either: the `Ticker`
+  construction above is a program that completes its output and never exits. **The plan owes the
+  harness a per-run timeout before either table commits a probe that can hang**, and until it exists
+  this structural check has two live arms and one named mechanism it does not have.
 * **Verdict failure — red only under `REXX_CORPUS_GATE=1`, and only for the rows the closing phase
   owns.** Each row carries its owning phase, from the enumeration. At 5a's gate, a 5a row whose
   verdict is anything but `agree` is red — a `loud` flag does not save it, because an accepted
@@ -534,6 +603,14 @@ progress report into the phase gate"*.
   reported and not gated. At 5c's gate every row is gated. So the table is a progress report by
   default, is legible the whole way through, and becomes the phase gate at exactly one boundary per
   phase.
+
+  **A row with no verdict is not a verdict failure**, and that distinction is what keeps "at 5c's
+  gate every row is gated" from being a gate that cannot pass. A `not-covered` or `unreachable`
+  method row runs no program and has no verdict, so gating cannot redden it; what is gated is its
+  *status*, which is re-derived and must match what is committed. `Alarm` and `Ticker` are the worked
+  example: both construct on the oracle and neither can in Phase 5, because their `init` reaches a
+  native D37 defers — so they are `not-covered`, and their method rows neither pass nor fail rather
+  than diverging on every name.
 
 The report is written identically in both modes, following `corpus.rs`: the assertion is what turns
 a mismatch into a non-zero exit, not what makes it visible.
@@ -652,12 +729,32 @@ does **not** contain `APPEND` — it answers about the receiver, which is a clas
 instances of it. `.Array~instanceMethods(.nil)` is empty. Either would have produced a table that
 looked derived and measured the wrong thing.
 
-Whether a documented method is class-side or instance-side is derivable: the four books suffix a
-method's `<title>` with `(Class Method)`, `(Abstract Method)`, `(Private Method)` or `(Attribute)`
-where it applies, and the suffix is systematic — with one case wobble (`Class method` occurs beside
+**Which arm a documented method takes is derived from its `<title>` suffix, and the rule is strong
+but not total.** The four books suffix a method's `<title>` with `(Class Method)`,
+`(Abstract Method)`, `(Private Method)` or `(Attribute)` where it applies. Checked against the oracle
+over the documented sets of thirteen classes — 417 (class, method) pairs — **415 agree**. The two
+that do not are the two shapes the rule cannot see, and each needs a stated fallback:
+
+* **The suffix can be absent on a class-side method.** `mthClassNew`'s `<title>` is the bare word
+  `new`, and it is class-side: measured, `.Class~hasMethod("NEW")` is `1` and
+  `.Class~new("Foo")~hasMethod("NEW")` is `0`. It lands on `Class`, which the metaclass work depends
+  on. **Fallback: where the suffix is absent the arm is measured against the oracle and committed as
+  a per-row override carrying its measurement** — an override is a recorded fact, not a guess, and it
+  reddens if the oracle changes.
+* **A title can name two methods.** `mthStringCenter` is `center/centre`, and it is a family rather
+  than a one-off — `canceled/cancelled` on both `Alarm` and `Ticker`, `delete / delStr` on
+  `MutableBuffer`. Neither arm answers the slash-joined string. **Fallback: a title containing a
+  separator is split into one row per name**, whitespace trimmed.
+
+Three smaller title shapes the extractor pins by name: the case wobble (`Class method` beside
 `Class Method`), one `(Inherited Class Method)`, and one parenthetical that is not a kind marker at
-all (`? (inline if)`), so the match is case-insensitive and those unusual titles are pinned by name
-in the extractor.
+all (`? (inline if)`). The match is case-insensitive.
+
+**Key a method to its class by the class's own section span, never by an `mth<Class>` name prefix.**
+Measured: `mthString*` also matches `mthStringTableNew`, `mthStringTableAtGet` and the rest of
+`StringTable`'s set, and the same collision holds for `Set`/`SetCollection`, `Map`/`MapCollection`
+and the `Ordered…` family. It is the same shape as the `grep -c class` filename trap this spec
+already documents, one authority over.
 
 **Three derivation artifacts in the half that has no parser to settle it, and the hierarchy
 extractor needs a rule for each.**
@@ -757,6 +854,7 @@ Five, each measured this session. In every one the implementation wins.
 | `provide.xml` `chi` lists `RexxInfo` as a class under `.Object` | `.RexxInfo` in `.environment` is an **instance**; the class object is not an environment entry | the acceptance set carries `RexxInfo` as an instance row, not a class row |
 | `provide.xml` `chi` omits `EventSemaphore`, `MutexSemaphore`, `Singleton`, `RegularExpression` | all four have `cls*` sections in `utilityclasses.xml`; the first three are `.environment` classes | the acceptance set is the union of the `cls*` sections, not the hierarchy list; the hierarchy list supplies edges only |
 | nothing documents `ArgUtil`, deliberately — `provide.xml` comments it out as "deprecated, won't document" | `.ArgUtil` is an `.environment` class object; `.ArgUtil~class` is `The Class class` | the acceptance set carries it as an undocumented-but-present row with the comment as its citation |
+| `utilityclasses.xml`'s `mthStreamSupplierInit` diagram is a bare `init` with no arguments | that call does not construct: measured, `.StreamSupplier~new` is rc 159, `Error 97.1: Object "STREAM" does not understand message "!QUERY_STREAMTYPE"` — the unsupplied argument defaults to the string `"STREAM"` | `StreamSupplier`'s instance-side rows are `not-covered` unless someone finds a call that constructs; the documented signature is not it |
 
 <a id="the-annotate-claim"></a>
 ### The `::ANNOTATE` claim, which is false where it is generalised
@@ -1024,12 +1122,18 @@ which name a bootstrap that runs later than they do.
   numerically right and file-ambiguous — `checkUninit :1210` and `completeNewObject :1882` are both
   **ClassClass.cpp** — and are now qualified. The roadmap's patchable-slot sentence is `:492`, which
   the superseded spec cites as `:482`.
-* **Whether a class with no `~new` can be reached at all.** Two of the five — `RexxContext` via
-  `.context`, `StackFrame` via `.context~stackFrames[1]` — have a measured route. For `Buffer`,
-  `Pointer` and `VariableReference` I found none this session, and **"I found none" is not "none
-  exists"**: `VariableReference` in particular has a documented `USE ARG >name` route I could not get
-  to produce one from a caller I controlled. The criterion's `unreachable` status is declared and
-  re-derived precisely so that a route found later reddens the row rather than being absorbed.
+* **Whether `Buffer`, `Pointer` and `VariableReference` can be reached at all.** I found no route
+  this session, and **"I found none" is not "none exists"** — `VariableReference` in particular has a
+  documented `USE ARG >name` route I could not drive from a caller I controlled. Only `Buffer` and
+  `Pointer` are marked `unreachable` on that basis, and the status is re-derived every run precisely
+  so a route found later reddens the row rather than being absorbed. The other two of the five have
+  measured routes and are not unreachable: `.context` is a `RexxContext` and
+  `.context~stackFrames[1]` a `StackFrame`.
+* **Whether an opt-in construction program constructs a *representative* instance.** Nothing checks
+  this and nothing can, mechanically. Measured, `.File~new('nosuch_zz.txt')` and
+  `.Stream~new('nosuch_zz.txt')` both succeed against files that do not exist, so a program that
+  passes says only that construction happened. Each opt-in program's stated reason is the only guard,
+  and it is a human one.
 * ~~**Whether `~method` reaches every mixin-donated name.**~~ **Closed, in the direction this spec
   did not expect.** Measured: `.K~method("DONATED")` for a `MIXINCLASS`-donated method raises 97.1,
   and so does `.DateTime~method("<")`, a method DateTime genuinely has. `~method` reaches the class's
