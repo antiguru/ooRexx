@@ -4682,3 +4682,72 @@ Removing an allocation or a call into libc reads as **more instructions and fewe
 * **The arena and the collector, about 8.5%.** `alloc_with` 5.8% total, `Heap::collect` 2.7%.
 * **`caller.traps`, 1.0%**, with the `Rc` route closed. Two shapes not tried: move-with-write-back on first mutation, which keeps reads as direct field accesses; or making the clone allocation-free by giving `Trap::label` an `Rc<[u8]>` and indexing the fixed condition set by an enum, which leaves the eager clone alone.
 * **Chunking `Heap::slots` into `Vec<Vec<Slot>>` with power-of-two inner lengths** (Moritz's suggestion) so growth never moves a slot. **Measure the growth cost first**: every slot access would gain a dependent load, `Heap::get`/`get_mut` sit under nearly everything, and three changes in this sitting were decided by exactly that kind of per-access tax showing up on the fixed-work axes. Nothing here separates *growth* from *sweeping* inside `Heap::collect`'s 2.7%, and `rexxcps` reaches steady state early. The larger prize if slots stop moving is that handles may not need generation validation per deref and the sweep could go chunk-wise -- a change to the arena's contract, not its layout.
+
+### Entry 61 -- promoting the clauses that compute nothing
+
+`6da78f62c` (`NOP`, `THEN`, `LEAVE`, `ITERATE`, plus `rexx-ir`) and `5e40705d7` (`LABEL`), against `94c4f6464`.
+
+**Same instrument caveat as entry 60**: `perf stat -e instructions:u,cycles:u` and `rexx-arms`, not the pinned wall-clock `rexx-bench-suite` against the oracle. Nothing here is a claim against the phase bar.
+
+#### What `Op::Generic` actually falls back on
+
+Entry 60's queue said the fallback was 17.6% and named `ITERATE`, `LEAVE`, `NOP`, `PARSE VAR` and labels as its inner-loop members. Counted rather than named, under a scratch build that noted each `Op::Generic` entry by instruction kind over the pinned `rexxcps`:
+
+| kind | entries |
+| --- | --- |
+| `PARSE` | 1,120,002 |
+| `THEN` | 700,002 |
+| `ITERATE` | 280,000 |
+| `TRACE` | 140,200 |
+| label | 140,000 |
+| `ADDRESS` | 140,000 |
+| `LEAVE`, `NOP`, `SIGNAL` | 1 each |
+| **total** | **2,520,207** |
+
+**`THEN` was the second-largest member and was not on the queue at all.** `PARSE` is the largest and is untouched. The same sweep over `corpus/lang` plus `bench-programs`, ignoring one program's 1,000,029 `NUMERIC` clauses: labels 149, `PARSE` 88, `SIGNAL` 48, `RAISE` 48, `TRACE` 46, and **`END` six, none of them `EndStyle::Select`**.
+
+#### The per-clause figure, and the floor it has to clear
+
+**A promoted marker clause is 21 user instructions and a promoted label clause is 54**, each measured where it is the only thing that changes and each doubling exactly with the pass count:
+
+* `bench-programs/emptyloop.rex`, whose body is a `NOP`, IR arm: 12,825,630,591 -> 12,300,630,949 at 25,000,000 passes and 25,650,631,343 -> 24,600,631,344 at 50,000,000. 21.000 per pass at both sizes.
+* a scratch axis whose loop body is one call to a label whose body is one `RETURN`: 8,722,628,463 -> 8,614,627,830 at 2,000,000 and 17,444,628,561 -> 17,228,628,320 at 4,000,000. 54.000 per pass at both sizes.
+
+The two differ because the marker is a body clause reached with `GRANTING` false and the label is an activation's own first clause reached with it true, which are separate inlinings of `run_ops`.
+
+**The layout floor is up to 0.66% of retired instructions, and this sitting measured it rather than assuming it.** `arith`, `varlookup`, `compound` and `strings` contain none of the promoted kinds, and every one of them still moved -- `varlookup`'s IR arm by +0.66% -- **and so did the tree-walker arm on all four**, which no `Op` change can reach. Three further readings of the same kind:
+
+* on `rexxcps`, promoting the markers alone was +7.46M instructions, the escapes alone +42.9M, and both together +8.33M. Not additive, so not work.
+* `6da78f62c` as a whole reads +8,315,409 instructions (+0.058%) on `rexxcps` while removing 980,004 `Generic` entries worth about -20.6M.
+* `5e40705d7` reads -7,604,819 against a prediction of 140,000 x 54 = 7,560,000, so there the layout term happened to be near zero.
+
+**So a whole-program instruction count cannot resolve a change of this size on this build, and the fixed-work axis can.** Cycles on `rexxcps` fell at both commits and won every interleaved pair; Moritz reported the same independently.
+
+#### What was declined, with the reason
+
+**`END` stays `Op::Generic`.** It is not a marker -- `EndStyle::Select` raises 7.3 -- and it is stepped essentially never, because every construct answers a `Flow` that resumes past its own `END`: zero over a whole `rexxcps` run, six over the corpus. Promoting it would add an op variant, and this sitting's own numbers price a variant at more than the work it would remove.
+
+**`ELSE` and `OTHERWISE` are markers and are still general.** Each is reached through machinery the marker arm does not touch -- an `ELSE` through the `IF`'s own false target, an `OTHERWISE` through the `Op::EnterOtherwise` at its entry -- so each needs its own witnesses. Corpus counts are 6 and 7.
+
+#### A divergence found while probing, which this phase does not own
+
+**A label inside a `DO` body is legal and this crate refuses it.** Measured 2026-08-17:
+
+```rexx
+do zi = 1 to 5
+  zlab:
+end
+say 'done'
+```
+
+The oracle prints `done` and exits 0. `rexx-run` answers `rexx-exec: 47.2: Unexpected label.` at rc 120. It is a parse-time refusal, so it belongs to `rexx-parse`'s block builder rather than to anything here. It also means there is no fixed-work axis shaped like `emptyloop` for a label, which is why the label axis above goes through a call.
+
+#### Tooling
+
+`rexx-ir FILE [TRACE-SETTING]` prints the compiled stream of every body, through the new `rexx_exec::render_ir`. The golden serialiser stops being `#[cfg(test)]` and gains two things a reader needs: `Op::Generic` and `Op::Clause` carry the line and source text of the clause they stand for, and abuttal and blank are named rather than rendered by their own spellings, which are the empty string and one space.
+
+#### Queue, revised
+
+* **`PARSE` is now the largest `Op::Generic` member by a factor of 1.6 over everything else left**, 1,120,002 entries on `rexxcps` against 700,002 for the whole marker family that just landed. It has expressions and targets, so it is not a marker-shaped promotion.
+* `TRACE` (140,200) and `ADDRESS` (140,000) are next, and both are `rexxcps` artifacts rather than general hot paths.
+* The arena and collector, `caller.traps` and the `Heap::slots` chunking carry over from entry 60 unchanged, including the instruction to measure growth before writing the chunked table.
