@@ -113,7 +113,7 @@ visible.
 
 | mechanism | authority | implementation | phase | today |
 |---|---|---|---|---|
-| object / mixin / abstract / metaclass as four kinds | `provide.xml` `typcla`,`objcla`,`xmixin`,`abscla`,`xmetac` | `ClassClass.hpp:180-189` `ClassFlag` | 5a (`ABSTRACT` enforcement 5b) | partial |
+| object / mixin / abstract / metaclass as four kinds | `provide.xml` `typcla`,`objcla`,`xmixin`,`abscla`,`xmetac` | `ClassClass.hpp:180-189` `ClassFlag` | 5a — the four kinds themselves. **Enforcement is split and owned in its own two rows below**, not here | partial |
 | a class carries two behaviours, class-side and instance-side | `dire.xml` `clasdi` (metaclass merge position); D44 | `createClassBehaviour :1119`, `createInstanceBehaviour :1148` | 5a | built (Task 2) |
 | the metaclass graph and its circularity | `provide.xml` `xmetac` | `RexxClass::createInstance :1854`, `buildFinalClassBehaviour :654` | 5a | built (Task 3) |
 | a mixin's base class, and who may inherit it | `provide.xml` `xmixin` | `mixinClass() :1514`, `inherit() :1322` | 5a | refused |
@@ -123,6 +123,7 @@ visible.
 | `~define` copies the behaviour, `~inherit` mutates it in place | `fundclasses.xml` `mthClassDefine`/`mthClassInherit`; D43 | `defineMethod :819`, `inherit :1287` | 5a | built (Task 2) |
 | `inheritInstanceMethods` — donation with no superclass edge | image-build only; `Setup.cpp:1809` removes it | `ClassClass.cpp:558` | 5a | not built |
 | the cascade, instance-side vs both sides | D44 | `updateInstanceSubClasses :1071`, `updateSubClasses :1036` | 5a | built (Task 2) |
+| **native method removal and hiding at image build** — `RemoveMethod` / `HideMethod`, and their class-side twins | **nothing documents it**; found by reading `Setup.cpp`. `fundclasses.xml`'s `define` section describes the *effect* of hiding without naming the mechanism: a `.nil` entry "makes the name unavailable … causes the unknown method (if any) to be run" | `Setup.cpp:360-361`, `:371-372`; used at `:792-804` (Queue), `:1307-1312` (VariableReference), `:1399-1404` (Stem). `MethodDictionary::hideMethod` is `put(TheNilObject, name)` (`:348-351`); removal deletes outright | 5a — it runs during native class construction | not built |
 | **the REXX_DEFINED lock** | `fundclasses.xml` `mthClassDefine`, `mthClassInherit` | `liveGeneral :134` under `PREPARINGIMAGE`; raises 98.985 in `define`, `defineMethods`, `delete`, `inherit`, `uninherit` | 5a | not built |
 | `~define` / `~defineMethods` / `~delete` / `~uninherit` / `~enhanced` | one `fundclasses.xml` section each | `ClassClass.cpp:819,518,952,1379,1440` | 5a (`~enhanced` 5b — it builds an instance) | partial |
 | **`::CLASS` option surface** — `METACLASS PUBLIC PRIVATE SUBCLASS MIXINCLASS INHERIT ABSTRACT` | `dire.xml` `clasdi`, `<option>` + indexterms | `classDirective` `DirectiveParser.cpp:334-490` | 5a | `SUBCLASS`/`PUBLIC`/`ABSTRACT` built; rest refused |
@@ -464,8 +465,13 @@ four books this session:
   `Ticker`, `delete / delStr` on `MutableBuffer`.
 
 **And the check that this list is complete is not another reading of it.** The task's own evidence is
-that every derived row answers on one arm or the other on the oracle; a row that answers on neither
-is a defect in the extractor, not a finding about the crate. An arm-agreement measurement cannot
+that every derived row answers on one arm or the other on the oracle. **That check applies to
+`covered` rows only, and stating the scope matters because reading it as universal makes it
+unsatisfiable**: a `not-covered` class has no instance, so its instance-side arm cannot answer at all
+— measured, `.Alarm~hasMethod("CANCEL")` is `0` and `.Alarm~new` raises `93.901`, so every one of
+`Alarm`'s documented instance methods answers on neither arm while `Alarm` itself is this spec's own
+worked `not-covered` example. Within the covered set, a row that answers on neither arm is a defect
+in the extractor, not a finding about the crate. An arm-agreement measurement cannot
 witness that class of defect at all, because a name the oracle does not have has no arm to disagree
 about — which is why the previous round's 415-of-417 evidence scored well on a row set that was
 partly wrong.
@@ -565,6 +571,27 @@ is a different row class with a different owner; see
 [table C](#table-c--the-concept-and-class-surface), including the arm for which no instrument exists.
 
 The roadmap's Phase 5 exit row is amended to the wiring half, with the method half stated as 5c's.
+
+**Four classes are in the criterion's set and nothing in Phase 5a creates them, so the criterion
+states their standing rather than silently demanding them.** `Queue`, `Stem`, `VariableReference` and
+`RexxInfo` each have a `cls*` section and are `.environment` entries, so the wiring half asks for
+them — and measured, **none of the four appears as a `::CLASS` in either `.orx` file**, so the
+bootstrap cannot supply them either. `rexx-classes`'s `DEFERRALS` defers all four with a concrete
+reason: `Queue` needs `removeMethod`, `Stem` and `VariableReference` need `hideMethod`, and `RexxInfo`
+is `addToSystem`-only and is not an environment-reachable class object at all.
+
+Their standing, decided here:
+
+* **`RexxInfo` is already outside the set**, by the exclusion above — its `.environment` entry is an
+  instance. Nothing changes.
+* **`Queue`, `Stem` and `VariableReference` are in 5a's scope**, because the mechanism they wait on
+  is 5a's: native method removal and hiding runs during native class construction and is now an
+  enumeration row of its own. They are **not** `not-covered` and not deferred to a later phase; they
+  are 5a work that had no enumeration row until the mechanism did.
+* Until that mechanism lands they are the wiring half's only rows that cannot pass, and **a wiring
+  row that cannot pass is a verdict failure at 5a's gate**, which is the correct outcome: the whole
+  point of naming the mechanism is that its absence now reddens something instead of being a deferral
+  nobody's criterion mentions.
 
 **The correlation review's version of this diff recorded four disagreements and 59 agreeing names.**
 Re-derived here it is five and 58: `ArgUtil` was missed, and the trio said to be "in the image, absent
@@ -752,10 +779,32 @@ bound the damage and neither closes it:
 * every mechanism that **has** a `provide.xml` section is inside table C's denominator, so its
   absence from the enumeration still surfaces there;
 * a mechanism with **no** documented section is outside every denominator in this document. The
-  REXX_DEFINED lock and the operator-frame traceback line are both in that class, and both reached
-  this document because someone read the C++, not because anything derived them. **A third one would
-  be missed exactly as the first two nearly were**, and the only instrument that has ever found this
-  class of thing here is reading an authority end to end.
+  REXX_DEFINED lock and the operator-frame traceback line were the first two in that class, and both
+  reached this document because someone read the C++, not because anything derived them.
+
+**A third arrived after this section was written, which is the hole producing a member rather than a
+prediction about one.** `RemoveMethod`/`HideMethod` (`Setup.cpp:371`-`372`) is in the enumeration
+above now; it was **not** found by reading the documentation, the enumeration or the C++ from the
+top. It was found by a reviewer reading `rexx-classes/src/native_classes.rs`'s `DEFERRALS` table and
+asking why four classes were deferred. **That route is the transferable part**: a deferral table
+whose every row must name a concrete missing mechanism is a list of mechanisms nobody enumerated,
+written by the person who hit them. It is the only instrument that has produced a member of this
+class without someone reading an authority end to end, and the plan should treat the deferral table
+as a standing input to the enumeration rather than as an implementation detail.
+
+Two things the mechanism turns out to be, both measured, because the shape is not what its name
+suggests:
+
+* **hiding is the `UNKNOWN` limb, not a new mechanism.** `MethodDictionary::hideMethod` is
+  `put(TheNilObject, name)`, which is the same `.nil` dictionary entry `fundclasses.xml`'s `define`
+  section describes as routing to `UNKNOWN`. Measured, a hidden name reads absent:
+  `.Stem~new~hasMethod("==")` is `0`.
+* **removal is a true deletion, and whether the name still answers depends on the sourced layer.**
+  Both come from one block: measured, `.Queue~new~hasMethod("SORT")` is **`1`** and
+  `~hasMethod("MAKESTRING")` is **`0`**, because `CoreClasses.orx` donates the sort family back
+  through `OrderedCollection` and does not donate `makeString`. The C++ says so in its own comment
+  at `Setup.cpp:795`-`797`. **So a native-layer removal is not observable on its own** — only the
+  composition of native removal and sourced donation is.
 
 **So that instrument gets a denominator of a different kind.** Not "is the enumeration complete",
 which is unanswerable, but **which authorities have been read end to end, by whom, at which
