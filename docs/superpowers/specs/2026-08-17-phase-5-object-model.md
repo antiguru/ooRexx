@@ -297,11 +297,14 @@ class or an object — `dire.xml`'s remaining four directives, `fundclasses.xml`
 reaches the same place and also collects `::OPTIONS`, `::RESOURCE`, `NAMESPACE` and `Package~local`,
 which the old cut left with no owner at all.
 
-**5c depends on 5b having landed, and that dependency is load-bearing rather than incidental.** The
-only readback that can ask whether a class answers its documented method set is on an instance —
-`.K~new~hasMethod("DONATED")`, measured — because `~method` sees a class's own scope only. So the
-class-library half of 5c cannot be measured at all until `~new` exists. The delivery order inside
-Phase 5 is therefore 5a, then 5b, then 5c, and it is a real ordering constraint, not a preference.
+**5c's acceptance criterion partly depends on 5b having landed, and that dependency is load-bearing
+rather than incidental.** A class's documented method set has two arms and they need different
+instruments: the **class-side** arm is `.X~hasMethod("M")` and is measurable from 5a onward, but the
+**instance-side** arm — which is most of any class's set — can only be asked of an instance
+(`.K~new~hasMethod("DONATED")`, measured), because `~method` sees a class's own scope only and
+therefore raises for every donated or inherited name. So the larger part of 5c's criterion cannot be
+measured until `~new` exists. The delivery order inside Phase 5 is 5a, then 5b, then 5c, and for that
+part of the criterion it is a real constraint rather than a preference.
 
 ### The bootstrap is a milestone, not a boundary
 
@@ -350,30 +353,79 @@ below one of these mixin classes" — so the criterion is that the documented ed
 `~superClasses`, never that it is the whole answer. That is gate table C's **wiring half**, it is
 class-level, and it is 5a's.
 
-**The method half is a separate criterion and it is 5b's, because no class-level readback can
-express it.** `~method` reads the class's *own scope*, so it raises for every documented method a
-class receives from a mixin or a superclass — measured: with `::CLASS M MIXINCLASS Object` defining
-`donated` and `::CLASS K INHERIT M` defining `ownm`, `.K~method("OWNM")` is `The Method class` and
-`.K~method("DONATED")` **raises 97.1**; `.DateTime~method("<")` raises 97.1 too, and `<` *is* in
-DateTime's documented set because `comparableclassmethods.xml` and `orderableclassmethods.xml` are
-`xi:include`d inside `clsDateTime`. `~instanceMethod` does not rescue it: measured,
-`.Array~instanceMethod("APPEND")` is `.nil` while `.Array~instanceMethod("STRING")` answers, so it
-answers about the receiver *and* returns `.nil` instead of raising, which discriminates nothing.
+### The method half, and the two instruments it needs
 
-The readback that does reach the documented set is on an instance — measured,
-`.K~new~hasMethod("DONATED")` and `.Array~new~hasMethod("APPEND")` are both `1` — and `~new` is 5b.
-So: **the wiring half gates 5a; the method half gates 5c and depends on 5b having landed `~new`.**
-That dependency is now load-bearing rather than incidental, and the plan owes the ordering.
+**The method half is a separate criterion and it is 5c's**, because implementing a class's documented
+methods is class-library work. **Its instance-side arm additionally cannot be measured until 5b has
+landed `~new`; its class-side arm can be measured from 5a onward.** An earlier draft of this
+paragraph said the whole half was 5b's, which contradicted every other statement of it in this
+document.
 
-**Which criterion each half is, said plainly, because the two are not the same test.** The wiring
-half is *the oracle's answer is reproduced*, with the documentation supplying the row keys. The
-method half is *the documented set answers*, with the documentation as the acceptance authority and
-`instance~hasMethod` as the instrument — a documented method the oracle does not answer is an
-upstream finding under the plan's three-signal rule, not a row we silently drop. Anywhere the class
-object's **own scope** is the question rather than its whole set, `~method` and `~hasMethod` are the
-instrument, and that is a different row class — see [table C](#table-c--the-concept-and-class-surface).
+The reason there are two arms is that neither instrument answers both. Measured:
 
-The roadmap's Phase 5 exit row is amended to the wiring half plus the method half's deferral.
+| what is asked | instrument | evidence |
+|---|---|---|
+| does X answer its documented **instance** method m | `.X~new~hasMethod("M")` | `.K~new~hasMethod("DONATED")` for a `MIXINCLASS`-donated method is `1`; `.Array~new~hasMethod("APPEND")` is `1` |
+| does X answer its documented **class** method m | `.X~hasMethod("M")` | `.Array~hasMethod("NEW")` and `.Array~hasMethod("OF")` are `1`, and both are **`0`** under `.Array~new~hasMethod` |
+
+`new` and `of` are exactly the two entries in `clsArray`'s documented set whose `<title>` carries the
+`(Class Method)` suffix, so the suffix derivation the extractor already performs is what picks the
+arm. **A single-instrument criterion fails every documented `(Class Method)` row**, and the first
+draft of this fix named only the first arm.
+
+Neither `~method` nor `~instanceMethod` can serve here, and this is why the criterion moved off them:
+`~method` reads the class's *own scope*, so it raises for every documented method a class receives
+from a mixin or a superclass — measured, `.K~method("DONATED")` **raises 97.1**, and so does
+`.DateTime~method("<")`, although `<` *is* in DateTime's documented set because
+`comparableclassmethods.xml` and `orderableclassmethods.xml` are `xi:include`d inside `clsDateTime`.
+`~instanceMethod` is worse: measured, `.Array~instanceMethod("APPEND")` is `.nil` while
+`.Array~instanceMethod("STRING")` answers, so it answers about the receiver *and* returns `.nil`
+instead of raising, which discriminates nothing.
+
+### Getting an instance, which a quarter of the classes will not give you
+
+The instance-side arm needs an instance, and a bare `~new` does not produce one for every class.
+Measured by iterating `.environment` and sending `~new` to every entry answering `~isA(.Class)`:
+**38 succeed, 24 raise.**
+
+* **Nineteen raise on arguments** — `Alarm`, `CaselessColumnComparator`, `CircularQueue`, `Class`,
+  `ColumnComparator`, `File`, `InvertingComparator`, `Message`, `Method`, `Package`, `Routine`,
+  `Singleton`, `Stream`, `StreamSupplier`, `String`, `Supplier`, `Ticker`, `TimeSpan`,
+  `WeakReference`, at `93.901`, `93.903`, `88.901` or `97.1`. **The criterion owes a committed
+  per-class construction recipe** for each, derived from that class's documented `new` signature in
+  its own `mth*New` section and validated by running it — a recipe that stops working is a row that
+  reddens, not one that is skipped.
+* **Five have no `~new` at all** — `Buffer`, `Pointer`, `RexxContext`, `StackFrame`,
+  `VariableReference`. Measured, `.Buffer~new` is rc 163, `Error 93.967: NEW method is not supported
+  for the Buffer class.` Two of the five have a measured non-`~new` route and take it:
+  `.context` is a live `RexxContext` and `.context~stackFrames[1]` is a `StackFrame`. For the rest I
+  found no route this session — which is **not** the same as there being none, a claim this project
+  has got wrong from true premises before.
+
+**`unreachable` is therefore a declared row status, and it is policed in both directions.** A row
+declared unreachable names the class, the arm, and what would have to exist to reach it; the table
+re-derives the reachable set on every run and reddens if a declared-unreachable row turns out to be
+reachable, or if a row acquires the status without being declared. Without that, "unreachable" is a
+place to put rows that are merely inconvenient — which is the same defect as a criterion the oracle
+fails, with the failure hidden instead of loud.
+
+**Mixin classes are not the problem they look like.** Measured, `.Collection~new` and
+`.Comparable~new` succeed, so the mixins need no recipe.
+
+### Which criterion each half is
+
+Said plainly, because they are not the same test. The **wiring half** is *the oracle's answer is
+reproduced*, with the documentation supplying the row keys; it is class-level and gates 5a. The
+**method half** is *the documented set answers*, with the documentation as the acceptance authority
+and `hasMethod` as the instrument on both arms; it gates 5c, and only its instance-side arm waits on
+5b. A documented method the oracle does not answer is an upstream finding under the plan's
+three-signal rule, not a row we silently drop.
+
+A third, separate question — *is m defined at X's **own** scope* — is what `~method` answers, and it
+is a different row class with a different owner; see
+[table C](#table-c--the-concept-and-class-surface), including the arm for which no instrument exists.
+
+The roadmap's Phase 5 exit row is amended to the wiring half, with the method half stated as 5c's.
 
 **The correlation review's version of this diff recorded four disagreements and 59 agreeing names.**
 Re-derived here it is five and 58: `ArgUtil` was missed, and the trio said to be "in the image, absent
@@ -397,19 +449,46 @@ comparison**, because a state with no verdict is a row that reads as nothing:
 | verdict | exit status | stdout | stderr |
 |---|---|---|---|
 | **agree** | same | same | same |
-| **loud** | crate rc 120 with a `rexx-exec:` message naming a phase | — | — |
 | **diverge-status** | differs | — | — |
 | **diverge-stdout** | same | differs | same |
 | **diverge-stderr** | same | same | differs |
 | **diverge-both** | same | differs | differs |
+
+Five cells, mutually exclusive and jointly exhaustive over the three-channel comparison, so exactly
+one applies to every row and no precedence question arises.
 
 `diverge-stdout` is the verdict the superseded gate had no way to express and the reason both
 `UNKNOWN` and `makeString` survived three reviews. **`diverge-stderr` is a live 5a state and the
 first draft of this taxonomy had no cell for it** — measured, `say b. + 1` with `b.` untouched is
 **rc 215 with empty stdout on both sides**, and the oracle's stderr opens with
 `*-* Compiled method "+" with scope "String".` where ours does not. That is this spec's own
-enumeration row for the operator-frame traceback line, and under a three-verdict function it computed
-to nothing at all.
+enumeration row for the operator-frame traceback line, and under the first draft's taxonomy — which
+split `diverge` only by exit status and by stdout — it computed to nothing at all.
+
+**`loud` is not a verdict, and the second draft's version of this table was wrong to make it one.**
+Its predicate is on the crate's output alone — rc 120 with a `rexx-exec:` message naming a phase — so
+it says nothing about the comparison and can co-fire with any other cell. Under a six-cell function
+with `loud` as a peer, a row that is both is ambiguous, and the decisive witness is one this spec
+elsewhere requires closing:
+
+```
+::ANNOTATE ROUTINE nosuchrtn author "moritz"
+  oracle  rc 157   stderr  Error 99.945: ::ANNOTATE target routine "NOSUCHRTN" not found.
+  crate   rc 120   stderr  rexx-exec: ::ANNOTATE naming a target is not implemented (Phase 5)
+```
+
+That row is `diverge-status` *and* loud. **D32 requires Phase 5 to reproduce refusals at the oracle's
+own rc and bytes**, so if `loud` won the precedence, a row the spec itself requires closing could
+never redden.
+
+**So `loud` is a separate boolean column, never a verdict.** Every row gets a verdict from the five
+cells above and, independently, a `loud` flag recording that the crate refused with an owned message.
+The flag never changes a verdict; it changes only what a **verdict failure** is allowed to look like
+before its phase closes. What the gate accepts at a phase boundary is `agree`, or a non-`agree`
+verdict whose row is recorded as an **accepted refusal** — which requires `loud` to be true *and* the
+row's owning phase to be later than the closing one. A `loud` row owned by the closing phase is red,
+and a row that is not `loud` is never an accepted refusal, because a silent wrong answer is the thing
+these tables exist to catch.
 
 ### The stderr comparison mode, which is part of the verdict function
 
@@ -440,12 +519,18 @@ progress report into the phase gate"*.
 
 * **Structural failure — always red, in both modes, in every phase.** A row whose probe program is
   missing; a row whose probe does not run on one of the two engines; a derived row set that does not
-  match the committed data file; a verdict the function cannot compute. These are defects in the
+  match the committed data file; an oracle run that did not yield three descriptors, whether from a
+  launch failure or a timeout, which must fail rather than be recorded as a divergence; a row whose
+  declared `unreachable` status disagrees with the re-derived reachable set. These are defects in the
   instrument, not in the implementation, and they are the failure the tables exist to be incapable of
-  hiding.
+  hiding. (An earlier draft listed "a verdict the function cannot compute" here. Against the total
+  five-cell function above that is unreachable by construction — an item on this list that cannot
+  fire is exactly the shape this project keeps finding in its own instruments, so it is replaced
+  rather than kept as belt-and-braces.)
 * **Verdict failure — red only under `REXX_CORPUS_GATE=1`, and only for the rows the closing phase
   owns.** Each row carries its owning phase, from the enumeration. At 5a's gate, a 5a row whose
-  verdict is anything but `agree` or an explicitly recorded `loud` is red; a 5b or 5c row is
+  verdict is anything but `agree` is red — a `loud` flag does not save it, because an accepted
+  refusal requires the row's owning phase to be *later* than the closing one; a 5b or 5c row is
   reported and not gated. At 5c's gate every row is gated. So the table is a progress report by
   default, is legible the whole way through, and becomes the phase gate at exactly one boundary per
   phase.
@@ -490,8 +575,9 @@ physical line (`CoreClasses.orx:151`).
 **How it fails in the direction that matters.** Three named mutations, each of which the table's own
 test asserts flips a stated row:
 
-1. make the crate accept a still-refused keyword silently — the row moves `loud` → `agree` **only if
-   the oracle agrees too**; if it does not, the row reads `diverge-silent` and reddens. This is the
+1. make the crate accept a still-refused keyword silently — the row's `loud` flag clears, and its
+   verdict becomes `agree` **only if the oracle agrees too**; if it does not, the verdict is one of
+   the four `diverge` cells and reddens. This is the
    `SUBCLASS`/`MIXINCLASS` shared-slot hazard the plan-split review filed as M10: `ast.rs`'s
    `ClassDirective` holds both in one `subclass` slot separated by `mixin: bool`, so a narrowing
    written against `subclass.is_some()` admits `MIXINCLASS` at rc 0. A refusal-derived table agrees
@@ -537,20 +623,28 @@ verdicts are identical and the cost is a per-class subprocess pair rather than a
 matters because these tables run inside `cargo test --release --workspace` and every oracle run is a
 `sh -c 'ulimit -v … && exec …'` launch.
 
-**The readback rules, measured this session, and they are two different questions:**
+**The readback rules. Two questions, two sides each, and one of the four cells has no instrument:**
 
-| the question | how | measured on the oracle |
-|---|---|---|
-| does class X **answer** its documented method m — the acceptance question, 5c | `.X~new~hasMethod("M")` | `.K~new~hasMethod("DONATED")` is 1 for a mixin-donated method; `.Array~new~hasMethod("APPEND")` is 1 |
-| is m defined **at X's own scope** — the scope question, 5a | `.X~method("M")` for an instance method, `.X~hasMethod("M")` for a class method | `.Array~method("APPEND")~class` is `The Method class`, `.Array~method("ZZNOSUCH")` raises 97.1; `.Array~hasMethod("OF")` is 1, `.Array~hasMethod("APPEND")` is 0 |
+| question | side | instrument | measured on the oracle |
+|---|---|---|---|
+| **acceptance** — does X answer documented method m | instance | `.X~new~hasMethod("M")` | `.K~new~hasMethod("DONATED")` is 1 for a mixin-donated method; `.Array~new~hasMethod("APPEND")` is 1 |
+| **acceptance** | class | `.X~hasMethod("M")` | `.Array~hasMethod("NEW")` and `.Array~hasMethod("OF")` are 1; both are 0 under `.Array~new~hasMethod` |
+| **scope** — is m defined at X's *own* scope | instance | `.X~method("M")` | `.Array~method("APPEND")~class` is `The Method class`; `.Array~method("ZZNOSUCH")` and `.Array~method("STRING")` both raise 97.1 |
+| **scope** | class | **none exists at the Rexx level** | `.Array~hasMethod("ID")` and `.Array~hasMethod("DEFINE")` are both **1**, though `id` and `define` are defined on `Class` — so `~hasMethod` walks the whole class behaviour and cannot answer this. `.Array~method("ID")` raises, because `~method` reads the *instance* dictionary only |
 
 `~method` reads `instanceMethodDictionary`, the methods "defined at this level"
-(`ClassClass.cpp:984`, comment at `:988`-`:990`), so it is per-scope. **That makes it a good scope
-discriminator and a bad acceptance check, and the first draft of this spec used it for both.**
-Measured, `.Array~method("STRING")` **raises 97.1** although every Array instance answers `STRING`;
-a build that flattened every scope onto one class would answer it, so it is exactly the right
-instrument for the scope question. And measured, `.K~method("DONATED")` raises 97.1 for a method the
-class genuinely has, so it is exactly the wrong instrument for the acceptance question.
+(`ClassClass.cpp:984`, comment at `:988`-`:990`). That makes it a good scope discriminator for
+instance methods and a bad acceptance check for anything: measured, `.Array~method("STRING")` raises
+97.1 although every Array instance answers `STRING` — which is what a build flattening every scope
+onto one class would fail — while `.K~method("DONATED")` raises for a method the class genuinely
+has.
+
+**The fourth cell is empty and the spec says so rather than naming an instrument that does not
+answer.** An earlier draft put `.X~hasMethod("M")` there; it belongs in the acceptance row's class
+arm, where it is correct. Whether a class method is defined at a given scope is therefore **not a row
+class in table C**, and a build that moved a class method between scopes would not be caught here.
+The place it would be caught is a scope-override send (`~m:scope`), which is its own enumeration row
+and has its own corpus programs — say that in the plan rather than leaving the gap implied.
 
 **`~instanceMethods` is not the readback**, and the measurement that says so is worth committing
 beside the rule: `.Array~instanceMethods` collected into a Set contains `DEFINE`, `ID` and `OF` and
@@ -565,12 +659,30 @@ where it applies, and the suffix is systematic — with one case wobble (`Class 
 all (`? (inline if)`), so the match is case-insensitive and those unusual titles are pinned by name
 in the extractor.
 
-**A third derivation artifact, in the half of the derivation that has no parser to settle it: the
-hierarchy extractor must strip XML comments before reading `<member>`s.** `provide.xml:844` is
-`<member><xref linkend="clsArgUtil" …/></member>` sitting inside a comment at `:843`/`:845` — and
-*inside* the `$GENERATED` block the extractor is pointed at. A per-`<member>` extraction that does
-not strip comments yields a hierarchy containing `ArgUtil` and contradicts this spec's own row
-saying `ArgUtil` is documented nowhere.
+**Three derivation artifacts in the half that has no parser to settle it, and the hierarchy
+extractor needs a rule for each.**
+
+1. **Strip XML comments before reading `<member>`s.** `provide.xml:844` is
+   `<member><xref linkend="clsArgUtil" …/></member>` sitting inside a comment at `:843`/`:845` — and
+   *inside* the `$GENERATED` block the extractor is pointed at. A per-`<member>` extraction that does
+   not strip comments yields a hierarchy containing `ArgUtil` and contradicts this spec's own row
+   saying `ArgUtil` is documented nowhere.
+2. **The root emits no self-edge.** `clsObject` is itself a level-0 `<member>`, so a naive
+   parent-of-previous-level rule makes `Object` its own parent; measured, `.Object~superClasses` has
+   `0` items, so that row can never hold.
+3. **Excluded names emit no edge.** `RexxInfo` is excluded from the class set by the criterion above
+   and must be excluded from the edge set too, or a naive extractor emits a row for a name that is
+   not an `.environment` class.
+
+A level-0 `<member>`'s parent is `Object`, from the section's own opening sentence — "Rexx provides
+the following classes belonging to the Object class" — which is what makes the edge set larger than
+the indented members alone.
+
+**Run end to end, the criterion holds.** Measured this session: the `chi` block yields **59** naive
+edges; rules 2 and 3 drop exactly `Object → Object` and `RexxInfo → Object`; and all **57** remaining
+edges appear in the child's `~superClasses` on the shipped oracle, zero failures. Without the rules
+it yields those two failing rows and, without rule 1, a member set containing `ArgUtil` — so the
+wiring half is satisfiable *and* falsifiable, demonstrated rather than asserted.
 
 **How it fails in the direction that matters.**
 
@@ -610,11 +722,16 @@ saying `ArgUtil` is documented nowhere.
   no `~new`**, which the plan's instance-shaped version of this probe is not. The program, in full,
   because its exact shape is the whole point:
 
-  ```
+  ```rexx
   say .K~m
-  ::CLASS P                     ::METHOD m CLASS -> return "parent"
-  ::CLASS M1 MIXINCLASS Object  ::METHOD m CLASS -> return "M1"
-  ::CLASS K SUBCLASS P INHERIT M1        -- K defines no m of its own
+  ::CLASS P
+  ::METHOD m CLASS
+    return "parent"
+  ::CLASS M1 MIXINCLASS Object
+  ::METHOD m CLASS
+    return "M1"
+  ::CLASS K SUBCLASS P INHERIT M1
+  -- K defines no m of its own; that is the point
   ```
 
   `say .K~m` is **`parent`** at rc 0, not `M1`. The mixin winning is its negative control.
@@ -721,7 +838,7 @@ withdrawn, with a reason.
 | **D24's three surviving forward constraints** — selectors interned at compile time, a `SmallInt` behaviour arm, a receiver in the calling convention | **carried, unchanged and still 5a's.** D28 disposed of D24's other two by declining the send cache; these three are not disposed of by anything in this spec, none is designed here, and the plan owes a task for each. Naming them here is the point: they are the concrete residue of D24 and they had no other home |
 | whether `createInstance()`'s order is load-bearing — only four of its positions carry a stated reason | **carried, narrowed.** D25's amendment removes that list as the *enumeration*, which is what it was mostly being used for; the ordering question survives as a construction-order question for the native layer and is unanswered |
 | what plays the oracle for a native method | **carried.** A collection primitive implemented in Rust has one through a Rexx program; a method `CoreClasses.orx` defines has one by construction; the plan should still say there is no third case rather than leave it implied |
-| which `CoreClasses.orx` classes the phase leaves unexercisable | **amended.** The old answer named `Alarm` and `Ticker`, because `REPLY`/`GUARD` were Phase 6's. D55 makes both run in a single-threaded Phase 5, so the list is smaller than the old spec assumed and the plan must re-derive it rather than inherit it |
+| which `CoreClasses.orx` classes the phase leaves unexercisable | **carried, with its stated reason corrected.** The old answer named `Alarm` and `Ticker` because `REPLY`/`GUARD` were Phase 6's; D55 removes that reason but not the conclusion. Both remain unexercisable for a reason D55 does not touch: `Alarm~init` calls `self~!startTimer` (`CoreClasses.orx:1557`), declared at `:1590` as `EXTERNAL 'LIBRARY REXX alarm_startTimer'`, and `Ticker~init` calls `self~!createTimer` (`:1659`), declared at `:1690` as `ticker_createTimer` — and under D37 a registered-but-unimplemented native raises **when invoked**, so neither `~new` can succeed in Phase 5. An earlier draft of this row said "the list is smaller than the old spec assumed", which is unsupported for the only two members it names. The plan must re-derive the list rather than inherit it |
 | the roadmap's first-listed reason for the IR — that it "founds OO dispatch for Phase 5 by making a call site a patchable slot" | **carried.** D28 sends no send through that slot, so the sentence needs amending or a recorded reason it survives. It is at `2026-07-27-rust-rewrite.md:492`; the old spec cites `:482` |
 | where the phase subset's programs come from, given that a subset chosen by the implementer is a weak instrument | **amended.** Partly answered: both gate tables' row sets come from the documentation, so the *choice* of what to cover is no longer the implementer's. Which program satisfies a given row still is, and that residue stands |
 
@@ -741,6 +858,11 @@ are restated here:
   the finding that neither `descriptor_diffs` (under `Normalized`) nor `ir_dual` can see an indent
   divergence. Carried; it is the same subject as the comparison-mode section above, and `Raw` is what
   makes the table's version of it able to fail.
+* **Criterion 5 — the security manager's interception seam**, with exactly one chokepoint at dispatch
+  and one at `.local`/`.environment` lookup, each asserted by a test that fails if a second appears.
+  Carried, through D45's "carried, extended" row; an earlier draft of this inventory claimed to close
+  over "the rest" of the criteria and then omitted this one, which is the standard the D25-D45 table
+  met and this inventory was added to match.
 * **Criterion 6 and criterion 9** — the performance guard and the cold-start measurement — carried
   through D35 and the untouched D2 obligation.
 * **The committed tables that have to move when a row starts passing**: `assertions.rs`'s `EXEMPT`,
@@ -902,6 +1024,12 @@ which name a bootstrap that runs later than they do.
   numerically right and file-ambiguous — `checkUninit :1210` and `completeNewObject :1882` are both
   **ClassClass.cpp** — and are now qualified. The roadmap's patchable-slot sentence is `:492`, which
   the superseded spec cites as `:482`.
+* **Whether a class with no `~new` can be reached at all.** Two of the five — `RexxContext` via
+  `.context`, `StackFrame` via `.context~stackFrames[1]` — have a measured route. For `Buffer`,
+  `Pointer` and `VariableReference` I found none this session, and **"I found none" is not "none
+  exists"**: `VariableReference` in particular has a documented `USE ARG >name` route I could not get
+  to produce one from a caller I controlled. The criterion's `unreachable` status is declared and
+  re-derived precisely so that a route found later reddens the row rather than being absorbed.
 * ~~**Whether `~method` reaches every mixin-donated name.**~~ **Closed, in the direction this spec
   did not expect.** Measured: `.K~method("DONATED")` for a `MIXINCLASS`-donated method raises 97.1,
   and so does `.DateTime~method("<")`, a method DateTime genuinely has. `~method` reaches the class's
