@@ -39,6 +39,53 @@ use rexx_core::{
 use rexx_num::{Form, Number};
 use std::borrow::Cow;
 
+/// How wide [`Interp::text_scratch`] is.
+///
+/// Twenty because that is `i64::MIN`'s rendering, sign included, which is the
+/// widest thing written there; the assertions below are what say so, rather
+/// than this sentence. `INLINE_TEXT` is the other writer and is far shorter.
+pub(crate) const TEXT_SCRATCH: usize = 20;
+const _: () = assert!(TEXT_SCRATCH >= rexx_core::INLINE_TEXT);
+
+/// Writes `value`'s decimal spelling into the tail of `buffer`, answering the
+/// index it starts at.
+///
+/// **The one spelling of a tagged integer's rendering**, and it must stay
+/// that way: [`Interp::write_text`] appends it, [`Interp::to_text`] leaves it
+/// in the interpreter's scratch, and [`Interp::render`] puts it in the
+/// `Rendered` it hands back. Those three must agree byte for byte or a value
+/// would read differently depending on which accessor asked.
+///
+/// Right-aligned because that is the direction the digits come out in, and
+/// `unsigned_abs` rather than a negation because `i64::MIN`'s magnitude has
+/// no positive form. `a_tagged_integer_renders_as_its_own_display_does` pins
+/// the result against `to_string` at both ends of the tagged range.
+///
+/// Written here rather than through `i64`'s `Display`: that would be the
+/// contract stated directly, but it reaches this buffer only through
+/// `core::fmt`, and measured on samples/rexxcps.rex a `write!` into a
+/// fixed-size `fmt::Write` sink cost 0.85% more instructions than the
+/// `to_string` allocation it was replacing -- `to_string` has a specialised
+/// integer path that `write!` does not take. The test is what keeps the two
+/// spellings honest instead.
+fn write_small_int(buffer: &mut [u8; TEXT_SCRATCH], value: i64) -> usize {
+    let mut at = buffer.len();
+    let mut magnitude = value.unsigned_abs();
+    loop {
+        at -= 1;
+        buffer[at] = b'0' + (magnitude % 10) as u8;
+        magnitude /= 10;
+        if magnitude == 0 {
+            break;
+        }
+    }
+    if value < 0 {
+        at -= 1;
+        buffer[at] = b'-';
+    }
+    at
+}
+
 impl Interp {
     /// Creates a text value: D15's "a value whose identity is its bytes".
     ///
@@ -276,26 +323,8 @@ impl Interp {
     /// [`to_text`]: Interp::to_text
     pub(crate) fn write_text(&mut self, value: ObjRef, out: &mut Vec<u8>) {
         if let Decoded::SmallInt(n) = value.decode() {
-            // Same digits `i64`'s own `Display` produces, including for
-            // `i64::MIN`, whose magnitude has no positive form -- which is why
-            // this goes through `unsigned_abs` rather than negating. Pinned
-            // against `to_string` by `write_text_writes_what_to_text_renders`
-            // below, over the boundary values and a spread between them.
-            let mut buffer = [0u8; 20];
-            let mut at = buffer.len();
-            let mut magnitude = n.unsigned_abs();
-            loop {
-                at -= 1;
-                buffer[at] = b'0' + (magnitude % 10) as u8;
-                magnitude /= 10;
-                if magnitude == 0 {
-                    break;
-                }
-            }
-            if n < 0 {
-                at -= 1;
-                buffer[at] = b'-';
-            }
+            let mut buffer = [0u8; TEXT_SCRATCH];
+            let at = write_small_int(&mut buffer, n);
             out.extend_from_slice(&buffer[at..]);
             return;
         }
@@ -310,7 +339,14 @@ impl Interp {
     pub(crate) fn to_text(&mut self, value: ObjRef) -> Cow<'_, [u8]> {
         match value.decode() {
             Decoded::Nil => return Cow::Borrowed(b"The NIL object"),
-            Decoded::SmallInt(n) => return Cow::Owned(n.to_string().into_bytes()),
+            // Rendered into the same scratch field the inline arm below uses,
+            // for the same reason: `to_string` would allocate a `Vec` per
+            // read, and a tagged integer is a value that exists precisely so
+            // that it need not be stored anywhere.
+            Decoded::SmallInt(n) => {
+                let at = write_small_int(&mut self.text_scratch, n);
+                return Cow::Borrowed(&self.text_scratch[at..]);
+            }
             // Copied into a scratch field and borrowed back out, rather than
             // returned as an owned `Vec`, because a short string is the most
             // common value there is and an allocation here would give back
@@ -459,28 +495,48 @@ impl Interp {
     /// The `Rendered` this hands back is empty in the case that matters: it
     /// means "a later `try_text` on this value returns `Some`", and a caller
     /// reading several values calls this for every one of them first, then
-    /// takes all its shared borrows at once. It is non-empty for a tagged
-    /// small integer, or a stem resolving to one, and then costs exactly what
-    /// [`to_text`] costs today -- which is what makes converting a call site
-    /// a pure improvement rather than a trade.
+    /// takes all its shared borrows at once. It is non-empty for an inline
+    /// string, a tagged small integer, or a stem resolving to a value whose
+    /// bytes are themselves a copy -- and only the last of those allocates.
     ///
-    /// The `Cow` match below is the whole implementation and it is not a
-    /// shortcut: `to_text` returns `Cow::Borrowed` precisely when it has left
-    /// the bytes somewhere in the heap, and `Cow::Owned` precisely when it
-    /// has not.
+    /// **The two arms in front of the `Cow` match are not a shortcut past
+    /// it.** `to_text` answers `Cow::Borrowed` both when it has left the bytes
+    /// in the heap and when it has put them in the interpreter's single
+    /// scratch slot, and only the first of those may become
+    /// [`Carried::Borrowable`] -- a `Rendered` outlives the next `to_text`
+    /// call, which overwrites that slot. The arms take the two values that
+    /// use the slot before the match can confuse them for heap bytes.
     ///
     /// [`try_text`]: Interp::try_text
     /// [`to_text`]: Interp::to_text
     pub(crate) fn render(&mut self, value: ObjRef) -> Rendered {
-        // Checked before `try_text`, because an inline string is the one
-        // value whose bytes are neither borrowable nor worth an allocation:
-        // they are copied into the `Rendered` itself, which the caller
-        // already owns.
-        if let Decoded::Text(inline) = value.decode() {
-            return Rendered {
-                value,
-                carried: Carried::Inline(inline),
-            };
+        // Both of these are checked before `try_text`, because their bytes are
+        // neither borrowable nor worth an allocation: they are written into
+        // the `Rendered` itself, which the caller already owns.
+        match value.decode() {
+            Decoded::Text(inline) => {
+                return Rendered {
+                    value,
+                    carried: Carried::Inline(inline),
+                };
+            }
+            // A tagged integer's bytes live nowhere until something asks for
+            // them, so `to_text` would leave them in the interpreter's single
+            // scratch slot -- a `Cow::Borrowed` that the next call overwrites,
+            // which is exactly what a `Rendered` may not hold. Rendered here
+            // instead, into storage this value owns.
+            Decoded::SmallInt(value_int) => {
+                let mut buffer = [0u8; TEXT_SCRATCH];
+                let at = write_small_int(&mut buffer, value_int);
+                return Rendered {
+                    value,
+                    carried: Carried::Scratch {
+                        buffer,
+                        at: at as u8,
+                    },
+                };
+            }
+            _ => {}
         }
         if self.try_text(value).is_some() {
             return Rendered {
@@ -766,12 +822,18 @@ pub(crate) struct Rendered {
 enum Carried {
     /// Nothing: the bytes are where they were and `try_text` reaches them.
     Borrowable,
-    /// A rendering that existed nowhere before -- a small integer's digits.
+    /// A rendering that existed nowhere before and does not fit the scratch
+    /// arm below -- a stem resolving to a value whose own bytes are already a
+    /// copy.
     Owned(Vec<u8>),
     /// Bytes that live in the handle. Copied here rather than allocated,
     /// which is what keeps an inline string free at a call site that needs
     /// several operands' bytes at once.
     Inline(InlineText),
+    /// A tagged integer's digits, written into this `Rendered` itself. The
+    /// same trade [`Carried::Inline`] makes: the caller already owns this, so
+    /// a value that exists only as a tag costs no allocation to read.
+    Scratch { buffer: [u8; TEXT_SCRATCH], at: u8 },
 }
 
 impl Rendered {
@@ -784,6 +846,7 @@ impl Rendered {
         match &self.carried {
             Carried::Owned(bytes) => bytes,
             Carried::Inline(inline) => inline,
+            Carried::Scratch { buffer, at } => &buffer[usize::from(*at)..],
             Carried::Borrowable => interp
                 .try_text(self.value)
                 .expect("`render` carried no bytes, so it left them borrowable"),
@@ -804,6 +867,67 @@ mod tests {
     use rexx_core::INLINE_TEXT;
     use rexx_num::DivOp;
     use std::collections::HashMap;
+
+    /// `to_text` renders a tagged integer exactly as `i64`'s `Display` does,
+    /// and the scratch it renders into is wide enough for every one of them.
+    ///
+    /// Both halves matter and neither implies the other. A renderer writing
+    /// into too small a buffer panics rather than truncating, so the widest
+    /// values are the ones that would find it -- `SMALL_INT_MIN` is nineteen
+    /// digits and a sign, which is `TEXT_SCRATCH` exactly, and it is in the
+    /// grid for that reason rather than for its value. A renderer wide enough
+    /// but spelling a number differently is what the byte equality catches.
+    #[test]
+    fn a_tagged_integer_renders_as_its_own_display_does() {
+        let mut interp = Interp::new();
+        for case in [
+            0i64,
+            1,
+            -1,
+            9,
+            -9,
+            10,
+            -10,
+            99,
+            -100,
+            1000,
+            i64::from(i32::MIN),
+            i64::from(u32::MAX),
+            SMALL_INT_MAX,
+            SMALL_INT_MIN,
+        ] {
+            let value = ObjRef::small_int(case).expect("inside the tagged range");
+            assert_eq!(
+                interp.to_text(value).as_ref(),
+                case.to_string().as_bytes(),
+                "{case}"
+            );
+        }
+        assert_eq!(
+            SMALL_INT_MIN.to_string().len(),
+            TEXT_SCRATCH,
+            "the widest tagged rendering is what fixes `TEXT_SCRATCH`; if this \
+             moved, the buffer has slack or is about to overrun"
+        );
+    }
+
+    /// Two reads in a row each answer their own value.
+    ///
+    /// The scratch is one slot, so a renderer that left a longer previous
+    /// rendering behind it -- or that returned a borrow outliving the next
+    /// write -- would show up as the first value's tail hanging off the
+    /// second. The pair is deliberately long-then-short.
+    #[test]
+    fn a_second_tagged_read_does_not_show_the_first_ones_tail() {
+        let mut interp = Interp::new();
+        let long = ObjRef::small_int(SMALL_INT_MIN).expect("inside the tagged range");
+        let short = ObjRef::small_int(7).expect("inside the tagged range");
+        assert_eq!(
+            interp.to_text(long).to_vec(),
+            SMALL_INT_MIN.to_string().into_bytes()
+        );
+        assert_eq!(interp.to_text(short).to_vec(), b"7".to_vec());
+    }
 
     /// `write_text` must append exactly the bytes `to_text` renders, for every
     /// value that reaches its hand-written formatter.
