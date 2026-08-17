@@ -160,12 +160,22 @@ impl ObjRef {
     ///
     /// The bytes are copied in; nothing outside is referenced afterwards,
     /// which is what lets the result outlive its source with no lifetime.
+    ///
+    /// **Copied by a bounded loop and not by `copy_from_slice`.** That method
+    /// takes a run-time length and so compiles to a call into `memcpy`, which
+    /// is the right tool for a length nobody knows and the wrong one for a
+    /// length the line above has just capped at [`INLINE_TEXT`]. The `zip`
+    /// stops at `bytes`, which is the shorter, so the bound is the same one
+    /// that guard establishes.
+    #[inline]
     pub fn inline_text(bytes: &[u8]) -> Option<Self> {
         if bytes.len() > INLINE_TEXT {
             return None;
         }
         let mut buf = [0u8; 8];
-        buf[..bytes.len()].copy_from_slice(bytes);
+        for (slot, byte) in buf.iter_mut().zip(bytes) {
+            *slot = *byte;
+        }
         let data = u64::from_le_bytes(buf);
         Some(ObjRef(
             (data << TEXT_DATA_SHIFT) | ((bytes.len() as u64) << TEXT_LEN_SHIFT) | TAG_TEXT,
