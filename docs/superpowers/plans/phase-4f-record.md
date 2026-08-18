@@ -5023,3 +5023,19 @@ Each was found by profiling `rexxcps` and reading which symbols grew, not by rea
 * **`invoke_named_call` goes through a new activation.** Whether it has to is open.
 * **`Number::add_signed` is not inlined into `Number::add`** -- Moritz, from the same profile. It is 2.20% self on a controlled loop's own axis.
 * **The `PROCEDURE` permission is written once per clause for the whole of a body**, and only the first two clauses can need it. The shortcut above is worth having on its own, with the label case handled.
+
+### Entry 68 -- `Op::Const` allocates to read a constant, and the tag space cannot fix it
+
+No commits. Moritz, reading `drive.rs`'s `Op::Const` arm.
+
+**The op rebuilds its value on every execution.** `Interp::literal` answers without allocating for a canonical small integer and for seven bytes or fewer, which the handle carries inline; anything longer takes `Bytes::from_slice` and an arena slot, every time the op runs.
+
+Counted with a counter in the arm itself, then removed: the pinned `rexxcps` runs `Op::Const` **1,508,931** times and allocates on about **560,000** of them -- the four 33-byte literals its timed loop assigns, rebuilt once per pass. `varlookup` and `compound` never reach an allocating one, and `strings` reaches `Op::Const` once in the whole run. At entry 64's measured 132 instructions per allocation removed, the prize is about **0.5% of `rexxcps`** and nothing anywhere else.
+
+**A new `ObjRef` tag is not available.** `handle.rs` spends all four values -- heap, small integer, `.nil`, inline text -- and `CLASS_SLOT_BASE`'s own doc already records the consequence: a class identity could not have a tag either, so it was given a **slot range** instead, `1 << 31` upwards with generation zero.
+
+So the shape is the one that decision already established: **an immortal region of the slot space**, interned once per distinct constant and skipped by the sweeper. The encoding stays `TAG_HEAP`, so every reader of `Decoded::Heap` is unchanged, and there is no root to register because nothing can collect it.
+
+**The alternative -- pre-building the handle and keeping it in the `Chunk` -- costs more.** `Interp::chunks` holds `Rc<Chunk>`, so a cached handle needs interior mutability inside a shared, otherwise immutable structure, *and* a new root for the collector to walk, on pain of the silent failure `Heap::collect`'s doc describes. The immortal region needs neither.
+
+**Sharing one object across every execution is safe, and it buys a second thing.** The only in-place mutation of a value body in this crate is `Body::Text`'s lazy `num` cache (`value.rs`, `to_number`), which is idempotent -- so a shared constant is parsed **once for the whole program** instead of once per execution, on top of the allocation saved. The other `Heap::get_mut` callers are stems, not text constants.
