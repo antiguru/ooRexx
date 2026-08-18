@@ -604,7 +604,7 @@ pub(crate) struct Activation {
     ///
     /// [`trace_mode`]: Activation::trace_mode
     /// [`settings`]: Activation::settings
-    pub(crate) traps: HashMap<Box<[u8]>, Trap>,
+    pub(crate) traps: TrapMap,
     /// The condition `CONDITION()` reports in this activation, or `None`
     /// when no handler has been entered here. [`TrappedCondition`] carries
     /// the measurements for the copy-on-call, never-write-back rule it
@@ -859,7 +859,7 @@ impl Activation {
             // `N`.
             trace_mode: TraceMode::NORMAL,
             address: AddressState::default(),
-            traps: HashMap::new(),
+            traps: TrapMap::default(),
             condition: None,
             cached_clock: None,
             clock_stale: true,
@@ -1026,7 +1026,7 @@ impl Activation {
             settings: Settings::default(),
             trace_mode: TraceMode::NORMAL,
             address: AddressState::default(),
-            traps: HashMap::new(),
+            traps: TrapMap::default(),
             condition: None,
             cached_clock: None,
             clock_stale: true,
@@ -1080,7 +1080,7 @@ impl Activation {
             settings: Settings::default(),
             trace_mode: TraceMode::NORMAL,
             address: AddressState::default(),
-            traps: HashMap::new(),
+            traps: TrapMap::default(),
             condition: None,
             cached_clock: None,
             clock_stale: true,
@@ -1124,7 +1124,7 @@ pub(crate) struct Inherited {
     pub(crate) settings: Settings,
     pub(crate) trace_mode: TraceMode,
     pub(crate) address: AddressState,
-    pub(crate) traps: HashMap<Box<[u8]>, Trap>,
+    pub(crate) traps: TrapMap,
     pub(crate) condition: Option<TrappedCondition>,
 }
 
@@ -1196,5 +1196,129 @@ impl Interp {
     /// value through [`Activation::nested`] instead, never through here.
     pub(crate) fn set_trace_mode(&mut self, mode: TraceMode) {
         self.activation_mut().trace_mode = mode;
+    }
+}
+
+/// One of the condition names the language fixes, used as an index into a
+/// [`BuiltinTraps`] slot.
+///
+/// `USER <name>` is not here: its spelling is half program text, so it lives
+/// in [`TrapMap`]'s map along with everything else this does not recognise.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Builtin {
+    Any,
+    Error,
+    Failure,
+    Halt,
+    LostDigits,
+    NoMethod,
+    NoString,
+    NotReady,
+    NoValue,
+    Syntax,
+}
+
+impl Builtin {
+    const COUNT: usize = 10;
+
+    /// The slot `name` names, or `None` for a name that gets a map entry.
+    ///
+    /// **Correctness does not rest on this list being complete.** A spelling
+    /// it does not answer for goes to `TrapMap`'s map, which is where every
+    /// name went before there were slots at all, so a name missing from here
+    /// is slower and not wrong. The list is `CONDITIONS` in `rexx-parse`'s
+    /// own token table without the two entries that are not trap keys:
+    /// `USER`, which only ever reaches a table as the `USER <name>` form, and
+    /// `PROPAGATE`, which is `RAISE`'s.
+    fn of(name: &[u8]) -> Option<Builtin> {
+        Some(match name {
+            b"ANY" => Builtin::Any,
+            b"ERROR" => Builtin::Error,
+            b"FAILURE" => Builtin::Failure,
+            b"HALT" => Builtin::Halt,
+            b"LOSTDIGITS" => Builtin::LostDigits,
+            b"NOMETHOD" => Builtin::NoMethod,
+            b"NOSTRING" => Builtin::NoString,
+            b"NOTREADY" => Builtin::NotReady,
+            b"NOVALUE" => Builtin::NoValue,
+            b"SYNTAX" => Builtin::Syntax,
+            _ => return None,
+        })
+    }
+}
+
+/// A slot per [`Builtin`], allocated only once something is armed.
+#[derive(Clone, Default)]
+pub(crate) struct BuiltinTraps([Option<Trap>; Builtin::COUNT]);
+
+/// The condition traps armed in one activation.
+///
+/// **Two stores, because the keys come from two places.** Every name the
+/// language fixes gets a slot; `USER <name>` and anything [`Builtin::of`]
+/// does not recognise gets a map entry. An activation that arms nothing --
+/// the overwhelming majority -- holds a null pointer and an empty map, and a
+/// callee inheriting its caller's table copies both without allocating.
+///
+/// **`Rc` rather than inline slots, and a pointer rather than nothing, are
+/// two separate measurements.** Inline slots would put a `Trap`-sized cell
+/// per condition into `Activation`, whose layout is on the variable-read
+/// path: putting the whole table behind an `Rc` once *shrank* `Activation`
+/// and cost 0.26% to 1.66% on every benchmark axis, two of which make no
+/// calls at all. `Rc` rather than `Box` is what makes the per-call copy free
+/// rather than one allocation, since a callee that arms nothing never writes.
+#[derive(Clone, Default)]
+pub(crate) struct TrapMap {
+    builtin: Option<Rc<BuiltinTraps>>,
+    user: HashMap<Box<[u8]>, Trap>,
+}
+
+impl TrapMap {
+    pub(crate) fn get(&self, name: &[u8]) -> Option<&Trap> {
+        match Builtin::of(name) {
+            Some(which) => self.builtin.as_ref()?.0[which as usize].as_ref(),
+            None => self.user.get(name),
+        }
+    }
+
+    pub(crate) fn get_mut(&mut self, name: &[u8]) -> Option<&mut Trap> {
+        match Builtin::of(name) {
+            Some(which) => Rc::make_mut(self.builtin.as_mut()?).0[which as usize].as_mut(),
+            None => self.user.get_mut(name),
+        }
+    }
+
+    pub(crate) fn insert(&mut self, name: Box<[u8]>, trap: Trap) {
+        match Builtin::of(&name) {
+            Some(which) => {
+                let slots = self
+                    .builtin
+                    .get_or_insert_with(|| Rc::new(BuiltinTraps::default()));
+                Rc::make_mut(slots).0[which as usize] = Some(trap);
+            }
+            None => {
+                self.user.insert(name, trap);
+            }
+        }
+    }
+
+    pub(crate) fn remove(&mut self, name: &[u8]) {
+        match Builtin::of(name) {
+            Some(which) => {
+                if let Some(slots) = self.builtin.as_mut() {
+                    Rc::make_mut(slots).0[which as usize] = None;
+                }
+            }
+            None => {
+                self.user.remove(name);
+            }
+        }
+    }
+
+    /// `#[cfg(test)]` because nothing outside the tests asks this: every
+    /// caller in the interpreter wants the trap itself, not whether one is
+    /// there.
+    #[cfg(test)]
+    pub(crate) fn contains_key(&self, name: &[u8]) -> bool {
+        self.get(name).is_some()
     }
 }
