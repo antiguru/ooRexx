@@ -39,7 +39,7 @@ use rexx_parse::{Call, ExprKind, Instruction, InstructionKind, ProgramSource, Sy
 
 use super::{BodyEngine, Chunk, ConditionKeyword, Op};
 use crate::clause::{ClauseOutcome, ClauseValue};
-use crate::eval::call_target_name;
+use crate::eval::{SymbolRead, call_target_name};
 use crate::run::{
     Absorbed, ConditionTrace, Echo, Ended, Flow, LoopHeaderValues, QueueKeyword, ReturnKeyword,
     SelectEscape, SelectResume, absorb, otherwise_range, otherwise_resume, select_escape,
@@ -921,10 +921,41 @@ impl Interp {
                                             "a compiled read names a slot this body's plan does not \
                                          give its symbol"
                                         );
-                                        let value = match self.read_symbol(code, *read, *symbol, at)
-                                        {
-                                            Ok(value) => value,
-                                            Err(failure) => break 'cold Err(failure),
+                                        // **The simple read is resolved here rather
+                                        // than through `read_symbol`, and that is a
+                                        // measurement.** A simple read is a slot
+                                        // index; reaching it through the shared
+                                        // function costs an out-of-line call, a
+                                        // match on `SymbolRead`, a tuple return and
+                                        // a `Result` return, per read. Measured with
+                                        // the marginal method -- a body run at N and
+                                        // 2N iterations, differenced -- `z = a` costs
+                                        // 479 user instructions per execution through
+                                        // `read_symbol` and 431 resolved here, while
+                                        // `z = 1` is unmoved at 367, which is the
+                                        // control saying the change reached the read
+                                        // and nothing else.
+                                        //
+                                        // The arm is `read_symbol`'s own
+                                        // `SymbolRead::Simple` arm, and the other
+                                        // kinds still go there: a stem allocates on a
+                                        // miss and a compound resolves a tail key,
+                                        // neither of which belongs in a driver.
+                                        let value = match read {
+                                            SymbolRead::Simple => {
+                                                let (value, novalue) =
+                                                    self.read_at(code, *symbol, at);
+                                                if let Err(failure) = self.novalue_check(novalue) {
+                                                    break 'cold Err(failure);
+                                                }
+                                                value
+                                            }
+                                            SymbolRead::Stem | SymbolRead::Compound => {
+                                                match self.read_symbol(code, *read, *symbol, at) {
+                                                    Ok(value) => value,
+                                                    Err(failure) => break 'cold Err(failure),
+                                                }
+                                            }
                                         };
                                         self.roots.set_temp(registers, *dst as usize, value);
                                     }

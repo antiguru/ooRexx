@@ -3808,10 +3808,30 @@ impl Interp {
     /// raised. `CALL ON NOVALUE` is a parse error anyway; the `call` half is
     /// reachable only through `CALL ON ANY`, which is measured not to catch
     /// a condition that has no resumption point.
+    /// **The gate is `inline(always)` and the raise is `cold`, which is a
+    /// measurement rather than a decoration.** An initialised read -- every
+    /// read in a working program -- reaches only the first comparison, and
+    /// with the whole function out of line it paid a call and a `Result`
+    /// return to learn that. A plain `#[inline]` did not move it: the tail
+    /// looks up a trap and builds a condition, which is enough to put the
+    /// inliner off. Splitting says which half is hot instead of hinting.
+    /// Measured with the marginal method -- a body run at N and 2N
+    /// iterations, differenced -- `z = a` costs 449 user instructions per
+    /// execution undivided and 431 split.
+    #[inline(always)]
     pub(crate) fn novalue_check(&self, novalue: Novalue) -> Result<(), Failure> {
         if novalue == Novalue::Set {
             return Ok(());
         }
+        self.novalue_raised()
+    }
+
+    /// [`Interp::novalue_check`]'s uninitialised half: whether the setting in
+    /// force turns this read into a raised `NOVALUE` rather than the derived
+    /// name `read_at` already produced.
+    #[cold]
+    #[inline(never)]
+    fn novalue_raised(&self) -> Result<(), Failure> {
         if self.trap_for(b"NOVALUE").is_none_or(|trap| trap.call) {
             return Ok(());
         }
