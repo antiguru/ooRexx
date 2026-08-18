@@ -5280,3 +5280,53 @@ Two mutations, both red: never writing the cache makes one constant over three p
 `cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings` clean; the debug gate fails 30, identical set to the baseline.
 
 **Not done, and adjacent**: `Op::LoadConstant` builds a constant symbol's upcased spelling through `Interp::literal` on every execution, with no cache slot to intern into. A symbol of seven bytes or fewer is answered from the handle, so only longer names pay, and no axis here measures it.
+
+### Entry 74 -- `Op::LoadConstant` interned, which was the hotter of the two all along
+
+Continues entry 73. Moritz asked for the op that entry named as adjacent and not done.
+
+#### It is hotter than `Op::Const`, and the previous count said otherwise because it was taken wrong
+
+Executions, counted with a process-wide atomic in each arm and then removed:
+
+| axis | `Op::Const` | `Op::LoadConstant` |
+|---|---:|---:|
+| `varlookup` | 0 | **19,000,003** |
+| `compound` | 0 | **5,000,007** |
+| pinned `rexxcps` | 1,830,013 | **3,540,011** |
+| `arith` | 0 | **2,500,003** |
+| `alloc4c` | 1,000,000 | 1,000,003 |
+| `strings` | 1 | 3 |
+| `emptyloop` | 1 | 2 |
+
+**`Op::Const`'s own doc comment said "zero on `varlookup`, `arith`, `compound`, `alloc4c`" and concluded that no registered axis executes one inside a measured loop.** `alloc4c` runs a million, which is where entry 73's -1.06% on that axis came from. The figure it corrects is not the interesting part; how it was taken is. **A first attempt here read zero on every axis including `rexxcps`**, because the counter was a `thread_local!` read from the main thread and `run_program` runs the interpreter on one of its own -- the hazard `RUN_CHUNK_ENTRIES`' own comment in `ir/drive.rs` names, and the reason the test-only counters there are per thread *and* entered through `execute`. An atomic is what makes a count taken from a binary trustworthy; a thread-local is what makes one taken from a test trustworthy, and using either in the other's place reads zero without complaining.
+
+#### The shape
+
+`Chunk::interned_symbols`, keyed by the constant symbol's own `SymbolId` -- which its doc licenses, the ids being dense, zero-based and assigned in interning order. So this op needs no slot in itself the way a literal does: a literal's bytes have no number until `compile` gives them one, and a constant symbol arrives with one. The table is sized from the widest id the emitted ops actually name, so a body naming none carries an empty vector.
+
+Sound because a chunk is only ever run against the symbol table it was compiled from: the cache key is `(BodyKey, ChunkTrace)` and `BodyKey` carries a `ProgramId`, which `Interp::programs` makes a durable identity by never removing a program.
+
+#### Measured
+
+| axis | before | after | |
+|---|---:|---:|---:|
+| `varlookup` | 40,242,659,744 | 39,330,660,632 | **-2.27%** |
+| `compound` | 16,108,655,017 | 15,847,596,607 | **-1.62%** |
+| `rexxcps` | 13,488,807,833 | 13,292,556,617 | **-1.46%** |
+| `alloc4c` | 5,449,668,528 | 5,401,761,535 | -0.88% |
+| `arith` | 17,551,102,063 | 17,435,231,826 | -0.66% |
+| `strings` | 29,166,520,025 | 29,166,540,931 | +0.00% |
+| `emptyloop` | 24,025,636,515 | 24,025,637,626 | +0.00% |
+
+**The order is the execution count's order**, and the two axes that execute two and three of these do not move at all. That correlation is the evidence that this is the op and not the layout floor, which has no reason to sort itself by how often an op runs.
+
+#### A constant symbol is a numeric symbol, which the test found out the hard way
+
+The first draft of the test used `zs = averyverylongconstantname` and counted two builds where it expected one. An unquoted word is a *variable* whose value defaults to its own upcased spelling and compiles to `Op::Load`; the two builds were the `1` and the `3` of the enclosing `do i = 1 to 3`, which are the constant symbols in that program. `rexx-ir`'s dump said so in one screen.
+
+Both facts are in the test now. Its values are written with a decimal point so they are not canonical small integers and are long enough not to fit the handle inline -- either would be answered before the cache was consulted. And **neither count is asserted against a fixed number**, because a loop header contributes constant symbols of its own: the properties asserted are that the count does not move between three passes and thirty, and that one more distinct symbol is exactly one more build. Two mutations, both red: never writing the cache gives 5 builds against 32, and a cache that ignores the id fails on output.
+
+**The counters are now one per op.** Sharing one made the `Op::Const` test read 3 -- its own literal plus the header's two constant symbols -- which is the same confusion the test's own subject had, arriving from the other direction.
+
+`cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings` clean; the debug gate fails 30, identical set to the baseline.
