@@ -1625,14 +1625,58 @@ impl Interp {
                                         // the reason `eval_if_condition` reads it
                                         // live: a nested activation moves it.
                                         let indent = self.clause_state.current_value_indent;
-                                        let holds = match self.condition_value(
-                                            value,
-                                            ConditionTrace::Result(indent),
-                                            false,
-                                            keyword.raiser(),
-                                        ) {
-                                            Ok(holds) => holds,
-                                            Err(failure) => break 'cold Err(failure),
+                                        // **A value that is already a logical
+                                        // needs neither a frame nor the general
+                                        // test.** `condition_value` opens a temps
+                                        // frame and roots the value, which its own
+                                        // doc explains is for `WHILE`/`UNTIL`: they
+                                        // re-test once per pass inside the
+                                        // enclosing `DO`'s single frame. An
+                                        // `IF`/`WHEN` tests once, and its value is
+                                        // already rooted in the register it came
+                                        // from.
+                                        //
+                                        // Both forms a condition arrives in are
+                                        // taken: the small int this op writes back,
+                                        // and the inline `"1"`/`"0"` a comparison
+                                        // answers with (`eval.rs` builds those with
+                                        // `self.text`). Anything else -- a heap
+                                        // string, a number, a value that is not a
+                                        // logical at all -- falls through to the
+                                        // general path, which is also the only path
+                                        // that can raise, since nothing reaching
+                                        // the quick arms can fail its own test.
+                                        //
+                                        // Gated on `results` because that is what
+                                        // `condition_value` prints its `>>>` under.
+                                        //
+                                        // Measured with the marginal method, a body
+                                        // run at N and 2N iterations and
+                                        // differenced: `if a = b then nop` costs 756
+                                        // user instructions per execution through
+                                        // the general path and 707 here, `if 1 then
+                                        // nop` 682 and 634.
+                                        let quick = match value.decode() {
+                                            rexx_core::Decoded::SmallInt(1) => Some(true),
+                                            rexx_core::Decoded::SmallInt(0) => Some(false),
+                                            rexx_core::Decoded::Text(text) => match &*text {
+                                                b"1" => Some(true),
+                                                b"0" => Some(false),
+                                                _ => None,
+                                            },
+                                            _ => None,
+                                        };
+                                        let holds = match quick {
+                                            Some(holds) if !self.trace_mode().results => holds,
+                                            _ => match self.condition_value(
+                                                value,
+                                                ConditionTrace::Result(indent),
+                                                false,
+                                                keyword.raiser(),
+                                            ) {
+                                                Ok(holds) => holds,
+                                                Err(failure) => break 'cold Err(failure),
+                                            },
                                         };
                                         // In range unconditionally: `SMALL_INT_MAX`
                                         // is far above one.
