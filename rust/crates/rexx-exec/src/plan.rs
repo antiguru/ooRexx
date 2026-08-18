@@ -431,6 +431,27 @@ impl Plan {
         for instruction in &body.instructions {
             plan.note_instruction(&instruction.kind, symbols);
         }
+        // **`RESULT`, `RC` and `SIGL` get a slot whether or not the body
+        // mentions them**, which is what
+        // `interpreter/execution/RexxLocalVariables.hpp` does with
+        // `VARIABLE_RESULT`/`VARIABLE_RC`/`VARIABLE_SIGL`. Registered after
+        // the body's own names rather than before them, because only being
+        // *in* the plan matters here and taking the low indices would
+        // renumber every slot this crate's tests pin.
+        //
+        // The interpreter assigns all three itself, so leaving them out of the
+        // plan does not mean they never get a slot -- it means they get one
+        // from `Interp::slot_of`'s third source, which grows the frame and
+        // records the name in `Activation::extra`. That map is cloned into
+        // every callee, so a single `CALL` whose routine returns a value made
+        // every later call allocate a map and copy a key, for a name the
+        // program never wrote. Measured with the marginal method: `call sub`
+        // against a routine ending `return 1` cost 4420.7 user instructions
+        // per call with `RESULT` reaching `extra`, and 4053.0 with the body
+        // mentioning `RESULT` so the plan held it already.
+        for reserved in [b"RESULT".as_slice(), b"RC".as_slice(), b"SIGL".as_slice()] {
+            plan.slot_for(reserved);
+        }
         plan.indents = crate::run::all_indents(&body.instructions);
         if let Some(source) = source {
             plan.lines = body
@@ -1363,7 +1384,23 @@ mod tests {
             let program = parse_program(source.to_vec()).expect("test program parses");
             let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
 
-            let mut actual: Vec<&[u8]> = plan.names.keys().map(|k| &**k).collect();
+            // The reserved names are in every plan, so they are checked
+            // for presence once and then set aside; what each case is about
+            // is the body's *own* names, and that comparison stays exact.
+            for reserved in [b"RESULT".as_slice(), b"RC".as_slice(), b"SIGL".as_slice()] {
+                assert!(
+                    plan.names.contains_key(reserved),
+                    "{:?}: every plan holds {}",
+                    String::from_utf8_lossy(source),
+                    String::from_utf8_lossy(reserved)
+                );
+            }
+            let mut actual: Vec<&[u8]> = plan
+                .names
+                .keys()
+                .map(|k| &**k)
+                .filter(|name| !matches!(*name, b"RESULT" | b"RC" | b"SIGL"))
+                .collect();
             actual.sort();
             let mut expected: Vec<&[u8]> = expected_names.iter().map(|n| n.as_bytes()).collect();
             expected.sort();
@@ -1371,7 +1408,7 @@ mod tests {
             assert_eq!(
                 actual,
                 expected,
-                "{:?}: expected the plan's key set to be exactly {expected_names:?}",
+                "{:?}: expected the plan's own key set to be exactly {expected_names:?}",
                 String::from_utf8_lossy(source)
             );
         }
@@ -1503,6 +1540,11 @@ mod tests {
                 (b"AA.II".as_slice(), 2),
                 (b"V.".as_slice(), 3),
                 (b"I".as_slice(), 4),
+                // `Plan::build` registers these after the body's own names,
+                // so they land at the end and the numbers above are unmoved.
+                (b"RESULT".as_slice(), 5),
+                (b"RC".as_slice(), 6),
+                (b"SIGL".as_slice(), 7),
             ]
         );
         let expected: Vec<(&str, &CompoundName)> = expected
@@ -1858,10 +1900,18 @@ mod tests {
         let program = parse_program(b"nop".to_vec()).expect("test program parses");
         activate(&mut interp, program);
 
+        // `RESULT`, `RC` and `SIGL` are in every plan (see `Plan::build`), so
+        // a body with no variables of its own holds exactly those and nothing
+        // more -- which is still the precondition this test needs: `X` is not
+        // among them, so reaching it has to grow the frame.
         assert_eq!(
             interp.activation().plan.len(),
-            0,
-            "a body with no variables at all has an empty plan"
+            3,
+            "a body with no variables of its own holds only the reserved names"
+        );
+        assert!(
+            interp.activation().plan.slot_of(b"X").is_none(),
+            "the name this test grows the frame for must not already have a slot"
         );
 
         let one = interp.number(
