@@ -5079,3 +5079,30 @@ Two guesses were wrong before the profile was read. Outlining the failure-attrib
 #### Where `rexxcps`' remaining +0.52% is not
 
 Not the loop machinery. Entry 68 measured `Op::Const` rebuilding a value on every execution at about 0.5% of that program, which is the same size, and `PARSE` is still `Op::Generic`.
+
+### Entry 70 -- `SIGNAL` promoted, and a promotion that the layout floor swallows
+
+No commits of the spike. Moritz asked for `SIGNAL` before `PARSE`.
+
+#### The shape
+
+One op, `Op::Signal { index, src }`, for all three forms -- the `Op::Say` arrangement, with the optional operand where the instruction has one. `src` is the register `SIGNAL VALUE`'s expression was evaluated into and `None` for the two forms with no expression, so a `SIGNAL VALUE zt` reaches the same `Op::Load` an assignment's value would, and a shape `compile` emits no native op for falls to `Op::EvalExpr` through a new `eval_chunk_expr` arm.
+
+`step`'s own arm now calls `Interp::signal_to_label` and `Interp::signal_to_value`, which the op calls too, so the search, the `SIGL` write and `VALUE`'s `>K>` echo are one implementation for both engines. The temp that roots a `VALUE`'s value across the render stays in `step`, because the compiled stream has a register doing that job and a second root would be a frame the clause does not own.
+
+`cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings` clean, and the debug gate fails 30 -- **exactly what the same command fails at `baaad08c7`, zero new**, first try. Checked against the oracle directly as well: `signal on syntax` plus a `signal value` into a label that then divides by zero prints the same two lines and exits 0 on both.
+
+#### It is not measurable, and the control says why
+
+Against the same tree without this change, on programs built to be dominated by `SIGNAL`:
+
+| probe | promoted against `Generic` |
+|---|---:|
+| 2,000,000 `SIGNAL label` transfers | **+0.96%** |
+| 1,000,000 `SIGNAL ON`/`OFF` pairs in a loop | -0.38% |
+
+**And the axes that contain no `SIGNAL` at all moved with it**: `varlookup` +0.61%, `compound` +0.52%, `rexxcps` +0.28%, `emptyloop` +0.10%. The effect on `SIGNAL`-heavy code is inside the movement the change causes on code that never executes a `SIGNAL`, so this build cannot resolve it -- entry 61's layout floor, met again by adding one variant to `Op` and two arms to the driver's matches.
+
+**A `SIGNAL label` costs about 1,500 instructions either way**, because the transfer leaves `run_ops` and re-enters it: `Flow::Signal` escapes to the activation loop, which applies it and calls back in, paying `run_ops`' 1160-byte frame. That is the cost worth attacking on this instruction, and it is not the one this change touched -- an in-range `SIGNAL` could be an `Op::Jump` the way `IF` and `SELECT` already are, when the target label is in the same body and no trap state intervenes.
+
+It is kept for the structural reason rather than a measured one: it removes an `Op::Generic` member and puts the two halves where both engines read them.
