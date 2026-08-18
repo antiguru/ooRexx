@@ -46,6 +46,21 @@ pub(crate) fn render(chunk: &Chunk) -> String {
             Op::LoopRun { index: at } => {
                 out.push_str(&format!("{index}: LoopRun index={at}\n"));
             }
+            Op::Signal { index: at, src } => {
+                out.push_str(&format!(
+                    "{index}: Signal index={at} src={}\n",
+                    render_register(*src)
+                ));
+            }
+            Op::Parse { index: at, src } => {
+                out.push_str(&format!(
+                    "{index}: Parse index={at} src={}\n",
+                    render_register(*src)
+                ));
+            }
+            Op::LoopNext { index: at } => {
+                out.push_str(&format!("{index}: LoopNext index={at}\n"));
+            }
             Op::Clause { index: at, end } => {
                 out.push_str(&format!("{index}: Clause index={at} end={end}\n"));
             }

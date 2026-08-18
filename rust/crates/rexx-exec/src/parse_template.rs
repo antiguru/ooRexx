@@ -376,15 +376,29 @@ fn find(haystack: &[u8], needle: &[u8], from: usize, caseless: bool) -> Option<u
     if needle.is_empty() || from > haystack.len() {
         return None;
     }
-    let last = haystack.len().checked_sub(needle.len())?;
-    (from..=last).find(|&at| {
-        let window = &haystack[at..at + needle.len()];
-        if caseless {
-            window.eq_ignore_ascii_case(needle)
-        } else {
-            window == needle
+    // Searched as one slice from `from` rather than by indexing `haystack` at
+    // each candidate offset: `windows` and `iter` both carry their own bound,
+    // where `&haystack[at..at + needle.len()]` is a range check per position.
+    let tail = &haystack[from..];
+    if needle.len() > tail.len() {
+        return None;
+    }
+    let at = match (needle, caseless) {
+        // A one-byte pattern is the common case and the one a byte scan can
+        // do without building a window per position -- `samples/rexxcps.rex`
+        // searches for a single `b` on four of its inner loop's clauses.
+        ([byte], false) => tail.iter().position(|candidate| candidate == byte),
+        ([byte], true) => {
+            let folded = byte.to_ascii_lowercase();
+            tail.iter()
+                .position(|candidate| candidate.to_ascii_lowercase() == folded)
         }
-    })
+        (_, false) => tail.windows(needle.len()).position(|w| w == needle),
+        (_, true) => tail
+            .windows(needle.len())
+            .position(|w| w.eq_ignore_ascii_case(needle)),
+    };
+    at.map(|at| at + from)
 }
 
 impl Interp {
@@ -422,9 +436,20 @@ impl Interp {
     /// `>=>P`, `>L>"2"`, `>>>"2"`, `>=>Q`, `>=>R`. The traced literal for
     /// `+3`/`-2`/`>3`/`<2` is the bare number without the sign, because that
     /// is the operand expression `rexx-parse` recorded.
-    pub(crate) fn exec_parse(&mut self, code: &Code<'_>, parse: &Parse) -> Result<(), Failure> {
+    ///
+    /// `evaluated` is `PARSE VALUE`'s source, for the caller that has already
+    /// computed it: the compiled stream evaluates that expression into a
+    /// register of its own, so [`super::ir::Op::Parse`] hands the value in
+    /// where `step` passes `None` and this evaluates it. Every other source
+    /// ignores the argument, having no expression to be handed.
+    pub(crate) fn exec_parse(
+        &mut self,
+        code: &Code<'_>,
+        parse: &Parse,
+        evaluated: Option<ObjRef>,
+    ) -> Result<(), Failure> {
         let indent = self.clause_state.current_value_indent;
-        let mut strings = self.parse_strings(code, parse, indent)?;
+        let mut strings = self.parse_strings(code, parse, indent, evaluated)?;
         let mut cursor = self.next_template(&mut strings, parse, indent);
 
         for entry in &parse.template {
@@ -482,14 +507,40 @@ impl Interp {
         code: &Code<'_>,
         parse: &Parse,
         indent: usize,
+        evaluated: Option<ObjRef>,
     ) -> Result<ParseStrings, Failure> {
         let (keyword, value) = match &parse.source {
             // `PARSE VALUE WITH template`, with no expression at all, is
             // legal and parses the null string.
-            ParseSource::Value(None) => ("VALUE", Vec::new()),
+            //
+            // **And it traces a literal's `>L>` line for a null string that
+            // no expression produced**, which is the parser's doing rather
+            // than this instruction's: `LanguageParser`'s own `SUBKEY_VALUE`
+            // arm substitutes `GlobalNames::NULLSTRING` for a missing
+            // expression, so by the time `RexxInstructionParse::execute` runs
+            // there is a literal to evaluate and the line is that evaluation's
+            // side effect. (`execute`'s own `expression != OREF_NULL` guard is
+            // unreachable for the same reason.) Measured: `parse value with a1
+            // a2` under `trace i` traces `>L>   ""` and then `>K>   "VALUE" =>
+            // ""`, in that order.
+            ParseSource::Value(None) => {
+                self.trace_literal(indent, b"");
+                ("VALUE", Vec::new())
+            }
+            // **Rooted by whichever side produced it.** A value handed in is
+            // already held by the register the compiled stream evaluated it
+            // into, so a second temp here would root it against a frame this
+            // clause does not own; a value evaluated here has nothing else
+            // holding it across the `&mut self` calls the template walk makes.
             ParseSource::Value(Some(expression)) => {
-                let value = self.eval(code, expression)?;
-                self.roots.push_temp(value);
+                let value = match evaluated {
+                    Some(value) => value,
+                    None => {
+                        let value = self.eval(code, expression)?;
+                        self.roots.push_temp(value);
+                        value
+                    }
+                };
                 ("VALUE", self.to_text(value).to_vec())
             }
             // An ordinary variable read, with everything that implies: `>C>`

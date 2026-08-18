@@ -1061,6 +1061,16 @@ impl Loud {
         }
     }
 
+    /// A compiled `Signal` op carries an operand its instruction's own form
+    /// does not have, or lacks the one it does -- an internal inconsistency,
+    /// never a program error.
+    fn signal_op_off_its_node() -> Loud {
+        Loud {
+            message: "a compiled SIGNAL op does not match the form of the SIGNAL it names"
+                .to_string(),
+        }
+    }
+
     /// A compiled `Store` op does not describe the assignment it was emitted
     /// for -- an internal inconsistency, never a program error.
     ///
@@ -2193,6 +2203,48 @@ struct Interp {
     /// that decides what belongs alongside them, and why they are one field
     /// rather than two.
     clause_state: ClauseState,
+    /// **SPIKE.** The flattened `DO`/`LOOP`s the op driver has open, innermost
+    /// last.
+    ///
+    /// **Here rather than in a local of `Interp::run_ops`**, and that is a
+    /// measurement: a loop's state holds `Number`s, so a stack of it has a
+    /// destructor, and a destructor anywhere the driver's per-clause path
+    /// unwinds through costs 14 instructions per body clause. The driver's own
+    /// frame stack stays plain data and this holds what has to be dropped.
+    ///
+    /// Boxed so that a pass boundary, which has to take the top out to hand it
+    /// a `&mut Interp` beside it, moves a pointer rather than the state.
+    #[expect(
+        clippy::vec_box,
+        reason = "the box is the point: a pass boundary takes the top out to hand it a &mut Interp beside it, and moves a pointer rather than the header's Numbers"
+    )]
+    flat_loops: Vec<Box<crate::run::FlatLoop>>,
+    /// **SPIKE.** The constructs the op driver has open, innermost last, across
+    /// every level of it at once.
+    ///
+    /// **Here rather than in a local of `Interp::run_ops`** so that entering a
+    /// body is not a fresh `Vec`: a level records the length it finds and
+    /// treats what is below as another level's, which is the same slicing
+    /// `flat_loops` already gets from being here. A body that opens a
+    /// construct then writes into an allocation this interpreter already owns,
+    /// where a local paid a `malloc`/`free` pair for every entry that pushed
+    /// once -- `samples/rexxcps.rex` enters `run_ops` for a called routine
+    /// 280,000 times and opens a loop frame in each.
+    ///
+    /// [`crate::ir::drive::Frame`] carries the argument for why the two kinds
+    /// of frame are one stack, and `Interp::unwind_frames` the one for why a
+    /// raise unwinds this and `flat_loops` together.
+    frames: Vec<crate::ir::drive::Frame>,
+    /// **SPIKE.** Boxes a finished loop handed back, so that entering a loop
+    /// is a write into an allocation this interpreter already owns. A loop
+    /// entered once per two passes is common enough -- `samples/rexxcps.rex`
+    /// enters one 140,000 times to run 280,000 passes -- that an allocation
+    /// per entry is charged against a saving per pass.
+    #[expect(
+        clippy::vec_box,
+        reason = "these are allocations handed back for reuse, so the box is what is being kept"
+    )]
+    flat_spares: Vec<Box<crate::run::FlatLoop>>,
     /// A condition raised by `RAISE` whose `CALL ON` handler has not run yet.
     ///
     /// **Deliberately not part of `ClauseState`**, checked against that
@@ -2933,6 +2985,9 @@ impl Interp {
             out: Vec::new(),
             trace: Vec::new(),
             clause_state: ClauseState::new(),
+            flat_loops: Vec::new(),
+            flat_spares: Vec::new(),
+            frames: Vec::new(),
             pending_traps: VecDeque::new(),
             active_condition: None,
             next_activation_id: 0,
@@ -3926,6 +3981,16 @@ impl Interp {
         behaviour: rexx_core::BehaviourId,
         body: rexx_core::Body,
     ) -> ObjRef {
+        self.collect_if_due();
+        self.heap.alloc_with_uncollected(behaviour, body)
+    }
+
+    /// The collection decision every allocation site makes, without the
+    /// allocation.
+    ///
+    /// Shared by [`Interp::alloc_with`] and [`Interp::alloc_immortal_with`],
+    /// which differ in what they allocate and not in when they collect.
+    fn collect_if_due(&mut self) {
         if self.stress_collect
             || (self.heap.will_grow() && self.heap.slot_capacity() >= self.collect_at)
         {
@@ -3948,7 +4013,27 @@ impl Interp {
                 self.collect_at = COLLECT_FLOOR.max(stats.live.saturating_mul(2));
             }
         }
-        self.heap.alloc_with_uncollected(behaviour, body)
+    }
+
+    /// [`alloc_with`], for an object the collector must never take.
+    ///
+    /// **The collection point is kept and only the object's fate changes.** An
+    /// immortal object needs no root, so going straight to
+    /// `Heap::alloc_immortal` would be correct -- but it would also remove an
+    /// allocation site from the stress mode, whose whole job is to collect at
+    /// every one of them and so find a root some *other* value is missing.
+    /// Measured: with this bypassing the decision, eight corpus programs
+    /// dropped to zero collections under that mode, which
+    /// `collect_stress.rs`'s committed list caught.
+    ///
+    /// [`alloc_with`]: Interp::alloc_with
+    fn alloc_immortal_with(
+        &mut self,
+        behaviour: rexx_core::BehaviourId,
+        body: rexx_core::Body,
+    ) -> ObjRef {
+        self.collect_if_due();
+        self.heap.alloc_immortal(behaviour, body)
     }
 
     // ---- values ----

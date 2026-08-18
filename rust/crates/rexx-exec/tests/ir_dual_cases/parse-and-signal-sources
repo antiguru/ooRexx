@@ -1,0 +1,158 @@
+# What promoting `PARSE`/`ARG`/`PULL` and `SIGNAL` has to keep, in three kinds.
+#
+# **The source expression, which is the only part of either instruction a
+# register holds.** `Op::Parse` and `Op::Signal` each carry one optional
+# operand, so a call inside that expression compiles to an `Op::CallExpr` whose
+# address has to resolve back to the node -- through `Interp::chunk_node_at`,
+# which answers per instruction kind. A kind missing from that function does
+# not produce wrong output: it fails loudly, which is how the `SIGNAL` half was
+# found, by a program written for the `PARSE` half. Both halves are rows here.
+#
+# **The trace, where the promoted path can diverge and no other instrument in
+# this crate sees it.** The expression's own lines are emitted by native ops
+# and the `>K>` keyword line by the instruction, so their order is the thing
+# under test; `PARSE VAR`'s `>V>` is the case where there is no register at all.
+#
+# **The template, which stays on the shared path and is here to say so.** A
+# `(pattern)` is evaluated when its trigger fires rather than hoisted with the
+# source, so it sees what a target of the same template assigned a moment
+# earlier -- `Op::Parse`'s own doc has the C++ this comes from.
+#
+# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, and every row
+# was measured to produce the identical bytes on both engines. Regenerate a row
+# by running its program under the oracle, never with REWRITE=1 -- ir_dual.rs
+# refuses to run at all under REWRITE for that reason. Capture is:
+#
+#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
+#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
+#
+# Expected lines are tagged so that no line of the block can be empty: an empty
+# line ends an expected block, and a program's own output may hold one.
+# Trailing blanks are part of what is compared.
+
+# a PARSE VALUE whose expression is a function call, which is the shape
+# that addresses a node through `Interp::chunk_node_at`
+program
+parse value maker() with q1 q2 q3
+say '<'q1'|'q2'|'q3'>'
+exit 0
+maker: return 'one two three'
+----
+rc> 0
+out> <one|two|three>
+
+# the same for SIGNAL VALUE: a call in the expression, resolving to a label
+# that exists
+program
+signal value upname()
+say 'wrong'
+exit 1
+TGT:
+say 'reached'
+exit 0
+upname: return 'TGT'
+----
+rc> 0
+out> reached
+
+# PARSE VALUE with an operator in its expression, under trace i, for the
+# order of the expression's own lines against the >K> line
+program
+trace i
+zs = 'a b'
+parse value zs 'c' with t1 t2 t3
+----
+rc> 0
+err>      2 *-* zs = 'a b'
+err>        >L>   "a b"
+err>        >>>   "a b"
+err>        >=>   ZS <= "a b"
+err>      3 *-* parse value zs 'c' with t1 t2 t3
+err>        >V>   ZS => "a b"
+err>        >L>   "c"
+err>        >O>   " " => "a b c"
+err>        >K>   "VALUE" => "a b c"
+err>        >>>   "a b c"
+err>        >=>   T1 <= "a"
+err>        >=>   T2 <= "b"
+err>        >=>   T3 <= "c"
+
+# PARSE VAR, whose source is a variable read rather than an expression:
+# >V> from the read comes before >K>, and no register is involved
+program
+trace i
+zr = 'one two'
+parse var zr v1 v2
+----
+rc> 0
+err>      2 *-* zr = 'one two'
+err>        >L>   "one two"
+err>        >>>   "one two"
+err>        >=>   ZR <= "one two"
+err>      3 *-* parse var zr v1 v2
+err>        >V>   ZR => "one two"
+err>        >K>   "VAR" => "one two"
+err>        >>>   "one two"
+err>        >=>   V1 <= "one"
+err>        >=>   V2 <= "two"
+
+# a (pattern) is evaluated when its trigger fires, so it sees a value a
+# target of the same template assigned. Both directions: the new value making
+# the search fail, and making it succeed
+program
+zp = 'Z'
+parse value 'abZcd' with zp 2 . (zp) zq
+say '<'zp'><'zq'>'
+zw = 'Q'
+parse value 'bXbYc' with zw 2 . (zw) zy
+say '<'zw'><'zy'>'
+----
+rc> 0
+out> <a><>
+out> <b><Yc>
+
+# PARSE VALUE WITH holding no expression at all, which still traces a
+# literal's >L> line because the C++ parser substitutes a null string there
+program
+trace i
+parse value with a1 a2
+say '<'a1'|'a2'>'
+----
+rc> 0
+out> <|>
+err>      2 *-* parse value with a1 a2
+err>        >L>   ""
+err>        >K>   "VALUE" => ""
+err>        >>>   ""
+err>        >=>   A1 <= ""
+err>        >=>   A2 <= ""
+err>      3 *-* say '<'a1'|'a2'>'
+err>        >L>   "<"
+err>        >V>   A1 => ""
+err>        >O>   "" => "<"
+err>        >L>   "|"
+err>        >O>   "" => "<|"
+err>        >V>   A2 => ""
+err>        >O>   "" => "<|"
+err>        >L>   ">"
+err>        >O>   "" => "<|>"
+err>        >>>   "<|>"
+
+# ARG, PARSE ARG and PARSE UPPER ARG over one argument list, for the
+# spelling that implies UPPER against the one that does not
+program
+call sub 'mIxEd CaSe', 'second one'
+exit 0
+sub:
+  parse upper arg b1 b2 ., b3
+  say '<'b1'|'b2'|'b3'>'
+  arg c1 c2 ., c3
+  say '<'c1'|'c2'|'c3'>'
+  parse arg d1 d2 ., d3
+  say '<'d1'|'d2'|'d3'>'
+  return
+----
+rc> 0
+out> <MIXED|CASE|SECOND ONE>
+out> <MIXED|CASE|SECOND ONE>
+out> <mIxEd|CaSe|second one>

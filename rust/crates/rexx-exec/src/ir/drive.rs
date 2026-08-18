@@ -65,14 +65,15 @@ const END_OF_BODY: Ended = Ended::Exited(None);
 /// op stream has no call between the two, so the driver keeps the frames
 /// itself and an escaping `Flow` walks them.
 ///
-/// **Local to one [`Interp::run_ops`] call, not on `Interp`.** A `Failure`
-/// unwinds out of that call with frames still open and the `Vec` is simply
-/// dropped, exactly as the Rust frames it replaces are; a stack on `Interp`
-/// would need every raise to remember to unwind it. A `DO` body inside a
-/// branch enters `run_ops` again through `run_bounded_from_chunk` and gets a
-/// stack of its own, which is right: a `LEAVE` there meets the loop first and
+/// **One stack on `Interp`, sliced per [`Interp::run_ops`] call.** Each entry
+/// records the length it found and treats everything below as another level's,
+/// so a `DO` body entering `run_ops` again through `run_bounded_from_chunk`
+/// still gets a region of its own: a `LEAVE` there meets the loop first and
 /// this frame afterwards, in that order, exactly as the nested calls give.
-struct SelectFrame {
+/// [`Interp::unwind_frames`] is what a `Failure` costs -- it unwinds out of
+/// `run_ops` with frames still open, and the entry boundary truncates back to
+/// the length it recorded rather than each raise remembering to.
+pub(crate) struct SelectFrame {
     /// The `SELECT` instruction this branch belongs to, which is the position
     /// `pop_search_frame` resets a forwarded `LEAVE`'s indent to.
     select: usize,
@@ -98,6 +99,65 @@ struct SelectFrame {
     op_end: u32,
     /// Which branch this is, which decides how it is left.
     branch: Branch,
+}
+
+/// **SPIKE.** One construct this level has open: a `SELECT`'s branch, or a
+/// flattened `DO`/`LOOP`.
+///
+/// **The two are one stack because a `Flow` leaving either is absorbed the
+/// same way** -- `settle` reads a range off whichever frame is innermost and
+/// asks `absorb`, and only what it does with an escape differs. A loop that
+/// held its state in a local of the driver instead would put that state in
+/// `run_ops`' own frame, which entry 66 measured at 66 instructions per pass
+/// before the flat path is ever taken.
+/// **The two fields the driver reads per op are in the frame itself rather
+/// than behind the kind**, so `pop_if`'s check and `settle`'s range stay the
+/// field loads they were before a second kind of frame existed. Measured: with
+/// them behind a `match`, a body clause costs 4 instructions more even when no
+/// loop is ever flattened, and a program has far more clauses than passes.
+pub(crate) struct Frame {
+    /// One past this frame's last op, which reaching means the frame's own
+    /// range ran out.
+    ///
+    /// **`u32::MAX` for a loop**, because a loop's body running out is an
+    /// arrival at [`super::Op::LoopNext`] rather than a position the driver
+    /// tests for: the op is at the `END`, so the driver decodes it on arrival
+    /// and this check must never fire for a loop.
+    op_end: u32,
+    /// The instruction range an escaping `Flow` is absorbed against.
+    start: usize,
+    end: usize,
+    kind: FrameKind,
+}
+
+pub(crate) enum FrameKind {
+    Select(SelectFrame),
+    /// Boxed so that the stack's element stays near a `SelectFrame`'s width:
+    /// a loop's state holds the header's `Number`s and is several times that.
+    /// The state is on `Interp::flat_loops`, innermost last, which is the same
+    /// order this stack is in -- so the loop a frame belongs to is that stack's
+    /// top when the frame is the innermost one, and no index is needed.
+    Loop,
+}
+
+impl Frame {
+    fn select(frame: SelectFrame) -> Self {
+        Frame {
+            op_end: frame.op_end,
+            start: frame.start,
+            end: frame.end,
+            kind: FrameKind::Select(frame),
+        }
+    }
+
+    fn loop_pass(body_start: usize, end_index: usize) -> Self {
+        Frame {
+            op_end: u32::MAX,
+            start: body_start,
+            end: end_index,
+            kind: FrameKind::Loop,
+        }
+    }
 }
 
 /// Which of a `SELECT`'s two kinds of branch a [`SelectFrame`] is open over.
@@ -317,14 +377,50 @@ impl Interp {
         end: usize,
         source: Option<&ProgramSource>,
     ) -> Result<Flow, Failure> {
+        // The frames below this length belong to the levels that entered
+        // before this one, and every check here stops at it. **This is the
+        // whole of what makes one stack safe to share**: `settle` walks down
+        // to it and no further, so an escaping `Flow` meets exactly the
+        // constructs this level opened, in the order it opened them.
+        let base = self.frames.len();
+        #[cfg(test)]
+        record_frame_floor(base);
+        let flow =
+            self.run_ops_from::<GRANTING>(code, chunk, registers, at, start, end, source, base);
+        // A `Flow` that left through `settle` has already popped every frame
+        // this level opened, so this fires only where a `Failure` unwound past
+        // them -- the point the `Vec` local to this call used to be dropped at.
+        if self.frames.len() > base {
+            self.unwind_frames(base);
+        }
+        flow
+    }
+
+    /// [`Interp::run_ops`]' body, with the frame stack's floor already taken.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "one caller, and every argument is a value it already holds"
+    )]
+    fn run_ops_from<const GRANTING: bool>(
+        &mut self,
+        code: &Code<'_>,
+        chunk: &Chunk,
+        registers: FrameId,
+        at: u32,
+        start: usize,
+        end: usize,
+        source: Option<&ProgramSource>,
+        base: usize,
+    ) -> Result<Flow, Failure> {
         let Some(stop) = chunk.op_at(end) else {
             return Err(Loud::chunk_map_too_short().into());
         };
         let depth = self.activations.len();
-        // The constructs this level has open. Empty for every body until a
-        // `SELECT` opens a branch, so the two comparisons per op below are a
-        // `Vec::last` on an empty `Vec` for everything else.
-        let mut frames: Vec<SelectFrame> = Vec::new();
+        // **SPIKE.** Whether the permission is still worth asking about. It is
+        // granted to this activation's first instruction and has to be cleared
+        // by the one after it; from there on `grant_procedure_permission` writes
+        // the same `false` over and over, once per clause, and this stops it.
+        let mut granting = GRANTING;
         let mut pc = at;
         loop {
             // **A branch whose ops the counter has left has run off its own
@@ -332,9 +428,14 @@ impl Interp {
             // `run_bounded` answering `Flow::Next`. Checked before the op is
             // fetched, because the op at `op_end` belongs to whatever follows
             // the branch and must not run until the branch has been left.
-            if let Some(frame) = frames.pop_if(|frame| pc >= frame.op_end) {
+            if self.frames.len() > base
+                && let Some(frame) = self.frames.pop_if(|frame| pc >= frame.op_end)
+            {
+                let FrameKind::Select(frame) = frame.kind else {
+                    return Err(Loud::op_not_driven("a loop frame ran off its own end").into());
+                };
                 let flow = self.leave_branch(code, &frame, Flow::Next)?;
-                match self.settle(code, chunk, &mut frames, flow, pc, start, end)? {
+                match self.settle(code, chunk, base, flow, pc, start, end, source)? {
                     Settled::At(target) => pc = target,
                     Settled::Escaped(other) => return Ok(other),
                 }
@@ -363,8 +464,10 @@ impl Interp {
                     let Some(instruction) = code.body.instructions.get(index) else {
                         return Err(Loud::chunk_map_too_short().into());
                     };
-                    if GRANTING {
+                    if granting {
                         self.grant_procedure_permission(instruction);
+                        granting = self.procedure_permitted
+                            || matches!(instruction.kind, InstructionKind::Label { .. });
                     }
                     let flow = self.step_in_temps_frame(code, index, instruction, source)?;
                     (flow, pc + 1)
@@ -386,8 +489,14 @@ impl Interp {
                     let Some(clause) = code.body.instructions.get(index) else {
                         return Err(Loud::chunk_map_too_short().into());
                     };
-                    if GRANTING {
+                    if granting {
                         self.grant_procedure_permission(clause);
+                        // **A label leaves the permission alone**, so a label
+                        // reading `false` here is not the permission being
+                        // spent: `sub: procedure expose zg` grants at the
+                        // `PROCEDURE`, one clause after the label.
+                        granting = self.procedure_permitted
+                            || matches!(clause.kind, InstructionKind::Label { .. });
                     }
                     // **Whether the setting in force is still the one this
                     // chunk's trace ops were emitted for**, and the whole of
@@ -679,10 +788,33 @@ impl Interp {
                                         "op writes register {dst} outside the region the chunk \
                                          reserved"
                                     );
-                                    let Some(bytes) = chunk.konst(*konst) else {
-                                        break 'region Err(Loud::constant_out_of_range().into());
-                                    };
-                                    let value = self.literal(bytes);
+                                    // **Built once for the whole run.** The
+                                    // value is interned into the chunk on the
+                                    // first execution and read from it after
+                                    // that, which is what stops this op
+                                    // allocating a fresh object for a literal
+                                    // longer than the handle carries inline --
+                                    // 560,000 times on the pinned `rexxcps`
+                                    // before this. `Chunk::interned`'s own doc
+                                    // has why the shared value is safe and why
+                                    // `NIL` is the empty state.
+                                    let mut value = chunk.interned_konst(*konst);
+                                    if value == ObjRef::NIL {
+                                        let Some(bytes) = chunk.konst(*konst) else {
+                                            break 'region Err(Loud::constant_out_of_range().into());
+                                        };
+                                        #[cfg(test)]
+                                        count_const_build();
+                                        value = self.interned_literal(bytes);
+                                        debug_assert_ne!(
+                                            value,
+                                            ObjRef::NIL,
+                                            "a constant interned to the handle that means \
+                                             'not built yet', so it would be rebuilt on every \
+                                             execution and the cache would be dead code"
+                                        );
+                                        chunk.remember_konst(*konst, value);
+                                    }
                                     self.roots.set_temp(registers, *dst as usize, value);
                                 }
                                 // A constant symbol's own value: its upcased
@@ -699,7 +831,26 @@ impl Interp {
                                         "op writes register {dst} outside the region the chunk \
                                          reserved"
                                     );
-                                    let value = self.literal(code.symbols.name(*symbol).as_bytes());
+                                    // Interned exactly as `Op::Const`'s value
+                                    // is, and keyed by the symbol's own id --
+                                    // so the symbol table is read once for the
+                                    // whole run rather than on every execution.
+                                    let mut value = chunk.interned_symbol(*symbol);
+                                    if value == ObjRef::NIL {
+                                        #[cfg(test)]
+                                        count_load_constant_build();
+                                        value = self.interned_literal(
+                                            code.symbols.name(*symbol).as_bytes(),
+                                        );
+                                        debug_assert_ne!(
+                                            value,
+                                            ObjRef::NIL,
+                                            "a constant symbol interned to the handle that means \
+                                             'not built yet', so it would be rebuilt on every \
+                                             execution and the cache would be dead code"
+                                        );
+                                        chunk.remember_symbol(*symbol, value);
+                                    }
                                     self.roots.set_temp(registers, *dst as usize, value);
                                 }
                                 // The `>L>` line of one literal. **Its own op**,
@@ -1004,6 +1155,79 @@ impl Interp {
                                 // The print, through `Interp::say_evaluated`,
                                 // for the same reason `Op::Store` goes through
                                 // `assign_evaluated`.
+                                // **`SIGNAL`, all three forms**, each doing
+                                // what `step`'s own arm does and nothing else:
+                                // the two transferring forms answer
+                                // `Flow::Signal` and end the region, the trap
+                                // form edits the activation's table and falls
+                                // through with whatever `exec_condition_trap`
+                                // answers.
+                                Op::Signal { index, src } => {
+                                    debug_assert_names_the_clause(code, *index, clause, "Signal");
+                                    let InstructionKind::Signal(signal) = &clause.kind else {
+                                        break 'region Err(Loud::instruction(&clause.kind).into());
+                                    };
+                                    let flow = match (&**signal, src) {
+                                        (rexx_parse::Signal::Label(name), None) => {
+                                            match self.signal_to_label(name) {
+                                                Ok(flow) => flow,
+                                                Err(failure) => break 'region Err(failure),
+                                            }
+                                        }
+                                        (rexx_parse::Signal::Value(_), Some(register)) => {
+                                            debug_assert!(
+                                                chunk.holds_register(*register),
+                                                "op reads register {register} outside the region                                                  the chunk reserved"
+                                            );
+                                            let value =
+                                                self.roots.temp_at(registers, *register as usize);
+                                            match self.signal_to_value(value) {
+                                                Ok(flow) => flow,
+                                                Err(failure) => break 'region Err(failure),
+                                            }
+                                        }
+                                        (rexx_parse::Signal::Trap(trap), None) => {
+                                            match self.exec_condition_trap(trap, false) {
+                                                Ok(flow) => flow,
+                                                Err(failure) => break 'region Err(failure),
+                                            }
+                                        }
+                                        // A form whose operand does not match
+                                        // the op's own: loud rather than a
+                                        // guess about which of the two is right.
+                                        _ => {
+                                            break 'region Err(
+                                                Loud::signal_op_off_its_node().into()
+                                            );
+                                        }
+                                    };
+                                    break 'region Ok(RegionEnd::Flowed(flow));
+                                }
+                                // `PARSE`/`ARG`/`PULL`. The whole instruction is
+                                // `exec_parse`, which both engines enter; what
+                                // this op adds is the source expression already
+                                // evaluated, for the one source that has one.
+                                Op::Parse { index, src } => {
+                                    debug_assert_names_the_clause(code, *index, clause, "Parse");
+                                    let (InstructionKind::Parse(parse)
+                                    | InstructionKind::Arg(parse)
+                                    | InstructionKind::Pull(parse)) = &clause.kind
+                                    else {
+                                        break 'region Err(Loud::instruction(&clause.kind).into());
+                                    };
+                                    let evaluated = src.map(|register| {
+                                        debug_assert!(
+                                            chunk.holds_register(register),
+                                            "op reads register {register} outside the region the \
+                                             chunk reserved"
+                                        );
+                                        self.roots.temp_at(registers, register as usize)
+                                    });
+                                    if let Err(failure) = self.exec_parse(code, parse, evaluated) {
+                                        break 'region Err(failure);
+                                    }
+                                    break 'region Ok(RegionEnd::Flowed(Flow::Next));
+                                }
                                 Op::Say { index, src } => {
                                     debug_assert_names_the_clause(code, *index, clause, "Say");
                                     debug_assert!(
@@ -1389,6 +1613,28 @@ impl Interp {
                                         break 'region Err(Loud::loop_op_off_its_node().into());
                                     };
                                     let values = header.take().unwrap_or_default();
+                                    // **SPIKE.** Flattened when this is a
+                                    // shape the spike drives: the frame goes
+                                    // on the stack, the region ends, and the
+                                    // counter falls into the body's first op,
+                                    // which is the op after this region.
+                                    let values = match self.flat_loop_start(
+                                        code, index, clause, body, source, values, end,
+                                    ) {
+                                        Ok(crate::run::FlatStart::Flat {
+                                            body_start,
+                                            end_index,
+                                        }) => {
+                                            self.frames
+                                                .push(Frame::loop_pass(body_start, end_index));
+                                            break 'region Ok(RegionEnd::At(end));
+                                        }
+                                        Ok(crate::run::FlatStart::Ended(flow)) => {
+                                            break 'region Ok(RegionEnd::Flowed(flow));
+                                        }
+                                        Ok(crate::run::FlatStart::Fallback(values)) => values,
+                                        Err(failure) => break 'region Err(failure),
+                                    };
                                     let flow = match self.run_loop_with_header(
                                         code,
                                         index,
@@ -1408,6 +1654,9 @@ impl Interp {
                                 }
                                 Op::Generic { .. } => {
                                     break 'region Err(Loud::op_not_driven("Generic").into());
+                                }
+                                Op::LoopNext { .. } => {
+                                    break 'region Err(Loud::op_not_driven("LoopNext").into());
                                 }
                                 Op::Clause { .. } => {
                                     break 'region Err(Loud::op_not_driven("Clause").into());
@@ -1493,14 +1742,40 @@ impl Interp {
                 // has the program that says it is not a spare one.
                 Op::EndBranch => (self.end_promoted_branch(code, Flow::Next)?, pc + 1),
                 Op::EnterWhen { select, when } => {
-                    frames.push(self.when_frame(code, chunk, *select as usize, *when as usize)?);
+                    let frame = self.when_frame(code, chunk, *select as usize, *when as usize)?;
+                    self.frames.push(Frame::select(frame));
                     pc += 1;
                     continue;
                 }
                 Op::EnterOtherwise { select } => {
-                    frames.push(self.otherwise_frame(code, chunk, *select as usize)?);
+                    let frame = self.otherwise_frame(code, chunk, *select as usize)?;
+                    self.frames.push(Frame::select(frame));
                     pc += 1;
                     continue;
+                }
+                // **SPIKE.** The bottom of a flattened pass, reached by the
+                // body falling out of its last clause into the `END`'s own op.
+                Op::LoopNext { index } => {
+                    if self.frames.len() <= base
+                        || !matches!(self.frames.last().map(|f| &f.kind), Some(FrameKind::Loop))
+                    {
+                        return Err(Loud::op_not_driven("LoopNext").into());
+                    }
+                    debug_assert_eq!(
+                        self.flat_loops.last().map(|flat| flat.do_index),
+                        Some(*index as usize),
+                        "a LoopNext op ended a pass of a loop other than the one it names"
+                    );
+                    match self.flat_loop_step_top(code, source, Flow::Next)? {
+                        crate::run::FlatStep::Body(op_body) => {
+                            pc = op_body;
+                            continue;
+                        }
+                        crate::run::FlatStep::Done(flow) => {
+                            self.frames.pop();
+                            (flow, pc)
+                        }
+                    }
                 }
                 // The ops below are only meaningful inside a `Clause` region,
                 // which the `Op::Clause` arm above walks: reaching one here
@@ -1524,6 +1799,8 @@ impl Interp {
                 Op::TracePrefix { .. } => return Err(Loud::op_not_driven("TracePrefix").into()),
                 Op::Store { .. } => return Err(Loud::op_not_driven("Store").into()),
                 Op::Say { .. } => return Err(Loud::op_not_driven("Say").into()),
+                Op::Signal { .. } => return Err(Loud::op_not_driven("Signal").into()),
+                Op::Parse { .. } => return Err(Loud::op_not_driven("Parse").into()),
                 Op::Return { .. } => return Err(Loud::op_not_driven("Return").into()),
                 Op::Queue { .. } => return Err(Loud::op_not_driven("Queue").into()),
                 Op::Call { .. } => return Err(Loud::op_not_driven("Call").into()),
@@ -1554,9 +1831,35 @@ impl Interp {
                 "a clause left the activation stack changed, so this loop's `code` and its `pc` \
                  no longer describe the same frame"
             );
-            match self.settle(code, chunk, &mut frames, flow, next, start, end)? {
+            match self.settle(code, chunk, base, flow, next, start, end, source)? {
                 Settled::At(target) => pc = target,
                 Settled::Escaped(other) => return Ok(other),
+            }
+        }
+    }
+
+    /// Drops every frame this level opened, and the loop state each open loop
+    /// frame stands for.
+    ///
+    /// **The `Failure` path, and the reason the two stacks are unwound
+    /// together.** A `FrameKind::Loop` frame and an entry on
+    /// `Interp::flat_loops` are one construct held in two places -- the frame
+    /// carries what an escaping `Flow` is absorbed against, the entry carries
+    /// the header's own state -- so a raise that discards one without the
+    /// other leaves the next `Op::LoopNext` reading a loop that is not its own.
+    /// The boxes go back to `flat_spares`, which is where a loop that ended
+    /// normally puts them.
+    #[cold]
+    #[inline(never)]
+    fn unwind_frames(&mut self, base: usize) {
+        while self.frames.len() > base {
+            let Some(frame) = self.frames.pop() else {
+                return;
+            };
+            if matches!(frame.kind, FrameKind::Loop)
+                && let Some(flat) = self.flat_loops.pop()
+            {
+                self.flat_spares.push(flat);
             }
         }
     }
@@ -1593,16 +1896,31 @@ impl Interp {
         &mut self,
         code: &Code<'_>,
         chunk: &Chunk,
-        frames: &mut Vec<SelectFrame>,
+        base: usize,
         mut flow: Flow,
         next: u32,
         start: usize,
         end: usize,
+        source: Option<&ProgramSource>,
     ) -> Result<Settled, Failure> {
+        // **SPIKE.** `Flow::Next` settles at `next` whatever is open: `absorb`
+        // answers `Advance` for it against every range, and every arm below
+        // turns `Advance` into `At(next)`. So the walk over the open frames is
+        // skipped for the one flow that every clause of every body produces,
+        // which is what makes a frame affordable to hold open across a loop's
+        // whole body rather than only across a `WHEN`'s branch.
+        if matches!(flow, Flow::Next) {
+            return Ok(Settled::At(next));
+        }
         loop {
             // Copied out rather than held, because the `Escaped` arm pops the
-            // frame this came from.
-            let Some((frame_start, frame_end)) = frames.last().map(|f| (f.start, f.end)) else {
+            // frame this came from. **`base` and not emptiness** is what ends
+            // the walk: the frames below it are another level's, and this one's
+            // own range has the next say.
+            let Some((frame_start, frame_end)) = (self.frames.len() > base)
+                .then(|| self.frames.last().map(|f| (f.start, f.end)))
+                .flatten()
+            else {
                 return Ok(match absorb(flow, start, end) {
                     Absorbed::Advance => Settled::At(next),
                     Absorbed::Resume(target) => Settled::At(op_at(chunk, target)?),
@@ -1617,8 +1935,34 @@ impl Interp {
                 // pass rather than a second rule doing it here.
                 Absorbed::Resume(target) => return Ok(Settled::At(op_at(chunk, target)?)),
                 Absorbed::Escaped(other) => {
-                    let frame = frames.pop().expect("the check above just observed one");
-                    flow = self.leave_branch(code, &frame, other)?;
+                    match self
+                        .frames
+                        .pop()
+                        .expect("the check above just observed one")
+                        .kind
+                    {
+                        FrameKind::Select(frame) => {
+                            flow = self.leave_branch(code, &frame, other)?;
+                        }
+                        // **SPIKE.** A `LEAVE`/`ITERATE` that reached this
+                        // loop, decided by the same `do_body_outcome` the
+                        // nested form hands the answering `Flow` to. An
+                        // `ITERATE` this loop consumes puts the frame back and
+                        // resumes at the body's first op -- the same place
+                        // `Op::LoopNext` resumes a pass that fell through.
+                        FrameKind::Loop => match self.flat_loop_step_top(code, source, other)? {
+                            crate::run::FlatStep::Body(op_body) => {
+                                self.frames.push(Frame {
+                                    op_end: u32::MAX,
+                                    start: frame_start,
+                                    end: frame_end,
+                                    kind: FrameKind::Loop,
+                                });
+                                return Ok(Settled::At(op_body));
+                            }
+                            crate::run::FlatStep::Done(escape) => flow = escape,
+                        },
+                    }
                 }
             }
         }
@@ -1961,6 +2305,89 @@ fn count_call_site_hit() {
 #[cfg(test)]
 pub(crate) fn call_site_hits() -> usize {
     CALL_SITE_HITS.with(std::cell::Cell::get)
+}
+
+// Test-only instrumentation: how many times an [`super::Op::Const`] on this
+// thread has had to build its value rather than read an interned one.
+//
+// **One counter per op rather than one for both**, because the two do not
+// occur independently in a program: a loop header's own bounds are constant
+// symbols, so a counted `Op::Const` test would be counting the header's
+// `Op::LoadConstant`s as well and its number would be about the header.
+//
+// **Output cannot see this and no other instrument in this crate can either.**
+// A constant built fresh on every execution and a constant built once produce
+// the same bytes, the same trace and the same exit status, by construction --
+// which is what makes the interning safe and also what leaves it unpinned. The
+// count is the only observable, and the property it states is the one worth
+// having: this is per *distinct* constant reached, not per execution.
+//
+// Counted where the value is built, so a cache that was written and never read
+// would show every execution here.
+//
+// Per thread for the reason `RUN_CHUNK_ENTRIES` is: see its own comment.
+#[cfg(test)]
+thread_local! {
+    static CONST_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn count_const_build() {
+    CONST_BUILDS.with(|builds| builds.set(builds.get() + 1));
+}
+
+#[cfg(test)]
+pub(crate) fn const_builds() -> usize {
+    CONST_BUILDS.with(std::cell::Cell::get)
+}
+
+// The same for [`super::Op::LoadConstant`]; see `CONST_BUILDS` for why the two
+// are counted apart.
+#[cfg(test)]
+thread_local! {
+    static LOAD_CONSTANT_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn count_load_constant_build() {
+    LOAD_CONSTANT_BUILDS.with(|builds| builds.set(builds.get() + 1));
+}
+
+#[cfg(test)]
+pub(crate) fn load_constant_builds() -> usize {
+    LOAD_CONSTANT_BUILDS.with(std::cell::Cell::get)
+}
+
+// Test-only instrumentation: the deepest frame stack any [`Interp::run_ops`]
+// entry on this thread has found already open.
+//
+// **The observable a shared frame stack owes and a local `Vec` did not.** A
+// level that leaves frames behind cannot corrupt the level above it -- `base`
+// is what stops the walk, so the leftovers are inert -- and the interpreter
+// goes on printing the right bytes while the stack grows for as long as the
+// program runs. Output cannot see that, and neither can an exit code; what
+// sees it is the floor the next entry finds. Measured on a program that traps
+// out of two open loops 50,000 times: 46,108 kB of peak resident memory with
+// `unwind_frames` deleted against 4,792 kB with it.
+//
+// Recorded at entry rather than at exit because that is where a leftover
+// becomes another level's problem, and as a maximum because a leak shows up as
+// a floor that climbs rather than as one bad entry.
+//
+// Per thread for the reason `RUN_CHUNK_ENTRIES` is: see its own comment.
+#[cfg(test)]
+thread_local! {
+    static FRAME_FLOOR_HIGH_WATER: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn record_frame_floor(base: usize) {
+    FRAME_FLOOR_HIGH_WATER.with(|floor| floor.set(floor.get().max(base)));
+}
+
+#[cfg(test)]
+pub(crate) fn frame_floor_high_water() -> usize {
+    FRAME_FLOOR_HIGH_WATER.with(std::cell::Cell::get)
 }
 
 #[cfg(test)]

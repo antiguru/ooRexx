@@ -124,6 +124,9 @@ impl Root {
             | Op::TraceKeyword { .. }
             | Op::LoopHeaderValue { .. }
             | Op::LoopRun { .. }
+            | Op::LoopNext { .. }
+            | Op::Signal { .. }
+            | Op::Parse { .. }
             | Op::Clause { .. }
             | Op::TraceClause { .. }
             | Op::SelectCaseText { .. }
@@ -185,6 +188,10 @@ fn promoted_as(kind: &InstructionKind, index: usize, listed: &[usize]) -> Option
         InstructionKind::Nop => Some("NOP"),
         InstructionKind::Then => Some("THEN"),
         InstructionKind::Label { .. } => Some("label"),
+        InstructionKind::Signal(_) => Some("SIGNAL"),
+        InstructionKind::Parse(_) => Some("PARSE"),
+        InstructionKind::Arg(_) => Some("ARG"),
+        InstructionKind::Pull(_) => Some("PULL"),
         _ => None,
     }
 }

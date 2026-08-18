@@ -818,7 +818,7 @@ fn a_counted_loop_compiles_its_header_to_a_clause_region_and_its_body_to_generic
          7: LoopHeaderValue role=To src=1\n\
          8: LoopRun index=0\n\
          9: Clause index=1 end=10\n\
-         10: Generic index=2\n"
+         10: LoopNext index=0\n"
     );
     // One register per header expression, and they are **not** released at the
     // region's end: the loop runs from op 8 with the body's clauses stepped
@@ -851,7 +851,7 @@ fn a_traced_counted_loop_echoes_its_do_clause_from_the_stream() {
          9: LoopRun index=0\n\
          10: Clause index=1 end=12\n\
          11: TraceClause index=1\n\
-         12: Generic index=2\n"
+         12: LoopNext index=0\n"
     );
     assert_eq!(chunk.registers, 2);
 }
@@ -892,7 +892,7 @@ fn a_block_has_an_empty_header_region_and_a_do_over_for_echoes_both_its_target_a
          8: LoopHeaderValue role=OverFor src=1\n\
          9: LoopRun index=0\n\
          10: Clause index=1 end=11\n\
-         11: Generic index=2\n"
+         11: LoopNext index=0\n"
     );
     assert_eq!(over.registers, 2);
 }
@@ -922,7 +922,7 @@ fn a_header_bound_that_is_a_symbol_and_one_that_is_a_call_take_their_own_ops() {
          7: LoopHeaderValue role=To src=1\n\
          8: LoopRun index=0\n\
          9: Clause index=1 end=10\n\
-         10: Generic index=2\n"
+         10: LoopNext index=0\n"
     );
 
     let call = compile_for_test(b"do i = 1 to length(zs)\n  nop\nend\n").expect("compiles");
@@ -938,7 +938,7 @@ fn a_header_bound_that_is_a_symbol_and_one_that_is_a_call_take_their_own_ops() {
          7: LoopHeaderValue role=To src=1\n\
          8: LoopRun index=0\n\
          9: Clause index=1 end=10\n\
-         10: Generic index=2\n"
+         10: LoopNext index=0\n"
     );
 }
 
@@ -963,7 +963,7 @@ fn a_header_slot_outside_the_native_set_leaves_the_other_slots_native() {
          6: LoopHeaderValue role=To src=1\n\
          7: LoopRun index=0\n\
          8: Clause index=1 end=9\n\
-         9: Generic index=2\n"
+         9: LoopNext index=0\n"
     );
 }
 
@@ -1024,7 +1024,7 @@ fn a_header_operands_register_goes_back_to_the_body() {
          14: LoadConstant dst=2\n\
          15: TraceLiteral src=2\n\
          16: Store index=1 at=2 src=2\n\
-         17: Generic index=2\n"
+         17: LoopNext index=0\n"
     );
     assert_eq!(
         chunk.registers, 3,
@@ -1073,8 +1073,8 @@ fn a_nested_loops_registers_sit_above_the_enclosing_loops_and_a_later_loops_reus
          16: LoopHeaderValue role=To src=3\n\
          17: LoopRun index=1\n\
          18: Clause index=2 end=19\n\
-         19: Generic index=3\n\
-         20: Generic index=4\n"
+         19: LoopNext index=1\n\
+         20: LoopNext index=0\n"
     );
     assert_eq!(
         nested.registers, 4,

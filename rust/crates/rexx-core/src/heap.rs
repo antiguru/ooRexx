@@ -53,6 +53,23 @@ pub struct Heap {
     free_head: Option<u32>,
     live: usize,
     marks: Vec<bool>,
+    /// The slots this heap will never sweep, in allocation order.
+    ///
+    /// **A root the heap holds itself**, which is what "immortal" means here.
+    /// The alternative shapes were a slot range of its own, as
+    /// [`crate::CLASS_SLOT_BASE`] gives a class identity, and a per-slot flag
+    /// the sweeper reads. A separate range would need a second store behind
+    /// [`Heap::get`], which is the hottest read in the interpreter and would
+    /// pay a branch on every value; a flag would need the marker to trace
+    /// these anyway, so that an immortal object's *children* survive with it.
+    /// Seeding the mark phase from here does both jobs at once: they are
+    /// marked, so the sweeper skips them by the rule it already has, and
+    /// whatever they reach is marked with them.
+    ///
+    /// Nothing removes an entry. That is the contract, not an omission: an
+    /// interned constant is reachable from a compiled stream that lives as
+    /// long as the program does.
+    immortal: Vec<ObjRef>,
     /// How many times `collect` has run, ever. Exists for Task 16's
     /// collect-on-every-allocation gate criterion (4a exit gate, criterion
     /// 4): the mode has to *prove* it collected rather than merely claim to,
@@ -69,6 +86,7 @@ impl Heap {
             free_head: None,
             live: 0,
             marks: Vec::new(),
+            immortal: Vec::new(),
             collections: 0,
         }
     }
@@ -110,7 +128,10 @@ impl Heap {
         // Resized every time: the heap grows between collections.
         self.marks.resize(self.slots.len(), false);
 
-        let mut work: Vec<ObjRef> = roots.iter().collect();
+        // The caller's roots and this heap's own. See the `immortal` field for
+        // why an interned constant is a root here rather than a slot range or
+        // a flag.
+        let mut work: Vec<ObjRef> = roots.iter().chain(self.immortal.iter().copied()).collect();
         let mut reached = Vec::new();
         while let Some(r) = work.pop() {
             let Some(slot) = self.resolve(r) else {
@@ -230,6 +251,33 @@ impl Heap {
 
     pub fn alloc(&mut self, body: Body) -> ObjRef {
         self.alloc_with_uncollected(BehaviourId::OBJECT, body)
+    }
+
+    /// Allocates an object this heap will never sweep.
+    ///
+    /// For a value that is interned once and read for the rest of the run --
+    /// a compiled stream's string constants. **The handle needs no root of the
+    /// caller's**, which is the whole point: it can be stored in a structure
+    /// the collector does not walk, and handed out for as long as that
+    /// structure lives.
+    ///
+    /// Not a way to avoid thinking about lifetime. Every allocation made here
+    /// is held for the life of the `Heap`, so a caller that interned per
+    /// *execution* rather than per distinct constant would leak steadily and
+    /// the collector could not tell it was happening.
+    pub fn alloc_immortal(&mut self, behaviour: BehaviourId, body: Body) -> ObjRef {
+        let handle = self.alloc_with_uncollected(behaviour, body);
+        self.immortal.push(handle);
+        handle
+    }
+
+    /// How many objects this heap has interned as immortal.
+    ///
+    /// The instrument for the paragraph above: a program's count is the number
+    /// of *distinct* constants its compiled streams hold, and a count that
+    /// tracks executions instead is the leak that would otherwise be invisible.
+    pub fn immortal_count(&self) -> usize {
+        self.immortal.len()
     }
 
     /// Allocates without ever collecting, whatever else is enabled.

@@ -15,7 +15,9 @@
 
 use std::collections::HashMap;
 
-use rexx_parse::{Call, CodeBody, Expr, ExprKind, Instruction, InstructionKind, SymbolId};
+use rexx_parse::{
+    Call, CodeBody, Expr, ExprKind, Instruction, InstructionKind, LoopKind, ParseSource, SymbolId,
+};
 
 use super::{Calls, Chunk, ChunkTooLarge, ConditionKeyword, Hints, NodePath, Op, PlanSlot};
 use crate::eval::{SymbolRead, is_arithmetic, is_native_binary};
@@ -317,6 +319,12 @@ pub(crate) fn compile(
     // and this is where that allocation ends.
     let mut release_at: Vec<Option<Mark>> = vec![None; len];
 
+    // **SPIKE.** Indexed by instruction: for an `END` that closes a repeating
+    // `DO`/`LOOP`, that loop's own instruction index. Filled in at the header,
+    // which is where the kind and the `END`'s position are both known, and read
+    // when the walk reaches the `END` itself.
+    let mut loop_of_end: Vec<Option<u32>> = vec![None; len];
+
     // Indexed by instruction: the instruction's own first op, which is
     // `op_of`'s entry except where a `Before` op sits in front of it.
     // Compile-time only -- the driver never wants it, because `PatchKind`'s
@@ -428,6 +436,16 @@ pub(crate) fn compile(
                     index: instruction_index(index)?,
                 });
                 close_region(&mut ops, at)?;
+                // **SPIKE.** A repeating loop's `END` carries the op that ends
+                // a pass. `Simple` is left alone: it does not repeat, so it has
+                // no pass to end, and its `END` stays the `Generic` that no
+                // range ever reaches.
+                if let Some(end) = body_node.end
+                    && end < len
+                    && !matches!(body_node.kind, LoopKind::Simple)
+                {
+                    loop_of_end[end] = Some(instruction_index(index)?);
+                }
                 // Past the `END`, so nothing between here and there can reuse a
                 // register the running loop still reads. A loop whose `END` is
                 // the body's last instruction has nothing to hang the release
@@ -770,6 +788,89 @@ pub(crate) fn compile(
                 close_region(&mut ops, at)?;
                 registers.release(mark);
             }
+            // `SIGNAL`, all three forms. The `SAY` shape, with the expression
+            // present only for `VALUE` -- and it goes through `push_value`
+            // like any other, so a `SIGNAL VALUE` whose expression is a
+            // literal or a bare symbol reaches the same native op an
+            // assignment's value would.
+            InstructionKind::Signal(signal) => {
+                let mark = registers.mark();
+                let at = op_index(&ops)?;
+                let echo = echoes(trace, instruction);
+                ops.push(Op::Clause {
+                    index: instruction_index(index)?,
+                    end: 0,
+                });
+                push_echo(&mut ops, echo, instruction_index(index)?);
+                let src = match &**signal {
+                    rexx_parse::Signal::Value(expression) => {
+                        let dst = registers.alloc()?;
+                        push_value(
+                            &mut ops,
+                            &mut consts,
+                            &mut registers,
+                            &mut hints,
+                            &mut calls,
+                            plan,
+                            expression,
+                            instruction_index(index)?,
+                            0,
+                            dst,
+                        )?;
+                        Some(dst)
+                    }
+                    rexx_parse::Signal::Label(_) | rexx_parse::Signal::Trap(_) => None,
+                };
+                ops.push(Op::Signal {
+                    index: instruction_index(index)?,
+                    src,
+                });
+                close_region(&mut ops, at)?;
+                registers.release(mark);
+            }
+            // `PARSE`, `ARG` and `PULL`, which are one instruction with three
+            // spellings and reach one `exec_parse`. The `SAY` shape, with the
+            // expression present only for `PARSE VALUE expr WITH` -- every
+            // other source reads a variable, an argument list or a line, none
+            // of which is an `Expr` a register could hold. `Op::Parse`'s own
+            // doc has why the template's `(expr)` patterns stay behind.
+            InstructionKind::Parse(parse)
+            | InstructionKind::Arg(parse)
+            | InstructionKind::Pull(parse) => {
+                let mark = registers.mark();
+                let at = op_index(&ops)?;
+                let echo = echoes(trace, instruction);
+                ops.push(Op::Clause {
+                    index: instruction_index(index)?,
+                    end: 0,
+                });
+                push_echo(&mut ops, echo, instruction_index(index)?);
+                let src = match &parse.source {
+                    ParseSource::Value(Some(expression)) => {
+                        let dst = registers.alloc()?;
+                        push_value(
+                            &mut ops,
+                            &mut consts,
+                            &mut registers,
+                            &mut hints,
+                            &mut calls,
+                            plan,
+                            expression,
+                            instruction_index(index)?,
+                            0,
+                            dst,
+                        )?;
+                        Some(dst)
+                    }
+                    _ => None,
+                };
+                ops.push(Op::Parse {
+                    index: instruction_index(index)?,
+                    src,
+                });
+                close_region(&mut ops, at)?;
+                registers.release(mark);
+            }
             // `RETURN` and `EXIT` are the `SAY` shape with a `Flow` in place
             // of the print, and one arm rather than two because the keyword is
             // all that differs -- read off the kind here exactly as `step`'s
@@ -984,6 +1085,14 @@ pub(crate) fn compile(
                 push_echo(&mut ops, echo, instruction_index(index)?);
                 close_region(&mut ops, at)?;
             }
+            // **SPIKE.** The `END` of a repeating loop, which the flattened
+            // form reaches by falling out of the body rather than by a range
+            // check. An `END` closing anything else keeps the `Generic` below.
+            InstructionKind::End { .. } if loop_of_end[index].is_some() => {
+                ops.push(Op::LoopNext {
+                    index: loop_of_end[index].expect("the guard just observed it"),
+                });
+            }
             _ => ops.push(Op::Generic {
                 index: instruction_index(index)?,
             }),
@@ -1025,12 +1134,29 @@ pub(crate) fn compile(
     assert_keyword_echoes_precede_their_value(&ops);
     assert_region_ops_name_their_clause(&ops);
 
+    let consts = consts.values;
+    // Sized from the stream rather than from the program's symbol table, which
+    // `compile` does not have: the widest constant symbol this body actually
+    // names, and nothing for a body that names none. `Chunk::interned_symbols`
+    // has why the gap in front of a high id is the right trade.
+    let widest_constant_symbol = ops
+        .iter()
+        .filter_map(|op| match op {
+            Op::LoadConstant { symbol, .. } => Some(symbol.index()),
+            _ => None,
+        })
+        .max();
     Ok(Chunk {
         trace,
         ops,
         op_of,
         registers: registers.high_water(),
-        consts: consts.values,
+        interned: vec![std::cell::Cell::new(rexx_core::ObjRef::NIL); consts.len()],
+        interned_symbols: vec![
+            std::cell::Cell::new(rexx_core::ObjRef::NIL);
+            widest_constant_symbol.map_or(0, |widest| widest + 1)
+        ],
+        consts,
         hints,
         calls,
     })
@@ -1894,7 +2020,10 @@ fn assert_region_ops_name_their_clause(ops: &[Op]) {
                 | Op::CallExpr { index, .. }
                 | Op::TraceFunction { index, .. }
                 | Op::Condition { index, .. }
-                | Op::LoopRun { index } => Some(*index),
+                | Op::LoopRun { index }
+                | Op::LoopNext { index }
+                | Op::Signal { index, .. }
+                | Op::Parse { index, .. } => Some(*index),
                 Op::Generic { .. }
                 | Op::TraceKeyword { .. }
                 | Op::LoopHeaderValue { .. }

@@ -143,6 +143,44 @@ impl Interp {
         self.text(bytes)
     }
 
+    /// [`literal`], for a caller that will keep the handle and read it for the
+    /// rest of the run.
+    ///
+    /// **The value is allocated where the collector cannot take it and is
+    /// shared by every later read**, so the caller stores the handle instead
+    /// of rebuilding the value. The two arms `literal` answers with need
+    /// nothing done to them -- a tagged small integer and a handle-inline
+    /// string are the value, with no object behind either -- so only the arm
+    /// that would allocate is interned.
+    ///
+    /// **Sharing one object across every execution of a constant is safe, and
+    /// the reason is narrow enough to state.** The only in-place mutation of a
+    /// `Body::Text` in this crate is its lazy `num` cache, filled by
+    /// `Number::parse_bytes` from the object's own bytes: the same input gives
+    /// the same answer, and `NUMERIC DIGITS` is not among its inputs --
+    /// rounding happens where the arithmetic does, against the settings in
+    /// force there. So the sharing is invisible except that the parse now
+    /// happens once for the whole program rather than once per execution.
+    ///
+    /// [`literal`]: Interp::literal
+    pub(crate) fn interned_literal(&mut self, bytes: &[u8]) -> ObjRef {
+        if let Some(value) = canonical_small_int(bytes)
+            && let Some(handle) = ObjRef::small_int(value)
+        {
+            return handle;
+        }
+        if let Some(inline) = ObjRef::inline_text(bytes) {
+            return inline;
+        }
+        self.alloc_immortal_with(
+            BehaviourId::STRING,
+            Body::Text {
+                bytes: Bytes::from_slice(bytes),
+                num: None,
+            },
+        )
+    }
+
     /// A builtin's counted result -- a length, a position, an index or a
     /// count -- as the inline tagged integer rather than as a heap string of
     /// its own decimal digits.

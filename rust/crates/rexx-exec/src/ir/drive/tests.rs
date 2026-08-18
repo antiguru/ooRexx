@@ -25,7 +25,8 @@
 
 use super::super::{CALL_SITE_CACHE, QUICKENING};
 use super::{
-    arith_hint_skips, call_site_hits, clause_op_entries, run_chunk_entries, trace_op_echoes,
+    arith_hint_skips, call_site_hits, clause_op_entries, const_builds, frame_floor_high_water,
+    load_constant_builds, run_chunk_entries, trace_op_echoes,
 };
 use crate::{Engine, Invocation, Outcome, execute, run_program};
 
@@ -725,4 +726,226 @@ say zi za.1 za.2 za.3 za.8
             "{engine:?} resolved a compound control's tail once instead of on every pass"
         );
     }
+}
+
+/// A raise that escapes two open loops leaves the frame stack where it found
+/// it, once per trap, however many times it happens.
+///
+/// **The property a shared frame stack needs and a `Vec` local to each level
+/// got for free.** There, a `Failure` unwound past the open frames and the
+/// `Vec` went with it. Here the stack outlives the level, so the entry
+/// boundary has to put it back, and nothing about the program's output says
+/// whether it did: leftovers sit below the next level's floor, are never read
+/// again, and the interpreter goes on printing the right bytes while the stack
+/// grows for as long as the program keeps trapping. `FRAME_FLOOR_HIGH_WATER`
+/// exists for exactly this, and carries the memory measurement.
+///
+/// The loops are what make it a test of the unwind rather than of the trap:
+/// two are open at the raise, both flattened, so each trap has two frames and
+/// two `flat_loops` entries to discard, and a leak shows as a floor climbing
+/// by two per trap rather than staying at zero.
+#[test]
+fn a_trapped_raise_gives_back_every_frame_the_loops_it_escaped_opened() {
+    const TRAPS_OUT_OF_LOOPS: &[u8] = b"\
+signal on syntax
+zc = 0
+retry:
+do i = 1 to 2
+  do k = 1 to 2
+    zq = 1 / 0
+  end
+end
+exit 1
+
+syntax:
+signal on syntax
+zc = zc + 1
+if zc > 4 then do
+  say 'traps' zc
+  exit 0
+  end
+signal retry
+";
+
+    let before = frame_floor_high_water();
+    let outcome = execute(
+        TEST_PATH,
+        TRAPS_OUT_OF_LOOPS.to_vec(),
+        false,
+        Invocation::none().with_engine(Engine::Ir),
+    );
+    // The adjacent success: five traps fired and the handler ran to its own
+    // `EXIT`, so the frames really were opened and really were escaped. Without
+    // this the assertion below is satisfied by a driver that never pushes one.
+    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stdout),
+        "traps 5\n",
+        "the program did not trap five times out of its loops, so what the \
+         floor below says about frames is about some other program"
+    );
+    assert_eq!(
+        frame_floor_high_water(),
+        before,
+        "an entry found frames another level had left open. Every `run_ops` \
+         call in this program is the activation's own, so each starts at a \
+         floor of zero unless a raise walked out over open frames without \
+         giving them back"
+    );
+}
+
+/// A constant is built once however many times its op runs.
+///
+/// **The only observable the interning has.** A value rebuilt per execution
+/// and a value built once produce identical bytes, identical trace and the
+/// same exit status -- that is what makes sharing one object safe, and it is
+/// also why no output comparison in this workspace can tell whether the cache
+/// is doing anything. `CONST_BUILDS` counts where the value is built, so a
+/// cache written and never read shows one build per pass here.
+///
+/// The literal is longer than a handle carries inline, which is the case that
+/// used to take an arena slot every time; a short one would be answered from
+/// the handle by `Interp::interned_literal` before the cache was consulted at
+/// all, and would say nothing about interning.
+///
+/// **The pair is what makes the count mean "per distinct constant".** One
+/// literal over three passes is one build, and a second, different literal in
+/// the same body makes it two -- so a cache that ignored its index and
+/// answered every constant with the first one would fail the second assertion
+/// while passing the first.
+#[test]
+fn a_long_constant_is_built_once_however_many_passes_read_it() {
+    const ONE_CONSTANT: &[u8] = b"\
+do i = 1 to 3
+  zs = 'a literal too long to live in the handle'
+end
+say zs
+";
+    const TWO_CONSTANTS: &[u8] = b"\
+do i = 1 to 3
+  zs = 'a literal too long to live in the handle'
+  zt = 'a second literal, also too long for the handle'
+end
+say zs zt
+";
+
+    let before = const_builds();
+    let outcome = execute(
+        TEST_PATH,
+        ONE_CONSTANT.to_vec(),
+        false,
+        Invocation::none().with_engine(Engine::Ir),
+    );
+    let one = const_builds() - before;
+    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stdout),
+        "a literal too long to live in the handle\n",
+        "the program did not run its loop, so the build count is about some other program"
+    );
+    assert_eq!(
+        one, 1,
+        "one constant read on three passes was built {one} times, so `Op::Const` is \
+         rebuilding its value instead of reading the one it interned"
+    );
+
+    let before = const_builds();
+    let outcome = execute(
+        TEST_PATH,
+        TWO_CONSTANTS.to_vec(),
+        false,
+        Invocation::none().with_engine(Engine::Ir),
+    );
+    let two = const_builds() - before;
+    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stdout),
+        "a literal too long to live in the handle a second literal, also too long for the \
+         handle\n",
+        "the program did not run its loop, so the build count is about some other program"
+    );
+    assert_eq!(
+        two, 2,
+        "two distinct constants over three passes were built {two} times, where one build \
+         each is the whole of what the cache promises"
+    );
+}
+
+/// A constant symbol is built once however many times its op runs, and each
+/// distinct symbol gets its own entry.
+///
+/// The sibling of `a_long_constant_is_built_once_however_many_passes_read_it`,
+/// and separate from it because the two ops key their caches differently: a
+/// literal's bytes get a slot `compile` assigns, and a constant symbol is keyed
+/// by its own `SymbolId`, on the strength of those being dense and zero-based.
+///
+/// **A constant symbol is a numeric one**, which the shape of these programs
+/// depends on: an unquoted word like `abc` is a *variable* whose value defaults
+/// to its own upcased spelling, and compiles to `Op::Load`. The values here are
+/// written with a decimal point so they are not canonical small integers, and
+/// long enough not to fit the handle inline -- either would be answered before
+/// the cache was consulted and would say nothing about it.
+///
+/// **Neither count is asserted against a fixed number**, because a loop header
+/// contributes constant symbols of its own -- `1` and `3` in `do i = 1 to 3`
+/// are two more `Op::LoadConstant`s, and pinning a total would be pinning that.
+/// The two properties are stated directly instead: the count does not move with
+/// the pass count, and one more distinct symbol is one more build.
+#[test]
+fn a_constant_symbol_is_built_once_and_each_one_gets_its_own_entry() {
+    const THREE_PASSES: &[u8] = b"\
+do i = 1 to 3
+  zs = 1.50000000000
+end
+say zs
+";
+    const THIRTY_PASSES: &[u8] = b"\
+do i = 1 to 30
+  zs = 1.50000000000
+end
+say zs
+";
+    const TWO_SYMBOLS: &[u8] = b"\
+do i = 1 to 3
+  zs = 1.50000000000
+  zt = 2.50000000000
+end
+say zs zt
+";
+
+    fn builds(program: &[u8], expected: &str) -> usize {
+        let before = load_constant_builds();
+        let outcome = execute(
+            TEST_PATH,
+            program.to_vec(),
+            false,
+            Invocation::none().with_engine(Engine::Ir),
+        );
+        assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+        assert_eq!(
+            String::from_utf8_lossy(&outcome.stdout),
+            expected,
+            "the program did not produce its own values, so the build count below is \
+             about some other program"
+        );
+        load_constant_builds() - before
+    }
+
+    let three = builds(THREE_PASSES, "1.50000000000\n");
+    let thirty = builds(THIRTY_PASSES, "1.50000000000\n");
+    let two = builds(TWO_SYMBOLS, "1.50000000000 2.50000000000\n");
+
+    assert_eq!(
+        three, thirty,
+        "three passes built {three} constants and thirty built {thirty}, so \
+         `Op::LoadConstant` is rebuilding its value per execution rather than reading \
+         the one it interned"
+    );
+    assert_eq!(
+        two,
+        three + 1,
+        "adding a second distinct constant symbol took the count from {three} to {two}, \
+         where exactly one more build is what a table keyed by the symbol's own id \
+         promises"
+    );
 }

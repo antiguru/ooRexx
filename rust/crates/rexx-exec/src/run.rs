@@ -610,6 +610,89 @@ enum HeaderClause {
     },
 }
 
+/// **SPIKE, not for commit.** One repeating loop being driven from the op
+/// driver's own frame: the state `run_repeating` holds in locals, held here
+/// instead because the pass loop is the driver's rather than its own.
+pub(crate) struct FlatLoop {
+    /// The first op of the body, where every pass starts.
+    pub(crate) op_body: u32,
+    /// The body's own instruction range, which an escaping `Flow` is absorbed
+    /// against exactly as `run_bounded`'s own bounds absorb it today.
+    pub(crate) body_start: usize,
+    pub(crate) end_index: usize,
+    pub(crate) do_index: usize,
+    resume: usize,
+    label: Option<SymbolId>,
+    do_indent: usize,
+    loop_indent: usize,
+    do_line: usize,
+    end_line: usize,
+    header_clause: HeaderClause,
+    /// `Some(true)` for `UNTIL`, `Some(false)` for `WHILE`, `None` for a loop
+    /// with neither. **The condition's own node is not held here**, because
+    /// this outlives the borrow of `code` a reference to it would need; the
+    /// node is read back off the `DO` instruction at the one point per pass
+    /// that tests it, and this says whether that read is owed at all.
+    conditional: Option<bool>,
+    state: LoopState,
+}
+
+impl FlatLoop {
+    /// Which clause a header or `UNTIL` test on this pass belongs to.
+    fn header_line(&self) -> usize {
+        match &self.header_clause {
+            HeaderClause::Do => self.do_line,
+            HeaderClause::End => self.end_line,
+            HeaderClause::Iterate { line, .. } => *line,
+        }
+    }
+}
+
+/// **SPIKE.** What a header clause's own answer means: `Some(flow)` is the
+/// loop finishing, `None` is one more pass.
+fn flat_header_outcome(
+    header: ClauseOutcome<bool>,
+    resume: usize,
+) -> Result<Option<Flow>, Failure> {
+    match header {
+        ClauseOutcome::Ended(exit) => Ok(Some(Flow::Exit(exit.value()))),
+        ClauseOutcome::Ran(Err(failure)) => Err(failure),
+        ClauseOutcome::Ran(Ok(false)) => Ok(Some(Flow::Goto(resume))),
+        ClauseOutcome::Ran(Ok(true)) => Ok(None),
+    }
+}
+
+/// **SPIKE.** The `WHILE`/`UNTIL` of the `DO`/`LOOP` at `index`, read back off
+/// the instruction because a [`FlatLoop`] outlives any borrow of `code`.
+fn loop_conditional_of<'a>(code: &'a Code<'_>, index: usize) -> Option<&'a LoopConditional> {
+    match &code.body.instructions.get(index)?.kind {
+        InstructionKind::Do(body) | InstructionKind::Loop(body) => body.conditional.as_ref(),
+        _ => None,
+    }
+}
+
+/// **SPIKE.** What `Interp::flat_loop_start` decided.
+pub(crate) enum FlatStart {
+    /// Driven from the driver's frame. The state is on `Interp::flat_loops`;
+    /// this is the body's own instruction range, which the driver's frame
+    /// absorbs an escaping `Flow` against.
+    Flat { body_start: usize, end_index: usize },
+    /// The header said zero passes, so the construct is already over.
+    Ended(Flow),
+    /// Not a shape this spike drives: take the nested path, with the header
+    /// values handed back so that the nested path can move them rather than
+    /// this one copying them.
+    Fallback(LoopHeaderValues),
+}
+
+/// **SPIKE.** What one pass boundary decided.
+pub(crate) enum FlatStep {
+    /// One more pass, from this op.
+    Body(u32),
+    /// The construct is over and this is its answer.
+    Done(Flow),
+}
+
 /// What drives one repeating `DO`/`LOOP`'s own iteration, once its header
 /// has already been evaluated and validated -- everything `LoopKind` can be
 /// except `Simple` (a block, never repeats, and `run_loop_with_header`'s own
@@ -2286,15 +2369,7 @@ impl Interp {
                 // the label's own upcased spelling, so the lowercase quoted
                 // form does not match), while `signal Sub` (bare, mixed
                 // case) and `signal "SUB"` both run it.
-                rexx_parse::Signal::Label(name) => {
-                    let target = self.resolve_signal_target(name)?;
-                    // Set only once the target actually resolves -- an
-                    // unresolved `SIGNAL` (16.1) ends the program regardless,
-                    // matching the oracle's own `signalTo`, which a caller
-                    // only ever invokes with an already-resolved target.
-                    self.set_sigl(self.clause_state.line());
-                    Ok(Flow::Signal(target))
-                }
+                rexx_parse::Signal::Label(name) => self.signal_to_label(name),
                 // `SIGNAL VALUE expr`. Its own `>K>` -- `"VALUE" => text`, at
                 // this clause's own indent with no `+2` the way `WHILE`/
                 // `UNTIL` carry (measured one `DO` deep: `signal value
@@ -2308,12 +2383,13 @@ impl Interp {
                 // text, none of them a different error.
                 rexx_parse::Signal::Value(expr) => {
                     let value = self.eval(code, expr)?;
+                    // Rooted here rather than inside `signal_to_value`, which
+                    // the compiled stream reaches with the value already in a
+                    // register: the temp is what roots it across the render
+                    // there, and a second one would be a frame this clause
+                    // does not own.
                     self.roots.push_temp(value);
-                    let text = self.to_text(value).to_vec();
-                    self.trace_keyword(self.clause_state.current_value_indent, "VALUE", &text);
-                    let target = self.resolve_signal_target(&text)?;
-                    self.set_sigl(self.clause_state.line());
-                    Ok(Flow::Signal(target))
+                    self.signal_to_value(value)
                 }
                 // `SIGNAL ON cond NAME label` / `SIGNAL OFF cond`. Unlike the
                 // two arms above it transfers no control of its own: it edits
@@ -2392,7 +2468,7 @@ impl Interp {
             InstructionKind::Parse(parse)
             | InstructionKind::Arg(parse)
             | InstructionKind::Pull(parse) => {
-                self.exec_parse(code, parse)?;
+                self.exec_parse(code, parse, None)?;
                 Ok(Flow::Next)
             }
 
@@ -3660,7 +3736,11 @@ impl Interp {
     /// SYNTAX` handler that runs `signal on syntax name second` and then
     /// divides by zero reaches `second`, where the same handler without the
     /// re-arm gets the ordinary fatal report.
-    fn exec_condition_trap(&mut self, trap: &ConditionTrap, call: bool) -> Result<Flow, Failure> {
+    pub(crate) fn exec_condition_trap(
+        &mut self,
+        trap: &ConditionTrap,
+        call: bool,
+    ) -> Result<Flow, Failure> {
         match &trap.label {
             Some(label) => {
                 let entry = Trap {
@@ -4547,6 +4627,32 @@ impl Interp {
     /// matches is Error 16.1, and this crate can raise it directly rather
     /// than deferring to a later phase's table the way `resolve_and_run_
     /// call`'s own unresolved-name path has to.
+    /// `SIGNAL label`, past the point where the label's bytes are known:
+    /// resolve, record `SIGL`, and answer the transfer.
+    ///
+    /// **One implementation, entered from `step` and from `Op::Signal`.**
+    pub(crate) fn signal_to_label(&mut self, name: &[u8]) -> Result<Flow, Failure> {
+        let target = self.resolve_signal_target(name)?;
+        // Set only once the target actually resolves -- an unresolved
+        // `SIGNAL` (16.1) ends the program regardless, matching the oracle's
+        // own `signalTo`, which a caller only ever invokes with an
+        // already-resolved target.
+        self.set_sigl(self.clause_state.line());
+        Ok(Flow::Signal(target))
+    }
+
+    /// `SIGNAL VALUE expr`, past the expression: its `>K>` echo, then the
+    /// same search and transfer a written label takes.
+    ///
+    /// `value` must already be rooted by its caller -- a temp on the
+    /// tree-walker, a register on the compiled stream -- because the render
+    /// below can collect.
+    pub(crate) fn signal_to_value(&mut self, value: ObjRef) -> Result<Flow, Failure> {
+        let text = self.to_text(value).to_vec();
+        self.trace_keyword(self.clause_state.current_value_indent, "VALUE", &text);
+        self.signal_to_label(&text)
+    }
+
     fn resolve_signal_target(&self, name: &[u8]) -> Result<usize, Failure> {
         let program = Rc::clone(&self.activation().program);
         let selector = self.activation().body;
@@ -7298,6 +7404,411 @@ impl Interp {
         }
     }
 
+    /// **SPIKE, not for commit.** Sets a repeating loop up to be driven from
+    /// the op driver's own frame instead of a nested `run_ops` entry, or
+    /// declines and leaves the caller to take the nested path.
+    #[allow(clippy::too_many_arguments, reason = "spike")]
+    pub(crate) fn flat_loop_start(
+        &mut self,
+        code: &Code<'_>,
+        index: usize,
+        instruction: &Instruction,
+        body: &Loop,
+        source: Option<&ProgramSource>,
+        values: LoopHeaderValues,
+        op_body: u32,
+    ) -> Result<FlatStart, Failure> {
+        // SPIKE: the switch is a run-time one so that both arms are the same
+        // binary -- the per-op checks this spike adds to the driver's loop are
+        // compiled in either way, so an arm with the flat path never taken
+        // prices those checks on their own.
+        static FLAT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        // **`loop_header_plan` is the whole refusal**, exactly as it is for
+        // `run_loop_with_header`: it answers `None` for a `COUNTER`, a stem
+        // `OVER` and `DO WITH`, which this crate does not run on either
+        // engine, and the nested path is where that becomes the loud error.
+        if *FLAT.get_or_init(|| std::env::var_os("REXX_NO_FLAT").is_some())
+            || loop_header_plan(body).is_none()
+        {
+            return Ok(FlatStart::Fallback(values));
+        }
+        let state = match &body.kind {
+            LoopKind::Forever => LoopState::Forever,
+            LoopKind::Count(_) => LoopState::Count {
+                remaining: values.count.unwrap_or(1),
+            },
+            LoopKind::Controlled(ctrl) => LoopState::Controlled {
+                control: ctrl.control,
+                at: control_slot(code, ctrl.control),
+                current: ControlValue::Wide(
+                    values
+                        .initial
+                        .expect("a controlled loop's plan always names its initial value"),
+                ),
+                to: values.to,
+                by: match values.by {
+                    Some(by) => by,
+                    None => Number::parse("1").expect("the literal 1 always parses"),
+                },
+                for_remaining: values.for_remaining,
+                stepped: false,
+            },
+            LoopKind::Over { control, .. } => LoopState::OverOnce {
+                control: *control,
+                at: control_slot(code, *control),
+                value: values
+                    .over
+                    .expect("a DO OVER's plan always names its target"),
+                done: false,
+                remaining: values.for_remaining,
+            },
+            // A block, not a loop: one pass, its own trace shape, and
+            // `run_loop_with_header`'s own arm resolves the whole of it
+            // without ever reaching a pass boundary. `DO WITH` is refused
+            // above and cannot arrive here.
+            LoopKind::Simple | LoopKind::With { .. } => {
+                return Ok(FlatStart::Fallback(values));
+            }
+        };
+        let end_index = body
+            .end
+            .expect("an unclosed DO/LOOP is error 14.1/14.5, so a body that parsed has this set");
+        let do_indent = self.clause_state.current_value_indent;
+        let end_line = self
+            .clause_line_at(code, end_index, &code.body.instructions[end_index], source)
+            .unwrap_or(0);
+        let do_line = self
+            .clause_line_at(code, index, instruction, source)
+            .unwrap_or_else(|| self.clause_state.line());
+        let mut flat = FlatLoop {
+            op_body,
+            body_start: index + 1,
+            end_index,
+            do_index: index,
+            resume: end_index + 1,
+            label: body.label,
+            do_indent,
+            loop_indent: do_indent + 2,
+            end_line,
+            do_line,
+            header_clause: HeaderClause::Do,
+            conditional: body.conditional.as_ref().map(|cond| cond.until),
+            state,
+        };
+        match self.flat_loop_header(code, source, &mut flat)? {
+            Some(flow) => Ok(FlatStart::Ended(flow)),
+            None => {
+                let range = (flat.body_start, flat.end_index);
+                let boxed = match self.flat_spares.pop() {
+                    Some(mut spare) => {
+                        *spare = flat;
+                        spare
+                    }
+                    None => Box::new(flat),
+                };
+                self.flat_loops.push(boxed);
+                Ok(FlatStart::Flat {
+                    body_start: range.0,
+                    end_index: range.1,
+                })
+            }
+        }
+    }
+
+    /// **SPIKE.** One pass boundary of the innermost flat loop: the state is
+    /// taken off `Interp::flat_loops` so that this can hold a `&mut Interp`
+    /// beside it, and put back when another pass follows.
+    pub(crate) fn flat_loop_step_top(
+        &mut self,
+        code: &Code<'_>,
+        source: Option<&ProgramSource>,
+        arrival: Flow,
+    ) -> Result<FlatStep, Failure> {
+        let Some(mut top) = self.flat_loops.pop() else {
+            return Err(Loud::op_not_driven("a pass boundary with no loop open").into());
+        };
+        match self.flat_loop_step(code, source, &mut top, arrival) {
+            Ok(FlatStep::Body(op_body)) => {
+                self.flat_loops.push(top);
+                Ok(FlatStep::Body(op_body))
+            }
+            Ok(FlatStep::Done(flow)) => {
+                self.flat_spares.push(top);
+                Ok(FlatStep::Done(flow))
+            }
+            Err(failure) => Err(failure),
+        }
+    }
+
+    /// **SPIKE.** One pass boundary: what the body just answered, then the
+    /// next pass's header test.
+    fn flat_loop_step(
+        &mut self,
+        code: &Code<'_>,
+        source: Option<&ProgramSource>,
+        flat: &mut FlatLoop,
+        arrival: Flow,
+    ) -> Result<FlatStep, Failure> {
+        // **Read once per pass boundary and used for both echoes.** The two
+        // events are one boundary and nothing between them can run a `TRACE`,
+        // so the second read could only ever answer what the first did.
+        let echoing = self.trace_mode().all;
+        // **A pass that fell out of its body needs nothing decided.**
+        // `do_body_outcome`'s own `Flow::Next` arm answers `FellThrough` and
+        // reads none of its other arguments, and that is the arrival of every
+        // pass that did not end in a `LEAVE`, an `ITERATE` or an escape -- so
+        // asking is a call per pass for an answer the discriminant already
+        // gives.
+        let outcome = if matches!(arrival, Flow::Next) {
+            DoOutcome::FellThrough
+        } else {
+            self.do_body_outcome(code, flat.do_index, flat.label, true, flat.resume, arrival)?
+        };
+        match outcome {
+            DoOutcome::Escaped(escape) => return Ok(FlatStep::Done(escape)),
+            DoOutcome::Iterated { line, site } => {
+                flat.header_clause = HeaderClause::Iterate { line, site };
+            }
+            DoOutcome::FellThrough => {
+                flat.header_clause = HeaderClause::End;
+                // `END` echoes for a pass that fell through to it and for no
+                // other, exactly as `run_repeating`'s own arm does.
+                if echoing
+                    && let Some((line, text)) =
+                        self.clause_site(source, &code.body.instructions[flat.end_index])
+                {
+                    self.trace_clause(line, flat.do_indent, &text);
+                }
+            }
+        }
+        // **`UNTIL`'s own test, and its own re-echo of the `DO`/`LOOP`
+        // clause.** `run_repeating`'s own arm has the measurement: the oracle
+        // re-enters the loop instruction to make this decision as much as to
+        // test `WHILE` or advance a control variable, so the echo here is
+        // unconditional rather than sharing the top-of-loop one below -- which
+        // is why that one is not emitted at all for an `UNTIL` loop.
+        if flat.conditional == Some(true) {
+            if echoing
+                && let Some((line, text)) =
+                    self.clause_site(source, &code.body.instructions[flat.do_index])
+            {
+                self.trace_clause(line, flat.do_indent, &text);
+            }
+            if let Some(flow) = self.flat_loop_until(code, source, flat)? {
+                return Ok(FlatStep::Done(flow));
+            }
+        } else if echoing
+            // **The re-echo of the `DO`/`LOOP` clause itself, once per pass
+            // after the first**, and it is asked here rather than at the
+            // loop's entry because a `TRACE` in the body changes the answer:
+            // measured, an `ir_dual` case that switches tracing on inside the
+            // body loses this line and `END`'s when the decision is made once
+            // on the way in.
+            && let Some((line, text)) =
+                self.clause_site(source, &code.body.instructions[flat.do_index])
+        {
+            self.trace_clause(line, flat.do_indent, &text);
+        }
+        match self.flat_loop_header(code, source, flat)? {
+            Some(flow) => Ok(FlatStep::Done(flow)),
+            None => Ok(FlatStep::Body(flat.op_body)),
+        }
+    }
+
+    /// **SPIKE.** An `UNTIL` loop's own bottom-of-pass test: `Some(flow)` is
+    /// the loop finishing, `None` is carrying on to the header.
+    ///
+    /// The test belongs to whichever clause transferred control back to the
+    /// loop, which is the same clause the *next* header test belongs to --
+    /// `HeaderClause`'s own doc comment has the oracle transcript that tells
+    /// the two candidates apart.
+    fn flat_loop_until(
+        &mut self,
+        code: &Code<'_>,
+        source: Option<&ProgramSource>,
+        flat: &FlatLoop,
+    ) -> Result<Option<Flow>, Failure> {
+        let Some(cond) = loop_conditional_of(code, flat.do_index) else {
+            return Err(Loud::instruction(&code.body.instructions[flat.do_index].kind).into());
+        };
+        let until_line = flat.header_line();
+        let (do_indent, loop_indent, resume) = (flat.do_indent, flat.loop_indent, flat.resume);
+        // The re-echoed `END` clause just above leaves `current_value_indent`
+        // untouched -- `trace_clause` does not set it -- so without this the
+        // `UNTIL`'s intermediates would read the `DO`'s own indent.
+        self.clause_state.current_value_indent = loop_indent;
+        let tested = self.in_clause(code, until_line, |it| {
+            let held = it.eval_condition(
+                code,
+                &cond.condition,
+                ConditionTrace::Keyword(loop_indent, "UNTIL"),
+                raised_until_not_logical,
+            )?;
+            // An `UNTIL` that held ends the loop, so this clause's own
+            // boundary sits outside the block.
+            it.settle_block_indent(!held, do_indent);
+            Ok(held)
+        })?;
+        match tested {
+            ClauseOutcome::Ended(exit) => Ok(Some(Flow::Exit(exit.value()))),
+            ClauseOutcome::Ran(Ok(true)) => Ok(Some(Flow::Goto(resume))),
+            ClauseOutcome::Ran(Ok(false)) => Ok(None),
+            ClauseOutcome::Ran(Err(failure)) => {
+                let end = &code.body.instructions[flat.end_index];
+                self.record_failure_at(source, end, loop_indent);
+                Err(failure)
+            }
+        }
+    }
+
+    /// **SPIKE.** Who a failing header re-test is blamed on: the clause that
+    /// transferred control back to the loop, at the body's indent.
+    ///
+    /// **Its own function, and `#[cold]` rather than inline.** It sits inside
+    /// the closure the clause unit runs, and a closure that carries it inline
+    /// costs the *succeeding* path: measured on `bench-programs/emptyloop.rex`,
+    /// whose header never fails, about 70 instructions per pass.
+    #[cold]
+    #[inline(never)]
+    fn blame_header_failure(
+        &mut self,
+        code: &Code<'_>,
+        source: Option<&ProgramSource>,
+        blame: &HeaderClause,
+        end_index: usize,
+        loop_indent: usize,
+    ) {
+        match blame {
+            HeaderClause::Do => {}
+            HeaderClause::End => {
+                self.record_failure_at(source, &code.body.instructions[end_index], loop_indent);
+            }
+            HeaderClause::Iterate { site, .. } => {
+                self.record_failure_site_at(site.clone(), loop_indent);
+            }
+        }
+    }
+
+    /// **SPIKE.** A `WHILE` that failed, blamed on the `DO`/`LOOP` clause at
+    /// the body's indent. `#[cold]` for the reason above.
+    #[cold]
+    #[inline(never)]
+    fn blame_while_failure(
+        &mut self,
+        code: &Code<'_>,
+        source: Option<&ProgramSource>,
+        do_index: usize,
+        loop_indent: usize,
+    ) {
+        self.record_failure_at(source, &code.body.instructions[do_index], loop_indent);
+    }
+
+    /// **SPIKE.** The header re-test, in its own clause: `Some(flow)` is the
+    /// loop finishing, `None` is one more pass.
+    ///
+    /// **A `WHILE` takes `flat_loop_header_while` instead, and the split is a
+    /// measurement rather than a shape.** The two differ by one test, so one
+    /// function with a branch is the obvious form -- and the branch is inside
+    /// the closure the clause unit runs, where carrying it costs the loops
+    /// that have no `WHILE` about 70 instructions per pass on
+    /// `bench-programs/emptyloop.rex`. `flat_loop_step` asks which of the two
+    /// this loop wants once per pass, outside that closure.
+    ///
+    /// **`inline(always)`, and it is a measurement rather than a habit.** This
+    /// is one call per pass of every flattened loop, and the inliner's own
+    /// judgement changed the moment `WHILE` was added beside it: measured on
+    /// `bench-programs/emptyloop.rex`, left alone it is emitted as a function
+    /// and the flat path goes from 3.08% ahead of the nested one to 3.37%
+    /// behind, with `flat_loop_header` appearing in the profile at 8.44% where
+    /// it had not appeared at all.
+    #[inline(always)]
+    fn flat_loop_header(
+        &mut self,
+        code: &Code<'_>,
+        source: Option<&ProgramSource>,
+        flat: &mut FlatLoop,
+    ) -> Result<Option<Flow>, Failure> {
+        if flat.conditional == Some(false) {
+            return self.flat_loop_header_while(code, source, flat);
+        }
+        let header_line = flat.header_line();
+        let do_indent = flat.do_indent;
+        let loop_indent = flat.loop_indent;
+        let resume = flat.resume;
+        let end_index = flat.end_index;
+        let blame = &flat.header_clause;
+        let state = &mut flat.state;
+        let header = self.in_clause(code, header_line, |it| {
+            let advanced = match it.loop_advance(code, state, do_indent, loop_indent) {
+                Ok(advanced) => advanced,
+                Err(failure) => {
+                    it.blame_header_failure(code, source, blame, end_index, loop_indent);
+                    return Err(failure);
+                }
+            };
+            it.settle_block_indent(advanced, do_indent);
+            Ok(advanced)
+        })?;
+        flat_header_outcome(header, resume)
+    }
+
+    /// **SPIKE.** [`Interp::flat_loop_header`] for a loop that carries a
+    /// `WHILE`: the same advance, then the condition, both inside the one
+    /// clause the oracle re-enters to make this decision.
+    ///
+    /// `inline(never)` so that the branch above it stays a call this loop's
+    /// shape decides once, rather than code the loops without a `WHILE` carry.
+    #[inline(never)]
+    fn flat_loop_header_while(
+        &mut self,
+        code: &Code<'_>,
+        source: Option<&ProgramSource>,
+        flat: &mut FlatLoop,
+    ) -> Result<Option<Flow>, Failure> {
+        let Some(cond) = loop_conditional_of(code, flat.do_index) else {
+            return Err(Loud::instruction(&code.body.instructions[flat.do_index].kind).into());
+        };
+        let header_line = flat.header_line();
+        let do_indent = flat.do_indent;
+        let loop_indent = flat.loop_indent;
+        let resume = flat.resume;
+        let (do_index, end_index) = (flat.do_index, flat.end_index);
+        let blame = &flat.header_clause;
+        let state = &mut flat.state;
+        let header = self.in_clause(code, header_line, |it| {
+            let advanced = match it.loop_advance(code, state, do_indent, loop_indent) {
+                Ok(advanced) => advanced,
+                Err(failure) => {
+                    it.blame_header_failure(code, source, blame, end_index, loop_indent);
+                    return Err(failure);
+                }
+            };
+            if !advanced {
+                it.settle_block_indent(false, do_indent);
+                return Ok(false);
+            }
+            // Overrides what stepping the `DO`/`LOOP` instruction set:
+            // `WHILE`'s condition is evaluated here, inside that same step,
+            // never through a `step_in_temps_frame` of its own.
+            it.clause_state.current_value_indent = loop_indent;
+            let held = match it.eval_condition(
+                code,
+                &cond.condition,
+                ConditionTrace::Keyword(loop_indent, "WHILE"),
+                raised_while_not_logical,
+            ) {
+                Ok(held) => held,
+                Err(failure) => {
+                    it.blame_while_failure(code, source, do_index, loop_indent);
+                    return Err(failure);
+                }
+            };
+            it.settle_block_indent(held, do_indent);
+            Ok(held)
+        })?;
+        flat_header_outcome(header, resume)
+    }
+
     /// Decides whether one more candidate iteration of `state` should run,
     /// consuming whatever budget (`FOR`, a bare count) applies and binding
     /// a control variable **before** the decision is answered, not after --
@@ -7896,6 +8407,23 @@ impl Interp {
                 },
                 0,
             ) => expression,
+            // The two instructions whose slot `0` exists only in one of their
+            // forms. Both are reachable: the expression is compiled through
+            // `push_value` like any other, so a call inside it emits an
+            // `Op::CallExpr` that addresses the node from here.
+            (InstructionKind::Signal(signal), 0) => match &**signal {
+                rexx_parse::Signal::Value(expression) => expression,
+                rexx_parse::Signal::Label(_) | rexx_parse::Signal::Trap(_) => return None,
+            },
+            (
+                InstructionKind::Parse(parse)
+                | InstructionKind::Arg(parse)
+                | InstructionKind::Pull(parse),
+                0,
+            ) => match &parse.source {
+                rexx_parse::ParseSource::Value(Some(expression)) => expression,
+                _ => return None,
+            },
             (InstructionKind::If { condition, .. }, 0) => condition,
             // A **plain** `WHEN`'s condition. A `WhenCase`'s values are not a
             // condition and compile to no native op at all, so no address ever
@@ -7982,6 +8510,32 @@ impl Interp {
             // is `crate::ir::Op::Load` instead -- and each is trace-identical
             // to the tree-walker's own arm here because this is the same
             // `eval` call it makes.
+            // `SIGNAL VALUE`'s own expression, for the shapes `compile` emits
+            // no native op for. The `>K>` echo and the search are
+            // `Op::Signal`'s, not this arm's, exactly as a loop header's
+            // validation is its own op.
+            (InstructionKind::Signal(signal), 0) => {
+                let rexx_parse::Signal::Value(expr) = &**signal else {
+                    return Err(Loud::instruction(&instruction.kind).into());
+                };
+                self.eval(code, expr)
+            }
+            // `PARSE VALUE expr WITH`'s own expression, on the same terms. The
+            // `>K>` echo and the whole template walk are `Op::Parse`'s; only
+            // the source is a register, and only this source has one --
+            // `compile` emits no register for any other, so reaching here with
+            // one is an op off its node.
+            (
+                InstructionKind::Parse(parse)
+                | InstructionKind::Arg(parse)
+                | InstructionKind::Pull(parse),
+                0,
+            ) => {
+                let rexx_parse::ParseSource::Value(Some(expr)) = &parse.source else {
+                    return Err(Loud::instruction(&instruction.kind).into());
+                };
+                self.eval(code, expr)
+            }
             (InstructionKind::Assignment { value, .. }, 0) => self.eval(code, value),
             (
                 InstructionKind::Say {

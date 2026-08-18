@@ -27,7 +27,7 @@
 
 use std::cell::Cell;
 
-use rexx_core::FrameId;
+use rexx_core::{FrameId, ObjRef};
 use rexx_parse::{Operator, PrefixOp, SymbolId};
 
 use crate::error::Raised;
@@ -39,7 +39,7 @@ use crate::run::{
 use crate::trace::ChunkTrace;
 
 mod compile;
-mod drive;
+pub(crate) mod drive;
 pub(crate) use compile::compile;
 pub(crate) use golden::render_annotated;
 
@@ -161,6 +161,21 @@ pub(crate) enum Op {
     /// both engines, before anything is evaluated, and a compiler that refused
     /// on its own would be a second copy of that decision.
     LoopRun { index: u32 },
+    /// **SPIKE, not for commit.** The bottom of one pass of the flattened
+    /// `DO`/`LOOP` at `index`: what the body just did, then the next pass's
+    /// header test, then either back to the body or on past the `END`.
+    ///
+    /// **It sits at the `END` instruction's own op**, which is what makes a
+    /// pass end an op the driver decodes on arrival rather than a condition it
+    /// tests on every op. The measurement that says this matters is entry 66's:
+    /// a prototype that tested for the pass end instead cost 12 to 22
+    /// instructions per body clause, and a program has far more clauses than
+    /// passes.
+    ///
+    /// Never reached when the loop declined to flatten: the nested driver entry
+    /// that runs the body is bounded by `[body_start, end_index)`, and this op
+    /// is the `END`'s.
+    LoopNext { index: u32 },
     /// Opens the promoted clause of the instruction at `index`. `end` is the
     /// op index one past this clause's last op -- the mark the register
     /// allocator releases to when the clause finishes (the plan's Decisions
@@ -385,20 +400,23 @@ pub(crate) enum Op {
     /// already -- so what the wrong call here would cost is an allocation per
     /// pass, not an answer.
     ///
-    /// **This op has no performance evidence in either direction, and that is
-    /// measured rather than an omission.** `push_native`'s literal arm is what
-    /// emits it, so a literal in any slot `compile` offers that function
-    /// compiles to one -- and no registered benchmark axis executes one
-    /// **inside a measured loop**: counting
-    /// executions on each axis at `n` and at `2n` gives a figure independent of
-    /// `n` every time -- one execution on `bench-programs/emptyloop.rex` (its
-    /// closing `say 'done'`) and one on `bench-programs/strings.rex` (the
-    /// subject string it assigns before its loop), zero on `varlookup`, `arith`,
-    /// `compound`, `alloc4c` and `startup`. So **no measurement of those axes
-    /// says anything about this op**, and a per-clause cost measured on them
-    /// belongs to the clause machinery around it -- [`Op::Clause`],
-    /// [`Op::TraceClause`], [`Op::EvalExpr`], [`Op::Store`] -- rather than
-    /// here.
+    /// **Which axes execute this, counted rather than reasoned about.** With a
+    /// counter in the arm itself: `alloc4c` 1,000,000, the pinned `rexxcps`
+    /// 1,830,013, `emptyloop` and `strings` one each -- their closing `say` and
+    /// their pre-loop subject string -- and `varlookup`, `compound` and `arith`
+    /// none at all. So `emptyloop` and `strings` say nothing about this op, and
+    /// a per-clause cost measured on them belongs to the clause machinery
+    /// around it -- [`Op::Clause`], [`Op::TraceClause`], [`Op::EvalExpr`],
+    /// [`Op::Store`] -- rather than here.
+    ///
+    /// (An earlier count read zero on `alloc4c` and stood here as "no
+    /// registered benchmark axis executes one inside a measured loop". It was
+    /// taken with a thread-local counter read from the main thread, where
+    /// `run_program` runs the interpreter on one of its own -- so every axis
+    /// read zero, including the two that do not, and the figures that
+    /// disagreed came from somewhere else. `RUN_CHUNK_ENTRIES`' own comment in
+    /// `ir/drive.rs` names that hazard and is why the test-only counters are
+    /// per thread *and* entered through `execute`.)
     ///
     /// **It emits nothing, and [`Op::TraceLiteral`] is why that is safe.**
     /// `eval.rs` emits a literal's `>L>` line as a side effect of evaluating
@@ -445,6 +463,14 @@ pub(crate) enum Op {
     ///
     /// **Only valid inside a [`Op::Clause`] region**, whose clause owns the
     /// value indent the line after this one traces at.
+    ///
+    /// **Its value is interned the way [`Op::Const`]'s is**, into
+    /// [`Chunk::interned_symbols`] and keyed by `symbol` itself, which
+    /// `SymbolId`'s own doc licenses: the ids are dense, zero-based and
+    /// assigned in interning order, so the id is already the index a table
+    /// wants. That is why this needs no slot of its own in the op the way a
+    /// literal does -- a literal's bytes have no number until `compile` gives
+    /// them one, and a constant symbol arrives with one.
     LoadConstant { symbol: SymbolId, dst: u16 },
     /// Echoes the `>L>` line of the literal or constant symbol in register
     /// `src`.
@@ -726,6 +752,57 @@ pub(crate) enum Op {
     ///
     /// **Only valid inside a [`Op::Clause`] region**, for that reason.
     Say { index: u32, src: Option<u16> },
+    /// The `SIGNAL` at `index`, in whichever of its three forms that
+    /// instruction carries.
+    ///
+    /// `src` is the register holding `SIGNAL VALUE`'s own evaluated
+    /// expression, and `None` for the two forms that have no expression --
+    /// the `Op::Say` arrangement, and for the same reason: one op per
+    /// instruction, with the optional operand where the instruction has one.
+    ///
+    /// **The three forms share an op because they share everything but their
+    /// last step.** `SIGNAL label` and `SIGNAL VALUE expr` differ only in
+    /// where the label's bytes come from, and `SIGNAL ON`/`OFF` transfers no
+    /// control at all -- it edits this activation's trap table and falls
+    /// through. Which one this is comes off the instruction, exactly as
+    /// `step`'s own arm reads it.
+    ///
+    /// **Only valid inside a [`Op::Clause`] region**, whose clause is this
+    /// `SIGNAL`'s own: `SIGL` is set to that clause's line, and `VALUE`'s
+    /// `>K>` echo prints at that clause's indent.
+    Signal { index: u32, src: Option<u16> },
+    /// The `PARSE`, `ARG` or `PULL` at `index`, with its template walked by
+    /// `Interp::exec_parse`.
+    ///
+    /// `src` is the register holding `PARSE VALUE expr WITH`'s own evaluated
+    /// expression, and `None` for every other source -- the `Op::Say`
+    /// arrangement again. `VAR` reads a variable with its own `>V>` trace and
+    /// its own `NOVALUE`, `ARG` takes the activation's arguments and `SOURCE`,
+    /// `VERSION`, `PULL` and `LINEIN` build or read their string, so the
+    /// expression `push_value` can reach is the one form that has one.
+    ///
+    /// **The template's own `(expr)` patterns are not registers and cannot
+    /// be**, which is the asymmetry that decides how much of this instruction
+    /// a compiler can hoist. `RexxInstructionParse::execute` evaluates the
+    /// source expression once before its trigger loop, and each trigger's own
+    /// pattern from inside that loop -- `ParseTrigger::parse` calls
+    /// `stringTrigger`/`integerTrigger`, and both `evaluate` there. So a
+    /// pattern naming a variable an earlier target of the same template just
+    /// wrote sees the new value.
+    ///
+    /// Measured both ways against the oracle, because a failed search and a
+    /// stale one look alike from one direction. With `zp = 'Z'`, `parse value
+    /// 'abZcd' with zp 2 . (zp) zq` gives `zp` as `a` and `zq` empty -- the
+    /// search running for the `a` assigned a moment earlier and finding
+    /// nothing, where hoisting would search for `Z` and answer `cd`. With `zp
+    /// = 'Q'`, `parse value 'bXbYc' with zp 2 . (zp) zq` gives `zp` as `b` and
+    /// `zq` as `Yc` -- the same new value, this time making the search
+    /// succeed, where hoisting would search for `Q` and answer nothing.
+    ///
+    /// **Only valid inside a [`Op::Clause`] region**, whose clause is this
+    /// instruction's own: every trace line the template prints takes its indent
+    /// from that clause.
+    Parse { index: u32, src: Option<u16> },
     /// Ends the activation at `index` with the value in register `src`, or
     /// with no value at all for the bare form, and answers the `Flow` its
     /// keyword calls for.
@@ -1418,13 +1495,50 @@ pub(crate) struct Chunk {
     /// swamping the difference it existed to measure, and interning is what
     /// removes it.
     ///
-    /// **Interning is invisible to a running program**, which is the property
-    /// that makes it safe: `Op::Const` reads the bytes and builds a fresh
-    /// value from them through `Interp::literal` every time it runs, so two
-    /// occurrences of one literal share a table entry and share no value.
-    /// `assignment-and-say`'s "one literal written twice traces twice" row is
-    /// that stated as output.
+    /// **Two occurrences of one literal share the value as well as the entry**,
+    /// which is what [`Chunk::interned`] holds and is the oracle's own
+    /// arrangement rather than an optimisation this crate invented: the C++
+    /// scanner passes every literal through `LanguageParser::commonString`
+    /// before it builds the token (`parser/Scanner.cpp:1781`), so identical
+    /// literals anywhere in a program are one object there too.
+    ///
+    /// It is still invisible in the trace, and `assignment-and-say`'s "one
+    /// literal written twice traces twice" row is what says so: the `>L>` line
+    /// is [`Op::TraceLiteral`]'s, emitted per occurrence, and sharing the value
+    /// a load produces does not reach it.
     consts: Vec<Box<[u8]>>,
+    /// The value each entry of [`Chunk::consts`] was interned to, or
+    /// [`ObjRef::NIL`] for one not built yet.
+    ///
+    /// **`Op::Const` used to rebuild its value on every execution**, which for
+    /// anything past the handle's own inline width meant an allocation each
+    /// time: the pinned `rexxcps` ran the op 1,508,931 times and allocated on
+    /// about 560,000 of them, rebuilding the same four literals once per pass.
+    ///
+    /// `NIL` is the empty state rather than an `Option` because it cannot be a
+    /// value here: `Interp::interned_literal` answers with a tagged small
+    /// integer, a handle-inline string, or an arena handle, and none of the
+    /// three encodes as `NIL`. `Op::Const`'s own arm asserts it in debug.
+    ///
+    /// **The values are allocated immortal, so this table needs no root.** It
+    /// is behind an `Rc<Chunk>` the collector does not walk, which is what made
+    /// caching the handle here impossible until the heap could be asked for an
+    /// object it will never sweep.
+    interned: Vec<Cell<ObjRef>>,
+    /// The same for [`Op::LoadConstant`], indexed by the constant symbol's own
+    /// `SymbolId` rather than by a slot `compile` assigned.
+    ///
+    /// **Sized to the widest id this body's constant symbols reach**, not to
+    /// the program's symbol table: a body naming none of them carries an empty
+    /// vector, and one naming a single high id carries the gap in front of it.
+    /// The gap is eight bytes an entry and is paid once per compiled chunk,
+    /// against a table indexed by a slot that would need a field in the op and
+    /// a second interning pass at compile time.
+    ///
+    /// **This op is hotter than [`Op::Const`], measured**: on the pinned
+    /// `rexxcps` it runs 3,540,011 times against `Op::Const`'s 1,830,013, and
+    /// on `bench-programs/varlookup.rex` 19,000,003 times against zero.
+    interned_symbols: Vec<Cell<ObjRef>>,
     /// The quickening hints [`Op::Arith`] reads, one per such op.
     ///
     /// **Mutable where the op stream is not**: an op is emitted once and never
@@ -1473,6 +1587,48 @@ impl Chunk {
     /// table this chunk was compiled with.
     fn konst(&self, at: u32) -> Option<&[u8]> {
         self.consts.get(at as usize).map(|bytes| &bytes[..])
+    }
+
+    /// The value constant `at` was interned to, or [`ObjRef::NIL`] when it has
+    /// not been built yet or the index names no entry.
+    ///
+    /// An out-of-range index answers the empty state rather than its own
+    /// error: the caller goes on to [`Chunk::konst`] for the bytes, which is
+    /// where the index is checked and refused loudly.
+    fn interned_konst(&self, at: u32) -> ObjRef {
+        match self.interned.get(at as usize) {
+            Some(cell) => cell.get(),
+            None => ObjRef::NIL,
+        }
+    }
+
+    /// Records what constant `at` was interned to.
+    fn remember_konst(&self, at: u32, value: ObjRef) {
+        if let Some(cell) = self.interned.get(at as usize) {
+            cell.set(value);
+        }
+    }
+
+    /// The value constant symbol `symbol` was interned to, or [`ObjRef::NIL`]
+    /// when it has not been built yet.
+    ///
+    /// An id outside the table answers the empty state, which sends the caller
+    /// to the symbol table for the spelling exactly as a first execution does.
+    /// So a table that came out too short costs the interning and not an
+    /// answer, which is the failure mode to prefer for a size derived from the
+    /// ops rather than from the program.
+    fn interned_symbol(&self, symbol: SymbolId) -> ObjRef {
+        match self.interned_symbols.get(symbol.index()) {
+            Some(cell) => cell.get(),
+            None => ObjRef::NIL,
+        }
+    }
+
+    /// Records what constant symbol `symbol` was interned to.
+    fn remember_symbol(&self, symbol: SymbolId, value: ObjRef) {
+        if let Some(cell) = self.interned_symbols.get(symbol.index()) {
+            cell.set(value);
+        }
     }
 
     /// Whether `reg` is inside the region `run_chunk` reserves for this

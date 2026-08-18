@@ -42,17 +42,26 @@ use rexx_exec::{Invocation, run_program};
 /// read `'v' || i` and the churn value `'abc'` until short byte strings began
 /// travelling in the handle too, at which point both went the way of the
 /// small integer and this file collected nothing at all -- caught by these
-/// tests failing, which is what they are for. Every literal here is now wider
+/// tests failing, which is what they are for. Every literal here is wider
 /// than `ObjRef`'s inline capacity, and the reason is written down rather
 /// than the widths merely being what they are.
+///
+/// **And a third time, from a mechanism that is not a width at all.** The
+/// churn value was the bare literal `'abcdefghij'`, which allocated once per
+/// pass until `Op::Const` began interning its value into the compiled stream:
+/// after that the loop allocated nothing whatever the literal's length, and
+/// the arena grew only for the tails. So the churn value is now *computed*,
+/// the same shape the tails already use and for the same reason -- a value
+/// built from the loop's own counter cannot be shared with anything, which is
+/// a property of the expression rather than of how wide its parts are.
 const TRANSIENT_THEN_CHURN: &str = "\
 s. = 0
 do i = 1 to 200000
   s.i = 'vvvvvvvv' || i
 end
 drop s.
-do 1000000
-  yy = 'abcdefghij'
+do j = 1 to 1000000
+  yy = 'abcdefghij' || j
 end
 say 'ok' yy
 ";
@@ -69,8 +78,8 @@ s. = 0
 do i = 1 to 200000
   s.i = 'vvvvvvvv' || i
 end
-do 1000000
-  yy = 'abcdefghij'
+do j = 1 to 1000000
+  yy = 'abcdefghij' || j
 end
 say 'ok' yy s.199999
 ";
@@ -87,11 +96,15 @@ fn run(text: &str) -> rexx_exec::Outcome {
 /// after a transient than one that watches the live count.
 ///
 /// **The bound is between two measured values, not a target.** With
-/// `Heap::will_grow` in the condition this program collects **8** times; with
-/// the live count alone it collects **19**, for the same peak resident set
-/// (60,656 KB against 60,860 KB) and the same output. 12 sits between them,
-/// so the assertion fails for the policy this one replaced and has room for
-/// the ordinary drift of a few collections either way.
+/// `Heap::will_grow` in the condition this program collects **6** times; with
+/// the live count alone it collects **17**. 12 sits between them, so the
+/// assertion fails for the policy this one replaced and has room for the
+/// ordinary drift of a few collections either way.
+///
+/// Both figures were re-measured when the churn value became a computed
+/// expression, and both fell -- 8 and 19 before -- because interning removed
+/// one allocation per pass from the tail loop as well. The gap is what the
+/// bound rests on, and it did not close.
 ///
 /// **It is not an emptiness check**: the lower bound is asserted too, because
 /// a trigger that stopped firing entirely would satisfy an upper bound alone
@@ -100,18 +113,21 @@ fn run(text: &str) -> rexx_exec::Outcome {
 fn a_dead_transients_slots_are_reused_before_the_collector_runs_again() {
     let outcome = run(TRANSIENT_THEN_CHURN);
     assert_eq!(outcome.exit_code, 0);
-    assert_eq!(String::from_utf8_lossy(&outcome.stdout), "ok abcdefghij\n");
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stdout),
+        "ok abcdefghij1000000\n"
+    );
     assert!(
         outcome.collections > 0,
-        "the program allocates 1.2 million values and collected nothing, so \
+        "the program allocates over a million values and collected nothing, so \
          the trigger is not firing at all"
     );
     assert!(
         outcome.collections <= 12,
         "collected {} times after the transient died. A collector that fires \
-         on the live count alone reads about 19 here, because it collects \
-         while the slots the transient freed are still unused; one that waits \
-         for the arena to need to grow reads about 8",
+         on the live count alone reads 17 here, because it collects while the \
+         slots the transient freed are still unused; one that waits for the \
+         arena to need to grow reads 6",
         outcome.collections
     );
 }
@@ -123,20 +139,28 @@ fn a_dead_transients_slots_are_reused_before_the_collector_runs_again() {
 /// collector fire less often everywhere would pass the test above and fail
 /// here, which is what stops that test being satisfied by simply collecting
 /// less.
+///
+/// **Measured at 7 under both policies**, which is this case's whole point
+/// stated as a number: the live-count-alone policy the test above rejects
+/// reads the same 7 here, because with nothing swept there are no reusable
+/// slots for the two conditions to disagree about. So the bound below is not
+/// separating policies -- it is the floor that says the trigger still fires,
+/// and a policy that halved the rate would cross it.
 #[test]
 fn a_live_set_that_does_not_die_still_collects_as_it_grows() {
     let outcome = run(LIVE_STAYS_LIVE);
     assert_eq!(outcome.exit_code, 0);
     assert_eq!(
         String::from_utf8_lossy(&outcome.stdout),
-        "ok abcdefghij vvvvvvvv199999\n",
+        "ok abcdefghij1000000 vvvvvvvv199999\n",
         "the stem must still be readable, which is what says the collector \
          did not sweep a live tail"
     );
     assert!(
-        outcome.collections >= 8,
-        "collected only {} times while the arena grew past 1.2 million \
-         allocations with a 200,000-entry stem live throughout",
+        outcome.collections >= 5,
+        "collected only {} times while the arena grew past a million \
+         allocations with a 200,000-entry stem live throughout, where both \
+         policies measure 7",
         outcome.collections
     );
 }
