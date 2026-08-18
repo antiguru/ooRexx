@@ -5228,3 +5228,55 @@ Every `PARSE` copies its source into a `Vec` the cursor owns, one allocation and
 No mechanism was established, and the reason for writing it down rather than retrying is that the allocation it removes is real and counted: the pool costs more than the `malloc` it saves, so the next attempt at this needs a different instrument, not a tidier pool. What is left in a `PARSE`-only profile is `exec_parse` at 29%, the target writes (`read_at`, `assign_expr_target`, `to_text`) at about 25% between them, and the heap at 8%.
 
 `cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings` clean; the debug gate fails 30, identical set to the baseline.
+
+### Entry 73 -- `Op::Const` interned, and entry 68's estimate was low and its mechanism wrong
+
+Still no commits of the spike. Moritz asked for entry 68's immortal constants.
+
+#### The shape, and where it differs from entry 68's sketch
+
+`Op::Const` interns its value into the chunk on first execution and reads it afterwards. `Chunk::interned` is a `Vec<Cell<ObjRef>>` beside `consts`, with `ObjRef::NIL` as the empty state -- which is safe because `Interp::interned_literal` answers with a tagged small integer, a handle-inline string, or an arena handle, and none of the three encodes as `NIL`. The op asserts that in debug.
+
+**Entry 68 called for "an immortal region of the slot space ... skipped by the sweeper", and that is not what is here.** A slot range of its own, the way `CLASS_SLOT_BASE` gives a class identity one, would need a second store behind `Heap::get` -- the hottest read in the interpreter -- and a branch on every value. A per-slot flag would need the marker to trace these objects anyway, so that an immortal object's *children* survive with it. `Heap::immortal` does both jobs at once by being a root the heap holds itself: the mark phase seeds from it, so they are marked, and the sweeper skips them by the rule it already has.
+
+So entry 68's "there is no root to register because nothing can collect it" is half right. There is a root; what the design buys is that **no caller can forget it**, which is what let the handle be cached behind an `Rc<Chunk>` the collector does not walk.
+
+**Sharing one object across executions matches the oracle rather than departing from it.** The C++ scanner passes every literal through `LanguageParser::commonString` before building the token (`parser/Scanner.cpp:1781`), so identical literals anywhere in a program are already one object there. The `Chunk::consts` doc comment asserted the opposite of what this makes true and is corrected.
+
+Checked by running rather than argued: a literal read under `NUMERIC DIGITS 12`, then `5`, then `15`, then under `NUMERIC FORM ENGINEERING`, with a second occurrence of the same literal sharing the object, matches the oracle line for line on both engines. The lazy `num` cache is `Number::parse_bytes` of the object's own bytes and `DIGITS` is not among its inputs.
+
+#### Measured, and entry 68's estimate was a third of it
+
+| axis | before | after | |
+|---|---:|---:|---:|
+| `rexxcps` | 13,692,809,770 | 13,488,807,833 | **-1.49%** |
+| `alloc4c` | 5,507,816,886 | 5,449,668,528 | **-1.06%** |
+| `emptyloop` | 24,075,636,315 | 24,025,636,515 | -0.21% |
+| `strings` | 29,208,638,559 | 29,166,520,025 | -0.14% |
+| `arith` | 17,568,977,850 | 17,551,102,063 | -0.10% |
+| `varlookup` | 40,280,658,476 | 40,242,659,744 | -0.09% |
+| `compound` | 16,118,655,028 | 16,108,655,017 | -0.06% |
+
+Entry 68 priced this at "about 0.5% of `rexxcps` and nothing anywhere else", from 560,000 allocations at entry 64's 132 instructions each. It is three times that on `rexxcps` and it is not nothing elsewhere.
+
+**And the word "allocation" was the wrong mechanism.** `INLINE_BYTES` is 54, so `Bytes::from_slice` holds a 33-byte literal inline and calls no allocator at all: counted with the `LD_PRELOAD` shim, the pinned run makes **4,903,152** `malloc` calls after this change against **4,903,165** measured before the `PARSE` work -- thirteen fewer, where 560,000 removed `malloc`s would have been unmissable. What the op was paying was the arena slot, the 54-byte inline copy, and the collections that the growing live count forced: **57 collections before, 49 after**, measured by instrumenting `Outcome::collections` on the pinned program with the interning arm swapped for the original `self.literal(bytes)`.
+
+A first attempt at that comparison read 24 collections for the "before" arm, which was not a before at all: disabling only the cache *read* left every execution allocating a fresh immortal object. The arm that reproduces the old behaviour has to call `literal` and skip the write as well.
+
+#### Two collector instruments fired, and both were right
+
+**`collect_policy.rs` lost its workload.** Its churn loop is `do 1000000; yy = 'abcdefghij'; end`, which allocated once per pass until this change and now allocates nothing at all -- so the program the file measures shrank from about 1.4 million allocations to 200,000 and collected 2 times instead of 8. **That file's own doc records the same hazard biting twice before**, from the small-integer immediate and then from handle-inline strings; this is the third, and the first that is not about a *width*. The churn value is now computed (`'abcdefghij' || j`), the same shape the tails already use, because a value built from the loop's counter cannot be shared however wide its parts are.
+
+Both bounds re-measured on the new workload rather than adjusted to fit: with `Heap::will_grow` in the condition it collects **6**, with the live count alone **17**, so the `<= 12` bound still sits between the two policies and still rejects the one it was written to reject. The adjacent case measures **7 under both policies**, which is what its own doc predicted, so its bound is a floor rather than a separator.
+
+**`collect_stress.rs` caught a weakened instrument.** Its committed list of programs that collect zero times under collect-on-every-allocation gained eight entries, because `Heap::alloc_immortal` bypassed `Interp::alloc_with` and so removed an allocation site from the mode whose whole job is to collect at every one of them. The fix is `Interp::alloc_immortal_with`, which makes the same collection decision first -- `collect_if_due`, extracted so the two allocators differ in what they allocate and not in when they collect. **The committed list then needed no edit at all**, which is the outcome to prefer: the expectation was right and the code was wrong.
+
+#### The test
+
+`a_long_constant_is_built_once_however_many_passes_read_it` (`ir/drive/tests.rs`), through a new test-only `CONST_BUILDS`. **No output comparison in this workspace can see this**: a value rebuilt per execution and a value built once produce identical bytes, identical trace and the same status -- which is what makes sharing safe and also what leaves it unpinned.
+
+Two mutations, both red: never writing the cache makes one constant over three passes build 3 times, and a cache that ignores its index fails on *output*, because the second constant then reads the first one's value.
+
+`cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings` clean; the debug gate fails 30, identical set to the baseline.
+
+**Not done, and adjacent**: `Op::LoadConstant` builds a constant symbol's upcased spelling through `Interp::literal` on every execution, with no cache slot to intern into. A symbol of seven bytes or fewer is answered from the handle, so only longer names pay, and no axis here measures it.
