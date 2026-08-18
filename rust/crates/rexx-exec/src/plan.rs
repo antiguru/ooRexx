@@ -222,6 +222,17 @@ impl CompoundName {
 #[derive(Debug, Default)]
 pub(crate) struct Plan {
     pub(crate) names: rexx_core::NameMap<Box<[u8]>, usize>,
+    /// The slots `build` reserved for the names the interpreter assigns on
+    /// its own -- `RESULT` after a call that returns a value, `SIGL` on a
+    /// transfer. Cached because the alternative is `Interp::slot_of`, which
+    /// hashes the name; measured, setting `RESULT` cost 236 user
+    /// instructions per call against the oracle's 18.
+    ///
+    /// `None` on a `Plan::default()`, which `Interp` hands to an activation
+    /// that has no body of its own (`lib.rs`) and whose name map is empty --
+    /// there is no slot to name, so those callers keep the lookup.
+    pub(crate) result_slot: Option<usize>,
+    pub(crate) sigl_slot: Option<usize>,
     pub(crate) by_symbol: Vec<Option<usize>>,
     /// The static clause indent of every instruction in this body, by index.
     ///
@@ -449,9 +460,9 @@ impl Plan {
         // against a routine ending `return 1` cost 4420.7 user instructions
         // per call with `RESULT` reaching `extra`, and 4053.0 with the body
         // mentioning `RESULT` so the plan held it already.
-        for reserved in [b"RESULT".as_slice(), b"RC".as_slice(), b"SIGL".as_slice()] {
-            plan.slot_for(reserved);
-        }
+        plan.result_slot = Some(plan.slot_for(b"RESULT"));
+        plan.slot_for(b"RC");
+        plan.sigl_slot = Some(plan.slot_for(b"SIGL"));
         plan.indents = crate::run::all_indents(&body.instructions);
         if let Some(source) = source {
             plan.lines = body

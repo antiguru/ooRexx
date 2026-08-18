@@ -2608,7 +2608,7 @@ impl Interp {
                 )?
             }
         };
-        let slot = self.slot_of(b"RESULT");
+        let slot = self.reserved_result_slot();
         let frame = self.activation().frame;
         // **A send that produced no value drops `RESULT`** rather than
         // leaving the previous one in place -- the same rule a bare `return`
@@ -3710,7 +3710,23 @@ impl Interp {
     /// exactly like any other shared-pool variable).
     fn set_sigl(&mut self, line: usize) {
         let value = self.text(line.to_string().as_bytes());
-        self.assign_by_name(b"SIGL", value);
+        // Not through `assign_by_name`: that reads the name's shape and then
+        // hashes it, and `SIGL` is a simple name whose slot the plan already
+        // holds. The fallback covers a plan with no name map at all.
+        let slot = match self.activation().plan.sigl_slot {
+            Some(slot) => slot,
+            None => self.slot_of(b"SIGL"),
+        };
+        let frame = self.activation().frame;
+        self.set_variable(frame, slot, value);
+    }
+
+    /// The slot `RESULT` lives in, from the plan when it has one.
+    fn reserved_result_slot(&mut self) -> usize {
+        match self.activation().plan.result_slot {
+            Some(slot) => slot,
+            None => self.slot_of(b"RESULT"),
+        }
     }
 
     /// `SIGNAL ON`/`OFF` and `CALL ON`/`OFF`, which are one instruction with
@@ -5456,7 +5472,7 @@ impl Interp {
         // is cleared on the way in. After `return 42` the caller reads `42`;
         // after a bare `return` it reads the derived name `RESULT`, which is
         // what an unset variable renders as.
-        let slot = self.slot_of(b"RESULT");
+        let slot = self.reserved_result_slot();
         let frame = self.activation().frame;
         match value {
             Some(value) => {
