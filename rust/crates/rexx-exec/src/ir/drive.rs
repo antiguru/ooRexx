@@ -1204,7 +1204,49 @@ impl Interp {
                                          give its target"
                                         );
                                         let value = self.roots.temp_at(registers, *src as usize);
-                                        if let Err(failure) =
+                                        // **A simple target with a resolved slot
+                                        // is a slot write**, taken here rather
+                                        // than through `assign_evaluated`, which
+                                        // roots the value, materialises the
+                                        // `Option` its `>>>` line would want, reads
+                                        // the clause indent, and then matches the
+                                        // target's shape to reach the same store.
+                                        // The cost is that path, not rendering:
+                                        // `result_text` and `trace_result` both
+                                        // gate on `trace_mode().results` themselves,
+                                        // so an untraced run renders nothing.
+                                        //
+                                        // The gate is `results` because it is the
+                                        // weaker of the two lines the long path
+                                        // emits: `>>>` is gated on `results` and
+                                        // `>=>` on `intermediates`, and `results`
+                                        // is true wherever `intermediates` is
+                                        // (`Interp::assign_evaluated` makes the
+                                        // same argument for the same reason), so a
+                                        // run that would print neither is exactly
+                                        // `!results`.
+                                        //
+                                        // No `push_temp` here, unlike the long
+                                        // path: the value is read out of a
+                                        // register and written into a slot, both
+                                        // of which are roots, and nothing between
+                                        // them allocates. `the_l0_subset_passes_
+                                        // again_under_collect_on_every_allocation`
+                                        // is what would find that wrong.
+                                        //
+                                        // Measured with the marginal method, a
+                                        // body run at N and 2N iterations and
+                                        // differenced: `z = 1` costs 368 user
+                                        // instructions per execution through
+                                        // `assign_evaluated` and 275 here, `z = a`
+                                        // 431 and 338.
+                                        if let Some(slot) = at
+                                            && matches!(target.kind, ExprKind::Variable(_))
+                                            && !self.trace_mode().results
+                                        {
+                                            let frame = self.activation().frame;
+                                            self.set_variable(frame, slot, value);
+                                        } else if let Err(failure) =
                                             self.assign_evaluated(code, target, value, at)
                                         {
                                             break 'cold Err(failure);

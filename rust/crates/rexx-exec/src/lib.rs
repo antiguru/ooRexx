@@ -3663,7 +3663,9 @@ impl Interp {
 
     /// Assigns the variable slot `slot` of `frame` names.
     #[inline(always)]
-    fn set_variable(&mut self, frame: SlotFrame, slot: usize, value: ObjRef) {
+    /// `pub(crate)` for `crate::ir::Op::Store`'s own fast path, which writes
+    /// a simple target's slot without going through `assign_evaluated`.
+    pub(crate) fn set_variable(&mut self, frame: SlotFrame, slot: usize, value: ObjRef) {
         if self.activation_exposes(frame) {
             return self.set_exposed_variable(frame, slot, value);
         }
