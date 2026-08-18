@@ -86,6 +86,18 @@ pub struct RootSet {
     /// chase happens once, at bind time, where the intermediate frame is
     /// still addressable.
     aliases: Vec<Option<usize>>,
+    /// How many entries of `aliases` are `Some`.
+    ///
+    /// **`resolve` runs on every variable read and every write, and this is
+    /// what lets the common program skip the parallel vector entirely.** An
+    /// alias exists only where `PROCEDURE EXPOSE` or `USE ARG >name` bound
+    /// one, so a program using neither -- which is most of them -- never has
+    /// a live entry here, and reading `aliases[position]` would be a second
+    /// indexed load from a second vector, on a different cache line from the
+    /// `slots` entry it guards. Measured by removing the load outright:
+    /// `bench-programs/varlookup.rex` -3.83%, `compound.rex` -2.90%,
+    /// `emptyloop.rex` -2.24%, a fixed-work rexxcps -0.98%.
+    alias_count: usize,
     /// The starting offset of every currently pushed frame, in push order.
     /// Its length is also every live frame's `depth` plus one, which is how
     /// `grow_slots` and `pop_slots` recognise the top frame.
@@ -99,6 +111,7 @@ impl RootSet {
             temps: Vec::new(),
             slots: Vec::new(),
             aliases: Vec::new(),
+            alias_count: 0,
             frame_starts: Vec::new(),
         }
     }
@@ -262,6 +275,12 @@ impl RootSet {
         // parallel by construction, and an `aliases` left longer would give
         // the *next* frame pushed at this offset a set of stale redirects
         // pointing into a dead activation's storage.
+        // The count goes with them. Only walked when there is something to
+        // find, so a program that never aliased pays one test per frame pop.
+        if self.alias_count != 0 {
+            let dropped = self.aliases[frame.start..].iter().flatten().count();
+            self.alias_count -= dropped;
+        }
         self.aliases.truncate(frame.start);
     }
 
@@ -303,7 +322,11 @@ impl RootSet {
     ///
     /// [`iter`]: RootSet::iter
     pub fn alias_slot(&mut self, frame: SlotFrame, index: usize, target: SlotRef) {
-        self.aliases[frame.start + index] = Some(target.0);
+        let entry = &mut self.aliases[frame.start + index];
+        if entry.is_none() {
+            self.alias_count += 1;
+        }
+        *entry = Some(target.0);
     }
 
     /// `frame`'s slot `index` as an absolute position, following an alias if
@@ -312,6 +335,25 @@ impl RootSet {
     /// it.
     fn resolve(&self, frame: SlotFrame, index: usize) -> usize {
         let position = frame.start + index;
+        // Nothing is aliased anywhere, so nothing can redirect: the parallel
+        // vector is not read at all. See `alias_count` for what that is worth.
+        //
+        // The two directions of drift are not symmetric. Above the truth
+        // costs only the load this was meant to save. Below it stops
+        // honouring a live alias, which `corpus/lang/use_arg_forms.rex`
+        // catches against the oracle -- measured, dropping `alias_slot`'s
+        // increment makes that program print the aliased variable's own
+        // value where the oracle prints what was written through the alias.
+        // The assertion is here because it names the slot at the read that
+        // relied on the claim, rather than leaving a line of output to
+        // disagree somewhere later.
+        if self.alias_count == 0 {
+            debug_assert!(
+                self.aliases[position].is_none(),
+                "slot {position} redirects while the alias count says none does"
+            );
+            return position;
+        }
         // `unwrap_or` and not a loop: see `slot_ref`.
         self.aliases[position].unwrap_or(position)
     }
