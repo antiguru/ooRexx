@@ -742,6 +742,10 @@ enum LoopState {
         to: Option<Number>,
         by: Number,
         for_remaining: Option<u64>,
+        /// SPIKE: TO/BY as plain integers, and the precision they hold for.
+        cached_digits: u64,
+        to_int: Option<i64>,
+        by_int: Option<i64>,
         /// Whether at least one candidate iteration has already been
         /// decided, which is exactly the oracle's own `!first` argument to
         /// `DoBlock::checkControl` (`ControlledDoInstruction.cpp:162`): it
@@ -6973,6 +6977,9 @@ impl Interp {
                     None => Number::parse("1").expect("the literal 1 always parses"),
                 },
                 for_remaining: values.for_remaining,
+                cached_digits: u64::MAX,
+                to_int: None,
+                by_int: None,
                 stepped: false,
             },
             LoopKind::Over { control, .. } => LoopState::OverOnce {
@@ -7520,6 +7527,9 @@ impl Interp {
                     None => Number::parse("1").expect("the literal 1 always parses"),
                 },
                 for_remaining: values.for_remaining,
+                cached_digits: u64::MAX,
+                to_int: None,
+                by_int: None,
                 stepped: false,
             },
             LoopKind::Over { control, .. } => LoopState::OverOnce {
@@ -7955,6 +7965,9 @@ impl Interp {
                 to,
                 by,
                 for_remaining,
+                cached_digits,
+                to_int,
+                by_int,
                 stepped,
             } => {
                 // **The re-tested pass's own four lines** (Task 9, closing
@@ -8021,6 +8034,27 @@ impl Interp {
                 let digits = self.activation().settings.digits();
                 let fuzz = self.activation().settings.fuzz();
                 let form = self.activation().settings.form();
+                if *cached_digits != digits {
+                    *cached_digits = digits;
+                    *to_int = to.as_ref().and_then(|bound| bound.plain_integer(digits));
+                    *by_int = by.plain_integer(digits);
+                }
+                // The cache is only ever as good as its invalidation, so the
+                // debug gate re-derives both on every pass and compares. This
+                // is the tripwire, not the test: a stale entry is invisible in
+                // the answer for every program tried against the oracle, which
+                // is exactly why it needs an assertion rather than a probe.
+                debug_assert_eq!(
+                    *to_int,
+                    to.as_ref().and_then(|bound| bound.plain_integer(digits)),
+                    "the loop's cached TO disagrees with DIGITS {digits}"
+                );
+                debug_assert_eq!(
+                    *by_int,
+                    by.plain_integer(digits),
+                    "the loop's cached BY disagrees with DIGITS {digits}"
+                );
+                let (to_int, by_int) = (*to_int, *by_int);
                 let re_tested = std::mem::replace(stepped, true);
                 // **One pass's own temps frame, released before the next pass
                 // opens one.** The enclosing `step_in_temps_frame` belongs to
@@ -8131,8 +8165,7 @@ impl Interp {
                     // addition, so the exact `i64` sum would be the wrong
                     // answer.
                     let stepped = match previous.decode() {
-                        Decoded::SmallInt(value) if within_digits(value, digits) => by
-                            .plain_integer(digits)
+                        Decoded::SmallInt(value) if within_digits(value, digits) => by_int
                             .and_then(|step| value.checked_add(step))
                             .filter(|sum| within_digits(*sum, digits)),
                         _ => None,
@@ -8207,13 +8240,7 @@ impl Interp {
                     // comparison expresses that. `FUZZ` is `0` unless a
                     // program says otherwise.
                     let integral = (fuzz == 0)
-                        .then(|| {
-                            Some((
-                                current.small(digits)?,
-                                to.plain_integer(digits)?,
-                                by.plain_integer(digits)?,
-                            ))
-                        })
+                        .then(|| Some((current.small(digits)?, to_int?, by_int?)))
                         .flatten();
                     let within = match integral {
                         Some((current, to, by)) => {
