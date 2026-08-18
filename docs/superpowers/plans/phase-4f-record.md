@@ -4917,3 +4917,52 @@ No commits. Moritz's suggestion, added here rather than to entry 64's queue beca
 * Count the nested entries before changing anything. `run_chunk_entries` already counts driver entries but is `#[cfg(test)]`; `rexxcps` runs roughly 560,000 loop passes and `emptyloop` runs 50,000,000, so the two axes differ by two orders of magnitude in exactly the quantity at stake.
 
 **The hard part is not the jump, it is what the nested call currently carries.** `run_repeating` re-evaluates the header inside a clause unit of its own each pass, `do_body_outcome` decides `LEAVE`/`ITERATE`/fall-through from the `Flow` the nested call answered, and `HeaderClause` tracks which clause a failing re-test is blamed on -- all of it keyed to the call returning. A flat form has to express those as ops and stream position instead, which is the same shape `Op::EnterWhen` took for `SELECT` and is why that one needed a frame stack in the driver.
+
+### Entry 66 -- the loop pass priced, and a spike that says where the cost may not go
+
+No commits. Entry 65's queue item measured and prototyped; the prototype is not committed and its numbers are why.
+
+Instrument: `perf stat -e instructions:u` on `rexx-run`, two sizes of the same program (2,000,000 and 4,000,000 passes) so the slope is the per-pass cost and startup drops out of it. Every figure below is a slope of that pair, and each reproduced across repeated runs to within a few hundred instructions out of billions.
+
+#### What a loop pass costs
+
+Programs: `do i = 1 to n / end` (empty body) and the same with one, then three, `nop` bodies.
+
+| arm | per pass | per body clause |
+|---|---:|---:|
+| tree-walker | 721 | 179 |
+| compiled stream (`3edfd75f0`) | 816 | 160 |
+
+**The compiled engine is 95 instructions per pass behind the tree-walker and 19 per clause ahead of it, so a loop body has to hold five clauses before the compiled engine wins.** `emptyloop.rex`'s body holds one, and the compiled arm runs it at 976 against the tree-walker's 900.
+
+**The 95 is the nested driver entry, and two instruments agree on it.** The engine A/B above is one. The other is an instruction-level profile of the empty-body program, where `run_ops::<false>` is 11.61% of 816 = 94.7 per pass -- and with an empty body that function has nothing to run, so all of it is entry and exit. The mechanism is in the disassembly: `run_ops`' prologue is six pushes and `sub $0x488,%rsp`, a 1160-byte frame built and torn down once per pass.
+
+The rest of the 816, from the same profile: `run_loop_with_header` 398, `Number::plain_integer` 121, `bind_control` 81, `result_text` 46, `read_at` 44, `do_body_outcome` 16, `novalue_check` 15. **The control variable's own arithmetic is a bigger share of a pass than the driver entry is.**
+
+#### The spike
+
+`Op::LoopRun` sets up a `FlatLoop` in a `run_ops` local, the region ends normally so the counter falls into the body's first op, and the driver's own loop notices the pass end and runs the header re-test. `do_body_outcome` and `loop_advance` are called unchanged, so `LEAVE`/`ITERATE` and the header keep one implementation. Declines to `run_loop_with_header` for `WHILE`/`UNTIL`, `COUNTER`, `OVER`, `DO WITH`, `trace all`, and a loop nested inside one already flat.
+
+**Both arms were built as one binary with the flat path behind a run-time switch**, so the driver's added per-op checks are compiled into both and an arm with the path never taken prices those checks alone.
+
+| arm | per pass | per body clause |
+|---|---:|---:|
+| `3edfd75f0` | 816 | 160 |
+| spike, flat path off | 882 | 172 |
+| spike, flat path on | 765 | 182 |
+
+**The flattening itself is worth 117 instructions per pass** (882 -> 765), which is more than the 95 the entry costs, because it also removes `run_bounded`'s absorb and the caller-side spill around the call.
+
+**And the prototype's way of reaching it costs 66 per pass before it is ever taken, plus 12 to 22 per body clause.** The idle 66 is read straight out of the binary: `run_ops`' frame goes from 1160 bytes to 1688, so every nested entry -- which is still what an ineligible loop uses -- pays for a frame holding state it does not use. The per-clause tax is the checks themselves, on the hottest path this interpreter has.
+
+**On a real program the trade is negative.** The pinned `rexxcps`, output identical apart from its own clauses-per-second line: `13,859,520,570` -> `14,168,972,045`, **+309,451,475, +2.23%**. Its loop bodies average tens of clauses, so the per-clause tax is charged tens of times for each per-pass saving. Predicted from the slopes above at about +198M against +309M measured -- same sign and order, and the residue is the layout floor plus the nested loops that decline.
+
+#### What the spike establishes for whoever builds this
+
+**The constraint is not "flatten the loop", it is "add nothing to the driver's per-op path or its frame".** A prototype that pays for the pass out of the clause loses, because a program has far more clauses than passes. Three placements were measured and all three raised the per-clause cost: an `Option<FlatLoop>` local (177 per clause), the same boxed with the flow test reordered (181), and one that folded the pass-end arrival into the existing `pc >= stop` check by making `stop` mutable (182, and mutating `stop` costs the per-op comparison its register).
+
+So the shape to build is the one `Op::EnterWhen` already uses, and Moritz's question names its missing half: **a backward `Op::Jump` at the `END`**, so a pass end is an op the driver decodes when it arrives rather than a condition it tests on every op, with the loop's state in the `frames` stack the loop already checks per op rather than in a new local. `Op::Jump`'s own doc says a backward jump out of a range is not checked and not emitted; one *inside* a range is what this needs, and the driver already executes `pc = *target` for it.
+
+#### A failure mode worth naming
+
+The first spike had no guard against a second loop starting while one was flat, so an inner loop overwrote the outer loop's state. `rexxcps` then reported **`3E+11 REXX clauses per second`** and exited 0, having run 2,353,529 instructions against 13.86 billion. **A loop-flattening defect does not crash; it silently does no work**, and the instruction count is what noticed. Any work here wants a fixed-work axis compared before its output is believed.
