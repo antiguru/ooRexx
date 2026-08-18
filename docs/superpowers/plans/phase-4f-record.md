@@ -5106,3 +5106,56 @@ Against the same tree without this change, on programs built to be dominated by 
 **A `SIGNAL label` costs about 1,500 instructions either way**, because the transfer leaves `run_ops` and re-enters it: `Flow::Signal` escapes to the activation loop, which applies it and calls back in, paying `run_ops`' 1160-byte frame. That is the cost worth attacking on this instruction, and it is not the one this change touched -- an in-range `SIGNAL` could be an `Op::Jump` the way `IF` and `SELECT` already are, when the target label is in the same body and no trap state intervenes.
 
 It is kept for the structural reason rather than a measured one: it removes an `Op::Generic` member and puts the two halves where both engines read them.
+
+### Entry 71 -- the driver's frame stack moved onto `Interp`, and every axis paid less
+
+Still no commits of the spike. Moritz asked for this after reading entry 70's account of `run_ops`' frame.
+
+#### What `run_ops`' frame actually is, and the correction entry 70 needs
+
+Entry 70 gives it as 1160 bytes. Re-measured on the current build before this change: `sub $0x538,%rsp` plus six register pushes, so **1336 bytes of locals and 1384 with the saved registers**, and the offsets at or above 1336 are the caller's stack arguments. The 1160 was a figure from an earlier build carried forward without re-measuring, which is the defect this project's own rule about summarising a measurement describes -- restating a number is authorship, and only re-running separates it from quotation.
+
+**No single object fills it.** Attributing each `%rsp` offset to the inlined source line that touches it gives a flat tail rather than a peak: `core/src/result.rs`' `?` plumbing across five lines, `error.rs:244`, three lines of `value.rs`, and the `raw_vec`/`vec`/`boxed`/`unix.rs` allocation paths. It is one large `match` whose arms each inline their own error construction and allocation, sharing a frame the prologue allocates whichever arm runs.
+
+#### The change
+
+`frames` was a `Vec<Frame>` local to each `run_ops` call. It is now `Interp::frames`, one stack for every level, sliced the way `flat_loops` already was: each entry records `base = self.frames.len()` and every check stops there, so an escaping `Flow` still meets exactly the constructs its own level opened, in the order it opened them. `run_ops` became a wrapper around `run_ops_from`, which is where `base` is taken and, on the way out, given back.
+
+**A `Failure` is what the wrapper is for.** It unwinds past open frames -- the point at which the local `Vec` used to be dropped -- and `Interp::unwind_frames` now does that job explicitly. It also pops the matching `flat_loops` entry for each `FrameKind::Loop` frame it discards, into `flat_spares`: the frame and the entry are one construct held in two places, and a raise that discarded one without the other would leave the next `Op::LoopNext` reading a loop that is not its own.
+
+#### Measured, and it is not the allocation
+
+`samples/rexxcps.rex` at the pinned counts, three runs each, spread under 0.02%:
+
+| | instructions:u |
+|---|---:|
+| local `Vec` | 14,129,803,395 |
+| on `Interp` | 13,959,698,589 |
+
+**-1.20%.** Every axis moved the same way, which is what separates this from entry 61's layout floor -- that moves axes in both directions:
+
+| axis | before | after | |
+|---|---:|---:|---:|
+| `varlookup` | 41,040,659,426 | 40,261,659,524 | **-1.90%** |
+| `emptyloop` | 24,500,635,864 | 24,075,636,402 | **-1.74%** |
+| `compound` | 16,343,669,173 | 16,113,655,294 | -1.41% |
+| `rexxcps` | 14,129,803,395 | 13,959,698,589 | -1.20% |
+| `alloc4c` | 5,569,816,153 | 5,507,815,122 | -1.11% |
+| `strings` | 29,439,638,673 | 29,208,638,596 | -0.79% |
+| `arith` | 17,637,979,008 | 17,567,479,520 | -0.40% |
+
+**The allocation saved is real and is not where the win is.** Counted with an `LD_PRELOAD` shim on `rexxcps`: 5,043,165 `malloc` calls before against 4,903,165 after, exactly **140,000** fewer and 62,720,248 fewer bytes, which is one first-push allocation per `run_ops` entry that opened a frame -- the same 140,000 loop entries `flat_spares`' own comment counts. But `emptyloop` enters `run_ops` a handful of times and still gains 1.74%, so most of the gain cannot be the allocation.
+
+What it is instead, from the code: `run_ops::<true>` fell from 16,519 bytes to 14,203 and `run_ops::<false>` from 16,479 to 13,722, and the stack frame from 1336 to 1240. A `Vec` local is a `Drop` type, so every fallible call in the function owed it cleanup, and the whole function is fallible calls. The per-clause size of the gain -- on the order of two to three instructions -- is the same shape as the 14 instructions per body clause entry 66 measured for the `FlatLoop` destructor, and the same fix: keep the driver's own frame plain.
+
+#### The leak this creates, and the test that sees it
+
+A shared stack makes a raise that walks out over open frames a **leak** rather than a dropped `Vec`, and it is invisible from outside: leftovers sit below the next level's `base`, are never read again, and the interpreter goes on printing correct bytes. Instrumenting `base` at entry on a program that traps out of two open loops shows it climbing by two per trap, `flat_loops` in lockstep. Peak resident memory over 50,000 traps: **46,108 kB with `unwind_frames` deleted against 4,792 kB with it.**
+
+`a_trapped_raise_gives_back_every_frame_the_loops_it_escaped_opened` (`ir/drive/tests.rs`) pins it through a new test-only `FRAME_FLOOR_HIGH_WATER`, asserting the floor never rises, beside the program's own output so that a driver which never pushed a frame would not satisfy it.
+
+**It adds coverage rather than merely being able to fail**, checked the way this project requires: the whole gated debug suite under the mutation fails 31, which is the baseline's 30 plus this test alone. Nothing else in the suite sees it, and nothing else could -- every observable it leaves is memory.
+
+Restored, `cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings` are clean and the debug gate fails 30, identical set to the baseline.
+
+**A first attempt at measuring the leak read 2,132 kB for both arms** and would have been recorded as "no leak". The poller was reading `/proc/$!/status` for a `timeout` wrapper rather than the interpreter it had started. The instrument was wrong in a way the number looked fine through, which is why the direct instrumentation of `base` was worth doing before believing either figure.
