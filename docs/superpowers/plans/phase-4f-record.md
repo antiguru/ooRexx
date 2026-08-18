@@ -4966,3 +4966,60 @@ So the shape to build is the one `Op::EnterWhen` already uses, and Moritz's ques
 #### A failure mode worth naming
 
 The first spike had no guard against a second loop starting while one was flat, so an inner loop overwrote the outer loop's state. `rexxcps` then reported **`3E+11 REXX clauses per second`** and exited 0, having run 2,353,529 instructions against 13.86 billion. **A loop-flattening defect does not crash; it silently does no work**, and the instruction count is what noticed. Any work here wants a fixed-work axis compared before its output is believed.
+
+### Entry 67 -- the backward-jump loop, built properly as a spike
+
+No commits of the spike itself; this entry is the record. Moritz asked for entry 66's recommended shape rather than its prototype.
+
+#### The shape
+
+`Op::LoopNext` is emitted at the `END` instruction of every repeating `DO`/`LOOP`, so **a pass ending is an op the driver decodes on arrival** rather than a condition it tests on every op. `Op::LoopRun` sets the loop up and the region ends normally, which drops the counter onto the body's first op; `LoopNext` runs `do_body_outcome`, `END`'s echo, the header re-test, and either jumps back to the body or pops the frame. `LEAVE`/`ITERATE` reach the loop through `settle`, which already walks the open frames outward, and through the same `do_body_outcome` the nested form calls. `run_loop_with_header` still resolves `WHILE`/`UNTIL`, `COUNTER`, `OVER`, `DO WITH`, and a loop nested inside one already flat.
+
+Both arms are one binary: `REXX_NO_FLAT=1` takes the nested path, so every figure below is a same-binary comparison.
+
+#### What it measures
+
+`perf stat -e instructions:u`, flat path against nested path in the same binary:
+
+| axis | flat against nested |
+|---|---:|
+| `emptyloop` | **-3.08%** |
+| `varlookup` | **-1.05%** |
+| `compound` | **-0.70%** |
+| `alloc4c` | -0.27% |
+| `strings` | +0.03% |
+| `arith` | +0.08% |
+| pinned `rexxcps` | **+0.52%** |
+
+#### Correctness
+
+The debug gate with the flat path on by default: 37 failures against 30 for the same command at `baaad08c7`, and **every one of the seven new failures is `ir::golden_tests`** -- the expected churn from `END`'s op changing. `tests/trace_oracle.rs` is 27 of 27, `both_engines_agree_on_every_case_file` passes, and the corpus differential and two-engine population tests fail exactly as they do at `baaad08c7`.
+
+**`memcap` does not exist in this environment**, so the gate ran under `ulimit -v` at 100 GiB with a timeout instead. At 8 GiB it produced 49 unrelated failures across `builtin::datetime` and the rest: the sized interpreter thread reserves 512 MiB and the harness runs many at once, so the cap was exhausted by reservations. That is the same `ulimit -v` trap the crate guide records, met from the other direction.
+
+#### Three defects the spike had, each worth the next person's attention
+
+**A shortcut on the `PROCEDURE` permission misread a label.** `grant_procedure_permission` writes `procedure_permitted = take(first_instruction_pending)` for every non-label clause, which after the second clause is the same `false` written over and over; a local that stops asking once it reads `false` saves that. But the function *skips* labels, so a label leaves the flag alone and the shortcut concluded the permission was spent -- `sub: procedure expose zp.` was then 17.1. Caught by `ir_dual`'s `compound-names` case, a `drive` test and two `trace_oracle` tests, all naming the same thing.
+
+**Deciding the trace echoes once at loop entry is wrong.** The first version declined to flatten when `trace_mode().all` was set on the way in. A `TRACE` *inside* the body then lost `END`'s echo and the `DO` clause's per-pass re-echo, which `ir_dual` caught. The fix was to stop declining and emit both echoes at the pass boundary under the same run-time gate `run_repeating` uses -- so the flat form covers traced loops too, and the entry check is gone.
+
+**A loop's state must not be a local of the driver, and must not be reachable by its destructor either.** Entry 66 measured the local at 66 instructions per pass. A `Box<FlatLoop>` inside the frames `Vec` costs 12 to 22 per *body clause*, because that `Vec` then has a destructor and the driver's per-clause path unwinds through it. Measured, the same frame with a non-`Drop` payload: 151 instructions per body clause against 165. The state lives on `Interp` and the driver's frame stack stays plain data.
+
+#### And two costs that are plumbing rather than design
+
+Each was found by profiling `rexxcps` and reading which symbols grew, not by reasoning about the code.
+
+**Cloning the header's `Number`s per loop entry rather than moving them**, because the spike took `LoopHeaderValues` by reference where `run_loop_with_header` takes it by value. `__memmove_avx_unaligned` was the symbol that grew. `rexxcps` +1.14% -> +0.56%.
+
+**A `Box` allocation per loop entry.** `rexxcps` enters one loop 140,000 times to run 280,000 passes, so an allocation per entry is charged against a saving per pass; finished loops now hand their box back to a spares list. +0.56% -> +0.46%.
+
+#### The instrument, and a warning about it
+
+**The per-pass and per-clause slopes from `bench-programs/emptyloop.rex`-shaped programs cannot resolve a change of this size across builds.** Five builds whose *nested* path is byte-identical logic measured 867, 869, 870, 871 and 882 instructions per pass against `baaad08c7`'s 816, and per body clause 151 to 172 against its 160. Profiling one of them showed why: `loop_advance` had stopped being inlined into `run_loop_with_header` and `plain_integer` had started being inlined into `loop_advance`. **Only same-binary comparisons are usable here**, which is what the run-time switch is for.
+
+#### Queue
+
+* **`PARSE` is still `Op::Generic`** -- Moritz, reading the profile. Unchanged from entry 64's queue and still the largest member.
+* **`invoke_named_call` goes through a new activation.** Whether it has to is open.
+* **`Number::add_signed` is not inlined into `Number::add`** -- Moritz, from the same profile. It is 2.20% self on a controlled loop's own axis.
+* **The `PROCEDURE` permission is written once per clause for the whole of a body**, and only the first two clauses can need it. The shortcut above is worth having on its own, with the label case handled.
