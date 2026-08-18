@@ -4944,6 +4944,9 @@ impl Interp {
                         self.trace_argument(self.clause_state.current_value_indent, b"");
                         values.push(None);
                     }
+                    Some(expr) if self.leaf_argument(expr) => {
+                        values.push(Some(self.eval_leaf_argument(code, expr)?));
+                    }
                     Some(expr) => {
                         values.push(Some(self.eval_traced_argument(code, expr)?.value()));
                     }
@@ -4968,6 +4971,9 @@ impl Interp {
                     // `RexxInstruction.cpp:161`, and measured above.
                     self.trace_argument(self.clause_state.current_value_indent, b"");
                     arguments.push(None);
+                }
+                Some(expr) if self.leaf_argument(expr) => {
+                    arguments.push(Some(Argument::Value(self.eval_leaf_argument(code, expr)?)));
                 }
                 Some(expr) => arguments.push(Some(self.eval_traced_argument(code, expr)?)),
             }
@@ -5408,6 +5414,55 @@ impl Interp {
     /// `USE ARG >` target needs the slot a `Reference` carries. Sharing the
     /// step is what keeps `>A>` and the `>O>` line a `>p` argument traces
     /// identical on both.
+    /// Whether `expr` is an argument this can evaluate without
+    /// [`Interp::eval_argument`]'s wrapper -- see [`eval_leaf_argument`].
+    ///
+    /// [`eval_leaf_argument`]: Interp::eval_leaf_argument
+    #[inline(always)]
+    fn leaf_argument(&self, expr: &Expr) -> bool {
+        !self.tracing_intermediates()
+            && matches!(
+                expr.kind,
+                ExprKind::Literal(_) | ExprKind::Constant(_) | ExprKind::Variable(_)
+            )
+    }
+
+    /// One argument's value, for a shape whose evaluation produces that
+    /// value and nothing else.
+    ///
+    /// `eval` wraps every node in the depth bookkeeping and a post-order
+    /// trace hook. The hook answers to `intermediates`, so with tracing off
+    /// an argument that is a bare literal, constant symbol or variable read
+    /// pays the wrapper for a line that is never emitted. Measured on
+    /// `bench-programs/strings.rex`, evaluating each argument one extra time
+    /// costs 25.05% of the program, and taking this route for its leaves
+    /// gives back 8.88%.
+    ///
+    /// **The depth bookkeeping stays.** `StackSpan`'s own `max_depth` is
+    /// observable and both engines' tests compare it, so this enters through
+    /// [`Interp::enter_eval_node`] and leaves the same way `eval` does; only
+    /// the hook is skipped, and only once its gate has already answered.
+    ///
+    /// **A reference argument is not a leaf.** `call sub >v` parses to its
+    /// own expression kind, and the `Argument::Reference` that `USE ARG >`
+    /// writes back through is built by `eval_argument`, which this bypasses
+    /// -- so the three kinds admitted above are exactly the ones that carry
+    /// no reference. Measured against the oracle, `call sub >vv` with a
+    /// `use arg > a` that assigns still writes `vv` in the caller.
+    ///
+    /// The value is rooted here for the same reason
+    /// [`Interp::eval_traced_argument`] roots its own: the callee's frame is
+    /// not open yet, and everything between here and it can allocate.
+    fn eval_leaf_argument(&mut self, code: &Code<'_>, expr: &Expr) -> Result<ObjRef, Failure> {
+        let anchor = 0u8;
+        self.enter_eval_node(&raw const anchor)?;
+        let value = self.eval_node(code, expr);
+        self.depth -= 1;
+        let value = value?;
+        self.roots.push_temp(value);
+        Ok(value)
+    }
+
     pub(crate) fn eval_traced_argument(
         &mut self,
         code: &Code<'_>,

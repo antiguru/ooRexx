@@ -511,7 +511,7 @@ impl Interp {
         self.trace_variable(indent, &tag, &text);
     }
 
-    fn eval_node(&mut self, code: &Code<'_>, expr: &Expr) -> Result<ObjRef, Failure> {
+    pub(crate) fn eval_node(&mut self, code: &Code<'_>, expr: &Expr) -> Result<ObjRef, Failure> {
         match &expr.kind {
             ExprKind::Literal(bytes) => Ok(self.literal(bytes)),
             // A constant's value is its own upcased spelling, which is
