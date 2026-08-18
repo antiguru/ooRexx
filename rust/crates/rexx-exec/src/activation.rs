@@ -62,7 +62,15 @@ pub(crate) struct Trap {
     /// The label to transfer (or call) to -- `NAME label`, or the condition's
     /// own name when `NAME` is omitted. `USER foo`'s own default is `FOO`,
     /// measured: `signal on user foo` with a `foo:` label traps there.
-    pub(crate) label: Box<[u8]>,
+    /// **`Rc<[u8]>` and not `Box<[u8]>`, which is a measurement.** A callee
+    /// inherits its caller's trap table by clone, so every armed trap's label
+    /// was copied on every call. Measured with the marginal method -- a
+    /// `call` body run at N and 2N iterations, differenced -- one
+    /// `signal on novalue` cost 423 user instructions per call over a program
+    /// with no trap armed, and 319 with the label shared instead of copied.
+    /// The oracle's own figure for the same pair is 0, so the remainder is
+    /// the table and its keys, not this.
+    pub(crate) label: std::rc::Rc<[u8]>,
     /// The trap is armed but held while its own `CALL ON` handler runs
     /// (`TrapHandler::disable`/`enable`, `execution/TrapHandler.cpp`).
     ///

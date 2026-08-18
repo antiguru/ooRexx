@@ -3745,7 +3745,7 @@ impl Interp {
             Some(label) => {
                 let entry = Trap {
                     call,
-                    label: label.clone(),
+                    label: std::rc::Rc::from(label.as_ref()),
                     delayed: false,
                 };
                 self.activation_mut()
