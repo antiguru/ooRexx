@@ -128,6 +128,23 @@ const MAX_EVAL_DEPTH: usize = 100_000;
 /// read.** `ExprKind::Constant`'s value is its own upcased spelling rather
 /// than anything stored, `ExprKind::DotVariable` traces `>E>` and
 /// `ExprKind::VariableReference` traces `>O>`; none reaches either function.
+/// The handle a Rexx logical value is, as a constant.
+///
+/// **A comparison's value is the one-byte string `"1"` or `"0"`, and that
+/// string inlines into the handle itself** -- so the two handles are fixed bit
+/// patterns and `logical` is a `const fn` rather than a call into
+/// `Interp::text`, which would run `inline_text`'s loop to rediscover them.
+/// Every consumer that only wants the bit can then compare two integers
+/// instead of decoding a handle and matching its bytes.
+pub(crate) const LOGICAL_TRUE: ObjRef = ObjRef::inline_byte(b'1');
+/// See [`LOGICAL_TRUE`].
+pub(crate) const LOGICAL_FALSE: ObjRef = ObjRef::inline_byte(b'0');
+
+/// The value a comparison or logical operator answers with.
+pub(crate) const fn logical(holds: bool) -> ObjRef {
+    if holds { LOGICAL_TRUE } else { LOGICAL_FALSE }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum SymbolRead {
     /// `ExprKind::Variable`: one slot, and the derived name when it is unset.
@@ -515,7 +532,7 @@ impl Interp {
                 // `.true`/`.false` need no representation of their own
                 // (D15): they are the one-byte strings "1" and "0", built
                 // fresh here the same way any other text value is.
-                ".TRUE" => Ok(self.text(b"1")),
+                ".TRUE" => Ok(LOGICAL_TRUE),
                 ".FALSE" => Ok(self.text(b"0")),
                 other => {
                     let name = other.as_bytes().to_vec();
@@ -1074,7 +1091,7 @@ impl Interp {
         // 4,220,217 allocations of nineteen bytes on a 400,000-clause run
         // (`SMALL_INT_MAX` has nineteen digits, which is what pre-sizes them).
         if let Some(holds) = small_int_compare(op, left_value, right_value, digits, fuzz) {
-            return Ok(self.text(if holds { b"1" } else { b"0" }));
+            return Ok(logical(holds));
         }
         // **Behind the fast path above, because a comparison of renderings
         // never fails and so offers nothing to ride.** Measured, comparing an
@@ -1109,7 +1126,7 @@ impl Interp {
         if let (Some(left), Some(right)) = (&left_number, &right_number) {
             let holds = rexx_num::compare_numbers(left, right, digits, fuzz, compare_op(op))
                 .map_err(Raised::from)?;
-            return Ok(self.text(if holds { b"1" } else { b"0" }));
+            return Ok(logical(holds));
         }
         // Either operand failed to parse, or the operator is strict and neither
         // was parsed at all. Both routes compare the operands' own text, which
@@ -1129,7 +1146,7 @@ impl Interp {
         )
         .map_err(Raised::from)?;
 
-        let result = self.text(if holds { b"1" } else { b"0" });
+        let result = logical(holds);
         Ok(result)
     }
 
@@ -1178,7 +1195,7 @@ impl Interp {
             other => return Err(Loud::binary_operator(other).into()),
         };
 
-        let result = self.text(if holds { b"1" } else { b"0" });
+        let result = logical(holds);
         Ok(result)
     }
 
@@ -1338,7 +1355,7 @@ impl Interp {
             }
         }
 
-        let result = self.text(if holds { b"1" } else { b"0" });
+        let result = logical(holds);
         self.roots.pop_frame(frame);
         Ok(result)
     }

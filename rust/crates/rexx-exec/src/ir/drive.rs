@@ -1656,15 +1656,28 @@ impl Interp {
                                         // user instructions per execution through
                                         // the general path and 707 here, `if 1 then
                                         // nop` 682 and 634.
-                                        let quick = match value.decode() {
-                                            rexx_core::Decoded::SmallInt(1) => Some(true),
-                                            rexx_core::Decoded::SmallInt(0) => Some(false),
-                                            rexx_core::Decoded::Text(text) => match &*text {
-                                                b"1" => Some(true),
-                                                b"0" => Some(false),
+                                        // **Two handles, because a logical reaches
+                                        // here two ways.** A comparison answers with
+                                        // the inline `"1"`/`"0"` `crate::eval::
+                                        // logical` builds, which is a constant and
+                                        // so compares as an integer; a source
+                                        // literal `1` is inlined as a tagged small
+                                        // int instead (`Interp::literal`), which the
+                                        // decode below is for. Measured, taking only
+                                        // the constants cost `if 1 then nop` 62 user
+                                        // instructions per execution -- literals
+                                        // fall through to the general path without
+                                        // the second arm.
+                                        let quick = if value == crate::eval::LOGICAL_TRUE {
+                                            Some(true)
+                                        } else if value == crate::eval::LOGICAL_FALSE {
+                                            Some(false)
+                                        } else {
+                                            match value.decode() {
+                                                rexx_core::Decoded::SmallInt(1) => Some(true),
+                                                rexx_core::Decoded::SmallInt(0) => Some(false),
                                                 _ => None,
-                                            },
-                                            _ => None,
+                                            }
                                         };
                                         let holds = match quick {
                                             Some(holds) if !self.trace_mode().results => holds,
@@ -2298,7 +2311,17 @@ impl Interp {
     /// register means the two ops came apart, which is loud rather than a
     /// silently-taken branch.
     fn register_holds(&self, registers: FrameId, reg: u16) -> Result<bool, Failure> {
-        match self.roots.temp_at(registers, reg as usize).decode() {
+        let value = self.roots.temp_at(registers, reg as usize);
+        // The two handles a logical arrives in, compared as integers: the
+        // constant a comparison answers with, and the small int
+        // `Op::Condition` writes back for everything else.
+        if value == crate::eval::LOGICAL_TRUE {
+            return Ok(true);
+        }
+        if value == crate::eval::LOGICAL_FALSE {
+            return Ok(false);
+        }
+        match value.decode() {
             Decoded::SmallInt(1) => Ok(true),
             Decoded::SmallInt(0) => Ok(false),
             _ => Err(Loud::register_not_logical().into()),

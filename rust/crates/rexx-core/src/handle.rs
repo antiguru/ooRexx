@@ -182,6 +182,18 @@ impl ObjRef {
         ))
     }
 
+    /// The inline-text handle for a single byte, as a constant.
+    ///
+    /// **The same handle [`ObjRef::inline_text`] answers for a one-byte
+    /// slice**, spelled so it can be a `const`: that function loops over its
+    /// input and so cannot be const-evaluated, and a caller that already knows
+    /// the byte at compile time should not be running a loop to learn a bit
+    /// pattern. `a_single_byte_inlines_the_same_way_either_route` is what keeps
+    /// the two from drifting.
+    pub const fn inline_byte(byte: u8) -> Self {
+        ObjRef(((byte as u64) << TEXT_DATA_SHIFT) | (1 << TEXT_LEN_SHIFT) | TAG_TEXT)
+    }
+
     /// The `id`th class object's identity, or `None` for an `id` the reserved
     /// range does not hold.
     ///
@@ -227,6 +239,24 @@ impl ObjRef {
                 })
             }
             _ => Decoded::Nil,
+        }
+    }
+}
+
+#[cfg(test)]
+mod inline_byte_tests {
+    use super::*;
+
+    /// The `const` route and the slice route must agree, or every caller that
+    /// compares against a constant logical silently stops matching.
+    #[test]
+    fn a_single_byte_inlines_the_same_way_either_route() {
+        for byte in 0u8..=255 {
+            assert_eq!(
+                Some(ObjRef::inline_byte(byte)),
+                ObjRef::inline_text(&[byte]),
+                "byte {byte} disagrees between the const and the slice route"
+            );
         }
     }
 }
