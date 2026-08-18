@@ -33,6 +33,20 @@ impl Number {
             return Ok(Number::zero());
         }
 
+        if let Some(exact) = exact_integer_product(&left, &right, digits) {
+            return Ok(exact);
+        }
+        Number::mul_long(&left, &right, digits)
+    }
+
+    /// `left * right` by long multiplication over the digit vectors, which is
+    /// what [`Number::mul`] runs wherever [`exact_integer_product`] declines.
+    ///
+    /// Both operands arrive already truncated to the working length and
+    /// already known non-zero, because `mul` decides both before choosing
+    /// between the two routes.
+    #[inline(always)]
+    fn mul_long(left: &Number, right: &Number, digits: u64) -> Result<Number, ArithError> {
         let product = mul_magnitudes(&left.digits, &right.digits);
         // Saturated: a bare `digits` past usize means "keep everything",
         // which the length test below then decides.
@@ -72,6 +86,47 @@ impl Number {
         result.check_range()?;
         Ok(result)
     }
+}
+
+/// The exact product, when both operands are plain integers whose digits and
+/// product an `i64` holds, and the product needs no rounding at `digits`.
+///
+/// **Every step the general path takes is the identity under those
+/// conditions**, which is what makes this a shortcut rather than a second
+/// implementation: neither operand is longer than the working length, so
+/// `truncated_to` borrows; the exact product is no longer than `digits`, so
+/// nothing is dropped into the exponent and `into_round` returns it
+/// unchanged; and it carries no leading zero for `assemble` to strip. What is
+/// skipped is the `Vec<u16>` accumulator and the digit-by-digit long
+/// multiplication over it.
+///
+/// The product's own width is either `width` or one less, so testing `width`
+/// declines a product that would in fact have fitted. That is deliberate: the
+/// cases it turns away cost the general path, and deciding them exactly would
+/// cost every case the leading-digit product it takes to know.
+///
+/// `Number::div`'s remainder is where this pays. It multiplies the integer
+/// quotient by the divisor at a working precision it inflates well past the
+/// setting in force, so that product is exact by construction.
+fn exact_integer_product(left: &Number, right: &Number, digits: u64) -> Option<Number> {
+    if left.exponent != 0 || right.exponent != 0 {
+        return None;
+    }
+    let width = left.digits.len() + right.digits.len();
+    // Eighteen digits is the widest product an `i64` holds whatever its
+    // digits are, so this bounds the folds below as well as the multiply.
+    if width > 18 || width as u64 > digits {
+        return None;
+    }
+    let fold = |number: &Number| {
+        number
+            .digits
+            .iter()
+            .fold(0i64, |acc, digit| acc * 10 + i64::from(*digit))
+    };
+    let mut product = Number::from_i64(fold(left) * fold(right));
+    product.negative = left.negative != right.negative;
+    Some(product)
 }
 
 /// Exact product of two digit vectors, most significant first.
@@ -439,4 +494,111 @@ pub(crate) fn subtract_multiple(left: &mut [u8], divisor: &[u8], m: i32) {
         carry, 0,
         "an under-guess never drives the remainder negative"
     );
+}
+
+#[cfg(test)]
+mod mul_shortcut_tests {
+    use super::exact_integer_product;
+    use crate::Number;
+
+    /// Spellings either side of what the shortcut admits: plain integers, a
+    /// value carrying an exponent, one with a fractional part, and widths
+    /// around the `i64` bound.
+    fn population() -> Vec<Number> {
+        [
+            "1",
+            "-1",
+            "7",
+            "-7",
+            "9",
+            "10",
+            "-10",
+            "99",
+            "100",
+            "1E+2",
+            "-1E+2",
+            "1.5",
+            "-1.5",
+            "0.001",
+            "12345",
+            "999999999",
+            "1000000000",
+            "123456789",
+            "123456789012345678",
+            "1234567890123456789",
+        ]
+        .iter()
+        .map(|text| Number::parse(text).expect("a spelling in the population parses"))
+        .collect()
+    }
+
+    /// Wherever the shortcut answers, it answers what the long multiplication
+    /// answers.
+    ///
+    /// This is the whole of its licence: it exists to skip work, so any
+    /// disagreement is a defect in it rather than a second opinion. The
+    /// precisions span both sides of every operand width in the population,
+    /// because what the shortcut may take is decided against the precision
+    /// and not against the operands alone.
+    #[test]
+    fn the_integer_shortcut_answers_what_the_long_multiplication_answers() {
+        let population = population();
+        let mut taken = 0;
+        for left in &population {
+            for right in &population {
+                for digits in [1u64, 2, 3, 5, 9, 10, 18, 20, 40] {
+                    let working = crate::working_length(digits);
+                    let left = left.truncated_to(working);
+                    let right = right.truncated_to(working);
+                    if left.is_zero() || right.is_zero() {
+                        continue;
+                    }
+                    let Some(shortcut) = exact_integer_product(&left, &right, digits) else {
+                        continue;
+                    };
+                    taken += 1;
+                    assert_eq!(
+                        shortcut,
+                        Number::mul_long(&left, &right, digits)
+                            .expect("the long path answers for an in-range product"),
+                        "{} * {} at DIGITS {digits}",
+                        left.format(40),
+                        right.format(40)
+                    );
+                }
+            }
+        }
+        // A shortcut that declined everything would satisfy the loop above
+        // without saying anything.
+        assert!(taken > 0, "the shortcut never fired");
+    }
+
+    /// The shortcut declines every operand it must, so that the assertion
+    /// above is a statement about a real boundary rather than about an empty
+    /// set on one side of it.
+    #[test]
+    fn the_integer_shortcut_declines_what_it_cannot_answer_exactly() {
+        let ten = Number::parse("10").expect("ten");
+        let scaled = Number::parse("1E+2").expect("a scaled integer");
+        let fraction = Number::parse("1.5").expect("a fraction");
+        let wide = Number::parse("1234567890123456789").expect("nineteen digits");
+
+        // A product wider than the precision has to be rounded, which the
+        // shortcut does not do. `10 * 10` is decided on the summed width of
+        // four rather than on the three digits `100` actually takes, so
+        // `DIGITS 3` is declined although its product would have fitted --
+        // the conservatism the shortcut's own comment describes, pinned here
+        // so that narrowing it later is a visible change rather than a quiet
+        // one.
+        assert!(exact_integer_product(&ten, &ten, 2).is_none());
+        assert!(exact_integer_product(&ten, &ten, 3).is_none());
+        assert!(exact_integer_product(&ten, &ten, 4).is_some());
+
+        // An operand whose digits do not sit at the units place.
+        assert!(exact_integer_product(&scaled, &ten, 40).is_none());
+        assert!(exact_integer_product(&fraction, &ten, 40).is_none());
+
+        // A product past what an `i64` holds.
+        assert!(exact_integer_product(&wide, &wide, 40).is_none());
+    }
 }
