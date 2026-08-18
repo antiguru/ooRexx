@@ -422,7 +422,7 @@ impl Interp {
         // the same `false` over and over, once per clause, and this stops it.
         let mut granting = GRANTING;
         let mut pc = at;
-        loop {
+        'ops: loop {
             // **A branch whose ops the counter has left has run off its own
             // end**, and that is the arrival the tree-walker gets as
             // `run_bounded` answering `Flow::Next`. Checked before the op is
@@ -617,605 +617,637 @@ impl Interp {
                     // when this region's ops were emitted -- so there is nothing
                     // to release here: the registers this region wrote are
                     // simply not addressed again.
-                    let ran: Result<RegionEnd, Failure> = 'region: {
-                        // A `DO`/`LOOP` header's values, accumulated across this
-                        // region's own ops because they are not `ObjRef`s and so
-                        // have no register to live in: a bound is a `Number` and
-                        // a budget is a count.
-                        //
-                        // **`None` until an op needs one**, so a region that is
-                        // not a loop header -- an `IF`'s, a `WHEN`'s, a
-                        // `SELECT`'s -- pays one discriminant store rather than
-                        // the struct's own initialisation.
-                        let mut header: Option<LoopHeaderValues> = None;
-                        let Some(ops) = chunk.ops_in(pc + 1, end) else {
-                            break 'region Err(Loud::chunk_map_too_short().into());
-                        };
-                        for region_op in ops {
-                            match region_op {
-                                // **No gate**: this op exists only in a chunk
-                                // compiled under a setting that echoes, which is
-                                // the decision. `stale` is the one thing that
-                                // can withdraw it, and then the clause unit has
-                                // already asked the current setting instead.
-                                Op::TraceClause { index } => {
-                                    debug_assert_names_the_clause(
-                                        code,
-                                        *index,
-                                        clause,
-                                        "TraceClause",
-                                    );
-                                    if !stale {
-                                        #[cfg(test)]
-                                        count_trace_op_echo();
-                                        // The indent this clause's own entry
-                                        // computed, read back rather than
-                                        // recomputed: `enter_stepped_clause`
-                                        // sets this field to `printed_indent`
-                                        // for the clause it is opening and
-                                        // nothing between there and here writes
-                                        // it, so the two engines cannot come to
-                                        // print an echo at two different indents
-                                        // for one clause.
-                                        let indent = self.clause_state.current_value_indent;
-                                        self.echo_compiled_clause(source, clause, indent);
-                                    }
-                                }
-                                // **The one thing this does that `EvalExpr`
-                                // does not is skip `resolve_call`.** The
-                                // argument loop, the `>A>` lines, the
-                                // activation bookkeeping and the three `Ended`
-                                // arms are the same functions `eval.rs` calls
-                                // on the same node; only the resolution comes
-                                // from the site instead of being made again.
-                                //
-                                // `enter_eval_node` is called because the
-                                // *arguments* go back through `eval`, and a
-                                // call that skipped it would start them one
-                                // level shallower than the tree-walker does --
-                                // see that function's own doc.
-                                Op::CallExpr {
-                                    index,
-                                    slot,
-                                    path,
-                                    site,
-                                    dst,
-                                } => {
-                                    debug_assert!(
-                                        chunk.holds_register(*dst),
-                                        "op writes register {dst} outside the region the chunk \
-                                         reserved"
-                                    );
-                                    debug_assert_names_the_clause(code, *index, clause, "CallExpr");
-                                    // The address resolves to a node, and the
-                                    // pair this op needs is that node's own.
-                                    // The match is here rather than inside the
-                                    // descent, which answers with an
-                                    // expression so that the echo op below can
-                                    // address a node of any kind.
-                                    let Some(ExprKind::Call { target, args }) =
-                                        Interp::chunk_node_at(clause, *slot, *path)
-                                            .map(|node| &node.kind)
-                                    else {
-                                        break 'region Err(Loud::call_op_off_its_node().into());
-                                    };
-                                    let (name, search_labels) = call_target_name(code, target);
-                                    // A raise is deliberately not recorded, and
-                                    // a hit needs no guard: `CallSite`'s own
-                                    // doc has both reasons, and they are the
-                                    // same ones `Op::Call` reads them for.
-                                    let resolved = match chunk.resolved_call(*site) {
-                                        Some(resolved) => {
+                    let ran: Result<RegionEnd, Failure> = 'cold: {
+                        // **The region answers an op index and nothing else.**
+                        // Where a clause leaves the counter is the whole of what
+                        // an ordinary one has to say, and carrying that in a
+                        // `Result<RegionEnd, Failure>` costs a 24-byte value
+                        // built and moved per clause. The two answers that do
+                        // need one -- a `Flow` the enclosing range settles, and a
+                        // failure -- leave through `'cold` instead, so the
+                        // discriminant rides the program counter on the path
+                        // every clause takes and the value exists only on the
+                        // paths that have something to put in it.
+                        let next: u32 = 'region: {
+                            // A `DO`/`LOOP` header's values, accumulated across this
+                            // region's own ops because they are not `ObjRef`s and so
+                            // have no register to live in: a bound is a `Number` and
+                            // a budget is a count.
+                            //
+                            // **`None` until an op needs one**, so a region that is
+                            // not a loop header -- an `IF`'s, a `WHEN`'s, a
+                            // `SELECT`'s -- pays one discriminant store rather than
+                            // the struct's own initialisation.
+                            let mut header: Option<LoopHeaderValues> = None;
+                            let Some(ops) = chunk.ops_in(pc + 1, end) else {
+                                break 'cold Err(Loud::chunk_map_too_short().into());
+                            };
+                            for region_op in ops {
+                                match region_op {
+                                    // **No gate**: this op exists only in a chunk
+                                    // compiled under a setting that echoes, which is
+                                    // the decision. `stale` is the one thing that
+                                    // can withdraw it, and then the clause unit has
+                                    // already asked the current setting instead.
+                                    Op::TraceClause { index } => {
+                                        debug_assert_names_the_clause(
+                                            code,
+                                            *index,
+                                            clause,
+                                            "TraceClause",
+                                        );
+                                        if !stale {
                                             #[cfg(test)]
-                                            count_call_site_hit();
-                                            resolved
+                                            count_trace_op_echo();
+                                            // The indent this clause's own entry
+                                            // computed, read back rather than
+                                            // recomputed: `enter_stepped_clause`
+                                            // sets this field to `printed_indent`
+                                            // for the clause it is opening and
+                                            // nothing between there and here writes
+                                            // it, so the two engines cannot come to
+                                            // print an echo at two different indents
+                                            // for one clause.
+                                            let indent = self.clause_state.current_value_indent;
+                                            self.echo_compiled_clause(source, clause, indent);
                                         }
-                                        None => match self.resolve_call(name, search_labels) {
-                                            Ok(resolved) => {
-                                                chunk.remember_call(*site, resolved);
+                                    }
+                                    // **The one thing this does that `EvalExpr`
+                                    // does not is skip `resolve_call`.** The
+                                    // argument loop, the `>A>` lines, the
+                                    // activation bookkeeping and the three `Ended`
+                                    // arms are the same functions `eval.rs` calls
+                                    // on the same node; only the resolution comes
+                                    // from the site instead of being made again.
+                                    //
+                                    // `enter_eval_node` is called because the
+                                    // *arguments* go back through `eval`, and a
+                                    // call that skipped it would start them one
+                                    // level shallower than the tree-walker does --
+                                    // see that function's own doc.
+                                    Op::CallExpr {
+                                        index,
+                                        slot,
+                                        path,
+                                        site,
+                                        dst,
+                                    } => {
+                                        debug_assert!(
+                                            chunk.holds_register(*dst),
+                                            "op writes register {dst} outside the region the chunk \
+                                         reserved"
+                                        );
+                                        debug_assert_names_the_clause(
+                                            code, *index, clause, "CallExpr",
+                                        );
+                                        // The address resolves to a node, and the
+                                        // pair this op needs is that node's own.
+                                        // The match is here rather than inside the
+                                        // descent, which answers with an
+                                        // expression so that the echo op below can
+                                        // address a node of any kind.
+                                        let Some(ExprKind::Call { target, args }) =
+                                            Interp::chunk_node_at(clause, *slot, *path)
+                                                .map(|node| &node.kind)
+                                        else {
+                                            break 'cold Err(Loud::call_op_off_its_node().into());
+                                        };
+                                        let (name, search_labels) = call_target_name(code, target);
+                                        // A raise is deliberately not recorded, and
+                                        // a hit needs no guard: `CallSite`'s own
+                                        // doc has both reasons, and they are the
+                                        // same ones `Op::Call` reads them for.
+                                        let resolved = match chunk.resolved_call(*site) {
+                                            Some(resolved) => {
+                                                #[cfg(test)]
+                                                count_call_site_hit();
                                                 resolved
                                             }
-                                            Err(failure) => break 'region Err(failure),
-                                        },
-                                    };
-                                    let probe = 0u8;
-                                    if let Err(failure) = self.enter_eval_node(&raw const probe) {
-                                        break 'region Err(failure);
-                                    }
-                                    let value = self.eval_call_resolved(code, resolved, name, args);
-                                    self.depth -= 1;
-                                    let value = match value {
-                                        Ok(value) => value,
-                                        Err(failure) => break 'region Err(failure),
-                                    };
-                                    self.roots.set_temp(registers, *dst as usize, value);
-                                }
-                                // The `>F>` line the op above owes, emitted
-                                // behind it because `eval`'s own hook is
-                                // post-order and this is the same line.
-                                Op::TraceFunction {
-                                    index,
-                                    slot,
-                                    path,
-                                    src,
-                                } => {
-                                    debug_assert_names_the_clause(
-                                        code,
-                                        *index,
-                                        clause,
-                                        "TraceFunction",
-                                    );
-                                    // **The gate in front of the descent, not
-                                    // only inside `trace_intermediate`.** That
-                                    // function returns immediately under the
-                                    // same condition, so this changes no
-                                    // output; what it changes is that an
-                                    // untraced run walks no path to reach a
-                                    // node it is not going to print.
-                                    if !self.tracing_intermediates() {
-                                        continue;
-                                    }
-                                    let Some(expr) = Interp::chunk_node_at(clause, *slot, *path)
-                                    else {
-                                        break 'region Err(Loud::call_op_off_its_node().into());
-                                    };
-                                    let value = self.roots.temp_at(registers, *src as usize);
-                                    self.trace_intermediate(code, expr, value);
-                                }
-                                Op::EvalExpr { index, slot, dst } => {
-                                    debug_assert!(
-                                        chunk.holds_register(*dst),
-                                        "op writes register {dst} outside the region the chunk \
-                                         reserved"
-                                    );
-                                    debug_assert_names_the_clause(code, *index, clause, "EvalExpr");
-                                    let value = match self.eval_chunk_expr(code, clause, *slot) {
-                                        Ok(value) => value,
-                                        Err(failure) => break 'region Err(failure),
-                                    };
-                                    self.roots.set_temp(registers, *dst as usize, value);
-                                }
-                                // **The phase's first native expression op**:
-                                // the literal's value, built from the chunk's
-                                // own interned bytes through the same
-                                // `Interp::literal` that `eval_node`'s `Literal`
-                                // arm calls, with `eval.rs` not entered at all.
-                                // It emits nothing -- `Op::TraceLiteral` below
-                                // is the line that loading a literal owes.
-                                Op::Const { dst, konst } => {
-                                    debug_assert!(
-                                        chunk.holds_register(*dst),
-                                        "op writes register {dst} outside the region the chunk \
-                                         reserved"
-                                    );
-                                    // **Built once for the whole run.** The
-                                    // value is interned into the chunk on the
-                                    // first execution and read from it after
-                                    // that, which is what stops this op
-                                    // allocating a fresh object for a literal
-                                    // longer than the handle carries inline --
-                                    // 560,000 times on the pinned `rexxcps`
-                                    // before this. `Chunk::interned`'s own doc
-                                    // has why the shared value is safe and why
-                                    // `NIL` is the empty state.
-                                    let mut value = chunk.interned_konst(*konst);
-                                    if value == ObjRef::NIL {
-                                        let Some(bytes) = chunk.konst(*konst) else {
-                                            break 'region Err(Loud::constant_out_of_range().into());
+                                            None => match self.resolve_call(name, search_labels) {
+                                                Ok(resolved) => {
+                                                    chunk.remember_call(*site, resolved);
+                                                    resolved
+                                                }
+                                                Err(failure) => break 'cold Err(failure),
+                                            },
                                         };
-                                        #[cfg(test)]
-                                        count_const_build();
-                                        value = self.interned_literal(bytes);
-                                        debug_assert_ne!(
-                                            value,
-                                            ObjRef::NIL,
-                                            "a constant interned to the handle that means \
-                                             'not built yet', so it would be rebuilt on every \
-                                             execution and the cache would be dead code"
-                                        );
-                                        chunk.remember_konst(*konst, value);
-                                    }
-                                    self.roots.set_temp(registers, *dst as usize, value);
-                                }
-                                // A constant symbol's own value: its upcased
-                                // spelling, built through the same
-                                // `Interp::literal` `Op::Const` above uses and
-                                // read out of the symbol table `code` carries,
-                                // which is what `eval_node`'s own `Constant`
-                                // arm does. It emits nothing -- the
-                                // `Op::TraceLiteral` below is the line it owes
-                                // too, because both print `>L>`.
-                                Op::LoadConstant { symbol, dst } => {
-                                    debug_assert!(
-                                        chunk.holds_register(*dst),
-                                        "op writes register {dst} outside the region the chunk \
-                                         reserved"
-                                    );
-                                    // Interned exactly as `Op::Const`'s value
-                                    // is, and keyed by the symbol's own id --
-                                    // so the symbol table is read once for the
-                                    // whole run rather than on every execution.
-                                    let mut value = chunk.interned_symbol(*symbol);
-                                    if value == ObjRef::NIL {
-                                        #[cfg(test)]
-                                        count_load_constant_build();
-                                        value = self.interned_literal(
-                                            code.symbols.name(*symbol).as_bytes(),
-                                        );
-                                        debug_assert_ne!(
-                                            value,
-                                            ObjRef::NIL,
-                                            "a constant symbol interned to the handle that means \
-                                             'not built yet', so it would be rebuilt on every \
-                                             execution and the cache would be dead code"
-                                        );
-                                        chunk.remember_symbol(*symbol, value);
-                                    }
-                                    self.roots.set_temp(registers, *dst as usize, value);
-                                }
-                                // The `>L>` line of one literal. **Its own op**,
-                                // because the load emits nothing and `eval.rs`
-                                // emits this as a side effect of evaluating --
-                                // so a promoted clause with no such op drops the
-                                // line while every line after it still matches.
-                                Op::TraceLiteral { src } => {
-                                    debug_assert!(
-                                        chunk.holds_register(*src),
-                                        "op reads register {src} outside the region the chunk \
-                                         reserved"
-                                    );
-                                    let value = self.roots.temp_at(registers, *src as usize);
-                                    self.echo_literal(value);
-                                }
-                                // **The second native expression op**: one bare
-                                // symbol's own value, through the same
-                                // `Interp::read_symbol` that `eval_node`'s
-                                // `Variable`/`Stem`/`Compound` arms enter, with
-                                // `eval.rs` itself not entered at all. It emits
-                                // nothing -- `Op::TraceRead` below is what
-                                // reading a symbol owes.
-                                Op::Load {
-                                    symbol,
-                                    read,
-                                    at,
-                                    dst,
-                                } => {
-                                    debug_assert!(
-                                        chunk.holds_register(*dst),
-                                        "op writes register {dst} outside the region the chunk \
-                                         reserved"
-                                    );
-                                    let at = at.resolved();
-                                    // **The tripwire for a chunk run against a
-                                    // plan that is not the one it was compiled
-                                    // from.** `at` was read out of that plan's
-                                    // `by_symbol`, which is the map `code.slots`
-                                    // is a view of, so a mismatch here is two
-                                    // different plans for one body -- and it
-                                    // would read somebody else's slot rather
-                                    // than fail, which is a wrong value found by
-                                    // chasing it.
-                                    debug_assert!(
-                                        at.is_none() || code.slot_for(*symbol) == at,
-                                        "a compiled read names a slot this body's plan does not \
-                                         give its symbol"
-                                    );
-                                    let value = match self.read_symbol(code, *read, *symbol, at) {
-                                        Ok(value) => value,
-                                        Err(failure) => break 'region Err(failure),
-                                    };
-                                    self.roots.set_temp(registers, *dst as usize, value);
-                                }
-                                // The `>V>` line one read owes, and the `>C>`
-                                // line in front of it when the read is a
-                                // compound. **Its own op**, because the load
-                                // emits nothing and `eval.rs` emits these as a
-                                // side effect of evaluating -- so a promoted
-                                // clause with no such op drops them while every
-                                // line after them still matches.
-                                Op::TraceRead { symbol, read, src } => {
-                                    debug_assert!(
-                                        chunk.holds_register(*src),
-                                        "op reads register {src} outside the region the chunk \
-                                         reserved"
-                                    );
-                                    let value = self.roots.temp_at(registers, *src as usize);
-                                    self.echo_symbol_read(code, *read, *symbol, value);
-                                }
-                                // **A native expression op**: one arithmetic
-                                // operator applied to two registers, through
-                                // the same `Interp::arith_small_int` and
-                                // `Interp::arith_general` that
-                                // `eval_arithmetic` enters, with `eval.rs`
-                                // itself not entered at all -- for the operands
-                                // either, which is what the ops in front of
-                                // this one are. It emits nothing --
-                                // `Op::TraceOperator` below is what applying an
-                                // operator owes.
-                                Op::Arith {
-                                    op,
-                                    hint,
-                                    lhs,
-                                    rhs,
-                                    dst,
-                                } => {
-                                    debug_assert!(
-                                        chunk.holds_register(*lhs) && chunk.holds_register(*rhs),
-                                        "op reads registers {lhs}/{rhs} outside the region the \
-                                         chunk reserved"
-                                    );
-                                    debug_assert!(
-                                        chunk.holds_register(*dst),
-                                        "op writes register {dst} outside the region the chunk \
-                                         reserved"
-                                    );
-                                    // **Both read before either is written**,
-                                    // which is what makes `lhs == dst` -- the
-                                    // shape a chain compiles to -- safe.
-                                    let left = self.roots.temp_at(registers, *lhs as usize);
-                                    let right = self.roots.temp_at(registers, *rhs as usize);
-                                    // The operands are rooted by the registers
-                                    // they came from, which is what
-                                    // `arith_general` requires of a caller and
-                                    // is why no frame is pushed here where
-                                    // `eval_arithmetic` pushes one: it has to
-                                    // root values held in Rust locals across
-                                    // the evaluation of the operand after them,
-                                    // and this op's operands were rooted before
-                                    // it ran.
-                                    //
-                                    // **The hint decides only which path is
-                                    // tried first, and removes no check.** The
-                                    // small-integer path re-decodes both
-                                    // operands and re-checks them against
-                                    // `DIGITS` on every execution -- Rexx
-                                    // rounds the operands before it operates,
-                                    // so an operand too wide for the precision
-                                    // makes the exact answer the wrong one --
-                                    // and answers `None` for every case where
-                                    // the two paths could disagree. Both are
-                                    // therefore correct for every operand, and
-                                    // what the hint can change is speed alone.
-                                    let mut quick = None;
-                                    if chunk.tries_small_int(*hint) {
-                                        quick = self.arith_small_int(*op, left, right);
-                                        // The one state change a site makes,
-                                        // and it makes it at most once: a site
-                                        // that has fallen through skips the
-                                        // attempt from here on, so the store
-                                        // never repeats and the line the table
-                                        // sits on is not dirtied again.
-                                        if quick.is_none() {
-                                            chunk.saw_general(*hint);
+                                        let probe = 0u8;
+                                        if let Err(failure) = self.enter_eval_node(&raw const probe)
+                                        {
+                                            break 'cold Err(failure);
                                         }
-                                    } else {
-                                        #[cfg(test)]
-                                        count_arith_hint_skip();
-                                    }
-                                    let value = match quick {
-                                        Some(value) => value,
-                                        None => match self.arith_general(*op, left, right) {
+                                        let value =
+                                            self.eval_call_resolved(code, resolved, name, args);
+                                        self.depth -= 1;
+                                        let value = match value {
                                             Ok(value) => value,
-                                            Err(failure) => break 'region Err(failure),
-                                        },
-                                    };
-                                    self.roots.set_temp(registers, *dst as usize, value);
-                                }
-                                // **Every other binary operator**: one
-                                // concatenation, comparison or logical
-                                // operator applied to two registers, through
-                                // the same `Interp::apply_binary` that
-                                // `eval_node`'s own binary arm enters, with
-                                // `eval.rs` itself not entered at all -- for
-                                // the operands either, which is what the ops in
-                                // front of this one are. It emits nothing --
-                                // `Op::TraceOperator` below is what applying an
-                                // operator owes.
-                                Op::Binary { op, lhs, rhs, dst } => {
-                                    debug_assert!(
-                                        chunk.holds_register(*lhs) && chunk.holds_register(*rhs),
-                                        "op reads registers {lhs}/{rhs} outside the region the \
+                                            Err(failure) => break 'cold Err(failure),
+                                        };
+                                        self.roots.set_temp(registers, *dst as usize, value);
+                                    }
+                                    // The `>F>` line the op above owes, emitted
+                                    // behind it because `eval`'s own hook is
+                                    // post-order and this is the same line.
+                                    Op::TraceFunction {
+                                        index,
+                                        slot,
+                                        path,
+                                        src,
+                                    } => {
+                                        debug_assert_names_the_clause(
+                                            code,
+                                            *index,
+                                            clause,
+                                            "TraceFunction",
+                                        );
+                                        // **The gate in front of the descent, not
+                                        // only inside `trace_intermediate`.** That
+                                        // function returns immediately under the
+                                        // same condition, so this changes no
+                                        // output; what it changes is that an
+                                        // untraced run walks no path to reach a
+                                        // node it is not going to print.
+                                        if !self.tracing_intermediates() {
+                                            continue;
+                                        }
+                                        let Some(expr) =
+                                            Interp::chunk_node_at(clause, *slot, *path)
+                                        else {
+                                            break 'cold Err(Loud::call_op_off_its_node().into());
+                                        };
+                                        let value = self.roots.temp_at(registers, *src as usize);
+                                        self.trace_intermediate(code, expr, value);
+                                    }
+                                    Op::EvalExpr { index, slot, dst } => {
+                                        debug_assert!(
+                                            chunk.holds_register(*dst),
+                                            "op writes register {dst} outside the region the chunk \
+                                         reserved"
+                                        );
+                                        debug_assert_names_the_clause(
+                                            code, *index, clause, "EvalExpr",
+                                        );
+                                        let value = match self.eval_chunk_expr(code, clause, *slot)
+                                        {
+                                            Ok(value) => value,
+                                            Err(failure) => break 'cold Err(failure),
+                                        };
+                                        self.roots.set_temp(registers, *dst as usize, value);
+                                    }
+                                    // **The phase's first native expression op**:
+                                    // the literal's value, built from the chunk's
+                                    // own interned bytes through the same
+                                    // `Interp::literal` that `eval_node`'s `Literal`
+                                    // arm calls, with `eval.rs` not entered at all.
+                                    // It emits nothing -- `Op::TraceLiteral` below
+                                    // is the line that loading a literal owes.
+                                    Op::Const { dst, konst } => {
+                                        debug_assert!(
+                                            chunk.holds_register(*dst),
+                                            "op writes register {dst} outside the region the chunk \
+                                         reserved"
+                                        );
+                                        // **Built once for the whole run.** The
+                                        // value is interned into the chunk on the
+                                        // first execution and read from it after
+                                        // that, which is what stops this op
+                                        // allocating a fresh object for a literal
+                                        // longer than the handle carries inline --
+                                        // 560,000 times on the pinned `rexxcps`
+                                        // before this. `Chunk::interned`'s own doc
+                                        // has why the shared value is safe and why
+                                        // `NIL` is the empty state.
+                                        let mut value = chunk.interned_konst(*konst);
+                                        if value == ObjRef::NIL {
+                                            let Some(bytes) = chunk.konst(*konst) else {
+                                                break 'cold Err(
+                                                    Loud::constant_out_of_range().into()
+                                                );
+                                            };
+                                            #[cfg(test)]
+                                            count_const_build();
+                                            value = self.interned_literal(bytes);
+                                            debug_assert_ne!(
+                                                value,
+                                                ObjRef::NIL,
+                                                "a constant interned to the handle that means \
+                                             'not built yet', so it would be rebuilt on every \
+                                             execution and the cache would be dead code"
+                                            );
+                                            chunk.remember_konst(*konst, value);
+                                        }
+                                        self.roots.set_temp(registers, *dst as usize, value);
+                                    }
+                                    // A constant symbol's own value: its upcased
+                                    // spelling, built through the same
+                                    // `Interp::literal` `Op::Const` above uses and
+                                    // read out of the symbol table `code` carries,
+                                    // which is what `eval_node`'s own `Constant`
+                                    // arm does. It emits nothing -- the
+                                    // `Op::TraceLiteral` below is the line it owes
+                                    // too, because both print `>L>`.
+                                    Op::LoadConstant { symbol, dst } => {
+                                        debug_assert!(
+                                            chunk.holds_register(*dst),
+                                            "op writes register {dst} outside the region the chunk \
+                                         reserved"
+                                        );
+                                        // Interned exactly as `Op::Const`'s value
+                                        // is, and keyed by the symbol's own id --
+                                        // so the symbol table is read once for the
+                                        // whole run rather than on every execution.
+                                        let mut value = chunk.interned_symbol(*symbol);
+                                        if value == ObjRef::NIL {
+                                            #[cfg(test)]
+                                            count_load_constant_build();
+                                            value = self.interned_literal(
+                                                code.symbols.name(*symbol).as_bytes(),
+                                            );
+                                            debug_assert_ne!(
+                                                value,
+                                                ObjRef::NIL,
+                                                "a constant symbol interned to the handle that means \
+                                             'not built yet', so it would be rebuilt on every \
+                                             execution and the cache would be dead code"
+                                            );
+                                            chunk.remember_symbol(*symbol, value);
+                                        }
+                                        self.roots.set_temp(registers, *dst as usize, value);
+                                    }
+                                    // The `>L>` line of one literal. **Its own op**,
+                                    // because the load emits nothing and `eval.rs`
+                                    // emits this as a side effect of evaluating --
+                                    // so a promoted clause with no such op drops the
+                                    // line while every line after it still matches.
+                                    Op::TraceLiteral { src } => {
+                                        debug_assert!(
+                                            chunk.holds_register(*src),
+                                            "op reads register {src} outside the region the chunk \
+                                         reserved"
+                                        );
+                                        let value = self.roots.temp_at(registers, *src as usize);
+                                        self.echo_literal(value);
+                                    }
+                                    // **The second native expression op**: one bare
+                                    // symbol's own value, through the same
+                                    // `Interp::read_symbol` that `eval_node`'s
+                                    // `Variable`/`Stem`/`Compound` arms enter, with
+                                    // `eval.rs` itself not entered at all. It emits
+                                    // nothing -- `Op::TraceRead` below is what
+                                    // reading a symbol owes.
+                                    Op::Load {
+                                        symbol,
+                                        read,
+                                        at,
+                                        dst,
+                                    } => {
+                                        debug_assert!(
+                                            chunk.holds_register(*dst),
+                                            "op writes register {dst} outside the region the chunk \
+                                         reserved"
+                                        );
+                                        let at = at.resolved();
+                                        // **The tripwire for a chunk run against a
+                                        // plan that is not the one it was compiled
+                                        // from.** `at` was read out of that plan's
+                                        // `by_symbol`, which is the map `code.slots`
+                                        // is a view of, so a mismatch here is two
+                                        // different plans for one body -- and it
+                                        // would read somebody else's slot rather
+                                        // than fail, which is a wrong value found by
+                                        // chasing it.
+                                        debug_assert!(
+                                            at.is_none() || code.slot_for(*symbol) == at,
+                                            "a compiled read names a slot this body's plan does not \
+                                         give its symbol"
+                                        );
+                                        let value = match self.read_symbol(code, *read, *symbol, at)
+                                        {
+                                            Ok(value) => value,
+                                            Err(failure) => break 'cold Err(failure),
+                                        };
+                                        self.roots.set_temp(registers, *dst as usize, value);
+                                    }
+                                    // The `>V>` line one read owes, and the `>C>`
+                                    // line in front of it when the read is a
+                                    // compound. **Its own op**, because the load
+                                    // emits nothing and `eval.rs` emits these as a
+                                    // side effect of evaluating -- so a promoted
+                                    // clause with no such op drops them while every
+                                    // line after them still matches.
+                                    Op::TraceRead { symbol, read, src } => {
+                                        debug_assert!(
+                                            chunk.holds_register(*src),
+                                            "op reads register {src} outside the region the chunk \
+                                         reserved"
+                                        );
+                                        let value = self.roots.temp_at(registers, *src as usize);
+                                        self.echo_symbol_read(code, *read, *symbol, value);
+                                    }
+                                    // **A native expression op**: one arithmetic
+                                    // operator applied to two registers, through
+                                    // the same `Interp::arith_small_int` and
+                                    // `Interp::arith_general` that
+                                    // `eval_arithmetic` enters, with `eval.rs`
+                                    // itself not entered at all -- for the operands
+                                    // either, which is what the ops in front of
+                                    // this one are. It emits nothing --
+                                    // `Op::TraceOperator` below is what applying an
+                                    // operator owes.
+                                    Op::Arith {
+                                        op,
+                                        hint,
+                                        lhs,
+                                        rhs,
+                                        dst,
+                                    } => {
+                                        debug_assert!(
+                                            chunk.holds_register(*lhs)
+                                                && chunk.holds_register(*rhs),
+                                            "op reads registers {lhs}/{rhs} outside the region the \
                                          chunk reserved"
-                                    );
-                                    debug_assert!(
-                                        chunk.holds_register(*dst),
-                                        "op writes register {dst} outside the region the chunk \
+                                        );
+                                        debug_assert!(
+                                            chunk.holds_register(*dst),
+                                            "op writes register {dst} outside the region the chunk \
                                          reserved"
-                                    );
-                                    // **Both read before either is written**,
-                                    // which is what makes `lhs == dst` -- the
-                                    // shape a chain compiles to -- safe.
-                                    let left = self.roots.temp_at(registers, *lhs as usize);
-                                    let right = self.roots.temp_at(registers, *rhs as usize);
-                                    // The operands are rooted by the registers
-                                    // they came from, which is what
-                                    // `apply_binary` requires of a caller and
-                                    // is why no frame is pushed here where
-                                    // `eval_node`'s own arm pushes one: it has
-                                    // to root values held in Rust locals across
-                                    // the evaluation of the operand after them,
-                                    // and this op's operands were rooted before
-                                    // it ran.
-                                    let value = match self.apply_binary(*op, left, right) {
-                                        Ok(value) => value,
-                                        Err(failure) => break 'region Err(failure),
-                                    };
-                                    self.roots.set_temp(registers, *dst as usize, value);
-                                }
-                                // The `>O>` line one operator owes. **Its own
-                                // op**, because the operation emits nothing and
-                                // `eval.rs` emits this as a side effect of
-                                // evaluating -- so a promoted clause with no
-                                // such op drops the line while every line after
-                                // it still matches.
-                                Op::TraceOperator { op, src } => {
-                                    debug_assert!(
-                                        chunk.holds_register(*src),
-                                        "op reads register {src} outside the region the chunk \
+                                        );
+                                        // **Both read before either is written**,
+                                        // which is what makes `lhs == dst` -- the
+                                        // shape a chain compiles to -- safe.
+                                        let left = self.roots.temp_at(registers, *lhs as usize);
+                                        let right = self.roots.temp_at(registers, *rhs as usize);
+                                        // The operands are rooted by the registers
+                                        // they came from, which is what
+                                        // `arith_general` requires of a caller and
+                                        // is why no frame is pushed here where
+                                        // `eval_arithmetic` pushes one: it has to
+                                        // root values held in Rust locals across
+                                        // the evaluation of the operand after them,
+                                        // and this op's operands were rooted before
+                                        // it ran.
+                                        //
+                                        // **The hint decides only which path is
+                                        // tried first, and removes no check.** The
+                                        // small-integer path re-decodes both
+                                        // operands and re-checks them against
+                                        // `DIGITS` on every execution -- Rexx
+                                        // rounds the operands before it operates,
+                                        // so an operand too wide for the precision
+                                        // makes the exact answer the wrong one --
+                                        // and answers `None` for every case where
+                                        // the two paths could disagree. Both are
+                                        // therefore correct for every operand, and
+                                        // what the hint can change is speed alone.
+                                        let mut quick = None;
+                                        if chunk.tries_small_int(*hint) {
+                                            quick = self.arith_small_int(*op, left, right);
+                                            // The one state change a site makes,
+                                            // and it makes it at most once: a site
+                                            // that has fallen through skips the
+                                            // attempt from here on, so the store
+                                            // never repeats and the line the table
+                                            // sits on is not dirtied again.
+                                            if quick.is_none() {
+                                                chunk.saw_general(*hint);
+                                            }
+                                        } else {
+                                            #[cfg(test)]
+                                            count_arith_hint_skip();
+                                        }
+                                        let value = match quick {
+                                            Some(value) => value,
+                                            None => match self.arith_general(*op, left, right) {
+                                                Ok(value) => value,
+                                                Err(failure) => break 'cold Err(failure),
+                                            },
+                                        };
+                                        self.roots.set_temp(registers, *dst as usize, value);
+                                    }
+                                    // **Every other binary operator**: one
+                                    // concatenation, comparison or logical
+                                    // operator applied to two registers, through
+                                    // the same `Interp::apply_binary` that
+                                    // `eval_node`'s own binary arm enters, with
+                                    // `eval.rs` itself not entered at all -- for
+                                    // the operands either, which is what the ops in
+                                    // front of this one are. It emits nothing --
+                                    // `Op::TraceOperator` below is what applying an
+                                    // operator owes.
+                                    Op::Binary { op, lhs, rhs, dst } => {
+                                        debug_assert!(
+                                            chunk.holds_register(*lhs)
+                                                && chunk.holds_register(*rhs),
+                                            "op reads registers {lhs}/{rhs} outside the region the \
+                                         chunk reserved"
+                                        );
+                                        debug_assert!(
+                                            chunk.holds_register(*dst),
+                                            "op writes register {dst} outside the region the chunk \
                                          reserved"
-                                    );
-                                    let value = self.roots.temp_at(registers, *src as usize);
-                                    self.echo_operator(*op, value);
-                                }
-                                // **A prefix operator**: `+`, `-` or `\`
-                                // applied to one register, through the same
-                                // `Interp::apply_prefix` that
-                                // `Interp::eval_prefix` enters, with `eval.rs`
-                                // itself not entered at all -- for the operand
-                                // either, which is what the ops in front of
-                                // this one are. It emits nothing --
-                                // `Op::TracePrefix` below is what applying an
-                                // operator owes.
-                                Op::Prefix { op, src, dst } => {
-                                    debug_assert!(
-                                        chunk.holds_register(*src),
-                                        "op reads register {src} outside the region the chunk \
+                                        );
+                                        // **Both read before either is written**,
+                                        // which is what makes `lhs == dst` -- the
+                                        // shape a chain compiles to -- safe.
+                                        let left = self.roots.temp_at(registers, *lhs as usize);
+                                        let right = self.roots.temp_at(registers, *rhs as usize);
+                                        // The operands are rooted by the registers
+                                        // they came from, which is what
+                                        // `apply_binary` requires of a caller and
+                                        // is why no frame is pushed here where
+                                        // `eval_node`'s own arm pushes one: it has
+                                        // to root values held in Rust locals across
+                                        // the evaluation of the operand after them,
+                                        // and this op's operands were rooted before
+                                        // it ran.
+                                        let value = match self.apply_binary(*op, left, right) {
+                                            Ok(value) => value,
+                                            Err(failure) => break 'cold Err(failure),
+                                        };
+                                        self.roots.set_temp(registers, *dst as usize, value);
+                                    }
+                                    // The `>O>` line one operator owes. **Its own
+                                    // op**, because the operation emits nothing and
+                                    // `eval.rs` emits this as a side effect of
+                                    // evaluating -- so a promoted clause with no
+                                    // such op drops the line while every line after
+                                    // it still matches.
+                                    Op::TraceOperator { op, src } => {
+                                        debug_assert!(
+                                            chunk.holds_register(*src),
+                                            "op reads register {src} outside the region the chunk \
                                          reserved"
-                                    );
-                                    debug_assert!(
-                                        chunk.holds_register(*dst),
-                                        "op writes register {dst} outside the region the chunk \
+                                        );
+                                        let value = self.roots.temp_at(registers, *src as usize);
+                                        self.echo_operator(*op, value);
+                                    }
+                                    // **A prefix operator**: `+`, `-` or `\`
+                                    // applied to one register, through the same
+                                    // `Interp::apply_prefix` that
+                                    // `Interp::eval_prefix` enters, with `eval.rs`
+                                    // itself not entered at all -- for the operand
+                                    // either, which is what the ops in front of
+                                    // this one are. It emits nothing --
+                                    // `Op::TracePrefix` below is what applying an
+                                    // operator owes.
+                                    Op::Prefix { op, src, dst } => {
+                                        debug_assert!(
+                                            chunk.holds_register(*src),
+                                            "op reads register {src} outside the region the chunk \
                                          reserved"
-                                    );
-                                    // **Read before the destination is
-                                    // written**, which is what makes `src ==
-                                    // dst` -- the shape a prefix compiles to --
-                                    // safe.
-                                    let value = self.roots.temp_at(registers, *src as usize);
-                                    // The operand is rooted by the register it
-                                    // came from, which is what `apply_prefix`
-                                    // requires of a caller and is why no frame
-                                    // is pushed here where `eval_prefix` pushes
-                                    // one: it has to root a value held in a
-                                    // Rust local across the operator's own
-                                    // allocation, and this op's operand was
-                                    // rooted before it ran.
-                                    let value = match self.apply_prefix(*op, value) {
-                                        Ok(value) => value,
-                                        Err(failure) => break 'region Err(failure),
-                                    };
-                                    self.roots.set_temp(registers, *dst as usize, value);
-                                }
-                                // The `>P>` line one prefix operator owes.
-                                // **Its own op**, for the reason
-                                // `Op::TraceOperator` above is, and a different
-                                // op from it because `>P>` is a different line
-                                // from `>O>`.
-                                Op::TracePrefix { op, src } => {
-                                    debug_assert!(
-                                        chunk.holds_register(*src),
-                                        "op reads register {src} outside the region the chunk \
+                                        );
+                                        debug_assert!(
+                                            chunk.holds_register(*dst),
+                                            "op writes register {dst} outside the region the chunk \
                                          reserved"
-                                    );
-                                    let value = self.roots.temp_at(registers, *src as usize);
-                                    self.echo_prefix_op(*op, value);
-                                }
-                                // The write, through `Interp::assign_evaluated`
-                                // -- the whole of what `step`'s own
-                                // `Assignment` arm does past the evaluation, so
-                                // the `>>>`/`>C>`/`>=>` lines and the stem and
-                                // compound dispatch are that arm's rather than a
-                                // second copy.
-                                Op::Store { index, at, src } => {
-                                    debug_assert!(
-                                        chunk.holds_register(*src),
-                                        "op reads register {src} outside the region the chunk \
+                                        );
+                                        // **Read before the destination is
+                                        // written**, which is what makes `src ==
+                                        // dst` -- the shape a prefix compiles to --
+                                        // safe.
+                                        let value = self.roots.temp_at(registers, *src as usize);
+                                        // The operand is rooted by the register it
+                                        // came from, which is what `apply_prefix`
+                                        // requires of a caller and is why no frame
+                                        // is pushed here where `eval_prefix` pushes
+                                        // one: it has to root a value held in a
+                                        // Rust local across the operator's own
+                                        // allocation, and this op's operand was
+                                        // rooted before it ran.
+                                        let value = match self.apply_prefix(*op, value) {
+                                            Ok(value) => value,
+                                            Err(failure) => break 'cold Err(failure),
+                                        };
+                                        self.roots.set_temp(registers, *dst as usize, value);
+                                    }
+                                    // The `>P>` line one prefix operator owes.
+                                    // **Its own op**, for the reason
+                                    // `Op::TraceOperator` above is, and a different
+                                    // op from it because `>P>` is a different line
+                                    // from `>O>`.
+                                    Op::TracePrefix { op, src } => {
+                                        debug_assert!(
+                                            chunk.holds_register(*src),
+                                            "op reads register {src} outside the region the chunk \
                                          reserved"
-                                    );
-                                    debug_assert_names_the_clause(code, *index, clause, "Store");
-                                    let InstructionKind::Assignment { target, .. } = &clause.kind
-                                    else {
-                                        break 'region Err(Loud::store_op_off_its_node().into());
-                                    };
-                                    let at = at.resolved();
-                                    // `Op::Load`'s own tripwire, on the writing
-                                    // side: `at` came out of the plan this chunk
-                                    // was compiled from, `code.slots` is a view
-                                    // of that same map, and a mismatch is two
-                                    // different plans for one body -- which would
-                                    // write into somebody else's slot rather than
-                                    // fail.
-                                    debug_assert!(
-                                        at.is_none()
-                                            || matches!(
-                                                &target.kind,
-                                                ExprKind::Variable(id)
-                                                    if code.slot_for(*id) == at
-                                            ),
-                                        "a compiled write names a slot this body's plan does not \
+                                        );
+                                        let value = self.roots.temp_at(registers, *src as usize);
+                                        self.echo_prefix_op(*op, value);
+                                    }
+                                    // The write, through `Interp::assign_evaluated`
+                                    // -- the whole of what `step`'s own
+                                    // `Assignment` arm does past the evaluation, so
+                                    // the `>>>`/`>C>`/`>=>` lines and the stem and
+                                    // compound dispatch are that arm's rather than a
+                                    // second copy.
+                                    Op::Store { index, at, src } => {
+                                        debug_assert!(
+                                            chunk.holds_register(*src),
+                                            "op reads register {src} outside the region the chunk \
+                                         reserved"
+                                        );
+                                        debug_assert_names_the_clause(
+                                            code, *index, clause, "Store",
+                                        );
+                                        let InstructionKind::Assignment { target, .. } =
+                                            &clause.kind
+                                        else {
+                                            break 'cold Err(Loud::store_op_off_its_node().into());
+                                        };
+                                        let at = at.resolved();
+                                        // `Op::Load`'s own tripwire, on the writing
+                                        // side: `at` came out of the plan this chunk
+                                        // was compiled from, `code.slots` is a view
+                                        // of that same map, and a mismatch is two
+                                        // different plans for one body -- which would
+                                        // write into somebody else's slot rather than
+                                        // fail.
+                                        debug_assert!(
+                                            at.is_none()
+                                                || matches!(
+                                                    &target.kind,
+                                                    ExprKind::Variable(id)
+                                                        if code.slot_for(*id) == at
+                                                ),
+                                            "a compiled write names a slot this body's plan does not \
                                          give its target"
-                                    );
-                                    let value = self.roots.temp_at(registers, *src as usize);
-                                    if let Err(failure) =
-                                        self.assign_evaluated(code, target, value, at)
-                                    {
-                                        break 'region Err(failure);
+                                        );
+                                        let value = self.roots.temp_at(registers, *src as usize);
+                                        if let Err(failure) =
+                                            self.assign_evaluated(code, target, value, at)
+                                        {
+                                            break 'cold Err(failure);
+                                        }
                                     }
-                                }
-                                // The print, through `Interp::say_evaluated`,
-                                // for the same reason `Op::Store` goes through
-                                // `assign_evaluated`.
-                                // **`SIGNAL`, all three forms**, each doing
-                                // what `step`'s own arm does and nothing else:
-                                // the two transferring forms answer
-                                // `Flow::Signal` and end the region, the trap
-                                // form edits the activation's table and falls
-                                // through with whatever `exec_condition_trap`
-                                // answers.
-                                Op::Signal { index, src } => {
-                                    debug_assert_names_the_clause(code, *index, clause, "Signal");
-                                    let InstructionKind::Signal(signal) = &clause.kind else {
-                                        break 'region Err(Loud::instruction(&clause.kind).into());
-                                    };
-                                    let flow = match (&**signal, src) {
-                                        (rexx_parse::Signal::Label(name), None) => {
-                                            match self.signal_to_label(name) {
-                                                Ok(flow) => flow,
-                                                Err(failure) => break 'region Err(failure),
+                                    // The print, through `Interp::say_evaluated`,
+                                    // for the same reason `Op::Store` goes through
+                                    // `assign_evaluated`.
+                                    // **`SIGNAL`, all three forms**, each doing
+                                    // what `step`'s own arm does and nothing else:
+                                    // the two transferring forms answer
+                                    // `Flow::Signal` and end the region, the trap
+                                    // form edits the activation's table and falls
+                                    // through with whatever `exec_condition_trap`
+                                    // answers.
+                                    Op::Signal { index, src } => {
+                                        debug_assert_names_the_clause(
+                                            code, *index, clause, "Signal",
+                                        );
+                                        let InstructionKind::Signal(signal) = &clause.kind else {
+                                            break 'cold Err(Loud::instruction(&clause.kind).into());
+                                        };
+                                        let flow = match (&**signal, src) {
+                                            (rexx_parse::Signal::Label(name), None) => {
+                                                match self.signal_to_label(name) {
+                                                    Ok(flow) => flow,
+                                                    Err(failure) => break 'cold Err(failure),
+                                                }
                                             }
-                                        }
-                                        (rexx_parse::Signal::Value(_), Some(register)) => {
-                                            debug_assert!(
-                                                chunk.holds_register(*register),
-                                                "op reads register {register} outside the region                                                  the chunk reserved"
-                                            );
-                                            let value =
-                                                self.roots.temp_at(registers, *register as usize);
-                                            match self.signal_to_value(value) {
-                                                Ok(flow) => flow,
-                                                Err(failure) => break 'region Err(failure),
+                                            (rexx_parse::Signal::Value(_), Some(register)) => {
+                                                debug_assert!(
+                                                    chunk.holds_register(*register),
+                                                    "op reads register {register} outside the region                                                  the chunk reserved"
+                                                );
+                                                let value = self
+                                                    .roots
+                                                    .temp_at(registers, *register as usize);
+                                                match self.signal_to_value(value) {
+                                                    Ok(flow) => flow,
+                                                    Err(failure) => break 'cold Err(failure),
+                                                }
                                             }
-                                        }
-                                        (rexx_parse::Signal::Trap(trap), None) => {
-                                            match self.exec_condition_trap(trap, false) {
-                                                Ok(flow) => flow,
-                                                Err(failure) => break 'region Err(failure),
+                                            (rexx_parse::Signal::Trap(trap), None) => {
+                                                match self.exec_condition_trap(trap, false) {
+                                                    Ok(flow) => flow,
+                                                    Err(failure) => break 'cold Err(failure),
+                                                }
                                             }
-                                        }
-                                        // A form whose operand does not match
-                                        // the op's own: loud rather than a
-                                        // guess about which of the two is right.
-                                        _ => {
-                                            break 'region Err(
-                                                Loud::signal_op_off_its_node().into()
-                                            );
-                                        }
-                                    };
-                                    break 'region Ok(RegionEnd::Flowed(flow));
-                                }
-                                // `PARSE`/`ARG`/`PULL`. The whole instruction is
-                                // `exec_parse`, which both engines enter; what
-                                // this op adds is the source expression already
-                                // evaluated, for the one source that has one.
-                                Op::Parse { index, src } => {
-                                    debug_assert_names_the_clause(code, *index, clause, "Parse");
-                                    let (InstructionKind::Parse(parse)
-                                    | InstructionKind::Arg(parse)
-                                    | InstructionKind::Pull(parse)) = &clause.kind
-                                    else {
-                                        break 'region Err(Loud::instruction(&clause.kind).into());
-                                    };
-                                    let evaluated = src.map(|register| {
+                                            // A form whose operand does not match
+                                            // the op's own: loud rather than a
+                                            // guess about which of the two is right.
+                                            _ => {
+                                                break 'cold Err(
+                                                    Loud::signal_op_off_its_node().into()
+                                                );
+                                            }
+                                        };
+                                        break 'cold Ok(RegionEnd::Flowed(flow));
+                                    }
+                                    // `PARSE`/`ARG`/`PULL`. The whole instruction is
+                                    // `exec_parse`, which both engines enter; what
+                                    // this op adds is the source expression already
+                                    // evaluated, for the one source that has one.
+                                    Op::Parse { index, src } => {
+                                        debug_assert_names_the_clause(
+                                            code, *index, clause, "Parse",
+                                        );
+                                        let (InstructionKind::Parse(parse)
+                                        | InstructionKind::Arg(parse)
+                                        | InstructionKind::Pull(parse)) = &clause.kind
+                                        else {
+                                            break 'cold Err(Loud::instruction(&clause.kind).into());
+                                        };
+                                        let evaluated = src.map(|register| {
                                         debug_assert!(
                                             chunk.holds_register(register),
                                             "op reads register {register} outside the region the \
@@ -1223,23 +1255,25 @@ impl Interp {
                                         );
                                         self.roots.temp_at(registers, register as usize)
                                     });
-                                    if let Err(failure) = self.exec_parse(code, parse, evaluated) {
-                                        break 'region Err(failure);
+                                        if let Err(failure) =
+                                            self.exec_parse(code, parse, evaluated)
+                                        {
+                                            break 'cold Err(failure);
+                                        }
+                                        break 'cold Ok(RegionEnd::Flowed(Flow::Next));
                                     }
-                                    break 'region Ok(RegionEnd::Flowed(Flow::Next));
-                                }
-                                Op::Say { index, src } => {
-                                    debug_assert_names_the_clause(code, *index, clause, "Say");
-                                    debug_assert!(
-                                        matches!(
-                                            &clause.kind,
-                                            InstructionKind::Say { expression }
-                                                if expression.is_some() == src.is_some()
-                                        ),
-                                        "a Say op names an instruction that is not a SAY of \
+                                    Op::Say { index, src } => {
+                                        debug_assert_names_the_clause(code, *index, clause, "Say");
+                                        debug_assert!(
+                                            matches!(
+                                                &clause.kind,
+                                                InstructionKind::Say { expression }
+                                                    if expression.is_some() == src.is_some()
+                                            ),
+                                            "a Say op names an instruction that is not a SAY of \
                                          matching arity"
-                                    );
-                                    let value = src.map(|register| {
+                                        );
+                                        let value = src.map(|register| {
                                         debug_assert!(
                                             chunk.holds_register(register),
                                             "op reads register {register} outside the region the \
@@ -1247,54 +1281,58 @@ impl Interp {
                                         );
                                         self.roots.temp_at(registers, register as usize)
                                     });
-                                    self.say_evaluated(value);
-                                }
-                                // The end of the activation, through
-                                // `Interp::returned_value`, for the same
-                                // reason `Op::Say` goes through
-                                // `say_evaluated`: the `>>>` line, the root
-                                // and the choice between `Flow::Return` and
-                                // `Flow::Exit` are that function's rather than
-                                // a second copy.
-                                //
-                                // **The region ends here**, carrying the
-                                // `Flow` out to `settle` exactly as
-                                // `Op::Call`'s arm does with the `Flow` a call
-                                // answers. The value leaves this clause inside
-                                // that `Flow`, so what roots it across the
-                                // boundary is `RegionEnd`'s own `ClauseValue`,
-                                // which forwards to `ClauseValue for Flow` --
-                                // the same rule `step`'s arm reaches through
-                                // `in_clause`, rather than a second copy.
-                                Op::Return {
-                                    index,
-                                    src,
-                                    keyword,
-                                } => {
-                                    debug_assert_names_the_clause(code, *index, clause, "Return");
-                                    debug_assert!(
-                                        matches!(
-                                            &clause.kind,
-                                            InstructionKind::Return { expression }
-                                                | InstructionKind::Exit { expression }
-                                                if expression.is_some() == src.is_some()
-                                        ),
-                                        "a Return op names an instruction that is not a RETURN or \
+                                        self.say_evaluated(value);
+                                    }
+                                    // The end of the activation, through
+                                    // `Interp::returned_value`, for the same
+                                    // reason `Op::Say` goes through
+                                    // `say_evaluated`: the `>>>` line, the root
+                                    // and the choice between `Flow::Return` and
+                                    // `Flow::Exit` are that function's rather than
+                                    // a second copy.
+                                    //
+                                    // **The region ends here**, carrying the
+                                    // `Flow` out to `settle` exactly as
+                                    // `Op::Call`'s arm does with the `Flow` a call
+                                    // answers. The value leaves this clause inside
+                                    // that `Flow`, so what roots it across the
+                                    // boundary is `RegionEnd`'s own `ClauseValue`,
+                                    // which forwards to `ClauseValue for Flow` --
+                                    // the same rule `step`'s arm reaches through
+                                    // `in_clause`, rather than a second copy.
+                                    Op::Return {
+                                        index,
+                                        src,
+                                        keyword,
+                                    } => {
+                                        debug_assert_names_the_clause(
+                                            code, *index, clause, "Return",
+                                        );
+                                        debug_assert!(
+                                            matches!(
+                                                &clause.kind,
+                                                InstructionKind::Return { expression }
+                                                    | InstructionKind::Exit { expression }
+                                                    if expression.is_some() == src.is_some()
+                                            ),
+                                            "a Return op names an instruction that is not a RETURN or \
                                          an EXIT of matching arity"
-                                    );
-                                    debug_assert!(
-                                        matches!(
-                                            (&clause.kind, keyword),
-                                            (InstructionKind::Return { .. }, ReturnKeyword::Return)
-                                                | (
+                                        );
+                                        debug_assert!(
+                                            matches!(
+                                                (&clause.kind, keyword),
+                                                (
+                                                    InstructionKind::Return { .. },
+                                                    ReturnKeyword::Return
+                                                ) | (
                                                     InstructionKind::Exit { .. },
                                                     ReturnKeyword::Exit
                                                 )
-                                        ),
-                                        "a Return op's keyword names the other half of the pair \
+                                            ),
+                                            "a Return op's keyword names the other half of the pair \
                                          from the clause it ends"
-                                    );
-                                    let value = src.map(|register| {
+                                        );
+                                        let value = src.map(|register| {
                                         debug_assert!(
                                             chunk.holds_register(register),
                                             "op reads register {register} outside the region the \
@@ -1302,43 +1340,45 @@ impl Interp {
                                         );
                                         self.roots.temp_at(registers, register as usize)
                                     });
-                                    let flow = self.returned_value(value, *keyword);
-                                    break 'region Ok(RegionEnd::Flowed(flow));
-                                }
-                                // The queue write and its `>>>`, through
-                                // `Interp::queue_evaluated`. This one does not
-                                // end the region: a `PUSH` and a `QUEUE`
-                                // answer `Flow::Next`, so the region ends
-                                // where a `SAY`'s does.
-                                Op::Queue {
-                                    index,
-                                    src,
-                                    keyword,
-                                } => {
-                                    debug_assert_names_the_clause(code, *index, clause, "Queue");
-                                    debug_assert!(
-                                        matches!(
-                                            &clause.kind,
-                                            InstructionKind::Push { expression }
-                                                | InstructionKind::Queue { expression }
-                                                if expression.is_some() == src.is_some()
-                                        ),
-                                        "a Queue op names an instruction that is not a PUSH or a \
+                                        let flow = self.returned_value(value, *keyword);
+                                        break 'cold Ok(RegionEnd::Flowed(flow));
+                                    }
+                                    // The queue write and its `>>>`, through
+                                    // `Interp::queue_evaluated`. This one does not
+                                    // end the region: a `PUSH` and a `QUEUE`
+                                    // answer `Flow::Next`, so the region ends
+                                    // where a `SAY`'s does.
+                                    Op::Queue {
+                                        index,
+                                        src,
+                                        keyword,
+                                    } => {
+                                        debug_assert_names_the_clause(
+                                            code, *index, clause, "Queue",
+                                        );
+                                        debug_assert!(
+                                            matches!(
+                                                &clause.kind,
+                                                InstructionKind::Push { expression }
+                                                    | InstructionKind::Queue { expression }
+                                                    if expression.is_some() == src.is_some()
+                                            ),
+                                            "a Queue op names an instruction that is not a PUSH or a \
                                          QUEUE of matching arity"
-                                    );
-                                    debug_assert!(
-                                        matches!(
-                                            (&clause.kind, keyword),
-                                            (InstructionKind::Push { .. }, QueueKeyword::Push)
-                                                | (
-                                                    InstructionKind::Queue { .. },
-                                                    QueueKeyword::Queue
-                                                )
-                                        ),
-                                        "a Queue op's keyword names the other half of the pair \
+                                        );
+                                        debug_assert!(
+                                            matches!(
+                                                (&clause.kind, keyword),
+                                                (InstructionKind::Push { .. }, QueueKeyword::Push)
+                                                    | (
+                                                        InstructionKind::Queue { .. },
+                                                        QueueKeyword::Queue
+                                                    )
+                                            ),
+                                            "a Queue op's keyword names the other half of the pair \
                                          from the clause it writes for"
-                                    );
-                                    let value = src.map(|register| {
+                                        );
+                                        let value = src.map(|register| {
                                         debug_assert!(
                                             chunk.holds_register(register),
                                             "op reads register {register} outside the region the \
@@ -1346,336 +1386,369 @@ impl Interp {
                                         );
                                         self.roots.temp_at(registers, register as usize)
                                     });
-                                    self.queue_evaluated(value, *keyword);
-                                }
-                                // The call, through the same
-                                // `Interp::resolve_call` and
-                                // `Interp::invoke_named_call` that `step`'s own
-                                // `Call` arm reaches -- so the resolution
-                                // order, the argument loop with its `>A>`
-                                // lines, the depth guard, the level state saved
-                                // around the nested activation and the `RESULT`
-                                // settle are that arm's rather than a second
-                                // copy. This op emits nothing itself and owes
-                                // no echo op, because it took no line away from
-                                // `eval.rs`: `Op::Call`'s own doc comment has
-                                // the argument and the measurement behind it.
-                                Op::Call { index, site } => {
-                                    debug_assert_names_the_clause(code, *index, clause, "Call");
-                                    let InstructionKind::Call(call) = &clause.kind else {
-                                        break 'region Err(Loud::call_op_off_its_node().into());
-                                    };
-                                    let Call::Named {
-                                        name,
-                                        literal,
-                                        args,
-                                    } = &**call
-                                    else {
-                                        break 'region Err(Loud::call_op_off_its_node().into());
-                                    };
-                                    // **The site's own kept answer, and the
-                                    // resolution when it has none.** Nothing
-                                    // invalidates one -- `CallSite`'s own doc
-                                    // comment has the reason per resolution
-                                    // step -- so a hit needs no guard and there
-                                    // is none. A raise is deliberately not
-                                    // recorded: `resolve_call` answers `Err`
-                                    // for a name that matched nothing, and a
-                                    // site that raised asks again.
-                                    let resolved = match chunk.resolved_call(*site) {
-                                        Some(resolved) => {
-                                            #[cfg(test)]
-                                            count_call_site_hit();
-                                            resolved
-                                        }
-                                        None => match self.resolve_call(name, !*literal) {
-                                            Ok(resolved) => {
-                                                chunk.remember_call(*site, resolved);
+                                        self.queue_evaluated(value, *keyword);
+                                    }
+                                    // The call, through the same
+                                    // `Interp::resolve_call` and
+                                    // `Interp::invoke_named_call` that `step`'s own
+                                    // `Call` arm reaches -- so the resolution
+                                    // order, the argument loop with its `>A>`
+                                    // lines, the depth guard, the level state saved
+                                    // around the nested activation and the `RESULT`
+                                    // settle are that arm's rather than a second
+                                    // copy. This op emits nothing itself and owes
+                                    // no echo op, because it took no line away from
+                                    // `eval.rs`: `Op::Call`'s own doc comment has
+                                    // the argument and the measurement behind it.
+                                    Op::Call { index, site } => {
+                                        debug_assert_names_the_clause(code, *index, clause, "Call");
+                                        let InstructionKind::Call(call) = &clause.kind else {
+                                            break 'cold Err(Loud::call_op_off_its_node().into());
+                                        };
+                                        let Call::Named {
+                                            name,
+                                            literal,
+                                            args,
+                                        } = &**call
+                                        else {
+                                            break 'cold Err(Loud::call_op_off_its_node().into());
+                                        };
+                                        // **The site's own kept answer, and the
+                                        // resolution when it has none.** Nothing
+                                        // invalidates one -- `CallSite`'s own doc
+                                        // comment has the reason per resolution
+                                        // step -- so a hit needs no guard and there
+                                        // is none. A raise is deliberately not
+                                        // recorded: `resolve_call` answers `Err`
+                                        // for a name that matched nothing, and a
+                                        // site that raised asks again.
+                                        let resolved = match chunk.resolved_call(*site) {
+                                            Some(resolved) => {
+                                                #[cfg(test)]
+                                                count_call_site_hit();
                                                 resolved
                                             }
-                                            Err(failure) => break 'region Err(failure),
-                                        },
-                                    };
-                                    let flow =
-                                        match self.invoke_named_call(code, resolved, name, args) {
+                                            None => match self.resolve_call(name, !*literal) {
+                                                Ok(resolved) => {
+                                                    chunk.remember_call(*site, resolved);
+                                                    resolved
+                                                }
+                                                Err(failure) => break 'cold Err(failure),
+                                            },
+                                        };
+                                        let flow = match self
+                                            .invoke_named_call(code, resolved, name, args)
+                                        {
                                             Ok(flow) => flow,
-                                            Err(failure) => break 'region Err(failure),
+                                            Err(failure) => break 'cold Err(failure),
                                         };
-                                    break 'region Ok(RegionEnd::Flowed(flow));
-                                }
-                                // A message send that is a whole clause,
-                                // whichever form it was written in.
-                                // `exec_message` is the tree-walker's own arm,
-                                // entered here with the fields it reads: the
-                                // term, and the message-assignment form's
-                                // value.
-                                Op::Message { index } => {
-                                    debug_assert_names_the_clause(code, *index, clause, "Message");
-                                    let InstructionKind::Message { term, value } = &clause.kind
-                                    else {
-                                        break 'region Err(Loud::instruction(&clause.kind).into());
-                                    };
-                                    let flow = match self.exec_message(code, term, value.as_ref()) {
-                                        Ok(flow) => flow,
-                                        Err(failure) => break 'region Err(failure),
-                                    };
-                                    break 'region Ok(RegionEnd::Flowed(flow));
-                                }
-                                // `EXPOSE`. `exec_expose` is the tree-walker's
-                                // own arm, entered here with the one field it
-                                // reads.
-                                Op::Expose { index } => {
-                                    debug_assert_names_the_clause(code, *index, clause, "Expose");
-                                    let InstructionKind::Expose { variables } = &clause.kind else {
-                                        break 'region Err(Loud::instruction(&clause.kind).into());
-                                    };
-                                    if let Err(failure) = self.exec_expose(code, variables) {
-                                        break 'region Err(failure);
+                                        break 'cold Ok(RegionEnd::Flowed(flow));
                                     }
-                                    break 'region Ok(RegionEnd::Flowed(Flow::Next));
-                                }
-                                // `LEAVE`/`ITERATE`. `leave_origin` is the
-                                // tree-walker's own capture, entered here with
-                                // the clause this region has open; which `Flow`
-                                // carries it is the only thing the two keywords
-                                // differ in, and the clause is what says which.
-                                Op::Escape { index: at } => {
-                                    debug_assert_names_the_clause(code, *at, clause, "Escape");
-                                    let origin =
-                                        Box::new(self.leave_origin(code, index, source, clause));
-                                    let flow = match clause.kind {
-                                        InstructionKind::Leave { name } => {
-                                            Flow::Leave(name, origin)
-                                        }
-                                        InstructionKind::Iterate { name } => {
-                                            Flow::Iterate(name, origin)
-                                        }
-                                        _ => {
-                                            break 'region Err(
-                                                Loud::instruction(&clause.kind).into()
-                                            );
-                                        }
-                                    };
-                                    break 'region Ok(RegionEnd::Flowed(flow));
-                                }
-                                // An `IF`'s or a plain `WHEN`'s condition
-                                // validation and its `>>>` line, through the
-                                // same `Interp::condition_value` the
-                                // tree-walker's own `eval_condition` reaches
-                                // -- so the trace, the temps frame, the
-                                // readback and the raiser are that function's
-                                // rather than a second copy. One arm for both
-                                // keywords, because the raiser is the only
-                                // thing that differs and the op carries it.
-                                // The register is read and written in place:
-                                // what a jump tests is the logical value of
-                                // the answer, and the unvalidated value has no
-                                // reader left.
-                                Op::Condition {
-                                    index,
-                                    reg,
-                                    keyword,
-                                } => {
-                                    debug_assert!(
-                                        chunk.holds_register(*reg),
-                                        "op reads register {reg} outside the region the chunk \
-                                         reserved"
-                                    );
-                                    debug_assert_names_the_clause(
-                                        code,
-                                        *index,
-                                        clause,
-                                        "Condition",
-                                    );
-                                    debug_assert!(
-                                        matches!(
-                                            (&clause.kind, keyword),
-                                            (InstructionKind::If { .. }, ConditionKeyword::If)
-                                                | (
-                                                    InstructionKind::When { .. },
-                                                    ConditionKeyword::When
-                                                )
-                                        ),
-                                        "a Condition op's keyword does not name the clause whose \
-                                         condition it is validating"
-                                    );
-                                    let value = self.roots.temp_at(registers, *reg as usize);
-                                    // Read live rather than compiled in, for
-                                    // the reason `eval_if_condition` reads it
-                                    // live: a nested activation moves it.
-                                    let indent = self.clause_state.current_value_indent;
-                                    let holds = match self.condition_value(
-                                        value,
-                                        ConditionTrace::Result(indent),
-                                        false,
-                                        keyword.raiser(),
-                                    ) {
-                                        Ok(holds) => holds,
-                                        Err(failure) => break 'region Err(failure),
-                                    };
-                                    // In range unconditionally: `SMALL_INT_MAX`
-                                    // is far above one.
-                                    let logical =
-                                        ObjRef::small_int(i64::from(holds)).unwrap_or(ObjRef::NIL);
-                                    self.roots.set_temp(registers, *reg as usize, logical);
-                                }
-                                Op::JumpUnless { reg, target } => {
-                                    debug_assert!(
-                                        chunk.holds_register(*reg),
-                                        "op reads register {reg} outside the region the chunk \
-                                         reserved"
-                                    );
-                                    match self.register_holds(registers, *reg) {
-                                        Ok(true) => {}
-                                        Ok(false) => break 'region Ok(RegionEnd::At(*target)),
-                                        Err(failure) => break 'region Err(failure),
-                                    }
-                                }
-                                Op::WhenTest { index, case, dst } => {
-                                    debug_assert!(
-                                        chunk.holds_register(*dst),
-                                        "op writes register {dst} outside the region the chunk \
-                                         reserved"
-                                    );
-                                    let case_text = match case {
-                                        Some(register) => {
-                                            debug_assert!(
-                                                chunk.holds_register(*register),
-                                                "op reads register {register} outside the region \
-                                                 the chunk reserved"
-                                            );
-                                            let value =
-                                                self.roots.temp_at(registers, *register as usize);
-                                            Some(self.to_text(value).to_vec())
-                                        }
-                                        None => None,
-                                    };
-                                    debug_assert_names_the_clause(code, *index, clause, "WhenTest");
-                                    let holds =
-                                        match self.scan_when(code, clause, case_text.as_deref()) {
-                                            Ok(holds) => holds,
-                                            Err(failure) => break 'region Err(failure),
+                                    // A message send that is a whole clause,
+                                    // whichever form it was written in.
+                                    // `exec_message` is the tree-walker's own arm,
+                                    // entered here with the fields it reads: the
+                                    // term, and the message-assignment form's
+                                    // value.
+                                    Op::Message { index } => {
+                                        debug_assert_names_the_clause(
+                                            code, *index, clause, "Message",
+                                        );
+                                        let InstructionKind::Message { term, value } = &clause.kind
+                                        else {
+                                            break 'cold Err(Loud::instruction(&clause.kind).into());
                                         };
-                                    // In range unconditionally: `SMALL_INT_MAX`
-                                    // is far above one. Stored as the logical
-                                    // value `Op::JumpUnless` reads back, exactly
-                                    // as an `IF`'s condition is.
-                                    let value =
-                                        ObjRef::small_int(i64::from(holds)).unwrap_or(ObjRef::NIL);
-                                    self.roots.set_temp(registers, *dst as usize, value);
-                                }
-                                // The `>K>` line of one header value. **The
-                                // emission is its own op**, which is what lets
-                                // the stream reproduce the order the oracle
-                                // evaluates and echoes a loop header in:
-                                // evaluate `TO`, echo it, evaluate `BY`, echo
-                                // it.
-                                Op::TraceKeyword { role, src } => {
-                                    debug_assert!(
-                                        chunk.holds_register(*src),
-                                        "op reads register {src} outside the region the chunk \
-                                         reserved"
-                                    );
-                                    let value = self.roots.temp_at(registers, *src as usize);
-                                    self.echo_header_value(*role, value);
-                                }
-                                // One header value's own validation, in front of
-                                // the next value's evaluation because that order
-                                // is observable (`Op::LoopHeaderValue`'s own doc
-                                // comment).
-                                Op::LoopHeaderValue { role, src } => {
-                                    debug_assert!(
-                                        chunk.holds_register(*src),
-                                        "op reads register {src} outside the region the chunk \
-                                         reserved"
-                                    );
-                                    let value = self.roots.temp_at(registers, *src as usize);
-                                    let values =
-                                        header.get_or_insert_with(LoopHeaderValues::default);
-                                    if let Err(failure) =
-                                        self.accept_header_value(*role, value, values)
-                                    {
-                                        break 'region Err(failure);
+                                        let flow =
+                                            match self.exec_message(code, term, value.as_ref()) {
+                                                Ok(flow) => flow,
+                                                Err(failure) => break 'cold Err(failure),
+                                            };
+                                        break 'cold Ok(RegionEnd::Flowed(flow));
                                     }
-                                }
-                                // The construct itself, from the values the ops
-                                // above filed. `run_loop_with_header` is the
-                                // same function the tree-walker reaches, and
-                                // `BodyEngine::Chunk` is the one thing this call
-                                // says that the tree-walker's does not: the
-                                // body's clauses come from this chunk.
-                                Op::LoopRun { index } => {
-                                    debug_assert_names_the_clause(code, *index, clause, "LoopRun");
-                                    let index = *index as usize;
-                                    let (InstructionKind::Do(body) | InstructionKind::Loop(body)) =
-                                        &clause.kind
-                                    else {
-                                        break 'region Err(Loud::loop_op_off_its_node().into());
-                                    };
-                                    let values = header.take().unwrap_or_default();
-                                    // **SPIKE.** Flattened when this is a
-                                    // shape the spike drives: the frame goes
-                                    // on the stack, the region ends, and the
-                                    // counter falls into the body's first op,
-                                    // which is the op after this region.
-                                    let values = match self.flat_loop_start(
-                                        code, index, clause, body, source, values, end,
-                                    ) {
-                                        Ok(crate::run::FlatStart::Flat {
-                                            body_start,
-                                            end_index,
-                                        }) => {
-                                            self.frames
-                                                .push(Frame::loop_pass(body_start, end_index));
-                                            break 'region Ok(RegionEnd::At(end));
+                                    // `EXPOSE`. `exec_expose` is the tree-walker's
+                                    // own arm, entered here with the one field it
+                                    // reads.
+                                    Op::Expose { index } => {
+                                        debug_assert_names_the_clause(
+                                            code, *index, clause, "Expose",
+                                        );
+                                        let InstructionKind::Expose { variables } = &clause.kind
+                                        else {
+                                            break 'cold Err(Loud::instruction(&clause.kind).into());
+                                        };
+                                        if let Err(failure) = self.exec_expose(code, variables) {
+                                            break 'cold Err(failure);
                                         }
-                                        Ok(crate::run::FlatStart::Ended(flow)) => {
-                                            break 'region Ok(RegionEnd::Flowed(flow));
-                                        }
-                                        Ok(crate::run::FlatStart::Fallback(values)) => values,
-                                        Err(failure) => break 'region Err(failure),
-                                    };
-                                    let flow = match self.run_loop_with_header(
-                                        code,
+                                        break 'cold Ok(RegionEnd::Flowed(Flow::Next));
+                                    }
+                                    // `LEAVE`/`ITERATE`. `leave_origin` is the
+                                    // tree-walker's own capture, entered here with
+                                    // the clause this region has open; which `Flow`
+                                    // carries it is the only thing the two keywords
+                                    // differ in, and the clause is what says which.
+                                    Op::Escape { index: at } => {
+                                        debug_assert_names_the_clause(code, *at, clause, "Escape");
+                                        let origin = Box::new(
+                                            self.leave_origin(code, index, source, clause),
+                                        );
+                                        let flow = match clause.kind {
+                                            InstructionKind::Leave { name } => {
+                                                Flow::Leave(name, origin)
+                                            }
+                                            InstructionKind::Iterate { name } => {
+                                                Flow::Iterate(name, origin)
+                                            }
+                                            _ => {
+                                                break 'cold Err(
+                                                    Loud::instruction(&clause.kind).into()
+                                                );
+                                            }
+                                        };
+                                        break 'cold Ok(RegionEnd::Flowed(flow));
+                                    }
+                                    // An `IF`'s or a plain `WHEN`'s condition
+                                    // validation and its `>>>` line, through the
+                                    // same `Interp::condition_value` the
+                                    // tree-walker's own `eval_condition` reaches
+                                    // -- so the trace, the temps frame, the
+                                    // readback and the raiser are that function's
+                                    // rather than a second copy. One arm for both
+                                    // keywords, because the raiser is the only
+                                    // thing that differs and the op carries it.
+                                    // The register is read and written in place:
+                                    // what a jump tests is the logical value of
+                                    // the answer, and the unvalidated value has no
+                                    // reader left.
+                                    Op::Condition {
                                         index,
-                                        clause,
-                                        body,
-                                        source,
-                                        BodyEngine::Chunk { chunk, registers },
-                                        values,
-                                    ) {
-                                        Ok(flow) => flow,
-                                        Err(failure) => break 'region Err(failure),
-                                    };
-                                    break 'region Ok(RegionEnd::Flowed(flow));
-                                }
-                                Op::Jump { target } => {
-                                    break 'region Ok(RegionEnd::At(*target));
-                                }
-                                Op::Generic { .. } => {
-                                    break 'region Err(Loud::op_not_driven("Generic").into());
-                                }
-                                Op::LoopNext { .. } => {
-                                    break 'region Err(Loud::op_not_driven("LoopNext").into());
-                                }
-                                Op::Clause { .. } => {
-                                    break 'region Err(Loud::op_not_driven("Clause").into());
-                                }
-                                Op::SelectCaseText { .. } => {
-                                    break 'region Err(Loud::op_not_driven("SelectCaseText").into());
-                                }
-                                Op::EnterWhen { .. } => {
-                                    break 'region Err(Loud::op_not_driven("EnterWhen").into());
-                                }
-                                Op::EnterOtherwise { .. } => {
-                                    break 'region Err(Loud::op_not_driven("EnterOtherwise").into());
-                                }
-                                Op::EndBranch => {
-                                    break 'region Err(Loud::op_not_driven("EndBranch").into());
+                                        reg,
+                                        keyword,
+                                    } => {
+                                        debug_assert!(
+                                            chunk.holds_register(*reg),
+                                            "op reads register {reg} outside the region the chunk \
+                                         reserved"
+                                        );
+                                        debug_assert_names_the_clause(
+                                            code,
+                                            *index,
+                                            clause,
+                                            "Condition",
+                                        );
+                                        debug_assert!(
+                                            matches!(
+                                                (&clause.kind, keyword),
+                                                (InstructionKind::If { .. }, ConditionKeyword::If)
+                                                    | (
+                                                        InstructionKind::When { .. },
+                                                        ConditionKeyword::When
+                                                    )
+                                            ),
+                                            "a Condition op's keyword does not name the clause whose \
+                                         condition it is validating"
+                                        );
+                                        let value = self.roots.temp_at(registers, *reg as usize);
+                                        // Read live rather than compiled in, for
+                                        // the reason `eval_if_condition` reads it
+                                        // live: a nested activation moves it.
+                                        let indent = self.clause_state.current_value_indent;
+                                        let holds = match self.condition_value(
+                                            value,
+                                            ConditionTrace::Result(indent),
+                                            false,
+                                            keyword.raiser(),
+                                        ) {
+                                            Ok(holds) => holds,
+                                            Err(failure) => break 'cold Err(failure),
+                                        };
+                                        // In range unconditionally: `SMALL_INT_MAX`
+                                        // is far above one.
+                                        let logical = ObjRef::small_int(i64::from(holds))
+                                            .unwrap_or(ObjRef::NIL);
+                                        self.roots.set_temp(registers, *reg as usize, logical);
+                                    }
+                                    Op::JumpUnless { reg, target } => {
+                                        debug_assert!(
+                                            chunk.holds_register(*reg),
+                                            "op reads register {reg} outside the region the chunk \
+                                         reserved"
+                                        );
+                                        match self.register_holds(registers, *reg) {
+                                            Ok(true) => {}
+                                            Ok(false) => break 'region *target,
+                                            Err(failure) => break 'cold Err(failure),
+                                        }
+                                    }
+                                    Op::WhenTest { index, case, dst } => {
+                                        debug_assert!(
+                                            chunk.holds_register(*dst),
+                                            "op writes register {dst} outside the region the chunk \
+                                         reserved"
+                                        );
+                                        let case_text = match case {
+                                            Some(register) => {
+                                                debug_assert!(
+                                                    chunk.holds_register(*register),
+                                                    "op reads register {register} outside the region \
+                                                 the chunk reserved"
+                                                );
+                                                let value = self
+                                                    .roots
+                                                    .temp_at(registers, *register as usize);
+                                                Some(self.to_text(value).to_vec())
+                                            }
+                                            None => None,
+                                        };
+                                        debug_assert_names_the_clause(
+                                            code, *index, clause, "WhenTest",
+                                        );
+                                        let holds = match self.scan_when(
+                                            code,
+                                            clause,
+                                            case_text.as_deref(),
+                                        ) {
+                                            Ok(holds) => holds,
+                                            Err(failure) => break 'cold Err(failure),
+                                        };
+                                        // In range unconditionally: `SMALL_INT_MAX`
+                                        // is far above one. Stored as the logical
+                                        // value `Op::JumpUnless` reads back, exactly
+                                        // as an `IF`'s condition is.
+                                        let value = ObjRef::small_int(i64::from(holds))
+                                            .unwrap_or(ObjRef::NIL);
+                                        self.roots.set_temp(registers, *dst as usize, value);
+                                    }
+                                    // The `>K>` line of one header value. **The
+                                    // emission is its own op**, which is what lets
+                                    // the stream reproduce the order the oracle
+                                    // evaluates and echoes a loop header in:
+                                    // evaluate `TO`, echo it, evaluate `BY`, echo
+                                    // it.
+                                    Op::TraceKeyword { role, src } => {
+                                        debug_assert!(
+                                            chunk.holds_register(*src),
+                                            "op reads register {src} outside the region the chunk \
+                                         reserved"
+                                        );
+                                        let value = self.roots.temp_at(registers, *src as usize);
+                                        self.echo_header_value(*role, value);
+                                    }
+                                    // One header value's own validation, in front of
+                                    // the next value's evaluation because that order
+                                    // is observable (`Op::LoopHeaderValue`'s own doc
+                                    // comment).
+                                    Op::LoopHeaderValue { role, src } => {
+                                        debug_assert!(
+                                            chunk.holds_register(*src),
+                                            "op reads register {src} outside the region the chunk \
+                                         reserved"
+                                        );
+                                        let value = self.roots.temp_at(registers, *src as usize);
+                                        let values =
+                                            header.get_or_insert_with(LoopHeaderValues::default);
+                                        if let Err(failure) =
+                                            self.accept_header_value(*role, value, values)
+                                        {
+                                            break 'cold Err(failure);
+                                        }
+                                    }
+                                    // The construct itself, from the values the ops
+                                    // above filed. `run_loop_with_header` is the
+                                    // same function the tree-walker reaches, and
+                                    // `BodyEngine::Chunk` is the one thing this call
+                                    // says that the tree-walker's does not: the
+                                    // body's clauses come from this chunk.
+                                    Op::LoopRun { index } => {
+                                        debug_assert_names_the_clause(
+                                            code, *index, clause, "LoopRun",
+                                        );
+                                        let index = *index as usize;
+                                        let (InstructionKind::Do(body)
+                                        | InstructionKind::Loop(body)) = &clause.kind
+                                        else {
+                                            break 'cold Err(Loud::loop_op_off_its_node().into());
+                                        };
+                                        let values = header.take().unwrap_or_default();
+                                        // **SPIKE.** Flattened when this is a
+                                        // shape the spike drives: the frame goes
+                                        // on the stack, the region ends, and the
+                                        // counter falls into the body's first op,
+                                        // which is the op after this region.
+                                        let values = match self.flat_loop_start(
+                                            code, index, clause, body, source, values, end,
+                                        ) {
+                                            Ok(crate::run::FlatStart::Flat {
+                                                body_start,
+                                                end_index,
+                                            }) => {
+                                                self.frames
+                                                    .push(Frame::loop_pass(body_start, end_index));
+                                                break 'region end;
+                                            }
+                                            Ok(crate::run::FlatStart::Ended(flow)) => {
+                                                break 'cold Ok(RegionEnd::Flowed(flow));
+                                            }
+                                            Ok(crate::run::FlatStart::Fallback(values)) => values,
+                                            Err(failure) => break 'cold Err(failure),
+                                        };
+                                        let flow = match self.run_loop_with_header(
+                                            code,
+                                            index,
+                                            clause,
+                                            body,
+                                            source,
+                                            BodyEngine::Chunk { chunk, registers },
+                                            values,
+                                        ) {
+                                            Ok(flow) => flow,
+                                            Err(failure) => break 'cold Err(failure),
+                                        };
+                                        break 'cold Ok(RegionEnd::Flowed(flow));
+                                    }
+                                    Op::Jump { target } => {
+                                        break 'region *target;
+                                    }
+                                    Op::Generic { .. } => {
+                                        break 'cold Err(Loud::op_not_driven("Generic").into());
+                                    }
+                                    Op::LoopNext { .. } => {
+                                        break 'cold Err(Loud::op_not_driven("LoopNext").into());
+                                    }
+                                    Op::Clause { .. } => {
+                                        break 'cold Err(Loud::op_not_driven("Clause").into());
+                                    }
+                                    Op::SelectCaseText { .. } => {
+                                        break 'cold Err(
+                                            Loud::op_not_driven("SelectCaseText").into()
+                                        );
+                                    }
+                                    Op::EnterWhen { .. } => {
+                                        break 'cold Err(Loud::op_not_driven("EnterWhen").into());
+                                    }
+                                    Op::EnterOtherwise { .. } => {
+                                        break 'cold Err(
+                                            Loud::op_not_driven("EnterOtherwise").into()
+                                        );
+                                    }
+                                    Op::EndBranch => {
+                                        break 'cold Err(Loud::op_not_driven("EndBranch").into());
+                                    }
                                 }
                             }
+                            end
+                        };
+                        // **The hot exit, and the whole point of the split.**
+                        // `leave_clause`'s own fast path is this same question,
+                        // so asking it here reaches the same answer without
+                        // building the value that answer would travel in.
+                        // `finish_plain_clause` discharges what is left of the
+                        // boundary.
+                        if self.pending_traps.is_empty() {
+                            self.finish_plain_clause(entry);
+                            pc = next;
+                            continue 'ops;
                         }
-                        Ok(RegionEnd::At(end))
+                        Ok(RegionEnd::At(next))
                     };
                     match self.leave_stepped_clause(entry, code, index, clause, source, ran)? {
                         ClauseOutcome::Ran(region) => match region? {

@@ -561,6 +561,32 @@ impl Interp {
         Ok(ClauseOutcome::Ran(ran))
     }
 
+    /// Spends `entry` with **no boundary and no value at all**, for a clause
+    /// that produced neither a `Flow` nor a failure at a moment when
+    /// `pending_traps` is empty.
+    ///
+    /// That precondition is what makes this the same thing
+    /// [`Interp::leave_clause`] would do: its own first two exits both hand
+    /// `ran` straight back, and with nothing queued the second is the one
+    /// taken. It is also why the `DO`/`LOOP` exemption
+    /// [`Interp::leave_clause_without_boundary`] exists for does not need
+    /// repeating here -- an exemption from delivering has nothing to exempt
+    /// when there is nothing to deliver, so both halves of that decision
+    /// collapse into this one function.
+    ///
+    /// Taking `&self` and never reading it is the same point
+    /// `leave_clause_without_boundary` makes: spending the [`ClauseEntry`] is
+    /// the whole of the work, and it leaves the interpreter untouched by
+    /// construction.
+    #[inline(always)]
+    pub(crate) fn spend_clause_entry(&self, entry: ClauseEntry) {
+        debug_assert!(
+            self.pending_traps.is_empty(),
+            "a clause boundary was skipped while a condition was queued for it"
+        );
+        let ClauseEntry(()) = entry;
+    }
+
     /// Takes a copy of the clause state for `Interp::invoke_call` to put
     /// back after the callee has run.
     ///

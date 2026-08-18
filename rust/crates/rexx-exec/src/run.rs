@@ -5793,6 +5793,39 @@ impl Interp {
         outcome
     }
 
+    /// The stepped-clause boundary for a clause that produced **neither a
+    /// `Flow` nor a failure**, with nothing queued to deliver.
+    ///
+    /// Everything [`Interp::leave_stepped_clause`] does, minus the parts that
+    /// exist for a value: there is no failure, so no site to record, and no
+    /// outcome to build. What is left is releasing the temps frame and
+    /// spending the entry.
+    ///
+    /// **Why it is a second function rather than a fast path inside the
+    /// first.** `leave_stepped_clause` takes and answers
+    /// `Result<ClauseOutcome<T>, Failure>`, and building that value is the
+    /// cost this avoids -- a fast path *inside* it would still have to
+    /// construct the answer. Measured on a loop whose body is `nop`, the one
+    /// line calling `leave_clause` was 25.8% of the program's user
+    /// instructions (`perf record -e instructions:u`, `perf report --sort
+    /// srcline`), against a clause that does no work at all.
+    ///
+    /// The caller owes the `pending_traps` check, because it is the caller
+    /// that knows whether this exit is available; `spend_clause_entry`
+    /// re-asserts it in debug.
+    #[inline(always)]
+    pub(crate) fn finish_plain_clause(&mut self, entry: SteppedClause) {
+        debug_assert!(
+            self.roots.temps_len() >= entry.temps_at_entry,
+            "step popped below its own temps watermark ({} -> {}), so it \
+             discarded roots it did not push",
+            entry.temps_at_entry,
+            self.roots.temps_len()
+        );
+        self.roots.pop_frame(entry.frame);
+        self.spend_clause_entry(entry.entry);
+    }
+
     /// One stepped clause's `*-*` echo, **if the setting in force echoes a
     /// clause of that kind**, at `indent`.
     ///
