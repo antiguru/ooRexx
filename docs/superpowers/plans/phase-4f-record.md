@@ -5159,3 +5159,72 @@ A shared stack makes a raise that walks out over open frames a **leak** rather t
 Restored, `cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings` are clean and the debug gate fails 30, identical set to the baseline.
 
 **A first attempt at measuring the leak read 2,132 kB for both arms** and would have been recorded as "no leak". The poller was reading `/proc/$!/status` for a `timeout` wrapper rather than the interpreter it had started. The instrument was wrong in a way the number looked fine through, which is why the direct instrumentation of `base` was worth doing before believing either figure.
+
+### Entry 72 -- `PARSE` promoted, two defects it uncovered, and where its cost actually is
+
+Still no commits of the spike. Moritz asked for `PARSE` after `SIGNAL`.
+
+#### What a `PARSE` costs, measured before touching it
+
+A 400,000-pass loop over one clause, against the same loop over `nop`, on the release build at entry 71's end:
+
+| clause | instructions per execution |
+|---|---:|
+| `parse var rc p1 p2 p3` | 1,443 |
+| `parse value 'Foo Bar' with v1 +5 v2 .` | 1,489 |
+| `parse var rc p1 (p0) p5` | 2,446 |
+
+`samples/rexxcps.rex` executes 1,120,002 of them, so this instruction is around a tenth of that program. **That is the finding, and it says the promotion is not where the money is**: dispatching one clause through `Op::Generic` costs tens of instructions, not a thousand.
+
+#### The promotion, and what it can and cannot hoist
+
+`Op::Parse { index, src }`, the `Op::Say` arrangement, covering `PARSE`, `ARG` and `PULL` -- one instruction with three spellings that already reached one `exec_parse`. `src` is the register holding `PARSE VALUE expr WITH`'s expression and `None` for every other source, since `VAR` reads a variable with its own `>V>` and its own `NOVALUE`, `ARG` takes the argument list, and `SOURCE`/`VERSION`/`PULL`/`LINEIN` build or read a string.
+
+**The template's `(expr)` patterns cannot join them, and the reference implementation is what settles it.** `RexxInstructionParse::execute` evaluates the source once before its trigger loop; each trigger's own pattern is evaluated *inside* that loop, by `ParseTrigger::parse` calling `stringTrigger`/`integerTrigger`, both of which `evaluate` there. So a pattern naming a variable that an earlier target of the same template just wrote sees the new value.
+
+Measured against the oracle in both directions, because a search that failed and a search that read a stale value look alike from one side:
+
+| program | oracle | what hoisting would give |
+|---|---|---|
+| `zp = 'Z'; parse value 'abZcd' with zp 2 . (zp) zq` | `<a><>` | `<a><cd>` |
+| `zp = 'Q'; parse value 'bXbYc' with zp 2 . (zp) zy` | `<b><Yc>` | `<b><>` |
+
+The first has the new value making the search fail, the second has it making the search succeed. This crate already agreed with both before the change.
+
+#### Two defects, one of them shipped by entry 70
+
+**`Interp::chunk_node_at` had no arm for `SIGNAL` or `PARSE`.** That function is how an `Op::CallExpr` addresses the node it belongs to, so a call inside either instruction's expression failed loudly: `signal value tname()` printed `a compiled call op does not name a call of its own body` and exited 120 where the oracle answers 16.1 and exits 240. **Entry 70 shipped that, and the whole gated suite was green over it** -- found here only because writing the `PARSE` half's test produced the same shape. Both arms added; `signal value tname()` now matches the oracle byte for byte including the exit status, and `parse value maker() with q1 q2 q3` works.
+
+**`PARSE VALUE WITH` with no expression traced no `>L>` line**, on *both* engines, so no dual-engine comparison could ever have seen it. The oracle traces `>L>   ""` before the `>K>` line, and the reason is in the parser rather than the instruction: `LanguageParser`'s `SUBKEY_VALUE` arm substitutes `GlobalNames::NULLSTRING` for a missing expression, so there is a literal to evaluate by the time `execute` runs. (`execute`'s own `expression != OREF_NULL` guard is unreachable for the same reason, and its comment saying the expression is optional describes the parser's input rather than its output.)
+
+`tests/ir_dual_cases/parse-and-signal-sources` carries both, with every expected byte measured against the oracle and both engines agreeing. It can fail: removing the `SIGNAL` arm from `chunk_node_at` reddens `both_engines_agree_on_every_case_file`.
+
+#### The promotion measures as a wash, and the search rewrite does not
+
+Promotion alone, against the tree at entry 71's end:
+
+| probe | |
+|---|---:|
+| `parse value 'Foo Bar' with v1 +5 v2 .` | **-1.08%** |
+| `parse var rc p1 (p0) p5` | +1.03% |
+| `parse var rc p1 p2 p3` | +0.78% |
+| `rexxcps` | +0.13% |
+
+Which is what the shape predicts: only `VALUE` gets a register, and the rest moves inside entry 61's layout floor.
+
+**`parse_template::find` was 21.42% of a `PARSE`-only profile**, second only to `exec_parse` itself. It indexed `haystack[at..at + needle.len()]` at every candidate offset, which is a range check per position, and had no case for a one-byte needle -- the shape `rexxcps` uses on four clauses of its inner loop. Rewritten to search one slice from `from` with `windows`, and to scan bytes directly when the needle is one byte:
+
+| probe | |
+|---|---:|
+| `parse var rc p1 (p0) p5` | **-25.6%** |
+| `rexxcps` | **-2.04%** |
+
+`find` no longer appears in the profile at all. Net against entry 71's end, `rexxcps` is **-1.91%**, and the six axes that execute no `PARSE` moved by at most 0.05%.
+
+#### A pooled parse buffer was tried and is not here
+
+Every `PARSE` copies its source into a `Vec` the cursor owns, one allocation and one free per execution. Handing those buffers back to a pool on `Interp` -- the same shape that worked for `flat_spares` in entry 69 -- made every probe **worse**: `parse var rc p1 p2 p3` +3.02%, `parse var rc p1 (p0) p5` +2.89%, `parse value ...` +2.79%, `rexxcps` +0.47%. Reverted, and the revert lands back on the numbers above to within 30,000 instructions out of 13.7 billion.
+
+No mechanism was established, and the reason for writing it down rather than retrying is that the allocation it removes is real and counted: the pool costs more than the `malloc` it saves, so the next attempt at this needs a different instrument, not a tidier pool. What is left in a `PARSE`-only profile is `exec_parse` at 29%, the target writes (`read_at`, `assign_expr_target`, `to_text`) at about 25% between them, and the heap at 8%.
+
+`cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings` clean; the debug gate fails 30, identical set to the baseline.
