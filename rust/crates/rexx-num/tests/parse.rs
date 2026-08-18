@@ -189,22 +189,26 @@ fn the_negative_threshold_is_on_the_raw_exponent_not_the_adjusted_one() {
 /// contract. `i64::MIN` is in the grid because it is the one value with no
 /// positive counterpart, and a sign-then-negate implementation gets exactly
 /// that one wrong.
+///
+/// **Every decade boundary is in the grid, with the value just below it.**
+/// `from_i64` computes the digit count up front and then writes each digit at
+/// the place that count implies, so a width that is wrong for one decade
+/// alone misplaces every digit of that decade and of no other -- which a grid
+/// of hand-picked values passes by not landing there.
 #[test]
 fn from_i64_builds_what_parsing_the_same_spelling_builds() {
-    for value in [
-        0i64,
-        1,
-        -1,
-        9,
-        10,
-        -10,
-        100,
-        12345,
-        -12345,
-        1_000_000_000,
-        i64::MAX,
-        i64::MIN,
-    ] {
+    let mut grid = vec![0i64, 1, -1, 9, 10, -10, 12345, -12345, i64::MAX, i64::MIN];
+    let mut decade: i64 = 1;
+    loop {
+        grid.push(decade);
+        grid.push(decade - 1);
+        grid.push(-decade);
+        if decade > i64::MAX / 10 {
+            break;
+        }
+        decade *= 10;
+    }
+    for value in grid {
         assert_eq!(
             Number::from_i64(value),
             Number::parse(&value.to_string()).expect("an i64 spelling parses"),
