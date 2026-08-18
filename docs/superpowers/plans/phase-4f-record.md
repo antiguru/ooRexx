@@ -5039,3 +5039,43 @@ So the shape is the one that decision already established: **an immortal region 
 **The alternative -- pre-building the handle and keeping it in the `Chunk` -- costs more.** `Interp::chunks` holds `Rc<Chunk>`, so a cached handle needs interior mutability inside a shared, otherwise immutable structure, *and* a new root for the collector to walk, on pain of the silent failure `Heap::collect`'s doc describes. The immortal region needs neither.
 
 **Sharing one object across every execution is safe, and it buys a second thing.** The only in-place mutation of a value body in this crate is `Body::Text`'s lazy `num` cache (`value.rs`, `to_number`), which is idempotent -- so a shared constant is parsed **once for the whole program** instead of once per execution, on top of the allocation saved. The other `Heap::get_mut` callers are stems, not text constants.
+
+### Entry 69 -- the flat loop reaches every shape this crate runs, and the gate is back to its baseline
+
+No commits of the spike. Continues entry 67.
+
+#### What was converted, and what there was nothing to convert
+
+`WHILE`/`UNTIL` and a non-stem `OVER` now flatten. **`COUNTER`, a stem `OVER` and `DO WITH` were never candidates**: `loop_header_plan` answers `None` for exactly those, this crate refuses them on *both* engines, and `run_loop_with_header` is where that becomes the loud error. So the flat path's whole eligibility test is now that one call -- the same refusal, asked once, in one place -- and `LoopKind::Simple` is the only shape that still takes the nested path by choice, because a block resolves without ever reaching a pass boundary.
+
+`UNTIL` needed its own bottom-of-pass function: its test sits after the body, before the next header, with an unconditional re-echo of the `DO` clause that replaces the top-of-loop one rather than joining it -- `run_repeating`'s own measured arrangement, kept.
+
+The seven `ir::golden_tests` expectations for `END`'s op are updated. **The debug gate now fails 30 tests, which is exactly what the same command fails at `baaad08c7`: zero new.** `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets -- -D warnings` clean.
+
+| axis | flat against nested, same binary |
+|---|---:|
+| `emptyloop` | **-5.77%** |
+| `varlookup` | **-2.32%** |
+| `compound` | **-1.55%** |
+| `alloc4c` | -0.77% |
+| `strings` | -0.19% |
+| `arith` | +0.02% |
+| pinned `rexxcps` | **+0.52%** |
+
+#### The const parameter on `run_ops` is load-bearing, measured
+
+`GRANTING` became a run-time argument once the permission was read into a local, so the obvious move is to drop it and have one instantiation instead of two. Measured, that one change alone: `emptyloop` **+0.37%**, `varlookup` **+0.67%**, `compound` **+0.51%**, `rexxcps` **+0.25%**. It stays.
+
+#### Adding a second header shape cost the first one 70 instructions per pass, and the cause was the inliner
+
+Converting `WHILE` took `emptyloop` from 3.08% ahead of the nested path to 3.66% behind. **The nested arm of both builds is identical to within 200 instructions out of 26 billion**, so this was not the codegen sensitivity entry 67 records -- it was the change.
+
+Two guesses were wrong before the profile was read. Outlining the failure-attribution arms as `#[cold]` moved it by 0.1%; splitting `WHILE` into its own function moved it by 0.2%. **The profile named it in one line**: `flat_loop_header` appeared at **8.44%** in the new build and did not appear at all in the old one, because it had been inlined into the pass boundary and adding a branch beside it stopped that. `#[inline(always)]` on the common header, `#[inline(never)]` on the `WHILE` one, and the axis went to 0.00%.
+
+**The remaining gap was a second inlining loss found the same way**: `do_body_outcome` had become a call too. It is not needed at all for the common arrival -- its own `Flow::Next` arm answers `FellThrough` and reads none of its other arguments -- so a pass that fell out of its body now decides that from the discriminant. `emptyloop` -4.81%, and after the lint fixes -5.77%.
+
+**The lesson is about the instrument, not the inliner.** Three attempts based on reading the code moved a total of 0.3%; one profile named the cause exactly. A per-pass regression with no plausible per-pass mechanism in the diff is an inlining decision until a profile says otherwise.
+
+#### Where `rexxcps`' remaining +0.52% is not
+
+Not the loop machinery. Entry 68 measured `Op::Const` rebuilding a value on every execution at about 0.5% of that program, which is the same size, and `PARSE` is still `Op::Generic`.
