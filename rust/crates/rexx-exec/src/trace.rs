@@ -651,10 +651,18 @@ impl Interp {
     /// under anything deeper than its own clause, matching every
     /// transcript in the report: a `say`'s own `>L>`/`>>>` sit at the same
     /// indent as the `say` clause itself, never one level further in).
+    #[inline(always)]
     pub(crate) fn trace_result(&mut self, indent: usize, value: &[u8]) {
         if !self.trace_mode().results {
             return;
         }
+        self.trace_result_line(indent, value);
+    }
+
+    /// The line itself, out of line: the gate above is what every call site
+    /// pays when tracing is off, and it is one load and a branch.
+    #[inline(never)]
+    fn trace_result_line(&mut self, indent: usize, value: &[u8]) {
         push_value(&mut self.trace, ">>>", indent, value);
     }
 
@@ -691,10 +699,18 @@ impl Interp {
     /// how little either one is: **not independently oracle-probed for
     /// `Constant`** (this task's report says so), reasoned from `Literal`'s
     /// own measured shape rather than a second transcript.
+    #[inline(always)]
     pub(crate) fn trace_literal(&mut self, indent: usize, value: &[u8]) {
         if !self.trace_mode().intermediates {
             return;
         }
+        self.trace_literal_line(indent, value);
+    }
+
+    /// The line itself, out of line: the gate above is what every call site
+    /// pays when tracing is off, and it is one load and a branch.
+    #[inline(never)]
+    fn trace_literal_line(&mut self, indent: usize, value: &[u8]) {
         push_value(&mut self.trace, ">L>", indent, value);
     }
 
@@ -710,10 +726,17 @@ impl Interp {
     /// The gate is asked before the value is rendered rather than inside
     /// [`Interp::trace_literal`] alone, because rendering allocates a copy of
     /// the value and an untraced run must not pay for it.
+    #[inline(always)]
     pub(crate) fn echo_literal(&mut self, value: ObjRef) {
         if !self.tracing_intermediates() {
             return;
         }
+        self.echo_literal_line(value);
+    }
+
+    /// The rendering and the line, out of line behind [`echo_literal`]'s gate.
+    #[inline(never)]
+    fn echo_literal_line(&mut self, value: ObjRef) {
         let indent = self.clause_state.current_value_indent;
         let text = self.to_text(value).to_vec();
         self.trace_literal(indent, &text);
@@ -722,10 +745,18 @@ impl Interp {
     /// `>V>` (`TRACE_PREFIX_VARIABLE`): a simple variable or bare stem's own
     /// read value, tagged with its own name, unquoted
     /// (`traceVariable`/`RexxActivation.hpp:341`-`342`, `quoteTag = false`).
+    #[inline(always)]
     pub(crate) fn trace_variable(&mut self, indent: usize, tag: &[u8], value: &[u8]) {
         if !self.trace_mode().intermediates {
             return;
         }
+        self.trace_variable_line(indent, tag, value);
+    }
+
+    /// The line itself, out of line: the gate above is what every call site
+    /// pays when tracing is off, and it is one load and a branch.
+    #[inline(never)]
+    fn trace_variable_line(&mut self, indent: usize, tag: &[u8], value: &[u8]) {
         push_tagged(&mut self.trace, ">V>", indent, false, tag, " => ", value);
     }
 
@@ -977,6 +1008,7 @@ impl Interp {
     /// are the two this returns, and each names the same field its own
     /// formatters check. Use [`Interp::result_text`] for `>>>`/`>K>`/`>R>`
     /// and this for every other value-bearing prefix.
+    #[inline(always)]
     pub(crate) fn intermediate_text(&mut self, value: ObjRef) -> Option<Vec<u8>> {
         self.trace_mode()
             .intermediates
@@ -993,6 +1025,7 @@ impl Interp {
     /// exactly one `TRACE` letter: `results` is true wherever
     /// `intermediates` is, so a `>>>` site guarded by `intermediates` prints
     /// under `TRACE I` and not under `TRACE R`.
+    #[inline(always)]
     pub(crate) fn result_text(&mut self, value: ObjRef) -> Option<Vec<u8>> {
         self.trace_mode()
             .results

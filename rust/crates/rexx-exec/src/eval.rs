@@ -473,6 +473,7 @@ impl Interp {
     /// The gate is asked before anything is rendered, for the reason
     /// `Interp::echo_literal` asks it there: rendering allocates a copy of a
     /// value of any size, and an untraced run must not pay for it.
+    #[inline(always)]
     pub(crate) fn echo_symbol_read(
         &mut self,
         code: &Code<'_>,
@@ -483,6 +484,19 @@ impl Interp {
         if !self.tracing_intermediates() {
             return;
         }
+        self.echo_symbol_read_line(code, read, id, value);
+    }
+
+    /// The name-building and the lines, out of line behind
+    /// [`Interp::echo_symbol_read`]'s gate.
+    #[inline(never)]
+    fn echo_symbol_read_line(
+        &mut self,
+        code: &Code<'_>,
+        read: SymbolRead,
+        id: SymbolId,
+        value: ObjRef,
+    ) {
         let indent = self.clause_state.current_value_indent;
         let tag = code.symbols.name(id).as_bytes().to_vec();
         if read == SymbolRead::Compound {
