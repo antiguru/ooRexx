@@ -1540,7 +1540,19 @@ impl From<&ParseError> for Raised {
 /// `1 / 0` arm is `Raised` (implemented, and this is what it does).
 #[derive(Debug)]
 pub(crate) enum Failure {
-    Loud(Loud),
+    /// **Boxed, and that is a measurement rather than a habit.** This variant
+    /// is what sets `Failure`'s width, and `Failure` is the error half of
+    /// `Result<ObjRef, Failure>`, the shape an expression answers in. Unboxed,
+    /// `Loud` is 24 bytes and that `Result` is 24, which travels through a
+    /// stack slot; boxed, both are 16, which is two registers. Measured with
+    /// `perf stat -e instructions:u` over `bench-programs`: `strings` -1.00%,
+    /// `varlookup` -0.77%, `emptyloop` -0.62%, the pinned `rexxcps` -0.58%,
+    /// `compound` -0.54%, `arith` -0.18% -- one direction on every axis, which
+    /// is what separates this from the +-0.5% a relayout moves things by.
+    ///
+    /// The allocation it adds is on the path that reports a construct this
+    /// crate does not implement, which runs once and then the program stops.
+    Loud(Box<Loud>),
     Raised(Box<Raised>),
     /// **Not a failure at all** -- `EXIT` inside a routine reached through
     /// `ExprKind::Call`'s expression form (Task 4), or that routine falling
@@ -1568,7 +1580,7 @@ pub(crate) enum Failure {
 
 impl From<Loud> for Failure {
     fn from(loud: Loud) -> Failure {
-        Failure::Loud(loud)
+        Failure::Loud(Box::new(loud))
     }
 }
 
