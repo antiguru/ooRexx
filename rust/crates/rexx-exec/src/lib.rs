@@ -2136,6 +2136,29 @@ struct Interp {
     /// interpreter found it, and it also makes suspending an activation a
     /// pointer move rather than a copy of the whole of it.
     running: Option<Box<Activation>>,
+    /// The `TRACE` setting of whatever [`Interp::running`] holds, kept beside
+    /// it rather than read through it.
+    ///
+    /// **The same move the field above is, for the value that field is asked
+    /// for most.** `Interp::trace_mode` is on the path of every clause and of
+    /// every expression node that can echo, and reaching the setting through
+    /// the box above costs an `Option` test and a pointer chase per call.
+    /// Measured against the tree as committed, `instructions:u`, stdout,
+    /// stderr and exit status identical either way: `varlookup.rex` -2.722%,
+    /// `emptyloop.rex` -2.555%, `compound.rex` -2.122%, `alloc4c.rex`
+    /// -1.589%, a fixed-work `rexxcps` -1.432%, `strings.rex` -1.410%,
+    /// `arith.rex` -0.422%.
+    ///
+    /// **The invariant is that this equals the running activation's own
+    /// `trace_mode`**, and it is maintained by [`Interp::push_activation`],
+    /// [`Interp::pop_activation`] and [`Interp::set_trace_mode`] -- the only
+    /// code that can change either side of it. `Interp::trace_mode` asserts
+    /// the equality in debug rather than trusting it, because a missed sync
+    /// point is a wrong `TRACE` setting, which every program that does not
+    /// trace runs past in silence.
+    ///
+    /// [`TraceMode::OFF`] with nothing running, matching the `None` above.
+    trace_cache: crate::trace::TraceMode,
     /// The activations that entered before [`Interp::running`], oldest
     /// first, so `suspended.last()` is the running activation's own caller.
     #[expect(
@@ -3110,6 +3133,7 @@ impl Interp {
             elapsed_anchor: None,
             pending_elapsed_reset: false,
             program_path: String::new(),
+            trace_cache: crate::trace::TraceMode::OFF,
         }
     }
 

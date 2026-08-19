@@ -1235,6 +1235,9 @@ impl Interp {
             }
             None => Box::new(activation),
         };
+        // `trace_cache`'s own invariant: the setting travels with whichever
+        // activation is running, and this changes which one that is.
+        self.trace_cache = boxed.trace_mode;
         if let Some(outer) = self.running.replace(boxed) {
             self.suspended.push(outer);
         }
@@ -1268,6 +1271,12 @@ impl Interp {
     pub(crate) fn pop_activation(&mut self) -> Option<Box<Activation>> {
         let ended = self.running.take()?;
         self.running = self.suspended.pop();
+        // The resumed caller's setting, or `OFF` where nothing is left to
+        // resume -- which is the state `Interp::new` starts in.
+        self.trace_cache = self
+            .running
+            .as_deref()
+            .map_or(TraceMode::OFF, |resumed| resumed.trace_mode);
         Some(ended)
     }
 
@@ -1280,7 +1289,18 @@ impl Interp {
     /// shape, sixteen times over -- and a borrow of `self` held across those
     /// would be the same `E0502` `run_activation`'s doc comment writes out.
     pub(crate) fn trace_mode(&self) -> TraceMode {
-        self.activation().trace_mode
+        // **The cache is checked here rather than trusted**, which is what
+        // closes the set of places that maintain it: any path that changes
+        // the running activation or its setting without going through one of
+        // them reddens this at the next clause, in a debug run of anything at
+        // all.
+        debug_assert_eq!(
+            self.running_activation()
+                .map(|activation| activation.trace_mode),
+            Some(self.trace_cache),
+            "the cached TRACE setting is not the running activation's"
+        );
+        self.trace_cache
     }
 
     /// Sets the running activation's `TRACE`. Only the `TRACE` instruction
@@ -1288,6 +1308,7 @@ impl Interp {
     /// value through [`Activation::nested`] instead, never through here.
     pub(crate) fn set_trace_mode(&mut self, mode: TraceMode) {
         self.activation_mut().trace_mode = mode;
+        self.trace_cache = mode;
     }
 }
 
