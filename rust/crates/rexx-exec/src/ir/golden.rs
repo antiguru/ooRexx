@@ -264,6 +264,9 @@ pub(crate) fn render(chunk: &Chunk) -> String {
             Op::Escape { index: at } => {
                 out.push_str(&format!("{index}: Escape index={at}\n"));
             }
+            Op::EndWhen => {
+                out.push_str(&format!("{index}: EndWhen\n"));
+            }
             Op::EndBranch => {
                 out.push_str(&format!("{index}: EndBranch\n"));
             }

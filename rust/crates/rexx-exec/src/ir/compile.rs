@@ -26,7 +26,7 @@ use crate::eval::{SymbolRead, is_arithmetic, is_native_binary};
 use crate::plan::Plan;
 use crate::run::{
     HeaderPlan, QueueKeyword, ReturnKeyword, if_targets, loop_header_plan, loop_header_slot,
-    otherwise_range,
+    otherwise_range, when_targets,
 };
 use crate::trace::ChunkTrace;
 
@@ -193,6 +193,14 @@ enum Before {
     /// A `SELECT`'s [`Op::EnterOtherwise`], in front of the `OTHERWISE` marker
     /// whose branch it opens a frame over. The `SELECT` is at this index.
     EnterOtherwise(usize),
+    /// A `SELECT` branch runs out in front of this instruction
+    /// ([`Op::EndWhen`]): a listed `WHEN`'s own `false_target`, or the end of
+    /// the `OTHERWISE` body.
+    ///
+    /// **One per branch that can end here rather than one per instruction**,
+    /// because nested `SELECT`s can run out at the same instruction and each
+    /// owes its own frame a close.
+    SelectBranchEnd,
 }
 
 /// What a listed `WHEN` needs from the `SELECT` that collected it, recorded
@@ -602,6 +610,10 @@ pub(crate) fn compile(
                              {otherwise_index}, so an OTHERWISE belongs to more than one SELECT"
                         );
                         before[*otherwise_index].push(Before::EnterOtherwise(index));
+                        // The `OTHERWISE` body's own end, which is the
+                        // `SELECT`'s: `otherwise_frame` gives that frame this
+                        // same range.
+                        before[select_end].push(Before::SelectBranchEnd);
                         (*otherwise_index, PatchKind::Resume)
                     }
                     // Landing on the `END` is what makes 7.3 the `END`'s own
@@ -651,6 +663,13 @@ pub(crate) fn compile(
                 let info = when_info[index]
                     .take()
                     .expect("the guard above just observed one");
+                // **Where this `WHEN`'s branch runs out, taken from the
+                // instruction rather than from the `SELECT`'s scan chain.**
+                // `Interp::when_frame` reads `when_targets` for the frame's
+                // own `op_end`, and the two part company: a `WHEN` absorbed as
+                // another's `THEN` is not in the list the scan walks, so the
+                // next *listed* `WHEN` is not where this branch ends.
+                before[when_targets(&instruction.kind, len).body_end].push(Before::SelectBranchEnd);
                 let mark = registers.mark();
                 let dst = registers.alloc()?;
                 let at = op_index(&ops)?;
@@ -1579,6 +1598,18 @@ fn emit_before(
     before: &mut [Before],
 ) -> Result<(), ChunkTooLarge> {
     before.reverse();
+    // **A `SELECT` branch's close goes in front of everything else here**,
+    // which is where the driver used to ask the question: it tested for an
+    // ended frame before fetching the op at all, so a `WHEN` whose body is an
+    // `IF` left the branch -- and jumped to the `SELECT`'s own end -- without
+    // ever reaching that `IF`'s [`Op::EndBranch`]. Emitting the close second
+    // runs that boundary first, which is a clause boundary that did not run
+    // before. The sort is stable, so nested branches keep the innermost-first
+    // order the reverse above gives them.
+    before.sort_by_key(|entry| match entry {
+        Before::SelectBranchEnd => 0,
+        Before::ThenEnd { .. } | Before::EnterOtherwise(_) => 1,
+    });
     debug_assert!(
         before
             .iter()
@@ -1602,6 +1633,7 @@ fn emit_before(
                     });
                 }
             }
+            Before::SelectBranchEnd => ops.push(Op::EndWhen),
             Before::EnterOtherwise(select) => ops.push(Op::EnterOtherwise {
                 select: instruction_index(*select)?,
             }),
@@ -2055,6 +2087,7 @@ fn assert_region_ops_name_their_clause(ops: &[Op]) {
                 | Op::Clause { .. }
                 | Op::SelectCaseText { .. }
                 | Op::EndBranch
+                | Op::EndWhen
                 | Op::EnterWhen { .. }
                 | Op::EnterOtherwise { .. }
                 | Op::Const { .. }

@@ -145,6 +145,7 @@ impl Root {
             | Op::Escape { .. }
             | Op::TraceFunction { .. }
             | Op::EndBranch
+            | Op::EndWhen
             | Op::EnterWhen { .. }
             | Op::EnterOtherwise { .. }
             | Op::Jump { .. }

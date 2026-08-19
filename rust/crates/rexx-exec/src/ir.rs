@@ -359,9 +359,25 @@ pub(crate) enum Op {
     /// **Emitted at the branch's end, not at the construct's**, and reached
     /// only by falling out of the branch: it sits at the `op_of` entry of the
     /// instruction the branch ends before, where the `IF`'s own false path
-    /// (`PatchKind::Enter`) does not land. A `SELECT` needs no op for it,
-    /// because its branches are closed by their frames.
+    /// (`PatchKind::Enter`) does not land. A `SELECT`'s own branches end at
+    /// [`Op::EndWhen`] instead, which closes a frame where this closes none.
     EndBranch,
+    /// Closes the [`Op::EnterWhen`]/[`Op::EnterOtherwise`] frame whose branch
+    /// ends here, if one is open.
+    ///
+    /// **Emitted at every position a `SELECT` branch can run out at** -- each
+    /// listed `WHEN`'s own `false_target`, and the `OTHERWISE` body's end --
+    /// which is the `op_of` entry of the instruction the branch ends before,
+    /// so a jump to that instruction reaches this op exactly as falling out of
+    /// the branch does.
+    ///
+    /// **Conditional, because the same position is where the scan lands when
+    /// the branch was never entered.** A `WHEN` whose condition did not hold
+    /// jumps to the next `WHEN`, which is the previous one's own end -- so
+    /// this op is reached with no frame open, and does nothing. The test it
+    /// makes is the one the driver used to make in front of every op; what
+    /// changed is where it is made, not what it asks.
+    EndWhen,
     /// Opens a frame over the branch of the listed `WHEN` at `when`, which
     /// belongs to the `SELECT` at `select`.
     ///

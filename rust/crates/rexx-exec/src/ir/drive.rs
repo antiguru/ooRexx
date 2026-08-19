@@ -208,6 +208,63 @@ impl ClauseValue for RegionEnd {
     }
 }
 
+/// What [`Interp::leave_ended_select_branch`] found.
+enum BranchEnd {
+    /// No frame ended here.
+    None,
+    /// A frame ended and the driver resumes at this op.
+    At(u32),
+    /// A frame ended and its `Flow` escaped the range being driven.
+    Escaped(Flow),
+}
+
+impl Interp {
+    /// Closes the innermost `SELECT` branch if it runs out at `pc`.
+    ///
+    /// **The test [`super::Op::EndWhen`] exists to make, and the one the range
+    /// boundary makes for itself.** It used to run in front of every op, which
+    /// is where the answer was wanted for a branch that falls out of its own
+    /// end; the op sits at exactly that position instead, and a jump to the
+    /// instruction it belongs to lands on it because `Chunk::op_of` resolves
+    /// to a resume point in front of the ops emitted before that instruction.
+    ///
+    /// `Flow::Next` rather than a carried flow, because falling out of a
+    /// branch is what this closes; an escaping flow reaches `settle` instead
+    /// and unwinds the frames itself.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the range `settle` absorbs against, and every argument is one the driver \
+                  already holds"
+    )]
+    fn leave_ended_select_branch(
+        &mut self,
+        code: &Code<'_>,
+        chunk: &Chunk,
+        base: usize,
+        pc: u32,
+        start: usize,
+        end: usize,
+        source: Option<&ProgramSource>,
+    ) -> Result<BranchEnd, Failure> {
+        if self.frames.len() <= base {
+            return Ok(BranchEnd::None);
+        }
+        let Some(frame) = self.frames.pop_if(|frame| pc >= frame.op_end) else {
+            return Ok(BranchEnd::None);
+        };
+        let FrameKind::Select(frame) = frame.kind else {
+            return Err(Loud::op_not_driven("a loop frame ran off its own end").into());
+        };
+        let flow = self.leave_branch(code, &frame, Flow::Next)?;
+        Ok(
+            match self.settle(code, chunk, base, flow, pc, start, end, source)? {
+                Settled::At(target) => BranchEnd::At(target),
+                Settled::Escaped(other) => BranchEnd::Escaped(other),
+            },
+        )
+    }
+}
+
 impl Interp {
     /// Runs `chunk` for the activation on top of the stack.
     ///
@@ -423,26 +480,33 @@ impl Interp {
         let mut granting = GRANTING;
         let mut pc = at;
         'ops: loop {
-            // **A branch whose ops the counter has left has run off its own
-            // end**, and that is the arrival the tree-walker gets as
-            // `run_bounded` answering `Flow::Next`. Checked before the op is
-            // fetched, because the op at `op_end` belongs to whatever follows
-            // the branch and must not run until the branch has been left.
-            if self.frames.len() > base
-                && let Some(frame) = self.frames.pop_if(|frame| pc >= frame.op_end)
-            {
-                let FrameKind::Select(frame) = frame.kind else {
-                    return Err(Loud::op_not_driven("a loop frame ran off its own end").into());
-                };
-                let flow = self.leave_branch(code, &frame, Flow::Next)?;
-                match self.settle(code, chunk, base, flow, pc, start, end, source)? {
-                    Settled::At(target) => pc = target,
-                    Settled::Escaped(other) => return Ok(other),
-                }
-                continue;
-            }
+            // **A branch that runs out exactly at this range's own end.**
+            // `stop` is `Chunk::op_of`'s entry for `end`, which is where the
+            // branch's own `Op::EndWhen` sits -- so the op is one past what
+            // this range drives and the boundary owes the close itself.
             if pc >= stop {
-                return Ok(Flow::Next);
+                match self.leave_ended_select_branch(code, chunk, base, pc, start, end, source)? {
+                    BranchEnd::At(target) => {
+                        pc = target;
+                        continue;
+                    }
+                    BranchEnd::Escaped(other) => return Ok(other),
+                    BranchEnd::None => return Ok(Flow::Next),
+                }
+            }
+            // **The tripwire for the op that replaced the check that used to
+            // stand here.** A frame is overdue only at the position its own
+            // `Op::EndWhen` occupies; anywhere else means a branch outlived
+            // the op that closes it, which is a `SELECT` running on into what
+            // follows it and is silent in any program whose branches happen to
+            // agree.
+            #[cfg(debug_assertions)]
+            if !matches!(chunk.op_at_index(pc), Some(Op::EndWhen)) {
+                debug_assert!(
+                    !(self.frames.len() > base
+                        && self.frames.last().is_some_and(|frame| pc >= frame.op_end)),
+                    "the innermost SELECT frame ended before op {pc}, which is not its own EndWhen"
+                );
             }
             let Some(op) = chunk.op_at_index(pc) else {
                 return Err(Loud::chunk_map_too_short().into());
@@ -1904,6 +1968,9 @@ impl Interp {
                                     Op::EndBranch => {
                                         break 'cold Err(Loud::op_not_driven("EndBranch").into());
                                     }
+                                    Op::EndWhen => {
+                                        break 'cold Err(Loud::op_not_driven("EndWhen").into());
+                                    }
                                 }
                             }
                             end
@@ -1985,6 +2052,20 @@ impl Interp {
                 // wrapper to run. `Interp::end_promoted_branch`'s doc comment
                 // has the program that says it is not a spare one.
                 Op::EndBranch => (self.end_promoted_branch(code, Flow::Next)?, pc + 1),
+                Op::EndWhen => {
+                    match self
+                        .leave_ended_select_branch(code, chunk, base, pc, start, end, source)?
+                    {
+                        BranchEnd::At(target) => {
+                            pc = target;
+                            continue;
+                        }
+                        BranchEnd::Escaped(other) => return Ok(other),
+                        // The scan's own landing place when the branch this
+                        // ends was never entered.
+                        BranchEnd::None => (Flow::Next, pc + 1),
+                    }
+                }
                 Op::EnterWhen { select, when } => {
                     let frame = self.when_frame(code, chunk, *select as usize, *when as usize)?;
                     self.frames.push(Frame::select(frame));

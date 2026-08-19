@@ -1321,19 +1321,21 @@ fn nested_ifs_reuse_their_registers() {
 ///
 /// The three things a reader should check by eye are the jump targets:
 ///
-/// * the first `WHEN`'s `JumpUnless` goes to op 17, the **second `WHEN`'s own
-///   clause region**, which is the scan continuing;
-/// * the second `WHEN`'s goes to op 32, the `EnterOtherwise` in front of the
+/// * the first `WHEN`'s `JumpUnless` goes to op 18, the **second `WHEN`'s own
+///   clause region**, which is the scan continuing -- past the `EndWhen` in
+///   front of it, because a scan that never entered the branch has no frame
+///   to close;
+/// * the second `WHEN`'s goes to op 33, the `EndWhen` in front of the
 ///   `OTHERWISE` marker, which is the scan running out;
-/// * and nothing jumps past a branch, because a branch is left by the frame
-///   `EnterWhen` opened rather than by an op -- reaching op 32 by falling out
-///   of the second `WHEN`'s branch is that branch's `op_end`, and the driver
-///   closes the frame there instead of running the op.
+/// * and no branch is jumped past: a branch ends at the `EndWhen` its own
+///   `op_end` names, which closes the frame `EnterWhen` opened and sends
+///   control to wherever the `SELECT` resumes.
 ///
-/// **`op_of[7]` is 32 and not 33**, which is the other half of the same
-/// mechanism: an absorbed `WHEN CASE`'s escape landing exactly on the
-/// `OTHERWISE` marker has to open the frame the marker's branch runs under,
-/// and that is what putting `EnterOtherwise` at the resume entry does.
+/// **`op_of[7]` is the `EndWhen` and `EnterOtherwise` follows it**, which is
+/// the other half of the same mechanism: an absorbed `WHEN CASE`'s escape
+/// landing exactly on the `OTHERWISE` marker has to close whatever branch was
+/// running and then open the frame the marker's own branch runs under, and
+/// that is the order those two ops are emitted in.
 #[test]
 fn a_select_with_an_otherwise_compiles_to_a_scan_chain_and_two_frames() {
     let chunk = compile_for_test(
@@ -1353,39 +1355,42 @@ fn a_select_with_an_otherwise_compiles_to_a_scan_chain_and_two_frames() {
          7: Binary op== lhs=0 rhs=1 dst=0\n\
          8: TraceOperator op== src=0\n\
          9: Condition index=1 reg=0 keyword=WHEN\n\
-         10: JumpUnless reg=0 target=17\n\
+         10: JumpUnless reg=0 target=18\n\
          11: EnterWhen select=0 when=1\n\
          12: Clause index=2 end=13\n\
          13: Clause index=3 end=17\n\
          14: Const dst=0 konst=0\n\
          15: TraceLiteral src=0\n\
          16: Say index=3 src=0\n\
-         17: Clause index=4 end=26\n\
-         18: LoadConstant dst=0\n\
-         19: TraceLiteral src=0\n\
-         20: LoadConstant dst=1\n\
-         21: TraceLiteral src=1\n\
-         22: Binary op== lhs=0 rhs=1 dst=0\n\
-         23: TraceOperator op== src=0\n\
-         24: Condition index=4 reg=0 keyword=WHEN\n\
-         25: JumpUnless reg=0 target=32\n\
-         26: EnterWhen select=0 when=4\n\
-         27: Clause index=5 end=28\n\
-         28: Clause index=6 end=32\n\
-         29: Const dst=0 konst=1\n\
-         30: TraceLiteral src=0\n\
-         31: Say index=6 src=0\n\
-         32: EnterOtherwise select=0\n\
-         33: Generic index=7\n\
-         34: Clause index=8 end=38\n\
-         35: Const dst=0 konst=2\n\
-         36: TraceLiteral src=0\n\
-         37: Say index=8 src=0\n\
-         38: Generic index=9\n\
-         39: Clause index=10 end=43\n\
-         40: Const dst=0 konst=3\n\
-         41: TraceLiteral src=0\n\
-         42: Say index=10 src=0\n"
+         17: EndWhen\n\
+         18: Clause index=4 end=27\n\
+         19: LoadConstant dst=0\n\
+         20: TraceLiteral src=0\n\
+         21: LoadConstant dst=1\n\
+         22: TraceLiteral src=1\n\
+         23: Binary op== lhs=0 rhs=1 dst=0\n\
+         24: TraceOperator op== src=0\n\
+         25: Condition index=4 reg=0 keyword=WHEN\n\
+         26: JumpUnless reg=0 target=33\n\
+         27: EnterWhen select=0 when=4\n\
+         28: Clause index=5 end=29\n\
+         29: Clause index=6 end=33\n\
+         30: Const dst=0 konst=1\n\
+         31: TraceLiteral src=0\n\
+         32: Say index=6 src=0\n\
+         33: EndWhen\n\
+         34: EnterOtherwise select=0\n\
+         35: Generic index=7\n\
+         36: Clause index=8 end=40\n\
+         37: Const dst=0 konst=2\n\
+         38: TraceLiteral src=0\n\
+         39: Say index=8 src=0\n\
+         40: EndWhen\n\
+         41: Generic index=9\n\
+         42: Clause index=10 end=46\n\
+         43: Const dst=0 konst=3\n\
+         44: TraceLiteral src=0\n\
+         45: Say index=10 src=0\n"
     );
     assert_eq!(
         chunk.registers, 2,
@@ -1394,7 +1399,7 @@ fn a_select_with_an_otherwise_compiles_to_a_scan_chain_and_two_frames() {
     );
     assert_eq!(
         chunk.op_of,
-        vec![0, 2, 12, 13, 17, 27, 28, 32, 34, 38, 39, 43]
+        vec![0, 2, 12, 13, 17, 28, 29, 33, 36, 40, 42, 46]
     );
 }
 
@@ -1426,27 +1431,29 @@ fn a_select_cases_own_value_outlives_the_registers_its_whens_take() {
          2: SelectCaseText index=0 case=0\n\
          3: Clause index=1 end=6\n\
          4: WhenTest index=1 case=0 dst=1\n\
-         5: JumpUnless reg=1 target=12\n\
+         5: JumpUnless reg=1 target=13\n\
          6: EnterWhen select=0 when=1\n\
          7: Clause index=2 end=8\n\
          8: Clause index=3 end=12\n\
          9: Const dst=1 konst=0\n\
          10: TraceLiteral src=1\n\
          11: Say index=3 src=1\n\
-         12: Clause index=4 end=15\n\
-         13: WhenTest index=4 case=0 dst=1\n\
-         14: JumpUnless reg=1 target=21\n\
-         15: EnterWhen select=0 when=4\n\
-         16: Clause index=5 end=17\n\
-         17: Clause index=6 end=21\n\
-         18: Const dst=1 konst=1\n\
-         19: TraceLiteral src=1\n\
-         20: Say index=6 src=1\n\
-         21: Generic index=7\n\
-         22: Clause index=8 end=26\n\
-         23: Const dst=0 konst=2\n\
-         24: TraceLiteral src=0\n\
-         25: Say index=8 src=0\n"
+         12: EndWhen\n\
+         13: Clause index=4 end=16\n\
+         14: WhenTest index=4 case=0 dst=1\n\
+         15: JumpUnless reg=1 target=23\n\
+         16: EnterWhen select=0 when=4\n\
+         17: Clause index=5 end=18\n\
+         18: Clause index=6 end=22\n\
+         19: Const dst=1 konst=1\n\
+         20: TraceLiteral src=1\n\
+         21: Say index=6 src=1\n\
+         22: EndWhen\n\
+         23: Generic index=7\n\
+         24: Clause index=8 end=28\n\
+         25: Const dst=0 konst=2\n\
+         26: TraceLiteral src=0\n\
+         27: Say index=8 src=0\n"
     );
     assert_eq!(
         chunk.registers, 2,
@@ -1454,9 +1461,41 @@ fn a_select_cases_own_value_outlives_the_registers_its_whens_take() {
     );
 }
 
+/// **A `WHEN` whose body is an `IF` owes two boundaries at one instruction,
+/// and the branch's own goes first.** The `IF`'s [`super::Op::EndBranch`] and
+/// the `WHEN`'s [`super::Op::EndWhen`] both sit in front of the `OTHERWISE`
+/// here. Leaving the branch sends control to the `SELECT`'s own end, so with
+/// `EndWhen` in front the `EndBranch` is never reached -- which is what the
+/// driver did before the branch end was an op, when it tested for an ended
+/// frame ahead of fetching anything.
+///
+/// **No output tells the two orders apart**, and that was looked for rather
+/// than assumed: a condition raised inside the branch, which is what that
+/// boundary would deliver, prints the same lines from the oracle either way.
+/// The order is visible here, in the stream, and nowhere else -- so this is
+/// where it is pinned.
+#[test]
+fn a_whens_branch_end_is_emitted_in_front_of_an_ifs() {
+    let chunk =
+        compile_for_test(b"select\n  when 1 = 1 then if 1 = 1 then nop\n  otherwise nop\nend\n")
+            .expect("compiles");
+    let stream = render(&chunk);
+    let end_when = stream
+        .find(": EndWhen")
+        .expect("the WHEN's branch end is emitted");
+    let end_branch = stream
+        .find(": EndBranch")
+        .expect("the IF's branch end is emitted");
+    assert!(
+        end_when < end_branch,
+        "the IF's EndBranch is emitted in front of the WHEN's EndWhen, so leaving the branch \
+         runs a clause boundary the tree-walker does not: {stream}"
+    );
+}
+
 /// Without an `OTHERWISE` the scan runs out onto the `END`, whose own 7.3 is
 /// what "every WHEN was false" means -- so the last `WHEN`'s `JumpUnless`
-/// names the `END`'s **own** op (17, the `Generic`) and no frame is open when
+/// names the `END`'s **own** op (18, the `Generic`) and no frame is open when
 /// it runs.
 ///
 /// The neighbouring case to the one above, and it is what says the
@@ -1479,18 +1518,19 @@ fn a_select_with_no_otherwise_scans_out_onto_its_own_end() {
          7: Binary op== lhs=0 rhs=1 dst=0\n\
          8: TraceOperator op== src=0\n\
          9: Condition index=1 reg=0 keyword=WHEN\n\
-         10: JumpUnless reg=0 target=17\n\
+         10: JumpUnless reg=0 target=18\n\
          11: EnterWhen select=0 when=1\n\
          12: Clause index=2 end=13\n\
          13: Clause index=3 end=17\n\
          14: Const dst=0 konst=0\n\
          15: TraceLiteral src=0\n\
          16: Say index=3 src=0\n\
-         17: Generic index=4\n\
-         18: Clause index=5 end=22\n\
-         19: Const dst=0 konst=1\n\
-         20: TraceLiteral src=0\n\
-         21: Say index=5 src=0\n"
+         17: EndWhen\n\
+         18: Generic index=4\n\
+         19: Clause index=5 end=23\n\
+         20: Const dst=0 konst=1\n\
+         21: TraceLiteral src=0\n\
+         22: Say index=5 src=0\n"
     );
 }
 
@@ -1513,11 +1553,12 @@ fn a_when_condition_outside_the_native_set_stays_one_when_test() {
          1: SelectCaseText index=0 case=-\n\
          2: Clause index=1 end=5\n\
          3: WhenTest index=1 case=- dst=0\n\
-         4: JumpUnless reg=0 target=8\n\
+         4: JumpUnless reg=0 target=9\n\
          5: EnterWhen select=0 when=1\n\
          6: Clause index=2 end=7\n\
          7: Clause index=3 end=8\n\
-         8: Generic index=4\n"
+         8: EndWhen\n\
+         9: Generic index=4\n"
     );
 }
 
@@ -1549,11 +1590,12 @@ fn a_call_in_a_whens_condition_is_addressed_at_the_conditions_slot() {
          11: Binary op=> lhs=0 rhs=1 dst=0\n\
          12: TraceOperator op=> src=0\n\
          13: Condition index=2 reg=0 keyword=WHEN\n\
-         14: JumpUnless reg=0 target=18\n\
+         14: JumpUnless reg=0 target=19\n\
          15: EnterWhen select=1 when=2\n\
          16: Clause index=3 end=17\n\
          17: Clause index=4 end=18\n\
-         18: Generic index=5\n"
+         18: EndWhen\n\
+         19: Generic index=5\n"
     );
 }
 
@@ -1585,13 +1627,14 @@ fn an_absorbed_when_compiles_to_generic() {
          7: Binary op== lhs=0 rhs=1 dst=0\n\
          8: TraceOperator op== src=0\n\
          9: Condition index=1 reg=0 keyword=WHEN\n\
-         10: JumpUnless reg=0 target=16\n\
+         10: JumpUnless reg=0 target=17\n\
          11: EnterWhen select=0 when=1\n\
          12: Clause index=2 end=13\n\
          13: Generic index=3\n\
-         14: Clause index=4 end=15\n\
-         15: Clause index=5 end=16\n\
-         16: Generic index=6\n"
+         14: EndWhen\n\
+         15: Clause index=4 end=16\n\
+         16: Clause index=5 end=17\n\
+         17: Generic index=6\n"
     );
 }
 
@@ -1690,7 +1733,7 @@ fn a_traced_select_echoes_its_header_and_each_listed_when() {
          4: Clause index=1 end=8\n\
          5: TraceClause index=1\n\
          6: WhenTest index=1 case=0 dst=1\n\
-         7: JumpUnless reg=1 target=16\n\
+         7: JumpUnless reg=1 target=17\n\
          8: EnterWhen select=0 when=1\n\
          9: Clause index=2 end=11\n\
          10: TraceClause index=2\n\
@@ -1699,24 +1742,26 @@ fn a_traced_select_echoes_its_header_and_each_listed_when() {
          13: Const dst=1 konst=0\n\
          14: TraceLiteral src=1\n\
          15: Say index=3 src=1\n\
-         16: Clause index=4 end=20\n\
-         17: TraceClause index=4\n\
-         18: WhenTest index=4 case=0 dst=1\n\
-         19: JumpUnless reg=1 target=28\n\
-         20: EnterWhen select=0 when=4\n\
-         21: Clause index=5 end=23\n\
-         22: TraceClause index=5\n\
-         23: Clause index=6 end=28\n\
-         24: TraceClause index=6\n\
-         25: Const dst=1 konst=1\n\
-         26: TraceLiteral src=1\n\
-         27: Say index=6 src=1\n\
-         28: Generic index=7\n\
-         29: Clause index=8 end=34\n\
-         30: TraceClause index=8\n\
-         31: Const dst=0 konst=2\n\
-         32: TraceLiteral src=0\n\
-         33: Say index=8 src=0\n"
+         16: EndWhen\n\
+         17: Clause index=4 end=21\n\
+         18: TraceClause index=4\n\
+         19: WhenTest index=4 case=0 dst=1\n\
+         20: JumpUnless reg=1 target=30\n\
+         21: EnterWhen select=0 when=4\n\
+         22: Clause index=5 end=24\n\
+         23: TraceClause index=5\n\
+         24: Clause index=6 end=29\n\
+         25: TraceClause index=6\n\
+         26: Const dst=1 konst=1\n\
+         27: TraceLiteral src=1\n\
+         28: Say index=6 src=1\n\
+         29: EndWhen\n\
+         30: Generic index=7\n\
+         31: Clause index=8 end=36\n\
+         32: TraceClause index=8\n\
+         33: Const dst=0 konst=2\n\
+         34: TraceLiteral src=0\n\
+         35: Say index=8 src=0\n"
     );
     assert_eq!(
         chunk.registers, 2,
@@ -1749,7 +1794,7 @@ fn two_constructs_ending_at_one_instruction_release_to_the_lower_mark() {
     let stream = render(&chunk);
     assert!(
         stream.contains(
-            "21: LoadConstant dst=0\n22: TraceLiteral src=0\n23: LoopHeaderValue role=Initial src=0"
+            "22: LoadConstant dst=0\n23: TraceLiteral src=0\n24: LoopHeaderValue role=Initial src=0"
         ),
         "the loop after the whole SELECT did not get register 0 back: {stream}"
     );
