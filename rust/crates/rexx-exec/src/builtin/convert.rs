@@ -475,7 +475,7 @@ fn x2d_c2d(
     // measured, `x2d('zz',0)` is `0`, not an error.
     let result_size = requested.unwrap_or(string.len());
     if result_size == 0 {
-        return Ok(interp.text(b"0"));
+        return Ok(interp.integer_text(b"0".to_vec(), digits));
     }
 
     let packed;
@@ -559,7 +559,7 @@ fn x2d_c2d(
         }
     }
     let rendered = render_decimal(&accumulator, negative);
-    Ok(interp.text_built(rendered))
+    Ok(interp.integer_text(rendered, digits))
 }
 
 /// `C2D(string [,n])`: the argument's bytes read as a binary integer.

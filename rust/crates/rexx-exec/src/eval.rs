@@ -1147,7 +1147,7 @@ impl Interp {
         // was the largest single allocation width in the interpreter, at
         // 4,220,217 allocations of nineteen bytes on a 400,000-clause run
         // (`SMALL_INT_MAX` has nineteen digits, which is what pre-sizes them).
-        if let Some(holds) = small_int_compare(op, left_value, right_value, digits, fuzz) {
+        if let Some(holds) = small_int_compare(op, left_value, right_value, digits) {
             return Ok(logical(holds));
         }
         let strict = is_strict_compare(op);
@@ -1738,34 +1738,36 @@ pub(crate) fn call_target_name<'a>(code: &Code<'a>, target: &'a CallTarget) -> (
 /// `Number`, so parsing one first would be pure waste).
 /// Whether two tagged small integers settle `op` between them, and how.
 ///
-/// `None` means they do not and the general path must run. Every guard below
-/// is a case where comparing the integers would give a different answer from
-/// comparing what the general path compares, so none of them is defensive.
+/// `None` means they do not and the general path must run.
 ///
-/// * **`NUMERIC FUZZ` must be zero.** Fuzz makes a numeric comparison compare
-///   fewer significant digits, so two distinct integers can be equal under it.
-/// * **Both magnitudes must sit inside `NUMERIC DIGITS`.** A numeric
-///   comparison rounds its operands to that many significant digits first, so
-///   at `DIGITS 9` two distinct ten-digit integers can compare equal.
+/// **This is `RexxInteger::comp` (`interpreter/classes/IntegerClass.cpp:1191`)
+/// and not an optimisation of the path below it.** Two integers that both fit
+/// `NUMERIC DIGITS` are subtracted directly there, and `NUMERIC FUZZ` -- which
+/// only ever enters through `NumberString::comp` -- is never consulted for
+/// them. Measured at `DIGITS 9 FUZZ 8`: `100000000 = 100000001` is `0`, while
+/// the same pair spelled `100000000.0 = 100000001`, whose left operand is no
+/// longer an integer, is `1`. Taking the general path here for a non-zero
+/// `FUZZ` would answer `1` for both.
+///
+/// The guards are each a case where comparing the integers would give a
+/// different answer from what the interpreter does, so none of them is
+/// defensive.
+///
+/// * **Both magnitudes must sit inside `NUMERIC DIGITS`**, which is
+///   `Numerics::isValid`'s test on either side of that `&&`. Outside it the
+///   interpreter falls to `NumberString::comp` and the operands are rounded to
+///   that many significant digits first, so at `DIGITS 9` two distinct
+///   ten-digit integers compare equal.
 /// * **The strict *ordering* operators are excluded**, because they compare
 ///   strings and not numbers: `9 >> 10` is true where `9 > 10` is false.
 ///   Strict *equality* is included, because a small integer renders
 ///   canonically -- no sign on zero, no leading zeros, no exponent -- so two
 ///   equal renderings mean equal values and the converse holds too.
-fn small_int_compare(
-    op: Operator,
-    left: ObjRef,
-    right: ObjRef,
-    digits: u64,
-    fuzz: u64,
-) -> Option<bool> {
+fn small_int_compare(op: Operator, left: ObjRef, right: ObjRef, digits: u64) -> Option<bool> {
     let (Decoded::SmallInt(left), Decoded::SmallInt(right)) = (left.decode(), right.decode())
     else {
         return None;
     };
-    if fuzz != 0 {
-        return None;
-    }
     // `i128` so the bound itself cannot overflow at the `DIGITS` a program may
     // set, and so `abs` has a value for `i64::MIN`.
     let bound = 10i128.checked_pow(u32::try_from(digits).ok()?)?;

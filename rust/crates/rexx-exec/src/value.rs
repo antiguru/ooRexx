@@ -358,6 +358,32 @@ impl Interp {
     /// back here instead and the next builtin builds in it. Above that the
     /// `Vec` becomes the object's own storage, so it is given up and the next
     /// taker allocates -- which is the same trade `text_owned` always made.
+    /// A builtin's finished result when the interpreter builds an *integer
+    /// object* for it: the `SmallInt` tag when those exact bytes are what the
+    /// tag renders back, and [`Interp::text_built`]'s own answer otherwise.
+    ///
+    /// **Which class a builtin builds is a comparison's business, not just its
+    /// rendering's.** `RexxInteger::comp`
+    /// (`interpreter/classes/IntegerClass.cpp:1191`) compares two integer
+    /// objects inside `NUMERIC DIGITS` exactly and never consults `NUMERIC
+    /// FUZZ`, so a builtin whose result is one answers differently from a
+    /// string spelling the same digits. Measured at `DIGITS 9 FUZZ 8`,
+    /// `trunc(100000000.4) = 100000001` is `0` while
+    /// `format(100000000) = 100000001`, whose result the interpreter builds as
+    /// a string, is `1`.
+    ///
+    /// This crate's tag is admitted on the rendering instead (D15), so the
+    /// same set is reached by asking whether the bytes round-trip through
+    /// `i64`: that refuses `+5`, `007` and anything with a point or an
+    /// exponent, none of which the tag could render back.
+    pub(crate) fn integer_text(&mut self, bytes: Vec<u8>, digits: u64) -> ObjRef {
+        if let Some(handle) = rendered_small_int(&bytes, digits) {
+            self.give_result_buffer(bytes);
+            return handle;
+        }
+        self.text_built(bytes)
+    }
+
     pub(crate) fn text_built(&mut self, bytes: Vec<u8>) -> ObjRef {
         if bytes.len() <= INLINE_BYTES {
             let value = self.text(&bytes);
@@ -1053,6 +1079,20 @@ pub(crate) fn within_digits(value: i64, digits: u64) -> bool {
 pub(crate) fn exact_small_int(value: i64, digits: u64) -> Option<ObjRef> {
     within_digits(value, digits)
         .then(|| ObjRef::small_int(value))
+        .flatten()
+}
+
+/// [`exact_small_int`] asked of a rendering rather than a value: the tag when
+/// `rendered` is exactly what it renders back, and `None` when the two would
+/// differ.
+///
+/// The round trip is the whole test. `i64::from_str` accepts spellings the
+/// tag does not reproduce -- a leading `+`, leading zeros -- and comparing
+/// `Display`'s bytes against the input refuses each without naming it.
+fn rendered_small_int(rendered: &[u8], digits: u64) -> Option<ObjRef> {
+    let value: i64 = str::from_utf8(rendered).ok()?.parse().ok()?;
+    (value.to_string().as_bytes() == rendered)
+        .then(|| exact_small_int(value, digits))
         .flatten()
 }
 

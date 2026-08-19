@@ -222,7 +222,7 @@ pub(crate) fn trunc(
     let places = whole_number(interp, name, args, 2)?;
     let value = target_number(interp, name, args)?;
     let places = padding_width(non_negative(places, 1)?.unwrap_or(0))?;
-    Ok(interp.text_built(value.trunc(digits, places).into_bytes()))
+    Ok(interp.integer_text(value.trunc(digits, places).into_bytes(), digits))
 }
 
 /// `FORMAT(number, before, after, expp, expt)`.

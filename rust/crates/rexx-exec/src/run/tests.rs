@@ -504,13 +504,25 @@ fn numeric_digits_changes_rounding_and_resets_to_9_with_no_expression() {
 }
 
 #[test]
-fn numeric_digits_reset_reports_a_conflict_exactly_as_if_9_were_typed() {
-    // numeric digits 20; numeric fuzz 15; numeric digits -> 33.1, ("9")
-    // rejected against the still-15 fuzz -- measured against the oracle.
+fn numeric_digits_reset_leaves_a_fuzz_the_operand_form_would_refuse() {
+    // `numeric digits 20; numeric fuzz 15; numeric digits` prints `9 15` at
+    // rc 0 -- measured against the oracle, running exactly these clauses.
+    let mut interp = Interp::new();
+    assert_eq!(
+        say_output(
+            &mut interp,
+            b"numeric digits 20\nnumeric fuzz 15\nnumeric digits\nsay digits() fuzz()"
+        ),
+        b"9 15\n".to_vec(),
+        "the reset stores the default and leaves FUZZ above it"
+    );
+
+    // The same value typed out is still 33.1, which is what makes the reset a
+    // rule of its own rather than the operand form with a constant.
     let mut interp = Interp::new();
     let failure = run_source(
         &mut interp,
-        b"numeric digits 20\nnumeric fuzz 15\nnumeric digits",
+        b"numeric digits 20\nnumeric fuzz 15\nnumeric digits 9",
     )
     .unwrap_err();
     let Failure::Raised(raised) = failure else {

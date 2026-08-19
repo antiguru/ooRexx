@@ -195,24 +195,36 @@ out> 0
 out> 0
 
 # NUMERIC FUZZ, the other setting a comparison reads: it subtracts from the
-# precision the comparison works at, so at FUZZ 3 `1000000` and `1000001`
-# compare equal, differing in the seventh significant digit, while `1000000`
+# precision the comparison works at, so at FUZZ 3 `1000000.0` and `1000001`
+# compare equal, differing in the seventh significant digit, while `1000000.0`
 # and `1000100`, differing in the fifth, do not. FUZZ then goes back to zero at
 # the same site, so the rows say the setting is read when the comparison runs
 # rather than when the clause was compiled. **The strict rows are the control
 # and there is one at each setting**, for the reason the DIGITS stanza above
 # gives.
+#
+# **The second row is the other control, and the reason the first is spelled
+# with a decimal point.** Two integer objects inside DIGITS are compared by
+# `RexxInteger::comp` (`interpreter/classes/IntegerClass.cpp:1191`), which
+# subtracts them directly and never reads FUZZ, so `1000000 = 1000001` answers
+# `0` at every FUZZ and demonstrates nothing about the setting. This stanza
+# asserted the opposite until 2026-08-19 -- expecting `1` there, which no
+# interpreter has ever printed -- so it was recording this crate's own answer
+# rather than the oracle's, against this file's own header rule. `numeric-fuzz`
+# beside it is where that path is covered in both directions.
 program
 numeric fuzz 3
+say 1000000.0 = 1000001
 say 1000000 = 1000001
-say 1000000 == 1000001
-say 1000000 = 1000100
+say 1000000.0 == 1000001
+say 1000000.0 = 1000100
 numeric fuzz 0
-say 1000000 = 1000001
-say 1000000 == 1000001
+say 1000000.0 = 1000001
+say 1000000.0 == 1000001
 ----
 rc> 0
 out> 1
+out> 0
 out> 0
 out> 0
 out> 0

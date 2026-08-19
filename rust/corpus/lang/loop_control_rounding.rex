@@ -29,8 +29,14 @@ do k = 1 to 20 for 12
 end
 say 'after' k
 
-/* FUZZ makes the TO comparison run at less than DIGITS precision, so the
-   bound is reached earlier than an exact comparison would reach it. */
+/* FUZZ does NOT reach this bound earlier, and that is what the loop is here
+   for. A controlled loop whose control value and TO are both integer objects
+   inside DIGITS has its bound tested by RexxInteger::comp, which subtracts
+   them directly and never reads FUZZ at all -- so this runs 1 to 10 and ends
+   at 11, exactly as it would at FUZZ 0. A bound test that applied FUZZ here
+   would compare at one digit and run past 10.
+   ir_dual_cases/numeric-fuzz holds the other direction, where the initial
+   value is spelled with a decimal point and the fuzzed comparison does run. */
 numeric digits 2
 numeric fuzz 1
 /* FOR 20 and not a rounder number: the count is itself read as a whole

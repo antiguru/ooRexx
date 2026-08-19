@@ -1,0 +1,137 @@
+# What `NUMERIC FUZZ` does, including in the state only its own reset reaches.
+#
+# **`NUMERIC DIGITS` with no operand is its own rule.** It stores the default
+# without the check the operand form makes, so a program can put FUZZ at or
+# above DIGITS and keep running. The ANSI draft says the opposite -- `X3J18-199X`
+# 8.3.15.1 gives the no-operand form `Value = 9` and then runs the same
+# `if Value<=#Fuzz.#Level then #Raise 'SYNTAX',33.1` -- so this is a place where
+# the interpreter and the standard disagree and the interpreter is what these
+# rows pin.
+#
+# **Above DIGITS, FUZZ does not mean "compare at zero digits".**
+# `NumberString::comp` computes `digits -= fuzz` into a signed `wholenumber_t`,
+# and `addSub` then finds the left operand large enough that the right cannot
+# affect the result and hands the left one back, so the shared sign is the whole
+# answer. The `fuzz = digits` rows beside them are what says so: they compare at
+# zero digits, and answer the opposite for the same operands.
+#
+# **A comparison of two integer objects inside DIGITS never reads FUZZ at all.**
+# `RexxInteger::comp` (`interpreter/classes/IntegerClass.cpp:1191`) subtracts
+# them directly, and only anything else falls to the fuzzed
+# `NumberString::comp`. Each row that takes that path is paired with the nearest
+# row that does not -- the same digits spelled with a decimal point, one digit
+# too wide for DIGITS, or built by a builtin the interpreter builds a string
+# for -- because the pairing is what pins the rule to which object a value is
+# rather than to what it is worth.
+#
+# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE. Capture is:
+#
+#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
+#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
+
+# the reset itself: DIGITS goes to the default and leaves a FUZZ above it, and
+# FUZZ's own reset then leaves DIGITS alone.
+program
+numeric digits 30
+numeric fuzz 20
+numeric digits
+say digits() fuzz()
+numeric fuzz
+say digits() fuzz()
+----
+rc> 0
+out> 9 20
+out> 9 0
+
+# FUZZ above DIGITS. Equal values compare unequal and the left operand is the
+# greater one, which is the sign of the left rather than an ordering. Opposite
+# signs and zero are decided before the precision is ever consulted, so those
+# two rows answer what they would at any FUZZ, and the strict comparison never
+# reads FUZZ at all.
+program
+numeric digits 30
+numeric fuzz 20
+numeric digits
+say 1 = 1.0
+say 1e5 = 1e5
+say 1 > 1.0000000001
+say 1 < 1.0000000001
+say -1 < -1.0
+say 0 = 0.0
+say 1 = 2
+say 1 == 1.0
+----
+rc> 0
+out> 0
+out> 0
+out> 1
+out> 0
+out> 1
+out> 1
+out> 0
+out> 0
+
+# FUZZ equal to DIGITS, which is the adjacent case and not the degenerate one:
+# the precision is zero rather than negative, and the same operands the block
+# above answers `0` for answer `1` here.
+program
+numeric digits 30
+numeric fuzz 9
+numeric digits
+say digits() fuzz()
+say 1 = 1.0
+say 1 = 1.000001
+say 1e5 = 1e5
+----
+rc> 0
+out> 9 9
+out> 1
+out> 1
+out> 1
+
+# integer objects against everything adjacent to them. The first row is the
+# exact comparison; the rest each miss it for one reason -- a decimal point, a
+# digit more than DIGITS admits, or a result the interpreter builds as a string.
+program
+numeric digits 9
+numeric fuzz 8
+say 100000000 = 100000001
+say 100000000.0 = 100000001
+say 1000000000 = 1000000001
+say trunc(100000000.4) = 100000001
+say x2d('5F5E100') = 100000001
+say c2d('05F5E100'x) = 100000001
+say format(100000000) = 100000001
+----
+rc> 0
+out> 0
+out> 1
+out> 1
+out> 0
+out> 0
+out> 0
+out> 1
+
+# a controlled loop's bound test takes the same two paths. The integer loop runs
+# no passes; the one whose initial value is spelled with a decimal point compares
+# fuzzily on every pass, including after the increment, and never terminates --
+# the `leave` is what bounds it here.
+program
+numeric digits 9
+numeric fuzz 8
+zc = 0
+do zi = 100000002 to 100000001
+  zc = zc + 1
+  if zc > 3 then leave
+end
+say 'int' zc
+zc = 0
+do zi = 100000002.0 to 100000001
+  zc = zc + 1
+  if zc > 3 then leave
+end
+say 'frac' zc
+----
+rc> 0
+out> int 0
+out> frac 4

@@ -304,7 +304,33 @@ fn numeric_order(a: &Number, b: &Number, digits: u64, fuzz: u64) -> Result<Order
         return Ok(Ordering::Equal);
     }
 
-    let working_digits = digits.saturating_sub(fuzz);
+    // **`FUZZ` above `DIGITS` is a state the interpreter reaches, and it does
+    // not mean "compare at zero digits".** `NUMERIC DIGITS` with no operand
+    // stores the default without checking FUZZ against it (`Settings::
+    // reset_digits` has the measurement), so `numeric digits 30; numeric fuzz
+    // 20; numeric digits` leaves FUZZ at 20 under DIGITS 9.
+    //
+    // `NumberString::comp` (`NumberStringClass.cpp:3190`) then computes
+    // `digits -= fuzz` into a signed `wholenumber_t` and carries the negative
+    // result into every length test below it: the digit-array shortcut wants
+    // both adjusted lengths at or under it and no length is, and `addSub`
+    // (`NumberStringMath.cpp:574`) truncates both operands to `digits + 1` and
+    // then finds the left one large enough that the right cannot affect the
+    // result, so it returns the left operand unchanged. Its sign -- which the
+    // two operands share by this point -- is the whole answer.
+    //
+    // Measured at `DIGITS 9 FUZZ 20`, all rc 0: `1e5 = 1e5` and `1 = 1.0` are
+    // `0`, `1 > 1.0000000001` is `1` and `1 < 1.0000000001` is `0`, while
+    // `-1 < -1.0` is `1`. Comparing at zero digits instead would answer `1`
+    // for the first two.
+    if fuzz > digits {
+        return Ok(if sign_a < 0 {
+            Ordering::Less
+        } else {
+            Ordering::Greater
+        });
+    }
+    let working_digits = digits - fuzz;
 
     // Both operands share a sign, so ordering them by magnitude orders them
     // by value once that sign is applied -- a larger magnitude is the larger
@@ -513,6 +539,53 @@ mod tests {
             Ordering::Less
         } else {
             Ordering::Greater
+        }
+    }
+
+    /// A `FUZZ` above `DIGITS` is not a `FUZZ` equal to it, and the two rows
+    /// beside each other are what says so.
+    ///
+    /// Measured against ooRexx 5.3.0. Above DIGITS, every same-signed non-zero
+    /// pair is ordered by the sign the two share, so equal values compare
+    /// unequal; at DIGITS the comparison runs at zero digits and calls them
+    /// equal. Opposite signs and zero are decided before the precision is
+    /// consulted and answer the same either way.
+    #[test]
+    fn fuzz_above_digits_orders_by_the_shared_sign() {
+        let order = |a: &str, b: &str, digits, fuzz| {
+            numeric_order(
+                &Number::parse(a).expect("a spelling"),
+                &Number::parse(b).expect("a spelling"),
+                digits,
+                fuzz,
+            )
+            .expect("neither operand overflows")
+        };
+
+        for (a, b) in [("1", "1.0"), ("100000", "1E5"), ("1", "1.0000000001")] {
+            assert_eq!(
+                order(a, b, 9, 20),
+                Ordering::Greater,
+                "{a} vs {b} above DIGITS is ordered by their shared sign"
+            );
+            assert_eq!(
+                order(a, b, 9, 9),
+                Ordering::Equal,
+                "{a} vs {b} at DIGITS compares at zero digits instead"
+            );
+        }
+        assert_eq!(
+            order("-1", "-1.0", 9, 20),
+            Ordering::Less,
+            "a shared negative sign orders the other way"
+        );
+
+        // Decided before the precision is reached, so identical either side of
+        // the boundary.
+        for fuzz in [0u64, 9, 20] {
+            assert_eq!(order("0", "0.0", 9, fuzz), Ordering::Equal);
+            assert_eq!(order("-1", "1", 9, fuzz), Ordering::Less);
+            assert_eq!(order("1", "-1", 9, fuzz), Ordering::Greater);
         }
     }
 

@@ -820,13 +820,26 @@ impl ControlValue {
         }
     }
 
-    /// The value as an integer exact at `digits`, or `None` when it is not
-    /// one -- the same condition `Number::plain_integer` decides, asked of
-    /// either representation.
+    /// The value as an integer the bound test may compare exactly, or `None`
+    /// when the fuzzed comparison has to run instead.
+    ///
+    /// **This asks which representation the value is in, not what it is
+    /// worth**, because that is the question the interpreter asks:
+    /// `RexxInteger::comp` (`interpreter/classes/IntegerClass.cpp:1191`) takes
+    /// its exact path only when both sides are already integer objects and
+    /// both fit `NUMERIC DIGITS`, and anything else falls to the fuzzed
+    /// `NumberString::comp`. A `Wide` value is one this crate is holding as a
+    /// `Number` -- either a value with a fractional part, or an integer too
+    /// wide for `DIGITS` -- and both are cases the interpreter fuzzes.
+    /// Deciding this by value would answer `Some` for a `Number` worth
+    /// `100000002` that reached that worth by rounding `100000002.0`, which
+    /// the interpreter compares fuzzily: measured at `DIGITS 9 FUZZ 8`,
+    /// `do zi = 100000002.0 to 100000001` does not terminate while the same
+    /// loop with an integer initial value runs no passes at all.
     fn small(&self, digits: u64) -> Option<i64> {
         match self {
             ControlValue::Small(value) => within_digits(*value, digits).then_some(*value),
-            ControlValue::Wide(number) => number.plain_integer(digits),
+            ControlValue::Wide(_) => None,
         }
     }
 }
@@ -1045,8 +1058,11 @@ pub(crate) fn loop_header_slot(body: &Loop, slot: u32) -> Option<&Expr> {
 /// afterwards would call `zf` where the oracle does not.
 #[derive(Default)]
 pub(crate) struct LoopHeaderValues {
-    /// A controlled loop's starting value, rounded at the digits in force.
-    initial: Option<Number>,
+    /// A controlled loop's starting value, rounded at the digits in force,
+    /// **in the representation the header's own value was in** -- an integer
+    /// stays one, so the first pass's bound test can be the exact comparison
+    /// the interpreter makes for two integer objects.
+    initial: Option<ControlValue>,
     to: Option<Number>,
     by: Option<Number>,
     /// A `FOR`'s own budget, from either a controlled loop's `FOR` or a
@@ -6906,7 +6922,20 @@ impl Interp {
         values: &mut LoopHeaderValues,
     ) -> Result<(), Failure> {
         match role {
-            HeaderRole::Initial => values.initial = Some(self.header_number(role, value)?),
+            // **The rounded value and the representation it arrived in.** The
+            // rounding is the oracle's, and for an integer inside `DIGITS` it
+            // is a no-op, so the two arms carry the same worth and differ only
+            // in what [`ControlValue::small`] may then answer.
+            HeaderRole::Initial => {
+                let number = self.header_number(role, value)?;
+                let digits = self.activation().settings.digits();
+                values.initial = Some(match value.decode() {
+                    Decoded::SmallInt(small) if within_digits(small, digits) => {
+                        ControlValue::Small(small)
+                    }
+                    _ => ControlValue::Wide(number),
+                });
+            }
             HeaderRole::To => values.to = Some(self.header_number(role, value)?),
             HeaderRole::By => values.by = Some(self.header_number(role, value)?),
             // **The rendering is built inside the failing arm**, because a
@@ -7135,14 +7164,12 @@ impl Interp {
             LoopKind::Controlled(ctrl) => LoopState::Controlled {
                 control: ctrl.control,
                 at: control_slot(code, ctrl.control),
-                // The header's own value, kept as the `Number` the header
-                // produced. The first re-test replaces it, and that is where
-                // the integer representation gets picked up.
-                current: ControlValue::Wide(
-                    values
-                        .initial
-                        .expect("a controlled loop's plan always names its initial value"),
-                ),
+                // The header's own value, in the representation the header
+                // produced it in. The first re-test replaces it, computing its
+                // own representation the same way.
+                current: values
+                    .initial
+                    .expect("a controlled loop's plan always names its initial value"),
                 to: values.to,
                 by: match values.by {
                     Some(by) => by,
@@ -7695,11 +7722,9 @@ impl Interp {
             LoopKind::Controlled(ctrl) => LoopState::Controlled {
                 control: ctrl.control,
                 at: control_slot(code, ctrl.control),
-                current: ControlValue::Wide(
-                    values
-                        .initial
-                        .expect("a controlled loop's plan always names its initial value"),
-                ),
+                current: values
+                    .initial
+                    .expect("a controlled loop's plan always names its initial value"),
                 to: values.to,
                 by: match values.by {
                     Some(by) => by,
@@ -8370,10 +8395,26 @@ impl Interp {
                     // an operand too wide for `DIGITS` is rounded before the
                     // addition, so the exact `i64` sum would be the wrong
                     // answer.
-                    let stepped = match previous.decode() {
-                        Decoded::SmallInt(value) if within_digits(value, digits) => by_int
-                            .and_then(|step| value.checked_add(step))
-                            .filter(|sum| within_digits(*sum, digits)),
+                    //
+                    // **The value in force has to be an integer too, and its
+                    // tag does not answer that.** `ObjRef::small_int` is
+                    // admitted on what a value *renders* as (D15), so a
+                    // `Number` that reached a whole rendering by rounding --
+                    // `100000002.0` at `DIGITS 9` -- comes back tagged. The
+                    // interpreter's `NumberString` stays one through its own
+                    // `+`, so a loop that started fractional keeps comparing
+                    // its bound fuzzily forever; carrying `current`'s
+                    // representation across the step is what reproduces that.
+                    // Measured at `DIGITS 9 FUZZ 8`,
+                    // `do zi = 100000002.0 to 100000001` does not terminate.
+                    let stepped = match (&*current, previous.decode()) {
+                        (ControlValue::Small(_), Decoded::SmallInt(value))
+                            if within_digits(value, digits) =>
+                        {
+                            by_int
+                                .and_then(|step| value.checked_add(step))
+                                .filter(|sum| within_digits(*sum, digits))
+                        }
                         _ => None,
                     };
                     // **Written inside each arm rather than assigned from the
@@ -8448,15 +8489,17 @@ impl Interp {
                     // allocates twice per pass for what an `i64` comparison
                     // answers outright.
                     //
-                    // **`FUZZ` is why this needs a guard beyond the three
-                    // values being integers.** A nonzero `FUZZ` compares at
-                    // *less* than `DIGITS` precision, so two integers that
-                    // differ can still compare equal, and no `i64`
-                    // comparison expresses that. `FUZZ` is `0` unless a
-                    // program says otherwise.
-                    let integral = (fuzz == 0)
-                        .then(|| Some((current.small(digits)?, to_int?, by_int?)))
-                        .flatten();
+                    // **`FUZZ` is not a guard on this, and reading it as one
+                    // is a divergence.** The interpreter compares two integers
+                    // that both fit `NUMERIC DIGITS` in `RexxInteger::comp`
+                    // (`interpreter/classes/IntegerClass.cpp:1191`), which
+                    // subtracts them directly and never reaches the fuzzed
+                    // `NumberString::comp`. Measured at `DIGITS 9 FUZZ 8`,
+                    // `do zi = 100000002 to 100000001` runs no passes, while
+                    // the same loop with the bound spelled `100000002.0` --
+                    // no longer an integer, so `current.small` answers `None`
+                    // and the fuzzed path below runs -- does not terminate.
+                    let integral = (|| Some((current.small(digits)?, to_int?, by_int?)))();
                     let within = match integral {
                         Some((current, to, by)) => {
                             if by < 0 {
@@ -9757,10 +9800,6 @@ impl Interp {
     ) -> Result<(), Failure> {
         match setting {
             NumericSetting::Digits => {
-                // **The default is built in the arm that uses it.** It used
-                // to be built before the call, so `numeric digits 20` --
-                // which never reads it -- allocated a `String` for the
-                // restore value it was overriding.
                 match self.numeric_operand(code, expression, "DIGITS")? {
                     Some(text) => {
                         let parsed = String::from_utf8_lossy(&text);
@@ -9768,14 +9807,12 @@ impl Interp {
                         self.give_result_buffer(text);
                         outcome.map_err(raised_from_settings)?;
                     }
-                    // **The value, not its text.** `DEFAULT_DIGITS` is a
-                    // constant, and rendering it so the text form can parse it
-                    // back was a heap allocation and a conversion per clause.
-                    None => self
-                        .activation_mut()
-                        .settings
-                        .set_digits(rexx_num::DEFAULT_DIGITS)
-                        .map_err(raised_from_settings)?,
+                    // **The reset is its own rule, not the operand form
+                    // with a constant** -- it stores the default and makes
+                    // neither of the operand form's checks, which is why it
+                    // cannot fail and why `reset_digits` documents the row
+                    // that says so.
+                    None => self.activation_mut().settings.reset_digits(),
                 }
             }
             NumericSetting::Fuzz => match self.numeric_operand(code, expression, "FUZZ")? {
@@ -9785,11 +9822,7 @@ impl Interp {
                     self.give_result_buffer(text);
                     outcome.map_err(raised_from_settings)?;
                 }
-                None => self
-                    .activation_mut()
-                    .settings
-                    .set_fuzz(0)
-                    .map_err(raised_from_settings)?,
+                None => self.activation_mut().settings.reset_fuzz(),
             },
             NumericSetting::FormDefault | NumericSetting::FormScientific => {
                 self.activation_mut()

@@ -258,22 +258,26 @@ impl Settings {
         self.set_digits_checked(value, not_whole)
     }
 
-    /// [`Settings::set_digits_str`]'s own checks and store, for a caller that
-    /// has the value rather than its text.
+    /// `NUMERIC DIGITS` with no operand: the default, stored **without** the
+    /// checks [`Settings::set_digits_str`] makes.
     ///
-    /// **`NUMERIC DIGITS` with no operand is the caller this exists for**: the
-    /// value is `DEFAULT_DIGITS`, and rendering it to a `String` so the text
-    /// form can parse it back cost a heap allocation and a conversion per
-    /// clause -- measured, 673 user instructions against the -O3
-    /// interpreter's 48.
+    /// **The no-operand form is its own rule rather than the operand form with
+    /// a constant, and the difference is observable.** Measured against ooRexx
+    /// 5.3.0 with `DIGITS 30` and `FUZZ 20` in force: `numeric digits` prints
+    /// `9 20` at rc 0, while `numeric digits 9` -- the same value spelled out
+    /// -- is 33.1 at rc 223. So the reset is not "set the default through the
+    /// same door".
     ///
-    /// It can still fail: resetting to the default is rejected when `FUZZ` is
-    /// not below it, which `NUMERIC DIGITS 30` then `NUMERIC FUZZ 20` then
-    /// `NUMERIC DIGITS` reaches.
-    pub fn set_digits(&mut self, value: u64) -> Result<(), SettingsError> {
-        self.set_digits_checked(value, || SettingsError::DigitsNotWhole {
-            found: value.to_string(),
-        })
+    /// The ANSI draft disagrees with the interpreter here rather than being
+    /// silent: `X3J18-199X` 8.3.15.1 gives the no-operand form `Value = 9` and
+    /// then runs the same `if Value<=#Fuzz.#Level then #Raise 'SYNTAX',33.1`
+    /// the operand form runs. This crate matches the interpreter.
+    ///
+    /// **The state this reaches has FUZZ at or above DIGITS**, which the
+    /// interpreter carries without complaint; `compare.rs`'s `numeric_order`
+    /// is where what that means for a comparison is written down.
+    pub fn reset_digits(&mut self) {
+        self.digits = crate::DEFAULT_DIGITS;
     }
 
     /// The half the two share. `not_whole` is a closure so that the text form
@@ -315,10 +319,16 @@ impl Settings {
         self.set_fuzz_checked(value)
     }
 
-    /// [`Settings::set_fuzz_str`]'s own check and store, for a caller that has
-    /// the value rather than its text -- `NUMERIC FUZZ` with no operand.
-    pub fn set_fuzz(&mut self, value: u64) -> Result<(), SettingsError> {
-        self.set_fuzz_checked(value)
+    /// `NUMERIC FUZZ` with no operand: zero, stored without a check.
+    ///
+    /// Written the same way as [`Settings::reset_digits`] because the
+    /// interpreter's no-operand forms behave the same way, and *not* because
+    /// the check would pass anyway. Measured with `DIGITS 30` and `FUZZ 20` in
+    /// force, `numeric fuzz` prints `30 0` -- DIGITS untouched, and no reading
+    /// of that row distinguishes a skipped check from a passed one, which is
+    /// why the citation for the rule is DIGITS' row rather than this one.
+    pub fn reset_fuzz(&mut self) {
+        self.fuzz = 0;
     }
 
     /// The half the two share. No `not_whole` closure here: the check below
@@ -357,5 +367,89 @@ impl Settings {
             }
         };
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Form, Settings, SettingsError};
+
+    /// The reset stores what the operand form refuses, and the refusal is
+    /// half of what makes that a rule rather than a coincidence.
+    ///
+    /// Measured against ooRexx 5.3.0: with `DIGITS 30` and `FUZZ 20` in
+    /// force, `numeric digits` prints `9 20` at rc 0 and `numeric digits 9`
+    /// is 33.1 at rc 223.
+    #[test]
+    fn the_digits_reset_stores_what_the_operand_form_refuses() {
+        let mut settings = Settings::default();
+        settings
+            .set_digits_str("30")
+            .expect("30 is legal at DIGITS 9");
+        settings.set_fuzz_str("20").expect("20 is below DIGITS 30");
+
+        let mut spelled_out = settings.clone();
+        assert_eq!(
+            spelled_out.set_digits_str("9"),
+            Err(SettingsError::FuzzNotBelowDigits {
+                digits: 9,
+                fuzz: 20
+            }),
+            "the operand form still refuses the value the reset stores"
+        );
+        assert_eq!(spelled_out.digits(), 30, "a refused set changes nothing");
+
+        settings.reset_digits();
+        assert_eq!(
+            (settings.digits(), settings.fuzz()),
+            (9, 20),
+            "the reset stores the default and leaves FUZZ above it"
+        );
+    }
+
+    /// Each no-operand form writes its own setting and leaves the other two.
+    /// Measured across a sweep of starting DIGITS, FUZZ and FORM: `numeric
+    /// digits` writes only DIGITS, `numeric fuzz` only FUZZ, and `numeric
+    /// form` only FORM.
+    #[test]
+    fn each_reset_leaves_the_settings_it_does_not_own() {
+        let start = || {
+            let mut settings = Settings::default();
+            settings
+                .set_digits_str("30")
+                .expect("30 is legal at DIGITS 9");
+            settings.set_fuzz_str("20").expect("20 is below DIGITS 30");
+            settings
+                .set_form_str("ENGINEERING")
+                .expect("a spelling the setter accepts");
+            settings
+        };
+
+        let mut digits_reset = start();
+        digits_reset.reset_digits();
+        assert_eq!(
+            (
+                digits_reset.digits(),
+                digits_reset.fuzz(),
+                digits_reset.form()
+            ),
+            (9, 20, Form::Engineering)
+        );
+
+        let mut fuzz_reset = start();
+        fuzz_reset.reset_fuzz();
+        assert_eq!(
+            (fuzz_reset.digits(), fuzz_reset.fuzz(), fuzz_reset.form()),
+            (30, 0, Form::Engineering)
+        );
+
+        let mut form_reset = start();
+        form_reset
+            .set_form_str("SCIENTIFIC")
+            .expect("a spelling the setter accepts");
+        assert_eq!(
+            (form_reset.digits(), form_reset.fuzz(), form_reset.form()),
+            (30, 20, Form::Scientific)
+        );
     }
 }
