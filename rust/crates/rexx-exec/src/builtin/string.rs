@@ -291,7 +291,7 @@ fn find_forward(haystack: &[u8], needle: &[u8], start: usize, range: usize) -> u
 /// `from_le_bytes` rather than `from_ne_bytes` so that byte *k* of memory is
 /// always at bit `8k`, which makes `trailing_zeros` the index on either
 /// endianness. On a little-endian target it compiles to nothing.
-fn find_byte(hay: &[u8], byte: u8) -> Option<usize> {
+pub(crate) fn find_byte(hay: &[u8], byte: u8) -> Option<usize> {
     const LOW: u64 = 0x0101_0101_0101_0101;
     const HIGH: u64 = 0x8080_8080_8080_8080;
 

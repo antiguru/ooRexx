@@ -80,7 +80,12 @@ mod datatype;
 mod datetime;
 mod numeric;
 mod state;
-mod string;
+/// Crate-visible because the builtins are not the only place this
+/// interpreter searches a haystack for a byte: a `PARSE` template's
+/// one-byte string pattern wants [`string::find_byte`] too, and a second
+/// copy of a scan whose correctness argument is as delicate as that one's
+/// is the wrong way to give it one.
+pub(crate) mod string;
 mod word;
 
 /// What a builtin's code looks like: the interpreter, the row's own name and

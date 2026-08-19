@@ -2040,12 +2040,14 @@ struct Interp {
     /// Buffers lent out for a `PARSE` instruction's source strings, and
     /// handed back when the template walk is done with them.
     ///
-    /// **A pool rather than one slot, because a `PARSE` holds several at
-    /// once**: `PARSE ARG` takes one per argument, and the comma fence keeps
-    /// the finished cursor's string alive until the next one is built. Every
-    /// one of them is copied out of a value, walked, and dropped, which is
-    /// [`Interp::key_buffer`]'s waste in a place that repeats it per
-    /// argument.
+    /// **A pool rather than one slot, because more than one is live at a
+    /// time**: the comma fence builds the next template's string before it
+    /// gives the finished cursor's back, and a trigger operand that calls a
+    /// routine can reach a `PARSE` of its own while this one's string is
+    /// still being walked. A single lent slot would be empty for the inner
+    /// one, which is safe but allocates. Every buffer is copied out of a
+    /// value, walked, and dropped, which is [`Interp::key_buffer`]'s waste in
+    /// a place that repeats it per clause.
     ///
     /// Losing one is safe and costs only the reuse, the same as the single
     /// slots above: a template that leaves through `?` drops its buffers and
@@ -2057,10 +2059,6 @@ struct Interp {
     /// held for the rest of the run, and the count bounds how many are kept
     /// at all.
     parse_buffers: Vec<Vec<u8>>,
-    /// The outer vector `PARSE ARG` collects its per-argument strings into,
-    /// lent by the same rule as [`Interp::parse_buffers`] and for the same
-    /// reason: it is allocated and freed once per `PARSE ARG`.
-    parse_string_lists: Vec<Vec<Vec<u8>>>,
     /// Where an inline string's bytes, or a tagged integer's rendering, are
     /// put so that [`Interp::to_text`] can hand back a borrow of them.
     ///
@@ -3037,7 +3035,6 @@ impl Interp {
             key_buffer: Vec::new(),
             value_buffer: Vec::new(),
             parse_buffers: Vec::new(),
-            parse_string_lists: Vec::new(),
             text_scratch: [0; crate::value::TEXT_SCRATCH],
             result_buffer: std::cell::Cell::new(Vec::new()),
             running: None,

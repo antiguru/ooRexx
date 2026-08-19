@@ -8558,8 +8558,20 @@ impl Interp {
     /// oracle; this crate ran clean, rc 0, before this fix. `do i = 1 to
     /// 99999 for 12345` under `digits 3` is 26.3 on the oracle, same gap.
     pub(crate) fn whole_nonneg(&mut self, value: ObjRef) -> Option<u64> {
-        let number = self.to_number(value).ok()?;
         let digits = usize::try_from(self.activation().settings.digits()).ok()?;
+        // **A tagged integer already is the answer**, when it is small enough
+        // that `whole_value` would round nothing -- which is what `whole_i64`
+        // decides, and `builtin::whole_number` takes the same shortcut against
+        // its own fixed width. Going the long way builds a `Number` out of the
+        // tag, digit by digit, and takes the `i64` straight back out of it. A
+        // `None` here means only that the rounding rule has to run, so the
+        // general path below still does.
+        if let Decoded::SmallInt(small) = value.decode()
+            && let Some(whole) = rexx_num::whole_i64(small, digits)
+        {
+            return u64::try_from(whole).ok();
+        }
+        let number = self.to_number(value).ok()?;
         let whole = number.whole_value(digits)?;
         u64::try_from(whole).ok()
     }

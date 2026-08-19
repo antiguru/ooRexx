@@ -103,7 +103,7 @@ fn is_blank(byte: u8) -> bool {
     byte == b' ' || byte == b'\t'
 }
 
-/// The strings one `PARSE` clause will consume, in template order.
+/// Where one `PARSE` clause's templates get their strings.
 ///
 /// **Every source but `ARG` produces exactly one string**, and carrying that
 /// one string in a `Vec` cost an allocation per clause for a container that
@@ -111,36 +111,20 @@ fn is_blank(byte: u8) -> bool {
 /// `samples/rexxcps.rex`, whose loop parses on every iteration, removing it
 /// took the program from 505,446 allocations to 466,246.
 ///
-/// `ARG` is the one source with more than one string, so it keeps the `Vec` it
-/// has to build anyway.
+/// `ARG` is the one source with more than one string, and it **names the
+/// argument each template will read rather than rendering them all up
+/// front**. A template's string is finished with before the next one starts,
+/// so at most one is live at a time and the rest of
+/// [`Interp::parse_buffers`] stays available to a nested `PARSE`; a template
+/// list shorter than the argument list renders nothing for the arguments it
+/// never reaches; and there is no outer vector to lend, return or bound.
 enum ParseStrings {
     /// A single-string source. The slot empties on the first take, so a
     /// template past the first parses the null string -- which is the rule
     /// [`Interp::next_template`] wants and gets here for free.
     One(Option<Vec<u8>>),
-    /// `PARSE ARG`: one string per argument of the running activation.
-    ///
-    /// The vector and a position rather than an `IntoIter`, so that the
-    /// vector itself can go back to [`Interp::parse_string_lists`] once the
-    /// template walk has finished with it.
-    Many(Vec<Vec<u8>>, usize),
-}
-
-impl ParseStrings {
-    /// The next string, or `None` once they are spent.
-    ///
-    /// A taken entry is left empty rather than removed, which is what lets
-    /// the vector be handed back whole.
-    fn next(&mut self) -> Option<Vec<u8>> {
-        match self {
-            ParseStrings::One(string) => string.take(),
-            ParseStrings::Many(strings, at) => {
-                let string = strings.get_mut(*at)?;
-                *at += 1;
-                Some(std::mem::take(string))
-            }
-        }
-    }
+    /// `PARSE ARG`: the index of the argument the next template reads.
+    Arg(usize),
 }
 
 /// One template's parse string and the five positions the triggers move.
@@ -403,7 +387,11 @@ fn find(haystack: &[u8], needle: &[u8], from: usize, caseless: bool) -> Option<u
         // A one-byte pattern is the common case and the one a byte scan can
         // do without building a window per position -- `samples/rexxcps.rex`
         // searches for a single `b` on four of its inner loop's clauses.
-        ([byte], false) => tail.iter().position(|candidate| candidate == byte),
+        // `find_byte` is `builtin::string`'s own scan, a word at a time; its
+        // doc has the argument for why the lowest flagged byte is the first
+        // match, and the test that runs that argument rather than resting on
+        // it.
+        ([byte], false) => crate::builtin::string::find_byte(tail, *byte),
         ([byte], true) => {
             let folded = byte.to_ascii_lowercase();
             tail.iter()
@@ -452,23 +440,45 @@ impl Interp {
         self.parse_buffers.push(buffer);
     }
 
-    /// Hands every string a template walk has not consumed back to the pool,
-    /// and the vector `PARSE ARG` held them in with them.
+    /// Hands back the string a template walk did not consume.
+    ///
+    /// `Arg` holds no buffer of its own -- it renders each argument when the
+    /// template that reads it starts, into a buffer the cursor then owns -- so
+    /// a walk that stopped short of the arguments has nothing here to return.
     fn give_parse_strings(&mut self, strings: ParseStrings) {
         match strings {
-            ParseStrings::One(string) => {
-                if let Some(string) = string {
-                    self.give_parse_buffer(string);
-                }
-            }
-            ParseStrings::Many(mut list, _) => {
-                for string in list.drain(..) {
-                    self.give_parse_buffer(string);
-                }
-                if self.parse_string_lists.len() < PARSE_BUFFERS_KEPT {
-                    self.parse_string_lists.push(list);
-                }
-            }
+            ParseStrings::One(Some(string)) => self.give_parse_buffer(string),
+            ParseStrings::One(None) | ParseStrings::Arg(_) => {}
+        }
+    }
+
+    /// `PARSE ARG`'s string for the template at argument position `at`, in a
+    /// buffer from the pool.
+    ///
+    /// An omitted position (`call sub 1,,3`) and a position past the last
+    /// argument are both the null string, which is the rule
+    /// [`Interp::parse_strings`] records the measurement for.
+    ///
+    /// **The value is read here rather than at the clause's start, so an
+    /// argument a later template reads has to survive everything the earlier
+    /// templates allocate.** It does, because an argument's value is rooted as
+    /// a temporary of the *caller*, below every watermark this activation's
+    /// clauses take, and so stays reachable for as long as the callee runs.
+    /// `a_late_parse_arg_template_survives_collection` runs that under
+    /// collect-on-every-allocation rather than arguing it; removing the
+    /// caller-side `push_temp` it names makes that test panic.
+    ///
+    /// A trigger operand that calls a routine replaces `call_context` and puts
+    /// it back, so the arguments a later template reads are still this
+    /// activation's own.
+    fn argument_text(&mut self, at: usize) -> Vec<u8> {
+        let argument = match self.call_context.arguments.get(at) {
+            Some(Some(argument)) => Some(argument.value()),
+            Some(None) | None => None,
+        };
+        match argument {
+            Some(value) => self.rendered_into_parse_buffer(value),
+            None => self.take_parse_buffer(),
         }
     }
 
@@ -557,7 +567,18 @@ impl Interp {
         parse: &Parse,
         indent: usize,
     ) -> Cursor {
-        let mut string = strings.next().unwrap_or_default();
+        let mut string = match strings {
+            // A template past the single string parses the null string, and
+            // an empty `Vec` is that with nothing taken from the pool -- one
+            // of zero capacity is what `give_parse_buffer` declines to park
+            // anyway.
+            ParseStrings::One(string) => string.take().unwrap_or_default(),
+            ParseStrings::Arg(index) => {
+                let at = *index;
+                *index += 1;
+                self.argument_text(at)
+            }
+        };
         if parse.upper {
             string.make_ascii_uppercase();
         } else if parse.lower {
@@ -577,8 +598,10 @@ impl Interp {
     /// 'three four', , 'five'` into `parse arg c1 , c2 , c3 , c4` gives
     /// `[one two][three four][][five]`.
     ///
-    /// A template past the end of this list parses the null string, which
-    /// [`Interp::next_template`] gets for free from the iterator running out.
+    /// A template past the last string parses the null string, which
+    /// [`Interp::next_template`] gets for free from the single slot emptying
+    /// and from [`Interp::argument_text`] answering for a position no argument
+    /// occupies.
     fn parse_strings(
         &mut self,
         code: &Code<'_>,
@@ -650,20 +673,7 @@ impl Interp {
             // one string (`RexxInstructionParse::execute`'s own `SUBKEY_ARG`
             // arm, which is the only one that does not call
             // `traceKeywordResult`).
-            ParseSource::Arg => {
-                let arguments = std::mem::take(&mut self.call_context.arguments);
-                let mut strings = self.parse_string_lists.pop().unwrap_or_default();
-                strings.clear();
-                strings.reserve(arguments.len());
-                for argument in &arguments {
-                    strings.push(match argument {
-                        Some(argument) => self.rendered_into_parse_buffer(argument.value()),
-                        None => Vec::new(),
-                    });
-                }
-                self.call_context.arguments = arguments;
-                return Ok(ParseStrings::Many(strings, 0));
-            }
+            ParseSource::Arg => return Ok(ParseStrings::Arg(0)),
             // The two sources that read a line rather than evaluating a value.
             // The split between them is entirely in which reader is called --
             // `PULL` takes the queue's head when there is one, `LINEIN` never
@@ -855,10 +865,14 @@ impl Interp {
             } else {
                 cursor.next_word()
             };
-            let value = self.text(&cursor.string()[piece.clone()]);
-            self.roots.push_temp(value);
             match target {
                 Some(target) => {
+                    // **The value is built inside this arm because the other
+                    // arm has nothing to assign it to.** A `.` consumes its
+                    // field and stores nowhere, so a value built ahead of the
+                    // match is created, rooted and dropped unread.
+                    let value = self.text(&cursor.string()[piece.clone()]);
+                    self.roots.push_temp(value);
                     // **The slot the upfront pass already bound this target
                     // to.** No compiler resolves a `PARSE` target -- nothing
                     // promotes the instruction -- but `Plan::build` walks
@@ -1286,6 +1300,52 @@ mod tests {
                 "{template}"
             );
         }
+    }
+
+    /// A `PARSE ARG` template past the first reads an argument that every
+    /// earlier template's allocations have had a chance to collect.
+    ///
+    /// **Run under collect-on-every-allocation**, because an ordinary run
+    /// reaches the second template long before the heap is due a collection
+    /// and so cannot ask the question at all. Measured to have teeth:
+    /// removing `eval_traced_argument`'s `push_temp` panics this at `to_text`'s
+    /// "a live value".
+    ///
+    /// The adjacent ordinary run is the other half: without it a mode that
+    /// silently declined to collect would satisfy this on its own, and the
+    /// `collections > 0` assertion is the same guard from the other side.
+    #[test]
+    fn a_late_parse_arg_template_survives_collection() {
+        // **The arguments are built by concatenation rather than written as
+        // literals**, and that is what gives this test its teeth: a literal is
+        // interned where the collector cannot take it, so a template reading
+        // one would answer correctly however badly it was rooted.
+        let source = concat!(
+            "call sub 'first' 'argument here', 'second' 'argument here'\n",
+            "exit\n",
+            "sub:\n",
+            "parse arg a1 a2 a3, b1 b2 b3\n",
+            "say '['a1']['a2']['a3']['b1']['b2']['b3']'\n",
+            "return\n",
+        );
+        let expected = "[first][argument][here][second][argument][here]\n";
+        let stressed = crate::run_program_collect_every_alloc(
+            "/tmp/parse-arg-collect.rex",
+            source.as_bytes().to_vec(),
+            crate::Invocation::none(),
+        );
+        assert_eq!(String::from_utf8_lossy(&stressed.stdout), expected);
+        assert_eq!(stressed.exit_code, 0);
+        assert!(
+            stressed.collections > 0,
+            "the stress mode collected nothing, so this proves nothing"
+        );
+        let ordinary = crate::run_program(
+            "/tmp/parse-arg-collect.rex",
+            source.as_bytes().to_vec(),
+            crate::Invocation::none(),
+        );
+        assert_eq!(String::from_utf8_lossy(&ordinary.stdout), expected);
     }
 
     /// `PARSE SOURCE` and `PARSE VERSION` reach their own strings, which no
