@@ -969,7 +969,7 @@ fn native_length(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<ObjRef, Failure> {
-    let length = interp.to_text(receiver).len();
+    let length = interp.text_len(receiver);
     Ok(interp.counted(length))
 }
 

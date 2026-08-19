@@ -99,7 +99,7 @@ pub(crate) fn length(
     let value = args[0].expect("check_arity admitted LENGTH's one required argument");
     // The borrow of `interp` ends with this statement, which is what lets the
     // allocation below happen at all.
-    let bytes = interp.to_text(value).len();
+    let bytes = interp.text_len(value);
     Ok(interp.counted(bytes))
 }
 

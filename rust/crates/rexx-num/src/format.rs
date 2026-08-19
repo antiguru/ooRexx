@@ -18,6 +18,8 @@
 //! `rust/corpus/num/form_notation.rex` and `format_trunc.rex`.
 
 use crate::{Digits, Form, Number};
+use std::borrow::Cow;
+use std::fmt::Write;
 
 /// What `FORMAT` can fail with. Both are error 93 (`Incorrect call to
 /// method`); the interpreter further distinguishes 93.941/93.942, but this
@@ -211,23 +213,15 @@ impl Number {
         // derives from `this` alone, before the section that applies
         // `after` and can carry -- it has no notion yet of the value carry
         // will eventually produce. So this first check (and its
-        // substitution) needs its own, uncarried trigger/grouping computed
-        // the same way `resolve_exponential_state` computes its first
-        // guess, not the final, carry-resolved one that drives the
+        // substitution) needs the uncarried trigger/grouping --
+        // `initial_exponent`, which is also `resolve_exponential_shape`'s
+        // first guess -- not the final, carry-resolved one that drives the
         // successful-render path below. Confirmed by forcing a carry that
         // bumps the exponent from 20 to 21 digits (`9.996E+20` rounded to 0
         // decimals) while `expp` is too narrow for either: the reported
         // mantissa is `"9.996"` (reframed at the pre-carry 20), not
         // `"0.9996"` (reframed at the post-carry 21).
-        let initial_eng_exp = expt.and_then(|expt| {
-            let a = adjusted(&n1);
-            // `saturating_mul`: `expt` may itself be the saturated-i64 form
-            // of a huge bare `digits` (see the default above), and doubling
-            // that must stay huge rather than wrap.
-            let triggered =
-                a as i64 >= expt || (a < 0 && (n1.exponent as i64).abs() > expt.saturating_mul(2));
-            triggered.then(|| group(form, a))
-        });
+        let initial_eng_exp = initial_exponent(Shape::of(&n1), form, expt);
         if let Some(width) = expp {
             if let Some(exp0) = initial_eng_exp {
                 let needed = exp0.unsigned_abs().to_string().len() as u32;
@@ -267,53 +261,44 @@ impl Number {
         // since nothing else can reach that raise.
         let reported = before.map(|_| reported_value(&n1, initial_eng_exp, eng_exp, after));
 
-        match eng_exp {
-            None => render_integer_padded(&rounded, before, after, reported.as_ref(), digits, form),
-            Some(exp) => {
-                // The exponent check comes before the `before` check -- an
-                // exponent that doesn't fit is reported even when `before`
-                // would have been wide enough for the mantissa.
-                let mantissa = render_integer_padded(
-                    &rounded,
-                    before,
-                    after,
-                    reported.as_ref(),
-                    digits,
-                    form,
-                )?;
+        // The exponent check comes before the `before` check -- an exponent
+        // that doesn't fit is reported even when `before` would have been
+        // wide enough for the mantissa. It has already run above, so the
+        // `?` here is the later of the two.
+        let layout = pad_to_before(
+            plain_layout(Shape::of(&rounded), after),
+            before,
+            reported.as_ref(),
+            digits,
+            form,
+        )?;
+        let field = ExponentField::decide(eng_exp, expp);
 
-                if exp == 0 {
-                    // A displayed exponent of exactly zero is never written
-                    // as `E+0` -- confirmed with `format(3.14159,,,,0)` at
-                    // DIGITS 5 (adjusted exponent 0 exactly), which prints
-                    // `3.1416`, not `3.1416E+0`, and with ENGINEERING
-                    // grouping an adjusted exponent of 1 or 2 down to a
-                    // displayed 0 the same way. If `expp` was explicit, the
-                    // field it would have taken is reserved as blanks
-                    // instead of vanishing outright.
-                    return Ok(match expp {
-                        Some(width) => format!("{mantissa}{}", " ".repeat(width as usize + 2)),
-                        None => mantissa,
-                    });
-                }
-                let e_sign = if exp < 0 { '-' } else { '+' };
-                let bare = exp.unsigned_abs().to_string();
-                // **Not `format!("{:0width$}", ..)`.** Rust's format width is
-                // a `u16`, so that spelling panics with "Formatting argument
-                // out of range" at `expp == 65536`, where the interpreter
-                // answers a 65,539-byte result. Measured both sides:
-                // `length(format(1e10,,,65535))` is 65538 and
-                // `length(format(1e10,,,65536))` is 65539.
-                let exp_digits = match expp {
-                    Some(width) => {
-                        let pad = (width as usize).saturating_sub(bare.len());
-                        format!("{}{bare}", "0".repeat(pad))
-                    }
-                    None => bare,
-                };
-                Ok(format!("{mantissa}E{e_sign}{exp_digits}"))
-            }
-        }
+        // **Measured out first and written once**, which is what lets this
+        // one `String` be allocated at its final size and never grow.
+        //
+        // Counted with an `LD_PRELOAD` shim over `malloc`: a version building
+        // the plain part as three `String`s and joining them made 3
+        // allocations every time it ran, 420,003 calls and 1,260,008
+        // allocations over one run of `samples/rexxcps.rex`, which was 19% of
+        // that run's 6,443,166 allocations. This is one `with_capacity` and,
+        // by the assertion below, nothing after it that has to grow -- the
+        // exponent field included, where the spelling this replaced built the
+        // mantissa, the exponent's own digits and the joined result
+        // separately.
+        let mut out = String::with_capacity(layout.len() + field.len());
+        emit_plain(&mut out, &rounded, layout);
+        field.push_to(&mut out);
+        // What makes the layout a promise about the bytes rather than a
+        // capacity hint for them -- and what says the allocation above stayed
+        // one: the final length equals the capacity asked for, so nothing
+        // pushed into it ever had to grow it.
+        debug_assert_eq!(
+            out.len(),
+            layout.len() + field.len(),
+            "the rendering disagrees with the layout it was emitted from"
+        );
+        Ok(out)
     }
 
     /// The exponent a [`format_with`] call with these same arguments would
@@ -394,19 +379,74 @@ fn group(form: Form, adjusted: i32) -> i32 {
 
 /// Rescales `n1` so its value reads as `mantissa * 10^exp`. Used both to turn
 /// a number into the digits that sit before `E`, and -- inside
-/// `resolve_exponential_state` -- to redo that rescaling from scratch once
+/// `resolve_exponential_shape` -- to redo that rescaling from scratch once
 /// rounding has changed which `exp` is the right one, rather than patching a
 /// stale mantissa.
 fn reframe(n1: &Number, exp: i32) -> Number {
     Number {
         negative: n1.negative,
         digits: n1.digits.clone(),
-        exponent: n1.exponent - exp,
+        exponent: Shape::of(n1).reframed(exp).exponent,
     }
 }
 
-fn adjusted(n: &Number) -> i32 {
-    n.exponent + n.digits.len() as i32 - 1
+/// A number reduced to everything the exponential decision and the layout
+/// read: how many digits it has, where the point sits relative to them, and
+/// whether it has a sign.
+///
+/// **Never a digit's value.** Only the rounding step reads a digit, so every
+/// other question the exponential decision asks can be asked of this and
+/// leave the number where it is -- which is what lets the resolution loop
+/// stop copying a `Number` per pass wherever it has nothing to round.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct Shape {
+    len: usize,
+    exponent: i32,
+    negative: bool,
+}
+
+impl Shape {
+    fn of(n: &Number) -> Self {
+        Shape {
+            len: n.digits.len(),
+            exponent: n.exponent,
+            negative: n.negative,
+        }
+    }
+
+    /// The exponent of the most significant digit.
+    fn adjusted(self) -> i32 {
+        self.exponent + self.len as i32 - 1
+    }
+
+    /// The shape [`reframe`] produces: rescaling a value to read as
+    /// `mantissa * 10^exp` moves the point and leaves the digits and the sign
+    /// where they were.
+    fn reframed(self, exp: i32) -> Self {
+        Shape {
+            exponent: self.exponent - exp,
+            ..self
+        }
+    }
+}
+
+/// Whether a value of this shape renders exponentially before `after` has cut
+/// anything, and at what exponent -- `None` for plain form.
+///
+/// `format_with`'s first `expp` check and `resolve_exponential_shape`'s first
+/// guess ask this same question of the same value at the same moment, and
+/// this is it. The low-end (fractional-value) arm reads the raw exponent,
+/// which is why the question can only be put here: a later pass, working from
+/// a bare adjusted exponent, no longer has it.
+fn initial_exponent(shape: Shape, form: Form, expt: Option<i64>) -> Option<i32> {
+    let expt = expt?;
+    let a = shape.adjusted();
+    // `saturating_mul`: `expt` may itself be the saturated-i64 form of a huge
+    // bare `digits` (see `trigger`), and doubling that must stay huge rather
+    // than wrap.
+    let triggered =
+        a as i64 >= expt || (a < 0 && (shape.exponent as i64).abs() > expt.saturating_mul(2));
+    triggered.then(|| group(form, a))
 }
 
 /// Decides whether `n1` renders in exponential form and, if so, at what
@@ -432,37 +472,41 @@ fn adjusted(n: &Number) -> i32 {
 /// (rounding never shrinks a magnitude), so this converges in a couple of
 /// passes for anything a real carry chain can produce. The cap is a
 /// defensive bound, not an expected iteration count.
-fn resolve_exponential_state(
+///
+/// **The answer is a [`Shape`], not a value.** Rounding is the one step in
+/// here that reads a digit, so with no `after` a pass costs no copy of `n1`
+/// at all, and with one it costs only the rounded value it has to look at.
+/// [`resolve_exponential_state`] materialises what this settled on, and
+/// asserts that what it built has the shape this reported.
+fn resolve_exponential_shape(
     n1: &Number,
     form: Form,
     expt: Option<i64>,
     after: Option<u32>,
-) -> (Option<i32>, Number) {
+) -> (Option<i32>, Shape) {
+    let base = Shape::of(n1);
+    // The shape a pass works on: `n1` reframed at the current guess, and cut
+    // to `after` places if there is a cut to make. Reframing at `0` -- what an
+    // untriggered guess gives -- is the identity, which is why the plain arm
+    // needs no case of its own.
+    let step = |eng_exp: Option<i32>| -> Shape {
+        let at = eng_exp.unwrap_or(0);
+        match after {
+            None => base.reframed(at),
+            Some(places) => Shape::of(&round_to_places(&reframe(n1, at), places)),
+        }
+    };
+
     // The very first guess is the only place the low-end (fractional-value)
-    // trigger matters: it needs `n1`'s own exponent, which later passes,
-    // working from a bare adjusted-exponent integer, no longer have. That is
-    // fine -- rounding only ever grows a number, so a value already outside
-    // exponential range can only move further from the fractional trigger's
-    // territory, never into it.
-    let mut eng_exp = expt.and_then(|expt| {
-        let a = adjusted(n1);
-        // `saturating_mul` for the same reason as `format_with`'s first
-        // trigger: `expt` may be a saturated huge `digits` default.
-        let triggered =
-            a as i64 >= expt || (a < 0 && (n1.exponent as i64).abs() > expt.saturating_mul(2));
-        triggered.then(|| group(form, a))
-    });
+    // trigger matters -- see `initial_exponent`. That is fine: rounding only
+    // ever grows a number, so a value already outside exponential range can
+    // only move further from the fractional trigger's territory, never into
+    // it.
+    let mut eng_exp = initial_exponent(base, form, expt);
 
     for _ in 0..8 {
-        let framed = match eng_exp {
-            Some(exp) => reframe(n1, exp),
-            None => n1.clone(),
-        };
-        let rounded = match after {
-            Some(places) => round_to_places(&framed, places),
-            None => framed,
-        };
-        let true_adjusted = eng_exp.unwrap_or(0) + adjusted(&rounded);
+        let rounded = step(eng_exp);
+        let true_adjusted = eng_exp.unwrap_or(0) + rounded.adjusted();
         // Once exponential, always exponential (growth cannot shrink a
         // magnitude back below the trigger); a number that started plain can
         // only newly trigger via the upper (adjusted >= expt) arm.
@@ -477,14 +521,45 @@ fn resolve_exponential_state(
         }
         eng_exp = new_eng_exp;
     }
+    (eng_exp, step(eng_exp))
+}
+
+/// The value [`resolve_exponential_shape`] decided on, materialised.
+///
+/// Borrows `n1` whenever neither the reframing nor the rounding had anything
+/// to change it into, which is every plain rendering with no `after`.
+///
+/// With an `after`, the cut is made once more here than the decision above
+/// already made it. That is the price of the decision being a shape: a
+/// `FORMAT` call with an explicit decimal count rounds twice, while a
+/// number's ordinary display -- the path with no `after` at all -- rounds not
+/// at all, and copies only where exponential form needs the mantissa
+/// reframed.
+fn resolve_exponential_state<'a>(
+    n1: &'a Number,
+    form: Form,
+    expt: Option<i64>,
+    after: Option<u32>,
+) -> (Option<i32>, Cow<'a, Number>) {
+    let (eng_exp, shape) = resolve_exponential_shape(n1, form, expt, after);
     let framed = match eng_exp {
-        Some(exp) => reframe(n1, exp),
-        None => n1.clone(),
+        Some(exp) => Cow::Owned(reframe(n1, exp)),
+        None => Cow::Borrowed(n1),
     };
     let rounded = match after {
-        Some(places) => round_to_places(&framed, places),
+        Some(places) => Cow::Owned(round_to_places(&framed, places)),
         None => framed,
     };
+    // The one place both halves are in hand at once: the shape the decision
+    // settled on is the shape of the value built from it. That decision is
+    // made in shape arithmetic, keeping no value it can be checked against --
+    // so this is what says the arithmetic tracks what `reframe` and
+    // `round_to_places` actually do.
+    debug_assert_eq!(
+        Shape::of(&rounded),
+        shape,
+        "the resolved value disagrees with the shape resolved for it"
+    );
     (eng_exp, rounded)
 }
 
@@ -557,7 +632,7 @@ fn post_carry_exponent_error(
         digits: rounded.digits,
         exponent: rounded.exponent + eng_exp0.unwrap_or(0),
     };
-    let adjusted2 = adjusted(&true_scale);
+    let adjusted2 = Shape::of(&true_scale).adjusted();
     let triggered = eng_exp0.is_some()
         || matches!(
             expt,
@@ -787,60 +862,181 @@ fn truncate_to_places(n: &Number, places: u32) -> Number {
     )
 }
 
-/// Splits `n` into plain sign/integer/decimal text, extends the decimal part
-/// to `after` places if requested, and, if `before` is supplied, pads or
-/// rejects the integer part. Used both for genuinely plain numbers and,
-/// unmodified, for an exponential mantissa -- reframing already arranges for
-/// the mantissa's own digit-count-plus-exponent to equal the number of
-/// integer digits it should display, so the same split and the same
-/// oversize check apply to both without knowing which one it is.
+/// A plain rendering of `n` on its own: [`plain_layout`] and [`pad_to_before`]
+/// decide it, [`emit_plain`] writes it. For the callers that want no exponent
+/// field at all -- `TRUNC`, and the substitution `ExponentOversize` carries.
 ///
-/// `after` is applied here against `n`'s *natural* decimal digits, rather
-/// than earlier by folding it into `n.exponent` (which is what
-/// `round_to_places`/`truncate_to_places` used to do): both `after`
-/// (`FORMAT`) and `places` (`TRUNC`) are legitimate up to `u32::MAX`, and the
-/// interpreter really does accept that (`TRUNC(1, 2147483648)` is a
-/// ~2.1-billion-character result) -- far more than `Number::exponent`'s
-/// `i32` could ever hold. Doing this arithmetic here, in `u64`/`usize`
-/// against the original value, instead of against a `Number` that would
-/// have had to encode it as an exponent, is what stays correct at that
-/// scale. By the time `n` gets here it has already been rounded/truncated
-/// down to at most `after` decimal digits if it had more, so `extra` below
-/// is only ever adding, never needing to trim.
+/// The same split serves a genuinely plain number and an exponential mantissa
+/// alike: reframing already arranges for the mantissa's own
+/// digit-count-plus-exponent to equal the number of integer digits it should
+/// display, so neither half has to know which one it is holding.
 fn render_integer_padded(
     n: &Number,
     before: Option<u32>,
     after: Option<u32>,
-    // `Some` exactly when `before` is, which is the only way the oversize
-    // raise below can be reached.
     reported: Option<&Number>,
     oversize_digits: u64,
-    // Only ever read to build `BeforeOversize`, which renders `reported`
-    // through `stringValue()` and so honours `NUMERIC FORM` as well as
-    // `DIGITS`. Every call that passes `before: None` can never reach that
-    // raise and passes `Form::Scientific` as an unread placeholder.
     oversize_form: Form,
 ) -> Result<String, FormatError> {
-    let sign = if n.negative { "-" } else { "" };
+    let layout = pad_to_before(
+        plain_layout(Shape::of(n), after),
+        before,
+        reported,
+        oversize_digits,
+        oversize_form,
+    )?;
+    let mut out = String::with_capacity(layout.len());
+    emit_plain(&mut out, n, layout);
+    debug_assert_eq!(
+        out.len(),
+        layout.len(),
+        "the rendering disagrees with the layout it was emitted from"
+    );
+    Ok(out)
+}
 
-    // **Measured out first and written once**, rather than built as three
-    // `String`s and joined. Every piece below is either a run of `n.digits` or
-    // a run of one repeated character, so its length is known before any of it
-    // exists -- which is what lets the one `String` at the bottom be allocated
-    // at its final size and never grow.
-    //
-    // Counted with an `LD_PRELOAD` shim over `malloc`: the three-`String`
-    // version made 3 allocations every time it ran, 420,003 calls and
-    // 1,260,008 allocations over one run of `samples/rexxcps.rex`, which was
-    // 19% of that run's 6,443,166 allocations. This makes one.
-    //
-    // `point` is where the decimal point falls inside the digit run, and it is
-    // meaningful only for a negative exponent -- a non-negative one puts the
-    // point past every digit, which is the arm that has no natural decimal
-    // part at all.
-    let point = n.digits.len() as i32 + n.exponent;
-    let int_len = if n.exponent >= 0 {
-        n.digits.len() + n.exponent as usize
+/// The exact byte counts a plain rendering is about to have, decided before
+/// any of those bytes exist.
+///
+/// **Every field is a function of the value's [`Shape`]** and of
+/// `before`/`after`; not one of them reads a digit's value. The split is one
+/// decision with two consumers rather than two statements of the same rule:
+/// [`len`] sizes the allocation, [`emit_plain`] writes the digits it counted,
+/// and the emitter chooses nothing of its own.
+///
+/// [`len`]: PlainLayout::len
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct PlainLayout {
+    /// The spaces `before` asks for, ahead of the sign.
+    pad: usize,
+    /// The sign, written only for a negative value.
+    sign: usize,
+    /// Digits before the decimal point, including the lone `0` a value below
+    /// one shows there.
+    int_len: usize,
+    /// The decimal part as (the value's own digits, the trailing zeros
+    /// `after` adds beyond them). `None` is "no decimal part", which is not
+    /// the same as `Some((0, 0))`: the first prints no `.` and the second
+    /// would.
+    dec: Option<(usize, usize)>,
+    /// Where the decimal point falls inside the digit run. Meaningful only
+    /// for a negative exponent -- a non-negative one puts the point past
+    /// every digit, which is the arm that has no natural decimal part at all.
+    point: i32,
+}
+
+impl PlainLayout {
+    /// The `+ 1` is the point itself, and it is inside the `map_or` rather
+    /// than added unconditionally: a value with no decimal part prints no
+    /// point, and a count one byte over would be right by luck rather than by
+    /// construction.
+    fn len(self) -> usize {
+        self.pad
+            + self.sign
+            + self.int_len
+            + self.dec.map_or(0, |(natural, extra)| 1 + natural + extra)
+    }
+}
+
+/// The number of decimal digits `value` is written with, without writing it.
+///
+/// `checked_ilog10` answers `None` for zero, which is one digit wide.
+fn decimal_width(value: u32) -> usize {
+    value.checked_ilog10().unwrap_or(0) as usize + 1
+}
+
+/// Everything a rendering carries after its mantissa, decided once so that
+/// the count reserving room for it and the code writing it read the same
+/// decision.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ExponentField {
+    /// Nothing follows -- plain form, or a displayed exponent of exactly zero
+    /// with no explicit `expp` whose field would need reserving.
+    Absent,
+    /// A displayed exponent of exactly zero *with* an explicit `expp`: the
+    /// field it would have taken is reserved as this many blanks rather than
+    /// vanishing outright.
+    Reserved(usize),
+    /// `E`, a sign, `zeros` leading zeros, and then `exp`'s own digits.
+    Present { exp: i32, zeros: usize },
+}
+
+impl ExponentField {
+    fn decide(eng_exp: Option<i32>, expp: Option<u32>) -> Self {
+        let Some(exp) = eng_exp else {
+            return ExponentField::Absent;
+        };
+        if exp == 0 {
+            // A displayed exponent of exactly zero is never written as `E+0`
+            // -- confirmed with `format(3.14159,,,,0)` at DIGITS 5 (adjusted
+            // exponent 0 exactly), which prints `3.1416`, not `3.1416E+0`,
+            // and with ENGINEERING grouping an adjusted exponent of 1 or 2
+            // down to a displayed 0 the same way.
+            return match expp {
+                Some(width) => ExponentField::Reserved(width as usize + 2),
+                None => ExponentField::Absent,
+            };
+        }
+        // **Not `format!("{:0width$}", ..)`.** Rust's format width is a
+        // `u16`, so that spelling panics with "Formatting argument out of
+        // range" at `expp == 65536`, where the interpreter answers a
+        // 65,539-byte result. Measured both sides:
+        // `length(format(1e10,,,65535))` is 65538 and
+        // `length(format(1e10,,,65536))` is 65539.
+        let zeros = match expp {
+            Some(width) => (width as usize).saturating_sub(decimal_width(exp.unsigned_abs())),
+            None => 0,
+        };
+        ExponentField::Present { exp, zeros }
+    }
+
+    fn len(self) -> usize {
+        match self {
+            ExponentField::Absent => 0,
+            ExponentField::Reserved(blanks) => blanks,
+            // The `E` and the sign, then the padding and the digits.
+            ExponentField::Present { exp, zeros } => 2 + zeros + decimal_width(exp.unsigned_abs()),
+        }
+    }
+
+    fn push_to(self, out: &mut String) {
+        match self {
+            ExponentField::Absent => {}
+            ExponentField::Reserved(blanks) => push_repeated(out, ' ', blanks),
+            ExponentField::Present { exp, zeros } => {
+                out.push('E');
+                out.push(if exp < 0 { '-' } else { '+' });
+                push_repeated(out, '0', zeros);
+                // Written straight into `out` rather than through
+                // `to_string`, which would allocate a `String` to be copied
+                // into this one; `write!` to a `String` cannot fail.
+                let _ = write!(out, "{}", exp.unsigned_abs());
+            }
+        }
+    }
+}
+
+/// Decides [`PlainLayout`] for a value of this shape, before `before` has had
+/// its say. **Infallible, and that is deliberate**: `before` is the only
+/// argument that can raise, so keeping it out of here leaves a rendering that
+/// supplies none -- which is what a number's ordinary display is -- with no
+/// `Result` carrying a `Number` to construct and drop.
+///
+/// `after` is applied here against the value's *natural* decimal digits,
+/// rather than earlier by folding it into the exponent: both `after`
+/// (`FORMAT`) and `places` (`TRUNC`) are legitimate up to `u32::MAX`, and the
+/// interpreter really does accept that (`TRUNC(1, 2147483648)` is a
+/// ~2.1-billion-character result) -- far more than `Number::exponent`'s `i32`
+/// could ever hold. Doing this arithmetic here, in `u64`/`usize` against the
+/// original value, instead of against a `Number` that would have had to
+/// encode it as an exponent, is what stays correct at that scale. By the time
+/// a shape gets here its value has already been rounded or truncated down to
+/// at most `after` decimal digits if it had more, so `extra` below is only
+/// ever adding, never needing to trim.
+fn plain_layout(shape: Shape, after: Option<u32>) -> PlainLayout {
+    let point = shape.len as i32 + shape.exponent;
+    let int_len = if shape.exponent >= 0 {
+        shape.len + shape.exponent as usize
     } else if point > 0 {
         point as usize
     } else {
@@ -849,12 +1045,12 @@ fn render_integer_padded(
     // The digits this value naturally shows after the point, before `after`
     // asks for more. `None` is "no decimal part", which is not the same as
     // `Some(0)`: the first prints no `.` and the second would.
-    let natural_dec = if n.exponent >= 0 {
+    let natural_dec = if shape.exponent >= 0 {
         None
     } else if point > 0 {
-        Some(n.digits.len() - point as usize)
+        Some(shape.len - point as usize)
     } else {
-        Some((-point) as usize + n.digits.len())
+        Some((-point) as usize + shape.len)
     };
     // The decimal part as (natural digits, trailing zeros `after` adds).
     let dec = match after {
@@ -866,52 +1062,78 @@ fn render_integer_padded(
             Some((natural, extra))
         }
     };
-    let needed = int_len as i64;
+    PlainLayout {
+        pad: 0,
+        sign: usize::from(shape.negative),
+        int_len,
+        dec,
+        point,
+    }
+}
 
-    let pad = match before {
-        None => 0,
-        Some(before) => {
-            // Widened to `i64`: `before` is a legitimate `u32` up to
-            // `u32::MAX` (the interpreter accepts `FORMAT(1, 3000000000)`
-            // and returns the three-billion-character result), and casting
-            // it to `i32` first can turn it negative, producing a spurious
-            // oversize error instead of the huge space-padding the
-            // interpreter actually shows.
-            //
-            // The error text substitutes the requested `before` itself, not
-            // the space actually available after the sign -- confirmed with
-            // `format(-123.456, 3)`, which reports "too large for 3 spaces"
-            // even though only 2 of those 3 are usable once the sign is set
-            // aside.
-            let available = i64::from(before) - i64::from(n.negative);
-            if available < needed {
-                return Err(FormatError::BeforeOversize {
-                    reported: reported
-                        .expect("`before` is Some here, and the caller pairs the two")
-                        .clone(),
-                    digits: oversize_digits,
-                    form: oversize_form,
-                    before,
-                });
-            }
-            (available - needed) as usize
-        }
+/// Applies `before` to a layout: the leading spaces that widen the integer
+/// part to it, or the raise for an integer part already wider.
+///
+/// The only way [`FormatError::BeforeOversize`] is reached, and the reason
+/// `before` is not [`plain_layout`]'s argument.
+fn pad_to_before(
+    layout: PlainLayout,
+    before: Option<u32>,
+    // `Some` exactly when `before` is, which is the only way the oversize
+    // raise below can be reached.
+    reported: Option<&Number>,
+    oversize_digits: u64,
+    // Only ever read to build `BeforeOversize`, which renders `reported`
+    // through `stringValue()` and so honours `NUMERIC FORM` as well as
+    // `DIGITS`. Every call that passes `before: None` can never reach that
+    // raise and passes `Form::Scientific` as an unread placeholder.
+    oversize_form: Form,
+) -> Result<PlainLayout, FormatError> {
+    let Some(before) = before else {
+        return Ok(layout);
     };
+    let needed = layout.int_len as i64;
+    // Widened to `i64`: `before` is a legitimate `u32` up to `u32::MAX` (the
+    // interpreter accepts `FORMAT(1, 3000000000)` and returns the
+    // three-billion-character result), and casting it to `i32` first can turn
+    // it negative, producing a spurious oversize error instead of the huge
+    // space-padding the interpreter actually shows.
+    //
+    // The error text substitutes the requested `before` itself, not the space
+    // actually available after the sign -- confirmed with
+    // `format(-123.456, 3)`, which reports "too large for 3 spaces" even
+    // though only 2 of those 3 are usable once the sign is set aside.
+    let available = i64::from(before) - layout.sign as i64;
+    if available < needed {
+        return Err(FormatError::BeforeOversize {
+            reported: reported
+                .expect("`before` is Some here, and the caller pairs the two")
+                .clone(),
+            digits: oversize_digits,
+            form: oversize_form,
+            before,
+        });
+    }
+    Ok(PlainLayout {
+        pad: (available - needed) as usize,
+        ..layout
+    })
+}
 
-    // The `+ 1` is the point itself, and it is inside the `map_or` rather than
-    // added unconditionally: a value with no decimal part prints no point, and
-    // a capacity one byte over would leave the allocation the right size by
-    // luck rather than by construction.
-    let mut out = String::with_capacity(
-        pad + sign.len() + int_len + dec.map_or(0, |(natural, extra)| 1 + natural + extra),
-    );
-    push_repeated(&mut out, ' ', pad);
-    out.push_str(sign);
+/// Writes the bytes [`plain_layout`] counted, and decides nothing of its own:
+/// every branch here is keyed on the exponent and the `point` the layout
+/// already carries.
+fn emit_plain(out: &mut String, n: &Number, layout: PlainLayout) {
+    let (dec, point) = (layout.dec, layout.point);
+    push_repeated(out, ' ', layout.pad);
+    if n.negative {
+        out.push('-');
+    }
     if n.exponent >= 0 {
-        push_digits(&mut out, n.digits.as_slice());
-        push_repeated(&mut out, '0', n.exponent as usize);
+        push_digits(out, n.digits.as_slice());
+        push_repeated(out, '0', n.exponent as usize);
     } else if point > 0 {
-        push_digits(&mut out, &n.digits.as_slice()[..point as usize]);
+        push_digits(out, &n.digits.as_slice()[..point as usize]);
     } else {
         out.push('0');
     }
@@ -922,15 +1144,14 @@ fn render_integer_padded(
         // and then the whole decimal part is the zeros below.
         if n.exponent < 0 {
             if point > 0 {
-                push_digits(&mut out, &n.digits.as_slice()[point as usize..]);
+                push_digits(out, &n.digits.as_slice()[point as usize..]);
             } else {
-                push_repeated(&mut out, '0', (-point) as usize);
-                push_digits(&mut out, n.digits.as_slice());
+                push_repeated(out, '0', (-point) as usize);
+                push_digits(out, n.digits.as_slice());
             }
         }
-        push_repeated(&mut out, '0', extra);
+        push_repeated(out, '0', extra);
     }
-    Ok(out)
 }
 
 /// Appends `digits` -- one decimal digit per byte, as [`Number`] stores them --

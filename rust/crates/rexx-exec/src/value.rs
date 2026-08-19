@@ -124,6 +124,33 @@ const _: () = assert!(TEXT_SCRATCH >= rexx_core::INLINE_TEXT);
 /// `to_string` allocation it was replacing -- `to_string` has a specialised
 /// integer path that `write!` does not take. The test is what keeps the two
 /// spellings honest instead.
+/// A heap number's display bytes, filled into the object's own cache on the
+/// first ask and reused forever after -- the `created_digits`/`created_form`
+/// pair is fixed at creation, so the rendering is a pure function of the
+/// object and cannot go stale.
+///
+/// **The one spelling of a heap number's rendering**, for the same reason
+/// [`write_small_int`] is the one spelling of a tagged integer's:
+/// [`Interp::to_text`] borrows these bytes out and [`Interp::text_len`]
+/// measures them, and a second reading of the precision/form pair is a
+/// number that could display differently depending on which accessor asked.
+/// The two cannot be held apart by a test, either -- whichever ran first
+/// would fill the cache the other then agrees with, which is measured: with
+/// the two written out separately, mutating `text_len`'s copy to ignore
+/// `created_digits` left `text_len_agrees_with_to_text` green.
+fn num_rendering<'a>(
+    value: &Number,
+    created_digits: u32,
+    created_form: Form,
+    text: &'a mut Option<Vec<u8>>,
+) -> &'a [u8] {
+    text.get_or_insert_with(|| {
+        value
+            .format_form(u64::from(created_digits), created_form)
+            .into_bytes()
+    })
+}
+
 fn write_small_int(buffer: &mut [u8; TEXT_SCRATCH], value: i64) -> usize {
     let mut at = buffer.len();
     let mut magnitude = value.unsigned_abs();
@@ -400,12 +427,10 @@ impl Interp {
     ///
     /// `.nil` has a string value with no backing bytes at all (D15), and a
     /// `SmallInt` has none stored either, so both are rendered fresh here
-    /// rather than looked up. A heap `Body::Num`'s `text` field is filled the
-    /// first time it is asked for, through `format_form(created_digits,
-    /// created_form)` and **never** `settings.digits()`/`settings.form()` --
-    /// there is no `Settings` in scope to reach for by mistake -- and once
-    /// filled it is reused forever: the pair is fixed at creation, so the
-    /// rendering is a pure function of the object and cannot go stale.
+    /// rather than looked up. A heap `Body::Num` goes through
+    /// [`num_rendering`], which uses `created_digits`/`created_form` and
+    /// **never** `settings.digits()`/`settings.form()` -- there is no
+    /// `Settings` in scope to reach for by mistake.
     ///
     /// `&mut self` and not `&self`, against the naming convention `to_*`
     /// usually implies, because filling that cache mutates the heap object
@@ -445,6 +470,109 @@ impl Interp {
             return;
         }
         out.extend_from_slice(&self.to_text(value));
+    }
+
+    /// How many bytes [`to_text`] would answer, for a caller that wants the
+    /// count and not the bytes.
+    ///
+    /// **Every arm renders exactly what [`to_text`] renders**; what this
+    /// saves is what a caller pays to be handed those bytes rather than their
+    /// count. `to_text` returns a `Cow<[u8]>`, and reaches it for a tagged
+    /// integer or a handle-inline string by writing the value into
+    /// `text_scratch` first -- so a caller taking `.len()` of the result pays
+    /// for a buffer it never reads. Priced by difference against a control
+    /// loop of identical shape, 3,000,000 calls each: `LENGTH` costs 40 fewer
+    /// instructions per call on a handle-inline string, 16 fewer on a tagged
+    /// integer and 19 fewer on a heap string than the `to_text(..).len()` it
+    /// replaced.
+    ///
+    /// **Answering a `Body::Num` from its shape instead of rendering it was
+    /// measured and declined.** `rexx-num` can size a rendering without
+    /// writing it, and doing that here made `LENGTH` of a freshly created
+    /// number 550 instructions per call cheaper when the number is then
+    /// discarded, and 1579 cheaper when it renders exponentially. But it cost
+    /// 199 per call whenever something renders the same number anyway, since
+    /// the width then buys nothing and the cache is not filled --
+    /// `samples/rexxcps.rex` takes `length(j)` of a loop control variable one
+    /// clause before string-comparing the same `j`, and paid +0.659% for it
+    /// against `strings` -0.201% and `alloc4c` -0.332%. Break-even is around
+    /// 27% of number measurements being discards, and nothing says the real
+    /// mix is above it.
+    ///
+    /// Mirroring [`to_text`]'s arms is a duplication, and
+    /// `text_len_agrees_with_to_text` plus the assertion below are what
+    /// police it -- except for `Body::Num`, which a test cannot police and
+    /// which therefore shares [`num_rendering`] rather than restating it.
+    /// Routing the rest through `to_text` instead would put a second tag test
+    /// on the path of every value: measured, specialising `LENGTH` for the
+    /// tagged shapes ahead of a `to_text` call cost +5 instructions on every
+    /// arena value and regressed the bench suite.
+    ///
+    /// [`to_text`]: Interp::to_text
+    pub(crate) fn text_len(&mut self, value: ObjRef) -> usize {
+        let answer = self.text_len_inner(value);
+        // The tripwire that makes the duplication above worth having: it runs
+        // on **every** value the gate ever measures, including the arms a
+        // unit test cannot easily construct, and it is compiled out of
+        // release -- where calling `to_text` is exactly the cost this
+        // function exists to avoid.
+        debug_assert_eq!(
+            answer,
+            self.to_text(value).len(),
+            "text_len disagrees with to_text"
+        );
+        answer
+    }
+
+    /// [`text_len`] itself, with the assertion lifted off it so that the
+    /// recursive `Body::Stem` arm below does not re-run it at every hop.
+    ///
+    /// [`text_len`]: Interp::text_len
+    fn text_len_inner(&mut self, value: ObjRef) -> usize {
+        match value.decode() {
+            Decoded::Nil => return b"The NIL object".len(),
+            Decoded::SmallInt(n) => {
+                let at = write_small_int(&mut self.text_scratch, n);
+                return TEXT_SCRATCH - at;
+            }
+            Decoded::Text(inline) => return inline.len(),
+            Decoded::Heap { .. } => {}
+        }
+
+        let stem_default = {
+            let Some(object) = self.heap.get(value) else {
+                return self.not_in_arena(value).len();
+            };
+            match &object.body {
+                Body::Stem {
+                    default: Some(d), ..
+                } => Some(*d),
+                _ => None,
+            }
+        };
+        if let Some(default) = stem_default {
+            return self.text_len_inner(default);
+        }
+
+        let object = self.heap.get_mut(value).expect("a live value");
+        match &mut object.body {
+            Body::Text { bytes, .. } => bytes.len(),
+            // Renders and caches, through the same function `to_text` reads.
+            // Answering the width from the number's shape instead, so that a
+            // number measured and then discarded never renders, was measured
+            // and declined -- see this function's doc comment.
+            Body::Num {
+                value: number,
+                created_digits,
+                created_form,
+                text,
+            } => num_rendering(number, *created_digits, *created_form, text).len(),
+            Body::Stem { name, .. } => name.len(),
+            Body::Native(native) => native.rendered().len(),
+            other => unreachable!(
+                "the value model only creates Text, Num, Stem and Native, got {other:?}"
+            ),
+        }
     }
 
     #[allow(
@@ -510,14 +638,7 @@ impl Interp {
                 created_digits,
                 created_form,
                 text,
-            } => {
-                let rendered = text.get_or_insert_with(|| {
-                    number
-                        .format_form(u64::from(*created_digits), *created_form)
-                        .into_bytes()
-                });
-                Cow::Borrowed(rendered.as_slice())
-            }
+            } => Cow::Borrowed(num_rendering(number, *created_digits, *created_form, text)),
             // Reached for a `Body::Stem` with `default: None` too (the
             // `stem_default` check above only short-circuits the `Some`
             // case), rendering the object's own name.
@@ -1253,6 +1374,112 @@ mod tests {
     /// so a parse failure is this test's own bug, not a case to handle.
     fn n(text: &str) -> Number {
         Number::parse(text).expect("test literal parses")
+    }
+
+    /// `text_len` answers what `to_text` measures, for every value kind that
+    /// can be built here.
+    ///
+    /// **The risk is the mirror, not any one arm**: the two functions match
+    /// on the same tags and the same `Body` variants, and nothing but this
+    /// stops one of them being widened without the other. So the grid is one
+    /// value of every kind, plus a wide spread of `Body::Num` -- both `FORM`s
+    /// and a precision that rounds -- because that is the arm whose answer
+    /// depends on more than the bytes already sitting in the object.
+    #[test]
+    fn text_len_agrees_with_to_text() {
+        let mut interp = Interp::new();
+        let mut values: Vec<ObjRef> = vec![ObjRef::NIL];
+        for case in [0i64, 1, -1, 9, -10, 1000, SMALL_INT_MAX, SMALL_INT_MIN] {
+            values.push(ObjRef::small_int(case).expect("inside the tagged range"));
+        }
+        for spelling in ["", "a", "abcdef", "abcdefg"] {
+            values.push(interp.text(spelling.as_bytes()));
+        }
+        // Past `INLINE_TEXT` and past `INLINE_BYTES`, so both a slot-inlined
+        // and a heap-allocated `Body::Text` are measured.
+        values.push(interp.text(&[b'q'; INLINE_TEXT + 1]));
+        values.push(interp.text(&[b'q'; INLINE_BYTES + 1]));
+
+        let mut numbers = 0usize;
+        for spelling in [
+            "0",
+            "1.50",
+            "-1.50",
+            "0.05",
+            "-0.05",
+            "12.4",
+            "99.6",
+            "1E+9",
+            "1E-9",
+            "1E+30",
+            "1E-30",
+            "10E-19",
+            "123456789012",
+            "-123456789012",
+            "0.000012345",
+            "123456789012345678901234567890",
+        ] {
+            for digits in [1u32, 2, 5, 9, 18, 40] {
+                for form in [Form::Scientific, Form::Engineering] {
+                    let value = interp.number(n(spelling), digits, form);
+                    // A `Body::Num`, not a tagged integer, is what this arm
+                    // is about -- the tag path is already in the list above.
+                    if matches!(value.decode(), Decoded::Heap { .. }) {
+                        numbers += 1;
+                    }
+                    values.push(value);
+                }
+            }
+        }
+
+        // A stem with no default renders its own name, and one with a default
+        // renders through it -- a second `text_len` hop, which is the only
+        // recursive arm.
+        let bare = interp.alloc_with(
+            BehaviourId::STEM,
+            Body::Stem {
+                name: b"Q.".to_vec().into(),
+                default: None,
+                tails: rexx_core::NameMap::default(),
+            },
+        );
+        values.push(bare);
+        let default = interp.number(n("1.50"), 9, Form::Scientific);
+        let defaulted = interp.alloc_with(
+            BehaviourId::STEM,
+            Body::Stem {
+                name: b"W.".to_vec().into(),
+                default: Some(default),
+                tails: rexx_core::NameMap::default(),
+            },
+        );
+        values.push(defaulted);
+
+        // **`text_len` is asked first, before anything renders**, so that a
+        // `Body::Num` reaches its arm with an empty `text` cache at least
+        // once. Asking `to_text` first would fill that cache, after which
+        // both functions read the same stored bytes and the rendering half of
+        // the arm is never exercised -- measured, a mutation replacing its
+        // `created_digits` with a constant left this test green when the two
+        // calls were the other way round. The second pass is the cached
+        // reading, deliberately, and it is the *second*.
+        for pass in 0..2 {
+            for value in &values {
+                let got = interp.text_len(*value);
+                let expected = interp.to_text(*value).len();
+                assert_eq!(got, expected, "pass {pass}, {value:?}");
+            }
+        }
+        // Floors, because every assertion above is inside a loop.
+        assert!(
+            values.len() > 100,
+            "only {} values were built",
+            values.len()
+        );
+        assert!(
+            numbers > 50,
+            "only {numbers} of the grid became a `Body::Num`"
+        );
     }
 
     /// The tag decision is the rendering's, at the tag's own boundary.
