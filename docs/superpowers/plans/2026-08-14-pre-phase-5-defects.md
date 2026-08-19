@@ -483,3 +483,54 @@ The rule the fix lands: a plain `DO` has a clause at its header and a clause at 
 3. **A stem `DO OVER` is refused where the oracle runs it.** `do zi over zz.` exits `rexx-exec: DO is not implemented` at `rc 120` against the oracle's `rc 0`. `loop_header_plan` answers `None` for it by design and `run_loop_with_header` raises there for both engines; this is the known refusal rather than a new divergence, and it is written down because a probe reached it.
 
 **Witnesses.** Each of the three changes was mutated separately, keeping the indent and the echo so that only the boundary moved. Every one reddens `corpus_differential` and `ir_dual`; the suite with `lang/do_clause_boundaries.rex` removed from the subset catches none of them, so all three are load-bearing and the program adds coverage rather than merely being able to fail. A raw before/after sweep of every program under `corpus/` and `bench-programs/`, on both engines and all three descriptors, moves nothing but the new program. **That sweep runs only the programs those two directories hold, so it can witness a regression only in a shape one of them already contains.** It did not witness the one this task created: inside an `INTERPRET` fragment the new header and `END` clauses are boundaries where the oracle offers a condition queued before the fragment none at all, and that shape was found by review instead. It is closed by the 2026-08-15 plan's Task 1, whose own before/after sweep over the same two directories, on both engines and all three descriptors, likewise moves nothing -- which is the measurement saying this sweep cannot see the shape in either direction.
+
+### Task 7: `NUMERIC DIGITS` with no operand is refused where the oracle resets it
+
+**Files:**
+- Modify: `rust/crates/rexx-exec/src/run.rs` (`exec_numeric`'s `NumericSetting::Digits` arm)
+- Modify: `rust/crates/rexx-num/src/settings.rs` (`Settings::set_digits` and the check it shares with `set_digits_str`)
+- Establish first, then modify if the measurement calls for it: whatever reads `Settings::fuzz` for a comparison
+- Test: `rust/crates/rexx-exec/tests/`, both engines
+
+**Interfaces:**
+- Independent of the tasks above. Touches no trace path.
+
+**The divergence, found 2026-08-19 by a probe written for a performance change and confirmed pre-existing against a build of `6e9f76ddd`:**
+
+```rexx
+numeric digits 30
+numeric fuzz 20
+numeric digits
+say digits() fuzz()
+```
+
+The oracle prints `9 20` and exits 0. This crate raises **33.1**, "Value of NUMERIC DIGITS ("9") must exceed value of NUMERIC FUZZ ("20")", at rc 223, on both engines.
+
+**The no-operand form skips the FUZZ comparison; the operand form does not.** Measured against the -O3 oracle, with `DIGITS 30` and `FUZZ 20` in force:
+
+| clause | oracle | this crate |
+|---|---|---|
+| `numeric digits` | `9 20` | 33.1 |
+| `numeric digits 9` | 33.1 | 33.1 |
+| `numeric fuzz` | `30 0` | `30 0` |
+
+So the reset is not "set the default through the same door"; it is its own rule, and the explicit spelling of the same value is still refused. `NUMERIC FUZZ`'s own reset already agrees, and is not evidence about this one -- `0` passes the comparison it makes.
+
+**The state the oracle reaches has FUZZ above DIGITS, and that is the half of this task that is not a one-line change.** It is survivable there and FUZZ stops having any effect once it exceeds DIGITS. At `DIGITS 9` `FUZZ 20` the oracle answers, all rc 0:
+
+```text
+say 1 = 1.000001        ->  0        (the same answer that DIGITS 9 FUZZ 0 gives)
+say 123456789012 + 1    ->  1.23456789E+11
+say 1/3                 ->  0.333333333
+if 100 = 101            ->  not equal
+```
+
+**Do not reproduce the reset before establishing what `fuzz >= digits` means for every operation that reads FUZZ.** Letting the reset through is a few lines; doing only that puts this crate's comparison code in a state it has never been in, and the probe above is four rows rather than a rule.
+
+- [ ] **Step 1: establish the reset's own rule from the oracle.** Sweep `numeric digits` with `FUZZ` at, below and equal to the default, from several starting `DIGITS`, and with `NUMERIC FORM` set both ways. Record which of `DIGITS`, `FUZZ` and `FORM` the no-operand form writes and which it leaves. `NUMERIC FORM`'s own no-operand spelling is in the sweep because this task is about the shape, not about `DIGITS` alone.
+
+- [ ] **Step 2: establish what `fuzz >= digits` means, before writing any of it.** Drive comparison, `DATATYPE('NUM')`, and each arithmetic operator across FUZZ values below, equal to and above DIGITS. The question is whether the oracle clamps the comparison's precision at zero, ignores FUZZ, or something else; the four rows above are consistent with more than one of those and do not settle it.
+
+- [ ] **Step 3: make the reset match, and cover it.** `Settings::set_digits` already exists and takes the value rather than its text; the reset arm is its only caller. Whatever Step 2 established belongs where FUZZ is read, not in the setter. A corpus program is the right vehicle only if its output differs -- check that it does before adding one, since `corpus_differential` is already in the failing set and a program that agrees adds nothing.
+
+- [ ] **Step 4: gates.** `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` from a clean target directory, and `REXX_CORPUS_GATE=1 cargo test --workspace --no-fail-fast` on both engines. Mutate the reset back to the refusing form and confirm the new coverage reddens.
