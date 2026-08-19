@@ -9768,10 +9768,13 @@ impl Interp {
                         self.give_result_buffer(text);
                         outcome.map_err(raised_from_settings)?;
                     }
+                    // **The value, not its text.** `DEFAULT_DIGITS` is a
+                    // constant, and rendering it so the text form can parse it
+                    // back was a heap allocation and a conversion per clause.
                     None => self
                         .activation_mut()
                         .settings
-                        .set_digits_str(&rexx_num::DEFAULT_DIGITS.to_string())
+                        .set_digits(rexx_num::DEFAULT_DIGITS)
                         .map_err(raised_from_settings)?,
                 }
             }
@@ -9785,7 +9788,7 @@ impl Interp {
                 None => self
                     .activation_mut()
                     .settings
-                    .set_fuzz_str("0")
+                    .set_fuzz(0)
                     .map_err(raised_from_settings)?,
             },
             NumericSetting::FormDefault | NumericSetting::FormScientific => {

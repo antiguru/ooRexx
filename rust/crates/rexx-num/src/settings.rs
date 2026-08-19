@@ -255,6 +255,35 @@ impl Settings {
         // `numeric digits 1000000000` is 26.005 at DIGITS 9 and legal at
         // DIGITS 10. There is no fixed cap short of `MAX_WHOLENUMBER`.
         let value = unsigned_whole_number(text, self.digits).ok_or_else(not_whole)?;
+        self.set_digits_checked(value, not_whole)
+    }
+
+    /// [`Settings::set_digits_str`]'s own checks and store, for a caller that
+    /// has the value rather than its text.
+    ///
+    /// **`NUMERIC DIGITS` with no operand is the caller this exists for**: the
+    /// value is `DEFAULT_DIGITS`, and rendering it to a `String` so the text
+    /// form can parse it back cost a heap allocation and a conversion per
+    /// clause -- measured, 673 user instructions against the -O3
+    /// interpreter's 48.
+    ///
+    /// It can still fail: resetting to the default is rejected when `FUZZ` is
+    /// not below it, which `NUMERIC DIGITS 30` then `NUMERIC FUZZ 20` then
+    /// `NUMERIC DIGITS` reaches.
+    pub fn set_digits(&mut self, value: u64) -> Result<(), SettingsError> {
+        self.set_digits_checked(value, || SettingsError::DigitsNotWhole {
+            found: value.to_string(),
+        })
+    }
+
+    /// The half the two share. `not_whole` is a closure so that the text form
+    /// reports the bytes the program wrote -- `numeric digits 0.0` names
+    /// `"0.0"` and not the `0` it converted to.
+    fn set_digits_checked(
+        &mut self,
+        value: u64,
+        not_whole: impl Fn() -> SettingsError,
+    ) -> Result<(), SettingsError> {
         if value < 1 {
             return Err(not_whole());
         }
@@ -283,6 +312,18 @@ impl Settings {
         // reached. (Negatives fail the conversion too; there is no separate
         // sign check.)
         let value = unsigned_whole_number(text, self.digits).ok_or_else(not_whole)?;
+        self.set_fuzz_checked(value)
+    }
+
+    /// [`Settings::set_fuzz_str`]'s own check and store, for a caller that has
+    /// the value rather than its text -- `NUMERIC FUZZ` with no operand.
+    pub fn set_fuzz(&mut self, value: u64) -> Result<(), SettingsError> {
+        self.set_fuzz_checked(value)
+    }
+
+    /// The half the two share. No `not_whole` closure here: the check below
+    /// reports numbers rather than the text it was given.
+    fn set_fuzz_checked(&mut self, value: u64) -> Result<(), SettingsError> {
         if value >= self.digits {
             // Same substitution rule as `set_digits_str`, mirrored: the
             // unchanged `self.digits` and the rejected candidate fuzz --
