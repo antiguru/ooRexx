@@ -208,6 +208,60 @@ impl ClauseValue for RegionEnd {
     }
 }
 
+/// The name [`Loud::op_not_driven`] reports for an op the driver's own loop
+/// has no arm for.
+///
+/// **Out of line and `#[cold]`, so the loop's dispatch does not carry an arm
+/// per undriven op.** Every op that belongs to a clause region reaches the
+/// loop's wildcard, and naming it there would put a second table beside the
+/// one the driven ops use -- measured, and the arms are what it costs rather
+/// than the frame: dropping them took `emptyloop.rex` -2.105% and
+/// `varlookup.rex` -1.087% while the frame grew.
+#[cold]
+fn undriven_op_name(op: &Op) -> &'static str {
+    match op {
+        Op::Generic { .. } => "Generic",
+        Op::TraceKeyword { .. } => "TraceKeyword",
+        Op::LoopHeaderValue { .. } => "LoopHeaderValue",
+        Op::LoopRun { .. } => "LoopRun",
+        Op::LoopNext { .. } => "LoopNext",
+        Op::Clause { .. } => "Clause",
+        Op::TraceClause { .. } => "TraceClause",
+        Op::EvalExpr { .. } => "EvalExpr",
+        Op::CallExpr { .. } => "CallExpr",
+        Op::TraceFunction { .. } => "TraceFunction",
+        Op::SelectCaseText { .. } => "SelectCaseText",
+        Op::WhenTest { .. } => "WhenTest",
+        Op::EndBranch => "EndBranch",
+        Op::EndWhen => "EndWhen",
+        Op::EnterWhen { .. } => "EnterWhen",
+        Op::EnterOtherwise { .. } => "EnterOtherwise",
+        Op::Const { .. } => "Const",
+        Op::LoadConstant { .. } => "LoadConstant",
+        Op::TraceLiteral { .. } => "TraceLiteral",
+        Op::Load { .. } => "Load",
+        Op::TraceRead { .. } => "TraceRead",
+        Op::Arith { .. } => "Arith",
+        Op::Binary { .. } => "Binary",
+        Op::TraceOperator { .. } => "TraceOperator",
+        Op::Prefix { .. } => "Prefix",
+        Op::TracePrefix { .. } => "TracePrefix",
+        Op::Store { .. } => "Store",
+        Op::Say { .. } => "Say",
+        Op::Signal { .. } => "Signal",
+        Op::Parse { .. } => "Parse",
+        Op::Return { .. } => "Return",
+        Op::Queue { .. } => "Queue",
+        Op::Call { .. } => "Call",
+        Op::Message { .. } => "Message",
+        Op::Expose { .. } => "Expose",
+        Op::Escape { .. } => "Escape",
+        Op::Jump { .. } => "Jump",
+        Op::JumpUnless { .. } => "JumpUnless",
+        Op::Condition { .. } => "Condition",
+    }
+}
+
 /// What [`Interp::leave_ended_select_branch`] found.
 enum BranchEnd {
     /// No frame ended here.
@@ -2108,42 +2162,10 @@ impl Interp {
                 // its `Clause`. Loud rather than a panic, which is this crate's
                 // standing rule for a state the type system admits and the
                 // compiler does not produce.
-                Op::TraceClause { .. } => return Err(Loud::op_not_driven("TraceClause").into()),
-                Op::EvalExpr { .. } => return Err(Loud::op_not_driven("EvalExpr").into()),
-                Op::Const { .. } => return Err(Loud::op_not_driven("Const").into()),
-                Op::LoadConstant { .. } => return Err(Loud::op_not_driven("LoadConstant").into()),
-                Op::TraceLiteral { .. } => return Err(Loud::op_not_driven("TraceLiteral").into()),
-                Op::Load { .. } => return Err(Loud::op_not_driven("Load").into()),
-                Op::TraceRead { .. } => return Err(Loud::op_not_driven("TraceRead").into()),
-                Op::Arith { .. } => return Err(Loud::op_not_driven("Arith").into()),
-                Op::Binary { .. } => return Err(Loud::op_not_driven("Binary").into()),
-                Op::TraceOperator { .. } => {
-                    return Err(Loud::op_not_driven("TraceOperator").into());
-                }
-                Op::Prefix { .. } => return Err(Loud::op_not_driven("Prefix").into()),
-                Op::TracePrefix { .. } => return Err(Loud::op_not_driven("TracePrefix").into()),
-                Op::Store { .. } => return Err(Loud::op_not_driven("Store").into()),
-                Op::Say { .. } => return Err(Loud::op_not_driven("Say").into()),
-                Op::Signal { .. } => return Err(Loud::op_not_driven("Signal").into()),
-                Op::Parse { .. } => return Err(Loud::op_not_driven("Parse").into()),
-                Op::Return { .. } => return Err(Loud::op_not_driven("Return").into()),
-                Op::Queue { .. } => return Err(Loud::op_not_driven("Queue").into()),
-                Op::Call { .. } => return Err(Loud::op_not_driven("Call").into()),
-                Op::Message { .. } => return Err(Loud::op_not_driven("Message").into()),
-                Op::Expose { .. } => return Err(Loud::op_not_driven("Expose").into()),
-                Op::Escape { .. } => return Err(Loud::op_not_driven("Escape").into()),
-                Op::CallExpr { .. } => return Err(Loud::op_not_driven("CallExpr").into()),
-                Op::TraceFunction { .. } => {
-                    return Err(Loud::op_not_driven("TraceFunction").into());
-                }
-                Op::JumpUnless { .. } => return Err(Loud::op_not_driven("JumpUnless").into()),
-                Op::Condition { .. } => return Err(Loud::op_not_driven("Condition").into()),
-                Op::WhenTest { .. } => return Err(Loud::op_not_driven("WhenTest").into()),
-                Op::TraceKeyword { .. } => return Err(Loud::op_not_driven("TraceKeyword").into()),
-                Op::LoopHeaderValue { .. } => {
-                    return Err(Loud::op_not_driven("LoopHeaderValue").into());
-                }
-                Op::LoopRun { .. } => return Err(Loud::op_not_driven("LoopRun").into()),
+                // Every op that belongs inside a clause region, which this
+                // loop does not drive -- `undriven_op_name` has why they are
+                // one arm rather than one each.
+                _ => return Err(Loud::op_not_driven(undriven_op_name(op)).into()),
             };
             // **Per clause, not per escaping flow.** A clause that left the
             // activation stack changed makes this loop's `code` describe a
