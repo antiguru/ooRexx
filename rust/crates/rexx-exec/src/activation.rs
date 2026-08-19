@@ -246,6 +246,36 @@ impl AddressState {
         self.current = Some(name);
     }
 
+    /// [`AddressState::set`] from bytes, reusing an `Rc` that already holds
+    /// them.
+    ///
+    /// **The name a `SELECT`-free `ADDRESS env` names is a constant of the
+    /// parse tree, and the one `ADDRESS VALUE address()` computes is the name
+    /// already in force**, so allocating for either is an allocation whose
+    /// result is a copy of something this state is holding. Measured against
+    /// the tree as committed, `instructions:u` per `address SH`: 353 before
+    /// and 232 after, where a bare `ADDRESS` -- the same bookkeeping with no
+    /// name to hand over -- is 230.
+    ///
+    /// Both arms are what [`AddressState::set`] would leave behind, and
+    /// `set_bytes_agrees_with_set` says so by running the two against each
+    /// other over every ordering of a small set of names.
+    pub(crate) fn set_bytes(&mut self, name: &[u8]) {
+        // Setting the name already in force: `set` would leave both halves
+        // holding it, and the second one can be the first's own `Rc`.
+        if self.current.as_deref() == Some(name) {
+            self.alternate = self.current.clone();
+            return;
+        }
+        // Setting the name last swapped out: `set` would make it current and
+        // the current one alternate, which is the swap this state already has.
+        if self.alternate.as_deref() == Some(name) {
+            std::mem::swap(&mut self.current, &mut self.alternate);
+            return;
+        }
+        self.set(Rc::from(name));
+    }
+
     /// Bare `ADDRESS`.
     pub(crate) fn toggle(&mut self) {
         std::mem::swap(&mut self.current, &mut self.alternate);
@@ -1433,5 +1463,68 @@ impl TrapMap {
     #[cfg(test)]
     pub(crate) fn contains_key(&self, name: &[u8]) -> bool {
         self.get(name).is_some()
+    }
+}
+
+#[cfg(test)]
+mod address_tests {
+    use super::AddressState;
+    use std::rc::Rc;
+
+    /// **[`AddressState::set_bytes`] leaves what [`AddressState::set`] would**,
+    /// which is the whole of its licence to skip the allocation: it is an
+    /// optimisation of `set`, not a second rule about what `ADDRESS` does.
+    ///
+    /// Driven over every sequence of names drawn from a set small enough that
+    /// repeats, alternations and fresh names all occur -- which is what
+    /// reaches both of its arms and the fall-through. A `bare` step is a plain
+    /// `ADDRESS`, so the toggling that decides which half holds what is in the
+    /// sequences too.
+    #[test]
+    fn set_bytes_agrees_with_set() {
+        const NAMES: [&[u8]; 3] = [b"AAA", b"BB", b"C"];
+        let mut reached_current = 0;
+        let mut reached_alternate = 0;
+        for encoded in 0..4usize.pow(6) {
+            let mut byte = encoded;
+            let (mut fast, mut slow) = (AddressState::default(), AddressState::default());
+            for _ in 0..6 {
+                let step = byte % 4;
+                byte /= 4;
+                match step {
+                    3 => {
+                        fast.toggle();
+                        slow.toggle();
+                    }
+                    name => {
+                        let name = NAMES[name];
+                        if fast.current.as_deref() == Some(name) {
+                            reached_current += 1;
+                        } else if fast.alternate.as_deref() == Some(name) {
+                            reached_alternate += 1;
+                        }
+                        fast.set_bytes(name);
+                        slow.set(Rc::from(name));
+                    }
+                }
+                assert_eq!(
+                    (fast.current.as_deref(), fast.alternate.as_deref()),
+                    (slow.current.as_deref(), slow.alternate.as_deref()),
+                    "set_bytes and set disagree after sequence {encoded}"
+                );
+            }
+        }
+        // **That the situations arise, not that the arms took them.** An arm
+        // that tests the wrong half falls through to the allocating path and
+        // still answers correctly, so equivalence cannot see it; what this
+        // pins is that the sequences above put a name back that is already
+        // current, and one that is already the alternate, so the equivalence
+        // above is checked over both.
+        assert!(
+            reached_current > 0 && reached_alternate > 0,
+            "the sequences never set a name already held, so the equivalence was not checked \
+             over the shapes the shortcuts exist for: current {reached_current}, alternate \
+             {reached_alternate}"
+        );
     }
 }

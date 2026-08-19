@@ -9712,12 +9712,21 @@ impl Interp {
         // `environment` before `dynamic`, mirroring the C++'s own `if
         // (environment != OREF_NULL)` ahead of its `ADDRESS VALUE` arm. The
         // parser never fills both, so the order decides nothing today.
-        let name: Rc<[u8]> = match (&address.environment, &address.dynamic) {
+        match (&address.environment, &address.dynamic) {
             (None, None) => {
                 self.activation_mut().address.toggle();
                 return Ok(());
             }
-            (Some(environment), _) => Rc::from(&environment[..]),
+            (Some(environment), _) => {
+                if environment.len() > MAX_ADDRESS_NAME_LENGTH {
+                    return Err(Raised::environment_name_too_long(
+                        MAX_ADDRESS_NAME_LENGTH,
+                        environment,
+                    )
+                    .into());
+                }
+                self.activation_mut().address.set_bytes(environment);
+            }
             (None, Some(expression)) => {
                 let value = self.eval(code, expression)?;
                 self.roots.push_temp(value);
@@ -9728,15 +9737,15 @@ impl Interp {
                 let mut text = self.take_result_buffer();
                 text.extend_from_slice(&self.to_text(value));
                 self.trace_result(self.clause_state.current_value_indent, &text);
-                let name = Rc::from(&text[..]);
+                if text.len() > MAX_ADDRESS_NAME_LENGTH {
+                    let raised = Raised::environment_name_too_long(MAX_ADDRESS_NAME_LENGTH, &text);
+                    self.give_result_buffer(text);
+                    return Err(raised.into());
+                }
+                self.activation_mut().address.set_bytes(&text);
                 self.give_result_buffer(text);
-                name
             }
-        };
-        if name.len() > MAX_ADDRESS_NAME_LENGTH {
-            return Err(Raised::environment_name_too_long(MAX_ADDRESS_NAME_LENGTH, &name).into());
         }
-        self.activation_mut().address.set(name);
         Ok(())
     }
 
