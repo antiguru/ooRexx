@@ -5777,7 +5777,12 @@ impl Interp {
         // is left untouched here -- `TIME('R')`'s own lazy reset needs it
         // still readable one call later, and clearing it here is what an
         // earlier version of this did instead.
-        self.activation_mut().clock_stale = true;
+        //
+        // **Reached together with the `>I>` decay below through one borrow**,
+        // because both write the activation that is executing right now and
+        // each reach for it is a null check on the running slot.
+        let activation = self.activation_mut();
+        activation.clock_stale = true;
         // `>I>`'s own "am I still on the first instruction" decay
         // (`TraceEntry`, `activation.rs`), spent **here** and not in
         // `run_activation`'s loop. `RexxActivation.cpp:657`-`659` clears the
@@ -5792,8 +5797,7 @@ impl Interp {
         //
         // At the *top*, before the clause runs, because `Pending -> Allowed`
         // is what a `TRACE` inside this very clause must see.
-        let stepped = self.activation().trace_entry.stepped();
-        self.activation_mut().trace_entry = stepped;
+        activation.trace_entry = activation.trace_entry.stepped();
         // `TRACE`'s own `*-*` clause echo (D17), and the single insertion
         // point for it -- exactly the analogue of `eval`'s own split from
         // `eval_node`, since this is the one place `run_bounded`'s loop

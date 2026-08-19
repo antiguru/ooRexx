@@ -885,6 +885,25 @@ impl Interp {
                                             "op reads register {src} outside the region the chunk \
                                          reserved"
                                         );
+                                        // **The gate in front of the register read,
+                                        // not only inside `echo_literal`.** That
+                                        // function returns immediately under the
+                                        // same condition, so this changes no output;
+                                        // what it changes is that an untraced run
+                                        // does not reach for a value it is not going
+                                        // to print, and `temp_at` is a bounds-check
+                                        // and a load per echo op in a stream that
+                                        // carries one behind every literal, read
+                                        // and operator. Measured over this arm and
+                                        // the other value-echo arms carrying the
+                                        // same gate, with the read moved behind it:
+                                        // `bench-programs/varlookup.rex` 23.751 to
+                                        // 21.737 billion user instructions and the
+                                        // pinned `rexxcps` 11.427 to 11.060
+                                        // billion.
+                                        if !self.tracing_intermediates() {
+                                            continue;
+                                        }
                                         let value = self.roots.temp_at(registers, *src as usize);
                                         self.echo_literal(value);
                                     }
@@ -972,6 +991,11 @@ impl Interp {
                                             "op reads register {src} outside the region the chunk \
                                          reserved"
                                         );
+                                        // The gate in front of the register read,
+                                        // for `Op::TraceLiteral`'s own reason.
+                                        if !self.tracing_intermediates() {
+                                            continue;
+                                        }
                                         let value = self.roots.temp_at(registers, *src as usize);
                                         self.echo_symbol_read(code, *read, *symbol, value);
                                     }
@@ -1109,6 +1133,11 @@ impl Interp {
                                             "op reads register {src} outside the region the chunk \
                                          reserved"
                                         );
+                                        // The gate in front of the register read,
+                                        // for `Op::TraceLiteral`'s own reason.
+                                        if !self.tracing_intermediates() {
+                                            continue;
+                                        }
                                         let value = self.roots.temp_at(registers, *src as usize);
                                         self.echo_operator(*op, value);
                                     }
@@ -1162,6 +1191,11 @@ impl Interp {
                                             "op reads register {src} outside the region the chunk \
                                          reserved"
                                         );
+                                        // The gate in front of the register read,
+                                        // for `Op::TraceLiteral`'s own reason.
+                                        if !self.tracing_intermediates() {
+                                            continue;
+                                        }
                                         let value = self.roots.temp_at(registers, *src as usize);
                                         self.echo_prefix_op(*op, value);
                                     }
