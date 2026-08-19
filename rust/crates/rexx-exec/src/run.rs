@@ -3623,11 +3623,11 @@ impl Interp {
                     at.is_none(),
                     "a stem write was handed a slot, and the slot it writes comes from the entry"
                 );
-                let name = code.symbols.name(*id).as_bytes().to_vec();
+                let name = code.symbols.name(*id).as_bytes();
                 let at = code.compound(*id).and_then(|entry| entry.stem_at);
-                self.stem_assign_at(&name, at, value);
+                self.stem_assign_at(name, at, value);
                 if let Some(rendered) = rendered {
-                    self.trace_assignment(indent, &name, rendered);
+                    self.trace_assignment(indent, name, rendered);
                 }
             }
             // `a.b = expr`: resolve the tail key the same way reading
@@ -3743,7 +3743,7 @@ impl Interp {
     /// outlives that call's own return, all the way up to the main body,
     /// exactly like any other shared-pool variable).
     fn set_sigl(&mut self, line: usize) {
-        let value = self.text(line.to_string().as_bytes());
+        let value = self.counted_text(line);
         // Not through `assign_by_name`: that reads the name's shape and then
         // hashes it, and `SIGL` is a simple name whose slot the plan already
         // holds. The fallback covers a plan with no name map at all.
@@ -6824,19 +6824,23 @@ impl Interp {
             HeaderRole::Initial => values.initial = Some(self.header_number(role, value)?),
             HeaderRole::To => values.to = Some(self.header_number(role, value)?),
             HeaderRole::By => values.by = Some(self.header_number(role, value)?),
+            // **The rendering is built inside the failing arm**, because a
+            // count is nearly always whole and the copy only ever reaches the
+            // message: hoisting it renders and frees a string per loop header
+            // to serve a branch that is not taken.
             HeaderRole::For | HeaderRole::OverFor => {
-                let text = self.to_text(value).to_vec();
-                values.for_remaining = Some(
-                    self.whole_nonneg(value)
-                        .ok_or_else(|| raised_for_count_not_whole(&text))?,
-                );
+                values.for_remaining = Some(match self.whole_nonneg(value) {
+                    Some(count) => count,
+                    None => return Err(raised_for_count_not_whole(&self.to_text(value)).into()),
+                });
             }
             HeaderRole::Count => {
-                let text = self.to_text(value).to_vec();
-                values.count = Some(
-                    self.whole_nonneg(value)
-                        .ok_or_else(|| raised_repetition_count_not_whole(&text))?,
-                );
+                values.count = Some(match self.whole_nonneg(value) {
+                    Some(count) => count,
+                    None => {
+                        return Err(raised_repetition_count_not_whole(&self.to_text(value)).into());
+                    }
+                });
             }
             // **`DO OVER` is not `stringValue()` and not an operator**, which
             // is why R12's other sites do not cover it: the oracle hands the
@@ -9612,9 +9616,16 @@ impl Interp {
             (None, Some(expression)) => {
                 let value = self.eval(code, expression)?;
                 self.roots.push_temp(value);
-                let text = self.to_text(value).to_vec();
+                // Built in the lent buffer: the rendering exists only to be
+                // traced and then copied into the `Rc`, so an owned `Vec` of
+                // its own would be an allocation and a free per `ADDRESS
+                // VALUE` clause.
+                let mut text = self.take_result_buffer();
+                text.extend_from_slice(&self.to_text(value));
                 self.trace_result(self.clause_state.current_value_indent, &text);
-                Rc::from(&text[..])
+                let name = Rc::from(&text[..]);
+                self.give_result_buffer(text);
+                name
             }
         };
         if name.len() > MAX_ADDRESS_NAME_LENGTH {

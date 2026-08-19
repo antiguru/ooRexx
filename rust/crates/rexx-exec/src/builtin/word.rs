@@ -69,7 +69,7 @@ use std::ops::Range;
 
 use rexx_core::ObjRef;
 
-use super::{buffer, length_of, position_of, required_string, whole_number};
+use super::{buffer, length_of, position_of, required_render, required_string, whole_number};
 use crate::Interp;
 use crate::error::Failure;
 
@@ -217,16 +217,26 @@ pub(crate) fn word(
     name: &[u8],
     args: &[Option<ObjRef>],
 ) -> Result<ObjRef, Failure> {
-    let string = required_string(interp, args, 1);
+    // The position is converted first so that the string can be read through
+    // `required_render`, which borrows the bytes where they are instead of
+    // copying them out; that function's own doc comment carries the ordering
+    // rule and why the reordering is not observable. The word is then built
+    // in the lent result buffer, so a word short enough to live in the handle
+    // costs no allocation at all.
     let position = position_of(converted_position(interp, name, args, 2)?)?;
-
-    let mut scan = Words::new(&string);
-    let found: &[u8] = if scan.skip(position) {
-        &string[scan.word.clone()]
-    } else {
-        b""
+    let string = required_render(interp, args, 1);
+    let found = {
+        let text = string.text(interp);
+        let mut scan = Words::new(text);
+        if scan.skip(position) {
+            scan.word.clone()
+        } else {
+            0..0
+        }
     };
-    Ok(interp.text(found))
+    let mut out = interp.take_result_buffer();
+    out.extend_from_slice(&string.text(interp)[found]);
+    Ok(interp.text_built(out))
 }
 
 /// `WORDINDEX(string, n)`: the 1-based byte offset the `n`th word starts at,

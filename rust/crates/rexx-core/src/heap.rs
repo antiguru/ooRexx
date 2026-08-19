@@ -70,6 +70,17 @@ pub struct Heap {
     /// interned constant is reachable from a compiled stream that lives as
     /// long as the program does.
     immortal: Vec<ObjRef>,
+    /// Every handle [`Heap::set_uninit`] has flagged and no collection has
+    /// since found gone or cleared.
+    ///
+    /// **An over-approximation on purpose**, which is what lets the sweep
+    /// consult it instead of walking the arena: an entry whose object has had
+    /// its flag cleared, or whose slot has been swept, is dropped the next
+    /// time a collection reads the list, and `collect` re-reads the flag
+    /// before acting on an entry. Under-approximating would be the unsound
+    /// direction, and the field `Object::has_uninit` is crate-private so that
+    /// [`Heap::set_uninit`] is the only way into the flagged state.
+    uninit: Vec<ObjRef>,
     /// How many times `collect` has run, ever. Exists for Task 16's
     /// collect-on-every-allocation gate criterion (4a exit gate, criterion
     /// 4): the mode has to *prove* it collected rather than merely claim to,
@@ -87,6 +98,7 @@ impl Heap {
             live: 0,
             marks: Vec::new(),
             immortal: Vec::new(),
+            uninit: Vec::new(),
             collections: 0,
         }
     }
@@ -133,6 +145,14 @@ impl Heap {
         // a flag.
         let mut work: Vec<ObjRef> = roots.iter().chain(self.immortal.iter().copied()).collect();
         let mut reached = Vec::new();
+        // The marked weak references, gathered here rather than by a walk of
+        // the arena afterwards. The mark loop visits each marked slot exactly
+        // once -- that is what the `replace` below guarantees -- so this ends
+        // up holding precisely the slots such a walk would have selected, at
+        // the cost of one discriminant test per marked object instead of a
+        // read of every slot in the table. Whether a *target* survived cannot
+        // be decided here, so the decision waits for the loop to finish.
+        let mut weak_marked: Vec<u32> = Vec::new();
         while let Some(r) = work.pop() {
             let Some(slot) = self.resolve(r) else {
                 continue;
@@ -143,6 +163,9 @@ impl Heap {
             let Slot::Live { object, .. } = &self.slots[slot] else {
                 unreachable!("resolve rejects free slots")
             };
+            if matches!(object.body, Body::WeakRef(_)) {
+                weak_marked.push(slot as u32);
+            }
             reached.clear();
             object.body.trace(&mut reached);
             work.extend(reached.iter().copied());
@@ -160,15 +183,13 @@ impl Heap {
         // Swapping these two passes is observable: a weak reference to an
         // unreachable but uninit-pending object reads .nil under this order
         // and reads the live object under the other one.
-        for slot in 0..self.slots.len() {
-            if !self.marks[slot] {
-                continue;
-            }
+        for slot in weak_marked {
+            let slot = slot as usize;
             let Slot::Live { object, .. } = &self.slots[slot] else {
-                continue;
+                unreachable!("the mark loop only records live slots")
             };
             let Body::WeakRef(target) = object.body else {
-                continue;
+                unreachable!("the mark loop only records weak references")
             };
             // "Dead" includes unresolvable: a target whose slot was already
             // freed, or whose generation has moved on, died in an earlier
@@ -184,22 +205,33 @@ impl Heap {
 
         // Pass 2: resurrect unreachable objects that define UNINIT, marking
         // everything they reach so the finalizer never sees a half-collected
-        // graph. They are reported, not swept; the caller clears has_uninit
+        // graph. They are reported, not swept; the caller calls `clear_uninit`
         // once the finalizer has run, and the next collection takes them.
+        //
+        // Read from the registry `set_uninit` maintains rather than from a
+        // walk of the arena, and the flag is re-read here so that an entry
+        // whose object has been cleared or swept decides nothing and leaves.
         let mut pending_uninit = Vec::new();
         let mut resurrect: Vec<ObjRef> = Vec::new();
-        for slot in 0..self.slots.len() {
-            if self.marks[slot] {
-                continue;
-            }
-            let Slot::Live { object, generation } = &self.slots[slot] else {
-                continue;
-            };
-            if object.has_uninit {
-                let r = ObjRef::heap(slot as u32, *generation);
-                pending_uninit.push(r);
-                resurrect.push(r);
-            }
+        if !self.uninit.is_empty() {
+            let mut registry = std::mem::take(&mut self.uninit);
+            registry.retain(|&r| {
+                let Some(slot) = self.resolve(r) else {
+                    return false;
+                };
+                let Slot::Live { object, .. } = &self.slots[slot] else {
+                    unreachable!("resolve rejects free slots")
+                };
+                if !object.has_uninit {
+                    return false;
+                }
+                if !self.marks[slot] {
+                    pending_uninit.push(r);
+                    resurrect.push(r);
+                }
+                true
+            });
+            self.uninit = registry;
         }
         while let Some(r) = resurrect.pop() {
             let Some(slot) = self.resolve(r) else {
@@ -271,6 +303,51 @@ impl Heap {
         handle
     }
 
+    /// Records that `r`'s object defines `UNINIT`, so the collector
+    /// resurrects and reports it rather than sweeping it. Answers whether the
+    /// handle named a live object.
+    ///
+    /// **The only way into that state**, which is why `Object::has_uninit` is
+    /// readable outside this crate and not writable: `collect` finds the
+    /// flagged objects through the list this appends to, and a flag set behind
+    /// its back would be a finalizer that never runs.
+    pub fn set_uninit(&mut self, r: ObjRef) -> bool {
+        let Some(slot) = self.resolve(r) else {
+            return false;
+        };
+        let Slot::Live { object, .. } = &mut self.slots[slot] else {
+            unreachable!("resolve rejects free slots")
+        };
+        if !object.has_uninit {
+            object.has_uninit = true;
+            self.uninit.push(r);
+        }
+        true
+    }
+
+    /// Undoes [`Heap::set_uninit`], for the caller reporting that the
+    /// finalizer has run. The next collection sweeps the object like any
+    /// other.
+    ///
+    /// **The registry entry goes with the flag**, because dropping it lazily
+    /// lets one object hold two entries: clearing and re-flagging before the
+    /// next collection pushes a second, and both are then live and flagged,
+    /// so the collection reports the same object twice and the finalizer runs
+    /// twice. Measured -- `set`, `clear`, `set`, `collect` answers a
+    /// two-element `pending_uninit` without this line, where a walk of the
+    /// arena answers one.
+    pub fn clear_uninit(&mut self, r: ObjRef) -> bool {
+        let Some(slot) = self.resolve(r) else {
+            return false;
+        };
+        let Slot::Live { object, .. } = &mut self.slots[slot] else {
+            unreachable!("resolve rejects free slots")
+        };
+        object.has_uninit = false;
+        self.uninit.retain(|&flagged| flagged != r);
+        true
+    }
+
     /// How many objects this heap has interned as immortal.
     ///
     /// The instrument for the paragraph above: a program's count is the number
@@ -298,19 +375,26 @@ impl Heap {
     /// at all, and forcing every one of those through a heavier entry point
     /// would buy this rule nothing they can bypass just as easily.
     pub fn alloc_with_uncollected(&mut self, behaviour: BehaviourId, body: Body) -> ObjRef {
-        let object = Object {
-            behaviour,
-            body,
-            has_uninit: false,
-        };
         self.live += 1;
+        // **`Object` is built inside each arm rather than once above the
+        // match**, so that the body lands in the slot it will live in instead
+        // of being written to a stack temporary and copied. A slot is wide --
+        // see this module's `size_of::<Slot>()` assertion -- and the copy is
+        // its full width. Measured on the allocating benchmark axes.
         match self.free_head {
             Some(slot) => {
                 let Slot::Free { next, generation } = self.slots[slot as usize] else {
                     unreachable!("the free list only threads free slots")
                 };
                 self.free_head = next;
-                self.slots[slot as usize] = Slot::Live { object, generation };
+                self.slots[slot as usize] = Slot::Live {
+                    object: Object {
+                        behaviour,
+                        body,
+                        has_uninit: false,
+                    },
+                    generation,
+                };
                 ObjRef::heap(slot, generation)
             }
             None => {
@@ -327,7 +411,11 @@ impl Heap {
                     "the arena reached the slot range reserved for class identities"
                 );
                 self.slots.push(Slot::Live {
-                    object,
+                    object: Object {
+                        behaviour,
+                        body,
+                        has_uninit: false,
+                    },
                     generation: 0,
                 });
                 ObjRef::heap(slot, 0)

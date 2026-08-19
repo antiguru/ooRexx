@@ -213,7 +213,28 @@ impl Interp {
         {
             return handle;
         }
-        self.text(value.to_string().as_bytes())
+        self.counted_text(value)
+    }
+
+    /// A count as a *text* value, for a caller that wants the digits rather
+    /// than the tagged integer [`Interp::counted`] prefers.
+    ///
+    /// **Rendered into a stack buffer**, so the digits cost no allocation of
+    /// their own: `to_string` would build a `String`, copy it into the value
+    /// and free it again, which for a value this short is the whole cost.
+    /// The width [`write_small_int`] needs is what `TEXT_SCRATCH` is sized
+    /// for.
+    pub(crate) fn counted_text(&mut self, value: usize) -> ObjRef {
+        match i64::try_from(value) {
+            Ok(value) => {
+                let mut digits = [0u8; TEXT_SCRATCH];
+                let at = write_small_int(&mut digits, value);
+                self.text(&digits[at..])
+            }
+            // Unreachable on a machine whose `usize` is 64 bits wide, and
+            // written rather than asserted for `counted`'s own reason.
+            Err(_) => self.text(value.to_string().as_bytes()),
+        }
     }
 
     /// [`text`], for a caller that already owns the bytes.

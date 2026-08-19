@@ -119,15 +119,26 @@ enum ParseStrings {
     /// [`Interp::next_template`] wants and gets here for free.
     One(Option<Vec<u8>>),
     /// `PARSE ARG`: one string per argument of the running activation.
-    Many(std::vec::IntoIter<Vec<u8>>),
+    ///
+    /// The vector and a position rather than an `IntoIter`, so that the
+    /// vector itself can go back to [`Interp::parse_string_lists`] once the
+    /// template walk has finished with it.
+    Many(Vec<Vec<u8>>, usize),
 }
 
 impl ParseStrings {
     /// The next string, or `None` once they are spent.
+    ///
+    /// A taken entry is left empty rather than removed, which is what lets
+    /// the vector be handed back whole.
     fn next(&mut self) -> Option<Vec<u8>> {
         match self {
             ParseStrings::One(string) => string.take(),
-            ParseStrings::Many(strings) => strings.next(),
+            ParseStrings::Many(strings, at) => {
+                let string = strings.get_mut(*at)?;
+                *at += 1;
+                Some(std::mem::take(string))
+            }
         }
     }
 }
@@ -156,6 +167,11 @@ pub(crate) struct Cursor {
 }
 
 impl Cursor {
+    /// The string back, for a caller returning it to a pool.
+    pub(crate) fn into_string(self) -> Vec<u8> {
+        self.string
+    }
+
     /// A fresh cursor over `string`, every position at the origin
     /// (`RexxTarget::next`'s own reset).
     pub(crate) fn new(string: Vec<u8>) -> Cursor {
@@ -401,7 +417,61 @@ fn find(haystack: &[u8], needle: &[u8], from: usize, caseless: bool) -> Option<u
     at.map(|at| at + from)
 }
 
+/// How many source buffers [`Interp::parse_buffers`] parks between `PARSE`
+/// instructions, and the widest one it will park.
+const PARSE_BUFFERS_KEPT: usize = 8;
+const PARSE_BUFFER_BYTES_KEPT: usize = 4096;
+
 impl Interp {
+    /// An empty buffer for a `PARSE` source string. See
+    /// [`Interp::parse_buffers`].
+    fn take_parse_buffer(&mut self) -> Vec<u8> {
+        self.parse_buffers.pop().unwrap_or_default()
+    }
+
+    /// `value`'s text in a buffer from the pool.
+    ///
+    /// The buffer is taken **before** the render, because
+    /// [`Interp::to_text`] hands back a borrow of `self` and nothing else may
+    /// touch the interpreter while it is live.
+    fn rendered_into_parse_buffer(&mut self, value: ObjRef) -> Vec<u8> {
+        let mut buffer = self.take_parse_buffer();
+        buffer.extend_from_slice(&self.to_text(value));
+        buffer
+    }
+
+    /// Hands a source buffer back, if it is one worth keeping.
+    fn give_parse_buffer(&mut self, mut buffer: Vec<u8>) {
+        if buffer.capacity() == 0
+            || buffer.capacity() > PARSE_BUFFER_BYTES_KEPT
+            || self.parse_buffers.len() >= PARSE_BUFFERS_KEPT
+        {
+            return;
+        }
+        buffer.clear();
+        self.parse_buffers.push(buffer);
+    }
+
+    /// Hands every string a template walk has not consumed back to the pool,
+    /// and the vector `PARSE ARG` held them in with them.
+    fn give_parse_strings(&mut self, strings: ParseStrings) {
+        match strings {
+            ParseStrings::One(string) => {
+                if let Some(string) = string {
+                    self.give_parse_buffer(string);
+                }
+            }
+            ParseStrings::Many(mut list, _) => {
+                for string in list.drain(..) {
+                    self.give_parse_buffer(string);
+                }
+                if self.parse_string_lists.len() < PARSE_BUFFERS_KEPT {
+                    self.parse_string_lists.push(list);
+                }
+            }
+        }
+    }
+
     /// One `PARSE` instruction: resolve the source, then walk the template.
     ///
     /// The trace shape, all of it measured (`trace i` unless a line is said
@@ -458,12 +528,19 @@ impl Interp {
                 // it advances to the next parse string, which for `PARSE ARG`
                 // is the next argument and for every other source is the null
                 // string (`RexxTarget::next`'s own `next_argument != 1` arm).
-                cursor = self.next_template(&mut strings, parse, indent);
+                let next = self.next_template(&mut strings, parse, indent);
+                let spent = std::mem::replace(&mut cursor, next);
+                self.give_parse_buffer(spent.into_string());
                 continue;
             };
             self.apply_trigger(code, trigger, &mut cursor, indent)?;
             self.assign_targets(code, trigger, &mut cursor, indent)?;
         }
+        // Only on the way out through the bottom: a template that leaves
+        // through `?` above drops its buffers instead, which is the same
+        // trade every lender in this interpreter makes.
+        self.give_parse_buffer(cursor.into_string());
+        self.give_parse_strings(strings);
         Ok(())
     }
 
@@ -541,7 +618,7 @@ impl Interp {
                         value
                     }
                 };
-                ("VALUE", self.to_text(value).to_vec())
+                ("VALUE", self.rendered_into_parse_buffer(value))
             }
             // An ordinary variable read, with everything that implies: `>C>`
             // and `>V>` for a compound, and `NOVALUE` for an unset name --
@@ -549,36 +626,43 @@ impl Interp {
             ParseSource::Var(id) => {
                 let value = self.read_parse_var(code, *id, indent)?;
                 self.roots.push_temp(value);
-                ("VAR", self.to_text(value).to_vec())
+                ("VAR", self.rendered_into_parse_buffer(value))
             }
             // The second word is the *calling context* rather than the call
             // depth, and it is the running activation's rather than this
             // clause's: `crate::activation::CallType` carries the measured
             // table and is set where each activation is built.
             ParseSource::Source => {
-                let mut source = PLATFORM.to_vec();
+                let mut source = self.take_parse_buffer();
+                source.extend_from_slice(PLATFORM);
                 source.push(b' ');
                 source.extend_from_slice(self.activation().call_type.token());
                 source.push(b' ');
                 source.extend_from_slice(self.program_path.as_bytes());
                 ("SOURCE", source)
             }
-            ParseSource::Version => ("VERSION", VERSION.to_vec()),
+            ParseSource::Version => {
+                let mut version = self.take_parse_buffer();
+                version.extend_from_slice(VERSION);
+                ("VERSION", version)
+            }
             // No `>K>` line of any kind, and the one source with more than
             // one string (`RexxInstructionParse::execute`'s own `SUBKEY_ARG`
             // arm, which is the only one that does not call
             // `traceKeywordResult`).
             ParseSource::Arg => {
                 let arguments = std::mem::take(&mut self.call_context.arguments);
-                let mut strings = Vec::with_capacity(arguments.len());
+                let mut strings = self.parse_string_lists.pop().unwrap_or_default();
+                strings.clear();
+                strings.reserve(arguments.len());
                 for argument in &arguments {
                     strings.push(match argument {
-                        Some(argument) => self.to_text(argument.value()).to_vec(),
+                        Some(argument) => self.rendered_into_parse_buffer(argument.value()),
                         None => Vec::new(),
                     });
                 }
                 self.call_context.arguments = arguments;
-                return Ok(ParseStrings::Many(strings.into_iter()));
+                return Ok(ParseStrings::Many(strings, 0));
             }
             // The two sources that read a line rather than evaluating a value.
             // The split between them is entirely in which reader is called --

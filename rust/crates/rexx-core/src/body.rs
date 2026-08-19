@@ -336,7 +336,21 @@ pub struct Object {
     pub body: Body,
     /// Set when the object defines an `UNINIT` method. Such an object is
     /// resurrected by the collector and reported through
-    /// `CollectStats::pending_uninit` rather than swept, and is cleared once
-    /// the caller reports the finalizer has run.
-    pub has_uninit: bool,
+    /// `CollectStats::pending_uninit` rather than swept, and is cleared
+    /// through [`crate::Heap::clear_uninit`] once the caller reports the
+    /// finalizer has run.
+    ///
+    /// **Set through [`crate::Heap::set_uninit`] and nowhere else**, which is
+    /// what the crate-private write permission enforces: the collector reaches
+    /// these objects through a list that method appends to rather than by
+    /// walking the arena, so a flag raised directly would name an object the
+    /// sweeper never asks about.
+    pub(crate) has_uninit: bool,
+}
+
+impl Object {
+    /// Whether this object defines an `UNINIT` method. See the field.
+    pub fn has_uninit(&self) -> bool {
+        self.has_uninit
+    }
 }
