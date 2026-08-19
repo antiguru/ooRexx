@@ -39,6 +39,62 @@ use rexx_core::{
 use rexx_num::{Form, Number};
 use std::borrow::Cow;
 
+/// Parses already answered for values whose bytes live in the handle.
+///
+/// **`Body::Text` carries a `num` cache and a handle-inline string has
+/// nowhere to put one** -- `rexx_core::InlineText`'s own doc comment states
+/// that limitation, and this is the home it lacks: on the interpreter rather
+/// than on the value, because the value is a `Copy` sixty-four bits with no
+/// object behind it.
+///
+/// **An entry cannot go stale, and that is a property of the key rather than
+/// a discipline.** A handle carrying inline text *is* its bytes -- the tag,
+/// the length and the bytes themselves are the whole of it, with no slot or
+/// generation to be recycled -- so two handles comparing equal name the same
+/// byte string, and the same byte string parses to the same `Number` forever.
+/// `NUMERIC DIGITS` does not enter: [`Interp::to_number`] never rounds, which
+/// is what lets one parse answer at every precision.
+///
+/// Direct-mapped and fixed-size, so a lookup is a mix, a load and a compare,
+/// and a collision costs only the parse that would have happened anyway.
+/// Measured on `samples/rexxcps.rex`, which converts a handle-inline string
+/// to a `Number` 2,790,002 times over 24 distinct strings: thirty-two entries
+/// answer 2,399,989 of those without parsing.
+pub(crate) struct TextNumbers {
+    /// [`ObjRef::NIL`] marks an empty slot. No key stored here can equal it:
+    /// every one carries the inline-text tag, which `.nil` does not.
+    keys: [ObjRef; TEXT_NUMBERS],
+    parsed: [Result<Number, NotNumeric>; TEXT_NUMBERS],
+}
+
+/// How many parses [`TextNumbers`] remembers. A power of two, so the slot is
+/// a mask rather than a division.
+const TEXT_NUMBERS: usize = 32;
+
+impl TextNumbers {
+    pub(crate) fn new() -> Self {
+        TextNumbers {
+            keys: [ObjRef::NIL; TEXT_NUMBERS],
+            parsed: std::array::from_fn(|_| Err(NotNumeric)),
+        }
+    }
+
+    /// Which slot `value` maps to.
+    ///
+    /// A multiply-xor-multiply finaliser over the handle's bits, whose low
+    /// bits then index. The bits themselves index badly: a handle's tag and
+    /// length sit in the low byte and short strings differ only in the bytes
+    /// above them. Measured over `rexxcps`' own conversions, taking the top
+    /// bits of a single multiply answers 1,679,994 of them from the table
+    /// where this answers 2,399,989.
+    fn slot(value: ObjRef) -> usize {
+        let mut mixed = value.bits().wrapping_mul(0xff51_afd7_ed55_8ccd);
+        mixed ^= mixed >> 33;
+        mixed = mixed.wrapping_mul(0xc4ce_b9fe_1a85_ec53);
+        (mixed as usize) & (TEXT_NUMBERS - 1)
+    }
+}
+
 /// How wide [`Interp::text_scratch`] is.
 ///
 /// Twenty because that is `i64::MIN`'s rendering, sign included, which is the
@@ -656,12 +712,41 @@ impl Interp {
         match value.decode() {
             Decoded::Nil => Err(NotNumeric),
             Decoded::SmallInt(n) => Ok(Number::from_i64(n)),
-            // Parsed on every ask, where a `Body::Text` parses once and
-            // caches it. See `text_bytes` for what that trade was measured
-            // at, and why the cache turned out to be worth so little.
-            Decoded::Text(inline) => Number::parse_bytes(&inline).ok_or(NotNumeric),
+            Decoded::Text(inline) => self.inline_text_to_number(value, &inline),
             Decoded::Heap { .. } => self.heap_to_number(value),
         }
+    }
+
+    /// [`to_number`]'s arm for a value whose bytes are in its own handle,
+    /// answered from [`TextNumbers`] when that table has been asked before.
+    ///
+    /// **Cloning what the table holds is a copy and not an allocation.** A
+    /// handle carries at most `INLINE_TEXT` bytes, so a `Number` parsed out
+    /// of one has at most that many digits, well inside the inline digit
+    /// capacity `rexx-num`'s own `Digits` fixes at thirty.
+    ///
+    /// **Outlined for the reason [`heap_to_number`] is.** [`to_number`] is
+    /// inlined into the expression evaluator's own hot loop, and the arms
+    /// worth inlining there are a tag test and one call each.
+    ///
+    /// [`to_number`]: Interp::to_number
+    /// [`heap_to_number`]: Interp::heap_to_number
+    #[inline(never)]
+    fn inline_text_to_number(
+        &mut self,
+        value: ObjRef,
+        inline: &[u8],
+    ) -> Result<Number, NotNumeric> {
+        let slot = TextNumbers::slot(value);
+        if self.text_numbers.keys[slot] == value {
+            return self.text_numbers.parsed[slot].clone();
+        }
+        // Stored before it is handed back, so the parse is moved into the
+        // table and only the answer is copied -- filling it the other way
+        // round would clone twice for one miss.
+        self.text_numbers.keys[slot] = value;
+        self.text_numbers.parsed[slot] = Number::parse_bytes(inline).ok_or(NotNumeric);
+        self.text_numbers.parsed[slot].clone()
     }
 
     /// [`to_number`]'s arm for a value that lives in the arena.
@@ -1001,6 +1086,106 @@ mod tests {
             "the widest tagged rendering is what fixes `TEXT_SCRATCH`; if this \
              moved, the buffer has slack or is about to overrun"
         );
+    }
+
+    /// A remembered parse answers what a fresh one answers, for every
+    /// spelling a handle can carry -- numeric and not, at every slot the
+    /// table has.
+    ///
+    /// **The interleaving is the test, not the repetition.** Every value is
+    /// asked about twice with every *other* value asked in between, so a
+    /// table that returned a neighbour's answer, or that let a collision
+    /// overwrite the key without overwriting the parse beside it, gives a
+    /// wrong `Number` rather than a stale one. `Number::parse_bytes` on the
+    /// same bytes is the reference, and it is what the interpreter would
+    /// have done with no table at all.
+    #[test]
+    fn a_remembered_parse_answers_what_a_fresh_one_does() {
+        let spellings: Vec<Vec<u8>> = [
+            "0", "1", "-1", "7", "05", "+5", " 5 ", "1.1", "2.2", "1.50", "99.7", "1e2", "1E-2",
+            "67", "1234567", "-999999", "foobar", "Key", "?", "string", "", "1.2.3", "0x1f", "e",
+            ".5", "-.5", "1.",
+        ]
+        .iter()
+        .map(|s| s.as_bytes().to_vec())
+        .collect();
+        // Every one of them has to fit the handle, or it would reach
+        // `heap_to_number` and this would be testing the wrong cache.
+        for spelling in &spellings {
+            assert!(
+                spelling.len() <= INLINE_TEXT,
+                "{spelling:?} does not fit a handle"
+            );
+        }
+
+        let mut interp = Interp::new();
+        let mut answered = 0usize;
+        for _pass in 0..3 {
+            for spelling in &spellings {
+                for other in &spellings {
+                    let handle =
+                        ObjRef::inline_text(other).expect("checked to fit the handle above");
+                    let _ = interp.to_number(handle);
+                }
+                let handle =
+                    ObjRef::inline_text(spelling).expect("checked to fit the handle above");
+                let expected = Number::parse_bytes(spelling).ok_or(NotNumeric);
+                assert_eq!(
+                    interp.to_number(handle),
+                    expected,
+                    "{:?}",
+                    String::from_utf8_lossy(spelling)
+                );
+                answered += 1;
+            }
+        }
+        // A floor, so a grid that stopped generating cases fails rather than
+        // passes empty.
+        assert_eq!(answered, spellings.len() * 3);
+    }
+
+    /// Two spellings that land in the same slot each keep their own answer.
+    ///
+    /// **Found rather than assumed.** The pair is searched for at run time
+    /// through the table's own slot function, so this stays a test of
+    /// eviction however that function is later changed -- a hand-picked pair
+    /// would silently stop colliding and leave the test passing without ever
+    /// exercising the case.
+    #[test]
+    fn two_spellings_sharing_a_slot_each_keep_their_own_answer() {
+        let candidates: Vec<Vec<u8>> = (0..4000u32)
+            .map(|n| n.to_string().into_bytes())
+            .filter(|s| s.len() <= INLINE_TEXT)
+            .collect();
+        let mut collision = None;
+        'search: for (at, first) in candidates.iter().enumerate() {
+            let first_handle = ObjRef::inline_text(first).expect("short enough");
+            for second in &candidates[at + 1..] {
+                let second_handle = ObjRef::inline_text(second).expect("short enough");
+                if TextNumbers::slot(first_handle) == TextNumbers::slot(second_handle) {
+                    collision = Some((first_handle, first.clone(), second_handle, second.clone()));
+                    break 'search;
+                }
+            }
+        }
+        let (first_handle, first, second_handle, second) =
+            collision.expect("two of four thousand spellings share one of thirty-two slots");
+
+        let mut interp = Interp::new();
+        for _round in 0..3 {
+            assert_eq!(
+                interp.to_number(first_handle),
+                Number::parse_bytes(&first).ok_or(NotNumeric),
+                "{:?}",
+                String::from_utf8_lossy(&first)
+            );
+            assert_eq!(
+                interp.to_number(second_handle),
+                Number::parse_bytes(&second).ok_or(NotNumeric),
+                "{:?}",
+                String::from_utf8_lossy(&second)
+            );
+        }
     }
 
     /// Two reads in a row each answer their own value.

@@ -2074,6 +2074,9 @@ struct Interp {
     /// that wants two values' bytes at once goes through `render`, which
     /// copies into its own `Rendered` and never touches this.
     text_scratch: [u8; crate::value::TEXT_SCRATCH],
+    /// The parse cache a handle-inline string has nowhere to keep. See
+    /// `value::TextNumbers`, which owns the rule and the measurement.
+    text_numbers: crate::value::TextNumbers,
     /// A buffer lent out for building a builtin's result, and handed back.
     ///
     /// **The same lending as [`Interp::key_buffer`], for a waste of the same
@@ -3036,6 +3039,7 @@ impl Interp {
             value_buffer: Vec::new(),
             parse_buffers: Vec::new(),
             text_scratch: [0; crate::value::TEXT_SCRATCH],
+            text_numbers: crate::value::TextNumbers::new(),
             result_buffer: std::cell::Cell::new(Vec::new()),
             running: None,
             suspended: Vec::new(),

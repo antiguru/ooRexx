@@ -14,6 +14,64 @@ use crate::Activation;
 use crate::plan::{BodyKey, ProgramId};
 use rexx_parse::{Program, parse_program};
 
+/// A controlled loop's `BY` is negative exactly when comparing it against
+/// zero says it is, at every `DIGITS` and `FUZZ`.
+///
+/// **The two agree by construction and this is what says so anyway.**
+/// `numeric_order` compares the operands' signs first and answers from them
+/// alone whenever they differ, so a zero on one side takes the answer out of
+/// the precision's hands -- and that is a claim about a function in another
+/// crate, which only running it can hold.
+///
+/// The grid deliberately spans values a small `DIGITS` would round hard
+/// (`0.0001` at `DIGITS 1`) and a `FUZZ` that eats the whole precision,
+/// because those are where a precision-sensitive route would part company
+/// with the sign.
+#[test]
+fn a_negative_by_is_what_comparing_it_against_zero_says() {
+    let mut checked = 0usize;
+    let mut negatives = 0usize;
+    for spelling in [
+        "1",
+        "-1",
+        "0",
+        "-0",
+        "0.0",
+        "1.1",
+        "-1.1",
+        "0.0001",
+        "-0.0001",
+        "1e9",
+        "-1e9",
+        "1e-9",
+        "-1e-9",
+        "999999999",
+        "-999999999",
+    ] {
+        let by = Number::parse(spelling).expect("a literal");
+        for digits in [1u64, 2, 9, 20] {
+            for fuzz in [0u64, 1, 9, 20] {
+                let against_zero = numeric_less(&by, &Number::zero(), digits, fuzz)
+                    .expect("comparing against zero cannot overflow");
+                assert_eq!(
+                    by.signum() < 0,
+                    against_zero,
+                    "{spelling} at digits {digits} fuzz {fuzz}"
+                );
+                checked += 1;
+                if against_zero {
+                    negatives += 1;
+                }
+            }
+        }
+    }
+    assert!(checked > 100, "only {checked} case(s)");
+    assert!(
+        negatives > 0,
+        "no case was negative, so only the false answer was compared"
+    );
+}
+
 /// Pushes a fresh top-level activation for `program`, the same setup
 /// `Interp::run` does, so a test can drive `step` through a live
 /// activation without the full instruction loop. Copied rather than

@@ -8386,8 +8386,16 @@ impl Interp {
                         }
                         None => {
                             let current = current.number();
-                            let by_negative = numeric_less(by, &Number::zero(), digits, fuzz)
-                                .map_err(Raised::from)?;
+                            // `signum`, not `numeric_less` against a zero
+                            // built for the occasion: `numeric_order`'s first
+                            // act is to compare the two operands' signs and
+                            // answer from them alone whenever they differ,
+                            // and one of them being zero is exactly that
+                            // case, so neither `digits` nor `fuzz` can reach
+                            // the answer. `a_negative_by_is_what_comparing_
+                            // it_against_zero_says` holds the two against
+                            // each other rather than this paragraph doing it.
+                            let by_negative = by.signum() < 0;
                             if by_negative {
                                 !numeric_less(&current, to, digits, fuzz).map_err(Raised::from)?
                             } else {

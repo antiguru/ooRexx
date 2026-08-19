@@ -342,7 +342,7 @@ fn magnitude_order(a: &Number, b: &Number, working_digits: u64) -> Option<Orderi
 
     let (digits_a, digits_b) = (a.digits.as_slice(), b.digits.as_slice());
     let shared = digits_a.len().min(digits_b.len());
-    let prefix = digits_a[..shared].cmp(&digits_b[..shared]);
+    let prefix = digit_prefix_order(&digits_a[..shared], &digits_b[..shared]);
     if prefix != Ordering::Equal {
         return Some(prefix);
     }
@@ -356,6 +356,30 @@ fn magnitude_order(a: &Number, b: &Number, working_digits: u64) -> Option<Orderi
     } else {
         Ordering::Equal
     })
+}
+
+/// The ordering of two equal-length digit runs, most significant first.
+///
+/// The same answer `<[u8]>::cmp` gives for equal lengths, which is the only
+/// shape it is handed -- `magnitude_order` slices both operands to their
+/// shared length first. `the_two_routes_agree_wherever_both_apply` is what
+/// holds it to that: measured, reversing the comparison here, and cutting it
+/// to the first digit, each redden that test.
+///
+/// **What differs is how the answer is reached.** The slice comparison
+/// calls libc's `memcmp` through the PLT, and its vectorised body is bought
+/// with a call, an argument setup and an alignment prologue -- against a run
+/// [`magnitude_order`] has already bounded by the working precision, which is
+/// nine digits under Rexx's default `NUMERIC DIGITS`. Measured on
+/// `samples/rexxcps.rex`, `memcmp` reached from this comparison carried 9.16%
+/// of `numeric_order`'s own samples.
+fn digit_prefix_order(a: &[u8], b: &[u8]) -> Ordering {
+    for (digit_a, digit_b) in a.iter().zip(b) {
+        if digit_a != digit_b {
+            return digit_a.cmp(digit_b);
+        }
+    }
+    Ordering::Equal
 }
 
 /// String fallback per `RexxString::stringComp` (`StringClass.cpp:795`).

@@ -144,6 +144,19 @@ pub enum Decoded {
 impl ObjRef {
     pub const NIL: ObjRef = ObjRef(TAG_NIL);
 
+    /// The handle's own bits, for a caller that has to *index* by identity
+    /// rather than compare two handles.
+    ///
+    /// A derived `Hash` already exists and is the wrong instrument for that:
+    /// it hashes through `Hasher`, whose default is `SipHash`, where a table
+    /// on the value model's own path wants a multiply and a shift. Nothing
+    /// here is a promise about the layout -- a reader that wants the parts
+    /// calls [`ObjRef::decode`], which is the only thing that knows what the
+    /// bits mean.
+    pub const fn bits(self) -> u64 {
+        self.0
+    }
+
     pub const fn heap(slot: u32, generation: u32) -> Self {
         debug_assert!(generation <= GENERATION_MAX);
         ObjRef(((generation as u64) << GEN_SHIFT) | ((slot as u64) << SLOT_SHIFT) | TAG_HEAP)
