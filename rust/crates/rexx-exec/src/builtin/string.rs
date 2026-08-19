@@ -210,26 +210,47 @@ fn find_forward(haystack: &[u8], needle: &[u8], start: usize, range: usize) -> u
     // haystack has.
     let first = needle[0];
     let last = needle.len() - 1;
-    if let Some(offset) = window.windows(needle.len()).position(|candidate| {
-        candidate[0] == first && candidate[last] == needle[last] && candidate == needle
-    }) {
-        return start + offset + 1;
+    // One past the last start at which the whole needle fits. The first byte
+    // is found a word at a time ([`find_byte`]) and only a position holding it
+    // is tested further.
+    //
+    // **The scan is what costs**, which is why the word step is on the scan
+    // and not on the compare. Measured with `perf annotate` on the release
+    // build over `bench-programs/strings.rex`, whose loop searches a 43-byte
+    // haystack for a three-byte needle: looking for the first byte one byte
+    // per iteration puts 47% of this function's own samples in the four
+    // instructions that do it -- a `cmp` against the first byte, an increment,
+    // a bound test and a branch.
+    let starts = range - last;
+    // Whether the scan below reached a first byte at all, which is the
+    // question the overrun path asks. Recorded as the scan runs so that path
+    // does not walk the same bytes again to answer it.
+    let mut saw_first = false;
+    let mut at = 0;
+    while let Some(offset) = find_byte(&window[at..starts], first) {
+        saw_first = true;
+        let position = at + offset;
+        if window[position + last] == needle[last]
+            && window[position..position + needle.len()] == *needle
+        {
+            return start + position + 1;
+        }
+        at = position + 1;
     }
 
     // **The overrun the doc above describes, and the failure path is the only
     // one that pays for it.** The scan just made covered every start at which
     // the whole needle fits; this is the one position past them, and the
     // oracle reaches it only after its own scan has found the first byte among
-    // those starts. `window[..range - last]` is exactly the slice that scan
-    // drew its candidates from, so asking whether the first byte is in it is
-    // asking whether the oracle's loop would have run at all.
+    // those starts. `saw_first` records exactly that, so asking it is asking
+    // whether the oracle's loop would have run at all.
     //
     // **A one-byte needle cannot get here**, which is why there is no guard
-    // for it: `last` is then `0`, the slice below is the whole window, and the
-    // scan above succeeds for any window holding the first byte -- so a
-    // failure means the test below is false. The C++ returns before its loop
-    // in that case and reaches the same answer by its own route.
-    if !window[..range - last].contains(&first) {
+    // for it: `last` is then `0`, the scan above covers the whole window, and
+    // it succeeds for any window holding the first byte -- so a failure means
+    // `saw_first` is false. The C++ returns before its loop in that case and
+    // reaches the same answer by its own route.
+    if !saw_first {
         return 0;
     }
     let over = start + range - last;
@@ -242,6 +263,50 @@ fn find_forward(haystack: &[u8], needle: &[u8], start: usize, range: usize) -> u
         Some(candidate) if candidate == needle => over + 1,
         _ => 0,
     }
+}
+
+/// The index of the first `byte` in `hay`, or `None`.
+///
+/// The answer is `hay.iter().position(|&b| b == byte)` and the tail below is
+/// written that way. What the leading loop buys is the rate: `position` is a
+/// byte at a time and does not vectorise, because an early exit makes the trip
+/// count depend on the data.
+///
+/// **The word step is the standard zero-byte search**, `haszero` from Bit
+/// Twiddling Hacks and what `core`'s own `slice::memchr` runs: `word - LOW`
+/// borrows into a byte's high bit exactly when that byte is `00`, `!word`
+/// keeps only the bytes that were under `0x80` to begin with, and `HIGH`
+/// discards everything but the flag. XOR-ing the searched byte in first turns
+/// "is zero" into "is `byte`".
+///
+/// **The mask can flag a byte that does not match, and never below the first
+/// one that does**, which is why the lowest set bit is the answer and not
+/// merely one of them: a false flag at byte *j* needs a borrow to arrive from
+/// byte *j-1*, a borrow leaves a byte only when that byte is `00` after the
+/// XOR or is itself borrowed into, and byte 0 is borrowed into by nothing --
+/// so no borrow reaches any byte at or below the first true match.
+/// `find_byte_agrees_with_position` runs that claim against `position` rather
+/// than resting on the argument.
+///
+/// `from_le_bytes` rather than `from_ne_bytes` so that byte *k* of memory is
+/// always at bit `8k`, which makes `trailing_zeros` the index on either
+/// endianness. On a little-endian target it compiles to nothing.
+fn find_byte(hay: &[u8], byte: u8) -> Option<usize> {
+    const LOW: u64 = 0x0101_0101_0101_0101;
+    const HIGH: u64 = 0x8080_8080_8080_8080;
+
+    let (words, tail) = hay.as_chunks::<8>();
+    let repeated = u64::from(byte) * LOW;
+    for (index, word) in words.iter().enumerate() {
+        let masked = u64::from_le_bytes(*word) ^ repeated;
+        let hits = masked.wrapping_sub(LOW) & !masked & HIGH;
+        if hits != 0 {
+            return Some(index * 8 + (hits.trailing_zeros() as usize) / 8);
+        }
+    }
+    tail.iter()
+        .position(|&candidate| candidate == byte)
+        .map(|at| words.len() * 8 + at)
 }
 
 /// The 1-based offset of the last `needle` that ends at or before `start`
@@ -844,19 +909,14 @@ pub(crate) fn changestr(
         Some(value) => count_of(value, 3)?,
         None => usize::MAX,
     };
-    let changes = count_occurrences(haystack, needle, limit);
-    if changes == 0 {
-        // The one place in this function where the borrow shape still costs
-        // something: the answer is the haystack itself, and handing borrowed
-        // bytes to a call that needs `&mut` means copying them first. The old
-        // code owned them already and paid the same copy on every call
-        // instead of only on this branch, which no benchmark here takes.
-        let unchanged = haystack.to_vec();
-        return Ok(interp.text_built(unchanged));
-    }
-    // Sized before anything is written: `changes` occurrences of `needle`
-    // each become `replacement`, and nothing else moves.
-    let grown = haystack.len() + changes * replacement.len();
+    // **One search, and the answer written as it is found.** Sizing the result
+    // before writing it means counting the occurrences first, and counting
+    // runs `find_forward` from each occurrence to the next exactly as writing
+    // does -- so the haystack is searched twice for one answer. Measured on
+    // `bench-programs/strings.rex`, whose loop changes a 43-byte haystack
+    // three million times, that second search is 2.4% of the whole program's
+    // `instructions:u`.
+    //
     // **The lent buffer, like every other sized result in this module.** A
     // fresh `Vec` here was not merely one allocation: `text_built` hands
     // whatever it is given back to the pool, so a fresh one *replaced* the
@@ -864,15 +924,40 @@ pub(crate) fn changestr(
     // wanting a byte more grew it again. Measured on
     // `bench-programs/strings.rex`, that pair was the whole of what the
     // program still allocated.
-    let mut out = buffer(interp, grown.saturating_sub(changes * needle.len()))?;
+    //
+    // The haystack is the floor rather than the answer's own length, which is
+    // not known until the search has run: a result that never grows past it is
+    // one that changed nothing or shortened, and those reserve once.
+    let mut out = buffer(interp, haystack.len())?;
     let mut next = 0;
-    for _ in 0..changes {
+    let mut changes = 0;
+    while changes < limit {
         let found = find_forward(haystack, needle, next, haystack.len());
-        out.extend_from_slice(&haystack[next..found - 1]);
+        if found == 0 {
+            break;
+        }
+        let kept = &haystack[next..found - 1];
+        // **Every growth stays fallible**, which is what a result sized in one
+        // reservation gets for free and this one has to ask for.
+        // `extend_from_slice` grows through the infallible path and aborts the
+        // process where the oracle raises 5.1, so the room for what is about
+        // to be written is taken here and the extends below cannot be what
+        // grows the buffer.
+        out.try_reserve(kept.len() + replacement.len())
+            .map_err(|_| Failure::from(Raised::system_resources()))?;
+        out.extend_from_slice(kept);
         out.extend_from_slice(replacement);
         next = found - 1 + needle.len();
+        changes += 1;
     }
-    out.extend_from_slice(&haystack[next..]);
+    // **No branch for "nothing changed"**, and none is needed: the loop leaves
+    // `next` at 0 when it never ran, so this copies the haystack whole, which
+    // is what CHANGESTR answers when the needle is absent, when the needle is
+    // the null string and when the requested count is 0.
+    let rest = &haystack[next..];
+    out.try_reserve(rest.len())
+        .map_err(|_| Failure::from(Raised::system_resources()))?;
+    out.extend_from_slice(rest);
     Ok(interp.text_built(out))
 }
 
@@ -2005,5 +2090,54 @@ mod tests {
             "a substring is not a counted answer, it is its own bytes"
         );
         assert_eq!(bytes, b"012");
+    }
+}
+
+#[cfg(test)]
+mod scan_tests {
+    use super::find_byte;
+
+    /// [`find_byte`]'s word step against the byte-at-a-time answer it stands
+    /// in for, at every length from empty to past the step's own width.
+    ///
+    /// **The haystacks are built out of `00`, `01`, `80` and an ordinary
+    /// letter**, which is the shape the borrow argument in [`find_byte`]'s own
+    /// doc turns on: `01` is the value a borrow arriving from below turns into
+    /// `ff`, so it is what a mask flags falsely, and `80` is already high
+    /// before the mask. Bytes drawn from the whole range reach that trio by
+    /// accident and rarely.
+    ///
+    /// **This is where the word step's contract is pinned, and it is not
+    /// pinned anywhere else.** Both halves measured by mutation: answering
+    /// with the mask's highest set bit rather than its lowest reddens this and
+    /// also reddens a test the crate already had, while dropping the word
+    /// offset the tail's own index is measured from reddens *only* this --
+    /// that answer is never larger than the true one, so `find_forward`'s
+    /// caller re-scans and still lands on the right byte, leaving the whole
+    /// interpreter's behaviour intact and only its rate ruined.
+    ///
+    /// The `assert_eq` names `position` as the answer, so a `find_byte` that
+    /// simply called it would pass -- which is the point: what is being fixed
+    /// is the result, and the word step is free to reach it any way it likes.
+    #[test]
+    fn find_byte_agrees_with_position() {
+        let alphabet = [0x00u8, 0x01, 0x80, b'a'];
+        for length in 0..40usize {
+            for seed in 0..500u32 {
+                let mut hay = Vec::with_capacity(length);
+                let mut state = seed.wrapping_mul(2_654_435_761).wrapping_add(length as u32);
+                for _ in 0..length {
+                    state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                    hay.push(alphabet[(state >> 16) as usize % alphabet.len()]);
+                }
+                for &wanted in &alphabet {
+                    assert_eq!(
+                        find_byte(&hay, wanted),
+                        hay.iter().position(|&byte| byte == wanted),
+                        "hay {hay:02x?} wanted {wanted:#04x}"
+                    );
+                }
+            }
+        }
     }
 }
