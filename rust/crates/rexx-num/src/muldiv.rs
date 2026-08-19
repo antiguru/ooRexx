@@ -356,9 +356,95 @@ impl Number {
     }
 }
 
+/// The widest divisor [`short_divide`] can carry in a machine word.
+///
+/// Its running remainder is always below the divisor, and one more numerator
+/// digit takes it to `remainder * 10 + digit`. With the divisor under
+/// `10^18` that value stays under `10^19`, which a `u64` holds -- `u64::MAX`
+/// is above `1.8 * 10^19`. Nineteen would not fit.
+///
+/// The bound is on the *divisor*, and `Number::div` truncates its operands to
+/// `working_length(digits)`, so every division at the default `NUMERIC
+/// DIGITS 9` is inside it whatever its operands look like.
+const SHORT_DIVISOR_DIGITS: usize = 18;
+
 /// Divides two digit strings, returning `want` quotient digits, the residue,
 /// and how many powers of ten the quotient was scaled by.
+///
+/// Both routes below produce the same digits; which one runs is decided by
+/// whether the divisor fits a machine word. That agreement is asserted rather
+/// than argued: `divide_route_tests` runs the two against each other over a
+/// grid of numerators, divisors and widths.
 fn long_divide(n: &[u8], d: &[u8], want: usize) -> (Digits, i32) {
+    if d.len() <= SHORT_DIVISOR_DIGITS {
+        let divisor = d
+            .iter()
+            .fold(0u64, |acc, digit| acc * 10 + u64::from(*digit));
+        // A zero divisor never arrives -- `Number::div` answers `DivideByZero`
+        // before this -- and neither route terminates on one, so the test
+        // routes it to the behaviour that was already here rather than to a
+        // new division by zero.
+        if divisor != 0 {
+            return short_divide(n, divisor, d.len(), want);
+        }
+    }
+    wide_divide(n, d, want)
+}
+
+/// [`long_divide`] for a divisor a `u64` holds, which is the schoolbook short
+/// division: one hardware divide per quotient digit, and no working storage
+/// at all.
+///
+/// **The digit it produces is the digit the wide path produces**, because
+/// that path's inner loop is subtracting the divisor out of the running
+/// remainder until what is left is smaller -- which is the quotient and the
+/// residue of exactly this division. The remainder enters each step below the
+/// divisor, so `remainder * 10 + digit` is below ten times it and the digit
+/// is a digit.
+///
+/// The stopping rules are the wide path's, restated against a `u64`
+/// remainder: a quotient that has not started yet swallows a zero digit, a
+/// remainder of zero with the numerator exhausted ends the division early so
+/// that `1 / 1` is `1` rather than a padded `1.00000000`, and `shift` counts
+/// the zeros appended past the numerator's own digits.
+fn short_divide(n: &[u8], divisor: u64, divisor_len: usize, want: usize) -> (Digits, i32) {
+    let mut remainder = 0u64;
+    let mut q = Digits::new();
+    let mut shift = 0i32;
+    let mut i = 0usize;
+    // Saturating, for the reason the wide path's own copy of this bound
+    // gives: `want` is itself saturated by `working_length`.
+    let exhausted = n.len().saturating_add(want).saturating_add(divisor_len);
+
+    while q.len() < want {
+        let next = if i < n.len() {
+            n[i]
+        } else {
+            shift += 1;
+            0
+        };
+        i += 1;
+        remainder = remainder * 10 + u64::from(next);
+        let digit = (remainder / divisor) as u8;
+        remainder %= divisor;
+        if q.is_empty() && digit == 0 {
+            // Not yet reached the first significant quotient digit.
+            if i > exhausted {
+                break;
+            }
+            continue;
+        }
+        q.push(digit);
+        if remainder == 0 && i >= n.len() {
+            break;
+        }
+    }
+    (q, shift)
+}
+
+/// [`long_divide`] for a divisor too wide for a machine word: guess a
+/// multiple from the divisor's leading digits, subtract it out, and repeat.
+fn wide_divide(n: &[u8], d: &[u8], want: usize) -> (Digits, i32) {
     // The live remainder is `rem[start..]`: leading zeros are skipped by
     // advancing `start` instead of draining them out, which cost a memmove
     // on every subtraction pass. The dead prefix stays zero, so slicing from
@@ -451,12 +537,10 @@ fn long_divide(n: &[u8], d: &[u8], want: usize) -> (Digits, i32) {
     // precision rather than read off the division (see `DivOp::Remainder`
     // above). Building it cost a `split_off`, which allocates.
     //
-    // **`rem` stays a `Vec` and that was measured, not assumed.** Holding it
-    // in `Digits` -- the inline type beside it -- removes three allocations
-    // per division at `NUMERIC DIGITS 9` and costs 3.104% of `arith`, because
-    // `push` and `as_mut_slice` branch on the arm inside the per-digit inner
-    // loop where a vector hands out a pointer. The allocations were the
-    // cheaper side of that trade.
+    // **`rem` stays a `Vec` rather than becoming a `Digits`.** The inline type
+    // saves the allocations, and costs more than they are worth: `push` and
+    // `as_mut_slice` branch on which arm holds the digits, and both sit inside
+    // the per-digit inner loop where a vector hands out a pointer instead.
     (q, shift)
 }
 
@@ -600,5 +684,145 @@ mod mul_shortcut_tests {
 
         // A product past what an `i64` holds.
         assert!(exact_integer_product(&wide, &wide, 40).is_none());
+    }
+}
+
+#[cfg(test)]
+mod divide_route_tests {
+    use super::{SHORT_DIVISOR_DIGITS, short_divide, wide_divide};
+    use crate::{DivOp, Number};
+
+    /// Digit strings with a non-zero leading digit, which is what a canonical
+    /// `Number` hands `long_divide` and what both routes are written against.
+    fn strings() -> Vec<Vec<u8>> {
+        let seeds: &[&[u8]] = &[
+            &[1],
+            &[3],
+            &[7],
+            &[9],
+            &[1, 0],
+            &[1, 2],
+            &[5, 0, 0],
+            &[9, 9],
+            &[9, 9, 9, 9, 9, 9, 9, 9, 9],
+            &[1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            &[1, 2, 3, 4, 5, 6, 7, 8, 9],
+            &[7, 0, 0, 0, 0, 0, 1],
+            &[9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 1, 2, 3, 4, 5, 6, 7, 8],
+            &[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            &[9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9],
+            &[
+                1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 2, 3, 4, 5,
+            ],
+        ];
+        seeds.iter().map(|s| s.to_vec()).collect()
+    }
+
+    /// The two routes answer the same quotient and the same scaling.
+    ///
+    /// This is the whole licence for having two: the short one exists to skip
+    /// the guess-and-subtract, so any disagreement is a defect in it rather
+    /// than a second opinion. `want` spans both sides of every numerator
+    /// width in the population, because where the division stops decides how
+    /// many digits either route emits.
+    #[test]
+    fn a_short_divisor_divides_the_same_way_the_wide_path_does() {
+        let population = strings();
+        let mut checked = 0usize;
+        let mut ended_early = 0usize;
+        let mut ran_past_the_numerator = 0usize;
+
+        for n in &population {
+            for d in &population {
+                if d.len() > SHORT_DIVISOR_DIGITS {
+                    continue;
+                }
+                let divisor = d
+                    .iter()
+                    .fold(0u64, |acc, digit| acc * 10 + u64::from(*digit));
+                for want in [1usize, 2, 3, 9, 10, 21, 25, 40] {
+                    let short = short_divide(n, divisor, d.len(), want);
+                    let wide = wide_divide(n, d, want);
+                    assert_eq!(
+                        short, wide,
+                        "{n:?} / {d:?} to {want} digit(s): short {short:?}, wide {wide:?}"
+                    );
+                    checked += 1;
+                    if short.0.len() < want {
+                        ended_early += 1;
+                    }
+                    if short.1 > 0 {
+                        ran_past_the_numerator += 1;
+                    }
+                }
+            }
+        }
+
+        // Floors, so a grid that stopped generating cases -- or one that only
+        // ever ran the division to its full width -- fails rather than passes
+        // empty. Both other exits are where the two routes keep separate
+        // bookkeeping and so are where they could part company.
+        assert!(checked > 500, "only {checked} case(s)");
+        assert!(ended_early > 0, "no case stopped before `want` digits");
+        assert!(ran_past_the_numerator > 0, "no case scaled the quotient");
+    }
+
+    /// The constant is the widest divisor whose remainder survives taking one
+    /// more numerator digit, and one digit wider it would not.
+    ///
+    /// `short_divide`'s remainder is below the divisor, so the value it forms
+    /// is at most `(divisor - 1) * 10 + 9`; the bound is checked against the
+    /// widest divisor of each width rather than argued about.
+    #[test]
+    fn the_short_divisor_width_is_the_one_a_machine_word_holds() {
+        let widest = |width: u32| 10u128.pow(width) - 1;
+        let step = |divisor: u128| (divisor - 1) * 10 + 9;
+        assert!(step(widest(SHORT_DIVISOR_DIGITS as u32)) <= u128::from(u64::MAX));
+        assert!(step(widest(SHORT_DIVISOR_DIGITS as u32 + 1)) > u128::from(u64::MAX));
+    }
+
+    /// Either side of the width where the route changes, through the operator
+    /// itself, so the boundary is exercised as a division and not only as a
+    /// property of the constant.
+    ///
+    /// The two quotients are the oracle's own, measured at `NUMERIC DIGITS
+    /// 20`, and they differ in magnitude as well as in digits -- the pair is
+    /// one divisor digit apart, so a route that dropped or gained a scaling
+    /// step would show here rather than in a last-digit disagreement.
+    #[test]
+    fn a_divisor_either_side_of_the_route_boundary_divides_correctly() {
+        let short = "999999999999999999";
+        let wide = "9999999999999999999";
+        assert_eq!(short.len(), SHORT_DIVISOR_DIGITS);
+        for (text, quotient) in [
+            (short, "1000000000000000001"),
+            (wide, "100000000000000000.01"),
+        ] {
+            let divisor = Number::parse(text).expect("a literal divisor");
+            let dividend =
+                Number::parse("999999999999999999999999999999999999").expect("a literal");
+            assert_eq!(
+                dividend
+                    .div(&divisor, 20, DivOp::Divide)
+                    .expect("in range")
+                    .format(20),
+                quotient
+            );
+        }
+        // The same pair as an exact division, where the quotient terminates
+        // rather than being rounded, so the early exit is what ends it.
+        for text in [short, wide] {
+            let divisor = Number::parse(text).expect("a literal divisor");
+            let dividend = divisor
+                .mul(&Number::parse("7").expect("seven"), 40)
+                .expect("in range");
+            assert_eq!(
+                dividend
+                    .div(&divisor, 40, DivOp::Divide)
+                    .expect("in range")
+                    .format(40),
+                "7"
+            );
+        }
     }
 }
