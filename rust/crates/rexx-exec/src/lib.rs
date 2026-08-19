@@ -2074,7 +2074,51 @@ struct Interp {
     /// live. `Cell::take` needs only `&self` and leaves the default behind,
     /// which is exactly the lending this wants.
     result_buffer: std::cell::Cell<Vec<u8>>,
-    activations: Vec<Activation>,
+    /// The activation running right now, held in a field of its own rather
+    /// than at the top of [`Interp::suspended`].
+    ///
+    /// **The split is a measurement.** Every hot read of the running
+    /// activation -- `activation().frame` for a variable, `activation()
+    /// .settings` for an arithmetic operator, `trace_mode()` for a gate --
+    /// went through `Vec::last`, which is a load of the pointer, a load of
+    /// the length, a multiply by `size_of::<Activation>()`, an add and an
+    /// empty check. None of that can be hoisted out of a dispatch loop,
+    /// because every op between two reads takes `&mut self`; so the IR
+    /// driver re-derived the same address once per op. A field is an offset
+    /// from the interpreter, and the same read is one load.
+    ///
+    /// Measured on `perf stat -e instructions:u` against `bench-programs/`,
+    /// which is deterministic there to the digit, with the stdout, stderr
+    /// and exit status of every program identical either way: `varlookup.rex`
+    /// -6.085%, `compound.rex` -4.604%, `emptyloop.rex` -3.525%,
+    /// `alloc4c.rex` -3.437%, a fixed-work `rexxcps` -2.772%,
+    /// `strings.rex` -2.289%, `arith.rex` -1.593%. It is not confined to the
+    /// IR driver, and that is why it reaches a program with no promoted
+    /// clause in it: `read_at`, `loop_advance` and `bind_control` each read
+    /// the running activation too.
+    ///
+    /// `None` is an interpreter with nothing running, which is what
+    /// [`Interp::new`] answers and what a body that has returned leaves
+    /// behind.
+    ///
+    /// **Boxed rather than held inline, and that is a measurement of its
+    /// own.** An `Activation` is large, so holding one in this struct moves
+    /// every field after it along by that width. Tried: the instruction
+    /// saving collapsed to -1.45% on `compound.rex` and -1.07% on
+    /// `strings.rex`, and `cycles:u` went the wrong way by 5.76% and 8.51%
+    /// against a base whose own run-to-run spread on those two is 0.17% and
+    /// 2.72%. The pointer keeps this struct's layout where the rest of the
+    /// interpreter found it, and it also makes suspending an activation a
+    /// pointer move rather than a copy of the whole of it.
+    running: Option<Box<Activation>>,
+    /// The activations that entered before [`Interp::running`], oldest
+    /// first, so `suspended.last()` is the running activation's own caller.
+    #[expect(
+        clippy::vec_box,
+        reason = "the box is the same one `running` holds, so suspending and \
+                  resuming move a pointer instead of the activation"
+    )]
+    suspended: Vec<Box<Activation>>,
     /// The next [`ActivationId`] to hand out. Monotonic, never reset, never
     /// reused -- see that type for the two defects that needed an identity a
     /// stack depth could not supply.
@@ -2502,7 +2546,7 @@ struct Interp {
     /// when nothing ever seals: this stays empty and `execute` builds a
     /// one-entry stack.
     ///
-    /// Never resolved by walking `Interp::activations` instead: `run` pops
+    /// Never resolved by walking the activation stack instead: `run` pops
     /// the activation before `execute` sees the error, which is the whole
     /// reason `failure_site` exists rather than being reconstructed at the
     /// top.
@@ -2970,7 +3014,8 @@ impl Interp {
             value_buffer: Vec::new(),
             text_scratch: [0; crate::value::TEXT_SCRATCH],
             result_buffer: std::cell::Cell::new(Vec::new()),
-            activations: Vec::new(),
+            running: None,
+            suspended: Vec::new(),
             programs: Vec::new(),
             plans: HashMap::new(),
             engine: Engine::TreeWalker,
@@ -3060,7 +3105,7 @@ impl Interp {
 
         let frame = self.roots.push_slots(plan.len());
         let id = self.next_activation_id();
-        self.activations.push(Activation::new(
+        self.push_activation(Activation::new(
             id,
             Rc::clone(&program),
             program_id,
@@ -3077,7 +3122,7 @@ impl Interp {
 
         // Popped whether or not the body raised, so the root set is left the
         // way it was found even on the failure path.
-        let activation = self.activations.pop().expect("the frame just pushed");
+        let activation = self.pop_activation().expect("the frame just pushed");
         self.roots.pop_slots(activation.frame);
         exit
     }
@@ -3584,7 +3629,7 @@ impl Interp {
         let plan = Rc::new(Plan::default());
         let frame = self.roots.push_slots(0);
         let activation_id = self.next_activation_id();
-        self.activations.push(Activation::new(
+        self.push_activation(Activation::new(
             activation_id,
             Rc::clone(program),
             id,
@@ -3598,7 +3643,7 @@ impl Interp {
             plan: None,
         };
         let result = self.eval(&code, expr);
-        self.activations.pop();
+        self.pop_activation();
         self.roots.pop_slots(frame);
         result.map(|_| ())
     }
@@ -3702,7 +3747,7 @@ impl Interp {
     /// local there.
     #[inline(always)]
     fn activation_exposes(&self, frame: SlotFrame) -> bool {
-        let activation = self.activations.last().expect("an activation is running");
+        let activation = self.activation();
         !activation.exposed.is_empty() && activation.frame == frame
     }
 
@@ -3728,7 +3773,7 @@ impl Interp {
         // name borrowed out of the activation has to stay live across the
         // `&mut self.heap` below; disjoint fields borrow independently where a
         // method taking `&self` would not.
-        let activation = self.activations.last().expect("an activation is running");
+        let activation = self.running.as_deref().expect("an activation is running");
         let Some(var) = Interp::exposure_in(activation, frame, slot) else {
             self.roots.set_frame_slot(frame, slot, value);
             return;
@@ -3749,7 +3794,7 @@ impl Interp {
     #[cold]
     #[inline(never)]
     fn clear_exposed_variable(&mut self, frame: SlotFrame, slot: usize) {
-        let activation = self.activations.last().expect("an activation is running");
+        let activation = self.running.as_deref().expect("an activation is running");
         let Some(var) = Interp::exposure_in(activation, frame, slot) else {
             self.roots.clear_frame_slot(frame, slot);
             return;
@@ -3768,11 +3813,7 @@ impl Interp {
 
     /// What an `EXPOSE` bound slot `slot` of `frame` to, if anything.
     fn exposure(&self, frame: SlotFrame, slot: usize) -> Option<&InstanceVar> {
-        Interp::exposure_in(
-            self.activations.last().expect("an activation is running"),
-            frame,
-            slot,
-        )
+        Interp::exposure_in(self.activation(), frame, slot)
     }
 
     /// [`Interp::exposure`] over one activation, so that a caller holding a

@@ -1329,7 +1329,7 @@ impl Interp {
             return self.run_chunk(&code, &chunk, Some(&program.source));
         }
 
-        let depth = self.activations.len();
+        let depth = self.activation_depth();
 
         while let Some(instruction) = code.body.instructions.get(self.activation().pc) {
             let index = self.activation().pc;
@@ -1394,7 +1394,7 @@ impl Interp {
                 return Ok(ended);
             }
             debug_assert_eq!(
-                self.activations.len(),
+                self.activation_depth(),
                 depth,
                 "step left the activation stack changed, so this loop's `code` and its `pc` \
                  no longer describe the same frame"
@@ -2775,12 +2775,7 @@ impl Interp {
         // in no instruction of either, so the plan has no slot for it and
         // both sides reach it only through a run-time binding.
         let resolved = self.activation().extra.clone();
-        if let Some(caller) = self
-            .activations
-            .len()
-            .checked_sub(2)
-            .and_then(|index| self.activations.get_mut(index))
-        {
+        if let Some(caller) = self.caller_activation_mut() {
             caller.extra = resolved;
         }
 
@@ -3825,7 +3820,7 @@ impl Interp {
     ///
     /// Returns a clone rather than a borrow: every caller goes on to call a
     /// `&mut self` method in the same breath (`remove` the trap, then
-    /// `set_sigl`), which a borrow of `self.activations` held across would
+    /// `set_sigl`), which a borrow of the running activation held across would
     /// make the `E0502` `run_activation`'s own doc comment writes out.
     pub(crate) fn trap_for(&self, condition: &[u8]) -> Option<Trap> {
         let traps = &self.activation().traps;
@@ -3942,7 +3937,7 @@ impl Interp {
                 return Err(Failure::Raised(raised));
             }
             // The outermost activation is the only one allowed to look.
-            Search::Top if self.activations.len() > 1 => return Err(failure),
+            Search::Top if self.activation_depth() > 1 => return Err(failure),
             Search::Top => {}
             Search::Nobody => return Err(failure),
         }
@@ -4283,8 +4278,7 @@ impl Interp {
     /// calls a routine raising the same condition runs once on both
     /// interpreters, byte for byte.
     fn caller_trap_for(&self, condition: &[u8]) -> Option<Trap> {
-        let caller = self.activations.len().checked_sub(2)?;
-        let traps = &self.activations[caller].traps;
+        let traps = &self.caller_activation()?.traps;
         traps
             .get(condition)
             .or_else(|| traps.get(b"ANY".as_slice()))
@@ -4590,7 +4584,10 @@ impl Interp {
                     // to be popped, and `caller_trap_for` above just read
                     // that same activation's table. See the field's own doc
                     // comment for the three transcripts behind it.
-                    activation: self.activations[self.activations.len() - 2].id,
+                    activation: self
+                        .caller_activation()
+                        .expect("a raise reaching here has a caller to queue against")
+                        .id,
                     // Set by `deliver_pending_traps` if this turns out to have
                     // been queued while a handler was running, which is not
                     // knowable here: this is the raise, not the delivery.
@@ -5072,7 +5069,7 @@ impl Interp {
         // native abort. `Raised::insufficient_stack` already existed
         // (`error.rs`); measured, the oracle answers the same 11.1 at rc 245
         // for the same program, at its own depth of 27,314.
-        if self.activations.len() >= MAX_ACTIVATION_DEPTH {
+        if self.activation_depth() >= MAX_ACTIVATION_DEPTH {
             return Err(Raised::insufficient_stack().into());
         }
 
@@ -5151,7 +5148,7 @@ impl Interp {
                 );
                 callee.extra = extra;
                 callee.exposed = exposed;
-                self.activations.push(callee);
+                self.push_activation(callee);
             }
             // **A pool of its own, and not one of the five inheritances**
             // -- `Activation::routine` is where that is stated and
@@ -5179,7 +5176,7 @@ impl Interp {
                     &routine_program.source,
                 );
                 let frame = self.roots.push_slots(plan.len());
-                self.activations.push(Activation::routine(
+                self.push_activation(Activation::routine(
                     callee_id,
                     routine_program,
                     installed.program,
@@ -5284,7 +5281,7 @@ impl Interp {
         // step, so a `CALL` that returned with the callee still on it would
         // trip that assertion in the caller rather than quietly running the
         // wrong frame's `pc`.
-        let callee = self.activations.pop().expect("the activation just pushed");
+        let callee = self.pop_activation().expect("the activation just pushed");
         // **The two halves of "was the pool shared" are one bool, and both
         // are needed.** A `PROCEDURE` callee pushed a frame of its own, so
         // that frame is popped here -- on the error path as well, which is

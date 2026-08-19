@@ -599,7 +599,7 @@ impl Interp {
         // reason: a method that sends itself a message is an unbounded
         // recursion, and it must become a reportable condition rather than a
         // native abort.
-        if self.activations.len() >= MAX_ACTIVATION_DEPTH {
+        if self.activation_depth() >= MAX_ACTIVATION_DEPTH {
             return Err(Raised::insufficient_stack().into());
         }
         let plan = self.plan_for(
@@ -614,7 +614,7 @@ impl Interp {
         let frame = self.roots.push_slots(plan.len());
         let callee_id = self.next_activation_id();
         let super_scope = self.super_scope_for(receiver, resolution);
-        self.activations.push(Activation::method(
+        self.push_activation(Activation::method(
             callee_id,
             program,
             installed.program,
@@ -671,7 +671,7 @@ impl Interp {
         let ended = self.run_activation();
 
         self.trace_invocation_exit();
-        let callee = self.activations.pop().expect("the activation just pushed");
+        let callee = self.pop_activation().expect("the activation just pushed");
         // Unconditionally, where `Interp::invoke_call` asks `owns_frame`
         // first: a method activation always owns its frame and nothing can
         // change that under it, because the one instruction that swaps a

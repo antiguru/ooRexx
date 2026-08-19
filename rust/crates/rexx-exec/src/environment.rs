@@ -597,7 +597,7 @@ impl Interp {
     /// `None` when no activation is running, which is how a unit test that
     /// resolves a name against a bare `Interp` reaches this.
     fn running_program(&self) -> Option<ProgramId> {
-        self.activations.last().map(|frame| frame.program_id)
+        self.running_activation().map(|frame| frame.program_id)
     }
 
     /// Records a class a `::CLASS` directive installed, under the running

@@ -167,9 +167,10 @@ pub(crate) struct TrappedCondition {
 /// reused for the life of an `Interp`.
 ///
 /// **Added by fix round 1, because a depth does not identify an activation.**
-/// `PendingTrap` first named its target activation by `activations.len()`,
-/// which is right while that activation is on the stack and wrong the moment
-/// it leaves: a later, unrelated call re-enters the same depth and picks up a
+/// `PendingTrap` first named its target activation by the activation stack's
+/// own depth, which is right while that activation is on the stack and wrong
+/// the moment it leaves: a later, unrelated call re-enters the same depth and
+/// picks up a
 /// condition that was never its. Measured both ways -- `call aa` then `call
 /// cc`, with `aa` raising a trapped `USER` condition, ran the handler inside
 /// `cc`; and a pending condition whose activation is unwound by an error the
@@ -343,7 +344,7 @@ pub(crate) struct Activation {
     /// The program this frame is running.
     ///
     /// **A liveness anchor, and never borrowed through.** Nothing takes
-    /// `&self.activations.last().program.…` and then calls a `&mut self`
+    /// `&self.activation().program.…` and then calls a `&mut self`
     /// method: that is the `E0502` written out in `run_activation`. This field
     /// exists so that the `Rc` the instruction loop clones into its local has
     /// something to be cloned from, and so that a frame keeps its program
@@ -1172,11 +1173,60 @@ impl Interp {
     }
 
     pub(crate) fn activation(&self) -> &Activation {
-        self.activations.last().expect("a live activation")
+        self.running.as_deref().expect("a live activation")
     }
 
     pub(crate) fn activation_mut(&mut self) -> &mut Activation {
-        self.activations.last_mut().expect("a live activation")
+        self.running.as_deref_mut().expect("a live activation")
+    }
+
+    /// The running activation, or `None` where nothing is running.
+    ///
+    /// For the caller that asks *whether* one is running rather than
+    /// assuming it: everything else wants [`Interp::activation`] and its
+    /// `expect`.
+    pub(crate) fn running_activation(&self) -> Option<&Activation> {
+        self.running.as_deref()
+    }
+
+    /// The running activation's own caller, or `None` at the outermost
+    /// level.
+    pub(crate) fn caller_activation(&self) -> Option<&Activation> {
+        self.suspended.last().map(Box::as_ref)
+    }
+
+    /// [`Interp::caller_activation`] for a writer.
+    pub(crate) fn caller_activation_mut(&mut self) -> Option<&mut Activation> {
+        self.suspended.last_mut().map(Box::as_mut)
+    }
+
+    /// How many activations are live, the running one included.
+    ///
+    /// This is what `Vec::len` answered while the running activation sat at
+    /// the top of the same vector, and every caller reading a *depth* --
+    /// `MAX_ACTIVATION_DEPTH`, an `INTERPRET` fragment's queue, the driver's
+    /// own entry depth -- means this number and not the suspended count.
+    pub(crate) fn activation_depth(&self) -> usize {
+        self.suspended.len() + usize::from(self.running.is_some())
+    }
+
+    /// Makes `activation` the running one and suspends whatever was.
+    pub(crate) fn push_activation(&mut self, activation: Activation) {
+        if let Some(outer) = self.running.replace(Box::new(activation)) {
+            self.suspended.push(outer);
+        }
+    }
+
+    /// Ends the running activation and resumes its caller, answering the
+    /// activation that ended.
+    ///
+    /// Answers the box rather than its contents, so that ending an
+    /// activation moves a pointer where returning it by value would copy the
+    /// whole of it back out.
+    pub(crate) fn pop_activation(&mut self) -> Option<Box<Activation>> {
+        let ended = self.running.take()?;
+        self.running = self.suspended.pop();
+        Some(ended)
     }
 
     /// The `TRACE` setting in force right now: the *running* activation's.

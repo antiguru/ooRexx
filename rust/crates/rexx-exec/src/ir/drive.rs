@@ -415,7 +415,7 @@ impl Interp {
         let Some(stop) = chunk.op_at(end) else {
             return Err(Loud::chunk_map_too_short().into());
         };
-        let depth = self.activations.len();
+        let depth = self.activation_depth();
         // **SPIKE.** Whether the permission is still worth asking about. It is
         // granted to this activation's first instruction and has to be cleared
         // by the one after it; from there on `grant_procedure_permission` writes
@@ -2029,7 +2029,7 @@ impl Interp {
             // against the wrong body -- so the check has to sit where a clause
             // finishes rather than where control leaves this function.
             debug_assert_eq!(
-                self.activations.len(),
+                self.activation_depth(),
                 depth,
                 "a clause left the activation stack changed, so this loop's `code` and its `pc` \
                  no longer describe the same frame"

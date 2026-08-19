@@ -34,7 +34,7 @@ fn activate(interp: &mut Interp, program: Program) -> Rc<Program> {
     );
     let frame = interp.roots.push_slots(plan.len());
     let id = interp.next_activation_id();
-    interp.activations.push(Activation::new(
+    interp.push_activation(Activation::new(
         id,
         Rc::clone(&program),
         program_id,
@@ -88,7 +88,7 @@ fn run_source_with_directives(
     );
     let frame = interp.roots.push_slots(plan.len());
     let id = interp.next_activation_id();
-    interp.activations.push(Activation::new(
+    interp.push_activation(Activation::new(
         id,
         Rc::clone(&program),
         program_id,

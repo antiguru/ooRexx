@@ -727,7 +727,7 @@ mod tests {
         );
         let frame = interp.roots.push_slots(plan.len());
         let activation = interp.next_activation_id();
-        interp.activations.push(Activation::new(
+        interp.push_activation(Activation::new(
             activation, program, program_id, plan, frame,
         ));
         let settings = &mut interp.activation_mut().settings;
