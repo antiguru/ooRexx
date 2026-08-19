@@ -587,28 +587,46 @@ impl ClauseValue for HeaderOutcome {
 /// last clause reports `2, 4, 4` (the `DO` line, then the `ITERATE`'s twice),
 /// where the same loop without the `ITERATE` reports the `DO` line then
 /// `END`'s.
+///
+/// **`Copy`, with the `ITERATE`'s echo site held beside it rather than in it
+/// -- a measurement, not a taste.** Every pass boundary assigns this, and an
+/// owned `Vec<u8>` inside the enum makes that assignment a drop rather than a
+/// store: read the old discriminant, test it against each variant that owns
+/// nothing, branch, and only then write. Measured, the site held inside
+/// instead: 17.0 more `instructions:u` per pass boundary on both
+/// `bench-programs/emptyloop.rex` and `bench-programs/varlookup.rex`, which is
+/// +2.681% and +1.268%. More than the drop's own instructions, because it also
+/// denies `flat_loop_step_top` a register for the loop state's own address and
+/// leaves it reloading that off the stack around every use.
+#[derive(Clone, Copy)]
 enum HeaderClause {
     /// The first pass: the `DO`/`LOOP` clause's own line.
     Do,
     /// The previous pass fell through to `END`.
     End,
-    /// The previous pass ended in an `ITERATE`.
+    /// The previous pass ended in an `ITERATE`, whose own echo site is the
+    /// [`IterateSite`] its holder carries beside this.
     Iterate {
         /// That `ITERATE` clause's own line -- `SIGL`'s quantity, which
         /// honours `clause_line_override` inside an `INTERPRET`.
         line: usize,
-        /// The same clause's `(line, text)` echo site, carried so that a
-        /// re-test which *fails* can be blamed on it. `LeaveOrigin` captured
-        /// this the instant the `ITERATE` stepped; without carrying it here
-        /// the pair is gone by the time the next header runs, and the
-        /// failure is misattributed to the `DO` clause (review round 1, F2).
-        /// **Not** `LeaveOrigin::indent`, which is that clause's own lexical
-        /// one: measured, an `ITERATE` nested two blocks deep inside the body
-        /// echoes at its own depth when it steps and at the *loop body's*
-        /// depth on the failure path.
-        site: Option<(usize, Vec<u8>)>,
     },
 }
+
+/// The `(line, text)` echo site of the `ITERATE` a [`HeaderClause::Iterate`]
+/// stands for, carried so that a re-test which *fails* can be blamed on it.
+/// `LeaveOrigin` captured this the instant the `ITERATE` stepped; without
+/// carrying it the pair is gone by the time the next header runs, and the
+/// failure is misattributed to the `DO` clause (review round 1, F2).
+/// **Not** `LeaveOrigin::indent`, which is that clause's own lexical one:
+/// measured, an `ITERATE` nested two blocks deep inside the body echoes at
+/// its own depth when it steps and at the *loop body's* depth on the failure
+/// path.
+///
+/// Read only while the tag beside it is [`HeaderClause::Iterate`], so a
+/// boundary that moves the tag off `Iterate` leaves this alone rather than
+/// clearing it -- clearing is the drop the split exists to remove.
+type IterateSite = Option<(usize, Vec<u8>)>;
 
 /// **SPIKE, not for commit.** One repeating loop being driven from the op
 /// driver's own frame: the state `run_repeating` holds in locals, held here
@@ -628,6 +646,8 @@ pub(crate) struct FlatLoop {
     do_line: usize,
     end_line: usize,
     header_clause: HeaderClause,
+    /// The echo site `header_clause` names when it is `Iterate`.
+    iterate_site: IterateSite,
     /// `Some(true)` for `UNTIL`, `Some(false)` for `WHILE`, `None` for a loop
     /// with neither. **The condition's own node is not held here**, because
     /// this outlives the borrow of `code` a reference to it would need; the
@@ -640,10 +660,10 @@ pub(crate) struct FlatLoop {
 impl FlatLoop {
     /// Which clause a header or `UNTIL` test on this pass belongs to.
     fn header_line(&self) -> usize {
-        match &self.header_clause {
+        match self.header_clause {
             HeaderClause::Do => self.do_line,
             HeaderClause::End => self.end_line,
-            HeaderClause::Iterate { line, .. } => *line,
+            HeaderClause::Iterate { line } => line,
         }
     }
 }
@@ -7216,6 +7236,7 @@ impl Interp {
         // pass -- `HeaderClause`'s own doc comment has the oracle mechanism
         // and the three measured transcripts.
         let mut header_clause = HeaderClause::Do;
+        let mut iterate_site: IterateSite = None;
         let end_line = self
             .clause_line_at(code, end_index, &code.body.instructions[end_index], source)
             .unwrap_or(0);
@@ -7249,10 +7270,10 @@ impl Interp {
             let do_line = self
                 .clause_line_at(code, do_index, do_instruction, source)
                 .unwrap_or_else(|| self.clause_state.line());
-            let header_line = match &header_clause {
+            let header_line = match header_clause {
                 HeaderClause::Do => do_line,
                 HeaderClause::End => end_line,
-                HeaderClause::Iterate { line, .. } => *line,
+                HeaderClause::Iterate { line } => line,
             };
             let header = self.in_clause(code, header_line, |it| {
                 // **A header that fails is blamed on the clause that
@@ -7279,13 +7300,13 @@ impl Interp {
                     let advanced = match it.loop_advance(code, &mut state, do_indent, loop_indent) {
                         Ok(advanced) => advanced,
                         Err(failure) => {
-                            match &header_clause {
+                            match header_clause {
                                 HeaderClause::Do => {}
                                 HeaderClause::End => {
                                     it.record_failure_at(source, end_instruction, loop_indent);
                                 }
-                                HeaderClause::Iterate { site, .. } => {
-                                    it.record_failure_site_at(site.clone(), loop_indent);
+                                HeaderClause::Iterate { .. } => {
+                                    it.record_failure_site_at(iterate_site.clone(), loop_indent);
                                 }
                             }
                             return Err(failure);
@@ -7344,7 +7365,8 @@ impl Interp {
                 // `RexxActivation::iterate` is what calls it for an
                 // `ITERATE` -- `END` is jumped straight over.
                 DoOutcome::Iterated { line, site } => {
-                    header_clause = HeaderClause::Iterate { line, site };
+                    header_clause = HeaderClause::Iterate { line };
+                    iterate_site = site;
                 }
                 // Reached only when the body fell off its end. **Not**
                 // reached on a matched `LEAVE`, which returns above instead
@@ -7400,10 +7422,10 @@ impl Interp {
                 // candidates apart -- `do until zs() >= 2` with `if zn = 1
                 // then iterate` on line 4 reports `4` for the first test and
                 // `6` (the `END` line) for the second.
-                let until_line = match &header_clause {
+                let until_line = match header_clause {
                     HeaderClause::Do => do_line,
                     HeaderClause::End => end_line,
-                    HeaderClause::Iterate { line, .. } => *line,
+                    HeaderClause::Iterate { line } => line,
                 };
                 // **This clause's boundary is unobservable on every probe
                 // tried, and it is here because it cannot be separated from
@@ -7643,6 +7665,7 @@ impl Interp {
             end_line,
             do_line,
             header_clause: HeaderClause::Do,
+            iterate_site: None,
             conditional: body.conditional.as_ref().map(|cond| cond.until),
             state,
         };
@@ -7718,7 +7741,8 @@ impl Interp {
         match outcome {
             DoOutcome::Escaped(escape) => return Ok(FlatStep::Done(escape)),
             DoOutcome::Iterated { line, site } => {
-                flat.header_clause = HeaderClause::Iterate { line, site };
+                flat.header_clause = HeaderClause::Iterate { line };
+                flat.iterate_site = site;
             }
             DoOutcome::FellThrough => {
                 flat.header_clause = HeaderClause::End;
@@ -7825,7 +7849,8 @@ impl Interp {
         &mut self,
         code: &Code<'_>,
         source: Option<&ProgramSource>,
-        blame: &HeaderClause,
+        blame: HeaderClause,
+        site: &IterateSite,
         end_index: usize,
         loop_indent: usize,
     ) {
@@ -7834,7 +7859,7 @@ impl Interp {
             HeaderClause::End => {
                 self.record_failure_at(source, &code.body.instructions[end_index], loop_indent);
             }
-            HeaderClause::Iterate { site, .. } => {
+            HeaderClause::Iterate { .. } => {
                 self.record_failure_site_at(site.clone(), loop_indent);
             }
         }
@@ -7887,13 +7912,14 @@ impl Interp {
         let loop_indent = flat.loop_indent;
         let resume = flat.resume;
         let end_index = flat.end_index;
-        let blame = &flat.header_clause;
+        let blame = flat.header_clause;
+        let site = &flat.iterate_site;
         let state = &mut flat.state;
         let header = self.in_clause(code, header_line, |it| {
             let advanced = match it.loop_advance(code, state, do_indent, loop_indent) {
                 Ok(advanced) => advanced,
                 Err(failure) => {
-                    it.blame_header_failure(code, source, blame, end_index, loop_indent);
+                    it.blame_header_failure(code, source, blame, site, end_index, loop_indent);
                     return Err(failure);
                 }
             };
@@ -7924,13 +7950,14 @@ impl Interp {
         let loop_indent = flat.loop_indent;
         let resume = flat.resume;
         let (do_index, end_index) = (flat.do_index, flat.end_index);
-        let blame = &flat.header_clause;
+        let blame = flat.header_clause;
+        let site = &flat.iterate_site;
         let state = &mut flat.state;
         let header = self.in_clause(code, header_line, |it| {
             let advanced = match it.loop_advance(code, state, do_indent, loop_indent) {
                 Ok(advanced) => advanced,
                 Err(failure) => {
-                    it.blame_header_failure(code, source, blame, end_index, loop_indent);
+                    it.blame_header_failure(code, source, blame, site, end_index, loop_indent);
                     return Err(failure);
                 }
             };

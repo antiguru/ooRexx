@@ -3829,13 +3829,30 @@ impl Interp {
         let frame = self.activation().frame;
         match self.variable(frame, slot) {
             Some(value) => (value, Novalue::Set),
-            // An uninitialised read yields the derived name, which for a
-            // simple variable is its own upcased spelling.
-            None => {
-                let derived = code.symbols.name(id).as_bytes();
-                (self.text(derived), Novalue::Unset)
-            }
+            None => (self.derived_name(code, id), Novalue::Unset),
         }
+    }
+
+    /// What an uninitialised read yields: the derived name, which for a
+    /// simple variable is its own upcased spelling.
+    ///
+    /// **Its own `#[cold]` function rather than an arm of [`Interp::read_at`],
+    /// and what decides that is the prologue rather than this code.**
+    /// `Interp::text` is `#[inline]`, so an arm here drags a `Bytes` inline
+    /// buffer with its `memset` and `memcpy` calls, a `malloc` and a
+    /// `Heap::collect` into the caller -- which then sizes a stack frame and
+    /// saves the callee-saved registers all of that needs, on every read,
+    /// including the reads that answer a value and never come here.
+    /// Measured, the same code written as that arm instead: exactly 9 more
+    /// `instructions:u` per `read_at` call -- a stack-frame allocation,
+    /// further callee-saved pushes, and their pops -- which is +1.988% on
+    /// `bench-programs/varlookup.rex` and +1.081% on `strings.rex`, neither of
+    /// which reads an uninitialised variable in its loop.
+    #[cold]
+    #[inline(never)]
+    fn derived_name(&mut self, code: &Code<'_>, id: SymbolId) -> ObjRef {
+        let derived = code.symbols.name(id).as_bytes();
+        self.text(derived)
     }
 
     /// Converts `EXIT`'s result into the raw exit code, before `rexx-run`'s
