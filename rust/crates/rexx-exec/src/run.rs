@@ -5779,7 +5779,9 @@ impl Interp {
         source: Option<&ProgramSource>,
         work: impl FnOnce(&mut Self) -> Result<T, Failure>,
     ) -> Result<ClauseOutcome<T>, Failure> {
-        let entry = self.enter_stepped_clause(echo, code, index, instruction, source);
+        // The tree-walker reaches a clause with no chunk in hand, so it reads
+        // the plan as this always did.
+        let entry = self.enter_stepped_clause(echo, code, index, instruction, source, None);
         let ran = work(self);
         self.leave_stepped_clause(entry, code, index, instruction, source, ran)
     }
@@ -5805,6 +5807,7 @@ impl Interp {
         index: usize,
         instruction: &Instruction,
         source: Option<&ProgramSource>,
+        position: Option<crate::ir::ClausePosition>,
     ) -> SteppedClause {
         // `DATE`/`TIME`'s per-clause clock cache (`activation.rs`'s own doc
         // on `Activation::clock_stale`) is invalidated **unconditionally,
@@ -5873,7 +5876,30 @@ impl Interp {
         // `printed_indent` rather than `static_indent` directly, so that
         // *which* offsets apply is one fact in one place -- see its own doc
         // comment for what it adds and why open-coding it was a defect.
-        let indent = self.printed_indent(code, index);
+        // **The chunk's own table where the driver had one to hand over.**
+        // Both answers are properties of where the clause is written, so the
+        // compiler settled them and what is left here is `activation_indent`
+        // and `indent_offset`, which only a running interpreter knows. The
+        // `source` and override tests keep the shortcut exactly equivalent to
+        // the reads it replaces: `clause_line_at` answers `None` with no
+        // source, and honours `clause_line_override` ahead of any table.
+        let shortcut = match position {
+            Some(position) if source.is_some() && self.clause_line_override.is_none() => {
+                Some(position)
+            }
+            _ => None,
+        };
+        let indent = match shortcut {
+            Some(position) => {
+                position.indent as usize + self.activation_indent + self.indent_offset
+            }
+            None => self.printed_indent(code, index),
+        };
+        debug_assert_eq!(
+            indent,
+            self.printed_indent(code, index),
+            "the chunk's indent table disagrees with the plan's for instruction {index}"
+        );
         self.clause_state.current_value_indent = indent;
         // Set unconditionally, exactly like `current_value_indent` just
         // above and for the identical reason (that field's own doc comment):
@@ -5885,9 +5911,18 @@ impl Interp {
         // the clause boundary are one operation (`clause.rs`), and the
         // `ClauseEntry` this hands back is what `leave_stepped_clause` spends
         // on the matching half.
-        let line = self
-            .clause_line_at(code, index, instruction, source)
-            .unwrap_or_else(|| self.clause_state.line());
+        let line = match shortcut {
+            Some(position) => position.line as usize,
+            None => self
+                .clause_line_at(code, index, instruction, source)
+                .unwrap_or_else(|| self.clause_state.line()),
+        };
+        debug_assert_eq!(
+            line,
+            self.clause_line_at(code, index, instruction, source)
+                .unwrap_or_else(|| self.clause_state.line()),
+            "the chunk's line table disagrees with the plan's for instruction {index}"
+        );
         let entry = self.enter_clause(line);
         // **`Echo::Gated` asks whether the setting in force echoes this
         // clause; `Echo::Compiled` is a clause whose chunk already answered

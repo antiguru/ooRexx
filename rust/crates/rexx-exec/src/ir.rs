@@ -1448,6 +1448,31 @@ impl Calls {
 /// One body's compiled instruction stream, cached on `Interp` under its
 /// `Plan`'s `BodyKey` **and the [`ChunkTrace`] it was compiled under**
 /// (`Interp::chunk_for`, in `plan.rs`).
+/// A clause's source line and its nesting indent, both fixed by the source
+/// text and so decided once, where the chunk is compiled.
+///
+/// **The constants every stepped clause pays for.** `SIGL` and every error
+/// and trace line want the line; `>V>`/`>L>`'s own column wants the indent.
+/// Reaching them per clause is otherwise a `Plan` table each, read behind an
+/// `Option<&Plan>` test, on the path of every clause a program steps -- and
+/// neither answer can change while the body is running, because both are
+/// properties of where the clause is written.
+///
+/// Measured against the tree as committed, `instructions:u`, with stdout,
+/// stderr and exit status identical either way: `varlookup.rex` -0.361%,
+/// `emptyloop.rex` -0.350%, `compound.rex` -0.188%, a fixed-work `rexxcps`
+/// -0.168%, `strings.rex` -0.157%, `alloc4c.rex` -0.157%, `arith.rex`
+/// -0.019%.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) struct ClausePosition {
+    /// `Plan::lines`' own entry: the source line the clause starts on.
+    pub(crate) line: u32,
+    /// `Plan::indents`' own entry: the nesting indent **before**
+    /// `Interp::activation_indent` and `Interp::indent_offset` are added,
+    /// which is what `Interp::printed_indent` adds to it.
+    pub(crate) indent: u32,
+}
+
 pub(crate) struct Chunk {
     /// The trace setting this stream's ops were emitted for, which is half of
     /// the key it is cached under and the thing the driver compares the
@@ -1485,6 +1510,13 @@ pub(crate) struct Chunk {
     /// `Interp::run_chunk` reserves this many registers before running a
     /// chunk and truncates them away on the way out.
     registers: u16,
+    /// One entry per instruction, in instruction order, or **empty when this
+    /// body's plan cannot supply every entry** -- a body planned without
+    /// source has no line table, and a clause line or indent too wide for a
+    /// `u32` has no entry either. Empty means the driver reads the tables as
+    /// it always did, so this is a shortcut and never the only route to an
+    /// answer.
+    positions: Box<[ClausePosition]>,
     /// The literal values [`Op::Const`] loads, **one entry per distinct
     /// literal** rather than one per occurrence.
     ///
@@ -1558,6 +1590,12 @@ impl Chunk {
     /// own last one.
     fn op_at(&self, index: usize) -> Option<u32> {
         self.op_of.get(index).copied()
+    }
+
+    /// The clause at instruction index `index`'s own [`ClausePosition`], or
+    /// `None` where this chunk carries no table.
+    pub(crate) fn position_at(&self, index: usize) -> Option<ClausePosition> {
+        self.positions.get(index).copied()
     }
 
     /// The op at op index `at`.

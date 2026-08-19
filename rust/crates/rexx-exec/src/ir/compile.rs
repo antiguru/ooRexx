@@ -19,7 +19,9 @@ use rexx_parse::{
     Call, CodeBody, Expr, ExprKind, Instruction, InstructionKind, LoopKind, ParseSource, SymbolId,
 };
 
-use super::{Calls, Chunk, ChunkTooLarge, ConditionKeyword, Hints, NodePath, Op, PlanSlot};
+use super::{
+    Calls, Chunk, ChunkTooLarge, ClausePosition, ConditionKeyword, Hints, NodePath, Op, PlanSlot,
+};
 use crate::eval::{SymbolRead, is_arithmetic, is_native_binary};
 use crate::plan::Plan;
 use crate::run::{
@@ -1151,6 +1153,7 @@ pub(crate) fn compile(
         ops,
         op_of,
         registers: registers.high_water(),
+        positions: clause_positions(body, plan),
         interned: vec![std::cell::Cell::new(rexx_core::ObjRef::NIL); consts.len()],
         interned_symbols: vec![
             std::cell::Cell::new(rexx_core::ObjRef::NIL);
@@ -1641,6 +1644,28 @@ fn close_region(ops: &mut [Op], at: u32) -> Result<(), ChunkTooLarge> {
         _ => unreachable!("close_region is given the index of the Clause op it closes"),
     }
     Ok(())
+}
+
+/// Every clause's [`ClausePosition`], or an empty table where the plan cannot
+/// supply one for each.
+///
+/// **All or nothing, so the driver's own check is one test rather than one
+/// per clause.** A plan built without source has no line table at all, and a
+/// line or indent past `u32` has no entry that would fit; either way the
+/// driver reads the plan as it did before this table existed.
+fn clause_positions(body: &CodeBody, plan: &Plan) -> Box<[ClausePosition]> {
+    let len = body.instructions.len();
+    if plan.lines.len() != len || plan.indents.len() != len {
+        return Box::default();
+    }
+    let mut positions = Vec::with_capacity(len);
+    for (line, indent) in plan.lines.iter().zip(plan.indents.iter()) {
+        let (Ok(line), Ok(indent)) = (u32::try_from(*line), u32::try_from(*indent)) else {
+            return Box::default();
+        };
+        positions.push(ClausePosition { line, indent });
+    }
+    positions.into_boxed_slice()
 }
 
 /// The index the next op will be pushed at, refused rather than wrapped.

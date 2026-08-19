@@ -568,7 +568,14 @@ impl Interp {
                     // `bench-baselines/phase-4e-arms.tsv` rather than restated
                     // here -- a row keyed by a hash cannot go stale where a
                     // number written into this line can.
-                    let entry = self.enter_stepped_clause(echo, code, index, clause, source);
+                    let entry = self.enter_stepped_clause(
+                        echo,
+                        code,
+                        index,
+                        clause,
+                        source,
+                        chunk.position_at(index),
+                    );
                     // Taken on entry exactly as `step` takes it, because a
                     // promoted clause is a clause and the permission is spent
                     // by whichever clause the activation granted it to.
