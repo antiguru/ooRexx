@@ -37,7 +37,7 @@
 //! better owner than the crate root.
 
 use rexx_classes::{ClassKind, MethodId};
-use rexx_core::{Body, Heap, ObjRef, RootSet, SlotFrame, SlotRef};
+use rexx_core::{Body, Heap, NameMap, ObjRef, RootSet, SlotFrame, SlotRef};
 use rexx_parse::{
     Access, AnnotationTarget, AttributeDirective, AttributeStyle, ClassDirective, CodeBody,
     ConstantValue, Directive, DirectiveKind, Expr, ExprKind, InstructionKind, MethodDirective,
@@ -2144,6 +2144,16 @@ struct Interp {
                   resuming move a pointer instead of the activation"
     )]
     suspended: Vec<Box<Activation>>,
+    /// Boxes whose activations have ended, kept for the next push rather than
+    /// returned to the allocator. `Interp::recycle_activation` is what fills
+    /// it and `Interp::push_activation` what drains it; both carry the
+    /// reasoning.
+    #[expect(
+        clippy::vec_box,
+        reason = "the box is the allocation being kept, so unboxing here would \
+                  return the very thing this parks"
+    )]
+    spare_activations: Vec<Box<Activation>>,
     /// The next [`ActivationId`] to hand out. Monotonic, never reset, never
     /// reused -- see that type for the two defects that needed an identity a
     /// stack depth could not supply.
@@ -2155,7 +2165,15 @@ struct Interp {
     /// `BodyKey { program: ProgramId(0), .. }` stays correct because
     /// `ProgramId(0)`'s program is still here.
     programs: Vec<Rc<Program>>,
-    plans: HashMap<BodyKey, Rc<Plan>>,
+    /// **`NameHasher` and not `RandomState`**, for the reason that alias's own
+    /// doc gives and with the same shape of key behind it: a `BodyKey` is a
+    /// pair of small integers this interpreter mints itself, so the
+    /// chosen-collision resistance `RandomState` buys is resistance to an
+    /// input nothing outside can choose, and SipHash's setup dominates a key
+    /// this short. Measured on a probe whose loop is one `CALL` into a label
+    /// that returns at once, the two lookups here and on `chunks` cost 9.7% of
+    /// the program between them.
+    plans: NameMap<BodyKey, Rc<Plan>>,
     /// Which engine `run_activation` runs a body on, from the
     /// [`Invocation`] `execute` was handed.
     ///
@@ -2171,7 +2189,9 @@ struct Interp {
     /// input to compilation (D23), so one body has one plan and can have more
     /// than one chunk. See `Interp::chunk_for`, in `plan.rs`, for why a
     /// narrower key is a wrong-output defect.
-    chunks: HashMap<(BodyKey, ChunkTrace), Rc<crate::ir::Chunk>>,
+    ///
+    /// `NameMap`'s hasher, for the reason `plans` states.
+    chunks: NameMap<(BodyKey, ChunkTrace), Rc<crate::ir::Chunk>>,
     /// How many times `chunk_for` has refused a body because it does not fit
     /// the index widths the compiled stream commits to (`ChunkTooLarge`) --
     /// never because a body contains a construct the compiler does not
@@ -3043,10 +3063,11 @@ impl Interp {
             result_buffer: std::cell::Cell::new(Vec::new()),
             running: None,
             suspended: Vec::new(),
+            spare_activations: Vec::new(),
             programs: Vec::new(),
-            plans: HashMap::new(),
+            plans: NameMap::default(),
             engine: Engine::TreeWalker,
-            chunks: HashMap::new(),
+            chunks: NameMap::default(),
             chunks_refused: 0,
             routines: HashMap::new(),
             object_model: None,

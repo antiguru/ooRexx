@@ -39,6 +39,14 @@ use rexx_parse::{CodeBody, DirectiveKind, Program};
 use std::collections::HashMap;
 use std::rc::Rc;
 
+/// How many ended activation boxes [`Interp::recycle_activation`] parks for
+/// reuse.
+///
+/// Small on purpose: what the pool serves is a call and its return, which
+/// needs one box back for the next call, and every extra entry is a frame's
+/// worth of memory held for a depth the program has already left.
+const SPARE_ACTIVATIONS: usize = 4;
+
 /// One enabled condition trap: `SIGNAL ON cond NAME label` or `CALL ON cond
 /// NAME label`.
 ///
@@ -1211,9 +1219,43 @@ impl Interp {
     }
 
     /// Makes `activation` the running one and suspends whatever was.
+    ///
+    /// **The box comes from [`Interp::recycle_activation`]'s pool when one is
+    /// waiting**, so a program whose loop calls a routine allocates the frame
+    /// once instead of once per call. Overwriting the spare drops whatever the
+    /// last activation left in it, which is the same drop the `Box` would have
+    /// run when it was freed -- what is saved is the allocator round trip, and
+    /// on a probe whose loop is one `CALL` into a label that returns at once,
+    /// `malloc` and `free` were 6.5% of the program between them.
     pub(crate) fn push_activation(&mut self, activation: Activation) {
-        if let Some(outer) = self.running.replace(Box::new(activation)) {
+        let boxed = match self.spare_activations.pop() {
+            Some(mut spare) => {
+                *spare = activation;
+                spare
+            }
+            None => Box::new(activation),
+        };
+        if let Some(outer) = self.running.replace(boxed) {
             self.suspended.push(outer);
+        }
+    }
+
+    /// Keeps an ended activation's box for the next [`Interp::
+    /// push_activation`], instead of returning it to the allocator.
+    ///
+    /// **The contents are left in it and dropped at reuse.** They are the
+    /// activation that just ended, so nothing reads them; clearing them here
+    /// would be the same drop moved earlier and a write of the whole struct
+    /// besides. What they keep alive is one program's `Rc` and one plan's,
+    /// both of which `Interp::programs` holds anyway.
+    ///
+    /// **Capped, because the pool is fed by returns and drained by calls, so a
+    /// recursion that unwinds a thousand levels would otherwise leave a
+    /// thousand frames parked.** Past the cap the box is simply dropped; the
+    /// depth that pays for the pool is the shallow, repeated one.
+    pub(crate) fn recycle_activation(&mut self, ended: Box<Activation>) {
+        if self.spare_activations.len() < SPARE_ACTIVATIONS {
+            self.spare_activations.push(ended);
         }
     }
 

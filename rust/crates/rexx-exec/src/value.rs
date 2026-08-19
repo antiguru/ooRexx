@@ -762,31 +762,29 @@ impl Interp {
     /// [`to_number`]: Interp::to_number
     #[inline(never)]
     fn heap_to_number(&mut self, value: ObjRef) -> Result<Number, NotNumeric> {
-        // Mirrors `to_text`'s own stem redirect above: decided, and
-        // the borrow on `self.heap` dropped, before the recursive
-        // call below, which cannot overlap it. The class arm rides
-        // this lookup's own `None`, as it does there.
-        let stem_default = {
-            let Some(object) = self.heap.get(value) else {
-                // A class object is not a number. The call is for the
-                // tripwire it carries, not for the bytes.
-                let _ = self.not_in_arena(value);
-                return Err(NotNumeric);
-            };
-            match &object.body {
-                Body::Stem {
-                    default: Some(d), ..
-                } => Some(*d),
-                _ => None,
-            }
+        // **One lookup, and the stem redirect leaves through it rather than
+        // behind it.** The redirect needs its `&mut self` back before it can
+        // recurse; copying the default handle out of the arm is what ends the
+        // borrow, and it ends it as completely as a separate lookup would.
+        // Deciding the redirect first instead costs every value that is *not*
+        // a stem with a default -- which is nearly all of them, `Body::Num`
+        // above all -- a second walk of the arena to be told so.
+        let Some(object) = self.heap.get_mut(value) else {
+            // A class object is not a number. The call is for the
+            // tripwire it carries, not for the bytes.
+            let _ = self.not_in_arena(value);
+            return Err(NotNumeric);
         };
-        if let Some(default) = stem_default {
-            return self.to_number(default);
-        }
-
-        let object = self.heap.get_mut(value).expect("a live value");
         match &mut object.body {
             Body::Num { value, .. } => Ok(value.clone()),
+            // Mirrors `to_text`'s own stem redirect above.
+            Body::Stem {
+                default: Some(default),
+                ..
+            } => {
+                let default = *default;
+                self.to_number(default)
+            }
             Body::Text { bytes, num } => {
                 let bytes = bytes.as_slice();
                 let cached = num.get_or_insert_with(|| {
@@ -797,9 +795,8 @@ impl Interp {
                     Err(marker) => Err(*marker),
                 }
             }
-            // Reached for a `Body::Stem` with `default: None` too
-            // (the `stem_default` check above only short-circuits
-            // the `Some` case): parses the object's own name, the
+            // A `Body::Stem` with `default: None`, the arm the redirect
+            // above leaves behind: parses the object's own name, the
             // same fallback `to_text` renders. No cache field
             // exists on `Body::Stem` to hold the parse the way
             // `Body::Text`'s `num` does, so this reparses on every

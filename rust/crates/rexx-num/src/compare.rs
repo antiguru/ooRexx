@@ -27,9 +27,9 @@
 //! - **Strict** (`==`, `\==`, `<<`, `>>`, `<<=`, `>>=`): always a byte
 //!   comparison of the operand text, never numeric, never blank-trimmed.
 //!
-//! Three public entry points, all reaching the one `numeric_order`/
-//! `string_order` pair below rather than each carrying its own copy of the
-//! rule: [`compare`] takes `&str`, for a caller that already has one (kept
+//! The public entry points all reach the one `numeric_order`/`string_order`
+//! pair below rather than each carrying its own copy of the rule.
+//! [`compare`] takes `&str`, for a caller that already has one (kept
 //! working exactly as before -- `rexx-parse`'s differential harness calls
 //! it); [`compare_bytes`] takes `&[u8]`, because a Rexx string is a *byte*
 //! string that need not be valid UTF-8 (D14; `reverse('ää')` is the
@@ -38,6 +38,9 @@
 //! sitting on one already (`rexx-exec`'s `Body::Text::num` cache exists
 //! precisely so a string is not reparsed on every comparison, and
 //! comparison is the operation that asks "is this a number?" most often).
+//! [`compare_numbers`] and [`compare_strings`] are `compare_decoded`'s own
+//! arms, exposed for a caller that has already settled which arm applies;
+//! each says on itself what that saves and what it costs to be wrong about.
 //! A hand-written second copy of `string_order` for the byte-slice path
 //! would be exactly the divergence this module's own header warns against.
 
@@ -152,13 +155,7 @@ pub fn compare_decoded(
     op: CompareOp,
 ) -> Result<bool, ArithError> {
     if op.is_strict() {
-        // `primitiveIsEqual`/`primitiveStrictComp` are both a plain
-        // shorter-prefix-then-length compare, with no blank stripping in
-        // either direction -- `" 1" == "1"` is false because the lengths
-        // differ, full stop. Rust's slice `Ord` already implements exactly
-        // that (shared prefix decides; a tie is broken by length), so there
-        // is nothing to hand-roll here.
-        return Ok(op.holds(a.cmp(b)));
+        return Ok(compare_strings(a, b, op));
     }
 
     // Parses only when the caller did not already hand in a `Number`, and
@@ -179,15 +176,46 @@ pub fn compare_decoded(
         parsed_b.as_ref()
     });
 
-    let ord = match (a_number, b_number) {
-        (Some(na), Some(nb)) => numeric_order(na, nb, digits, fuzz)?,
+    match (a_number, b_number) {
+        (Some(na), Some(nb)) => Ok(op.holds(numeric_order(na, nb, digits, fuzz)?)),
         // `RexxString::comp`: if either side doesn't convert, this drops to
         // `stringComp` -- not an error. `NumberString::comp` does the same
         // thing symmetrically (`stringValue()->stringComp(...)`) when only
         // its own right-hand argument fails to convert.
-        _ => string_order(a, b),
-    };
-    Ok(op.holds(ord))
+        _ => Ok(compare_strings(a, b, op)),
+    }
+}
+
+/// [`compare_decoded`]'s two byte-comparing arms alone: the strict family,
+/// and the fallback a non-strict operator takes when an operand does not
+/// convert.
+///
+/// **Not a shortcut past [`compare_decoded`], but the same arms called
+/// directly**, on [`compare_numbers`]'s own terms and for the same reason:
+/// that function's strict return and its `_` arm are this call and nothing
+/// else, so a caller choosing between them is choosing where the decision is
+/// made rather than what the answer is.
+///
+/// **The entry point for a caller that already knows an operand does not
+/// convert**, which [`compare_decoded`] cannot be told: `None` there means
+/// "parse it from the bytes", so a caller passing `None` for an operand whose
+/// parse it has already attempted and lost buys that same parse a second
+/// time. `Interp::compare_values` is where that showed up.
+///
+/// The two families differ in one thing and it is not the operator: a strict
+/// comparison compares the spellings byte for byte, where the fallback strips
+/// leading blanks ([`string_order`]). `primitiveIsEqual`/
+/// `primitiveStrictComp` are both a plain shorter-prefix-then-length compare,
+/// with no blank stripping in either direction -- `" 1" == "1"` is false
+/// because the lengths differ, full stop. Rust's slice `Ord` already
+/// implements exactly that (shared prefix decides; a tie is broken by
+/// length), so there is nothing to hand-roll for it.
+pub fn compare_strings(a: &[u8], b: &[u8], op: CompareOp) -> bool {
+    if op.is_strict() {
+        op.holds(a.cmp(b))
+    } else {
+        op.holds(string_order(a, b))
+    }
 }
 
 /// [`compare_decoded`]'s numeric arm alone: both operands already parsed, and

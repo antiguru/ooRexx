@@ -16,7 +16,7 @@
 //! (Task 7) with `Stem`, `Compound`, `DotVariable`'s parse-time names,
 //! `Prefix`, the arithmetic operators and the concatenation forms
 //! `||` did not already cover, and (Task 8) with the comparison operators
-//! (through `rexx-num`'s `compare_decoded`, never a hand-written
+//! (through `rexx-num`'s own comparison entry points, never a hand-written
 //! string comparison), the binary logical operators `&`/`|`/`&&`, and
 //! `ExprKind::Logical` (the comma-separated conditional list `IF a, b THEN`
 //! desugars to), and (Task 4, 4b) `ExprKind::Call`, the internal-function
@@ -76,8 +76,8 @@ use crate::error::Raised;
 use crate::run::{Ended, Resolved};
 use crate::value::{canonical_small_int, exact_small_int, within_digits};
 use crate::{Code, Failure, Interp, Loud, StackSpan};
-use rexx_core::{Body, Decoded, NotNumeric, ObjRef, is_class_slot};
-use rexx_num::{CompareOp, DivOp, Number, compare_decoded};
+use rexx_core::{Body, Decoded, INLINE_BYTES, NotNumeric, ObjRef, is_class_slot};
+use rexx_num::{CompareOp, DivOp, Number};
 use rexx_parse::{CallTarget, Expr, ExprKind, Operator, PrefixOp, SymbolId};
 
 /// D19's evaluation-depth limit: `eval`'s own recursion, one level per
@@ -729,6 +729,16 @@ impl Interp {
         name: &[u8],
         args: &[Option<Expr>],
     ) -> Result<ObjRef, Failure> {
+        // **A builtin goes straight to its own entry point**, which is the
+        // same call `invoke_call` would make and answers the value this
+        // function wants: none of the three arms below can apply to it, since
+        // it runs no activation and so can neither exit nor return nothing.
+        // What the detour cost is the `Ended` -- wider than a register pair,
+        // so built in memory here and read back out one line later, on the
+        // path every `length(...)`/`substr(...)` in a program takes.
+        if let Resolved::Builtin(target) = resolved {
+            return self.invoke_builtin_call(code, target, name, args);
+        }
         // `CallType::Function`: this is the function-invocation route, and a
         // `::ROUTINE` reached this way answers `FUNCTION` as `PARSE SOURCE`'s
         // second word where the same body reached by `CALL` answers
@@ -1019,6 +1029,12 @@ impl Interp {
     /// operator" before the parser ever sees it. That is why the separator is a
     /// caller's argument and not read off the source span.
     ///
+    /// **One byte or none, rather than a slice**, and the width is the reason:
+    /// a slice of run-time length is joined by a call into `memcpy`, and the
+    /// separator this function is handed most often is the empty one, which
+    /// pays that call to copy nothing. `Blank`'s single space is the widest
+    /// there is for the type to have to hold.
+    ///
     /// **Both operands must already be rooted by the caller**, because the join
     /// below allocates and a value held only in a Rust local across an
     /// allocation is invisible to the collector. [`Interp::arith_general`]'s
@@ -1029,7 +1045,7 @@ impl Interp {
         &mut self,
         left_value: ObjRef,
         right_value: ObjRef,
-        separator: &[u8],
+        separator: Option<u8>,
     ) -> Result<ObjRef, Failure> {
         // Both operands' bytes are read through shared borrows, which can be
         // live at once -- and that is the whole change here. The left operand
@@ -1042,21 +1058,45 @@ impl Interp {
         let right_rendered = self.render(right_value);
         let left_bytes = left_rendered.text(self);
         let right_bytes = right_rendered.text(self);
+        // **A join that fits the object's own inline bytes is built on the
+        // stack and never touches the lent buffer at all.** `text_built` ends
+        // such a join by copying it into the value and handing the buffer
+        // straight back, so everything the `Vec` did for it -- the take, the
+        // reservation, the length bookkeeping, the return -- was setup for a
+        // container the result does not end up in. The bound is the one
+        // `text_built` branches on, so this arm and its own are the same
+        // arm -- what differs is that the buffer is never taken.
+        let total = left_bytes.len() + usize::from(separator.is_some()) + right_bytes.len();
+        if total <= INLINE_BYTES {
+            let mut buffer = [0u8; INLINE_BYTES];
+            let (head, rest) = buffer.split_at_mut(left_bytes.len());
+            head.copy_from_slice(left_bytes);
+            let rest = match separator {
+                Some(byte) => {
+                    let (slot, rest) = rest.split_at_mut(1);
+                    slot[0] = byte;
+                    rest
+                }
+                None => rest,
+            };
+            rest[..right_bytes.len()].copy_from_slice(right_bytes);
+            return Ok(self.text(&buffer[..total]));
+        }
         //
         // **Built in the lent buffer and finished with `text_built`**, which
         // is what makes the one remaining allocation conditional rather than
-        // certain. A join of two short operands fits `INLINE_BYTES` and is
-        // copied into the object, so the buffer comes straight back and the
-        // next join reuses it; only a result too long to live inline keeps
-        // the buffer, which is the same trade `text_built` always makes.
+        // certain. Only a result too long to live inline reaches here, and it
+        // keeps the buffer, which is the same trade `text_built` always makes.
         // Measured with `heaptrack` on `bench-programs/strings.rex`, where
         // this was one of the two allocations left per iteration and 99.6% of
         // what that program allocated was freed with nothing allocated in
         // between.
         let mut bytes = self.take_result_buffer();
-        bytes.reserve(left_bytes.len() + separator.len() + right_bytes.len());
+        bytes.reserve(left_bytes.len() + usize::from(separator.is_some()) + right_bytes.len());
         bytes.extend_from_slice(left_bytes);
-        bytes.extend_from_slice(separator);
+        if let Some(byte) = separator {
+            bytes.push(byte);
+        }
         bytes.extend_from_slice(right_bytes);
         let joined = self.text_built(bytes);
 
@@ -1066,25 +1106,28 @@ impl Interp {
     /// The comparison operators (D15's "Expression evaluation":
     /// numeric-or-string `= \= <> >< > < >= <= \> \<`, and strict
     /// `== \== >> << >>= <<= \>> \<<`), all through `rexx-num`'s
-    /// `compare_decoded` -- **no string comparison is written here**, per
-    /// the plan's own instruction and this crate's standing rule against a
-    /// second copy of logic `rexx-num` already owns (the same rule
-    /// `compare.rs`'s own module doc states for its three entry points).
+    /// `compare_numbers` and `compare_strings` -- **no comparison rule is
+    /// written here**, per the plan's own instruction and this crate's
+    /// standing rule against a second copy of logic `rexx-num` already owns
+    /// (the same rule `compare.rs`'s own module doc states for its entry
+    /// points). Those two are `compare_decoded`'s own arms, called directly
+    /// because this function has already decided which arm applies: each
+    /// arm's own doc comment says so, and says what a caller buys by
+    /// choosing.
     ///
     /// **Both operands must already be rooted by the caller**, for the reason
     /// [`Interp::concat_values`] states: the result value below allocates.
     ///
     /// Calls `to_number` for the non-strict family only, and never for
-    /// strict operators, which `compare_decoded` never even inspects a
-    /// `Number` for (`is_strict()`'s short-circuit, `compare.rs:154`) --
-    /// asking for one anyway would force a needless parse of an operand
+    /// strict operators, which never inspect a `Number` at all
+    /// (`CompareOp::is_strict`'s short-circuit, `compare.rs`) -- asking for
+    /// one anyway would force a needless parse of an operand
     /// `==`/`>>`/... never numerically compares. When `to_number` is
     /// called, it already routes through `Body::Text`'s tri-state `num`
     /// cache (`value.rs`), so an operand already asked about is not
-    /// reparsed -- passing its *bytes* to `compare_decoded` alongside the
-    /// already-parsed `Number` is what the plan's "do not quietly defeat
-    /// the cache by using the `&str` entry point" is about, not a
-    /// prohibition on calling `to_number` at all.
+    /// reparsed -- keeping the parse on this side of the call is what the
+    /// plan's "do not quietly defeat the cache by using the `&str` entry
+    /// point" is about, not a prohibition on calling `to_number` at all.
     fn compare_values(
         &mut self,
         op: Operator,
@@ -1107,19 +1150,37 @@ impl Interp {
         if let Some(holds) = small_int_compare(op, left_value, right_value, digits, fuzz) {
             return Ok(logical(holds));
         }
-        // **Behind the fast path above, because a comparison of renderings
-        // never fails and so offers nothing to ride.** Measured, comparing an
-        // object against the very text it renders as answers `0` on the
-        // oracle and `1` here; see `Loud::operator_operand`.
-        if let Some(kind) = self.operator_operand_gap(left_value) {
-            return Err(Loud::operator_operand(op.spelling(), kind).into());
-        }
         let strict = is_strict_compare(op);
         let left_number = if strict {
             None
         } else {
             self.to_number(left_value).ok()
         };
+        // **Behind the fast path above, because a comparison of renderings
+        // never fails and so offers nothing to ride.** Measured, comparing an
+        // object against the very text it renders as answers `0` on the
+        // oracle and `1` here; see `Loud::operator_operand`.
+        //
+        // **Behind the left operand's own parse as well, and the assertion is
+        // what makes that safe rather than the argument for it.** Every shape
+        // this gap names -- a class identity, one of the interpreter's own
+        // objects, and a stem redirecting to either -- is a shape
+        // `Interp::to_number` answers `NotNumeric` for, so a left operand that
+        // produced a `Number` has no gap to report and the lookup this costs
+        // is a heap fetch on a value already known to be a number. The
+        // ordering the skip must not disturb is the *error's*, and it is
+        // undisturbed: nothing between here and the original position can
+        // fail, and the arm that could -- `compare_numbers` -- is reached only
+        // when both operands parsed, which is exactly when there is no gap.
+        debug_assert!(
+            left_number.is_none() || self.operator_operand_gap(left_value).is_none(),
+            "a left operand that parsed as a number reported an operator gap"
+        );
+        if left_number.is_none()
+            && let Some(kind) = self.operator_operand_gap(left_value)
+        {
+            return Err(Loud::operator_operand(op.spelling(), kind).into());
+        }
         let right_number = if strict {
             None
         } else {
@@ -1145,20 +1206,33 @@ impl Interp {
         // Either operand failed to parse, or the operator is strict and neither
         // was parsed at all. Both routes compare the operands' own text, which
         // is what these two renderings are for.
+        //
+        // **`compare_strings` rather than `compare_decoded`, because a `None`
+        // here is an answer and not a question.** `compare_decoded` reads a
+        // `None` as "parse this one from the bytes", which is right for a
+        // caller that has not tried -- and this one has: an operand is `None`
+        // exactly when [`Interp::to_number`] already refused it, or when the
+        // operator is strict and no `Number` is ever consulted. Handing that
+        // `None` on buys the refused parse a second time, over the same
+        // bytes, to reach the same string fallback.
         let left_rendered = self.render(left_value);
         let right_rendered = self.render(right_value);
         let left_bytes = left_rendered.text(self);
         let right_bytes = right_rendered.text(self);
-        let holds = compare_decoded(
-            left_bytes,
-            left_number.as_ref(),
-            right_bytes,
-            right_number.as_ref(),
-            digits,
-            fuzz,
-            compare_op(op),
-        )
-        .map_err(Raised::from)?;
+        // The claim the line below rests on, checked rather than argued: an
+        // operand `to_number` refused is one whose own rendering does not
+        // parse either, so the arm `compare_decoded` would have reached after
+        // reparsing is the arm taken here. A strict operator is exempt because
+        // it consults no `Number` at all.
+        debug_assert!(
+            strict || left_number.is_some() || Number::parse_bytes(left_bytes).is_none(),
+            "a left operand to_number refused parses from its own rendering"
+        );
+        debug_assert!(
+            strict || right_number.is_some() || Number::parse_bytes(right_bytes).is_none(),
+            "a right operand to_number refused parses from its own rendering"
+        );
+        let holds = rexx_num::compare_strings(left_bytes, right_bytes, compare_op(op));
 
         let result = logical(holds);
         Ok(result)
@@ -1279,8 +1353,8 @@ impl Interp {
         right: ObjRef,
     ) -> Result<ObjRef, Failure> {
         match op {
-            Operator::Concatenate | Operator::Abuttal => self.concat_values(left, right, b""),
-            Operator::Blank => self.concat_values(left, right, b" "),
+            Operator::Concatenate | Operator::Abuttal => self.concat_values(left, right, None),
+            Operator::Blank => self.concat_values(left, right, Some(b' ')),
             op if is_comparison(op) => self.compare_values(op, left, right),
             Operator::And | Operator::Or | Operator::Xor => self.logical_values(op, left, right),
             op => Err(Loud::binary_operator(op).into()),

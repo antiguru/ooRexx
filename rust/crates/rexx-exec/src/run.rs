@@ -4859,6 +4859,64 @@ impl Interp {
         self.value_buffer = buffer;
     }
 
+    /// One builtin call: its arguments evaluated in the caller, then the row
+    /// run over them.
+    ///
+    /// **Evaluates into its own buffer of values**, before an `Argument` is
+    /// ever built. A builtin wants the values and nothing else: the
+    /// `Reference` half of an `Argument` exists for `USE ARG >`, which no
+    /// builtin has, so building a `Vec<Option<Argument>>` here would only be
+    /// something to copy into a `Vec<Option<ObjRef>>` before handing it over.
+    /// That the shape of this path is worth caring about is a measurement:
+    /// with `perf` on `bench-programs/strings.rex`, whose loop makes four
+    /// builtin calls, the call path was 14.76% of samples -- more than any
+    /// builtin it dispatches.
+    ///
+    /// The evaluation itself is shared with the label path
+    /// (`eval_traced_argument`), so the `>p` reference form still traces its
+    /// `>O>` line here exactly as it does for a label call, and `>A>` fires
+    /// once per position with the omitted ones included.
+    ///
+    /// **A value and not an [`Ended`], which is the reason this is reachable
+    /// from outside [`Interp::invoke_call`] at all.** A builtin runs no
+    /// activation, so it can neither exit nor return nothing: `Ended`'s two
+    /// variants are both the same answer for it, and `Result<Ended, Failure>`
+    /// is wider than a register pair where `Result<ObjRef, Failure>` is not.
+    /// `Interp::eval_call_resolved` wants the value and enters here directly;
+    /// `invoke_call` wraps the same call for the callers that hold an `Ended`.
+    ///
+    /// See `builtin`'s own module doc for what this deliberately does *not*
+    /// do that the label path does -- `SIGL`, the depth guard and the
+    /// activation level, with a probe for each.
+    pub(crate) fn invoke_builtin_call(
+        &mut self,
+        code: &Code<'_>,
+        target: crate::builtin::BuiltinTarget,
+        name: &[u8],
+        args: &[Option<Expr>],
+    ) -> Result<ObjRef, Failure> {
+        let mut values = self.take_value_buffer();
+        for arg in args {
+            match arg {
+                None => {
+                    self.trace_argument(self.clause_state.current_value_indent, b"");
+                    values.push(None);
+                }
+                Some(expr) if self.leaf_argument(expr) => {
+                    values.push(Some(self.eval_leaf_argument(code, expr)?));
+                }
+                Some(expr) => {
+                    values.push(Some(self.eval_traced_argument(code, expr)?.value()));
+                }
+            }
+        }
+        let outcome = builtin::run(self, name, target, &values);
+        // Back before the outcome is read, so the raised-condition path keeps
+        // the buffer as the ordinary one does.
+        self.give_value_buffer(values);
+        outcome
+    }
+
     /// Evaluates the arguments of a call already resolved to `resolved` and
     /// runs it, in its own nested activation where it has one.
     ///
@@ -4918,10 +4976,18 @@ impl Interp {
     /// **The cheaper shape, named here so it is not rediscovered as a
     /// cost:** keep the value off the path a builtin takes. [`Entered`] is
     /// already the type that exists only past the builtin return, so a call
-    /// type carried on it, or two monomorphised entry points that fix it at
-    /// the call site rather than passing it, would leave the builtin arm with
-    /// nothing to materialise. Neither is built here and neither has been
-    /// measured, so what is known is the cost and the direction, not the win.
+    /// type carried on it would leave the builtin arm with nothing to
+    /// materialise. That one is not built here and has not been measured, so
+    /// what is known about it is the cost and the direction, not the win.
+    ///
+    /// **A caller that has already resolved the name to a builtin wants
+    /// [`Interp::invoke_builtin_call`] instead**, and that is the other half
+    /// of the same shape: an entry point the call site chooses carries no
+    /// call type to materialise, and it answers a value rather than an
+    /// `Ended`, which is wider than a register pair and travels through
+    /// memory. `Interp::eval_call_resolved` takes it. What still arrives
+    /// here with a builtin is the `CALL` instruction's own route, which holds
+    /// an `Ended` for its `Flow` regardless.
     pub(crate) fn invoke_call(
         &mut self,
         code: &Code<'_>,
@@ -4955,40 +5021,14 @@ impl Interp {
         // argument's callee's. Measured (`trace i`): `call sub 1,,3` traces
         // `>A>   "1"`, `>A>   ""`, `>A>   "3"`, in that order, each right
         // after its own argument's `>L>`/`>V>` lines.
-        // **The builtin path evaluates into its own buffer and returns from
-        // here**, before an `Argument` is ever built. A builtin wants the
-        // values and nothing else: the `Reference` half of an `Argument`
-        // exists for `USE ARG >`, which no builtin has, so the general path
-        // below used to build a `Vec<Option<Argument>>` and then copy it into
-        // a `Vec<Option<ObjRef>>` to hand over. Measured with `perf` on
-        // `bench-programs/strings.rex`, whose loop makes four builtin calls,
-        // `invoke_call` was 14.76% of samples -- more than any builtin it
-        // dispatches.
-        //
-        // The evaluation itself is shared with the general path
-        // (`eval_traced_argument`), so the `>p` reference form still traces
-        // its `>O>` line here exactly as it does for a label call.
+        // **The builtin path returns from here**, before an `Argument` is ever
+        // built and before any activation exists -- [`Interp::
+        // invoke_builtin_call`] is the whole of it, and its own doc says what
+        // it does not do that the label path below does.
         if let Resolved::Builtin(target) = resolved {
-            let mut values = self.take_value_buffer();
-            for arg in args {
-                match arg {
-                    None => {
-                        self.trace_argument(self.clause_state.current_value_indent, b"");
-                        values.push(None);
-                    }
-                    Some(expr) if self.leaf_argument(expr) => {
-                        values.push(Some(self.eval_leaf_argument(code, expr)?));
-                    }
-                    Some(expr) => {
-                        values.push(Some(self.eval_traced_argument(code, expr)?.value()));
-                    }
-                }
-            }
-            let outcome = builtin::run(self, name, target, &values);
-            // Back before the outcome is read, so the raised-condition path
-            // keeps the buffer as the ordinary one does.
-            self.give_value_buffer(values);
-            return Ok(Ended::Returned(Some(outcome?)));
+            return Ok(Ended::Returned(Some(
+                self.invoke_builtin_call(code, target, name, args)?,
+            )));
         }
 
         // A fresh `Vec` and not a lent one: this path always hands the
@@ -5281,7 +5321,7 @@ impl Interp {
         // step, so a `CALL` that returned with the callee still on it would
         // trip that assertion in the caller rather than quietly running the
         // wrong frame's `pc`.
-        let callee = self.pop_activation().expect("the activation just pushed");
+        let mut callee = self.pop_activation().expect("the activation just pushed");
         // **The two halves of "was the pool shared" are one bool, and both
         // are needed.** A `PROCEDURE` callee pushed a frame of its own, so
         // that frame is popped here -- on the error path as well, which is
@@ -5294,8 +5334,14 @@ impl Interp {
         if callee.owns_frame {
             self.roots.pop_slots(callee.frame);
         } else {
-            self.activation_mut().extra = callee.extra;
+            // Taken rather than moved out, so the box stays whole and can be
+            // parked: moving a field out of a `Box` moves the whole of it out
+            // and frees the box, which is the allocation the pool exists to
+            // keep. What is left behind is the empty map a fresh activation
+            // starts with.
+            self.activation_mut().extra = std::mem::take(&mut callee.extra);
         }
+        self.recycle_activation(callee);
         self.activation_indent = saved_base;
         self.indent_offset = saved_offset;
         self.clause_line_override = saved_line;
