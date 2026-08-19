@@ -8263,8 +8263,16 @@ impl Interp {
                             .filter(|sum| within_digits(*sum, digits)),
                         _ => None,
                     };
-                    *current = match stepped {
-                        Some(sum) => ControlValue::Small(sum),
+                    // **Written inside each arm rather than assigned from the
+                    // `match`'s own value**, which is layout rather than
+                    // style. A single assignment site has to write a whole
+                    // `ControlValue`, and that is as wide as the `Number` its
+                    // other arm carries, so the integer arm pays that width
+                    // to deliver a tag and an `i64`; per arm, each writes
+                    // only the bytes it has. Measured, 10 instructions a pass
+                    // -- 190,000,000 across `bench-programs/varlookup.rex`.
+                    match stepped {
+                        Some(sum) => *current = ControlValue::Small(sum),
                         None => {
                             // The control variable is the **left** operand of
                             // the oracle's own implicit `+`, so an object
@@ -8279,9 +8287,10 @@ impl Interp {
                                 .into());
                             }
                             let read = self.arith_operand(previous)?;
-                            ControlValue::Wide(read.add(by, digits).map_err(Raised::from)?)
+                            *current =
+                                ControlValue::Wide(read.add(by, digits).map_err(Raised::from)?);
                         }
-                    };
+                    }
                 }
                 // The first pass takes the value the header already computed,
                 // unincremented and with no line of its own beyond the `>=>`
