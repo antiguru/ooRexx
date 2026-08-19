@@ -742,10 +742,25 @@ enum LoopState {
         to: Option<Number>,
         by: Number,
         for_remaining: Option<u64>,
-        /// SPIKE: TO/BY as plain integers, and the precision they hold for.
+        /// `TO`/`BY` as plain integers, and the precision they hold for.
         cached_digits: u64,
         to_int: Option<i64>,
         by_int: Option<i64>,
+        /// Whether the control variable is spelled simple, stem or compound.
+        ///
+        /// Taken when the loop is entered, because it is a property of the
+        /// name alone and the name is fixed by the parse: `control` is a
+        /// `SymbolId` this state owns, and the `Code` a pass is driven with
+        /// is the one that compiled it. Both halves of a pass read it from
+        /// here -- the re-read to pick how it reads, `bind_control` to pick
+        /// how it writes.
+        ///
+        /// **The resolved *name* is not cached and must not be**, only the
+        /// shape: a compound control resolves its tail afresh on every pass
+        /// against whatever the tail variable holds now. Measured against
+        /// the oracle, `a.=0; k=1; do a.k = 1 to 3; k=k+1; end` never
+        /// advances, because each pass reads and writes a different tail.
+        shape: NameShape,
         /// Whether at least one candidate iteration has already been
         /// decided, which is exactly the oracle's own `!first` argument to
         /// `DoBlock::checkControl` (`ControlledDoInstruction.cpp:162`): it
@@ -7035,6 +7050,7 @@ impl Interp {
                 cached_digits: u64::MAX,
                 to_int: None,
                 by_int: None,
+                shape: shape_of(code.symbols.name(ctrl.control).as_bytes()),
                 stepped: false,
             },
             LoopKind::Over { control, .. } => LoopState::OverOnce {
@@ -7585,6 +7601,7 @@ impl Interp {
                 cached_digits: u64::MAX,
                 to_int: None,
                 by_int: None,
+                shape: shape_of(code.symbols.name(ctrl.control).as_bytes()),
                 stepped: false,
             },
             LoopKind::Over { control, .. } => LoopState::OverOnce {
@@ -8010,7 +8027,14 @@ impl Interp {
                     *r -= 1;
                 }
                 *done = true;
-                self.bind_control(code, *control, loop_indent, *value, *at)?;
+                self.bind_control(
+                    code,
+                    *control,
+                    loop_indent,
+                    *value,
+                    *at,
+                    shape_of(code.symbols.name(*control).as_bytes()),
+                )?;
                 Ok(true)
             }
             LoopState::Controlled {
@@ -8023,6 +8047,7 @@ impl Interp {
                 cached_digits,
                 to_int,
                 by_int,
+                shape,
                 stepped,
             } => {
                 // **The re-tested pass's own four lines** (Task 9, closing
@@ -8110,6 +8135,17 @@ impl Interp {
                     "the loop's cached BY disagrees with DIGITS {digits}"
                 );
                 let (to_int, by_int) = (*to_int, *by_int);
+                // The same tripwire for the control variable's shape, which
+                // needs no invalidation at all: it is a property of a name
+                // the parse fixed, so nothing can move it. The assertion is
+                // what says so on every pass of every program the debug gate
+                // runs, rather than a comment claiming it.
+                debug_assert_eq!(
+                    *shape,
+                    shape_of(code.symbols.name(*control).as_bytes()),
+                    "the loop's cached control-variable shape is not the one its name gives"
+                );
+                let shape = *shape;
                 let re_tested = std::mem::replace(stepped, true);
                 // **One pass's own temps frame, released before the next pass
                 // opens one.** The enclosing `step_in_temps_frame` belongs to
@@ -8123,7 +8159,6 @@ impl Interp {
                 // exactly as `pop_frame`'s own doc describes.
                 let pass = self.roots.push_frame();
                 if re_tested {
-                    let name = code.symbols.name(*control).as_bytes();
                     // **`read`, not `read_by_name`: this is an evaluation and
                     // it can raise `NOVALUE`** (review round 1 re-review,
                     // NEW-1 -- a defect this arm shipped with, not a
@@ -8161,7 +8196,7 @@ impl Interp {
                     // the very next pass, so the loop's own `TO 3` bound
                     // keeps comparing against a fresh, still-default `0`
                     // tail instead of the one `a.i` incremented.
-                    let (previous, novalue, resolved) = match shape_of(name) {
+                    let (previous, novalue, resolved) = match shape {
                         NameShape::Simple => {
                             // `read_at` with the slot `control_slot` took when
                             // the loop was entered, which is the same
@@ -8181,6 +8216,7 @@ impl Interp {
                         // declines a stem.
                         NameShape::Stem => {
                             let at = code.compound(*control).and_then(|entry| entry.stem_at);
+                            let name = code.symbols.name(*control).as_bytes();
                             (self.read_stem_at(name, at), Novalue::Set, None)
                         }
                         NameShape::Compound => {
@@ -8201,6 +8237,7 @@ impl Interp {
                     // there, the same order `eval_node`'s `Compound` arm and
                     // its own tracing counterpart use for an ordinary read.
                     if let Some(resolved) = &resolved {
+                        let name = code.symbols.name(*control).as_bytes();
                         self.trace_compound_name(loop_indent, name, resolved);
                     }
                     // `result_text` for the pair, not `intermediate_text`:
@@ -8208,6 +8245,7 @@ impl Interp {
                     // `results` is the weaker of the two, so it renders for
                     // either and drops neither.
                     if let Some(rendered) = self.result_text(previous) {
+                        let name = code.symbols.name(*control).as_bytes();
                         self.trace_variable(loop_indent, name, &rendered);
                         self.trace_result(loop_indent, &rendered);
                     }
@@ -8270,7 +8308,7 @@ impl Interp {
                 if re_tested && let Some(rendered) = self.result_text(value) {
                     self.trace_result(loop_indent, &rendered);
                 }
-                self.bind_control(code, *control, bind_indent, value, *at)?;
+                self.bind_control(code, *control, bind_indent, value, *at, shape)?;
                 // The control variable's own storage now roots `value`, and
                 // `previous` is dead, so the pass's frame goes here. The three
                 // `return Ok(false)` paths below end the loop, whose enclosing
@@ -8370,10 +8408,15 @@ impl Interp {
         indent: usize,
         value: ObjRef,
         at: Option<usize>,
+        shape: NameShape,
     ) -> Result<(), Failure> {
-        match shape_of(code.symbols.name(control).as_bytes()) {
+        debug_assert_eq!(
+            shape,
+            shape_of(code.symbols.name(control).as_bytes()),
+            "a control variable's write was told a shape its name does not give"
+        );
+        match shape {
             NameShape::Simple => {
-                let name = code.symbols.name(control).as_bytes();
                 // The tripwire `crate::ir::Op::Load` and `Op::Store` each carry,
                 // on the one write that keeps its slot across passes rather
                 // than reading it out of an op: a kept index that is not the
@@ -8385,7 +8428,11 @@ impl Interp {
                 );
                 let slot = match at {
                     Some(slot) => slot,
-                    None => self.slot_of(name),
+                    // The name is looked up here rather than above the
+                    // `match`, so that a loop whose slot was resolved when it
+                    // was entered -- every counted loop -- never asks for its
+                    // own name again on a pass.
+                    None => self.slot_of(code.symbols.name(control).as_bytes()),
                 };
                 let frame = self.activation().frame;
                 self.set_variable(frame, slot, value);
