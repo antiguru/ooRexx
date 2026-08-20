@@ -2034,13 +2034,16 @@ struct Interp {
     /// top, whether the call was compiled to `Op::PushArg` or evaluates its
     /// arguments through `invoke_builtin_call`'s own loop.
     ///
-    /// **One field and not two, which is a measurement rather than tidiness.**
-    /// Giving the compiled path a second `Vec` of its own moved nothing about
-    /// what any op does, and cost `bench-programs/varlookup.rex` -- which
-    /// calls nothing at all -- 5.97% more retired instructions, `compound`
-    /// 4.14% and `strings` 3.33%; the same build with the field removed and
-    /// the ops left in place returned every one of them to its baseline. This
-    /// struct is large and hot enough that adding a field to it is not free.
+    /// **One field and not two for the nesting above, and not because a
+    /// second one would cost anything.** Measured against the tree as
+    /// committed: a second `Vec<Option<ObjRef>>` declared here and never read
+    /// moves no program in `bench-programs/` by more than 0.004% of retired
+    /// instructions, and neither does 1536 bytes of unread padding, which
+    /// carries this struct's hottest fields -- `running`, `clause_state`,
+    /// `text_scratch`, `trace_cache` -- that far along. `Interp`'s width is
+    /// not a lever. The 5.97% that `varlookup` retires when the compiled
+    /// call path is written out is the driver's arm bodies, and `ir::drive`
+    /// records it at the arms it belongs to.
     ///
     /// **Lent and returned rather than borrowed in place**, for
     /// [`Interp::key_buffer`]'s reason: a call needs `&mut self` and its own
@@ -2139,14 +2142,17 @@ struct Interp {
     /// behind.
     ///
     /// **Boxed rather than held inline, and that is a measurement of its
-    /// own.** An `Activation` is large, so holding one in this struct moves
-    /// every field after it along by that width. Tried: the instruction
-    /// saving collapsed to -1.45% on `compound.rex` and -1.07% on
-    /// `strings.rex`, and `cycles:u` went the wrong way by 5.76% and 8.51%
-    /// against a base whose own run-to-run spread on those two is 0.17% and
-    /// 2.72%. The pointer keeps this struct's layout where the rest of the
-    /// interpreter found it, and it also makes suspending an activation a
-    /// pointer move rather than a copy of the whole of it.
+    /// own.** Tried inline: the instruction saving above collapsed to -1.45%
+    /// on `compound.rex` and -1.07% on `strings.rex`. The pointer also makes
+    /// suspending an activation a pointer move rather than a copy of the
+    /// whole of it.
+    ///
+    /// **Not for the width.** Displacing this struct's fields costs nothing,
+    /// and [`Interp::value_buffer`] carries that measurement; a `cycles:u`
+    /// comparison between two builds cannot settle a layout question here at
+    /// all, because an inert field that no program reads moves
+    /// `bench-programs/` by -4.71% to +5.55% on that counter -- a wider
+    /// spread than any layout change measured against it.
     running: Option<Box<Activation>>,
     /// The `TRACE` setting of whatever [`Interp::running`] holds, kept beside
     /// it rather than read through it.
