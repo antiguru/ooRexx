@@ -504,32 +504,33 @@ fn numeric_digits_changes_rounding_and_resets_to_9_with_no_expression() {
 }
 
 #[test]
-fn numeric_digits_reset_leaves_a_fuzz_the_operand_form_would_refuse() {
-    // `numeric digits 20; numeric fuzz 15; numeric digits` prints `9 15` at
-    // rc 0 -- measured against the oracle, running exactly these clauses.
+fn numeric_digits_reset_refuses_a_fuzz_the_operand_form_would_refuse() {
+    // Both spellings raise 33.1 with the same two substitutions -- the default
+    // that could not be stored and the FUZZ in force -- measured against the
+    // oracle, running exactly these clauses.
+    for source in [
+        b"numeric digits 20\nnumeric fuzz 15\nnumeric digits".as_slice(),
+        b"numeric digits 20\nnumeric fuzz 15\nnumeric digits 9".as_slice(),
+    ] {
+        let mut interp = Interp::new();
+        let failure = run_source(&mut interp, source).unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (33, 1));
+        assert_eq!(raised.additional, vec![b"9".to_vec(), b"15".to_vec()]);
+    }
+
+    // A reset whose default clears the FUZZ in force still stores it.
     let mut interp = Interp::new();
     assert_eq!(
         say_output(
             &mut interp,
-            b"numeric digits 20\nnumeric fuzz 15\nnumeric digits\nsay digits() fuzz()"
+            b"numeric digits 20\nnumeric fuzz 5\nnumeric digits\nsay digits() fuzz()"
         ),
-        b"9 15\n".to_vec(),
-        "the reset stores the default and leaves FUZZ above it"
+        b"9 5\n".to_vec(),
+        "the reset stores the default and leaves a FUZZ below it alone"
     );
-
-    // The same value typed out is still 33.1, which is what makes the reset a
-    // rule of its own rather than the operand form with a constant.
-    let mut interp = Interp::new();
-    let failure = run_source(
-        &mut interp,
-        b"numeric digits 20\nnumeric fuzz 15\nnumeric digits 9",
-    )
-    .unwrap_err();
-    let Failure::Raised(raised) = failure else {
-        panic!("expected Raised, got {failure:?}");
-    };
-    assert_eq!((raised.number, raised.sub), (33, 1));
-    assert_eq!(raised.additional, vec![b"9".to_vec(), b"15".to_vec()]);
 }
 
 #[test]

@@ -258,26 +258,29 @@ impl Settings {
         self.set_digits_checked(value, not_whole)
     }
 
-    /// `NUMERIC DIGITS` with no operand: the default, stored **without** the
-    /// checks [`Settings::set_digits_str`] makes.
+    /// `NUMERIC DIGITS` with no operand: the default, and it makes the same
+    /// FUZZ check the operand form makes.
     ///
-    /// **The no-operand form is its own rule rather than the operand form with
-    /// a constant, and the difference is observable.** Measured against ooRexx
-    /// 5.3.0 with `DIGITS 30` and `FUZZ 20` in force: `numeric digits` prints
-    /// `9 20` at rc 0, while `numeric digits 9` -- the same value spelled out
-    /// -- is 33.1 at rc 223. So the reset is not "set the default through the
-    /// same door".
+    /// `NumericInstruction.cpp`'s no-operand arm is
+    /// `if (defaultDigits <= context->fuzz())` before `setDigits`, the same
+    /// test the expression arm runs against its own candidate. The rejected
+    /// value it names is the **default**, not the setting in force: measured
+    /// with `DIGITS 30` and `FUZZ 20` in force, `numeric digits` is 33.1 at
+    /// rc 223 reading `Value of NUMERIC DIGITS ("9") must exceed value of
+    /// NUMERIC FUZZ ("20")`.
     ///
-    /// The ANSI draft disagrees with the interpreter here rather than being
-    /// silent: `X3J18-199X` 8.3.15.1 gives the no-operand form `Value = 9` and
-    /// then runs the same `if Value<=#Fuzz.#Level then #Raise 'SYNTAX',33.1`
-    /// the operand form runs. This crate matches the interpreter.
-    ///
-    /// **The state this reaches has FUZZ at or above DIGITS**, which the
-    /// interpreter carries without complaint; `compare.rs`'s `numeric_order`
-    /// is where what that means for a comparison is written down.
-    pub fn reset_digits(&mut self) {
+    /// The ANSI draft agrees: `X3J18-199X` 8.3.15.1 gives the no-operand form
+    /// `Value = 9` and then runs the same
+    /// `if Value<=#Fuzz.#Level then #Raise 'SYNTAX',33.1`.
+    pub fn reset_digits(&mut self) -> Result<(), SettingsError> {
+        if crate::DEFAULT_DIGITS <= self.fuzz {
+            return Err(SettingsError::FuzzNotBelowDigits {
+                digits: crate::DEFAULT_DIGITS,
+                fuzz: self.fuzz,
+            });
+        }
         self.digits = crate::DEFAULT_DIGITS;
+        Ok(())
     }
 
     /// The half the two share. `not_whole` is a closure so that the text form
@@ -319,14 +322,16 @@ impl Settings {
         self.set_fuzz_checked(value)
     }
 
-    /// `NUMERIC FUZZ` with no operand: zero, stored without a check.
+    /// `NUMERIC FUZZ` with no operand: zero.
     ///
-    /// Written the same way as [`Settings::reset_digits`] because the
-    /// interpreter's no-operand forms behave the same way, and *not* because
-    /// the check would pass anyway. Measured with `DIGITS 30` and `FUZZ 20` in
-    /// force, `numeric fuzz` prints `30 0` -- DIGITS untouched, and no reading
-    /// of that row distinguishes a skipped check from a passed one, which is
-    /// why the citation for the rule is DIGITS' row rather than this one.
+    /// The interpreter guards this arm too -- `if (defaultFuzz >= context->
+    /// digits())` before `setFuzz` -- but **the guard cannot fire here**, and
+    /// that is a property of the default rather than an omission: this crate's
+    /// default fuzz is zero and `set_digits_checked` refuses any DIGITS below
+    /// one, so `0 >= self.digits` is false for every state reachable. The C++
+    /// takes its default from the package, which `::OPTIONS` can move off
+    /// zero; if that ever becomes representable here, this needs the check and
+    /// the signature [`Settings::reset_digits`] has.
     pub fn reset_fuzz(&mut self) {
         self.fuzz = 0;
     }
@@ -374,14 +379,14 @@ impl Settings {
 mod tests {
     use super::{Form, Settings, SettingsError};
 
-    /// The reset stores what the operand form refuses, and the refusal is
-    /// half of what makes that a rule rather than a coincidence.
+    /// The reset refuses exactly what the operand form refuses, and names the
+    /// same two values -- the default it wanted to store and the FUZZ in force.
     ///
-    /// Measured against ooRexx 5.3.0: with `DIGITS 30` and `FUZZ 20` in
-    /// force, `numeric digits` prints `9 20` at rc 0 and `numeric digits 9`
-    /// is 33.1 at rc 223.
+    /// Measured with `DIGITS 30` and `FUZZ 20` in force: both `numeric digits`
+    /// and `numeric digits 9` are 33.1 at rc 223, reading
+    /// `Value of NUMERIC DIGITS ("9") must exceed value of NUMERIC FUZZ ("20")`.
     #[test]
-    fn the_digits_reset_stores_what_the_operand_form_refuses() {
+    fn the_digits_reset_refuses_what_the_operand_form_refuses() {
         let mut settings = Settings::default();
         settings
             .set_digits_str("30")
@@ -399,11 +404,18 @@ mod tests {
         );
         assert_eq!(spelled_out.digits(), 30, "a refused set changes nothing");
 
-        settings.reset_digits();
+        assert_eq!(
+            settings.reset_digits(),
+            Err(SettingsError::FuzzNotBelowDigits {
+                digits: 9,
+                fuzz: 20
+            }),
+            "the reset makes the same check, naming the default it could not store"
+        );
         assert_eq!(
             (settings.digits(), settings.fuzz()),
-            (9, 20),
-            "the reset stores the default and leaves FUZZ above it"
+            (30, 20),
+            "a refused reset changes nothing"
         );
     }
 
@@ -425,15 +437,21 @@ mod tests {
             settings
         };
 
+        // DIGITS' reset cannot run from this state -- the default sits under
+        // the FUZZ in force -- so the pair it would have to leave alone is
+        // measured from a state where it succeeds.
         let mut digits_reset = start();
-        digits_reset.reset_digits();
+        digits_reset
+            .set_fuzz_str("5")
+            .expect("5 is below DIGITS 30");
+        digits_reset.reset_digits().expect("9 exceeds a FUZZ of 5");
         assert_eq!(
             (
                 digits_reset.digits(),
                 digits_reset.fuzz(),
                 digits_reset.form()
             ),
-            (9, 20, Form::Engineering)
+            (9, 5, Form::Engineering)
         );
 
         let mut fuzz_reset = start();

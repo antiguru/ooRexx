@@ -1,36 +1,39 @@
 # What `NUMERIC FUZZ` does, including in the state only its own reset reaches.
 #
-# **`NUMERIC DIGITS` with no operand is its own rule.** It stores the default
-# without the check the operand form makes, so a program can put FUZZ at or
-# above DIGITS and keep running. The ANSI draft says the opposite -- `X3J18-199X`
-# 8.3.15.1 gives the no-operand form `Value = 9` and then runs the same
-# `if Value<=#Fuzz.#Level then #Raise 'SYNTAX',33.1` -- so this is a place where
-# the interpreter and the standard disagree and the interpreter is what these
-# rows pin.
+# **`NUMERIC DIGITS` with no operand makes the same check the operand form
+# makes.** `NumericInstruction.cpp`'s no-operand arm is
+# `if (defaultDigits <= context->fuzz())` before `setDigits`, and the value it
+# names in the message is the default rather than the setting in force -- so
+# with FUZZ 20 in force the refusal reads `("9") must exceed ... ("20")`. The
+# ANSI draft agrees: `X3J18-199X` 8.3.15.1 gives the no-operand form `Value = 9`
+# and then runs the same `if Value<=#Fuzz.#Level then #Raise 'SYNTAX',33.1`.
+# `NUMERIC FUZZ` with no operand is guarded the same way,
+# `if (defaultFuzz >= context->digits())`.
 #
-# **Above DIGITS, FUZZ does not mean "compare at zero digits".**
-# `NumberString::comp` computes `digits -= fuzz` into a signed `wholenumber_t`,
-# and `addSub` then finds the left operand large enough that the right cannot
-# affect the result and hands the left one back, so the shared sign is the whole
-# answer. The `fuzz = digits` rows beside them are what says so: they compare at
-# zero digits, and answer the opposite for the same operands.
+# **So the rows here reach FUZZ at or above DIGITS by refusing, not by running.**
+# Probed for another route on 2026-08-20 and none was found: `::OPTIONS FUZZ 20`
+# and `interpret "numeric digits"` both raise 33.1, and a `procedure` inherits a
+# pair that already satisfies the rule. That is a failed search rather than a
+# proof, so `compare.rs`'s `numeric_order` keeps its handling of the state; what
+# it no longer has is a witness at this level.
 #
-# **A comparison of two integer objects inside DIGITS never reads FUZZ at all.**
-# `RexxInteger::comp` (`interpreter/classes/IntegerClass.cpp:1191`) subtracts
-# them directly, and only anything else falls to the fuzzed
-# `NumberString::comp`. Each row that takes that path is paired with the nearest
-# row that does not -- the same digits spelled with a decimal point, one digit
-# too wide for DIGITS, or built by a builtin the interpreter builds a string
-# for -- because the pairing is what pins the rule to which object a value is
-# rather than to what it is worth.
+# **A comparison of two integer objects inside DIGITS reads FUZZ.**
+# `RexxInteger::comp` (`interpreter/classes/IntegerClass.cpp`) subtracts them
+# directly only while `number_fuzz()` is zero, and anything else -- including a
+# non-zero FUZZ over two plain integers -- falls to `NumberString::comp`. Each
+# row that takes the exact path is paired with the nearest row that does not --
+# the same digits spelled with a decimal point, one digit too wide for DIGITS,
+# or built by a builtin the interpreter builds a string for -- because at
+# `FUZZ 0` the pairing is what pins the rule to which object a value is rather
+# than to what it is worth.
 #
 # EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE. Capture is:
 #
 #   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
 #     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
 
-# the reset itself: DIGITS goes to the default and leaves a FUZZ above it, and
-# FUZZ's own reset then leaves DIGITS alone.
+# the reset refuses rather than storing a default that would sit under FUZZ, and
+# the rejected value it names is the default (9) rather than the 30 in force.
 program
 numeric digits 30
 numeric fuzz 20
@@ -39,55 +42,26 @@ say digits() fuzz()
 numeric fuzz
 say digits() fuzz()
 ----
-rc> 0
-out> 9 20
-out> 9 0
+rc> 223
+err>      3 *-* numeric digits
+err> Error 33 running /nonexistent/ir-dual-case.rex line 3:  Invalid expression result.
+err> Error 33.1:  Value of NUMERIC DIGITS ("9") must exceed value of NUMERIC FUZZ ("20").
 
-# FUZZ above DIGITS. Equal values compare unequal and the left operand is the
-# greater one, which is the sign of the left rather than an ordering. Opposite
-# signs and zero are decided before the precision is ever consulted, so those
-# two rows answer what they would at any FUZZ, and the strict comparison never
-# reads FUZZ at all.
-program
-numeric digits 30
-numeric fuzz 20
-numeric digits
-say 1 = 1.0
-say 1e5 = 1e5
-say 1 > 1.0000000001
-say 1 < 1.0000000001
-say -1 < -1.0
-say 0 = 0.0
-say 1 = 2
-say 1 == 1.0
-----
-rc> 0
-out> 0
-out> 0
-out> 1
-out> 0
-out> 1
-out> 1
-out> 0
-out> 0
-
-# FUZZ equal to DIGITS, which is the adjacent case and not the degenerate one:
-# the precision is zero rather than negative, and the same operands the block
-# above answers `0` for answer `1` here.
+# the adjacent case, FUZZ equal to the default rather than above it: the check
+# is `<=`, so equality refuses too, and both substituted values read 9. The
+# comparison rows these two blocks used to carry are gone with the state they
+# needed -- nothing after the refusal ran, so they pinned this message twice
+# over rather than any comparison.
 program
 numeric digits 30
 numeric fuzz 9
 numeric digits
 say digits() fuzz()
-say 1 = 1.0
-say 1 = 1.000001
-say 1e5 = 1e5
 ----
-rc> 0
-out> 9 9
-out> 1
-out> 1
-out> 1
+rc> 223
+err>      3 *-* numeric digits
+err> Error 33 running /nonexistent/ir-dual-case.rex line 3:  Invalid expression result.
+err> Error 33.1:  Value of NUMERIC DIGITS ("9") must exceed value of NUMERIC FUZZ ("9").
 
 # integer objects against everything adjacent to them. The first row is the
 # exact comparison; the rest each miss it for one reason -- a decimal point, a
@@ -104,18 +78,18 @@ say c2d('05F5E100'x) = 100000001
 say format(100000000) = 100000001
 ----
 rc> 0
-out> 0
 out> 1
 out> 1
-out> 0
-out> 0
-out> 0
+out> 1
+out> 1
+out> 1
+out> 1
 out> 1
 
-# a controlled loop's bound test takes the same two paths. The integer loop runs
-# no passes; the one whose initial value is spelled with a decimal point compares
-# fuzzily on every pass, including after the increment, and never terminates --
-# the `leave` is what bounds it here.
+# a controlled loop's bound test is an ordinary comparison, so a non-zero FUZZ
+# reaches it whichever way the values are spelled. Neither loop terminates on its
+# own here -- the `leave` is what bounds both -- because 100000002 and 100000001
+# compare equal at DIGITS 9 FUZZ 8.
 program
 numeric digits 9
 numeric fuzz 8
@@ -133,5 +107,5 @@ end
 say 'frac' zc
 ----
 rc> 0
-out> int 0
+out> int 4
 out> frac 4

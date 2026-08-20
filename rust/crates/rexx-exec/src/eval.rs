@@ -1150,7 +1150,9 @@ impl Interp {
         // was the largest single allocation width in the interpreter, at
         // 4,220,217 allocations of nineteen bytes on a 400,000-clause run
         // (`SMALL_INT_MAX` has nineteen digits, which is what pre-sizes them).
-        if let Some(holds) = small_int_compare(op, left_value, right_value, digits) {
+        if fuzz == 0
+            && let Some(holds) = small_int_compare(op, left_value, right_value, digits)
+        {
             return Ok(logical(holds));
         }
         let strict = is_strict_compare(op);
@@ -1751,14 +1753,14 @@ pub(crate) fn call_target_name<'a>(code: &Code<'a>, target: &'a CallTarget) -> (
 ///
 /// `None` means they do not and the general path must run.
 ///
-/// **This is `RexxInteger::comp` (`interpreter/classes/IntegerClass.cpp:1191`)
-/// and not an optimisation of the path below it.** Two integers that both fit
-/// `NUMERIC DIGITS` are subtracted directly there, and `NUMERIC FUZZ` -- which
-/// only ever enters through `NumberString::comp` -- is never consulted for
-/// them. Measured at `DIGITS 9 FUZZ 8`: `100000000 = 100000001` is `0`, while
-/// the same pair spelled `100000000.0 = 100000001`, whose left operand is no
-/// longer an integer, is `1`. Taking the general path here for a non-zero
-/// `FUZZ` would answer `1` for both.
+/// **This is `RexxInteger::comp` (`interpreter/classes/IntegerClass.cpp`) and
+/// not an optimisation of the path below it.** Two integers that both fit
+/// `NUMERIC DIGITS` are subtracted directly there -- but only while
+/// `number_fuzz()` is zero, which the caller tests before reaching this, since
+/// a fuzzed comparison belongs to `NumberString::comp`. Measured at `DIGITS 9
+/// FUZZ 8`, both `100000000 = 100000001` and the same pair spelled
+/// `100000000.0 = 100000001` answer `1`; at `FUZZ 0` both answer `0`, and only
+/// there does the spelling stop mattering.
 ///
 /// The guards are each a case where comparing the integers would give a
 /// different answer from what the interpreter does, so none of them is

@@ -844,21 +844,20 @@ impl ControlValue {
     }
 
     /// The value as an integer the bound test may compare exactly, or `None`
-    /// when the fuzzed comparison has to run instead.
+    /// when the fuzzed comparison has to run instead. The caller supplies the
+    /// other half of the interpreter's condition, that `NUMERIC FUZZ` is zero.
     ///
     /// **This asks which representation the value is in, not what it is
     /// worth**, because that is the question the interpreter asks:
-    /// `RexxInteger::comp` (`interpreter/classes/IntegerClass.cpp:1191`) takes
-    /// its exact path only when both sides are already integer objects and
-    /// both fit `NUMERIC DIGITS`, and anything else falls to the fuzzed
-    /// `NumberString::comp`. A `Wide` value is one this crate is holding as a
-    /// `Number` -- either a value with a fractional part, or an integer too
-    /// wide for `DIGITS` -- and both are cases the interpreter fuzzes.
+    /// `RexxInteger::comp` (`interpreter/classes/IntegerClass.cpp`) takes its
+    /// exact path only when both sides are already integer objects that fit
+    /// `NUMERIC DIGITS` and `number_fuzz()` is zero, and anything else falls
+    /// to `NumberString::comp`. A `Wide` value is one this crate is holding as
+    /// a `Number` -- either a value with a fractional part, or an integer too
+    /// wide for `DIGITS` -- and neither reaches the exact path.
     /// Deciding this by value would answer `Some` for a `Number` worth
     /// `100000002` that reached that worth by rounding `100000002.0`, which
-    /// the interpreter compares fuzzily: measured at `DIGITS 9 FUZZ 8`,
-    /// `do zi = 100000002.0 to 100000001` does not terminate while the same
-    /// loop with an integer initial value runs no passes at all.
+    /// the interpreter never compares as two integers.
     fn small(&self, digits: u64) -> Option<i64> {
         match self {
             ControlValue::Small(value) => within_digits(*value, digits).then_some(*value),
@@ -8602,7 +8601,15 @@ impl Interp {
                     && let ControlValue::Small(_) = current
                 {
                     let mode = self.trace_mode();
-                    if !mode.results && !mode.intermediates {
+                    // `FUZZ` sits here rather than in the conjunction above so
+                    // a pass that fails an earlier test never reads it: the
+                    // arm below is the only one that answers the bound test
+                    // without consulting it, and the general path reads it once
+                    // on its own account.
+                    if !mode.results
+                        && !mode.intermediates
+                        && self.activation().settings.fuzz() == 0
+                    {
                         let frame = self.activation().frame;
                         // The read is `Interp::variable` rather than
                         // `read_at`: the shape is `Simple` and the slot is
@@ -8864,16 +8871,20 @@ impl Interp {
                     // allocates twice per pass for what an `i64` comparison
                     // answers outright.
                     //
-                    // **`FUZZ` is not a guard on this, and reading it as one
-                    // is a divergence.** The interpreter compares two integers
-                    // that both fit `NUMERIC DIGITS` in `RexxInteger::comp`
-                    // (`interpreter/classes/IntegerClass.cpp:1191`), which
-                    // subtracts them directly and never reaches the fuzzed
-                    // `NumberString::comp`. Measured at `DIGITS 9 FUZZ 8`,
-                    // `do zi = 100000002 to 100000001` runs no passes, while
-                    // the same loop with the bound spelled `100000002.0` --
-                    // no longer an integer, so `current.small` answers `None`
-                    // and the fuzzed path below runs -- does not terminate.
+                    // **A non-zero `FUZZ` disqualifies the exact path**, which
+                    // is why `fuzz == 0` guards the integer arm. The
+                    // interpreter reaches the bound test as an ordinary Rexx
+                    // comparison -- `DoBlock::checkControl` calls
+                    // `result->callOperatorMethod(compare, to)` -- and
+                    // `RexxInteger::comp`
+                    // (`interpreter/classes/IntegerClass.cpp`) subtracts
+                    // directly only when both sides are integer objects that
+                    // fit `NUMERIC DIGITS` *and* `number_fuzz() == 0`.
+                    // Anything else falls to the fuzzed `NumberString::comp`.
+                    // Measured at `DIGITS 9 FUZZ 8`, `do zi = 100000002 to
+                    // 100000001` keeps running, and so does the same loop with
+                    // the bound spelled `100000002.0`; at `FUZZ 0` both run no
+                    // passes at all.
                     //
                     // **Matched on the three `Option`s together rather than
                     // threaded through a `?` chain**, which is codegen rather
@@ -8884,7 +8895,7 @@ impl Interp {
                     // `do i = 1 to 300000`, that line cost 53 instructions a
                     // pass, 16 of them in the closure's own body.
                     let within = match (current.small(digits), to_int, by_int) {
-                        (Some(current), Some(to), Some(by)) => {
+                        (Some(current), Some(to), Some(by)) if fuzz == 0 => {
                             if by < 0 {
                                 current >= to
                             } else {
@@ -10243,12 +10254,15 @@ impl Interp {
                         self.give_result_buffer(text);
                         outcome.map_err(raised_from_settings)?;
                     }
-                    // **The reset is its own rule, not the operand form
-                    // with a constant** -- it stores the default and makes
-                    // neither of the operand form's checks, which is why it
-                    // cannot fail and why `reset_digits` documents the row
-                    // that says so.
-                    None => self.activation_mut().settings.reset_digits(),
+                    // The reset stores the default and makes the operand
+                    // form's FUZZ check against it, which is the arm the
+                    // interpreter runs: it can fail, and the value it names
+                    // is the default rather than the setting in force.
+                    None => self
+                        .activation_mut()
+                        .settings
+                        .reset_digits()
+                        .map_err(raised_from_settings)?,
                 }
             }
             NumericSetting::Fuzz => match self.numeric_operand(code, expression, "FUZZ")? {
