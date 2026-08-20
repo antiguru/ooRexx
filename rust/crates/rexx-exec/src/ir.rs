@@ -79,6 +79,27 @@ mod corpus_shape_tests;
 /// already present adds none -- and it calls the width column the right
 /// prediction for that case. So sixteen rests on the sitting plus that
 /// prediction, and not on an argument from cache lines.
+/// **Narrowing this is not a lever, and the axis it looks like a lever on is
+/// index scaling rather than density.** Measured against the tree as
+/// committed by widening `Op::EndBranch` with a padding field, stdout and
+/// exit status identical at every width: 20 bytes and 24 bytes each cost
+/// `bench-programs/` between +0.31% and +1.09% of retired instructions and
+/// agree with one another to the third digit on every program, while **32
+/// bytes -- twice this -- costs at most +0.211% and is 0.000% on most of the
+/// suite**. A power-of-two width indexes with a shift; 20 and 24 need a
+/// multiply, and that is the whole of the difference.
+///
+/// **Nor does the stream's footprint reach it.** A generated body of 12,000
+/// assignment clauses in a loop compiles to 48,015 ops, which is 750 KB at
+/// this width and past this machine's 512 KB L2. At 32 bytes it retires the
+/// same instructions and takes 64% more L1 data misses, and runs *fewer*
+/// cycles. The driver walks the array forwards, so the prefetcher covers it
+/// and a miss on it is not a stall.
+///
+/// Eight bytes is reachable -- registers would become `u8` and instruction
+/// indices `u16`, each needing a refusal path, and `CallExpr`'s `slot` and
+/// `path` would move to a table beside [`Chunk::calls`] -- and on these
+/// measurements it would buy nothing.
 const _: () = assert!(size_of::<Op>() == 16);
 
 impl Op {
