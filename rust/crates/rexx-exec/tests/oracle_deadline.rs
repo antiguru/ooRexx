@@ -18,17 +18,10 @@
 //! same entry point every other differential test in this crate uses -- and
 //! the assertion is that the call **returns** with
 //! [`Termination::TimedOut`], inside a bounded amount of wall time, rather
-//! than blocking forever the way `Command::output` (what `Oracle::run`
-//! called directly, with no deadline) would have.
-//!
-//! **The before state**, for comparison, measured by hand rather than in
-//! this suite -- there is no surviving code path that still calls
-//! `Command::output` without a deadline for this file to run as a
-//! counter-test: the same program, wrapped the way
-//! `support::oracle::locate`'s doc and `rust/CLAUDE.md`'s "Wrap every oracle
-//! run" both give (`( ulimit -v 1048576; LD_LIBRARY_PATH=.../lib timeout -s
-//! KILL 10 .../bin/rexx do-forever.rex )`), ran the full ten seconds and was
-//! killed by the external `timeout`: rc 137, both channels empty.
+//! than blocking forever the way an undeadlined `Command::output` does. The
+//! control this is measured against -- the same program with no deadline
+//! anywhere in the path -- is measured by hand, not run here, and is in the
+//! task's own report rather than in this file.
 //!
 //! This does not prove the crate side of a gate-table row can be bounded:
 //! `Invocation::with_engine` runs **in-process**, and an in-process run
@@ -39,17 +32,22 @@
 //!
 //! # The gate
 //!
-//! Gated on `REXX_CORPUS_GATE`, the switch every oracle-invoking harness in
-//! this crate uses, for the reason they all give: an offline checkout is not
-//! asked to produce an oracle. Here it also keeps the ~10-second wait for the
-//! deadline to fire out of a plain `cargo test`, where nothing else in this
-//! crate deliberately runs that long.
+//! Gated on `REXX_CORPUS_GATE`, but not for the reason that gates most of
+//! this crate's oracle-invoking harnesses: `corpus.rs`, `builtin_status.rs`
+//! and `state_builtin_oracle.rs` put every program they own through
+//! `wait_with_deadline` on a plain `cargo test` already, gating only their
+//! own assertion, so the deadline **mechanism** -- a broken poll loop, a
+//! misclassified normal exit -- would already redden ungated. What only
+//! this file checks, and only under the gate, is that the **kill** itself
+//! fires: proving that costs the full `ORACLE_DEADLINE`, which is worth
+//! keeping out of a plain `cargo test`, where nothing else in this crate
+//! deliberately runs that long.
 
 mod support;
 
 use std::fs;
 use std::path::PathBuf;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use support::oracle::{ORACLE_DEADLINE, Termination, did_not_finish};
 
@@ -149,5 +147,80 @@ fn a_program_that_never_finishes_reddens_at_the_deadline_instead_of_hanging() {
         "the run above must have actually started the oracle"
     );
 
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// A program whose only "problem" is a background process holding its own
+/// end of the pipe open still returns promptly, rather than blocking for
+/// that process's own lifetime the way an unbounded `read_to_end` would.
+///
+/// `address system 'sleep 30 &'` forks a background `sleep` that inherits
+/// the same stdout descriptor and then keeps running after `rexx` itself
+/// exits at `say 'done'`; nothing kills that descendant, since `Child`
+/// tracks only the direct process, so without a bound of its own on the
+/// read this call blocks for the descendant's own lifetime -- thirty
+/// seconds here, and unboundedly for a probe that backgrounds something
+/// longer-lived. `Termination::TimedOut` rather than `Exited(0)` is the
+/// right answer too: the transcript could not be read in full, so this run
+/// is a structural failure to whatever calls it, not a byte comparison
+/// against a `done\n` that in fact reached the pipe but was never
+/// retrieved.
+#[test]
+fn a_background_process_holding_the_pipe_open_does_not_hang_the_run() {
+    if !gate_mode() {
+        eprintln!(
+            "*** SKIPPED -- needs the oracle and runs only with {GATE_ENV} \
+             set, since it spends most of ORACLE_DEADLINE proving the read \
+             gives up rather than blocking for the backgrounded process's \
+             own lifetime. ***"
+        );
+        return;
+    }
+
+    let dir = fresh_run_dir();
+    let file = dir.join("orphan.rex");
+    fs::write(&file, b"address system 'sleep 30 &'\nsay 'done'\n")
+        .unwrap_or_else(|e| panic!("cannot write {}: {e}", file.display()));
+    let abs = fs::canonicalize(&file)
+        .unwrap_or_else(|e| panic!("cannot resolve {}: {e}", file.display()));
+
+    let oracle = support::oracle::locate();
+    let started = Instant::now();
+    let outcome = oracle.run(&abs);
+    let elapsed = started.elapsed();
+
+    // The bound that would fail without the fix this test proves: the
+    // backgrounded `sleep` runs thirty seconds, so a read joined
+    // unconditionally on its pipe returns no sooner than that. Comfortably
+    // under it, and comfortably over the read's own bounded budget, so this
+    // is not a race against either number.
+    assert!(
+        elapsed < Duration::from_secs(20),
+        "the run took {elapsed:?} to return -- a program that only leaves a \
+         background process holding its own pipe open must not block for \
+         that process's own lifetime (30s here)"
+    );
+    assert_eq!(
+        outcome.termination,
+        Termination::TimedOut,
+        "the transcript could not be read in full within the deadline, so \
+         this must read as a non-finish rather than as the direct \
+         process's own successful exit; got {:?}",
+        outcome.termination
+    );
+    assert!(
+        did_not_finish(&outcome),
+        "did_not_finish must agree with the classification above"
+    );
+
+    assert_eq!(
+        oracle.invocations(),
+        1,
+        "the run above must have actually started the oracle"
+    );
+
+    // The backgrounded `sleep` holds a pipe descriptor, not anything under
+    // `dir` itself, so removing the directory here is unrelated to the
+    // process this test deliberately leaves running.
     let _ = fs::remove_dir_all(&dir);
 }

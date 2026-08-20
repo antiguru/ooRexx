@@ -85,6 +85,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -138,12 +139,11 @@ pub struct Oracle {
 ///
 /// A pure function of what [`ExitStatus::code`](std::process::ExitStatus::code)
 /// returned and whether [`wait_with_deadline`] is the one that ended the
-/// run, kept as a named type rather than the `exit_code: i32` sentinel this
-/// replaced: `output.status.code().unwrap_or(-1)` gave a signal death and a
-/// normal `exit -1` the identical representation, and a verdict function
-/// comparing exit codes read the former as a divergence -- a wrong
-/// classification, not merely an imprecise one -- rather than the failure it
-/// was.
+/// run, kept as a named type rather than an `i32` exit code:
+/// `status.code().unwrap_or(-1)` gives a signal death and a normal `exit -1`
+/// the identical representation, and a verdict function comparing exit
+/// codes reads the former as a divergence -- a wrong classification, not
+/// merely an imprecise one -- rather than the failure it is.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Termination {
     /// The process ran to completion and returned this status.
@@ -308,13 +308,23 @@ impl Oracle {
     /// itself and because `Stdio` cannot express "feed these bytes".
     pub fn run_with_stdin(&self, path: &Path, args: &[&str], stdin: Stdio) -> CppOutcome {
         self.invocations.fetch_add(1, Ordering::Relaxed);
-        let child = self
+        let mut child = self
             .wrapped(path, args)
             .stdin(stdin)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .unwrap_or_else(|e| panic!("failed to spawn the oracle for {}: {e}", path.display()));
+        // A no-op for the `File`/`Stdio::null()` shapes this method's only
+        // caller passes today, since neither hands back a `child.stdin` to
+        // take. It matters for `Stdio::piped()`, which the signature also
+        // accepts: this method never writes to a piped stdin, so without
+        // this a caller passing one would get a child waiting on input that
+        // never arrives -- killed at `ORACLE_DEADLINE` and reported
+        // `TimedOut`, a ten-second wait for what closing the pipe here
+        // would have answered at once. `run_with`'s bytes path avoids the
+        // same trap by dropping its own `sink` after writing.
+        drop(child.stdin.take());
         let (stdout, stderr, termination) = wait_with_deadline(child, path);
         CppOutcome {
             stdout,
@@ -359,9 +369,10 @@ impl Oracle {
 /// and need [`wait_with_deadline`]'s poll loop for it, which this function's
 /// single blocking `wait_with_output` cannot express; `rexx-run` run as a
 /// subprocess carries no deadline of its own, so this stays the simpler,
-/// blocking form for the one caller left. Getting it wrong has one specific
-/// failure mode worth naming regardless: writing the whole buffer before
-/// reading any output deadlocks if the buffer is larger than a pipe and the
+/// blocking form for its caller in `tests/input_oracle.rs`. Getting it
+/// wrong has one specific failure mode worth naming regardless: writing the
+/// whole buffer before reading any output deadlocks if the buffer is
+/// larger than a pipe and the
 /// program writes enough to fill its own. `wait_with_output` reads both
 /// output pipes concurrently, so the deadlock window is only the write
 /// below; the caller here feeds a handful of lines, far inside one pipe
@@ -391,49 +402,81 @@ pub fn write_and_wait(command: &mut Command, bytes: &[u8], path: &Path) -> std::
 ///
 /// **Why this exists.** `Command::output` (and `Child::wait_with_output`,
 /// which it calls) blocks on `waitpid` with no deadline of its own -- so a
-/// program that never exits, `do forever; end` among them, hung whichever
-/// test called it forever, and hung `cargo test --workspace` with it. This
-/// polls [`Child::try_wait`] instead, at [`POLL_INTERVAL`], and calls
-/// `kill()` the moment [`ORACLE_DEADLINE`] has passed.
+/// program that never exits, `do forever; end` among them, hangs whichever
+/// test calls it, and hangs `cargo test --workspace` with it. This polls
+/// [`Child::try_wait`] instead, at [`POLL_INTERVAL`], and calls `kill()` the
+/// moment [`ORACLE_DEADLINE`] has passed.
 ///
-/// **Why the reader threads.** Polling `try_wait` instead of blocking on
-/// `wait` means nothing here is blocked reading `stdout`/`stderr` while the
-/// poll loop runs, so those two pipes are read on their own threads from the
-/// moment the child is spawned -- the same concurrent-read shape
-/// `wait_with_output` already uses internally, needed for the same reason
-/// [`write_and_wait`]'s doc names for the write side: a chatty program can
-/// fill a pipe's kernel buffer and block until something drains it, and nothing
-/// here may be that something only once a wait already returned.
+/// **Why the reader threads report over a channel rather than being
+/// joined.** `read_to_end` returns only once *every* write end of a pipe is
+/// closed, not once the direct child dies -- and `kill()` above reaches only
+/// the direct child. A program that hands its own descriptor to a process
+/// of its own (`address system 'sleep 3600 &'`, still running when its
+/// parent exits) leaves that process holding the write end, so an
+/// unconditional `join()` here would block for that process's own lifetime
+/// regardless of how the child above was classified: this deadline would
+/// bound the wait and not the read, one gap wide enough for a single
+/// committed probe to hang `cargo test --workspace` for an hour. So each
+/// reader thread sends its buffer down a channel instead of being joined,
+/// and this function gives that channel a bounded, independent budget of
+/// its own -- [`ORACLE_DEADLINE`] again, but measured fresh from here rather
+/// than as whatever the process-wait loop above left over, since a direct
+/// child that exits at once (this shape's whole point) would otherwise
+/// leave the read almost no time to run. **The residual, honestly**: giving
+/// up on a channel does not reap what is blocking it. A grandchild that
+/// still holds the descriptor keeps running, and the reader thread stays
+/// parked in its `read` call for as long as that process does (or forever)
+/// -- a leaked background process and a leaked background thread in this
+/// test binary, not a hung suite. `Child` has no handle on a process it
+/// never spawned, so there is nothing further here to kill.
+///
+/// **Why the reader threads exist at all.** Polling `try_wait` instead of
+/// blocking on `wait` means nothing here is blocked reading `stdout`/`stderr`
+/// while the poll loop runs, so those two pipes are read on their own
+/// threads from the moment the child is spawned -- the same concurrent-read
+/// shape `wait_with_output` already uses internally, needed for the same
+/// reason [`write_and_wait`]'s doc names for the write side: a chatty
+/// program can fill a pipe's kernel buffer and block until something drains
+/// it, and nothing here may be that something only once a wait already
+/// returned.
 ///
 /// `child`'s `stdin` is expected to already be closed or fully written by the
 /// caller -- this function only waits and reads the two output pipes.
 fn wait_with_deadline(mut child: Child, path: &Path) -> (Vec<u8>, Vec<u8>, Termination) {
     let mut stdout_pipe = child.stdout.take().expect("stdout was requested as a pipe");
     let mut stderr_pipe = child.stderr.take().expect("stderr was requested as a pipe");
-    let stdout_thread = thread::spawn(move || {
+    let (stdout_tx, stdout_rx) = mpsc::channel();
+    let (stderr_tx, stderr_rx) = mpsc::channel();
+    thread::spawn(move || {
         let mut buf = Vec::new();
         let _ = stdout_pipe.read_to_end(&mut buf);
-        buf
+        let _ = stdout_tx.send(buf);
     });
-    let stderr_thread = thread::spawn(move || {
+    thread::spawn(move || {
         let mut buf = Vec::new();
         let _ = stderr_pipe.read_to_end(&mut buf);
-        buf
+        let _ = stderr_tx.send(buf);
     });
 
     let start = Instant::now();
-    let (code, deadline_exceeded) = loop {
+    let (mut code, mut deadline_exceeded) = loop {
         match child.try_wait() {
             Ok(Some(status)) => break (status.code(), false),
             Ok(None) => {
                 if start.elapsed() >= ORACLE_DEADLINE {
                     // The process is still running past its deadline: kill
-                    // it and reap it so it does not outlive this function as
-                    // a zombie, then classify the run as the harness's own
-                    // kill rather than as whatever signal delivered it.
+                    // it, then bind the status `wait()` actually returns
+                    // rather than assuming `None`. A process that exited in
+                    // the gap between the last `try_wait` and this check is
+                    // killed as a no-op -- the signal lands on an
+                    // already-dead process -- and `wait()` still reports its
+                    // real status, so binding it here turns what would
+                    // otherwise be a flaky `TimedOut` (and the panic
+                    // `expect_exit_code` gives one) into the `Exited` this
+                    // run actually earned.
                     let _ = child.kill();
-                    let _ = child.wait();
-                    break (None, true);
+                    let status = child.wait().ok();
+                    break (status.and_then(|s| s.code()), true);
                 }
                 thread::sleep(POLL_INTERVAL);
             }
@@ -441,12 +484,36 @@ fn wait_with_deadline(mut child: Child, path: &Path) -> (Vec<u8>, Vec<u8>, Termi
         }
     };
 
-    let stdout = stdout_thread
-        .join()
-        .unwrap_or_else(|_| panic!("stdout reader thread panicked for {}", path.display()));
-    let stderr = stderr_thread
-        .join()
-        .unwrap_or_else(|_| panic!("stderr reader thread panicked for {}", path.display()));
+    // Bounded independently of the wait above -- see "Why the reader
+    // threads report over a channel" -- so a fast-exiting direct child with
+    // a slow grandchild still has this whole deadline to finish reading in,
+    // and a read that has already outlasted one deadline is not handed a
+    // second one on top by chaining off the first one's remaining time. The
+    // two channels share one clock rather than each getting a fresh
+    // `ORACLE_DEADLINE`, so the pair together are bounded by it once, not
+    // twice.
+    let read_deadline = Instant::now() + ORACLE_DEADLINE;
+    let stdout_result =
+        stdout_rx.recv_timeout(read_deadline.saturating_duration_since(Instant::now()));
+    let stderr_result =
+        stderr_rx.recv_timeout(read_deadline.saturating_duration_since(Instant::now()));
+    let (stdout, stderr) = match (stdout_result, stderr_result) {
+        (Ok(stdout), Ok(stderr)) => (stdout, stderr),
+        _ => {
+            // At least one side is still blocked, almost always behind a
+            // descriptor its direct child handed to a process of its own.
+            // The transcript is not trustworthy either way -- a stdout that
+            // did arrive on time proves nothing about a stderr that did not,
+            // and vice versa -- so this run counts as a non-finish and both
+            // channels read empty. Free to do: a `TimedOut` run's bytes are
+            // a structural failure, never a comparison, so nothing downstream
+            // reads them.
+            code = None;
+            deadline_exceeded = true;
+            (Vec::new(), Vec::new())
+        }
+    };
+
     (
         stdout,
         stderr,
