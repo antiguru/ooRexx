@@ -188,8 +188,9 @@ impl Interp {
     /// value that fits in the handle needs no storage at all -- so that copy
     /// is written and discarded. [`text_bytes`]' own doc has how often: the
     /// handle takes about two thirds to three quarters of the strings this
-    /// interpreter creates. The test there stays, because [`text_owned`]
-    /// arrives already holding a `Bytes` and cannot reach this one.
+    /// interpreter creates. [`text_owned`] makes the same test in front of its
+    /// own `Bytes`, so [`text_bytes`] asserts the answer rather than asking
+    /// for it a third time.
     ///
     /// [`text_owned`]: Interp::text_owned
     /// [`text_bytes`]: Interp::text_bytes
@@ -394,28 +395,48 @@ impl Interp {
     }
 
     pub(crate) fn text_owned(&mut self, bytes: Vec<u8>) -> ObjRef {
+        // **The handle test in front of the `Bytes`**, for the reason
+        // [`Interp::text`] gives: a value short enough to live in the handle
+        // needs no storage, and `Bytes::from_vec` would copy it into a
+        // 54-byte inline buffer that is then discarded. The median string
+        // this interpreter builds is three bytes long.
+        if let Some(inline) = ObjRef::inline_text(&bytes) {
+            return inline;
+        }
         self.text_bytes(Bytes::from_vec(bytes))
     }
 
     /// The one place a `Body::Text` is built, so the `num` cache's initial
     /// state is stated once.
     ///
-    /// **A string short enough is not built at all.** `ObjRef::inline_text`
+    /// **A string short enough never reaches here.** `ObjRef::inline_text`
     /// carries up to `INLINE_TEXT` bytes in the handle, so those values cost
     /// no slot, no mark byte and no sweep. Measured over the benchmark axes,
     /// that is about two thirds to three quarters of every string this
     /// interpreter creates -- the length distribution is bimodal, a median of
     /// three bytes with the next cluster far above the inline capacity.
+    /// **Both callers make that test in front of the `Bytes` rather than
+    /// behind it**, which is what this function no longer repeating it says:
+    /// a `Bytes` built for a value that fits the handle copies the bytes into
+    /// a 54-byte inline buffer and then discards the whole thing.
     ///
     /// The one thing given up is the `num` cache: a handle is `Copy`, so
     /// there is no shared mutable home for a lazy parse. Measured on the only
     /// axis that asks a string for a number at all, that cache was serving
     /// 22,400 repeat asks against 94,805 first ones, so what is lost is a
     /// fifth of a quarter of the calls on one axis and nothing on four.
+    ///
+    /// **`#[inline]`, because a `Bytes` is 56 bytes and both callers build one
+    /// at the call site.** Out of line it is written to the caller's stack,
+    /// copied across the call, copied into `Body::Text` and copied again into
+    /// the slot; inlined, the construction and the `Body` literal have one
+    /// destination between them.
+    #[inline]
     fn text_bytes(&mut self, bytes: Bytes) -> ObjRef {
-        if let Some(inline) = ObjRef::inline_text(&bytes) {
-            return inline;
-        }
+        debug_assert!(
+            ObjRef::inline_text(&bytes).is_none(),
+            "a value that fits the handle built a Bytes on the way here"
+        );
         self.alloc_with(BehaviourId::STRING, Body::Text { bytes, num: None })
     }
 
