@@ -20,8 +20,7 @@
 //! [`Termination::TimedOut`], inside a bounded amount of wall time, rather
 //! than blocking forever the way an undeadlined `Command::output` does. The
 //! control this is measured against -- the same program with no deadline
-//! anywhere in the path -- is measured by hand, not run here, and is in the
-//! task's own report rather than in this file.
+//! anywhere in the path -- is measured by hand rather than run here.
 //!
 //! This does not prove the crate side of a gate-table row can be bounded:
 //! `Invocation::with_engine` runs **in-process**, and an in-process run
@@ -35,13 +34,12 @@
 //! Gated on `REXX_CORPUS_GATE`, but not for the reason that gates most of
 //! this crate's oracle-invoking harnesses: `corpus.rs`, `builtin_status.rs`
 //! and `state_builtin_oracle.rs` put every program they own through
-//! `wait_with_deadline` on a plain `cargo test` already, gating only their
-//! own assertion, so the deadline **mechanism** -- a broken poll loop, a
-//! misclassified normal exit -- would already redden ungated. What only
-//! this file checks, and only under the gate, is that the **kill** itself
-//! fires: proving that costs the full `ORACLE_DEADLINE`, which is worth
-//! keeping out of a plain `cargo test`, where nothing else in this crate
-//! deliberately runs that long.
+//! `wait_with_deadline` on a plain `cargo test` already, so the deadline
+//! **mechanism** -- a broken poll loop, a misclassified normal exit --
+//! would already redden ungated. What only this file checks, and only under
+//! the gate, is that the **kill** itself fires: proving that costs the full
+//! `ORACLE_DEADLINE`, which is worth keeping out of a plain `cargo test`,
+//! where nothing else in this crate deliberately runs that long.
 
 mod support;
 
@@ -189,7 +187,7 @@ fn a_background_process_holding_the_pipe_open_does_not_hang_the_run() {
     let outcome = oracle.run(&abs);
     let elapsed = started.elapsed();
 
-    // The bound that would fail without the fix this test proves: the
+    // The bound that would fail if the read were joined unconditionally: the
     // backgrounded `sleep` runs thirty seconds, so a read joined
     // unconditionally on its pipe returns no sooner than that. Comfortably
     // under it, and comfortably over the read's own bounded budget, so this

@@ -96,12 +96,17 @@ use rexx_exec::Outcome;
 /// here as a named constant rather than a magic number in the format string.
 pub const ORACLE_MEMORY_LIMIT_KIB: u64 = 1_048_576;
 
-/// How long an oracle invocation may run before [`wait_with_deadline`] kills
-/// it and counts the run as [`Termination::TimedOut`] instead of blocking on
-/// it forever. 10 seconds: the figure `timeout -s KILL 10` already fixes by
-/// hand around every oracle invocation this project runs outside the suite
-/// (`rust/CLAUDE.md`'s "Wrap every oracle run" and the probe rules below it),
-/// restated here so the harness enforces what a person has had to remember.
+/// How long [`wait_with_deadline`] waits for the direct child before killing
+/// it, and separately, how long it then waits for the two output pipes to
+/// finish reading -- so one oracle invocation is bounded at up to **twice**
+/// this, not once: `wait_with_deadline`'s own doc has the reason the read
+/// needs a budget of its own rather than sharing the wait's. 10 seconds is
+/// the figure `timeout -s KILL 10` fixes by hand around every oracle
+/// invocation this project runs outside the suite (`rust/CLAUDE.md`'s "Wrap
+/// every oracle run" and the probe rules below it), which bounds only the
+/// process, not a descriptor it hands to one of its own -- the harness's
+/// doubled bound is what closes that gap, not a mismatch with the by-hand
+/// figure.
 pub const ORACLE_DEADLINE: Duration = Duration::from_secs(10);
 
 /// How often [`wait_with_deadline`] polls [`Child::try_wait`] while a run is
@@ -315,8 +320,9 @@ impl Oracle {
             .stderr(Stdio::piped())
             .spawn()
             .unwrap_or_else(|e| panic!("failed to spawn the oracle for {}: {e}", path.display()));
-        // A no-op for the `File`/`Stdio::null()` shapes this method's only
-        // caller passes today, since neither hands back a `child.stdin` to
+        // A no-op for the `File`-backed `Stdio` `input_oracle.rs`'s
+        // `an_unreadable_console_is_end_of_input` passes, and for
+        // `Stdio::null()`, since neither hands back a `child.stdin` to
         // take. It matters for `Stdio::piped()`, which the signature also
         // accepts: this method never writes to a piped stdin, so without
         // this a caller passing one would get a child waiting on input that
@@ -497,6 +503,22 @@ fn wait_with_deadline(mut child: Child, path: &Path) -> (Vec<u8>, Vec<u8>, Termi
         stdout_rx.recv_timeout(read_deadline.saturating_duration_since(Instant::now()));
     let stderr_result =
         stderr_rx.recv_timeout(read_deadline.saturating_duration_since(Instant::now()));
+
+    // A disconnected channel means the sender end was dropped without
+    // sending -- the reader thread panicked before it could report its
+    // buffer -- which `recv_timeout` distinguishes from an ordinary
+    // `Timeout` and this function does too, rather than reading both the
+    // same way. The pre-channel code named the path in exactly this case
+    // (`.join().unwrap_or_else(|_| panic!(...))`); folding it into a
+    // `TimedOut` classification instead would trade a named harness bug for
+    // a silent misclassification.
+    if matches!(stdout_result, Err(mpsc::RecvTimeoutError::Disconnected)) {
+        panic!("stdout reader thread panicked for {}", path.display());
+    }
+    if matches!(stderr_result, Err(mpsc::RecvTimeoutError::Disconnected)) {
+        panic!("stderr reader thread panicked for {}", path.display());
+    }
+
     let (stdout, stderr) = match (stdout_result, stderr_result) {
         (Ok(stdout), Ok(stderr)) => (stdout, stderr),
         _ => {
@@ -505,11 +527,25 @@ fn wait_with_deadline(mut child: Child, path: &Path) -> (Vec<u8>, Vec<u8>, Termi
             // The transcript is not trustworthy either way -- a stdout that
             // did arrive on time proves nothing about a stderr that did not,
             // and vice versa -- so this run counts as a non-finish and both
-            // channels read empty. Free to do: a `TimedOut` run's bytes are
-            // a structural failure, never a comparison, so nothing downstream
+            // channels read empty. Free to do: a non-finish's bytes are a
+            // structural failure, never a comparison, so nothing downstream
             // reads them.
-            code = None;
-            deadline_exceeded = true;
+            //
+            // Only synthesised when the process-wait loop above found an
+            // `Exited` -- if it already found a non-finish of its own
+            // (`Signaled` or `TimedOut`), that classification is left alone
+            // rather than overwritten: a child that genuinely died from a
+            // signal must not be relabelled `TimedOut` merely because a
+            // descendant of its also kept a pipe open, since `Signaled`'s
+            // own doc distinguishes a crash from a timeout and a reader
+            // sent to the wrong one learns the wrong thing.
+            if matches!(
+                classify_termination(code, deadline_exceeded),
+                Termination::Exited(_)
+            ) {
+                code = None;
+                deadline_exceeded = true;
+            }
             (Vec::new(), Vec::new())
         }
     };
