@@ -8331,8 +8331,8 @@ impl Interp {
                 // read the control variable (`control->evaluate`, which
                 // traces `>V>`), `traceResult` that value, add `BY`,
                 // `traceResult` the sum, then `control->assign` (`>=>`).
-                // The `!first` is exactly `stepped` here. Measured, `trace
-                // i` / `do ii = 1 to 2`'s own second pass:
+                // The `!first` is exactly `stepped` here. `trace i` /
+                // `do ii = 1 to 2`'s own second pass:
                 //
                 // ```text
                 //   >V>     II => "1"
@@ -8344,6 +8344,16 @@ impl Interp {
                 // and the same program under `trace r` shows only the two
                 // `>>>` lines, which is the gating: `>V>`/`>=>` are
                 // `intermediates`, both `>>>` are `results`.
+                //
+                // **The oracle binary on this machine emits neither `>>>`
+                // line, and that is its age rather than a disagreement.**
+                // Its `DoBlock::checkControl` has no `traceResult` call at
+                // all; the two above were added between the version it was
+                // built from and the `interpreter/` this crate reimplements.
+                // Measured 2026-08-20 against both oracle builds. So the
+                // transcript here is read off this repository's C++, and a
+                // probe of this arm against the oracle will differ by
+                // exactly these two lines.
                 //
                 // **The pair is emitted before either termination test**, on
                 // the failing pass as well -- measured, `do ii = 1 to 3`
