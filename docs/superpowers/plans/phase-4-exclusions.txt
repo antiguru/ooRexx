@@ -3657,3 +3657,61 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   :546-:547 are external natives, so the bootstrap CALLS a native while
   installing a directive. Evaluation happens now; resolving that particular
   native call is Task 10's (the entry-point registry), not this one's.
+
+--------------------------------------------------------------------------
+STANDING RED, opened 2026-08-20: corpus/lang/loop_control_rounding.rex
+--------------------------------------------------------------------------
+
+Status: DIVERGES from the oracle. Phase 4 loop control. Does not block
+Phase 5. Recorded here because the SDD workspace it was found in is
+scratch and this file is not.
+
+The oracle binary at /home/moritz/dev/repos/ooRexx/build was deliberately
+swapped from a 5.0 interpreter to a 5.3 one on 2026-08-20 (Moritz,
+confirmed; the differential is version-matched to this repository's own
+interpreter/ from now on). REXX_CORPUS_GATE=1 at 5de2a8801 is 105 of 106
+and this is the one program that moved.
+
+WHAT DIVERGES. `do m = 1 to 10 for 20` under NUMERIC DIGITS 2 FUZZ 1:
+the oracle runs the control variable out to 14 and reports `after 15`;
+this crate stops at 11 and reports `after 11`.
+
+WHY, AND IT IS NOT A MISSING FEATURE. This crate implements 5.0's rule
+deliberately and with a measured comment saying so. run.rs's controlled-
+loop bound test takes an unfuzzed i64 comparison whenever current, to and
+by all fit NUMERIC DIGITS, and its comment states:
+
+    **`FUZZ` is not a guard on this, and reading it as one is a
+    divergence.**
+
+That was true of the 5.0 oracle it was measured against. It is exactly
+backwards for the C++ in this repository, which spells the guard out:
+
+    interpreter/classes/IntegerClass.cpp, RexxInteger::comp
+        // if we want to do a binary compare, both operands must be valid
+        // under the current numeric digits, and FUZZ must be zero
+        if (Numerics::isValid(value, number_digits()) &&
+            isInteger(other) &&
+            Numerics::isValid(((RexxInteger *)other)->value, number_digits()) &&
+            number_fuzz() == 0)
+
+5.3 reaches that from DoBlock::checkControl, which does the bound test as
+an ordinary Rexx comparison -- `result->callOperatorMethod(compare, to)`
+-- rather than through a private integer path.
+
+THE FIX is to add `fuzz == 0` to the integer fast path's condition, so a
+non-zero FUZZ falls to controlled_within_wide as the C++ falls to
+NumberString::comp. The comment above it has to be rewritten in the same
+edit: it currently asserts the opposite of this tree's own source and
+cites a measurement taken against an interpreter that is no longer on this
+machine.
+
+NOT YET DONE. The crate is frozen while an agent re-measures every figure
+in the Phase 5a plan against a binary that must not move under it. Do this
+once that report lands.
+
+THE TRANSFERABLE PART. The comment was not sloppy -- it was measured,
+specific, and correct when written. It rotted because its referent was the
+oracle binary, which is machine state and not tree state, and nothing in
+the checkout records which interpreter answered a given run. A comment
+citing the oracle is only as stable as the binary on disk.
