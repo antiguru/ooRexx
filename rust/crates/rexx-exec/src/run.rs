@@ -8577,6 +8577,68 @@ impl Interp {
                 // iterations, for *either* reason a candidate iteration can
                 // fail below (an exhausted `FOR` budget or the `TO` bound).
                 let digits = self.activation().settings.digits();
+                // **The ordinary counted pass, answered without reaching any
+                // of the code below.** Every branch of the arm from here on
+                // exists for a shape this test excludes: a control variable
+                // that is not a plain name, a value or a bound too wide for
+                // the tag, a `FOR` budget, a `TRACE` that has to render the
+                // value, or the first pass, whose value the header already
+                // computed. What is left is read the slot, add, write the
+                // slot, compare -- and, because both handles are tagged
+                // integers rather than heap objects, no temporaries frame
+                // for the collector to walk.
+                //
+                // The gate is deliberately a conjunction of the cheapest
+                // available tests and never re-derives anything: `cached_
+                // digits == digits` is what makes `to_int`/`by_int` usable,
+                // exactly as the invalidation below defines them.
+                if *stepped
+                    && *shape == NameShape::Simple
+                    && *cached_digits == digits
+                    && for_remaining.is_none()
+                    && let Some(slot) = *at
+                    && let Some(step) = *by_int
+                    && let Some(bound) = *to_int
+                    && let ControlValue::Small(_) = current
+                {
+                    let mode = self.trace_mode();
+                    if !mode.results && !mode.intermediates {
+                        let frame = self.activation().frame;
+                        // The read is `Interp::variable` rather than
+                        // `read_at`: the shape is `Simple` and the slot is
+                        // the loop's own, so the two agree, and an
+                        // uninitialised slot answers `None` here instead of
+                        // building a derived name -- which is one of the
+                        // shapes this path declines, since it goes on to
+                        // fail 41.1 below.
+                        if let Some(previous) = self.variable(frame, slot)
+                            && let Decoded::SmallInt(value) = previous.decode()
+                            && within_digits(value, digits)
+                            && let Some(sum) = value.checked_add(step)
+                            && within_digits(sum, digits)
+                            && let Some(handle) = exact_small_int(sum, digits)
+                        {
+                            debug_assert_eq!(
+                                *shape,
+                                shape_of(code.symbols.name(*control).as_bytes()),
+                                "the loop's cached control-variable shape is not the one its name gives"
+                            );
+                            debug_assert_eq!(
+                                *to_int,
+                                to.as_ref().and_then(|bound| bound.plain_integer(digits)),
+                                "the loop's cached TO disagrees with DIGITS {digits}"
+                            );
+                            debug_assert_eq!(
+                                *by_int,
+                                by.plain_integer(digits),
+                                "the loop's cached BY disagrees with DIGITS {digits}"
+                            );
+                            *current = ControlValue::Small(sum);
+                            self.set_variable(frame, slot, handle);
+                            return Ok(if step < 0 { sum >= bound } else { sum <= bound });
+                        }
+                    }
+                }
                 let fuzz = self.activation().settings.fuzz();
                 let form = self.activation().settings.form();
                 if *cached_digits != digits {
