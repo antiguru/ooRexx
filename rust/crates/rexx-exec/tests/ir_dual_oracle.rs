@@ -136,9 +136,8 @@ fn render_oracle(oracle: &Oracle, run_dir: &Path, label: &str, program: &str) ->
     fs::write(&path, program.as_bytes())
         .unwrap_or_else(|e| panic!("cannot write {}: {e}", path.display()));
     let outcome = oracle.run(&path);
-    // An unconditional `assert!` naming the stanza, the shape every
-    // oracle-invoking harness in this crate uses for the same event, before
-    // `expect_exit_code` below can reach its own path-less panic.
+    // An unconditional `assert!` naming the stanza, before `expect_exit_code`
+    // below can reach its own path-less panic.
     assert!(
         !did_not_finish(&outcome),
         "{label}: the oracle did not finish: {:?} -- a structural failure, not \
@@ -199,6 +198,12 @@ fn every_recorded_expectation_is_still_what_the_oracle_produces() {
 
     datadriven::walk(CASE_DIR, |file| {
         let filename = file.filename.clone();
+        // Reset per file, unlike `checked` below: `datadriven` 0.9.0 walks
+        // `fs::read_dir` unsorted, so a running total across every file is
+        // neither the stanza's position in *this* file nor stable between
+        // two machines -- adding a case file anywhere renumbers everything
+        // after it. A within-file count is stable under both.
+        let mut in_file = 0usize;
         file.run(|case| {
             assert_eq!(
                 case.directive, "program",
@@ -206,7 +211,8 @@ fn every_recorded_expectation_is_still_what_the_oracle_produces() {
                 case.directive
             );
             checked += 1;
-            let label = format!("{filename}#{checked}");
+            in_file += 1;
+            let label = format!("{filename}#{in_file}");
             let reason = case.args.remove(NOT_ORACLE_BYTES).map(|values| {
                 assert!(
                     !values.is_empty(),

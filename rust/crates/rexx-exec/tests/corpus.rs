@@ -662,7 +662,7 @@ fn corpus_differential() {
     // decide whether a run that never produced bytes to compare gets
     // noticed. Named separately from `mismatches.is_empty()` so that a
     // report-mode run -- most runs -- cannot let a program that stopped
-    // finishing pass as "106 of 106 matching" just because the corpus
+    // finishing pass as a fully-matching corpus just because the corpus
     // gate itself was not requested.
     let structural: Vec<&str> = mismatches
         .iter()

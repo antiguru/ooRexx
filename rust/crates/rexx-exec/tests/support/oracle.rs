@@ -508,10 +508,8 @@ fn wait_with_deadline(mut child: Child, path: &Path) -> (Vec<u8>, Vec<u8>, Termi
     // sending -- the reader thread panicked before it could report its
     // buffer -- which `recv_timeout` distinguishes from an ordinary
     // `Timeout` and this function does too, rather than reading both the
-    // same way. The pre-channel code named the path in exactly this case
-    // (`.join().unwrap_or_else(|_| panic!(...))`); folding it into a
-    // `TimedOut` classification instead would trade a named harness bug for
-    // a silent misclassification.
+    // same way. Folding it into a `TimedOut` classification instead would
+    // trade a named harness bug for a silent misclassification.
     if matches!(stdout_result, Err(mpsc::RecvTimeoutError::Disconnected)) {
         panic!("stdout reader thread panicked for {}", path.display());
     }

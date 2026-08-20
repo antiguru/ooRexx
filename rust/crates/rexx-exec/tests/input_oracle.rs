@@ -555,6 +555,16 @@ fn an_unreadable_console_is_end_of_input() {
     // keep in one place, and the counter is asserted below.
     let cpp = oracle.run_with_stdin(&abs, &[], as_stdin());
 
+    // Structural, and checked before the byte comparison below, same as this
+    // file's other `oracle.run_with`/`run_with_stdin` call site (`:449`):
+    // an unread console must not turn a non-finish into a divergence.
+    assert!(
+        !did_not_finish(&cpp),
+        "an unreadable console: the oracle did not finish: {:?} -- a \
+         structural failure, not a byte comparison",
+        cpp.termination
+    );
+
     assert_eq!(
         (
             String::from_utf8_lossy(&rust.stdout).into_owned(),
