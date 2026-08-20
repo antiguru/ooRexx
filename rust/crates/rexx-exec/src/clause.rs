@@ -206,6 +206,43 @@ pub(crate) struct ClauseState {
     /// number of spaces, where a line that is momentarily wrong means a
     /// clause boundary did not happen.
     pub(crate) current_value_indent: usize,
+    /// Whether the clause now running had instruction tracing in force **when
+    /// it began**, which is the only thing an assignment's `>>>` echo is
+    /// allowed to consult.
+    ///
+    /// **The oracle decides this once, before it evaluates.**
+    /// `RexxInstructionAssignment::execute` branches on
+    /// `context->tracingInstructions()` and takes a fast path that never calls
+    /// `traceResult` at all, so a `TRACE` reached *inside* the expression
+    /// cannot bring that line back. Measured: `zg = trace('i')` prints
+    /// `>F>   TRACE => "N"` and then `>=>   ZG <= "N"` with no `>>>` between
+    /// them, and `zg = trace('i') || 'q'` prints `>F>`, `>L>`, `>O>` and `>=>`
+    /// with none either -- while `say trace('i')`, whose instruction re-reads
+    /// the setting, does print one.
+    ///
+    /// **Only the assignment instruction has that shape**, which is why this
+    /// gates one call site rather than `Interp::trace_result` itself:
+    /// `tracingInstructions()` appears in exactly one file under
+    /// `interpreter/instructions/`.
+    ///
+    /// **What the field costs, since it is written per clause and read per
+    /// assignment**: `instructions:u` over `bench-programs/`, `varlookup.rex`
+    /// +0.379%, `emptyloop.rex` +0.362% -- 50,000,461 over 25,000,000 passes,
+    /// two an iteration, which is the load of the setting and the store beside
+    /// the indent. Carried rather than recomputed because the value wanted is
+    /// the one from *before* the expression ran, which nothing later can
+    /// recover.
+    ///
+    /// **Saved and restored by `Interp::save_clause_state`**, so a callee's
+    /// own clauses cannot leave this reading for the caller's: measured with
+    /// `trace i`, a routine whose body runs `trace o`, and the caller's clause
+    /// resuming afterwards -- dropping it from that copy changes those bytes.
+    ///
+    /// The other direction needs no field, because `traceResult` reads the
+    /// setting in force when it runs: `trace i` followed by `zg = trace('o')`
+    /// prints neither `>>>` nor `>=>`, and the ordinary `results` gate on both
+    /// lines is already what does that.
+    pub(crate) instructions_traced_at_entry: bool,
     /// The line the clause currently being stepped starts at -- **`SIGL`'s**
     /// own value, one control transfer away from being read, and the exact
     /// analogue of `current_value_indent` just above: `Interp::invoke_call`
@@ -245,6 +282,9 @@ impl ClauseState {
         ClauseState {
             current_value_indent: 0,
             current_clause_line: 0,
+            // `false` is the state an interpreter with nothing running is in,
+            // matching `Interp::trace_cache`'s own `TraceMode::OFF`.
+            instructions_traced_at_entry: false,
         }
     }
 }
@@ -604,6 +644,7 @@ impl Interp {
         SavedClauseState(ClauseState {
             current_value_indent: self.clause_state.current_value_indent,
             current_clause_line: self.clause_state.current_clause_line,
+            instructions_traced_at_entry: self.clause_state.instructions_traced_at_entry,
         })
     }
 

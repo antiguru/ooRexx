@@ -219,3 +219,106 @@ err>        >>>       "ab"
 err>      4 *-* call trace 'o'
 err>        >L>   "o"
 err>        >A>   "o"
+
+# an assignment whose own expression turns tracing on
+# The oracle decides an assignment's `>>>` before it evaluates:
+# `RexxInstructionAssignment::execute` branches on `tracingInstructions()`
+# and its fast path never calls `traceResult`, so a `TRACE` reached inside
+# the expression cannot bring the line back. `>F>` and `>=>` still print --
+# the call machinery and `assign` each read the setting where they run.
+program
+zs = 'ab'
+zg = trace('i')
+say zs
+----
+rc> 0
+out> ab
+err>        >F>   TRACE => "N"
+err>        >=>   ZG <= "N"
+err>      3 *-* say zs
+err>        >V>   ZS => "ab"
+err>        >>>   "ab"
+
+# the same, with the expression carrying on after the setting changed
+# `>F>`, `>L>` and `>O>` all print and `>>>` still does not, which is what
+# says the missing line is the instruction's own decision and not a gate on
+# the value.
+program
+/* assignment whose expression turns it on and then does more work */
+zg = trace('i') || 'q'
+say 'after'
+----
+rc> 0
+out> after
+err>        >F>   TRACE => "N"
+err>        >L>   "q"
+err>        >O>   "||" => "Nq"
+err>        >=>   ZG <= "Nq"
+err>      3 *-* say 'after'
+err>        >L>   "after"
+err>        >>>   "after"
+
+# SAY, whose instruction re-reads the setting
+# The adjacent success: `tracingInstructions()` appears in exactly one file
+# under `interpreter/instructions/`, so every other instruction echoes what
+# the setting says when the echo runs. A fix applied to `trace_result`
+# itself rather than to the assignment would drop this row's `>>>`.
+program
+/* SAY: does it re-read the setting mid-clause? */
+say trace('i')
+say 'after'
+----
+rc> 0
+out> N
+out> after
+err>        >F>   TRACE => "N"
+err>        >>>   "N"
+err>      3 *-* say 'after'
+err>        >L>   "after"
+err>        >>>   "after"
+
+# traced at entry, turned off inside the expression
+# The other direction, and it needs no entry state: `traceResult` and the
+# assignment echo both read the setting in force when they run, so a clause
+# that switches tracing off part way owes neither line.
+program
+/* the reverse: on at entry, turned off inside the expression */
+trace i
+zg = trace('o')
+say 'after'
+----
+rc> 0
+out> after
+err>      3 *-* zg = trace('o')
+err>        >L>   "o"
+err>        >A>   "o"
+
+# a callee that changes the setting, with the caller's clause resuming
+# The caller is traced at entry and the routine turns tracing off inside its
+# own activation. The setting comes back with the return, and so must the
+# entry state the caller's clause recorded -- `save_clause_state` is what
+# carries it. Dropping this field from that copy reddens this row.
+program
+/* the caller is traced, the callee turns it off internally, caller resumes */
+trace i
+zg = sub() || 'q'
+say 'after'
+exit
+sub:
+  trace o
+  return 'S'
+----
+rc> 0
+out> after
+err>      3 *-* zg = sub() || 'q'
+err>      6 *-*   sub:
+err>      7 *-*   trace o
+err>        >F>   SUB => "S"
+err>        >L>   "q"
+err>        >O>   "||" => "Sq"
+err>        >>>   "Sq"
+err>        >=>   ZG <= "Sq"
+err>      4 *-* say 'after'
+err>        >L>   "after"
+err>        >>>   "after"
+err>      5 *-* exit

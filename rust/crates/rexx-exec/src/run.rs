@@ -3525,7 +3525,14 @@ impl Interp {
         // `TRACE R`.
         let rendered = self.result_text(value);
         if let Some(rendered) = &rendered {
-            self.trace_result(indent, rendered);
+            // **The entry gate, not just the setting in force.** An assignment
+            // whose expression turned tracing on owes no `>>>`, because the
+            // oracle chose the path without one before it evaluated. See
+            // `ClauseState::instructions_traced_at_entry`, which carries the
+            // measurement.
+            if self.clause_state.instructions_traced_at_entry {
+                self.trace_result(indent, rendered);
+            }
         }
         self.assign_expr_target(code, target, value, rendered.as_deref(), indent, at)
     }
@@ -6005,6 +6012,10 @@ impl Interp {
             "the chunk's indent table disagrees with the plan's for instruction {index}"
         );
         self.clause_state.current_value_indent = indent;
+        // Set here with the indent, and for the same reason that one is: this
+        // is the one place every stepped instruction passes before its `step`
+        // call runs, which is where the oracle reads it too. See the field.
+        self.clause_state.instructions_traced_at_entry = self.trace_mode().all;
         // Set unconditionally, exactly like `current_value_indent` just
         // above and for the identical reason (that field's own doc comment):
         // `SIGL` (`lib.rs`'s doc on `current_clause_line`) has to stay
