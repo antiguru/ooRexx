@@ -8755,21 +8755,8 @@ impl Interp {
                     match stepped {
                         Some(sum) => *current = ControlValue::Small(sum),
                         None => {
-                            // The control variable is the **left** operand of
-                            // the oracle's own implicit `+`, so an object
-                            // assigned to it inside the body is 97.1 there --
-                            // measured, `do i = 1 to 3; i = .array; end`
-                            // prints one iteration and then raises.
-                            if let Some(kind) = self.operator_operand_gap(previous) {
-                                return Err(Loud::object_position(
-                                    "a controlled DO's control variable",
-                                    kind,
-                                )
-                                .into());
-                            }
-                            let read = self.arith_operand(previous)?;
                             *current =
-                                ControlValue::Wide(read.add(by, digits).map_err(Raised::from)?);
+                                ControlValue::Wide(self.controlled_step_wide(previous, by, digits)?)
                         }
                     }
                 }
@@ -8784,8 +8771,7 @@ impl Interp {
                 {
                     handle
                 } else {
-                    let number = current.number().into_owned();
-                    self.number(number, crate::eval::saturate_digits(digits), form)
+                    self.controlled_value_wide(current, digits, form)
                 };
                 // Rooted before anything else can allocate: the render below
                 // builds a `Vec`, and `bind_control`'s compound arm resolves a
@@ -8826,33 +8812,24 @@ impl Interp {
                     // the same loop with the bound spelled `100000002.0` --
                     // no longer an integer, so `current.small` answers `None`
                     // and the fuzzed path below runs -- does not terminate.
-                    let integral = (|| Some((current.small(digits)?, to_int?, by_int?)))();
-                    let within = match integral {
-                        Some((current, to, by)) => {
+                    //
+                    // **Matched on the three `Option`s together rather than
+                    // threaded through a `?` chain**, which is codegen rather
+                    // than style: written as an immediately-invoked closure
+                    // returning `Option<(i64, i64, i64)>`, LLVM left the
+                    // closure out of line and returned the tuple through
+                    // memory. Measured with callgrind on
+                    // `do i = 1 to 300000`, that line cost 53 instructions a
+                    // pass, 16 of them in the closure's own body.
+                    let within = match (current.small(digits), to_int, by_int) {
+                        (Some(current), Some(to), Some(by)) => {
                             if by < 0 {
                                 current >= to
                             } else {
                                 current <= to
                             }
                         }
-                        None => {
-                            let current = current.number();
-                            // `signum`, not `numeric_less` against a zero
-                            // built for the occasion: `numeric_order`'s first
-                            // act is to compare the two operands' signs and
-                            // answer from them alone whenever they differ,
-                            // and one of them being zero is exactly that
-                            // case, so neither `digits` nor `fuzz` can reach
-                            // the answer. `a_negative_by_is_what_comparing_
-                            // it_against_zero_says` holds the two against
-                            // each other rather than this paragraph doing it.
-                            let by_negative = by.signum() < 0;
-                            if by_negative {
-                                !numeric_less(&current, to, digits, fuzz).map_err(Raised::from)?
-                            } else {
-                                !numeric_less(to, &current, digits, fuzz).map_err(Raised::from)?
-                            }
-                        }
+                        _ => Self::controlled_within_wide(current, to, by, digits, fuzz)?,
                     };
                     if !within {
                         return Ok(false);
@@ -8864,6 +8841,76 @@ impl Interp {
                 Ok(true)
             }
         }
+    }
+
+    /// One controlled pass's step where the control variable is not an
+    /// integer the tag holds, or the sum leaves what `DIGITS` admits.
+    ///
+    /// **Out of line so that its `Number` locals do not size
+    /// [`Interp::loop_advance`]'s own frame**, which every pass pays for
+    /// whether it comes here or not; the same reason `derived_name` is not
+    /// an arm of `read_at`. Measured: with the three wide paths written
+    /// inline, `loop_advance` allocated a 696-byte frame on every pass; with
+    /// them out of line it allocates 248.
+    #[inline(never)]
+    fn controlled_step_wide(
+        &mut self,
+        previous: ObjRef,
+        by: &Number,
+        digits: u64,
+    ) -> Result<Number, Failure> {
+        // The control variable is the **left** operand of the oracle's own
+        // implicit `+`, so an object assigned to it inside the body is 97.1
+        // there -- measured, `do i = 1 to 3; i = .array; end` prints one
+        // iteration and then raises.
+        if let Some(kind) = self.operator_operand_gap(previous) {
+            return Err(Loud::object_position("a controlled DO's control variable", kind).into());
+        }
+        let read = self.arith_operand(previous)?;
+        read.add(by, digits)
+            .map_err(Raised::from)
+            .map_err(Failure::from)
+    }
+
+    /// The handle a controlled pass binds when [`exact_small_int`] declines
+    /// the control value. Out of line for the reason
+    /// [`Interp::controlled_step_wide`] gives.
+    #[inline(never)]
+    fn controlled_value_wide(
+        &mut self,
+        current: &ControlValue,
+        digits: u64,
+        form: rexx_num::Form,
+    ) -> ObjRef {
+        let number = current.number().into_owned();
+        self.number(number, crate::eval::saturate_digits(digits), form)
+    }
+
+    /// A controlled loop's `TO` test where either side is wider than an
+    /// `i64` comparison answers. Out of line for the reason
+    /// [`Interp::controlled_step_wide`] gives.
+    ///
+    /// `signum`, not `numeric_less` against a zero built for the occasion:
+    /// `numeric_order`'s first act is to compare the two operands' signs and
+    /// answer from them alone whenever they differ, and one of them being
+    /// zero is exactly that case, so neither `digits` nor `fuzz` can reach
+    /// the answer. `a_negative_by_is_what_comparing_it_against_zero_says`
+    /// holds the two against each other rather than this paragraph doing it.
+    #[inline(never)]
+    fn controlled_within_wide(
+        current: &ControlValue,
+        to: &Number,
+        by: &Number,
+        digits: u64,
+        fuzz: u64,
+    ) -> Result<bool, Failure> {
+        let current = current.number();
+        let within = if by.signum() < 0 {
+            !numeric_less(&current, to, digits, fuzz).map_err(Raised::from)?
+        } else {
+            !numeric_less(to, &current, digits, fuzz).map_err(Raised::from)?
+        };
+        Ok(within)
     }
 
     /// Writes `value` into `control`'s own variable, through whichever of
