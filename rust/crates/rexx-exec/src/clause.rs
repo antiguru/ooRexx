@@ -431,6 +431,14 @@ impl Interp {
     /// [`ClauseEntry`] does and does not close.
     #[inline(always)]
     pub(crate) fn enter_clause(&mut self, line: usize) -> ClauseEntry {
+        // **The argument stack is empty at every clause boundary**, and this
+        // is what keeps that true when a clause is abandoned part-way through
+        // pushing a call's run: a trapped `NOVALUE` on a second argument
+        // leaves the first standing, and nothing later would take it. Every
+        // ordinary call removes its own run, so this stores a length that is
+        // already zero. Measured: 200,000 abandoned pushes grew the process
+        // by 3.3 MB without it.
+        self.value_buffer.clear();
         // **The fourth-site tripwire** (fix round 4). A condition queued by
         // this activation's clause at line L that is still waiting when a
         // clause at a *different* line begins means some construct resolved

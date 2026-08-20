@@ -2030,12 +2030,24 @@ struct Interp {
     /// hand over. The builtin path builds the values directly now, so this is
     /// the only one left.
     ///
+    /// **A stack, and the only one**: every call's arguments, innermost run on
+    /// top, whether the call was compiled to `Op::PushArg` or evaluates its
+    /// arguments through `invoke_builtin_call`'s own loop.
+    ///
+    /// **One field and not two, which is a measurement rather than tidiness.**
+    /// Giving the compiled path a second `Vec` of its own moved nothing about
+    /// what any op does, and cost `bench-programs/varlookup.rex` -- which
+    /// calls nothing at all -- 5.97% more retired instructions, `compound`
+    /// 4.14% and `strings` 3.33%; the same build with the field removed and
+    /// the ops left in place returned every one of them to its baseline. This
+    /// struct is large and hot enough that adding a field to it is not free.
+    ///
     /// **Lent and returned rather than borrowed in place**, for
-    /// [`Interp::key_buffer`]'s reason: the argument loop calls back into
-    /// `&mut self` for every argument it evaluates, which a live borrow of a
-    /// field would forbid. Losing it is safe and costs only the reuse -- a
-    /// call that returns early through `?` leaves this empty and the next
-    /// taker allocates.
+    /// [`Interp::key_buffer`]'s reason: a call needs `&mut self` and its own
+    /// arguments at once, which a live borrow of a field would forbid. What
+    /// is lent is the whole stack and what comes back has the caller's own
+    /// run removed, so a callee that pushes runs of its own starts from an
+    /// empty one.
     value_buffer: Vec<Option<ObjRef>>,
     /// Buffers lent out for a `PARSE` instruction's source strings, and
     /// handed back when the template walk is done with them.

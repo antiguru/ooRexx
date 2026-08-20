@@ -4911,26 +4911,28 @@ impl Interp {
         name: &[u8],
         args: &[Option<Expr>],
     ) -> Result<ObjRef, Failure> {
-        let mut values = self.take_value_buffer();
+        // **Pushed onto the shared stack one at a time**, rather than into a
+        // buffer lent for the whole loop: each argument's evaluation calls
+        // back into `&mut self`, so nothing may hold the `Vec` across it, and
+        // a run that is only ever appended to needs no borrow between pushes.
+        // The compiled path's `Op::PushArg` writes the same stack.
+        let mark = self.value_buffer.len();
         for arg in args {
-            match arg {
+            let value = match arg {
                 None => {
                     self.trace_argument(self.clause_state.current_value_indent, b"");
-                    values.push(None);
+                    None
                 }
                 Some(expr) if self.leaf_argument(expr) => {
-                    values.push(Some(self.eval_leaf_argument(code, expr)?));
+                    Some(self.eval_leaf_argument(code, expr)?)
                 }
-                Some(expr) => {
-                    values.push(Some(self.eval_traced_argument(code, expr)?.value()));
-                }
-            }
+                Some(expr) => Some(self.eval_traced_argument(code, expr)?.value()),
+            };
+            self.value_buffer.push(value);
         }
-        let outcome = builtin::run(self, name, target, &values);
-        // Back before the outcome is read, so the raised-condition path keeps
-        // the buffer as the ordinary one does.
-        self.give_value_buffer(values);
-        outcome
+        self.run_over_pushed_args(mark, |interp, values| {
+            builtin::run(interp, name, target, values)
+        })
     }
 
     /// Evaluates the arguments of a call already resolved to `resolved` and
@@ -5066,7 +5068,93 @@ impl Interp {
                 Some(expr) => arguments.push(Some(self.eval_traced_argument(code, expr)?)),
             }
         }
+        self.invoke_call_over(resolved, name, arguments, call_type)
+    }
 
+    /// One compiled call over the arguments its own ops already evaluated.
+    ///
+    /// **The values stand on [`Interp::call_args`] rather than being passed
+    /// as a slice**, because a builtin needs `&mut Interp` and the arguments
+    /// at once: the stack is taken out for the duration and put back with
+    /// this call's own run removed. A callee that pushes runs of its own
+    /// starts from an empty stack and leaves it empty, so what comes back is
+    /// what went out.
+    ///
+    /// `name` is only ever read on a failure -- an unresolved routine names
+    /// itself, and a function returning nothing names itself -- so the caller
+    /// recovers it from the op's address rather than on every execution.
+    pub(crate) fn call_over_pushed_args(
+        &mut self,
+        resolved: Resolved,
+        name: &[u8],
+        mark: usize,
+    ) -> Result<ObjRef, Failure> {
+        self.run_over_pushed_args(mark, |interp, values| {
+            interp.call_over_values(resolved, name, values)
+        })
+    }
+
+    /// Runs `body` over the argument run standing above `mark`, with the
+    /// stack lent out for the duration and this run removed on the way back.
+    ///
+    /// **The stack is taken out rather than borrowed**, because `body` needs
+    /// `&mut Interp` and the values at once. What that leaves behind is an
+    /// empty stack, which is exactly what a callee pushing runs of its own
+    /// should start from.
+    ///
+    /// **Restored before the outcome is read**, so a raised condition leaves
+    /// the stack as an ordinary return does.
+    fn run_over_pushed_args(
+        &mut self,
+        mark: usize,
+        body: impl FnOnce(&mut Interp, &[Option<ObjRef>]) -> Result<ObjRef, Failure>,
+    ) -> Result<ObjRef, Failure> {
+        let mut values = std::mem::take(&mut self.value_buffer);
+        let outcome = body(self, &values[mark..]);
+        values.truncate(mark);
+        self.value_buffer = values;
+        outcome
+    }
+
+    /// [`Interp::call_over_pushed_args`] with the run in hand.
+    fn call_over_values(
+        &mut self,
+        resolved: Resolved,
+        name: &[u8],
+        values: &[Option<ObjRef>],
+    ) -> Result<ObjRef, Failure> {
+        // The builtin path, which runs no activation -- the same shortcut
+        // `eval_call_resolved` takes and for the same measured reason.
+        if let Resolved::Builtin(target) = resolved {
+            return builtin::run(self, name, target, values);
+        }
+        let arguments = values
+            .iter()
+            .map(|value| value.map(Argument::Value))
+            .collect();
+        match self.invoke_call_over(resolved, name, arguments, CallType::Function)? {
+            Ended::Exited(value) => Err(Failure::Exited(value)),
+            Ended::Returned(Some(value)) => Ok(value),
+            Ended::Returned(None) => Err(Raised::no_data_returned(name).into()),
+        }
+    }
+
+    /// [`Interp::invoke_call`] past its argument evaluation: everything a
+    /// callee needs once its arguments are values.
+    ///
+    /// **Split out for the compiled call path**, which evaluates arguments
+    /// through ops of its own (`Op::PushArg`) and so arrives here holding
+    /// values where `invoke_call` arrives holding expressions. Both reach one
+    /// copy of the activation bookkeeping below, which is what keeps `SIGL`,
+    /// the depth guard and the level accounting from drifting apart between
+    /// the two.
+    pub(crate) fn invoke_call_over(
+        &mut self,
+        resolved: Resolved,
+        name: &[u8],
+        arguments: Vec<Option<Argument>>,
+        call_type: CallType,
+    ) -> Result<Ended, Failure> {
         // **The builtin outcome ends here**, before `SIGL`, before the depth
         // guard and before any activation is pushed -- each of those three is
         // the label path's, and the oracle answers that the builtin path has

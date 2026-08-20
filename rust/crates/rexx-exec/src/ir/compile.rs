@@ -1463,11 +1463,73 @@ fn push_native<'a>(
         // made afresh. What it needs and no other arm here does is an address:
         // the value is not computed from operand registers, so the driver goes
         // back to the node to find the target and the arguments.
-        ExprKind::Call { .. } => {
-            let slot = u16::try_from(slot).map_err(|_| ChunkTooLarge {
+        ExprKind::Call { args, .. } => {
+            let slot16 = u16::try_from(slot).map_err(|_| ChunkTooLarge {
                 what: "expression slots past u16",
             })?;
             let path = path.expect("native_shape accepts a call only where an address reaches it");
+            // **The arguments become ops of their own where they can.** Then
+            // the call op takes values off the driver's argument stack
+            // instead of walking back to the node for expressions and
+            // evaluating each through `eval`. What that saves is the descent,
+            // the name lookup and one `eval` entry per argument; measured on
+            // a ladder of `zq = length(s)` clauses, a builtin call cost 617
+            // instructions against the -O3 interpreter's 293.
+            //
+            // `native_shape` with no address is exactly the right test: it
+            // declines a call, so an argument holding one keeps the whole
+            // call on `Op::CallExpr` rather than nesting argument runs, and
+            // it declines the `>v` reference form, which `USE ARG >` writes
+            // back through and a value on a stack cannot carry.
+            if args
+                .iter()
+                .all(|arg| arg.as_ref().is_none_or(|expr| native_shape(expr, None)))
+            {
+                let argc = u16::try_from(args.len()).map_err(|_| ChunkTooLarge {
+                    what: "call arguments past u16",
+                })?;
+                let mark = registers.mark();
+                for arg in args {
+                    match arg {
+                        None => {
+                            ops.push(Op::PushArg {
+                                src: Op::ARG_OMITTED,
+                            });
+                            ops.push(Op::TraceArgument {
+                                src: Op::ARG_OMITTED,
+                            });
+                        }
+                        Some(expr) => {
+                            let src = registers.alloc()?;
+                            push_native(
+                                ops, consts, registers, hints, calls, plan, expr, index, slot,
+                                None, src,
+                            )?;
+                            ops.push(Op::PushArg { src });
+                            // Behind the argument's own ops, so its `>L>`/
+                            // `>V>` lines print first -- the order
+                            // `invoke_call`'s own loop produces.
+                            ops.push(Op::TraceArgument { src });
+                        }
+                    }
+                }
+                ops.push(Op::CallArgs {
+                    slot: slot16,
+                    path,
+                    site: calls.reserve()?,
+                    argc,
+                    dst,
+                });
+                registers.release(mark);
+                ops.push(Op::TraceFunction {
+                    index,
+                    slot: slot16,
+                    path,
+                    src: dst,
+                });
+                return Ok(());
+            }
+            let slot = slot16;
             ops.push(Op::CallExpr {
                 index,
                 slot,
@@ -1965,12 +2027,24 @@ fn assert_call_echoes_follow_their_op(ops: &[Op]) {
             .checked_sub(1)
             .and_then(|before| ops.get(before))
             .is_some_and(|before| {
-                matches!(
-                    before,
-                    Op::CallExpr { index, slot, path, dst, .. }
-                        if index == echoed && slot == echoed_slot && path == echoed_path
-                            && dst == src
-                )
+                match before {
+                    Op::CallExpr {
+                        index,
+                        slot,
+                        path,
+                        dst,
+                        ..
+                    } => {
+                        index == echoed && slot == echoed_slot && path == echoed_path && dst == src
+                    }
+                    // No `index` of its own to compare -- `Op::CallArgs`'s own
+                    // doc has why it carries none, and this check is what
+                    // gives it the echo's instead.
+                    Op::CallArgs {
+                        slot, path, dst, ..
+                    } => slot == echoed_slot && path == echoed_path && dst == src,
+                    _ => false,
+                }
             });
         assert!(
             runs_it,
@@ -2101,6 +2175,9 @@ fn assert_region_ops_name_their_clause(ops: &[Op]) {
                 | Op::Prefix { .. }
                 | Op::TracePrefix { .. }
                 | Op::Jump { .. }
+                | Op::PushArg { .. }
+                | Op::TraceArgument { .. }
+                | Op::CallArgs { .. }
                 | Op::JumpUnless { .. } => None,
             };
             assert!(

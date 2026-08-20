@@ -81,6 +81,16 @@ mod corpus_shape_tests;
 /// prediction, and not on an argument from cache lines.
 const _: () = assert!(size_of::<Op>() == 16);
 
+impl Op {
+    /// The `src` an [`Op::PushArg`] or [`Op::TraceArgument`] carries for an
+    /// omitted argument position.
+    ///
+    /// **A register this can never collide with**, because `Registers::alloc`
+    /// hands out an index only after `checked_add` has succeeded past it, so
+    /// `u16::MAX` is refused as `ChunkTooLarge` rather than allocated.
+    pub(crate) const ARG_OMITTED: u16 = u16::MAX;
+}
+
 /// One step in a compiled stream.
 ///
 /// **Every op that runs a clause carries its own instruction index**, and
@@ -284,6 +294,61 @@ pub(crate) enum Op {
         slot: u16,
         path: NodePath,
         site: u16,
+        dst: u16,
+    },
+    /// Appends the value in `src` to the driver's argument stack, or an
+    /// omitted position when `src` is [`Op::ARG_OMITTED`].
+    ///
+    /// **Nothing here roots the value.** The register already does -- the
+    /// driver's register file is a rooted temps frame -- and the compiler
+    /// gives each argument a register of its own that nothing writes again
+    /// before the call takes it, so the copy on the stack is reachable for
+    /// exactly as long as it must be.
+    ///
+    /// An omitted position is pushed rather than skipped, because it holds
+    /// its place: `call sub 1,,3` fills three positions and leaves the middle
+    /// target unset instead of shifting `3` into it.
+    PushArg { src: u16 },
+    /// The `>A>` line one argument owes, for the value now in `src`, or the
+    /// **empty** value line an omitted position owes when `src` is
+    /// [`Op::ARG_OMITTED`] -- which is not the absence of a line
+    /// (`RexxInstruction.cpp:161`).
+    ///
+    /// Emitted behind the argument's own ops, so its `>L>`/`>V>` lines print
+    /// first, which is the order `invoke_call`'s own loop produces.
+    TraceArgument { src: u16 },
+    /// A call over the `argc` arguments now on top of the driver's argument
+    /// stack.
+    ///
+    /// **The count is a field and the start is not**, because the arguments
+    /// of the call now running are always the topmost run: an argument
+    /// holding a call of its own is not compiled to this op at all, and any
+    /// call that did nest would have taken its own run before the outer call
+    /// pushed the rest of its.
+    ///
+    /// **It carries no `index`, alone among the ops that name a clause**, and
+    /// the width budget is why: `slot`, `path`, `site`, `argc` and `dst`
+    /// already fill the 16 bytes the assertion above [`Op`] allows. Nothing
+    /// is lost -- the [`Op::TraceFunction`] immediately behind it carries
+    /// `index` and is checked against the clause, and
+    /// `compile::assert_call_echoes_follow_their_op` ties that op's `slot`,
+    /// `path` and register to this one's, so this op reaches the same clause
+    /// through the same check.
+    ///
+    /// **`slot` and `path` are read only when the site has nothing**, which
+    /// is what makes this cheaper than [`Op::CallExpr`]: they recover the
+    /// callee's spelling, and a resolved site needs no spelling at all -- a
+    /// builtin dispatches through the row the site holds, and no part of that
+    /// path reads it.
+    ///
+    /// **It serves a routine as well as a builtin**, because which one a name
+    /// is cannot be known when the stream is built: a `::ROUTINE` shadows a
+    /// builtin of the same name, and only resolution says so.
+    CallArgs {
+        slot: u16,
+        path: NodePath,
+        site: u16,
+        argc: u16,
         dst: u16,
     },
     /// The `>F>` line [`Op::CallExpr`] owes, for the value now in `src`.

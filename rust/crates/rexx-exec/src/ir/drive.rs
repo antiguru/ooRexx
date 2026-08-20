@@ -229,6 +229,9 @@ fn undriven_op_name(op: &Op) -> &'static str {
         Op::TraceClause { .. } => "TraceClause",
         Op::EvalExpr { .. } => "EvalExpr",
         Op::CallExpr { .. } => "CallExpr",
+        Op::PushArg { .. } => "PushArg",
+        Op::TraceArgument { .. } => "TraceArgument",
+        Op::CallArgs { .. } => "CallArgs",
         Op::TraceFunction { .. } => "TraceFunction",
         Op::SelectCaseText { .. } => "SelectCaseText",
         Op::WhenTest { .. } => "WhenTest",
@@ -273,6 +276,92 @@ enum BranchEnd {
 }
 
 impl Interp {
+    /// One [`crate::ir::Op::PushArg`]: the register's value, or an omitted
+    /// position, onto the argument stack.
+    #[inline(never)]
+    fn push_call_arg(&mut self, registers: FrameId, src: u16) {
+        let value = if src == Op::ARG_OMITTED {
+            None
+        } else {
+            Some(self.roots.temp_at(registers, src as usize))
+        };
+        self.value_buffer.push(value);
+    }
+
+    /// One [`crate::ir::Op::TraceArgument`]'s `>A>` line, its gate already
+    /// answered by the caller.
+    ///
+    /// The indent is the calling clause's own and is read fresh, for
+    /// `invoke_call`'s own measured reason: an earlier argument's callee can
+    /// have moved it.
+    #[inline(never)]
+    fn trace_call_arg(&mut self, registers: FrameId, src: u16) {
+        let indent = self.clause_state.current_value_indent;
+        if src == Op::ARG_OMITTED {
+            self.trace_argument(indent, b"");
+            return;
+        }
+        let value = self.roots.temp_at(registers, src as usize);
+        if let Some(rendered) = self.intermediate_text(value) {
+            self.trace_argument(indent, &rendered);
+        }
+    }
+
+    /// One [`crate::ir::Op::CallArgs`]: resolve the callee, then run it over
+    /// the `argc` arguments its own ops left on the argument stack.
+    ///
+    /// **Deliberately not inlined into the driver.** See the op's arm for the
+    /// measurement; what it costs to inline is paid by every op in the stream
+    /// and not only by calls.
+    #[inline(never)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "every parameter is one field of the op or the stream it stands in, and folding them into a struct would put the wide fields back in the driver's frame"
+    )]
+    fn run_call_args(
+        &mut self,
+        code: &Code<'_>,
+        chunk: &Chunk,
+        clause: &Instruction,
+        slot: u16,
+        path: super::NodePath,
+        site: u16,
+        argc: u16,
+    ) -> Result<ObjRef, Failure> {
+        let Some(mark) = self.value_buffer.len().checked_sub(argc as usize) else {
+            return Err(Loud::call_op_off_its_node().into());
+        };
+        // **The spelling is recovered only when the site has nothing**, which
+        // is the whole reason this op is cheaper than `Op::CallExpr`: a
+        // resolved builtin dispatches through the row the site holds, and no
+        // part of that path reads it.
+        let mut spelling: &[u8] = b"";
+        let resolved = match chunk.resolved_call(site) {
+            Some(resolved) => {
+                #[cfg(test)]
+                count_call_site_hit();
+                resolved
+            }
+            None => {
+                let Some(ExprKind::Call { target, .. }) =
+                    Interp::chunk_node_at(clause, slot, path).map(|node| &node.kind)
+                else {
+                    return Err(Loud::call_op_off_its_node().into());
+                };
+                let (name, search_labels) = call_target_name(code, target);
+                spelling = name;
+                let resolved = self.resolve_call(name, search_labels)?;
+                chunk.remember_call(site, resolved);
+                resolved
+            }
+        };
+        let probe = 0u8;
+        self.enter_eval_node(&raw const probe)?;
+        let value = self.call_over_pushed_args(resolved, spelling, mark);
+        self.depth -= 1;
+        value
+    }
+
     /// Closes the innermost `SELECT` branch if it runs out at `pc`.
     ///
     /// **The test [`super::Op::EndWhen`] exists to make, and the one the range
@@ -869,6 +958,62 @@ impl Interp {
                                             Err(failure) => break 'cold Err(failure),
                                         };
                                         self.roots.set_temp(registers, *dst as usize, value);
+                                    }
+                                    // **Every one of these bodies is behind
+                                    // a call.** What they do is small, but
+                                    // what they *contain* is not -- a `Vec`
+                                    // push carries its own growth path and an
+                                    // argument echo builds a rendering -- and
+                                    // inlining either into the driver's frame
+                                    // is paid by every op in the stream.
+                                    // Measured with the bodies written out
+                                    // here, `varlookup` -- which never
+                                    // executes one -- retired 5.97% more
+                                    // instructions, `compound` 4.14%.
+                                    Op::PushArg { src } => {
+                                        self.push_call_arg(registers, *src);
+                                    }
+                                    Op::TraceArgument { src } => {
+                                        if !self.tracing_intermediates() {
+                                            continue;
+                                        }
+                                        self.trace_call_arg(registers, *src);
+                                    }
+                                    Op::CallArgs {
+                                        slot,
+                                        path,
+                                        site,
+                                        argc,
+                                        dst,
+                                    } => {
+                                        debug_assert!(
+                                            chunk.holds_register(*dst),
+                                            "op writes register {dst} outside the region the chunk \
+                                         reserved"
+                                        );
+                                        // **The body is behind a call and not
+                                        // written here**, which is layout
+                                        // rather than style: a call's
+                                        // resolution, its argument run and its
+                                        // outcome are wide, and inlining them
+                                        // into the driver's own frame raises
+                                        // the register pressure every *other*
+                                        // op then pays. Measured: with this
+                                        // body inline, `varlookup` -- which
+                                        // calls nothing at all -- retired 4.9%
+                                        // more instructions.
+                                        match self.run_call_args(
+                                            code, chunk, clause, *slot, *path, *site, *argc,
+                                        ) {
+                                            Ok(value) => {
+                                                self.roots.set_temp(
+                                                    registers,
+                                                    *dst as usize,
+                                                    value,
+                                                );
+                                            }
+                                            Err(failure) => break 'cold Err(failure),
+                                        }
                                     }
                                     // The `>F>` line the op above owes, emitted
                                     // behind it because `eval`'s own hook is

@@ -119,8 +119,10 @@ impl Root {
             Op::Binary { .. } => Some(Root::Binary),
             Op::Prefix { .. } => Some(Root::Prefix),
             Op::EvalExpr { .. } => Some(Root::EvalExpr),
-            Op::CallExpr { .. } => Some(Root::CallExpr),
-            Op::Generic { .. }
+            Op::CallExpr { .. } | Op::CallArgs { .. } => Some(Root::CallExpr),
+            Op::PushArg { .. }
+            | Op::TraceArgument { .. }
+            | Op::Generic { .. }
             | Op::TraceKeyword { .. }
             | Op::LoopHeaderValue { .. }
             | Op::LoopRun { .. }

@@ -88,6 +88,27 @@ pub(crate) fn render(chunk: &Chunk) -> String {
                     render_path(*path)
                 ));
             }
+            Op::CallArgs {
+                slot,
+                path,
+                site,
+                argc,
+                dst,
+            } => {
+                out.push_str(&format!(
+                    "{index}: CallArgs slot={slot} path={} site={site} argc={argc} dst={dst}\n",
+                    render_path(*path)
+                ));
+            }
+            Op::PushArg { src } => {
+                out.push_str(&format!("{index}: PushArg src={}\n", render_arg(*src)));
+            }
+            Op::TraceArgument { src } => {
+                out.push_str(&format!(
+                    "{index}: TraceArgument src={}\n",
+                    render_arg(*src)
+                ));
+            }
             Op::TraceFunction {
                 index: at,
                 slot,
@@ -418,6 +439,16 @@ fn render_queue_keyword(keyword: QueueKeyword) -> &'static str {
 /// Spelled out rather than rendered as the encoding's own integer, because a
 /// golden expectation is read by a person: `root.L.R` says where the op sits
 /// and the bits behind it do not.
+/// An argument op's `src`: the register, or `omitted` for the position that
+/// carries no register at all.
+fn render_arg(src: u16) -> String {
+    if src == Op::ARG_OMITTED {
+        "omitted".to_string()
+    } else {
+        src.to_string()
+    }
+}
+
 fn render_path(path: NodePath) -> String {
     let mut out = "root".to_string();
     for right in path.steps() {
