@@ -374,6 +374,23 @@ impl Heap {
     /// `rexx-core`'s own tests allocate directly with no `Interp` in scope
     /// at all, and forcing every one of those through a heavier entry point
     /// would buy this rule nothing they can bypass just as easily.
+    /// **`#[inline]`, and the whole out-of-line copy goes away with it**:
+    /// every call site takes it, `nm` finds no symbol for it afterwards, and
+    /// `.text` *shrinks* by 6,744 bytes -- the argument marshalling an
+    /// 80-byte `Body` needs at each site cost more than the bodies do.
+    /// Measured in retired instructions: `rexxcps` -0.363%, `emptyloop`
+    /// -0.180%, `varlookup` -0.094%, `compound` -0.048%, `alloc4c` and
+    /// `strings` unmoved -- the two axes that allocate most are the two that
+    /// do not move, so what this buys is the call and not the allocation.
+    /// `#[inline(always)]` is worse on every axis (`rexxcps` -0.328%,
+    /// `strings` +0.035%).
+    ///
+    /// **The 80-byte copy into the slot is still there and this does not
+    /// touch it.** The body arrives by value from a caller that built it on
+    /// its own stack, so the free-list arm reads 80 bytes and writes 80;
+    /// removing that needs the caller to construct into the slot, which is
+    /// an interface change rather than an attribute.
+    #[inline]
     pub fn alloc_with_uncollected(&mut self, behaviour: BehaviourId, body: Body) -> ObjRef {
         self.live += 1;
         // **`Object` is built inside each arm rather than once above the
