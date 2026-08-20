@@ -496,7 +496,7 @@ fn sweep_one(oracle: &Oracle, run_root: &Path, case: &Case) -> Option<String> {
         rust.exit_code,
         String::from_utf8_lossy(&cpp.stdout),
         String::from_utf8_lossy(&cpp.stderr),
-        cpp.exit_code
+        cpp.expect_exit_code()
     ))
 }
 

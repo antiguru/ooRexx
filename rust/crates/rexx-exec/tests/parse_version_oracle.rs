@@ -143,7 +143,7 @@ fn parse_version_still_answers_what_the_oracle_answers() {
         String::from_utf8_lossy(&rust.stdout),
         String::from_utf8_lossy(&cpp.stdout),
         rust.exit_code,
-        cpp.exit_code
+        cpp.expect_exit_code()
     );
     assert_eq!(
         oracle.invocations(),

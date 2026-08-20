@@ -66,7 +66,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use support::oracle::{CppOutcome, write_and_wait};
+use support::oracle::{CppOutcome, classify_termination, write_and_wait};
 
 /// Env var that flips this file from a skip into the check.
 const GATE_ENV: &str = "REXX_CORPUS_GATE";
@@ -375,10 +375,15 @@ fn run_rust(path: &Path, args: &[&str], stdin: Option<&[u8]>) -> CppOutcome {
             .unwrap_or_else(|e| panic!("failed to spawn rexx-run for {}: {e}", path.display())),
         Some(bytes) => write_and_wait(&mut command, bytes, path),
     };
+    // `rexx-run` has no deadline of its own -- `write_and_wait` and
+    // `Command::output` above both block without one -- so a `None` exit
+    // code here can only be a signal death, never the harness's own kill.
+    // See `support::oracle::write_and_wait`'s doc for why this stays the
+    // simpler, un-deadlined form rather than gaining one.
     CppOutcome {
         stdout: output.stdout,
         stderr: output.stderr,
-        exit_code: output.status.code().unwrap_or(-1),
+        termination: classify_termination(output.status.code(), false),
     }
 }
 
@@ -397,7 +402,7 @@ fn diffs(rust: &CppOutcome, cpp: &CppOutcome) -> Vec<&'static str> {
     if support::normalize_stderr(&rust.stderr) != support::normalize_stderr(&cpp.stderr) {
         out.push("stderr");
     }
-    if rust.exit_code != cpp.exit_code {
+    if rust.termination != cpp.termination {
         out.push("exit code");
     }
     out
@@ -449,10 +454,10 @@ fn command_line_arguments_and_the_console_agree_with_the_oracle() {
                 case.stdin.map(String::from_utf8_lossy),
                 String::from_utf8_lossy(&rust.stdout),
                 String::from_utf8_lossy(&rust.stderr),
-                rust.exit_code,
+                rust.expect_exit_code(),
                 String::from_utf8_lossy(&cpp.stdout),
                 String::from_utf8_lossy(&cpp.stderr),
-                cpp.exit_code,
+                cpp.expect_exit_code(),
             ));
         }
     }
@@ -544,7 +549,7 @@ fn an_unreadable_console_is_end_of_input() {
         (
             String::from_utf8_lossy(&cpp.stdout).into_owned(),
             String::from_utf8_lossy(&cpp.stderr).into_owned(),
-            Some(cpp.exit_code)
+            Some(cpp.expect_exit_code())
         ),
         "an unreadable console must answer the null string on both sides"
     );

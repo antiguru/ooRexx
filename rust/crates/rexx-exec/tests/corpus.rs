@@ -367,7 +367,7 @@ fn check_case(oracle: &Oracle, corpus_dir: &Path, rel_path: &str) -> Option<Mism
             "{} differ (loud failure: {construct} is not implemented; rust rc {rust_exit}, \
              oracle rc {})",
             diffs.join(", "),
-            cpp.exit_code
+            cpp.expect_exit_code()
         ),
         // No loud-failure marker: a real divergence rather than a known gap,
         // so give enough of all three channels to diagnose it from the
@@ -380,7 +380,7 @@ fn check_case(oracle: &Oracle, corpus_dir: &Path, rel_path: &str) -> Option<Mism
             excerpt(&rust.stderr),
             excerpt(&cpp.stdout),
             excerpt(&cpp.stderr),
-            cpp.exit_code
+            cpp.expect_exit_code()
         ),
     };
 

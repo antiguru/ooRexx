@@ -68,7 +68,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rexx_exec::{Invocation, Outcome, run_program};
-use support::oracle::{CppOutcome, Oracle, locate};
+use support::oracle::{Oracle, locate};
 
 /// The same directory `ir_dual.rs` walks. Two tests reading one directory is
 /// the point: one says this crate matches the recording, the other says the
@@ -131,18 +131,19 @@ fn render_oracle(oracle: &Oracle, run_dir: &Path, program: &str) -> String {
     let path = run_dir.join("case.rex");
     fs::write(&path, program.as_bytes())
         .unwrap_or_else(|e| panic!("cannot write {}: {e}", path.display()));
-    let CppOutcome {
-        stdout,
-        stderr,
-        exit_code,
-    } = oracle.run(&path);
+    let outcome = oracle.run(&path);
+    let exit_code = outcome.expect_exit_code();
     let shown = path.to_string_lossy().into_owned();
     let rewrite = |bytes: Vec<u8>| {
         String::from_utf8_lossy(&bytes)
             .replace(&shown, INLINE_PATH)
             .into_bytes()
     };
-    tagged(exit_code, &rewrite(stdout), &rewrite(stderr))
+    tagged(
+        exit_code,
+        &rewrite(outcome.stdout),
+        &rewrite(outcome.stderr),
+    )
 }
 
 /// This crate's own answer, which is what a `not-oracle-bytes` stanza records.

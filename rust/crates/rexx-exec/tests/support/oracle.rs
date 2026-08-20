@@ -81,9 +81,12 @@
 // for the same reason.
 #![allow(dead_code)]
 
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use rexx_exec::Outcome;
 
@@ -91,6 +94,31 @@ use rexx_exec::Outcome;
 /// the figure this project has used by hand throughout Phase 4, restated
 /// here as a named constant rather than a magic number in the format string.
 pub const ORACLE_MEMORY_LIMIT_KIB: u64 = 1_048_576;
+
+/// How long an oracle invocation may run before [`wait_with_deadline`] kills
+/// it and counts the run as [`Termination::TimedOut`] instead of blocking on
+/// it forever. 10 seconds: the figure `timeout -s KILL 10` already fixes by
+/// hand around every oracle invocation this project runs outside the suite
+/// (`rust/CLAUDE.md`'s "Wrap every oracle run" and the probe rules below it),
+/// restated here so the harness enforces what a person has had to remember.
+pub const ORACLE_DEADLINE: Duration = Duration::from_secs(10);
+
+/// How often [`wait_with_deadline`] polls [`Child::try_wait`] while a run is
+/// still outstanding.
+///
+/// **Why polling rather than `wait-timeout 0.2.0`.** That crate resolves
+/// offline in this machine's cargo cache (`cargo add -p rexx-exec --dry-run
+/// --offline wait-timeout@0.2.0` succeeds, exit 0, against
+/// `~/.cargo/registry/src/.../wait-timeout-0.2.0`), so it was a real option
+/// and not ruled out by the no-network constraint. It buys nothing here: its
+/// `wait_timeout` only replaces the polling loop below, and this harness
+/// still needs its own threads reading `stdout`/`stderr` concurrently so a
+/// chatty program cannot fill one pipe and deadlock the wait -- the same
+/// problem [`write_and_wait`]'s doc names for the write side. A dependency
+/// that would remove one loop and leave the harder half of the mechanism
+/// exactly as it is is not what "buys something" means, so this stays a
+/// plain poll and no dev-dependency is added.
+const POLL_INTERVAL: Duration = Duration::from_millis(5);
 
 /// Root of the built C++ oracle. See the module doc for why this is
 /// hardcoded rather than read from an env var.
@@ -106,13 +134,81 @@ pub struct Oracle {
     invocations: AtomicUsize,
 }
 
+/// How an oracle-side run ended.
+///
+/// A pure function of what [`ExitStatus::code`](std::process::ExitStatus::code)
+/// returned and whether [`wait_with_deadline`] is the one that ended the
+/// run, kept as a named type rather than the `exit_code: i32` sentinel this
+/// replaced: `output.status.code().unwrap_or(-1)` gave a signal death and a
+/// normal `exit -1` the identical representation, and a verdict function
+/// comparing exit codes read the former as a divergence -- a wrong
+/// classification, not merely an imprecise one -- rather than the failure it
+/// was.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Termination {
+    /// The process ran to completion and returned this status.
+    Exited(i32),
+    /// The process died from a signal nobody here sent -- a crash, not a
+    /// timeout.
+    Signaled,
+    /// [`wait_with_deadline`] killed the process because it was still
+    /// running at [`ORACLE_DEADLINE`].
+    TimedOut,
+}
+
+/// Classifies a wait's result into a [`Termination`], from the two plain
+/// values -- `code: Option<i32>` and `deadline_exceeded: bool` -- that
+/// [`wait_with_deadline`] already has in hand, rather than from a live
+/// `ExitStatus`. `ExitStatus` has no portable public constructor
+/// (`ExitStatus::from_raw` is Unix-only and still needs a real wait status
+/// from the kernel), so a signal-death test could not build one to call this
+/// on; taking the two primitives it would otherwise be inspected for keeps
+/// both failing arms plain unit tests instead.
+pub fn classify_termination(code: Option<i32>, deadline_exceeded: bool) -> Termination {
+    match (code, deadline_exceeded) {
+        (Some(status), _) => Termination::Exited(status),
+        (None, true) => Termination::TimedOut,
+        (None, false) => Termination::Signaled,
+    }
+}
+
+/// Whether an oracle run ended some way other than a normal exit -- the
+/// check a caller makes before treating a run as a structural failure rather
+/// than a pair of bytes to diff: whatever `stdout`/`stderr` a killed or
+/// crashed process left behind is wherever it happened to be interrupted,
+/// not a completed answer to compare against. Tested on
+/// [`CppOutcome::termination`] directly, never on a synthesised exit
+/// code, since [`classify_termination`]'s two failing arms both carry `code:
+/// None` and nothing about the exit code distinguishes them.
+pub fn did_not_finish(outcome: &CppOutcome) -> bool {
+    !matches!(outcome.termination, Termination::Exited(_))
+}
+
 /// What one oracle run produced. Deliberately not [`rexx_exec::Outcome`]:
 /// that type carries a `stack: StackSpan` field this process never measures,
 /// and reusing it would invite comparing a field that was never filled in.
 pub struct CppOutcome {
     pub stdout: Vec<u8>,
     pub stderr: Vec<u8>,
-    pub exit_code: i32,
+    pub termination: Termination,
+}
+
+impl CppOutcome {
+    /// The process's own exit status.
+    ///
+    /// Panics if the run did not end that way -- every existing differential
+    /// caller in this tree assumes the oracle ran to completion and compares
+    /// bytes on that assumption; a [`did_not_finish`] check belongs before
+    /// this call wherever a timeout or a crash is a live possibility rather
+    /// than a bug. A panic here is what such an assumption gets when it is
+    /// wrong: a structural failure naming what actually happened, rather
+    /// than an ordinary exit code standing in for it.
+    pub fn expect_exit_code(&self) -> i32 {
+        match self.termination {
+            Termination::Exited(code) => code,
+            other => panic!("oracle run did not exit normally, so it has no exit code: {other:?}"),
+        }
+    }
 }
 
 /// Locates the oracle, or fails the test naming exactly what is missing.
@@ -173,20 +269,29 @@ impl Oracle {
     pub fn run_with(&self, path: &Path, args: &[&str], stdin: Option<&[u8]>) -> CppOutcome {
         self.invocations.fetch_add(1, Ordering::Relaxed);
         let mut command = self.wrapped(path, args);
-        command.stdin(match stdin {
-            None => Stdio::null(),
-            Some(_) => Stdio::piped(),
-        });
-        let output = match stdin {
-            None => command.output().unwrap_or_else(|e| {
-                panic!("failed to spawn the oracle for {}: {e}", path.display())
-            }),
-            Some(bytes) => write_and_wait(&mut command, bytes, path),
-        };
+        command
+            .stdin(match stdin {
+                None => Stdio::null(),
+                Some(_) => Stdio::piped(),
+            })
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let mut child = command
+            .spawn()
+            .unwrap_or_else(|e| panic!("failed to spawn the oracle for {}: {e}", path.display()));
+        if let Some(bytes) = stdin {
+            // A write failure is ignored deliberately -- see
+            // `write_and_wait`'s doc for why an `EPIPE` here is a legitimate
+            // outcome to compare rather than a harness error.
+            use std::io::Write;
+            let mut sink = child.stdin.take().expect("stdin was requested as a pipe");
+            let _ = sink.write_all(bytes);
+        }
+        let (stdout, stderr, termination) = wait_with_deadline(child, path);
         CppOutcome {
-            stdout: output.stdout,
-            stderr: output.stderr,
-            exit_code: output.status.code().unwrap_or(-1),
+            stdout,
+            stderr,
+            termination,
         }
     }
 
@@ -203,15 +308,18 @@ impl Oracle {
     /// itself and because `Stdio` cannot express "feed these bytes".
     pub fn run_with_stdin(&self, path: &Path, args: &[&str], stdin: Stdio) -> CppOutcome {
         self.invocations.fetch_add(1, Ordering::Relaxed);
-        let output = self
+        let child = self
             .wrapped(path, args)
             .stdin(stdin)
-            .output()
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
             .unwrap_or_else(|e| panic!("failed to spawn the oracle for {}: {e}", path.display()));
+        let (stdout, stderr, termination) = wait_with_deadline(child, path);
         CppOutcome {
-            stdout: output.stdout,
-            stderr: output.stderr,
-            exit_code: output.status.code().unwrap_or(-1),
+            stdout,
+            stderr,
+            termination,
         }
     }
 
@@ -246,13 +354,18 @@ impl Oracle {
 
 /// Spawns `command`, writes `bytes` to its standard input, closes it, and waits.
 ///
-/// Split out because both interpreters need it -- the oracle here and
-/// `rexx-run` in `tests/input_oracle.rs` -- and because getting it wrong has one
-/// specific failure mode worth naming: writing the whole buffer before reading
-/// any output deadlocks if the buffer is larger than a pipe and the program
-/// writes enough to fill its own. `wait_with_output` reads both output pipes
-/// concurrently, so the deadlock window is only the write below; every caller
-/// here feeds a handful of lines, far inside one pipe buffer.
+/// **Used by `rexx-run` in `tests/input_oracle.rs`, not by the oracle side
+/// here.** `Oracle::run`, `run_with` and `run_with_stdin` carry a deadline
+/// and need [`wait_with_deadline`]'s poll loop for it, which this function's
+/// single blocking `wait_with_output` cannot express; `rexx-run` run as a
+/// subprocess carries no deadline of its own, so this stays the simpler,
+/// blocking form for the one caller left. Getting it wrong has one specific
+/// failure mode worth naming regardless: writing the whole buffer before
+/// reading any output deadlocks if the buffer is larger than a pipe and the
+/// program writes enough to fill its own. `wait_with_output` reads both
+/// output pipes concurrently, so the deadlock window is only the write
+/// below; the caller here feeds a handful of lines, far inside one pipe
+/// buffer.
 ///
 /// A write failure is ignored deliberately: a program that exits before reading
 /// its input leaves this end broken (`EPIPE`), which is a legitimate outcome to
@@ -271,6 +384,74 @@ pub fn write_and_wait(command: &mut Command, bytes: &[u8], path: &Path) -> std::
     child
         .wait_with_output()
         .unwrap_or_else(|e| panic!("failed to wait for {}: {e}", path.display()))
+}
+
+/// Waits for `child` under [`ORACLE_DEADLINE`], reading both output pipes
+/// concurrently, and returns what it produced along with how it ended.
+///
+/// **Why this exists.** `Command::output` (and `Child::wait_with_output`,
+/// which it calls) blocks on `waitpid` with no deadline of its own -- so a
+/// program that never exits, `do forever; end` among them, hung whichever
+/// test called it forever, and hung `cargo test --workspace` with it. This
+/// polls [`Child::try_wait`] instead, at [`POLL_INTERVAL`], and calls
+/// `kill()` the moment [`ORACLE_DEADLINE`] has passed.
+///
+/// **Why the reader threads.** Polling `try_wait` instead of blocking on
+/// `wait` means nothing here is blocked reading `stdout`/`stderr` while the
+/// poll loop runs, so those two pipes are read on their own threads from the
+/// moment the child is spawned -- the same concurrent-read shape
+/// `wait_with_output` already uses internally, needed for the same reason
+/// [`write_and_wait`]'s doc names for the write side: a chatty program can
+/// fill a pipe's kernel buffer and block until something drains it, and nothing
+/// here may be that something only once a wait already returned.
+///
+/// `child`'s `stdin` is expected to already be closed or fully written by the
+/// caller -- this function only waits and reads the two output pipes.
+fn wait_with_deadline(mut child: Child, path: &Path) -> (Vec<u8>, Vec<u8>, Termination) {
+    let mut stdout_pipe = child.stdout.take().expect("stdout was requested as a pipe");
+    let mut stderr_pipe = child.stderr.take().expect("stderr was requested as a pipe");
+    let stdout_thread = thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = stdout_pipe.read_to_end(&mut buf);
+        buf
+    });
+    let stderr_thread = thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = stderr_pipe.read_to_end(&mut buf);
+        buf
+    });
+
+    let start = Instant::now();
+    let (code, deadline_exceeded) = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break (status.code(), false),
+            Ok(None) => {
+                if start.elapsed() >= ORACLE_DEADLINE {
+                    // The process is still running past its deadline: kill
+                    // it and reap it so it does not outlive this function as
+                    // a zombie, then classify the run as the harness's own
+                    // kill rather than as whatever signal delivered it.
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    break (None, true);
+                }
+                thread::sleep(POLL_INTERVAL);
+            }
+            Err(e) => panic!("failed to wait for {}: {e}", path.display()),
+        }
+    };
+
+    let stdout = stdout_thread
+        .join()
+        .unwrap_or_else(|_| panic!("stdout reader thread panicked for {}", path.display()));
+    let stderr = stderr_thread
+        .join()
+        .unwrap_or_else(|_| panic!("stderr reader thread panicked for {}", path.display()));
+    (
+        stdout,
+        stderr,
+        classify_termination(code, deadline_exceeded),
+    )
 }
 
 /// Truncates an in-process exit code to the single byte a real process's
@@ -341,7 +522,7 @@ pub fn descriptor_diffs_with(
     if stderr_differs {
         diffs.push("stderr");
     }
-    if wrapped_exit_code(rust.exit_code) != cpp.exit_code {
+    if wrapped_exit_code(rust.exit_code) != cpp.expect_exit_code() {
         diffs.push("exit code");
     }
     diffs
@@ -349,7 +530,10 @@ pub fn descriptor_diffs_with(
 
 #[cfg(test)]
 mod tests {
-    use super::{CppOutcome, StderrComparison, descriptor_diffs_with};
+    use super::{
+        CppOutcome, StderrComparison, Termination, classify_termination, descriptor_diffs_with,
+        did_not_finish,
+    };
     use rexx_exec::{Outcome, StackSpan};
 
     fn outcome(stderr: &[u8]) -> Outcome {
@@ -367,7 +551,7 @@ mod tests {
         CppOutcome {
             stdout: Vec::new(),
             stderr: stderr.to_vec(),
-            exit_code: 0,
+            termination: Termination::Exited(0),
         }
     }
 
@@ -400,5 +584,52 @@ mod tests {
              pair, or this is not demonstrating two different modes at all: \
              got {normalized:?}"
         );
+    }
+
+    /// A run that exited normally is `Exited`, whatever `deadline_exceeded`
+    /// says -- a completed process cannot also have been killed for running
+    /// too long. Pairs with the two failing-arm tests below rather than
+    /// standing alone, per `rust/CLAUDE.md`'s "pair a refusal with its
+    /// adjacent success": without it, the two below could be pinning
+    /// `deadline_exceeded` to the classification's whole answer instead of
+    /// to the tiebreak it only is when `code` is `None`.
+    #[test]
+    fn classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag() {
+        assert_eq!(classify_termination(Some(0), false), Termination::Exited(0));
+        assert_eq!(classify_termination(Some(1), true), Termination::Exited(1));
+    }
+
+    /// `(None, true)`: [`wait_with_deadline`] is the one that ended the run.
+    #[test]
+    fn classify_termination_reports_timed_out_when_the_harness_killed_it() {
+        assert_eq!(classify_termination(None, true), Termination::TimedOut);
+    }
+
+    /// `(None, false)`: the process died from a signal nobody here sent -- a
+    /// crash, distinguished from `TimedOut` only by which side of the `if`
+    /// in [`wait_with_deadline`] produced the `None`.
+    #[test]
+    fn classify_termination_reports_signaled_when_nothing_here_killed_it() {
+        assert_eq!(classify_termination(None, false), Termination::Signaled);
+    }
+
+    /// [`did_not_finish`] reads the status, not a number: both failing arms
+    /// answer `true` even though neither carries an exit code to compare.
+    #[test]
+    fn did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit() {
+        let finished = cpp_outcome(b"");
+        assert!(!did_not_finish(&finished));
+
+        let timed_out = CppOutcome {
+            termination: Termination::TimedOut,
+            ..cpp_outcome(b"")
+        };
+        assert!(did_not_finish(&timed_out));
+
+        let signaled = CppOutcome {
+            termination: Termination::Signaled,
+            ..cpp_outcome(b"")
+        };
+        assert!(did_not_finish(&signaled));
     }
 }

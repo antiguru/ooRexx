@@ -247,7 +247,7 @@ fn measure(oracle: &Oracle, run_root: &Path, name: &str, program: &str) -> Measu
         rust.exit_code,
         excerpt(&cpp.stdout),
         excerpt(&cpp.stderr),
-        cpp.exit_code
+        cpp.expect_exit_code()
     );
 
     Measured {
