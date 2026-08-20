@@ -8108,7 +8108,11 @@ impl Interp {
             }
             None => {
                 let range = (boxed.body_start, boxed.end_index);
-                self.flat_loops.push(boxed);
+                // The loop just entered becomes the innermost, and whatever
+                // was innermost joins the ones enclosing it.
+                if let Some(enclosing) = self.flat_top.replace(boxed) {
+                    self.flat_loops.push(enclosing);
+                }
                 Ok(FlatStart::Flat {
                     body_start: range.0,
                     end_index: range.1,
@@ -8118,7 +8122,7 @@ impl Interp {
     }
 
     /// **SPIKE.** One pass boundary of the innermost flat loop: the state is
-    /// taken off `Interp::flat_loops` so that this can hold a `&mut Interp`
+    /// taken out of `Interp::flat_top` so that this can hold a `&mut Interp`
     /// beside it, and put back when another pass follows.
     pub(crate) fn flat_loop_step_top(
         &mut self,
@@ -8126,18 +8130,28 @@ impl Interp {
         source: Option<&ProgramSource>,
         arrival: Flow,
     ) -> Result<FlatStep, Failure> {
-        let Some(mut top) = self.flat_loops.pop() else {
+        let Some(mut top) = self.flat_top.take() else {
             return Err(Loud::op_not_driven("a pass boundary with no loop open").into());
         };
         match self.flat_loop_step(code, source, &mut top, arrival) {
             Ok(FlatStep::Body(op_body)) => {
-                self.flat_loops.push(top);
+                self.flat_top = Some(top);
                 Ok(FlatStep::Body(op_body))
             }
             Ok(FlatStep::Done(flow)) => {
                 self.flat_spares.push(top);
+                // The loop that just ended uncovers the one enclosing it, and
+                // `None` here is the outermost of a nest having ended.
+                self.flat_top = self.flat_loops.pop();
                 Ok(FlatStep::Done(flow))
             }
+            // `top` is dropped rather than handed back, and this loop's own
+            // frame is still standing: `unwind_frames` finds `flat_top`
+            // already empty and takes the enclosing box for that frame, so one
+            // box reaches the allocator instead of `flat_spares` and no state
+            // is lost. Its own `if let Some` is what tolerates the last frame
+            // finding nothing left, which is the same tolerance the pop off
+            // `flat_loops` needed before this field existed.
             Err(failure) => Err(failure),
         }
     }

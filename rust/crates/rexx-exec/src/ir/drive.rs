@@ -2361,7 +2361,7 @@ impl Interp {
                         return Err(Loud::op_not_driven("LoopNext").into());
                     }
                     debug_assert_eq!(
-                        self.flat_loops.last().map(|flat| flat.do_index),
+                        self.flat_top.as_ref().map(|flat| flat.do_index),
                         Some(*index as usize),
                         "a LoopNext op ended a pass of a loop other than the one it names"
                     );
@@ -2423,10 +2423,19 @@ impl Interp {
             let Some(frame) = self.frames.pop() else {
                 return;
             };
-            if matches!(frame.kind, FrameKind::Loop)
-                && let Some(flat) = self.flat_loops.pop()
-            {
-                self.flat_spares.push(flat);
+            if matches!(frame.kind, FrameKind::Loop) {
+                // The innermost open loop is the one this frame stands for.
+                // `None` is a pass boundary having taken it out and then
+                // raised, which loses one box to the allocator and no state.
+                if let Some(flat) = self.flat_top.take() {
+                    self.flat_spares.push(flat);
+                }
+                // Uncovering the loop enclosing it is the same line
+                // `Interp::flat_loop_step_top` runs for a loop that ends
+                // normally, and it is what keeps `flat_top` meaning "the
+                // innermost loop still open" without a repair pass after this
+                // one. `None` is the last of them having gone.
+                self.flat_top = self.flat_loops.pop();
             }
         }
     }
