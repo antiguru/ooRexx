@@ -64,7 +64,9 @@ use std::process::{Command, ExitCode};
 use std::time::Duration;
 
 use rexx_bench::arms::Arm;
-use rexx_bench::child::{ADDRESS_SPACE_LIMIT_KIB, Counted, ORACLE_ROOT, Side, Wrapper, run};
+use rexx_bench::child::{
+    ADDRESS_SPACE_LIMIT_KIB, Counted, Counters, ORACLE_ROOT, Side, Wrapper, parse_counters, run,
+};
 use rexx_bench::timing::{MedianInterval, median_interval_indices};
 
 /// Paired measurements per axis.
@@ -230,10 +232,22 @@ fn main() -> ExitCode {
     // baseline was taken with. `rexx-bench-band` measures what pinning is
     // worth; this flag is how the suite gets the same treatment once that
     // measurement says it is worth having.
+    // Every run is counted as well as timed. The three quantities then
+    // describe the *same* executions rather than three sets of them, which is
+    // what lets a row's cycles and its wall time be read against each other.
     let wrapper = Wrapper {
         pin: flag_value(&arguments, "--pin"),
-        counters: Counted::Nothing,
+        counters: Counted::User,
     };
+
+    // Settled here rather than at each reading: a suite that stopped counting
+    // would otherwise print its counter columns empty, and a report missing a
+    // column reads like an axis nobody measured rather than like a harness
+    // that was reconfigured.
+    assert!(
+        wrapper.counters.events().is_some(),
+        "the suite reports cycles and instructions beside every wall time, so it must run counted"
+    );
 
     verify_axis_list();
 
@@ -351,6 +365,7 @@ fn main() -> ExitCode {
         }
     }
     write_axes(&mut report, &rows, &offset);
+    write_counters(&mut report, &rows);
 
     eprintln!("measuring rexxcps");
     let cps = measure_interleaved(
@@ -410,6 +425,10 @@ struct Paired {
     /// result is a number it prints rather than a time this harness takes.
     oracle_stdout: Vec<Vec<u8>>,
     rust_stdout: Vec<Vec<u8>>,
+    /// `cycles:u` and `instructions:u` for every sampled run, in the same
+    /// order as the wall times beside them and from the same executions.
+    oracle_counters: Vec<Counters>,
+    rust_counters: Vec<Counters>,
 }
 
 impl Paired {
@@ -448,6 +467,8 @@ fn measure_interleaved(
         rust: Vec::with_capacity(pairs),
         oracle_stdout: Vec::with_capacity(pairs),
         rust_stdout: Vec::with_capacity(pairs),
+        oracle_counters: Vec::with_capacity(pairs),
+        rust_counters: Vec::with_capacity(pairs),
     };
     for index in 0..(warmup + pairs) {
         let sampled = index >= warmup;
@@ -466,13 +487,47 @@ fn measure_interleaved(
                 ));
             }
             if sampled {
-                let (times, outputs) = if is_oracle {
-                    (&mut result.oracle, &mut result.oracle_stdout)
+                // Refused whole rather than recorded as absent. `perf` reports
+                // a multiplexed-out event *scaled up* to what it would have
+                // been, in the same column and format as an exact count, and
+                // `parse_counters` declines that; a row silently missing its
+                // counters would read as an axis this suite measured.
+                // A wrapper that counts must produce a reading, and it is
+                // refused whole rather than recorded as absent: `perf` reports
+                // a multiplexed-out event *scaled up* to what it would have
+                // been, in the same column and format as an exact count, and
+                // `parse_counters` declines that. Whether the suite counts at
+                // all is settled once in `main`; this stays conditional so the
+                // alternation test can drive it with a shell probe on a
+                // machine without `perf`.
+                let counters = match wrapper.counters.events() {
+                    None => None,
+                    Some(events) => Some(parse_counters(&completed.stderr, events).ok_or_else(|| {
+                        format!(
+                            "no complete {}/{} reading from {} on {}. Is `perf` installed, and is `kernel.perf_event_paranoid` low enough to count a child?",
+                            events[0],
+                            events[1],
+                            side.label,
+                            program.display()
+                        )
+                    })?),
+                };
+                let (times, outputs, counts) = if is_oracle {
+                    (
+                        &mut result.oracle,
+                        &mut result.oracle_stdout,
+                        &mut result.oracle_counters,
+                    )
                 } else {
-                    (&mut result.rust, &mut result.rust_stdout)
+                    (
+                        &mut result.rust,
+                        &mut result.rust_stdout,
+                        &mut result.rust_counters,
+                    )
                 };
                 times.push(completed.wall);
                 outputs.push(completed.stdout);
+                counts.extend(counters);
             }
         }
     }
@@ -843,6 +898,106 @@ fn write_offset(report: &mut String, name: &str, paired: &Paired) {
     );
 }
 
+/// Median of one counter across a side's sampled runs.
+fn counter_median(readings: &[Counters], pick: fn(&Counters) -> u64) -> f64 {
+    let mut values: Vec<f64> = readings.iter().map(|r| pick(r) as f64).collect();
+    Stats::of(&mut values).median
+}
+
+/// The hardware counters, per axis and per side.
+///
+/// **Wall time is what the gate is stated in; these are what explain it.** An
+/// axis can be slower on the clock while retiring fewer instructions, and
+/// which of those is true decides whether the work or the memory behaviour is
+/// the thing to change.
+fn write_counters(report: &mut String, rows: &[AxisRow]) {
+    if rows.is_empty() {
+        return;
+    }
+    let _ = writeln!(report, "#### Cycles and instructions\n");
+    let _ = writeln!(
+        report,
+        "Counted with `perf stat -e cycles:u,instructions:u` on the **same runs** the wall times \
+         above come from, so a row's three quantities describe one set of executions rather than \
+         three. A reading `perf` could not schedule for the whole run is refused rather than \
+         recorded, because it would be reported scaled up to an estimate in the same format as an \
+         exact count.\n"
+    );
+    let _ = writeln!(
+        report,
+        "**The instruction ratio is not the scoreboard and does not stand in for the wall ratio.** \
+         Read the two ratio columns below against the wall ratios above: `cycles` tracks wall time \
+         closely on every axis, and `instructions` tracks it on none, missing in *both* directions \
+         -- an axis can retire far more instructions than the oracle and lose by less than that \
+         suggests, or retire about as many and win comfortably. The two interpreters reach a \
+         variable and hold a small integer differently enough that their instructions are not the \
+         same unit of work, so a ratio between their counts is not a ratio of anything. **Quote \
+         cycles or wall time when comparing the two sides.**\n"
+    );
+    let _ = writeln!(
+        report,
+        "| axis | side | cycles | instructions | IPC | cycles/iter | instr/iter |"
+    );
+    let _ = writeln!(report, "|---|---|---:|---:|---:|---:|---:|");
+    for row in rows {
+        for (label, readings) in [
+            ("oracle", &row.paired.oracle_counters),
+            ("this crate", &row.paired.rust_counters),
+        ] {
+            if readings.is_empty() {
+                let _ = writeln!(
+                    report,
+                    "| `{}` | {label} | **no reading** | **no reading** | | | |",
+                    row.name
+                );
+                continue;
+            }
+            let cycles = counter_median(readings, |r| r.cycles);
+            let instructions = counter_median(readings, |r| r.instructions);
+            let iterations = row.iterations as f64;
+            let _ = writeln!(
+                report,
+                "| `{}` | {label} | {:.0} | {:.0} | {:.2} | {:.1} | {:.1} |",
+                row.name,
+                cycles,
+                instructions,
+                instructions / cycles,
+                cycles / iterations,
+                instructions / iterations,
+            );
+        }
+    }
+    let _ = writeln!(report);
+
+    let _ = writeln!(report, "| axis | cycles ratio | instructions ratio |");
+    let _ = writeln!(report, "|---|---:|---:|");
+    for row in rows {
+        if row.paired.oracle_counters.is_empty() || row.paired.rust_counters.is_empty() {
+            continue;
+        }
+        let oracle_cycles = counter_median(&row.paired.oracle_counters, |r| r.cycles);
+        let rust_cycles = counter_median(&row.paired.rust_counters, |r| r.cycles);
+        let oracle_instructions = counter_median(&row.paired.oracle_counters, |r| r.instructions);
+        let rust_instructions = counter_median(&row.paired.rust_counters, |r| r.instructions);
+        let _ = writeln!(
+            report,
+            "| `{}` | {:.2}x | {:.2}x |",
+            row.name,
+            rust_cycles / oracle_cycles,
+            rust_instructions / oracle_instructions,
+        );
+    }
+    let _ = writeln!(
+        report,
+        "\nBoth are this crate's median over the oracle's, so below 1.00x is this crate ahead -- \
+         the same direction as the wall ratio above.\n\n**Where `instructions:u` is the right \
+         instrument is this crate against itself.** It is deterministic to several significant \
+         figures where cycles move a few per cent between runs on this machine, which is why every \
+         optimisation in this tree is justified with it and why `rexx-arms` reports it. That is a \
+         claim about A/B-ing one binary against another, not about the column beside it.\n"
+    );
+}
+
 fn write_axes(report: &mut String, rows: &[AxisRow], offset: &Paired) {
     let _ = writeln!(report, "### Axes\n");
     // Every axis having failed is already reported loudly elsewhere; what
@@ -986,19 +1141,34 @@ fn write_rexxcps(report: &mut String, paired: &Paired) {
     );
     let _ = writeln!(
         report,
-        "| side | wall median | wall interval | `Averaged:` |"
+        "| side | wall median | wall interval | cycles | instructions | IPC | `Averaged:` |"
     );
-    let _ = writeln!(report, "|---|---:|---|---|");
-    for (label, stats, runs) in [
-        ("oracle", oracle_wall, &paired.oracle_stdout),
-        ("this crate", rust_wall, &paired.rust_stdout),
+    let _ = writeln!(report, "|---|---:|---|---:|---:|---:|---|");
+    for (label, stats, runs, readings) in [
+        (
+            "oracle",
+            oracle_wall,
+            &paired.oracle_stdout,
+            &paired.oracle_counters,
+        ),
+        (
+            "this crate",
+            rust_wall,
+            &paired.rust_stdout,
+            &paired.rust_counters,
+        ),
     ] {
+        let cycles = counter_median(readings, |r| r.cycles);
+        let instructions = counter_median(readings, |r| r.instructions);
         let _ = writeln!(
             report,
-            "| {label} | {:.4} s | {:.4} - {:.4} s | {} |",
+            "| {label} | {:.4} s | {:.4} - {:.4} s | {:.0} | {:.0} | {:.2} | {} |",
             stats.median,
             stats.low,
             stats.high,
+            cycles,
+            instructions,
+            instructions / cycles,
             quoted_line(runs.last().map_or(&[][..], Vec::as_slice), "Averaged:")
         );
     }

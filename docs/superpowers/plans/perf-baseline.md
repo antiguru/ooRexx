@@ -5,7 +5,7 @@ Task 0.7. This is the number every later phase's D9 performance gate (Global Con
 than its C++ counterpart on this suite. Coming out worse than what is recorded here, on the
 platforms recorded here, is the definition of a gate failure.
 
-**START HERE, 2026-08-20: the current standing is "The baseline with a REXXCPS this repository owns" at the end of this file.** Two things changed on that date and every ratio written before it is void as a comparison. The oracle binary at `build/` was deliberately swapped from a 5.0 interpreter built `-O0` to a 5.3 one built `-O2 -g` -- version-matched to this repository's own `interpreter/` -- and roughly eighty optimisation commits landed in this crate. **A ratio needs its oracle's version and optimisation level to mean anything, and no section above that one records either.** Crate-absolute figures stay honest measurements of the commit they name; ratios do not travel across that boundary.
+**START HERE, 2026-08-20: the current standing is "The first counted baseline" at the end of this file.** Two things changed on that date and every ratio written before it is void as a comparison. The oracle binary at `build/` was deliberately swapped from a 5.0 interpreter built `-O0` to a 5.3 one built `-O2 -g` -- version-matched to this repository's own `interpreter/` -- and roughly eighty optimisation commits landed in this crate. **A ratio needs its oracle's version and optimisation level to mean anything, and no section above that one records either.** Crate-absolute figures stay honest measurements of the commit they name; ratios do not travel across that boundary.
 
 **Every "this crate" figure in this file above the pre-Phase-5 section is a tree-walker figure, and re-running the harness no longer produces one** (2026-08-11, `phase-4e-gate.md`; amended 2026-08-15). `rexx-run` defaulted to the tree-walker when those were measured and `rexx_bench::child::Side::rust` inherited that default; Phase 4e made the compiled stream the default and made the harness name the arm on every child and print it in its provenance block. So `rexx-bench-suite` with no arguments now measures the IR arm, and `--engine tree-walker` is what reproduces the arm those rows were taken on. None of them has been re-measured. **"The pre-Phase-5 baseline" below is the first IR-arm section in this file**; its provenance block names the arm, as every section written after Phase 4e does.
 
@@ -1203,7 +1203,12 @@ Measured here rather than left out of the table, with the status and message eac
 | `dispatch` | 120 | `rexx-exec: method "NEW" of class "Object" is not implemented (Phase 5)` |
 | `heapshape` | 120 | `rexx-exec: method "NEW" of class "Array" is not implemented (Phase 5)` |
 
-## The baseline with a REXXCPS this repository owns, measured 2026-08-20 at `5bee5524b`
+## The baseline with a REXXCPS this repository owns, measured 2026-08-20 at `5bee5524b` (superseded the same day)
+
+**Superseded by the section below, which adds `cycles:u` and `instructions:u` to every row.** The crate
+and the oracle are the same binaries; what changed is that the suite now counts as well as times, so
+the wall times below were taken without `perf` in the pipeline and those in the next section with it.
+That is one more reason the two are not comparable, on top of their being separate runs.
 
 **What is new since the section above, which was taken earlier the same day.** This crate gained the
 `NUMERIC FUZZ` fixes at `2eed4cad5` -- three call sites that took an exact integer comparison without
@@ -1328,6 +1333,181 @@ Measured here rather than left out of the table, with the status and message eac
 | `alloc` | 120 | `rexx-exec: method "OF" of class "Array" is not implemented (Phase 5)` |
 | `dispatch` | 120 | `rexx-exec: method "NEW" of class "Object" is not implemented (Phase 5)` |
 | `heapshape` | 120 | `rexx-exec: method "NEW" of class "Array" is not implemented (Phase 5)` |
+
+## The first counted baseline, measured 2026-08-20 at `d90de68e3`
+
+**What is new: every run is counted as well as timed.** `perf stat -e cycles:u,instructions:u` wraps both
+sides on every axis, and the counters come from the *same* executions as the wall times beside them, so a
+row's three quantities describe one set of runs rather than three.
+
+**Why this was worth adding, in one number.** `strings` retires **1.44x** the oracle's instructions and
+takes **1.23x** its time. Wall time alone says that axis is slow; the counters say *why*, and say it is the
+amount of work rather than the memory behaviour. `arith` is the opposite shape -- 1.08x the instructions
+for 1.15x the time -- and no amount of staring at wall times would have separated those two cases.
+
+**What the two counters are each good for, measured here rather than assumed.**
+
+* **`cycles` tracks wall time on every axis** -- compare the two ratio columns below against the wall
+  ratios above and they agree to a couple of hundredths throughout. It is the honest count to quote when
+  comparing the two interpreters.
+* **`instructions` tracks wall time on none of them**, and misses in both directions: `varlookup` retires
+  about as many instructions as the oracle (0.97x) and wins comfortably on the clock (0.71x), while
+  `arith` retires fewer (1.08x against a 1.15x wall ratio) and still loses. The two interpreters hold a
+  small integer and reach a variable differently enough that their instructions are not the same unit of
+  work, so a ratio between their counts is not a ratio of anything.
+* **`instructions` is nonetheless the instrument for this crate against itself**, because it is
+  deterministic where cycles are not. `alloc4c`'s crate arm reads 3,459,005,164 here against
+  3,459,005,134 in a self-check run minutes earlier -- eight significant figures. That is why every
+  optimisation in this tree is justified with it and why `rexx-arms` reports it.
+
+**Do not compute a delta between this section and any other.** Separate suite runs are not comparable --
+the suite alternates the two interpreters pair by pair *within* a run because this machine's clock drifts
+across minutes by more than several of the effects being measured. These wall times additionally carry
+`perf`'s overhead, which the section above does not.
+
+**The standing:** four of six axes faster than the oracle -- `alloc4c` 0.58x, `compound` 0.54x,
+`emptyloop` 0.61x, `varlookup` 0.71x -- and two slower, `arith` 1.15x and `strings` 1.23x.
+
+### Provenance
+
+| | |
+|---|---|
+| measured | 2026-08-20T21:12:04+02:00 |
+| repo commit | `d90de68e366ec46f34dc2843579c8520d16a56b2` |
+| oracle `bin/rexx` | `/home/moritz/dev/repos/ooRexx/build/bin/rexx` -- size=62600 bytes, mtime=2026-08-05 16:02:20.172072564 +0200, sha256=bb5bb8ccbb96c376e329b91aafdad891f975ba06c941dbceba82c3848fa13019 |
+| oracle `lib/librexx.so.4` | size=17853856 bytes, mtime=2026-08-05 16:02:20.064306594 +0200, sha256=42136c4038004fe2d5104181e06873301f032ced97c54a0fe84042e006d9b6fb |
+| oracle `lib/librexxapi.so.4` | size=667792 bytes, mtime=2026-07-30 23:06:46.077533141 +0200, sha256=3536b76379c23fc7e3c4bce97b57d3c4812291ce5d68e71adc507ee690dc7d66 |
+| this crate `rexx-run` | `/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/target/release/rexx-run` -- size=17908376 bytes, mtime=2026-08-20 18:23:50.610701577 +0200, sha256=141c3fa968ea774655bc00f3e3b9f61cf1c4b738fd2793831d0055e94f1d074b |
+| this crate's engine | `REXX_ENGINE=ir`, set by this harness on every run |
+| address-space cap | `ulimit -v 8388608` KiB, **both sides, every axis** |
+| pairs per axis | 9 sampled, 1 warm-up pair(s) discarded, oracle and this crate alternating |
+| pairs for the offset line | 51 sampled, 5 warm-up |
+| statistic | median; interval is the distribution-free sign-test interval for the median at a 95% target |
+| working directory of every child | a fresh empty temporary directory |
+
+### Fixed per-process offset (`startup.rex`)
+
+**Not comparable, and not a pass.** This crate has no `CoreClasses.orx` bootstrap yet (Phase 5), so it starts fast by not doing the work the oracle does at startup. The two numbers below are each side's own fixed cost, reported so every axis above can be read net of it -- not as a result about which interpreter starts faster.
+
+| side | median | min | max | 95.1% interval | spread |
+|---|---:|---:|---:|---|---:|
+| oracle | 14.380 ms | 12.357 ms | 17.683 ms | 13.691 - 15.192 ms | 37.0 % |
+| this crate | 10.438 ms | 9.291 ms | 47.422 ms | 10.103 - 10.696 ms | 365.3 % |
+
+Both offsets include one `/bin/sh` `exec` from the `ulimit` wrapper, on both sides equally.
+
+### Axes
+
+`iters/s` is the program's own loop bound divided by the median wall time. `iters/s net` divides by the median wall time less that side's per-process offset above.
+
+| axis | iterations | side | median | min | max | interval | spread | iters/s | iters/s net |
+|---|---:|---|---:|---:|---:|---|---:|---:|---:|
+| `alloc4c` | 1000000 | oracle | 1.0141 s | 0.9997 s | 1.0249 s | 1.0038 - 1.0219 s | 2.49 % | 986091 | 1000274 |
+| `alloc4c` | 1000000 | this crate | 0.5928 s | 0.5799 s | 0.6063 s | 0.5805 - 0.6009 s | 4.45 % | 1686995 | 1717233 |
+| `arith` | 500000 | oracle | 1.1687 s | 1.1606 s | 1.1860 s | 1.1606 - 1.1814 s | 2.17 % | 427822 | 433151 |
+| `arith` | 500000 | this crate | 1.3447 s | 1.3405 s | 1.3547 s | 1.3422 - 1.3478 s | 1.05 % | 371829 | 374738 |
+| `compound` | 5000000 | oracle | 1.1590 s | 1.1521 s | 1.1755 s | 1.1528 - 1.1629 s | 2.02 % | 4314121 | 4368320 |
+| `compound` | 5000000 | this crate | 0.6202 s | 0.6179 s | 0.6302 s | 0.6181 - 0.6219 s | 1.99 % | 8062011 | 8200018 |
+| `emptyloop` | 25000000 | oracle | 0.9011 s | 0.8834 s | 0.9393 s | 0.8866 - 0.9161 s | 6.21 % | 27744324 | 28194253 |
+| `emptyloop` | 25000000 | this crate | 0.5469 s | 0.5414 s | 0.5534 s | 0.5440 - 0.5508 s | 2.20 % | 45712471 | 46601897 |
+| `strings` | 3000000 | oracle | 0.8600 s | 0.8523 s | 0.8816 s | 0.8525 - 0.8681 s | 3.40 % | 3488464 | 3547787 |
+| `strings` | 3000000 | this crate | 1.0538 s | 1.0473 s | 1.0556 s | 1.0518 - 1.0555 s | 0.79 % | 2846900 | 2875382 |
+| `varlookup` | 19000000 | oracle | 1.2021 s | 1.1904 s | 1.2178 s | 1.1905 - 1.2144 s | 2.28 % | 15806210 | 15997582 |
+| `varlookup` | 19000000 | this crate | 0.8521 s | 0.8459 s | 0.8639 s | 0.8498 - 0.8637 s | 2.11 % | 22298728 | 22575276 |
+
+#### Ratios and the gate call
+
+The throughput ratio (oracle iters/s over this crate's) and the wall ratio (this crate's median over the oracle's) are the same number, because both sides run the same iteration count.
+
+**The ratio interval is indicative, and the verdict is not taken from it.** It divides one side's interval by the other's, so its joint coverage is at least 92.2% by Bonferroni -- one minus the two sides' miss probabilities added -- not the 96.1% either side carries alone. The verdict applies Global Constraints' rule directly: this crate's point estimate against the oracle's interval, slow side.
+
+| axis | oracle median | this crate median | ratio | ratio interval | verdict |
+|---|---:|---:|---:|---|---|
+| `alloc4c` | 1.0141 s | 0.5928 s | 0.58x | 0.57x - 0.60x | faster |
+| `arith` | 1.1687 s | 1.3447 s | 1.15x | 1.14x - 1.16x | SLOWER |
+| `compound` | 1.1590 s | 0.6202 s | 0.54x | 0.53x - 0.54x | faster |
+| `emptyloop` | 0.9011 s | 0.5469 s | 0.61x | 0.59x - 0.62x | faster |
+| `strings` | 0.8600 s | 1.0538 s | 1.23x | 1.21x - 1.24x | SLOWER |
+| `varlookup` | 1.2021 s | 0.8521 s | 0.71x | 0.70x - 0.73x | faster |
+
+#### Same work on both sides
+
+A wall time is only about the workload if the workload ran. Every sampled run on each side printed the same bytes, and the two sides printed the same bytes as each other.
+
+| axis | stable within a side | identical across sides | stdout |
+|---|---|---|---|
+| `alloc4c` | yes | yes | `12888896` |
+| `arith` | yes | yes | `4629643519330627.7808` |
+| `compound` | yes | yes | `5000000` |
+| `emptyloop` | yes | yes | `done` |
+| `strings` | yes | yes | `138000000` |
+| `varlookup` | yes | yes | `19000000` |
+
+#### Cycles and instructions
+
+Counted with `perf stat -e cycles:u,instructions:u` on the **same runs** the wall times above come from, so a row's three quantities describe one set of executions rather than three. A reading `perf` could not schedule for the whole run is refused rather than recorded, because it would be reported scaled up to an estimate in the same format as an exact count.
+
+**The instruction ratio is not the scoreboard and does not stand in for the wall ratio.** Read the two ratio columns below against the wall ratios above: `cycles` tracks wall time closely on every axis, and `instructions` tracks it on none, missing in *both* directions -- an axis can retire far more instructions than the oracle and lose by less than that suggests, or retire about as many and win comfortably. The two interpreters reach a variable and hold a small integer differently enough that their instructions are not the same unit of work, so a ratio between their counts is not a ratio of anything. **Quote cycles or wall time when comparing the two sides.**
+
+| axis | side | cycles | instructions | IPC | cycles/iter | instr/iter |
+|---|---|---:|---:|---:|---:|---:|
+| `alloc4c` | oracle | 2879465230 | 4865213504 | 1.69 | 2879.5 | 4865.2 |
+| `alloc4c` | this crate | 1642772220 | 3459005164 | 2.11 | 1642.8 | 3459.0 |
+| `arith` | oracle | 3409989539 | 11076092796 | 3.25 | 6820.0 | 22152.2 |
+| `arith` | this crate | 3936899099 | 11978656649 | 3.04 | 7873.8 | 23957.3 |
+| `compound` | oracle | 3372624925 | 10342250776 | 3.07 | 674.5 | 2068.5 |
+| `compound` | this crate | 1790933997 | 9548933129 | 5.33 | 358.2 | 1909.8 |
+| `emptyloop` | oracle | 2619830547 | 12650890161 | 4.83 | 104.8 | 506.0 |
+| `emptyloop` | this crate | 1576299541 | 9400623602 | 5.96 | 63.1 | 376.0 |
+| `strings` | oracle | 2500493905 | 11162842372 | 4.46 | 833.5 | 3720.9 |
+| `strings` | this crate | 3073982446 | 16108257423 | 5.24 | 1024.7 | 5369.4 |
+| `varlookup` | oracle | 3512318730 | 17015875922 | 4.84 | 184.9 | 895.6 |
+| `varlookup` | this crate | 2480828040 | 16549645091 | 6.67 | 130.6 | 871.0 |
+
+| axis | cycles ratio | instructions ratio |
+|---|---:|---:|
+| `alloc4c` | 0.57x | 0.71x |
+| `arith` | 1.15x | 1.08x |
+| `compound` | 0.53x | 0.92x |
+| `emptyloop` | 0.60x | 0.74x |
+| `strings` | 1.23x | 1.44x |
+| `varlookup` | 0.71x | 0.97x |
+
+Both are this crate's median over the oracle's, so below 1.00x is this crate ahead -- the same direction as the wall ratio above.
+
+**Where `instructions:u` is the right instrument is this crate against itself.** It is deterministic to several significant figures where cycles move a few per cent between runs on this machine, which is why every optimisation in this tree is justified with it and why `rexx-arms` reports it. That is a claim about A/B-ing one binary against another, not about the column beside it.
+
+### `bench-rexxcps/rexxcps.rex`
+
+REXXCPS 2.2 with its loop counts fixed, so **both sides do identical work** and the wall times below are directly comparable. The clauses-per-second figure each side prints is per clause and is comparable for the same reason. Each side's `Averaged:` line is quoted so that identity is visible rather than assumed: the two must read the same, and a report where they do not is one where something rewrote the counts. The stock `samples/rexxcps.rex` scales its own count until a trial takes about a second, which is what this file exists to remove -- see `bench-rexxcps/README.md`.
+
+| side | wall median | wall interval | cycles | instructions | IPC | `Averaged:` |
+|---|---:|---|---:|---:|---:|---|
+| oracle | 1.1728 s | 1.1659 - 1.1783 s | 3411931868 | 10627381038 | 3.11 | `Averaged: 200 x 100 iterations of 1000 clauses` |
+| this crate | 1.9771 s | 1.9685 - 1.9847 s | 5799850972 | 18717492066 | 3.23 | `Averaged: 200 x 100 iterations of 1000 clauses` |
+
+| side | median cps | min | max | 96.1% interval | spread |
+|---|---:|---:|---:|---|---:|
+| oracle | 17350930 | 17202940 | 17481738 | 17263331 - 17467051 | 1.61 % |
+| this crate | 10203946 | 10134962 | 10308359 | 10161812 - 10240860 | 1.70 % |
+
+**Internal cps ratio: 1.70x** (oracle median over this crate's median), interval 1.69x - 1.72x.
+
+### Axes this crate cannot run
+
+Measured here rather than left out of the table, with the status and message each one actually produced. These belong to later tasks in this phase; what belongs to this one is that they are visible.
+
+| axis | exit status | message |
+|---|---:|---|
+| `alloc` | 120 | `rexx-exec: method "OF" of class "Array" is not implemented (Phase 5)
+22408831,,cycles:u,10005144,100.00,,
+48589625,,instructions:u,10005144,100.00,,` |
+| `dispatch` | 120 | `rexx-exec: method "NEW" of class "Object" is not implemented (Phase 5)
+19327905,,cycles:u,8898647,100.00,,
+44696209,,instructions:u,8898647,100.00,,` |
+| `heapshape` | 120 | `rexx-exec: method "NEW" of class "Array" is not implemented (Phase 5)
+19924590,,cycles:u,8764473,100.00,,
+48710663,,instructions:u,8764473,100.00,,` |
 
 ## What is still missing
 
