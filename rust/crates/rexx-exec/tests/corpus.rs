@@ -246,13 +246,23 @@ fn run_rust(path: &Path) -> Outcome {
     rexx_exec::run_program(path_str, text, rexx_exec::Invocation::none())
 }
 
-/// One corpus program that disagreed with the oracle.
+/// One corpus program that disagreed with the oracle, or one whose oracle
+/// run did not finish.
 struct Mismatch {
     rel_path: String,
     /// The construct named in `rexx-exec: X is not implemented`, when the
-    /// stderr has that shape. `None` for a genuine divergence.
+    /// stderr has that shape. `None` for a genuine divergence and for a
+    /// structural failure alike.
     owner: Option<String>,
     reason: String,
+    /// `true` for an oracle run that did not finish, `false` for an ordinary
+    /// byte divergence. Kept as its own field rather than inferred from
+    /// `reason`'s text, because a structural failure is red in every mode
+    /// and a divergence is red only under the gate -- `corpus_differential`
+    /// asserts on this field unconditionally, before the gated assertion
+    /// over the whole list, and a bit that says which kind a `Mismatch` is
+    /// cannot be conflated with prose the way a substring match could be.
+    structural: bool,
 }
 
 /// Pulls `X` out of a `rexx-exec: X is not implemented` line, the same
@@ -365,6 +375,7 @@ fn check_case(oracle: &Oracle, corpus_dir: &Path, rel_path: &str) -> Option<Mism
                  comparison",
                 cpp.termination
             ),
+            structural: true,
         });
     }
 
@@ -411,6 +422,7 @@ fn check_case(oracle: &Oracle, corpus_dir: &Path, rel_path: &str) -> Option<Mism
         rel_path: rel_path.to_string(),
         owner,
         reason,
+        structural: false,
     })
 }
 
@@ -643,6 +655,27 @@ fn corpus_differential() {
     let total = subset.len();
     let gate = gate_mode();
     emit_uncaptured(&build_report(matched, total, &mismatches, gate));
+
+    // Unconditional, and checked before the gated assertion below: a
+    // structural failure is red in every mode, per the global constraints,
+    // and `gate_mode()` exists to relax a *verdict* comparison, not to
+    // decide whether a run that never produced bytes to compare gets
+    // noticed. Named separately from `mismatches.is_empty()` so that a
+    // report-mode run -- most runs -- cannot let a program that stopped
+    // finishing pass as "106 of 106 matching" just because the corpus
+    // gate itself was not requested.
+    let structural: Vec<&str> = mismatches
+        .iter()
+        .filter(|m| m.structural)
+        .map(|m| m.rel_path.as_str())
+        .collect();
+    assert!(
+        structural.is_empty(),
+        "{} corpus program(s) did not finish, a structural failure in every \
+         mode rather than a verdict `{GATE_ENV}` could relax: {structural:?}. \
+         See the report above for which `Termination` each one carries.",
+        structural.len()
+    );
 
     assert!(
         !gate || mismatches.is_empty(),

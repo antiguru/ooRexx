@@ -68,7 +68,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rexx_exec::{Invocation, Outcome, run_program};
-use support::oracle::{Oracle, locate};
+use support::oracle::{Oracle, did_not_finish, locate};
 
 /// The same directory `ir_dual.rs` walks. Two tests reading one directory is
 /// the point: one says this crate matches the recording, the other says the
@@ -127,11 +127,24 @@ fn tagged(exit_code: i32, stdout: &[u8], stderr: &[u8]) -> String {
 
 /// The oracle's answer for one program, with the path it ran from rewritten to
 /// [`INLINE_PATH`] so a traceback's middle line is comparable.
-fn render_oracle(oracle: &Oracle, run_dir: &Path, program: &str) -> String {
+///
+/// `label` identifies the stanza for the [`did_not_finish`] check below --
+/// `expect_exit_code`'s own panic has no such label in it, and this function
+/// is called once per stanza across every file `datadriven::walk` reads.
+fn render_oracle(oracle: &Oracle, run_dir: &Path, label: &str, program: &str) -> String {
     let path = run_dir.join("case.rex");
     fs::write(&path, program.as_bytes())
         .unwrap_or_else(|e| panic!("cannot write {}: {e}", path.display()));
     let outcome = oracle.run(&path);
+    // An unconditional `assert!` naming the stanza, the shape every
+    // oracle-invoking harness in this crate uses for the same event, before
+    // `expect_exit_code` below can reach its own path-less panic.
+    assert!(
+        !did_not_finish(&outcome),
+        "{label}: the oracle did not finish: {:?} -- a structural failure, not \
+         a byte comparison",
+        outcome.termination
+    );
     let exit_code = outcome.expect_exit_code();
     let shown = path.to_string_lossy().into_owned();
     let rewrite = |bytes: Vec<u8>| {
@@ -185,6 +198,7 @@ fn every_recorded_expectation_is_still_what_the_oracle_produces() {
     let mut marked: BTreeMap<String, usize> = BTreeMap::new();
 
     datadriven::walk(CASE_DIR, |file| {
+        let filename = file.filename.clone();
         file.run(|case| {
             assert_eq!(
                 case.directive, "program",
@@ -192,6 +206,7 @@ fn every_recorded_expectation_is_still_what_the_oracle_produces() {
                 case.directive
             );
             checked += 1;
+            let label = format!("{filename}#{checked}");
             let reason = case.args.remove(NOT_ORACLE_BYTES).map(|values| {
                 assert!(
                     !values.is_empty(),
@@ -199,7 +214,7 @@ fn every_recorded_expectation_is_still_what_the_oracle_produces() {
                 );
                 values.join(" ")
             });
-            let from_oracle = render_oracle(&oracle, &run_dir, &case.input);
+            let from_oracle = render_oracle(&oracle, &run_dir, &label, &case.input);
             match reason {
                 None => from_oracle,
                 Some(reason) => {

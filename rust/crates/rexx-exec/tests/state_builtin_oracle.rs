@@ -481,17 +481,21 @@ fn sweep_one(oracle: &Oracle, run_root: &Path, case: &Case) -> Option<String> {
     let rust = rexx_exec::run_program(path, text, rexx_exec::Invocation::none());
     let cpp = oracle.run(&abs);
 
-    // Checked here rather than left to `descriptor_diffs`'s own
-    // `expect_exit_code()` call: that panic has no `case.name` in it and
-    // fires from inside `support/oracle.rs`, and this function's caller
-    // sweeps every case in one loop, so a panic without a name leaves an
-    // operator knowing only that some case's oracle run stopped finishing.
-    if did_not_finish(&cpp) {
-        return Some(format!(
-            "  {} did not finish: {:?} -- a structural failure, not a byte comparison",
-            case.name, cpp.termination
-        ));
-    }
+    // An unconditional `assert!`, not a `Some(String)` return: this
+    // function's caller matches its `Some` against `DECLARED_GAPS`
+    // (`every_state_builtin_case_matches_the_oracle_except_the_declared_gaps`),
+    // and a case already in that set would have a non-finish silently
+    // absorbed as the declared gap it names, in every mode, rather than
+    // reddening as the structural failure it actually is. Checked before
+    // `descriptor_diffs`, whose own `expect_exit_code()` panic has no
+    // `case.name` in it.
+    assert!(
+        !did_not_finish(&cpp),
+        "{}: the oracle did not finish: {:?} -- a structural failure, not a byte \
+         comparison, and never a declared gap",
+        case.name,
+        cpp.termination
+    );
 
     let diffs = descriptor_diffs(&rust, &cpp);
     if diffs.is_empty() {

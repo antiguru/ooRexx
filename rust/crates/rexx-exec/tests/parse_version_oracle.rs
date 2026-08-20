@@ -64,7 +64,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use support::oracle::descriptor_diffs;
+use support::oracle::{descriptor_diffs, did_not_finish};
 
 /// Env var that flips this file from a skip into the check. `corpus.rs`'s own
 /// switch, deliberately reused rather than given a fourth spelling.
@@ -130,6 +130,17 @@ fn parse_version_still_answers_what_the_oracle_answers() {
     let text = fs::read(&abs).unwrap_or_else(|e| panic!("cannot read {}: {e}", abs.display()));
     let rust = rexx_exec::run_program(path, text, rexx_exec::Invocation::none());
     let cpp = oracle.run(&abs);
+
+    // Named even though this file runs exactly one program: `descriptor_diffs`
+    // would otherwise reach `expect_exit_code`'s path-less panic, and an
+    // unconditional `assert!` naming the program is the shape this crate's
+    // other oracle-invoking harnesses use for the same event.
+    assert!(
+        !did_not_finish(&cpp),
+        "PARSE VERSION's oracle run did not finish: {:?} -- a structural \
+         failure, not a byte comparison",
+        cpp.termination
+    );
 
     let diffs = descriptor_diffs(&rust, &cpp);
     assert!(
