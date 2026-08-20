@@ -7026,13 +7026,19 @@ impl Interp {
             // is a no-op, so the two arms carry the same worth and differ only
             // in what [`ControlValue::small`] may then answer.
             HeaderRole::Initial => {
-                let number = self.header_number(role, value)?;
                 let digits = self.activation().settings.digits();
+                // **The `Number` is built only by the arm that keeps it.**
+                // `ControlValue::Small` carries the `i64` the tag already
+                // holds, so asking `header_number` first and then discarding
+                // its answer builds a digit vector for every ordinary counted
+                // loop and throws it away. What that call would have checked
+                // -- an object in an operand position, a non-numeric value --
+                // a tagged integer cannot fail.
                 values.initial = Some(match value.decode() {
                     Decoded::SmallInt(small) if within_digits(small, digits) => {
                         ControlValue::Small(small)
                     }
-                    _ => ControlValue::Wide(number),
+                    _ => ControlValue::Wide(self.header_number(role, value)?),
                 });
             }
             HeaderRole::To => values.to = Some(self.header_number(role, value)?),
@@ -7093,6 +7099,35 @@ impl Interp {
     /// once per iteration, so there is no hot path here to keep clear of.
     fn header_number(&mut self, role: HeaderRole, value: ObjRef) -> Result<Number, Failure> {
         let entry_digits = self.activation().settings.digits();
+        // **A tagged integer no wider than `DIGITS` is its own rounding**, so
+        // the unary `+` below has nothing to do to it and the general path
+        // only spends: `arith_operand` builds a `Number`, the addition copies
+        // it into a zero-left fast path, rounds it, and copies it out again.
+        // Neither of the two checks the general path makes can fail here --
+        // the tag holds no object for `operator_operand_gap` to find, and an
+        // integer is numeric -- so this answers directly.
+        //
+        // **The header is a hot path, which it does not look like.** Measured
+        // against the -O3 oracle: `do n = 1 to N ; do j = 1 to 1 ; end ; end`
+        // costs 1366 cycles an outer iteration here against its 596, and the
+        // inner header runs once per iteration of the loop above it -- an
+        // entry, not an iteration, is still per-iteration work when the loop
+        // is nested.
+        if let Decoded::SmallInt(small) = value.decode()
+            && within_digits(small, entry_digits)
+        {
+            let shortcut = Number::from_i64(small);
+            // The tripwire, not the test: a disagreement is invisible in the
+            // answer for every program that stays inside the tag, which is
+            // why it is asserted on every header of every program the debug
+            // gate runs rather than probed once.
+            debug_assert_eq!(
+                Ok(&shortcut),
+                round_via_unary_plus(&Number::from_i64(small), entry_digits).as_ref(),
+                "a tagged integer within DIGITS {entry_digits} is not its own unary +"
+            );
+            return Ok(shortcut);
+        }
         if let Some(kind) = self.operator_operand_gap(value) {
             return Err(Loud::object_position(role.value_name(), kind).into());
         }
@@ -7276,7 +7311,7 @@ impl Interp {
                     // literal `1` is already whole at any width, so rounding
                     // it at the header's digits could only ever answer `1`
                     // again.
-                    None => Number::parse("1").expect("the literal 1 always parses"),
+                    None => Number::one(),
                 },
                 for_remaining: values.for_remaining,
                 cached_digits: u64::MAX,
@@ -7827,7 +7862,7 @@ impl Interp {
                 to: values.to,
                 by: match values.by {
                     Some(by) => by,
-                    None => Number::parse("1").expect("the literal 1 always parses"),
+                    None => Number::one(),
                 },
                 for_remaining: values.for_remaining,
                 cached_digits: u64::MAX,

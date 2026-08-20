@@ -18,8 +18,19 @@ use crate::{ArithError, Digits, MAX_EXPONENT, Number};
 
 impl Number {
     /// The value one.
-    pub fn one() -> Number {
-        Number::parse("1").expect("1 is a number")
+    ///
+    /// Built directly rather than parsed. `Number::parse("1")` scans a string
+    /// and runs the whole numeric grammar for a value whose digit vector is
+    /// one byte; this is the same `Number` and is a `const fn`, so a caller
+    /// naming it in a `const` pays nothing at all. A controlled `DO` with no
+    /// `BY` asks for this on every loop entry, which for a nested loop is
+    /// once per iteration of the loop above it.
+    pub const fn one() -> Number {
+        Number {
+            negative: false,
+            digits: Digits::single(1),
+            exponent: 0,
+        }
     }
 
     /// Interprets this number as a whole number expressible within `digits`
