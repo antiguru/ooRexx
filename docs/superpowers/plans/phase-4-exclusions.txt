@@ -3706,12 +3706,64 @@ edit: it currently asserts the opposite of this tree's own source and
 cites a measurement taken against an interpreter that is no longer on this
 machine.
 
-NOT YET DONE. The crate is frozen while an agent re-measures every figure
-in the Phase 5a plan against a binary that must not move under it. Do this
-once that report lands.
+CLOSED 2026-08-20 at 2eed4cad5. Both of loop_advance's bound tests now
+carry the fuzz == 0 condition, and REXX_CORPUS_GATE=1 is 106 of 106.
+Chasing this one program found two further divergences of the same shape,
+fixed in the same commit: eval's small_int_compare, which serves every
+comparison operator, and NUMERIC DIGITS with no operand, which in 5.3 makes
+the same FUZZ check the operand form makes.
 
 THE TRANSFERABLE PART. The comment was not sloppy -- it was measured,
 specific, and correct when written. It rotted because its referent was the
 oracle binary, which is machine state and not tree state, and nothing in
 the checkout records which interpreter answered a given run. A comment
 citing the oracle is only as stable as the binary on disk.
+
+--------------------------------------------------------------------------
+STANDING RED, opened 2026-08-20: a loop header's indent in a traceback
+--------------------------------------------------------------------------
+
+Status: DIVERGES from the oracle. Phase 4 trace/traceback. Does not block
+Phase 5. No corpus program covers it; the witness is
+tests/ir_dual_cases/loop-header-boundaries, whose recorded bytes are this
+crate's and not the 5.3 oracle's.
+
+The program is a CALL ON handler that raises inside a loop header's own
+expression:
+
+    call on user zx name h
+    do i = 1 to raiser()
+      nop
+    end
+    ...
+    raiser: raise user zx return 1
+    h: say 1/0
+
+The oracle's traceback indents the header clause two columns further than
+this crate does:
+
+    oracle:      2 *-*   do i = 1 to raiser()
+    this crate:  2 *-* do i = 1 to raiser()
+
+Everything else about the transcript agrees, rc 214 included.
+
+WHY IT IS RECORDED RATHER THAN FIXED. It was found by running all 197
+ir_dual_cases stanzas against the 5.3 oracle, which is not something any
+test does -- ir_dual compares this crate against the recording, so a
+recording that drifts from the oracle is invisible. Five of the six drifted
+recordings that sweep found are corrected; this one is a real behavioural
+divergence rather than a stale byte, so correcting the recording would have
+hidden it.
+
+NOT THE SAME as the two trace divergences rust/CLAUDE.md records as closed
+by the oracle swap. Those were a header's own >L>/>V>/>K>/>=> value lines
+and a missing >>> pair on a re-tested pass, both verified byte-identical on
+2026-08-20. This is the *-* clause line in a traceback, a third thing.
+
+THE TRANSFERABLE PART, and it is the same lesson as the entry above.
+tests/ir_dual_cases holds expectations measured against an oracle, and
+nothing re-checks them against a live one. The corpus differential does run
+the oracle every time; these do not. So the whole file set is only as
+current as the last person who re-ran it, and the oracle is machine state
+that no file in the checkout records. The sweep that found this is a
+throwaway script; making it a test is the durable fix and nobody owns it.
