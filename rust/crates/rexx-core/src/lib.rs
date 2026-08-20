@@ -11,8 +11,21 @@
 
 //! The Rexx object model: handles, the arena heap, tracing, and behaviours.
 
+// **`deny` and not `forbid`, and the difference is the record.** Every other
+// crate in this workspace inherits `[workspace.lints.rust] unsafe_code =
+// "forbid"`; this one spells its own lints out so that `bytes.rs` can carry the
+// one approved `unsafe` in the tree (Moritz, 2026-08-20). `Cargo.toml`'s own
+// comment has why the workspace line is untouched, and `2026-07-27-rust-
+// rewrite.md:23` has why the choice of level here is how an exception is
+// written down at all.
+#![deny(unsafe_code)]
+
 mod behaviour;
 mod body;
+// The one module granted the exception above. Its `Bytes` doc states the
+// invariant, names the only writer and the only reader, and gives the
+// measurement that bought it.
+#[allow(unsafe_code)]
 mod bytes;
 mod handle;
 mod heap;

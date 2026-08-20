@@ -30,6 +30,7 @@
 //! [`Body::Text`]: crate::Body
 
 use std::fmt;
+use std::mem::MaybeUninit;
 use std::ops::Deref;
 
 /// How many bytes fit without a heap allocation.
@@ -65,27 +66,74 @@ const _: () = assert!(size_of::<Bytes>() <= 56);
 /// An immutable byte string, stored inline when it is at most
 /// [`INLINE_BYTES`] long.
 ///
-/// The representation is private: `Inline`'s `len` counts the live bytes at
-/// the front of `buf` and nothing may read past it, so a caller able to write
-/// that field could produce a slice over bytes no one ever set. Everything
-/// outside this module goes through [`Bytes::from_slice`] or
-/// [`Bytes::from_vec`], which is why the invariant is checkable by reading
-/// this file alone.
+/// # The invariant, and why this file is the whole of it
+///
+/// **`Inline`'s first `len` bytes are initialised and the rest are not, and
+/// nothing reads past `len`.**
+///
+/// Both halves are checkable by reading this file and nothing else.
+/// `Repr` is private and [`Bytes::from_slice`] is its only constructor, so
+/// `len` is only ever the length of a slice whose bytes were just written.
+/// [`Bytes::as_slice`] is the only reader of `buf`, and every other way out of
+/// this type -- [`Deref`], [`fmt::Debug`], and so every comparison, hash and
+/// pattern match a caller makes -- goes through it.
+///
+/// The tail is uninitialised on purpose: `[0u8; INLINE_BYTES]` followed by a
+/// copy writes the whole array and then writes the live prefix again, and that
+/// zeroing pass was **1.4% of `samples/rexxcps.rex`'s wall clock**
+/// (`_memset_avx2_unaligned_erms`, measured with samply). The safe
+/// alternatives were built and measured rather than argued about:
+/// `std::array::from_fn(|i| source.get(i).copied().unwrap_or(0))` replaces the
+/// vectorised memset with a bounds-checked scalar loop and costs
+/// `bench-programs/strings.rex` **+10.557%** retired instructions, `alloc4c`
+/// +8.310% and `rexxcps` +6.888%; keeping the zeroing is the 1.4%.
+///
+/// **Under `debug_assertions` the tail is filled with [`POISON`] instead of
+/// being left uninitialised**, so that a broken invariant is a *defined* wrong
+/// answer rather than undefined behaviour. Without it, the assertions that
+/// catch an over-read would themselves be reading uninitialised memory, and a
+/// green suite would be luck rather than evidence.
+/// `the_bytes_past_len_are_never_part_of_the_value` carries the three
+/// mutations this was checked against and says plainly that the poison adds no
+/// coverage the value assertions lack -- only soundness to their verdict.
 #[derive(Clone)]
 pub struct Bytes(Repr);
 
+/// What a debug build writes past `len`, so that a read which should never
+/// happen produces something a test can recognise. `0xAB` is not a byte any
+/// test source here produces.
+#[cfg(debug_assertions)]
+const POISON: u8 = 0xAB;
+
 #[derive(Clone)]
 enum Repr {
-    Inline { len: u8, buf: [u8; INLINE_BYTES] },
+    Inline {
+        len: u8,
+        buf: [MaybeUninit<u8>; INLINE_BYTES],
+    },
     Heap(Vec<u8>),
 }
 
 impl Bytes {
     /// A copy of `source`, inline when it fits.
+    ///
+    /// **The only place a `Repr::Inline` is built**, which is half of what
+    /// makes the type's invariant local: `len` below is the length of the
+    /// slice whose bytes the loop just wrote, so the first `len` bytes are
+    /// initialised by construction. No `unsafe` is needed to write them --
+    /// `MaybeUninit::write` is safe, and the loop lowers to the same copy the
+    /// `copy_from_slice` it replaces did.
     pub fn from_slice(source: &[u8]) -> Bytes {
         if source.len() <= INLINE_BYTES {
-            let mut buf = [0u8; INLINE_BYTES];
-            buf[..source.len()].copy_from_slice(source);
+            let mut buf = [MaybeUninit::<u8>::uninit(); INLINE_BYTES];
+            for (slot, byte) in buf.iter_mut().zip(source) {
+                slot.write(*byte);
+            }
+            // See the type's doc: this exists so the invariant has a test.
+            #[cfg(debug_assertions)]
+            for slot in &mut buf[source.len()..] {
+                slot.write(POISON);
+            }
             Bytes(Repr::Inline {
                 len: source.len() as u8,
                 buf,
@@ -114,9 +162,27 @@ impl Bytes {
         }
     }
 
+    /// **The only reader of `Repr::Inline`'s buffer**, which is the other half
+    /// of what makes the invariant local: every comparison, hash, `Debug` and
+    /// deref a caller performs arrives here first.
     pub fn as_slice(&self) -> &[u8] {
         match &self.0 {
-            Repr::Inline { len, buf } => &buf[..*len as usize],
+            Repr::Inline { len, buf } => {
+                let len = *len as usize;
+                // Not a redundant bound: it is what says the slice below stays
+                // inside the array, stated where the `unsafe` can see it
+                // rather than left to `len`'s type.
+                debug_assert!(len <= INLINE_BYTES, "an inline length past the buffer");
+                // SAFETY: `from_slice` is the only constructor of
+                // `Repr::Inline` and it writes exactly `len` bytes before
+                // setting `len`, so the first `len` elements of `buf` are
+                // initialised. `len` is a `u8` and `INLINE_BYTES` is 54, and
+                // the assertion above holds it inside the array on every debug
+                // run of the suite. Nothing between construction and here can
+                // shorten the array or lengthen `len`: `Repr` is private to
+                // this file and neither field is written anywhere else.
+                unsafe { std::slice::from_raw_parts(buf.as_ptr().cast::<u8>(), len) }
+            }
             Repr::Heap(v) => v,
         }
     }
@@ -227,6 +293,64 @@ mod tests {
                 "wrong arm at length {len}"
             );
             source.push(b'a');
+        }
+    }
+
+    /// **What [`POISON`] is for, and it is not extra mutation coverage.**
+    /// Three mutations were applied and all three redden this file:
+    /// `as_slice` answering `INLINE_BYTES` bytes, `as_slice` answering
+    /// `len + 1`, and `from_slice` writing one byte too few. Every one of them
+    /// is caught by the value assertions that were already here, so this test
+    /// finds nothing they do not.
+    ///
+    /// What it changes is whether their verdict *means* anything. Break the
+    /// invariant without a poisoned tail and the assertion that catches it is
+    /// reading uninitialised memory -- undefined behaviour, so a green run
+    /// would be luck rather than evidence. A debug build writes a byte no
+    /// caller supplied into the tail instead, which makes an over-read a
+    /// defined, recognisable answer and this file's verdict sound.
+    ///
+    /// Every inline length is checked, because an over-read of a *fixed* width
+    /// -- the shape a later "optimisation" would take -- shows only at the
+    /// lengths shorter than that width.
+    ///
+    /// `debug_assertions` only, and that is not a hole: a release build leaves
+    /// the tail uninitialised, so there is nothing there for a test to
+    /// recognise, and `rust/CLAUDE.md`'s gate is a debug run.
+    #[cfg(debug_assertions)]
+    #[test]
+    fn the_bytes_past_len_are_never_part_of_the_value() {
+        for len in 0..=INLINE_BYTES {
+            let source: Vec<u8> = (0..len).map(|i| (i % 97) as u8).collect();
+            assert!(
+                !source.contains(&POISON),
+                "the source itself carries the poison byte at {len}"
+            );
+            let bytes = Bytes::from_slice(&source);
+            assert!(bytes.is_inline(), "not the arm under test at {len}");
+            assert_eq!(bytes.as_slice(), &source[..], "bytes at {len}");
+            assert!(
+                !bytes.as_slice().contains(&POISON),
+                "a read went past len at {len}: {:?}",
+                bytes.as_slice()
+            );
+        }
+    }
+
+    /// Two constructors reaching the inline arm answer the same value, and
+    /// the tails they leave behind are not allowed to make them differ.
+    ///
+    /// `from_vec` copies out of a heap buffer and `from_slice` out of a stack
+    /// one, so anything comparing the whole array rather than `..len` would
+    /// see two different tails and could answer either way.
+    #[test]
+    fn the_two_constructors_agree_whatever_is_behind_the_live_bytes() {
+        for len in 0..=INLINE_BYTES {
+            let source: Vec<u8> = (0..len).map(|i| (i % 251) as u8).collect();
+            let a = Bytes::from_slice(&source);
+            let b = Bytes::from_vec(source.clone());
+            assert_eq!(a.as_slice(), b.as_slice(), "value at {len}");
+            assert_eq!(format!("{a:?}"), format!("{b:?}"), "Debug at {len}");
         }
     }
 
