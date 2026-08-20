@@ -350,7 +350,7 @@ out> H ran 6
 out> after set
 out> G ran 7
 
-program
+program not-oracle-bytes=loop-header-traceback-indent
 call on user zx name h
 do i = 1 to raiser()
   nop

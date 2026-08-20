@@ -19,7 +19,7 @@
 # what these rows are here to catch.
 
 # do with
-program
+program not-oracle-bytes=do-with-refused
 do with index i over 5
   nop
 end
@@ -28,7 +28,7 @@ rc> 120
 err> rexx-exec: DO is not implemented
 
 # do counter
-program
+program not-oracle-bytes=do-counter-refused
 do counter c i = 1 to 2
   nop
 end
@@ -37,7 +37,7 @@ rc> 120
 err> rexx-exec: DO is not implemented
 
 # do over a stem target
-program
+program not-oracle-bytes=stem-over-refused
 a. = 1
 do qq over a.
   nop
