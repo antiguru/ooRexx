@@ -45,6 +45,13 @@ fn compile_for_test_under(source: &[u8], trace: ChunkTrace) -> Result<Chunk, Chu
 /// Through `mode_from_setting` rather than a hand-built `TraceMode`, so a case
 /// below is compiling for the setting a `trace r` clause would actually
 /// produce.
+/// The setting `TRACE I` puts in force, which is the one that makes a chunk
+/// carry the value echoes at all: under anything narrower `compile` leaves them
+/// out, so a case pinning what an echo op holds has to ask for this.
+fn intermediates() -> ChunkTrace {
+    ChunkTrace::of(crate::trace::mode_from_setting(b"i").expect("I is a valid TRACE setting"))
+}
+
 fn traced() -> ChunkTrace {
     ChunkTrace::of(crate::trace::mode_from_setting(b"r").expect("R is a valid TRACE setting"))
 }
@@ -138,48 +145,38 @@ fn a_call_promotes_at_the_root_and_below_it() {
     let root = compile_for_test(b"zz = length('abc')").expect("the chunk fits");
     assert_eq!(
         render(&root),
-        "0: Clause index=0 end=8\n\
+        "0: Clause index=0 end=6\n\
          1: Const dst=1 konst=0\n\
-         2: TraceLiteral src=1\n\
-         3: PushArg src=1\n\
-         4: TraceArgument src=1\n\
-         5: CallArgs slot=0 path=root site=0 argc=1 dst=0\n\
-         6: TraceFunction index=0 slot=0 path=root src=0\n\
-         7: Store index=0 at=0 src=0\n"
+         2: PushArg src=1\n\
+         3: CallArgs slot=0 path=root site=0 argc=1 dst=0\n\
+         4: TraceFunction index=0 slot=0 path=root src=0\n\
+         5: Store index=0 at=0 src=0\n"
     );
 
     let left = compile_for_test(b"zz = length('abc') + 1").expect("the chunk fits");
     assert_eq!(
         render(&left),
-        "0: Clause index=0 end=12\n\
+        "0: Clause index=0 end=8\n\
          1: Const dst=1 konst=0\n\
-         2: TraceLiteral src=1\n\
-         3: PushArg src=1\n\
-         4: TraceArgument src=1\n\
-         5: CallArgs slot=0 path=root.L site=0 argc=1 dst=0\n\
-         6: TraceFunction index=0 slot=0 path=root.L src=0\n\
-         7: LoadConstant dst=1\n\
-         8: TraceLiteral src=1\n\
-         9: Arith op=+ hint=0 lhs=0 rhs=1 dst=0\n\
-         10: TraceOperator op=+ src=0\n\
-         11: Store index=0 at=0 src=0\n"
+         2: PushArg src=1\n\
+         3: CallArgs slot=0 path=root.L site=0 argc=1 dst=0\n\
+         4: TraceFunction index=0 slot=0 path=root.L src=0\n\
+         5: LoadConstant dst=1\n\
+         6: Arith op=+ hint=0 lhs=0 rhs=1 dst=0\n\
+         7: Store index=0 at=0 src=0\n"
     );
 
     let right = compile_for_test(b"zz = 1 + length('abc')").expect("the chunk fits");
     assert_eq!(
         render(&right),
-        "0: Clause index=0 end=12\n\
+        "0: Clause index=0 end=8\n\
          1: LoadConstant dst=0\n\
-         2: TraceLiteral src=0\n\
-         3: Const dst=2 konst=0\n\
-         4: TraceLiteral src=2\n\
-         5: PushArg src=2\n\
-         6: TraceArgument src=2\n\
-         7: CallArgs slot=0 path=root.R site=0 argc=1 dst=1\n\
-         8: TraceFunction index=0 slot=0 path=root.R src=1\n\
-         9: Arith op=+ hint=0 lhs=0 rhs=1 dst=0\n\
-         10: TraceOperator op=+ src=0\n\
-         11: Store index=0 at=0 src=0\n"
+         2: Const dst=2 konst=0\n\
+         3: PushArg src=2\n\
+         4: CallArgs slot=0 path=root.R site=0 argc=1 dst=1\n\
+         5: TraceFunction index=0 slot=0 path=root.R src=1\n\
+         6: Arith op=+ hint=0 lhs=0 rhs=1 dst=0\n\
+         7: Store index=0 at=0 src=0\n"
     );
 
     // Two calls over one operator: a register each for the two results, and
@@ -300,10 +297,9 @@ fn an_assignment_of_a_literal_compiles_to_a_constant_load_and_a_store() {
     let chunk = compile_for_test(b"n1 = 'abc'\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=4\n\
+        "0: Clause index=0 end=3\n\
          1: Const dst=0 konst=0\n\
-         2: TraceLiteral src=0\n\
-         3: Store index=0 at=0 src=0\n"
+         2: Store index=0 at=0 src=0\n"
     );
     // One register, released at the clause's own end, so a body of a hundred
     // assignments reserves one.
@@ -332,14 +328,12 @@ fn two_assignments_and_two_says_in_one_body_reuse_one_register() {
     let chunk = compile_for_test(b"n1 = 'a'\nn2 = 'b'\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=4\n\
+        "0: Clause index=0 end=3\n\
          1: Const dst=0 konst=0\n\
-         2: TraceLiteral src=0\n\
-         3: Store index=0 at=0 src=0\n\
-         4: Clause index=1 end=8\n\
-         5: Const dst=0 konst=1\n\
-         6: TraceLiteral src=0\n\
-         7: Store index=1 at=1 src=0\n"
+         2: Store index=0 at=0 src=0\n\
+         3: Clause index=1 end=6\n\
+         4: Const dst=0 konst=1\n\
+         5: Store index=1 at=1 src=0\n"
     );
     assert_eq!(
         chunk.registers, 1,
@@ -377,18 +371,15 @@ fn one_literal_written_twice_is_one_interned_constant() {
     let chunk = compile_for_test(b"say 'dup'\nsay 'dup'\nsay 'x'\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=4\n\
+        "0: Clause index=0 end=3\n\
          1: Const dst=0 konst=0\n\
-         2: TraceLiteral src=0\n\
-         3: Say index=0 src=0\n\
-         4: Clause index=1 end=8\n\
-         5: Const dst=0 konst=0\n\
-         6: TraceLiteral src=0\n\
-         7: Say index=1 src=0\n\
-         8: Clause index=2 end=12\n\
-         9: Const dst=0 konst=1\n\
-         10: TraceLiteral src=0\n\
-         11: Say index=2 src=0\n"
+         2: Say index=0 src=0\n\
+         3: Clause index=1 end=6\n\
+         4: Const dst=0 konst=0\n\
+         5: Say index=1 src=0\n\
+         6: Clause index=2 end=9\n\
+         7: Const dst=0 konst=1\n\
+         8: Say index=2 src=0\n"
     );
     assert_eq!(
         chunk.consts,
@@ -413,10 +404,9 @@ fn a_bare_symbol_compiles_to_a_native_read_in_each_of_its_three_kinds() {
     let simple = compile_for_test(b"zw = zv\n").expect("compiles");
     assert_eq!(
         render(&simple),
-        "0: Clause index=0 end=4\n\
+        "0: Clause index=0 end=3\n\
          1: Load read=Simple at=1 dst=0\n\
-         2: TraceRead read=Simple src=0\n\
-         3: Store index=0 at=0 src=0\n"
+         2: Store index=0 at=0 src=0\n"
     );
     assert_eq!(simple.registers, 1);
     assert!(
@@ -427,19 +417,17 @@ fn a_bare_symbol_compiles_to_a_native_read_in_each_of_its_three_kinds() {
     let stem = compile_for_test(b"zw = zs.\n").expect("compiles");
     assert_eq!(
         render(&stem),
-        "0: Clause index=0 end=4\n\
+        "0: Clause index=0 end=3\n\
          1: Load read=Stem at=1 dst=0\n\
-         2: TraceRead read=Stem src=0\n\
-         3: Store index=0 at=0 src=0\n"
+         2: Store index=0 at=0 src=0\n"
     );
 
     let compound = compile_for_test(b"zw = za.zi\n").expect("compiles");
     assert_eq!(
         render(&compound),
-        "0: Clause index=0 end=4\n\
+        "0: Clause index=0 end=3\n\
          1: Load read=Compound at=- dst=0\n\
-         2: TraceRead read=Compound src=0\n\
-         3: Store index=0 at=0 src=0\n"
+         2: Store index=0 at=0 src=0\n"
     );
 }
 
@@ -455,8 +443,7 @@ fn a_bare_symbol_compiles_to_a_native_read_in_each_of_its_three_kinds() {
 fn a_compiled_read_names_the_symbol_its_expression_does() {
     let program = parse_program(b"zw = za.zi\n".to_vec()).expect("test program parses");
     let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
-    let chunk =
-        super::compile(&program.main, &plan, ChunkTrace::of(TraceMode::NORMAL)).expect("compiles");
+    let chunk = super::compile(&program.main, &plan, intermediates()).expect("compiles");
 
     let InstructionKind::Assignment { value, .. } = &program.main.instructions[0].kind else {
         panic!("the program's one instruction is an assignment");
@@ -492,10 +479,9 @@ fn a_say_of_a_bare_symbol_compiles_to_a_native_read() {
     let chunk = compile_for_test(b"say zv\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=4\n\
+        "0: Clause index=0 end=3\n\
          1: Load read=Simple at=0 dst=0\n\
-         2: TraceRead read=Simple src=0\n\
-         3: Say index=0 src=0\n"
+         2: Say index=0 src=0\n"
     );
 }
 
@@ -519,14 +505,11 @@ fn an_expression_that_only_contains_a_symbol_is_more_than_that_symbols_read() {
     let chunk = compile_for_test(b"zw = zv + 1\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=8\n\
+        "0: Clause index=0 end=5\n\
          1: Load read=Simple at=1 dst=0\n\
-         2: TraceRead read=Simple src=0\n\
-         3: LoadConstant dst=1\n\
-         4: TraceLiteral src=1\n\
-         5: Arith op=+ hint=0 lhs=0 rhs=1 dst=0\n\
-         6: TraceOperator op=+ src=0\n\
-         7: Store index=0 at=0 src=0\n"
+         2: LoadConstant dst=1\n\
+         3: Arith op=+ hint=0 lhs=0 rhs=1 dst=0\n\
+         4: Store index=0 at=0 src=0\n"
     );
 
     let dotvar = compile_for_test(b"zw = .nil\n").expect("compiles");
@@ -560,22 +543,15 @@ fn a_chain_of_operators_reuses_the_destination_register() {
     let chunk = compile_for_test(b"zw = za + zb + zc + zd\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=16\n\
+        "0: Clause index=0 end=9\n\
          1: Load read=Simple at=1 dst=0\n\
-         2: TraceRead read=Simple src=0\n\
-         3: Load read=Simple at=2 dst=1\n\
-         4: TraceRead read=Simple src=1\n\
-         5: Arith op=+ hint=0 lhs=0 rhs=1 dst=0\n\
-         6: TraceOperator op=+ src=0\n\
-         7: Load read=Simple at=3 dst=1\n\
-         8: TraceRead read=Simple src=1\n\
-         9: Arith op=+ hint=1 lhs=0 rhs=1 dst=0\n\
-         10: TraceOperator op=+ src=0\n\
-         11: Load read=Simple at=4 dst=1\n\
-         12: TraceRead read=Simple src=1\n\
-         13: Arith op=+ hint=2 lhs=0 rhs=1 dst=0\n\
-         14: TraceOperator op=+ src=0\n\
-         15: Store index=0 at=0 src=0\n"
+         2: Load read=Simple at=2 dst=1\n\
+         3: Arith op=+ hint=0 lhs=0 rhs=1 dst=0\n\
+         4: Load read=Simple at=3 dst=1\n\
+         5: Arith op=+ hint=1 lhs=0 rhs=1 dst=0\n\
+         6: Load read=Simple at=4 dst=1\n\
+         7: Arith op=+ hint=2 lhs=0 rhs=1 dst=0\n\
+         8: Store index=0 at=0 src=0\n"
     );
     assert_eq!(
         chunk.registers, 2,
@@ -597,18 +573,13 @@ fn precedence_decides_which_operator_is_the_inner_one() {
     let chunk = compile_for_test(b"zw = za + zb * zc\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=12\n\
+        "0: Clause index=0 end=7\n\
          1: Load read=Simple at=1 dst=0\n\
-         2: TraceRead read=Simple src=0\n\
-         3: Load read=Simple at=2 dst=1\n\
-         4: TraceRead read=Simple src=1\n\
-         5: Load read=Simple at=3 dst=2\n\
-         6: TraceRead read=Simple src=2\n\
-         7: Arith op=* hint=0 lhs=1 rhs=2 dst=1\n\
-         8: TraceOperator op=* src=1\n\
-         9: Arith op=+ hint=1 lhs=0 rhs=1 dst=0\n\
-         10: TraceOperator op=+ src=0\n\
-         11: Store index=0 at=0 src=0\n"
+         2: Load read=Simple at=2 dst=1\n\
+         3: Load read=Simple at=3 dst=2\n\
+         4: Arith op=* hint=0 lhs=1 rhs=2 dst=1\n\
+         5: Arith op=+ hint=1 lhs=0 rhs=1 dst=0\n\
+         6: Store index=0 at=0 src=0\n"
     );
     assert_eq!(
         chunk.registers, 3,
@@ -703,14 +674,11 @@ fn every_binary_operator_but_arithmetic_compiles_to_one_op() {
         assert_eq!(
             render(&chunk),
             format!(
-                "0: Clause index=0 end=8\n\
+                "0: Clause index=0 end=5\n\
                  1: Load read=Simple at=1 dst=0\n\
-                 2: TraceRead read=Simple src=0\n\
-                 3: Load read=Simple at=2 dst=1\n\
-                 4: TraceRead read=Simple src=1\n\
-                 5: Binary op={spelling} lhs=0 rhs=1 dst=0\n\
-                 6: TraceOperator op={spelling} src=0\n\
-                 7: Store index=0 at=0 src=0\n"
+                 2: Load read=Simple at=2 dst=1\n\
+                 3: Binary op={spelling} lhs=0 rhs=1 dst=0\n\
+                 4: Store index=0 at=0 src=0\n"
             ),
             "{} did not compile to one Binary op",
             String::from_utf8_lossy(source)
@@ -720,14 +688,11 @@ fn every_binary_operator_but_arithmetic_compiles_to_one_op() {
     let chunk = compile_for_test(b"za = zb + zc\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=8\n\
+        "0: Clause index=0 end=5\n\
          1: Load read=Simple at=1 dst=0\n\
-         2: TraceRead read=Simple src=0\n\
-         3: Load read=Simple at=2 dst=1\n\
-         4: TraceRead read=Simple src=1\n\
-         5: Arith op=+ hint=0 lhs=0 rhs=1 dst=0\n\
-         6: TraceOperator op=+ src=0\n\
-         7: Store index=0 at=0 src=0\n"
+         2: Load read=Simple at=2 dst=1\n\
+         3: Arith op=+ hint=0 lhs=0 rhs=1 dst=0\n\
+         4: Store index=0 at=0 src=0\n"
     );
 }
 
@@ -749,12 +714,10 @@ fn a_prefix_operator_compiles_to_a_native_op_and_its_own_echo() {
         assert_eq!(
             render(&chunk),
             format!(
-                "0: Clause index=0 end=6\n\
+                "0: Clause index=0 end=4\n\
                  1: Load read=Simple at=1 dst=0\n\
-                 2: TraceRead read=Simple src=0\n\
-                 3: Prefix op={spelling} src=0 dst=0\n\
-                 4: TracePrefix op={spelling} src=0\n\
-                 5: Store index=0 at=0 src=0\n"
+                 2: Prefix op={spelling} src=0 dst=0\n\
+                 3: Store index=0 at=0 src=0\n"
             ),
             "{} did not compile to one Prefix op and its own echo",
             String::from_utf8_lossy(source)
@@ -774,10 +737,9 @@ fn a_constant_symbol_is_a_native_load() {
     let chunk = compile_for_test(b"zw = 1\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=4\n\
+        "0: Clause index=0 end=3\n\
          1: LoadConstant dst=0\n\
-         2: TraceLiteral src=0\n\
-         3: Store index=0 at=0 src=0\n"
+         2: Store index=0 at=0 src=0\n"
     );
 
     // A quoted literal is the other load, against the chunk's own interned
@@ -785,10 +747,9 @@ fn a_constant_symbol_is_a_native_load() {
     let quoted = compile_for_test(b"zw = '1'\n").expect("compiles");
     assert_eq!(
         render(&quoted),
-        "0: Clause index=0 end=4\n\
+        "0: Clause index=0 end=3\n\
          1: Const dst=0 konst=0\n\
-         2: TraceLiteral src=0\n\
-         3: Store index=0 at=0 src=0\n"
+         2: Store index=0 at=0 src=0\n"
     );
 }
 
@@ -824,24 +785,21 @@ fn a_counted_loop_compiles_its_header_to_a_clause_region_and_its_body_to_generic
     let chunk = compile_for_test(b"do i = 1 to 3\n  nop\nend\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=9\n\
+        "0: Clause index=0 end=6\n\
          1: LoadConstant dst=0\n\
-         2: TraceLiteral src=0\n\
-         3: LoopHeaderValue role=Initial src=0\n\
-         4: LoadConstant dst=1\n\
-         5: TraceLiteral src=1\n\
-         6: TraceKeyword role=To src=1\n\
-         7: LoopHeaderValue role=To src=1\n\
-         8: LoopRun index=0\n\
-         9: Clause index=1 end=10\n\
-         10: LoopNext index=0\n"
+         2: LoopHeaderValue role=Initial src=0\n\
+         3: LoadConstant dst=1\n\
+         4: LoopHeaderValue role=To src=1\n\
+         5: LoopRun index=0\n\
+         6: Clause index=1 end=7\n\
+         7: LoopNext index=0\n"
     );
     // One register per header expression, and they are **not** released at the
     // region's end: the loop runs from op 8 with the body's clauses stepped
     // between, so a register handed out again there would be overwritten while
     // the running loop still reads it.
     assert_eq!(chunk.registers, 2);
-    assert_eq!(chunk.op_of, vec![0, 9, 10, 11]);
+    assert_eq!(chunk.op_of, vec![0, 6, 7, 8]);
 }
 
 /// The same loop under `TRACE R`: the clause echo is an op of the region, and
@@ -855,19 +813,16 @@ fn a_traced_counted_loop_echoes_its_do_clause_from_the_stream() {
     let chunk = compile_for_test_under(b"do i = 1 to 3\n  nop\nend\n", traced()).expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=10\n\
+        "0: Clause index=0 end=7\n\
          1: TraceClause index=0\n\
          2: LoadConstant dst=0\n\
-         3: TraceLiteral src=0\n\
-         4: LoopHeaderValue role=Initial src=0\n\
-         5: LoadConstant dst=1\n\
-         6: TraceLiteral src=1\n\
-         7: TraceKeyword role=To src=1\n\
-         8: LoopHeaderValue role=To src=1\n\
-         9: LoopRun index=0\n\
-         10: Clause index=1 end=12\n\
-         11: TraceClause index=1\n\
-         12: LoopNext index=0\n"
+         3: LoopHeaderValue role=Initial src=0\n\
+         4: LoadConstant dst=1\n\
+         5: LoopHeaderValue role=To src=1\n\
+         6: LoopRun index=0\n\
+         7: Clause index=1 end=9\n\
+         8: TraceClause index=1\n\
+         9: LoopNext index=0\n"
     );
     assert_eq!(chunk.registers, 2);
 }
@@ -897,18 +852,14 @@ fn a_block_has_an_empty_header_region_and_a_do_over_for_echoes_both_its_target_a
     let over = compile_for_test(b"do qq over 4.5 for 2\n  nop\nend\n").expect("compiles");
     assert_eq!(
         render(&over),
-        "0: Clause index=0 end=10\n\
+        "0: Clause index=0 end=6\n\
          1: LoadConstant dst=0\n\
-         2: TraceLiteral src=0\n\
-         3: TraceKeyword role=Over src=0\n\
-         4: LoopHeaderValue role=Over src=0\n\
-         5: LoadConstant dst=1\n\
-         6: TraceLiteral src=1\n\
-         7: TraceKeyword role=OverFor src=1\n\
-         8: LoopHeaderValue role=OverFor src=1\n\
-         9: LoopRun index=0\n\
-         10: Clause index=1 end=11\n\
-         11: LoopNext index=0\n"
+         2: LoopHeaderValue role=Over src=0\n\
+         3: LoadConstant dst=1\n\
+         4: LoopHeaderValue role=OverFor src=1\n\
+         5: LoopRun index=0\n\
+         6: Clause index=1 end=7\n\
+         7: LoopNext index=0\n"
     );
     assert_eq!(over.registers, 2);
 }
@@ -928,37 +879,30 @@ fn a_header_bound_that_is_a_symbol_and_one_that_is_a_call_take_their_own_ops() {
     let symbol = compile_for_test(b"do i = 1 to zn\n  nop\nend\n").expect("compiles");
     assert_eq!(
         render(&symbol),
-        "0: Clause index=0 end=9\n\
+        "0: Clause index=0 end=6\n\
          1: LoadConstant dst=0\n\
-         2: TraceLiteral src=0\n\
-         3: LoopHeaderValue role=Initial src=0\n\
-         4: Load read=Simple at=1 dst=1\n\
-         5: TraceRead read=Simple src=1\n\
-         6: TraceKeyword role=To src=1\n\
-         7: LoopHeaderValue role=To src=1\n\
-         8: LoopRun index=0\n\
-         9: Clause index=1 end=10\n\
-         10: LoopNext index=0\n"
+         2: LoopHeaderValue role=Initial src=0\n\
+         3: Load read=Simple at=1 dst=1\n\
+         4: LoopHeaderValue role=To src=1\n\
+         5: LoopRun index=0\n\
+         6: Clause index=1 end=7\n\
+         7: LoopNext index=0\n"
     );
 
     let call = compile_for_test(b"do i = 1 to length(zs)\n  nop\nend\n").expect("compiles");
     assert_eq!(
         render(&call),
-        "0: Clause index=0 end=13\n\
+        "0: Clause index=0 end=9\n\
          1: LoadConstant dst=0\n\
-         2: TraceLiteral src=0\n\
-         3: LoopHeaderValue role=Initial src=0\n\
-         4: Load read=Simple at=1 dst=2\n\
-         5: TraceRead read=Simple src=2\n\
-         6: PushArg src=2\n\
-         7: TraceArgument src=2\n\
-         8: CallArgs slot=1 path=root site=0 argc=1 dst=1\n\
-         9: TraceFunction index=0 slot=1 path=root src=1\n\
-         10: TraceKeyword role=To src=1\n\
-         11: LoopHeaderValue role=To src=1\n\
-         12: LoopRun index=0\n\
-         13: Clause index=1 end=14\n\
-         14: LoopNext index=0\n"
+         2: LoopHeaderValue role=Initial src=0\n\
+         3: Load read=Simple at=1 dst=2\n\
+         4: PushArg src=2\n\
+         5: CallArgs slot=1 path=root site=0 argc=1 dst=1\n\
+         6: TraceFunction index=0 slot=1 path=root src=1\n\
+         7: LoopHeaderValue role=To src=1\n\
+         8: LoopRun index=0\n\
+         9: Clause index=1 end=10\n\
+         10: LoopNext index=0\n"
     );
 }
 
@@ -974,16 +918,14 @@ fn a_header_slot_outside_the_native_set_leaves_the_other_slots_native() {
     let chunk = compile_for_test(b"do i = .nil to 3\n  nop\nend\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=8\n\
+        "0: Clause index=0 end=6\n\
          1: EvalExpr index=0 slot=0 dst=0\n\
          2: LoopHeaderValue role=Initial src=0\n\
          3: LoadConstant dst=1\n\
-         4: TraceLiteral src=1\n\
-         5: TraceKeyword role=To src=1\n\
-         6: LoopHeaderValue role=To src=1\n\
-         7: LoopRun index=0\n\
-         8: Clause index=1 end=9\n\
-         9: LoopNext index=0\n"
+         4: LoopHeaderValue role=To src=1\n\
+         5: LoopRun index=0\n\
+         6: Clause index=1 end=7\n\
+         7: LoopNext index=0\n"
     );
 }
 
@@ -1027,24 +969,18 @@ fn a_header_operands_register_goes_back_to_the_body() {
     let chunk = compile_for_test(b"do i = 1 to zn + 1\n  zx = 5\nend\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=13\n\
+        "0: Clause index=0 end=8\n\
          1: LoadConstant dst=0\n\
-         2: TraceLiteral src=0\n\
-         3: LoopHeaderValue role=Initial src=0\n\
-         4: Load read=Simple at=1 dst=1\n\
-         5: TraceRead read=Simple src=1\n\
-         6: LoadConstant dst=2\n\
-         7: TraceLiteral src=2\n\
-         8: Arith op=+ hint=0 lhs=1 rhs=2 dst=1\n\
-         9: TraceOperator op=+ src=1\n\
-         10: TraceKeyword role=To src=1\n\
-         11: LoopHeaderValue role=To src=1\n\
-         12: LoopRun index=0\n\
-         13: Clause index=1 end=17\n\
-         14: LoadConstant dst=2\n\
-         15: TraceLiteral src=2\n\
-         16: Store index=1 at=2 src=2\n\
-         17: LoopNext index=0\n"
+         2: LoopHeaderValue role=Initial src=0\n\
+         3: Load read=Simple at=1 dst=1\n\
+         4: LoadConstant dst=2\n\
+         5: Arith op=+ hint=0 lhs=1 rhs=2 dst=1\n\
+         6: LoopHeaderValue role=To src=1\n\
+         7: LoopRun index=0\n\
+         8: Clause index=1 end=11\n\
+         9: LoadConstant dst=2\n\
+         10: Store index=1 at=2 src=2\n\
+         11: LoopNext index=0\n"
     );
     assert_eq!(
         chunk.registers, 3,
@@ -1074,27 +1010,21 @@ fn a_nested_loops_registers_sit_above_the_enclosing_loops_and_a_later_loops_reus
         .expect("compiles");
     assert_eq!(
         render(&nested),
-        "0: Clause index=0 end=9\n\
+        "0: Clause index=0 end=6\n\
          1: LoadConstant dst=0\n\
-         2: TraceLiteral src=0\n\
-         3: LoopHeaderValue role=Initial src=0\n\
-         4: LoadConstant dst=1\n\
-         5: TraceLiteral src=1\n\
-         6: TraceKeyword role=To src=1\n\
-         7: LoopHeaderValue role=To src=1\n\
-         8: LoopRun index=0\n\
-         9: Clause index=1 end=18\n\
-         10: LoadConstant dst=2\n\
-         11: TraceLiteral src=2\n\
-         12: LoopHeaderValue role=Initial src=2\n\
-         13: LoadConstant dst=3\n\
-         14: TraceLiteral src=3\n\
-         15: TraceKeyword role=To src=3\n\
-         16: LoopHeaderValue role=To src=3\n\
-         17: LoopRun index=1\n\
-         18: Clause index=2 end=19\n\
-         19: LoopNext index=1\n\
-         20: LoopNext index=0\n"
+         2: LoopHeaderValue role=Initial src=0\n\
+         3: LoadConstant dst=1\n\
+         4: LoopHeaderValue role=To src=1\n\
+         5: LoopRun index=0\n\
+         6: Clause index=1 end=12\n\
+         7: LoadConstant dst=2\n\
+         8: LoopHeaderValue role=Initial src=2\n\
+         9: LoadConstant dst=3\n\
+         10: LoopHeaderValue role=To src=3\n\
+         11: LoopRun index=1\n\
+         12: Clause index=2 end=13\n\
+         13: LoopNext index=1\n\
+         14: LoopNext index=0\n"
     );
     assert_eq!(
         nested.registers, 4,
@@ -1109,7 +1039,7 @@ fn a_nested_loops_registers_sit_above_the_enclosing_loops_and_a_later_loops_reus
     );
     assert!(
         render(&sequential).contains(
-            "17: TraceKeyword role=To src=1\n18: LoopHeaderValue role=To src=1\n19: LoopRun index=3"
+            "11: LoadConstant dst=1\n12: LoopHeaderValue role=To src=1\n13: LoopRun index=3"
         ),
         "the second loop\'s own bound went somewhere other than register 1: {}",
         render(&sequential)
@@ -1154,31 +1084,25 @@ fn an_if_with_an_else_compiles_to_a_clause_region_and_two_jumps() {
         compile_for_test(b"if 1 = 1 then say 'a'\nelse say 'b'\nsay 'c'\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=9\n\
+        "0: Clause index=0 end=6\n\
          1: LoadConstant dst=0\n\
-         2: TraceLiteral src=0\n\
-         3: LoadConstant dst=1\n\
-         4: TraceLiteral src=1\n\
-         5: Binary op== lhs=0 rhs=1 dst=0\n\
-         6: TraceOperator op== src=0\n\
-         7: Condition index=0 reg=0 keyword=IF\n\
-         8: JumpUnless reg=0 target=16\n\
-         9: Clause index=1 end=10\n\
-         10: Clause index=2 end=14\n\
-         11: Const dst=0 konst=0\n\
-         12: TraceLiteral src=0\n\
-         13: Say index=2 src=0\n\
-         14: EndBranch\n\
-         15: Jump target=21\n\
-         16: Generic index=3\n\
-         17: Clause index=4 end=21\n\
-         18: Const dst=0 konst=1\n\
-         19: TraceLiteral src=0\n\
-         20: Say index=4 src=0\n\
-         21: Clause index=5 end=25\n\
-         22: Const dst=0 konst=2\n\
-         23: TraceLiteral src=0\n\
-         24: Say index=5 src=0\n"
+         2: LoadConstant dst=1\n\
+         3: Binary op== lhs=0 rhs=1 dst=0\n\
+         4: Condition index=0 reg=0 keyword=IF\n\
+         5: JumpUnless reg=0 target=12\n\
+         6: Clause index=1 end=7\n\
+         7: Clause index=2 end=10\n\
+         8: Const dst=0 konst=0\n\
+         9: Say index=2 src=0\n\
+         10: EndBranch\n\
+         11: Jump target=16\n\
+         12: Generic index=3\n\
+         13: Clause index=4 end=16\n\
+         14: Const dst=0 konst=1\n\
+         15: Say index=4 src=0\n\
+         16: Clause index=5 end=19\n\
+         17: Const dst=0 konst=2\n\
+         18: Say index=5 src=0\n"
     );
     // Two registers throughout: the comparison's right operand takes one of
     // its own beside the register the condition lands in, and gives it back
@@ -1186,7 +1110,7 @@ fn an_if_with_an_else_compiles_to_a_clause_region_and_two_jumps() {
     // The condition's own register is released at the `IF`'s clause end, so
     // each promoted `SAY` below gets register 0 back.
     assert_eq!(chunk.registers, 2);
-    assert_eq!(chunk.op_of, vec![0, 9, 10, 14, 17, 21, 25]);
+    assert_eq!(chunk.op_of, vec![0, 6, 7, 10, 13, 16, 19]);
     // Three distinct literals, one entry each, in the order they were first
     // seen -- which is the order the `konst` fields above read.
     assert_eq!(
@@ -1211,25 +1135,20 @@ fn an_if_with_no_else_emits_no_branch_end_jump() {
     let chunk = compile_for_test(b"if 1 = 0 then say 'a'\nsay 'b'\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=9\n\
+        "0: Clause index=0 end=6\n\
          1: LoadConstant dst=0\n\
-         2: TraceLiteral src=0\n\
-         3: LoadConstant dst=1\n\
-         4: TraceLiteral src=1\n\
-         5: Binary op== lhs=0 rhs=1 dst=0\n\
-         6: TraceOperator op== src=0\n\
-         7: Condition index=0 reg=0 keyword=IF\n\
-         8: JumpUnless reg=0 target=15\n\
-         9: Clause index=1 end=10\n\
-         10: Clause index=2 end=14\n\
-         11: Const dst=0 konst=0\n\
-         12: TraceLiteral src=0\n\
-         13: Say index=2 src=0\n\
-         14: EndBranch\n\
-         15: Clause index=3 end=19\n\
-         16: Const dst=0 konst=1\n\
-         17: TraceLiteral src=0\n\
-         18: Say index=3 src=0\n"
+         2: LoadConstant dst=1\n\
+         3: Binary op== lhs=0 rhs=1 dst=0\n\
+         4: Condition index=0 reg=0 keyword=IF\n\
+         5: JumpUnless reg=0 target=11\n\
+         6: Clause index=1 end=7\n\
+         7: Clause index=2 end=10\n\
+         8: Const dst=0 konst=0\n\
+         9: Say index=2 src=0\n\
+         10: EndBranch\n\
+         11: Clause index=3 end=14\n\
+         12: Const dst=0 konst=1\n\
+         13: Say index=3 src=0\n"
     );
     assert_eq!(chunk.registers, 2);
 }
@@ -1288,36 +1207,28 @@ fn nested_ifs_reuse_their_registers() {
         compile_for_test(b"if 1 = 1 then\n  if 2 = 2 then say 'a'\nsay 'b'\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=9\n\
+        "0: Clause index=0 end=6\n\
          1: LoadConstant dst=0\n\
-         2: TraceLiteral src=0\n\
-         3: LoadConstant dst=1\n\
-         4: TraceLiteral src=1\n\
-         5: Binary op== lhs=0 rhs=1 dst=0\n\
-         6: TraceOperator op== src=0\n\
-         7: Condition index=0 reg=0 keyword=IF\n\
-         8: JumpUnless reg=0 target=26\n\
-         9: Clause index=1 end=10\n\
-         10: Clause index=2 end=19\n\
-         11: LoadConstant dst=0\n\
-         12: TraceLiteral src=0\n\
-         13: LoadConstant dst=1\n\
-         14: TraceLiteral src=1\n\
-         15: Binary op== lhs=0 rhs=1 dst=0\n\
-         16: TraceOperator op== src=0\n\
-         17: Condition index=2 reg=0 keyword=IF\n\
-         18: JumpUnless reg=0 target=26\n\
-         19: Clause index=3 end=20\n\
-         20: Clause index=4 end=24\n\
-         21: Const dst=0 konst=0\n\
-         22: TraceLiteral src=0\n\
-         23: Say index=4 src=0\n\
-         24: EndBranch\n\
-         25: EndBranch\n\
-         26: Clause index=5 end=30\n\
-         27: Const dst=0 konst=1\n\
-         28: TraceLiteral src=0\n\
-         29: Say index=5 src=0\n"
+         2: LoadConstant dst=1\n\
+         3: Binary op== lhs=0 rhs=1 dst=0\n\
+         4: Condition index=0 reg=0 keyword=IF\n\
+         5: JumpUnless reg=0 target=19\n\
+         6: Clause index=1 end=7\n\
+         7: Clause index=2 end=13\n\
+         8: LoadConstant dst=0\n\
+         9: LoadConstant dst=1\n\
+         10: Binary op== lhs=0 rhs=1 dst=0\n\
+         11: Condition index=2 reg=0 keyword=IF\n\
+         12: JumpUnless reg=0 target=19\n\
+         13: Clause index=3 end=14\n\
+         14: Clause index=4 end=17\n\
+         15: Const dst=0 konst=0\n\
+         16: Say index=4 src=0\n\
+         17: EndBranch\n\
+         18: EndBranch\n\
+         19: Clause index=5 end=22\n\
+         20: Const dst=0 konst=1\n\
+         21: Say index=5 src=0\n"
     );
     assert_eq!(
         chunk.registers, 2,
@@ -1367,50 +1278,40 @@ fn a_select_with_an_otherwise_compiles_to_a_scan_chain_and_two_frames() {
         render(&chunk),
         "0: Clause index=0 end=1\n\
          1: SelectCaseText index=0 case=-\n\
-         2: Clause index=1 end=11\n\
+         2: Clause index=1 end=8\n\
          3: LoadConstant dst=0\n\
-         4: TraceLiteral src=0\n\
-         5: LoadConstant dst=1\n\
-         6: TraceLiteral src=1\n\
-         7: Binary op== lhs=0 rhs=1 dst=0\n\
-         8: TraceOperator op== src=0\n\
-         9: Condition index=1 reg=0 keyword=WHEN\n\
-         10: JumpUnless reg=0 target=18\n\
-         11: EnterWhen select=0 when=1\n\
-         12: Clause index=2 end=13\n\
-         13: Clause index=3 end=17\n\
-         14: Const dst=0 konst=0\n\
-         15: TraceLiteral src=0\n\
-         16: Say index=3 src=0\n\
-         17: EndWhen\n\
-         18: Clause index=4 end=27\n\
-         19: LoadConstant dst=0\n\
-         20: TraceLiteral src=0\n\
-         21: LoadConstant dst=1\n\
-         22: TraceLiteral src=1\n\
-         23: Binary op== lhs=0 rhs=1 dst=0\n\
-         24: TraceOperator op== src=0\n\
-         25: Condition index=4 reg=0 keyword=WHEN\n\
-         26: JumpUnless reg=0 target=33\n\
-         27: EnterWhen select=0 when=4\n\
-         28: Clause index=5 end=29\n\
-         29: Clause index=6 end=33\n\
-         30: Const dst=0 konst=1\n\
-         31: TraceLiteral src=0\n\
-         32: Say index=6 src=0\n\
-         33: EndWhen\n\
-         34: EnterOtherwise select=0\n\
-         35: Generic index=7\n\
-         36: Clause index=8 end=40\n\
-         37: Const dst=0 konst=2\n\
-         38: TraceLiteral src=0\n\
-         39: Say index=8 src=0\n\
-         40: EndWhen\n\
-         41: Generic index=9\n\
-         42: Clause index=10 end=46\n\
-         43: Const dst=0 konst=3\n\
-         44: TraceLiteral src=0\n\
-         45: Say index=10 src=0\n"
+         4: LoadConstant dst=1\n\
+         5: Binary op== lhs=0 rhs=1 dst=0\n\
+         6: Condition index=1 reg=0 keyword=WHEN\n\
+         7: JumpUnless reg=0 target=14\n\
+         8: EnterWhen select=0 when=1\n\
+         9: Clause index=2 end=10\n\
+         10: Clause index=3 end=13\n\
+         11: Const dst=0 konst=0\n\
+         12: Say index=3 src=0\n\
+         13: EndWhen\n\
+         14: Clause index=4 end=20\n\
+         15: LoadConstant dst=0\n\
+         16: LoadConstant dst=1\n\
+         17: Binary op== lhs=0 rhs=1 dst=0\n\
+         18: Condition index=4 reg=0 keyword=WHEN\n\
+         19: JumpUnless reg=0 target=25\n\
+         20: EnterWhen select=0 when=4\n\
+         21: Clause index=5 end=22\n\
+         22: Clause index=6 end=25\n\
+         23: Const dst=0 konst=1\n\
+         24: Say index=6 src=0\n\
+         25: EndWhen\n\
+         26: EnterOtherwise select=0\n\
+         27: Generic index=7\n\
+         28: Clause index=8 end=31\n\
+         29: Const dst=0 konst=2\n\
+         30: Say index=8 src=0\n\
+         31: EndWhen\n\
+         32: Generic index=9\n\
+         33: Clause index=10 end=36\n\
+         34: Const dst=0 konst=3\n\
+         35: Say index=10 src=0\n"
     );
     assert_eq!(
         chunk.registers, 2,
@@ -1419,7 +1320,7 @@ fn a_select_with_an_otherwise_compiles_to_a_scan_chain_and_two_frames() {
     );
     assert_eq!(
         chunk.op_of,
-        vec![0, 2, 12, 13, 17, 28, 29, 33, 36, 40, 42, 46]
+        vec![0, 2, 9, 10, 13, 21, 22, 25, 28, 31, 33, 36]
     );
 }
 
@@ -1451,29 +1352,26 @@ fn a_select_cases_own_value_outlives_the_registers_its_whens_take() {
          2: SelectCaseText index=0 case=0\n\
          3: Clause index=1 end=6\n\
          4: WhenTest index=1 case=0 dst=1\n\
-         5: JumpUnless reg=1 target=13\n\
+         5: JumpUnless reg=1 target=12\n\
          6: EnterWhen select=0 when=1\n\
          7: Clause index=2 end=8\n\
-         8: Clause index=3 end=12\n\
+         8: Clause index=3 end=11\n\
          9: Const dst=1 konst=0\n\
-         10: TraceLiteral src=1\n\
-         11: Say index=3 src=1\n\
-         12: EndWhen\n\
-         13: Clause index=4 end=16\n\
-         14: WhenTest index=4 case=0 dst=1\n\
-         15: JumpUnless reg=1 target=23\n\
-         16: EnterWhen select=0 when=4\n\
-         17: Clause index=5 end=18\n\
-         18: Clause index=6 end=22\n\
-         19: Const dst=1 konst=1\n\
-         20: TraceLiteral src=1\n\
-         21: Say index=6 src=1\n\
-         22: EndWhen\n\
-         23: Generic index=7\n\
-         24: Clause index=8 end=28\n\
-         25: Const dst=0 konst=2\n\
-         26: TraceLiteral src=0\n\
-         27: Say index=8 src=0\n"
+         10: Say index=3 src=1\n\
+         11: EndWhen\n\
+         12: Clause index=4 end=15\n\
+         13: WhenTest index=4 case=0 dst=1\n\
+         14: JumpUnless reg=1 target=21\n\
+         15: EnterWhen select=0 when=4\n\
+         16: Clause index=5 end=17\n\
+         17: Clause index=6 end=20\n\
+         18: Const dst=1 konst=1\n\
+         19: Say index=6 src=1\n\
+         20: EndWhen\n\
+         21: Generic index=7\n\
+         22: Clause index=8 end=25\n\
+         23: Const dst=0 konst=2\n\
+         24: Say index=8 src=0\n"
     );
     assert_eq!(
         chunk.registers, 2,
@@ -1530,27 +1428,22 @@ fn a_select_with_no_otherwise_scans_out_onto_its_own_end() {
         render(&chunk),
         "0: Clause index=0 end=1\n\
          1: SelectCaseText index=0 case=-\n\
-         2: Clause index=1 end=11\n\
+         2: Clause index=1 end=8\n\
          3: LoadConstant dst=0\n\
-         4: TraceLiteral src=0\n\
-         5: LoadConstant dst=1\n\
-         6: TraceLiteral src=1\n\
-         7: Binary op== lhs=0 rhs=1 dst=0\n\
-         8: TraceOperator op== src=0\n\
-         9: Condition index=1 reg=0 keyword=WHEN\n\
-         10: JumpUnless reg=0 target=18\n\
-         11: EnterWhen select=0 when=1\n\
-         12: Clause index=2 end=13\n\
-         13: Clause index=3 end=17\n\
-         14: Const dst=0 konst=0\n\
-         15: TraceLiteral src=0\n\
-         16: Say index=3 src=0\n\
-         17: EndWhen\n\
-         18: Generic index=4\n\
-         19: Clause index=5 end=23\n\
-         20: Const dst=0 konst=1\n\
-         21: TraceLiteral src=0\n\
-         22: Say index=5 src=0\n"
+         4: LoadConstant dst=1\n\
+         5: Binary op== lhs=0 rhs=1 dst=0\n\
+         6: Condition index=1 reg=0 keyword=WHEN\n\
+         7: JumpUnless reg=0 target=14\n\
+         8: EnterWhen select=0 when=1\n\
+         9: Clause index=2 end=10\n\
+         10: Clause index=3 end=13\n\
+         11: Const dst=0 konst=0\n\
+         12: Say index=3 src=0\n\
+         13: EndWhen\n\
+         14: Generic index=4\n\
+         15: Clause index=5 end=18\n\
+         16: Const dst=0 konst=1\n\
+         17: Say index=5 src=0\n"
     );
 }
 
@@ -1596,30 +1489,25 @@ fn a_call_in_a_whens_condition_is_addressed_at_the_conditions_slot() {
         .expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=4\n\
+        "0: Clause index=0 end=3\n\
          1: Const dst=0 konst=0\n\
-         2: TraceLiteral src=0\n\
-         3: Store index=0 at=0 src=0\n\
-         4: Clause index=1 end=5\n\
-         5: SelectCaseText index=1 case=-\n\
-         6: Clause index=2 end=19\n\
-         7: Load read=Simple at=0 dst=1\n\
-         8: TraceRead read=Simple src=1\n\
-         9: PushArg src=1\n\
-         10: TraceArgument src=1\n\
-         11: CallArgs slot=0 path=root.L site=0 argc=1 dst=0\n\
-         12: TraceFunction index=2 slot=0 path=root.L src=0\n\
-         13: LoadConstant dst=1\n\
-         14: TraceLiteral src=1\n\
-         15: Binary op=> lhs=0 rhs=1 dst=0\n\
-         16: TraceOperator op=> src=0\n\
-         17: Condition index=2 reg=0 keyword=WHEN\n\
-         18: JumpUnless reg=0 target=23\n\
-         19: EnterWhen select=1 when=2\n\
-         20: Clause index=3 end=21\n\
-         21: Clause index=4 end=22\n\
-         22: EndWhen\n\
-         23: Generic index=5\n"
+         2: Store index=0 at=0 src=0\n\
+         3: Clause index=1 end=4\n\
+         4: SelectCaseText index=1 case=-\n\
+         5: Clause index=2 end=14\n\
+         6: Load read=Simple at=0 dst=1\n\
+         7: PushArg src=1\n\
+         8: CallArgs slot=0 path=root.L site=0 argc=1 dst=0\n\
+         9: TraceFunction index=2 slot=0 path=root.L src=0\n\
+         10: LoadConstant dst=1\n\
+         11: Binary op=> lhs=0 rhs=1 dst=0\n\
+         12: Condition index=2 reg=0 keyword=WHEN\n\
+         13: JumpUnless reg=0 target=18\n\
+         14: EnterWhen select=1 when=2\n\
+         15: Clause index=3 end=16\n\
+         16: Clause index=4 end=17\n\
+         17: EndWhen\n\
+         18: Generic index=5\n"
     );
 }
 
@@ -1643,22 +1531,19 @@ fn an_absorbed_when_compiles_to_generic() {
         render(&chunk),
         "0: Clause index=0 end=1\n\
          1: SelectCaseText index=0 case=-\n\
-         2: Clause index=1 end=11\n\
+         2: Clause index=1 end=8\n\
          3: LoadConstant dst=0\n\
-         4: TraceLiteral src=0\n\
-         5: LoadConstant dst=1\n\
-         6: TraceLiteral src=1\n\
-         7: Binary op== lhs=0 rhs=1 dst=0\n\
-         8: TraceOperator op== src=0\n\
-         9: Condition index=1 reg=0 keyword=WHEN\n\
-         10: JumpUnless reg=0 target=17\n\
-         11: EnterWhen select=0 when=1\n\
-         12: Clause index=2 end=13\n\
-         13: Generic index=3\n\
-         14: EndWhen\n\
-         15: Clause index=4 end=16\n\
-         16: Clause index=5 end=17\n\
-         17: Generic index=6\n"
+         4: LoadConstant dst=1\n\
+         5: Binary op== lhs=0 rhs=1 dst=0\n\
+         6: Condition index=1 reg=0 keyword=WHEN\n\
+         7: JumpUnless reg=0 target=14\n\
+         8: EnterWhen select=0 when=1\n\
+         9: Clause index=2 end=10\n\
+         10: Generic index=3\n\
+         11: EndWhen\n\
+         12: Clause index=4 end=13\n\
+         13: Clause index=5 end=14\n\
+         14: Generic index=6\n"
     );
 }
 
@@ -1689,41 +1574,35 @@ fn a_traced_if_carries_its_clause_echo_as_an_op_of_the_region() {
         .expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=10\n\
+        "0: Clause index=0 end=7\n\
          1: TraceClause index=0\n\
          2: LoadConstant dst=0\n\
-         3: TraceLiteral src=0\n\
-         4: LoadConstant dst=1\n\
-         5: TraceLiteral src=1\n\
-         6: Binary op== lhs=0 rhs=1 dst=0\n\
-         7: TraceOperator op== src=0\n\
-         8: Condition index=0 reg=0 keyword=IF\n\
-         9: JumpUnless reg=0 target=19\n\
-         10: Clause index=1 end=12\n\
-         11: TraceClause index=1\n\
-         12: Clause index=2 end=17\n\
-         13: TraceClause index=2\n\
-         14: Const dst=0 konst=0\n\
-         15: TraceLiteral src=0\n\
-         16: Say index=2 src=0\n\
-         17: EndBranch\n\
-         18: Jump target=25\n\
-         19: Generic index=3\n\
-         20: Clause index=4 end=25\n\
-         21: TraceClause index=4\n\
-         22: Const dst=0 konst=1\n\
-         23: TraceLiteral src=0\n\
-         24: Say index=4 src=0\n\
-         25: Clause index=5 end=30\n\
-         26: TraceClause index=5\n\
-         27: Const dst=0 konst=2\n\
-         28: TraceLiteral src=0\n\
-         29: Say index=5 src=0\n"
+         3: LoadConstant dst=1\n\
+         4: Binary op== lhs=0 rhs=1 dst=0\n\
+         5: Condition index=0 reg=0 keyword=IF\n\
+         6: JumpUnless reg=0 target=15\n\
+         7: Clause index=1 end=9\n\
+         8: TraceClause index=1\n\
+         9: Clause index=2 end=13\n\
+         10: TraceClause index=2\n\
+         11: Const dst=0 konst=0\n\
+         12: Say index=2 src=0\n\
+         13: EndBranch\n\
+         14: Jump target=20\n\
+         15: Generic index=3\n\
+         16: Clause index=4 end=20\n\
+         17: TraceClause index=4\n\
+         18: Const dst=0 konst=1\n\
+         19: Say index=4 src=0\n\
+         20: Clause index=5 end=24\n\
+         21: TraceClause index=5\n\
+         22: Const dst=0 konst=2\n\
+         23: Say index=5 src=0\n"
     );
     // The echo op addresses no register, so the extra op changes nothing the
     // driver has to reserve.
     assert_eq!(chunk.registers, 2);
-    assert_eq!(chunk.op_of, vec![0, 10, 12, 17, 20, 25, 30]);
+    assert_eq!(chunk.op_of, vec![0, 7, 9, 13, 16, 20, 24]);
 }
 
 /// A traced `SELECT CASE`: **one echo per promoted clause, and exactly one**.
@@ -1757,35 +1636,32 @@ fn a_traced_select_echoes_its_header_and_each_listed_when() {
          4: Clause index=1 end=8\n\
          5: TraceClause index=1\n\
          6: WhenTest index=1 case=0 dst=1\n\
-         7: JumpUnless reg=1 target=17\n\
+         7: JumpUnless reg=1 target=16\n\
          8: EnterWhen select=0 when=1\n\
          9: Clause index=2 end=11\n\
          10: TraceClause index=2\n\
-         11: Clause index=3 end=16\n\
+         11: Clause index=3 end=15\n\
          12: TraceClause index=3\n\
          13: Const dst=1 konst=0\n\
-         14: TraceLiteral src=1\n\
-         15: Say index=3 src=1\n\
-         16: EndWhen\n\
-         17: Clause index=4 end=21\n\
-         18: TraceClause index=4\n\
-         19: WhenTest index=4 case=0 dst=1\n\
-         20: JumpUnless reg=1 target=30\n\
-         21: EnterWhen select=0 when=4\n\
-         22: Clause index=5 end=24\n\
-         23: TraceClause index=5\n\
-         24: Clause index=6 end=29\n\
-         25: TraceClause index=6\n\
-         26: Const dst=1 konst=1\n\
-         27: TraceLiteral src=1\n\
-         28: Say index=6 src=1\n\
-         29: EndWhen\n\
-         30: Generic index=7\n\
-         31: Clause index=8 end=36\n\
-         32: TraceClause index=8\n\
-         33: Const dst=0 konst=2\n\
-         34: TraceLiteral src=0\n\
-         35: Say index=8 src=0\n"
+         14: Say index=3 src=1\n\
+         15: EndWhen\n\
+         16: Clause index=4 end=20\n\
+         17: TraceClause index=4\n\
+         18: WhenTest index=4 case=0 dst=1\n\
+         19: JumpUnless reg=1 target=28\n\
+         20: EnterWhen select=0 when=4\n\
+         21: Clause index=5 end=23\n\
+         22: TraceClause index=5\n\
+         23: Clause index=6 end=27\n\
+         24: TraceClause index=6\n\
+         25: Const dst=1 konst=1\n\
+         26: Say index=6 src=1\n\
+         27: EndWhen\n\
+         28: Generic index=7\n\
+         29: Clause index=8 end=33\n\
+         30: TraceClause index=8\n\
+         31: Const dst=0 konst=2\n\
+         32: Say index=8 src=0\n"
     );
     assert_eq!(
         chunk.registers, 2,
@@ -1817,9 +1693,7 @@ fn two_constructs_ending_at_one_instruction_release_to_the_lower_mark() {
     .expect("compiles");
     let stream = render(&chunk);
     assert!(
-        stream.contains(
-            "22: LoadConstant dst=0\n23: TraceLiteral src=0\n24: LoopHeaderValue role=Initial src=0"
-        ),
+        stream.contains("19: LoadConstant dst=0\n20: LoopHeaderValue role=Initial src=0"),
         "the loop after the whole SELECT did not get register 0 back: {stream}"
     );
     assert_eq!(
@@ -2066,20 +1940,18 @@ fn a_compiled_write_names_a_slot_only_for_a_simple_target() {
     let simple = compile_for_test(b"zw = 'v'\n").expect("compiles");
     assert_eq!(
         render(&simple),
-        "0: Clause index=0 end=4\n\
+        "0: Clause index=0 end=3\n\
          1: Const dst=0 konst=0\n\
-         2: TraceLiteral src=0\n\
-         3: Store index=0 at=0 src=0\n"
+         2: Store index=0 at=0 src=0\n"
     );
 
     for source in [&b"zs. = 'v'\n"[..], &b"zs.zk = 'v'\n"[..]] {
         let chunk = compile_for_test(source).expect("compiles");
         assert_eq!(
             render(&chunk),
-            "0: Clause index=0 end=4\n\
+            "0: Clause index=0 end=3\n\
              1: Const dst=0 konst=0\n\
-             2: TraceLiteral src=0\n\
-             3: Store index=0 at=- src=0\n",
+             2: Store index=0 at=- src=0\n",
             "{} resolved a slot for a target that does not read one",
             String::from_utf8_lossy(source)
         );
@@ -2128,10 +2000,9 @@ fn a_return_and_an_exit_compile_to_one_op_tagged_with_their_keyword() {
     let chunk = compile_for_test(b"return 1\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=4\n\
+        "0: Clause index=0 end=3\n\
          1: LoadConstant dst=0\n\
-         2: TraceLiteral src=0\n\
-         3: Return index=0 src=0 keyword=RETURN\n"
+         2: Return index=0 src=0 keyword=RETURN\n"
     );
 
     let bare = compile_for_test(b"return\n").expect("compiles");
@@ -2144,10 +2015,9 @@ fn a_return_and_an_exit_compile_to_one_op_tagged_with_their_keyword() {
     let exit = compile_for_test(b"exit 1\n").expect("compiles");
     assert_eq!(
         render(&exit),
-        "0: Clause index=0 end=4\n\
+        "0: Clause index=0 end=3\n\
          1: LoadConstant dst=0\n\
-         2: TraceLiteral src=0\n\
-         3: Return index=0 src=0 keyword=EXIT\n"
+         2: Return index=0 src=0 keyword=EXIT\n"
     );
 
     let bare_exit = compile_for_test(b"exit\n").expect("compiles");
@@ -2169,18 +2039,16 @@ fn a_push_and_a_queue_compile_to_one_op_tagged_with_their_end() {
     let chunk = compile_for_test(b"push 'a'\nqueue 'b'\npush\nqueue\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=4\n\
+        "0: Clause index=0 end=3\n\
          1: Const dst=0 konst=0\n\
-         2: TraceLiteral src=0\n\
-         3: Queue index=0 src=0 keyword=PUSH\n\
-         4: Clause index=1 end=8\n\
-         5: Const dst=0 konst=1\n\
-         6: TraceLiteral src=0\n\
-         7: Queue index=1 src=0 keyword=QUEUE\n\
-         8: Clause index=2 end=10\n\
-         9: Queue index=2 src=- keyword=PUSH\n\
-         10: Clause index=3 end=12\n\
-         11: Queue index=3 src=- keyword=QUEUE\n"
+         2: Queue index=0 src=0 keyword=PUSH\n\
+         3: Clause index=1 end=6\n\
+         4: Const dst=0 konst=1\n\
+         5: Queue index=1 src=0 keyword=QUEUE\n\
+         6: Clause index=2 end=8\n\
+         7: Queue index=2 src=- keyword=PUSH\n\
+         8: Clause index=3 end=10\n\
+         9: Queue index=3 src=- keyword=QUEUE\n"
     );
 }
 
@@ -2215,14 +2083,12 @@ fn a_call_in_a_returns_expression_is_addressed_at_the_returns_slot() {
     let chunk = compile_for_test(b"return length(zs)\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=8\n\
+        "0: Clause index=0 end=6\n\
          1: Load read=Simple at=0 dst=1\n\
-         2: TraceRead read=Simple src=1\n\
-         3: PushArg src=1\n\
-         4: TraceArgument src=1\n\
-         5: CallArgs slot=0 path=root site=0 argc=1 dst=0\n\
-         6: TraceFunction index=0 slot=0 path=root src=0\n\
-         7: Return index=0 src=0 keyword=RETURN\n"
+         2: PushArg src=1\n\
+         3: CallArgs slot=0 path=root site=0 argc=1 dst=0\n\
+         4: TraceFunction index=0 slot=0 path=root src=0\n\
+         5: Return index=0 src=0 keyword=RETURN\n"
     );
 }
 
@@ -2238,10 +2104,9 @@ fn a_traced_exit_carries_its_clause_echo_op() {
     let chunk = compile_for_test_under(b"exit 2\n", traced()).expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=5\n\
+        "0: Clause index=0 end=4\n\
          1: TraceClause index=0\n\
          2: LoadConstant dst=0\n\
-         3: TraceLiteral src=0\n\
-         4: Return index=0 src=0 keyword=EXIT\n"
+         3: Return index=0 src=0 keyword=EXIT\n"
     );
 }

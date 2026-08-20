@@ -249,14 +249,24 @@ impl TraceMode {
 ///
 /// [`echoes`]: ChunkTrace::echoes
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub(crate) struct ChunkTrace {
-    /// [`TraceMode::all`]: every stepped clause echoes.
-    clauses: bool,
-    /// [`TraceMode::labels`]: a `LABEL` clause echoes.
-    labels: bool,
-}
+pub(crate) struct ChunkTrace(u8);
 
 impl ChunkTrace {
+    /// [`TraceMode::all`]: every stepped clause echoes.
+    const CLAUSES: u8 = 1;
+    /// [`TraceMode::labels`]: a `LABEL` clause echoes.
+    const LABELS: u8 = 2;
+    /// [`TraceMode::intermediates`]: a literal, a read, an operator's result,
+    /// an argument and a call's result each echo a line of their own.
+    ///
+    /// **A key bit like the two above, and for the same reason**: it decides
+    /// which value-echo ops a chunk carries at all, so two chunks for one body
+    /// can differ by it and `Interp::chunk_for` must not hand one back for the
+    /// other. `ir::compile` reads it beside [`crate::plan::Plan::never_retraces`],
+    /// which is what says the answer cannot change under the chunk while it
+    /// runs.
+    const INTERMEDIATES: u8 = 4;
+
     /// What `compile` reads out of the setting in force.
     ///
     /// **`inline(always)`, and it is a measurement rather than a habit.** These
@@ -276,10 +286,17 @@ impl ChunkTrace {
     /// bookkeeping.
     #[inline(always)]
     pub(crate) fn of(mode: TraceMode) -> ChunkTrace {
-        ChunkTrace {
-            clauses: mode.all,
-            labels: mode.labels,
-        }
+        // **One byte and not three `bool` fields, which is a measurement.**
+        // `Interp::run_ops`'s staleness check compares a whole `ChunkTrace`
+        // once per promoted clause, so the type's width is on that path: as
+        // three fields the comparison cost `bench-programs/emptyloop.rex`
+        // 0.723% and the pinned `rexxcps` 0.372% against two, where packed it
+        // costs neither.
+        ChunkTrace(
+            (u8::from(mode.all) * ChunkTrace::CLAUSES)
+                | (u8::from(mode.labels) * ChunkTrace::LABELS)
+                | (u8::from(mode.intermediates) * ChunkTrace::INTERMEDIATES),
+        )
     }
 
     /// Whether a `*-*` line prints for a clause of this kind.
@@ -291,9 +308,39 @@ impl ChunkTrace {
     /// **`inline(always)` is measured**: one of the group of four
     /// [`ChunkTrace::of`] carries the number for, worth 100,000,000 user
     /// instructions on `bench-programs/emptyloop.rex` between them.
+    /// Whether the value echoes -- `>L>`, `>V>`, `>O>`, `>A>`, `>F>` and the
+    /// header's `>K>` -- print at all, which is what decides whether a chunk
+    /// carries an op for each of them.
+    #[inline(always)]
+    pub(crate) fn intermediates(self) -> bool {
+        self.0 & ChunkTrace::INTERMEDIATES != 0
+    }
+
+    /// This setting with [`ChunkTrace::INTERMEDIATES`] masked off, which is
+    /// what `Interp::run_ops` compares its chunk against per promoted clause.
+    ///
+    /// **The staleness check is about the clause echo alone, and must not see
+    /// this type's third bit.** A chunk that left its value echoes out was
+    /// compiled for a body [`crate::plan::Plan::never_retraces`] answered for,
+    /// so the setting it was keyed under cannot change while it runs; a chunk
+    /// that kept them gates every one at run time and is right either way. So
+    /// the bit can differ between a running chunk and the setting in force only
+    /// where nothing reads the difference.
+    ///
+    /// **Masking rather than comparing the whole byte is a measurement.**
+    /// Comparing all three costs `bench-programs/emptyloop.rex` 0.723% of
+    /// retired instructions -- 100,018,461 over 25,000,000 passes, four an
+    /// iteration -- which is [`ChunkTrace::of`]'s own recorded cost for this
+    /// type being materialised instead of folded away, and the same shape:
+    /// a third component is one comparison more than the fold survives.
+    #[inline(always)]
+    pub(crate) fn clause_echoes(self) -> ChunkTrace {
+        ChunkTrace(self.0 & (ChunkTrace::CLAUSES | ChunkTrace::LABELS))
+    }
+
     #[inline(always)]
     pub(crate) fn echoes(self, is_label: bool) -> bool {
-        self.clauses || (self.labels && is_label)
+        self.0 & ChunkTrace::CLAUSES != 0 || (self.0 & ChunkTrace::LABELS != 0 && is_label)
     }
 }
 

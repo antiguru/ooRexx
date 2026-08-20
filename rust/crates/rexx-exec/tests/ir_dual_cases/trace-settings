@@ -188,3 +188,34 @@ err>        >=>   N1 <= "lit"
 err>      3 *-* say n1
 err>        >V>   N1 => "lit"
 err>        >>>   "lit"
+
+# trace turned on by CALL TRACE, not by the TRACE instruction
+# The setting a body reaches through the `TRACE()` builtin rather than
+# through its own TRACE instruction, which is the route `Plan::never_retraces`
+# exists to see: the builtin sets the *running* activation's setting, so a
+# chunk that had left its value echoes out would have none to turn on. The
+# `>L>`, `>V>` and `>O>` lines below are what a chunk without them loses,
+# and the `>A>` line is the builtin's own argument.
+program
+zs = 'ab'
+if 1 = 1 then call trace 'i'
+if 2 = 2 then say zs
+call trace 'o'
+say 'done'
+----
+rc> 0
+out> ab
+out> done
+err>        >>>       "N"
+err>      3 *-* if 2 = 2 
+err>        >L>   "2"
+err>        >L>   "2"
+err>        >O>   "=" => "1"
+err>        >>>   "1"
+err>      3 *-*   then
+err>      3 *-*     say zs
+err>        >V>       ZS => "ab"
+err>        >>>       "ab"
+err>      4 *-* call trace 'o'
+err>        >L>   "o"
+err>        >A>   "o"

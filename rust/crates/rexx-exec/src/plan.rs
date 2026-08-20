@@ -31,9 +31,9 @@ use crate::Interp;
 use crate::run::{NameShape, shape_of};
 use crate::trace::ChunkTrace;
 use rexx_parse::{
-    Call, CodeBody, Expr, ExprKind, Fragment, Instruction, InstructionKind, Loop, LoopKind, Parse,
-    ParseSource, ProgramSource, Redirection, Signal, SymbolId, SymbolTable, Tail, Trace, Use,
-    VariableRef, compound_parts,
+    Call, CallTarget, CodeBody, Expr, ExprKind, Fragment, Instruction, InstructionKind, Loop,
+    LoopKind, Parse, ParseSource, ProgramSource, Redirection, Signal, SymbolId, SymbolTable, Tail,
+    Trace, Use, VariableRef, compound_parts,
 };
 use std::rc::Rc;
 
@@ -234,6 +234,24 @@ pub(crate) struct Plan {
     pub(crate) result_slot: Option<usize>,
     pub(crate) sigl_slot: Option<usize>,
     pub(crate) by_symbol: Vec<Option<usize>>,
+    /// Whether nothing this body runs can change the `TRACE` setting in force
+    /// while it runs, so that a compiled stream may decide at compile time
+    /// which value echoes it carries rather than gating each one.
+    ///
+    /// **`false` is the safe answer and the default one**, which is what a
+    /// [`Plan::default()`] gives a body-less activation and a fragment: it
+    /// means "may retrace", so every echo is emitted and gated at run time
+    /// exactly as it always was. [`Plan::build`] starts this `true` and lets
+    /// the walk below falsify it.
+    ///
+    /// **What falsifies it** is a `TRACE` instruction, an `INTERPRET` or
+    /// `OPTIONS` whose text is not known here, a call this body makes to
+    /// `TRACE()` -- the builtin sets the running activation's own setting
+    /// (`builtin::state::trace`) -- and a `CALL (expr)` whose target is not
+    /// known until it runs. A call to anything else cannot reach it: a routine
+    /// or method runs in an activation of its own, and `push_activation` and
+    /// `pop_activation` restore this one's setting around it.
+    never_retraces: bool,
     /// The static clause indent of every instruction in this body, by index.
     ///
     /// `static_indent` walks the flat instruction list from position zero to
@@ -387,6 +405,12 @@ impl Plan {
     /// symbol's entry with no complaint (`SymbolId::index`'s own doc comment
     /// on the two ways that goes wrong). `Code` is what pairs a plan with the
     /// table whose ids index it, and `Code::compound` is the only caller.
+    /// Whether nothing this body runs can change the `TRACE` setting while it
+    /// runs. See the field for what falsifies it and why `false` is safe.
+    pub(crate) fn never_retraces(&self) -> bool {
+        self.never_retraces
+    }
+
     pub(crate) fn compound(&self, id: SymbolId) -> Option<&CompoundName> {
         self.compounds.get(id.index())?.as_ref()
     }
@@ -437,6 +461,9 @@ impl Plan {
             by_symbol: std::iter::repeat_with(|| None)
                 .take(symbols.len())
                 .collect(),
+            // Optimistic, and the walk below falsifies it; the field's own doc
+            // has why the *default* is the other way round.
+            never_retraces: true,
             ..Plan::default()
         };
         for instruction in &body.instructions {
@@ -498,6 +525,7 @@ impl Plan {
             | InstructionKind::Reply { expression }
             | InstructionKind::Numeric { expression, .. } => self.note_opt(expression, symbols),
             InstructionKind::Interpret { expression } | InstructionKind::Options { expression } => {
+                self.never_retraces = false;
                 self.note(expression, symbols);
             }
             InstructionKind::Do(loop_) | InstructionKind::Loop(loop_) => {
@@ -597,6 +625,7 @@ impl Plan {
                 }
             }
             InstructionKind::Trace(trace) => {
+                self.never_retraces = false;
                 if let Trace::Value(expr) = trace {
                     self.note(expr, symbols);
                 }
@@ -684,10 +713,21 @@ impl Plan {
     /// through `slot_of`; `Trap` names a condition, not a variable.
     fn note_call(&mut self, call: &Call, symbols: &SymbolTable) {
         match call {
-            Call::Named { args, .. } | Call::Qualified { args, .. } => {
+            Call::Named { name, args, .. } => {
+                if names_trace(name) {
+                    self.never_retraces = false;
+                }
+                self.note_args(args, symbols);
+            }
+            Call::Qualified { name, args, .. } => {
+                if names_trace(symbols.name(*name).as_bytes()) {
+                    self.never_retraces = false;
+                }
                 self.note_args(args, symbols);
             }
             Call::Dynamic { target, args } => {
+                // The target is a run-time value, so this cannot be read here.
+                self.never_retraces = false;
                 self.note(target, symbols);
                 self.note_args(args, symbols);
             }
@@ -805,7 +845,20 @@ impl Plan {
                 self.note(left, symbols);
                 self.note(right, symbols);
             }
-            ExprKind::Call { args, .. } | ExprKind::QualifiedCall { args, .. } => {
+            ExprKind::Call { target, args } => {
+                let named = match target {
+                    CallTarget::Symbol(id) => names_trace(symbols.name(*id).as_bytes()),
+                    CallTarget::Literal(bytes) => names_trace(bytes),
+                };
+                if named {
+                    self.never_retraces = false;
+                }
+                self.note_args(args, symbols);
+            }
+            ExprKind::QualifiedCall { name, args, .. } => {
+                if names_trace(symbols.name(*name).as_bytes()) {
+                    self.never_retraces = false;
+                }
                 self.note_args(args, symbols);
             }
             ExprKind::Message {
@@ -1070,6 +1123,17 @@ impl Interp {
             .map(|entry| entry.map(|local_slot| enclosing[local_slot]))
             .collect()
     }
+}
+
+/// Whether a call names the `TRACE()` builtin, which sets the running
+/// activation's own `TRACE` setting where every other call cannot.
+///
+/// Case-insensitive because the two spellings reach here differently: a bare
+/// symbol arrives upcased, and `"trace"(...)` arrives exactly as written --
+/// which never resolves to the builtin, so answering `true` for it costs the
+/// optimisation on that body and nothing else.
+fn names_trace(name: &[u8]) -> bool {
+    name.eq_ignore_ascii_case(b"TRACE")
 }
 
 #[cfg(test)]
@@ -2013,5 +2077,44 @@ mod tests {
             "the fragment's own id must resolve to the SAME slot the \
              enclosing body would use for the same name"
         );
+    }
+    /// **What may change the `TRACE` setting under a running chunk**, which is
+    /// the whole of what lets `ir::compile` decide a body's value echoes once
+    /// instead of gating each one.
+    ///
+    /// Each blocking route is paired with the nearest body that does *not*
+    /// block, because a guard that answered "may retrace" for everything would
+    /// satisfy the first half alone and cost only the optimisation -- silently.
+    #[test]
+    fn a_body_that_can_reach_the_trace_setting_is_the_one_that_says_so() {
+        let retraces = |source: &[u8]| {
+            let program = parse_program(source.to_vec()).expect("test program parses");
+            !Plan::build(&program.main, &program.symbols, None).never_retraces()
+        };
+
+        // The instruction, in each of its forms.
+        assert!(retraces(b"trace i"));
+        assert!(retraces(b"zv = 'i'\ntrace value zv"));
+        // The builtin, which sets the *running* activation's own setting where
+        // every other call cannot reach it.
+        assert!(retraces(b"zg = trace('i')"));
+        assert!(retraces(b"call trace 'i'"));
+        assert!(retraces(b"zg = TRACE('i')"));
+        // Its argument list is no shelter: the walk reaches nested calls.
+        assert!(retraces(b"zg = length(trace('i'))"));
+        // Text this cannot read.
+        assert!(retraces(b"interpret zv"));
+        assert!(retraces(b"call (zv) 1"));
+
+        // The adjacent successes: a call, an assignment and a loop that name
+        // no route to the setting.
+        assert!(!retraces(b"zg = length('ab')"));
+        assert!(!retraces(b"call charout , 'x'"));
+        assert!(!retraces(b"do zi = 1 to 3\nzs = zi + 1\nend"));
+        assert!(!retraces(b"say 'x'"));
+        // A *variable* spelled TRACE is not a call to it, but blocking one
+        // costs only the optimisation -- so this row records which way the
+        // guard falls rather than asserting it must not block.
+        let _ = retraces(b"trace_var = 1");
     }
 }

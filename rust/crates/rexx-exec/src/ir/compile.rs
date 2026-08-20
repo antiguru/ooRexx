@@ -299,6 +299,21 @@ pub(crate) fn compile(
     #[cfg(test)]
     count_compile_call();
 
+    // **Whether this stream carries a value echo at all**, decided here rather
+    // than gated per execution. `trace` is the setting the chunk is keyed under,
+    // so a body entered while `TRACE I` is in force gets a stream with the ops
+    // and one entered without it gets a stream without them. What makes that
+    // safe is the second half: the setting can change *while* a chunk runs, and
+    // an op that is not in the stream cannot be gated back on, so a body that
+    // can reach the setting keeps its echoes and its run-time gate.
+    //
+    // Measured over `bench-programs/`, `instructions:u`: `strings.rex` -3.70%,
+    // `varlookup.rex` -2.94%, `alloc4c.rex` -2.36%, `compound.rex` -2.23%, a
+    // pinned `rexxcps` -1.78% and `arith.rex` -0.69%. Those streams are between
+    // 29% and 38% value-echo ops, every one of which an untraced run dispatched
+    // to reach a gate that answered no.
+    let echoes_values = trace.intermediates() || !plan.never_retraces();
+
     let len = body.instructions.len();
     let mut ops: Vec<Op> = Vec::with_capacity(len);
     let mut op_of = Vec::with_capacity(len + 1);
@@ -396,6 +411,7 @@ pub(crate) fn compile(
                     match loop_header_slot(body_node, slot) {
                         Some(expr) if native_shape(expr, Some(NodePath::ROOT)) => push_native(
                             &mut ops,
+                            echoes_values,
                             &mut consts,
                             &mut registers,
                             &mut hints,
@@ -413,7 +429,7 @@ pub(crate) fn compile(
                             dst,
                         }),
                     }
-                    if role.keyword().is_some() {
+                    if echoes_values && role.keyword().is_some() {
                         ops.push(Op::TraceKeyword { role, src: dst });
                     }
                     ops.push(Op::LoopHeaderValue { role, src: dst });
@@ -498,6 +514,7 @@ pub(crate) fn compile(
                 if native_shape(condition, Some(NodePath::ROOT)) {
                     push_native(
                         &mut ops,
+                        echoes_values,
                         &mut consts,
                         &mut registers,
                         &mut hints,
@@ -693,6 +710,7 @@ pub(crate) fn compile(
                     {
                         push_native(
                             &mut ops,
+                            echoes_values,
                             &mut consts,
                             &mut registers,
                             &mut hints,
@@ -752,6 +770,7 @@ pub(crate) fn compile(
                 push_echo(&mut ops, echo, instruction_index(index)?);
                 push_value(
                     &mut ops,
+                    echoes_values,
                     &mut consts,
                     &mut registers,
                     &mut hints,
@@ -788,6 +807,7 @@ pub(crate) fn compile(
                         let dst = registers.alloc()?;
                         push_value(
                             &mut ops,
+                            echoes_values,
                             &mut consts,
                             &mut registers,
                             &mut hints,
@@ -828,6 +848,7 @@ pub(crate) fn compile(
                         let dst = registers.alloc()?;
                         push_value(
                             &mut ops,
+                            echoes_values,
                             &mut consts,
                             &mut registers,
                             &mut hints,
@@ -871,6 +892,7 @@ pub(crate) fn compile(
                         let dst = registers.alloc()?;
                         push_value(
                             &mut ops,
+                            echoes_values,
                             &mut consts,
                             &mut registers,
                             &mut hints,
@@ -920,6 +942,7 @@ pub(crate) fn compile(
                         let dst = registers.alloc()?;
                         push_value(
                             &mut ops,
+                            echoes_values,
                             &mut consts,
                             &mut registers,
                             &mut hints,
@@ -963,6 +986,7 @@ pub(crate) fn compile(
                         let dst = registers.alloc()?;
                         push_value(
                             &mut ops,
+                            echoes_values,
                             &mut consts,
                             &mut registers,
                             &mut hints,
@@ -1212,6 +1236,7 @@ pub(crate) fn compile(
 )]
 fn push_value<'a>(
     ops: &mut Vec<Op>,
+    echoes_values: bool,
     consts: &mut Constants<'a>,
     registers: &mut Registers,
     hints: &mut Hints,
@@ -1225,6 +1250,7 @@ fn push_value<'a>(
     if native_shape(expr, Some(NodePath::ROOT)) {
         push_native(
             ops,
+            echoes_values,
             consts,
             registers,
             hints,
@@ -1322,6 +1348,7 @@ fn descend(path: Option<NodePath>, right: bool) -> Option<NodePath> {
 )]
 fn push_native<'a>(
     ops: &mut Vec<Op>,
+    echoes_values: bool,
     consts: &mut Constants<'a>,
     registers: &mut Registers,
     hints: &mut Hints,
@@ -1341,7 +1368,9 @@ fn push_native<'a>(
             });
             // Behind the load rather than in front of it, because `eval.rs`
             // emits this line post-order, with the value in hand.
-            ops.push(Op::TraceLiteral { src: dst });
+            if echoes_values {
+                ops.push(Op::TraceLiteral { src: dst });
+            }
         }
         // A constant symbol's value is its own upcased spelling, which lives
         // in the symbol table rather than in the node -- so the symbol travels
@@ -1350,14 +1379,18 @@ fn push_native<'a>(
         // same `>L>`.
         ExprKind::Constant(id) => {
             ops.push(Op::LoadConstant { symbol: *id, dst });
-            ops.push(Op::TraceLiteral { src: dst });
+            if echoes_values {
+                ops.push(Op::TraceLiteral { src: dst });
+            }
         }
         // The three bare-symbol reads. **`ExprKind::DotVariable` and
         // `ExprKind::VariableReference` are not among them and are not
         // reads**: they trace `>E>` and `>O>` rather than `>V>`.
-        ExprKind::Variable(id) => push_read(ops, plan, SymbolRead::Simple, *id, dst),
-        ExprKind::Stem(id) => push_read(ops, plan, SymbolRead::Stem, *id, dst),
-        ExprKind::Compound(id) => push_read(ops, plan, SymbolRead::Compound, *id, dst),
+        ExprKind::Variable(id) => push_read(ops, echoes_values, plan, SymbolRead::Simple, *id, dst),
+        ExprKind::Stem(id) => push_read(ops, echoes_values, plan, SymbolRead::Stem, *id, dst),
+        ExprKind::Compound(id) => {
+            push_read(ops, echoes_values, plan, SymbolRead::Compound, *id, dst)
+        }
         ExprKind::Binary { op, left, right } => {
             // **The left operand lands in `dst` itself and only the right one
             // takes a register of its own**, which is what keeps a chain's
@@ -1368,6 +1401,7 @@ fn push_native<'a>(
             // makes the aliasing safe.
             push_native(
                 ops,
+                echoes_values,
                 consts,
                 registers,
                 hints,
@@ -1383,6 +1417,7 @@ fn push_native<'a>(
             let rhs = registers.alloc()?;
             push_native(
                 ops,
+                echoes_values,
                 consts,
                 registers,
                 hints,
@@ -1418,7 +1453,9 @@ fn push_native<'a>(
             // Behind the operation rather than in front of it, because
             // `eval.rs` emits this line post-order, with the value in hand --
             // so an inner operator's line precedes the outer one's.
-            ops.push(Op::TraceOperator { op: *op, src: dst });
+            if echoes_values {
+                ops.push(Op::TraceOperator { op: *op, src: dst });
+            }
             // Held until the operation has run: the right operand's register
             // is live right up to it, and a release any earlier would hand it
             // out to the next operand of an enclosing operator.
@@ -1432,6 +1469,7 @@ fn push_native<'a>(
             // term does and no more.
             push_native(
                 ops,
+                echoes_values,
                 consts,
                 registers,
                 hints,
@@ -1455,7 +1493,9 @@ fn push_native<'a>(
             // `Op::TracePrefix` and not `Op::TraceOperator`: a prefix operator
             // traces `>P>`, which is a different line from the `>O>` every
             // binary operator traces.
-            ops.push(Op::TracePrefix { op: *op, src: dst });
+            if echoes_values {
+                ops.push(Op::TracePrefix { op: *op, src: dst });
+            }
         }
         // **A call takes its own op wherever it sits**, which is
         // [`Op::CallExpr`], and the only thing that op changes about running
@@ -1495,21 +1535,35 @@ fn push_native<'a>(
                             ops.push(Op::PushArg {
                                 src: Op::ARG_OMITTED,
                             });
-                            ops.push(Op::TraceArgument {
-                                src: Op::ARG_OMITTED,
-                            });
+                            if echoes_values {
+                                ops.push(Op::TraceArgument {
+                                    src: Op::ARG_OMITTED,
+                                });
+                            }
                         }
                         Some(expr) => {
                             let src = registers.alloc()?;
                             push_native(
-                                ops, consts, registers, hints, calls, plan, expr, index, slot,
-                                None, src,
+                                ops,
+                                echoes_values,
+                                consts,
+                                registers,
+                                hints,
+                                calls,
+                                plan,
+                                expr,
+                                index,
+                                slot,
+                                None,
+                                src,
                             )?;
                             ops.push(Op::PushArg { src });
                             // Behind the argument's own ops, so its `>L>`/
                             // `>V>` lines print first -- the order
                             // `invoke_call`'s own loop produces.
-                            ops.push(Op::TraceArgument { src });
+                            if echoes_values {
+                                ops.push(Op::TraceArgument { src });
+                            }
                         }
                     }
                 }
@@ -1603,7 +1657,14 @@ fn write_slot(plan: &Plan, target: &Expr) -> PlanSlot {
 /// them on ([`PlanSlot`]'s own doc comment).
 ///
 /// [`PlanSlot`]: super::PlanSlot
-fn push_read(ops: &mut Vec<Op>, plan: &Plan, read: SymbolRead, symbol: SymbolId, dst: u16) {
+fn push_read(
+    ops: &mut Vec<Op>,
+    echoes_values: bool,
+    plan: &Plan,
+    read: SymbolRead,
+    symbol: SymbolId,
+    dst: u16,
+) {
     let at = match read {
         SymbolRead::Simple | SymbolRead::Stem => plan
             .slot_for_symbol(symbol)
@@ -1618,11 +1679,13 @@ fn push_read(ops: &mut Vec<Op>, plan: &Plan, read: SymbolRead, symbol: SymbolId,
     });
     // Behind the load rather than in front of it, because `eval.rs` emits
     // these lines post-order, with the value in hand.
-    ops.push(Op::TraceRead {
-        symbol,
-        read,
-        src: dst,
-    });
+    if echoes_values {
+        ops.push(Op::TraceRead {
+            symbol,
+            read,
+            src: dst,
+        });
+    }
 }
 
 /// Whether a promoted clause of `instruction` echoes under `trace`.

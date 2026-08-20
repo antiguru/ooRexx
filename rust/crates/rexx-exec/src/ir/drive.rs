@@ -746,7 +746,7 @@ impl Interp {
                     // ops that can run a `TRACE` needs that list to be right,
                     // and the list is an internal enumeration; reading the
                     // setting where the answer is used needs nothing.
-                    let stale = chunk.trace() != self.chunk_trace();
+                    let stale = chunk.trace().clause_echoes() != self.chunk_trace().clause_echoes();
                     // **`stale` moves the clause echo from the stream back to
                     // the run-time gate, in both directions at once.** The
                     // region's own [`Op::TraceClause`] is skipped and
