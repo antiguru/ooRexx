@@ -135,7 +135,7 @@ later task adds its witness to `phase-5a.txt` in its own commit.
 ./target/release/rexx-arms --build pinned=bench-baselines/pinned/rexx-run-pre-phase-5 \
                            --build head=target/release/rexx-run \
     --axis alloc4c --axis arith --axis compound --axis emptyloop --axis strings --axis varlookup \
-    --rounds 5 --task <task> --commit <commit> --baseline bench-baselines/phase-5a-arms.tsv
+    --rounds 5 --task <task> --commit <commit> --baseline bench-baselines/phase-5a-native-layer-arms.tsv
 ```
 
 Instrument `instructions:u`. Under 1% on an axis is not a finding; at or above 1% the task says
@@ -689,7 +689,7 @@ something nobody enumerated or the crate refuses something the table says it all
 
 **Report, each a number or a named absence:** the five gate commands; the subset in `phase-5a.txt`
 passing on both engines with traced cases unnormalised; the derived table with every row's status;
-the `rexx-arms` standing against `bench-baselines/phase-5a-arms.tsv`, stating plainly that no axis
+the `rexx-arms` standing against `bench-baselines/phase-5a-native-layer-arms.tsv`, stating plainly that no axis
 sends a message so the sitting witnesses the classic paths and nothing more; and the object-model
 differentials task by task.
 

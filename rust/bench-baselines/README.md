@@ -1,5 +1,7 @@
 # Committed measurement records
 
+**The pinned builds these are measured against are described in `PINNED.md`**, which also says which of the two `phase-5a` files belongs to which plan and which pin. `pinned/` itself is git-ignored.
+
 One machine-readable record per landed task, written by `rexx-arms`
 (`crates/rexx-bench/src/bin/rexx-arms.rs`).
 
