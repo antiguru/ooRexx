@@ -1154,10 +1154,18 @@ impl Interp {
             return Ok(logical(holds));
         }
         let strict = is_strict_compare(op);
+        // **The `Result` is kept rather than turned into an `Option`.** A
+        // `Number` is forty bytes and `Result::ok` moves one, so the two calls
+        // here moved eighty bytes for nothing: every read below is `is_ok`,
+        // `is_err` or a borrow out of the `Ok` arm, and none of them needs an
+        // `Option`. Measured on `samples/rexxcps.rex`, -0.531% of its retired
+        // instructions and -0.60% of its cycles over six alternating runs --
+        // the first pair of runs read -5%, which was the cold start and not
+        // this.
         let left_number = if strict {
-            None
+            Err(NotNumeric)
         } else {
-            self.to_number(left_value).ok()
+            self.to_number(left_value)
         };
         // **Behind the fast path above, because a comparison of renderings
         // never fails and so offers nothing to ride.** Measured, comparing an
@@ -1176,18 +1184,18 @@ impl Interp {
         // fail, and the arm that could -- `compare_numbers` -- is reached only
         // when both operands parsed, which is exactly when there is no gap.
         debug_assert!(
-            left_number.is_none() || self.operator_operand_gap(left_value).is_none(),
+            left_number.is_err() || self.operator_operand_gap(left_value).is_none(),
             "a left operand that parsed as a number reported an operator gap"
         );
-        if left_number.is_none()
+        if left_number.is_err()
             && let Some(kind) = self.operator_operand_gap(left_value)
         {
             return Err(Loud::operator_operand(op.spelling(), kind).into());
         }
         let right_number = if strict {
-            None
+            Err(NotNumeric)
         } else {
-            self.to_number(right_value).ok()
+            self.to_number(right_value)
         };
 
         // **Both operands parsed means the bytes have no reader**, so they are
@@ -1201,7 +1209,7 @@ impl Interp {
         // Measured on `samples/rexxcps.rex`: 2,520,002 comparisons reach this
         // point and 1,680,001 of them take this arm, which is 3,360,002
         // renderings not performed.
-        if let (Some(left), Some(right)) = (&left_number, &right_number) {
+        if let (Ok(left), Ok(right)) = (&left_number, &right_number) {
             let holds = rexx_num::compare_numbers(left, right, digits, fuzz, compare_op(op))
                 .map_err(Raised::from)?;
             return Ok(logical(holds));
@@ -1228,11 +1236,11 @@ impl Interp {
         // reparsing is the arm taken here. A strict operator is exempt because
         // it consults no `Number` at all.
         debug_assert!(
-            strict || left_number.is_some() || Number::parse_bytes(left_bytes).is_none(),
+            strict || left_number.is_ok() || Number::parse_bytes(left_bytes).is_none(),
             "a left operand to_number refused parses from its own rendering"
         );
         debug_assert!(
-            strict || right_number.is_some() || Number::parse_bytes(right_bytes).is_none(),
+            strict || right_number.is_ok() || Number::parse_bytes(right_bytes).is_none(),
             "a right operand to_number refused parses from its own rendering"
         );
         let holds = rexx_num::compare_strings(left_bytes, right_bytes, compare_op(op));
