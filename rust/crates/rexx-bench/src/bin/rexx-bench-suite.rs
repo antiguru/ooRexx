@@ -103,10 +103,25 @@ const OFFSET_WARMUP_PAIRS: usize = 5;
 /// measurement has to be comparable to this one.
 const TARGET_COVERAGE: f64 = 0.95;
 
-/// The oracle's own clauses-per-second benchmark, in the read-only C++ tree.
-/// Not copied into this repository: it is the oracle's file, and a copy is a
-/// thing that can drift from it.
-const REXXCPS: &str = "/home/moritz/dev/repos/ooRexx/samples/rexxcps.rex";
+/// REXXCPS 2.2 with its loop counts fixed, in this repository.
+///
+/// **Not the copy in the read-only C++ tree**, which self-calibrates against
+/// the clock: it scales its own count until a trial takes about a second, so
+/// the two interpreters do different amounts of work and neither their wall
+/// times nor two reports taken on different days are comparable. Fixing the
+/// counts is what makes both comparable.
+///
+/// **And not a path into that tree**, which is machine state no file here
+/// records -- the oracle binary beside it was replaced wholesale on
+/// 2026-08-20, from a 5.0 interpreter to a 5.3 one, with nothing in the
+/// checkout noticing. A benchmark whose program lives outside the repository
+/// cannot be reproduced from the repository. `bench-rexxcps/README.md` has the
+/// provenance and what was changed.
+/// The path itself is [`rexx_bench::rexxcps_path`], resolved from this
+/// crate's manifest rather than the caller's cwd.
+fn rexxcps_program() -> std::path::PathBuf {
+    rexx_bench::rexxcps_path()
+}
 
 /// What the suite does with one benchmark program.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -341,7 +356,7 @@ fn main() -> ExitCode {
     let cps = measure_interleaved(
         &oracle,
         &rust,
-        Path::new(REXXCPS),
+        &rexxcps_program(),
         &workdir,
         pairs,
         warmup,
@@ -958,15 +973,16 @@ fn write_axes(report: &mut String, rows: &[AxisRow], offset: &Paired) {
 fn write_rexxcps(report: &mut String, paired: &Paired) {
     let oracle_wall = Stats::of(&mut seconds(&paired.oracle));
     let rust_wall = Stats::of(&mut seconds(&paired.rust));
-    let _ = writeln!(report, "### `samples/rexxcps.rex`\n");
+    let _ = writeln!(report, "### `bench-rexxcps/rexxcps.rex`\n");
     let _ = writeln!(
         report,
-        "The oracle's own clauses-per-second benchmark, run from the read-only C++ tree. It \
-         self-calibrates: a trial that comes in at or under a second is run again at twice the \
-         count, so the two sides do **different amounts of work** and their wall times are not \
-         directly comparable. The clauses-per-second figure each side prints is per clause and is \
-         the comparable one. Each side's `Averaged:` line is quoted so the asymmetry is visible \
-         rather than inferred.\n"
+        "REXXCPS 2.2 with its loop counts fixed, so **both sides do identical work** and the wall \
+         times below are directly comparable. The clauses-per-second figure each side prints is \
+         per clause and is comparable for the same reason. Each side's `Averaged:` line is quoted \
+         so that identity is visible rather than assumed: the two must read the same, and a report \
+         where they do not is one where something rewrote the counts. The stock \
+         `samples/rexxcps.rex` scales its own count until a trial takes about a second, which is \
+         what this file exists to remove -- see `bench-rexxcps/README.md`.\n"
     );
     let _ = writeln!(
         report,

@@ -106,6 +106,17 @@ pub fn controls_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../bench-control")
 }
 
+/// REXXCPS 2.2 with its loop counts fixed, resolved the same way.
+///
+/// Outside `bench-programs/` for the reason a control is: the axis list is
+/// asserted against that directory in both directions, and this is one
+/// program reported on its own terms rather than a dimension of the baseline.
+/// It has no `n = <digits>` line for [`programs_dir`]'s consumers to read.
+/// `bench-rexxcps/README.md` has the provenance.
+pub fn rexxcps_path() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../bench-rexxcps/rexxcps.rex")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
