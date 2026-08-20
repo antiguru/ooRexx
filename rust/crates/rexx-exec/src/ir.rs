@@ -1003,6 +1003,32 @@ pub(crate) enum Op {
     /// `site` is this call site's own slot in [`Chunk::calls`], **not** a
     /// position in the op stream, for the reason [`Op::Arith`]'s `hint` is not.
     Call { index: u32, site: u16 },
+    /// [`Op::Call`] with its arguments already on the driver's argument
+    /// stack, which is what [`Op::PushArg`] put there.
+    ///
+    /// **The same trade [`Op::CallArgs`] makes for a call in an expression,
+    /// made for the instruction.** `Op::Call` hands the argument *expressions*
+    /// to `Interp::invoke_call`, which descends each node and enters `eval`
+    /// for it; the arguments here were computed by ops of the enclosing
+    /// region, so what the call does is resolve a name and run a callee.
+    /// Measured against the -O3 oracle before this op existed, by slope:
+    /// `call subroutine 'with' 2 'args', '(This is the second)'1''1` cost
+    /// 3268.5 cycles a pass against 1919.7, where the *same* two expressions
+    /// hoisted into variables and passed as variables cost 2451.5 -- two
+    /// extra assignments and two extra reads, and still cheaper, because the
+    /// hoisted form put the concatenations on the compiled path.
+    ///
+    /// **Emitted only when every argument is `native_shape`**, which is the
+    /// identical guard `Op::CallArgs` uses and refuses the same two things: an
+    /// argument that is itself a call, which needs an address this op has no
+    /// slot for, and the `>v` reference form, which carries a variable's home
+    /// and not a value. Anything else stays on `Op::Call`.
+    ///
+    /// No `dst`. A `CALL`'s outcome is `RESULT`, settled in the caller's own
+    /// pool by `Interp::invoke_named_call_over_pushed_args`, and its `Flow`
+    /// can be an `EXIT` that leaves the program -- neither of which a register
+    /// holds.
+    CallNamed { index: u32, site: u16, argc: u16 },
     /// Runs the message-send clause at `index`: the receiver, the scope
     /// override, the arguments and their `>A>` lines, the send, the `>M>`
     /// line, and `RESULT`. All of it through `Interp::exec_message`, the

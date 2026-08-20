@@ -709,7 +709,10 @@ impl Interp {
         args: &[Option<Expr>],
     ) -> Result<ObjRef, Failure> {
         let (name, search_labels) = call_target_name(code, target);
-        let resolved = self.resolve_call(name, search_labels)?;
+        // Held until the arguments have run -- `Interp::resolved_after_
+        // arguments` has the C++ citation and the two measurements.
+        let resolution = self.resolve_call(name, search_labels);
+        let resolved = self.resolved_after_arguments(code, resolution, args)?;
         self.eval_call_resolved(code, resolved, name, args)
     }
 

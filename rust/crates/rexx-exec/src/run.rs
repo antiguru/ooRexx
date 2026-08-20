@@ -5665,6 +5665,75 @@ impl Interp {
         Ok(argument)
     }
 
+    /// A call's resolution, held back until its arguments have run.
+    ///
+    /// **A name that matches nothing cannot be reported before the arguments
+    /// have had their chance to raise.** The C++ resolves a call's target at
+    /// parse time -- `externalTarget`, `targetInstruction` and `builtinIndex`
+    /// are fields of the instruction -- and
+    /// `RexxInstructionCall::execute` then evaluates the arguments before it
+    /// dispatches on any of them (`instructions/CallInstruction.cpp:166`, the
+    /// line commented "evaluate the arguments first"). A resolution that
+    /// happens at run time here therefore owes the same order, which this
+    /// gives it: on success nothing changes, and on failure the arguments run
+    /// first and any condition they raise is reported instead.
+    ///
+    /// Measured against the oracle: `call nosuch 1/0` is 42.3 and not 43.1,
+    /// and under `trace i`, `call nosuch 1, 2` traces `>L> "1"`, `>A> "1"`,
+    /// `>L> "2"`, `>A> "2"` and only then reports 43.1. Both hold for the
+    /// `nosuch(1, 2)` expression form too.
+    ///
+    /// The compiled paths need none of this: their arguments are ops that
+    /// have already run by the time the call op resolves.
+    /// **The body is `#[cold]` and the wrapper is not**, because the failure
+    /// is the only case this exists for and every resolved call pays whatever
+    /// stands in front of it. Measured with the loop written inline here:
+    /// `bench-programs/strings.rex` retired 2,999,401 more instructions --
+    /// one per iteration -- over a program that never fails to resolve
+    /// anything.
+    #[inline(always)]
+    pub(crate) fn resolved_after_arguments(
+        &mut self,
+        code: &Code<'_>,
+        resolution: Result<Resolved, Failure>,
+        args: &[Option<Expr>],
+    ) -> Result<Resolved, Failure> {
+        match resolution {
+            Ok(resolved) => Ok(resolved),
+            Err(failure) => Err(self.arguments_before_failure(code, args, failure)),
+        }
+    }
+
+    /// [`Interp::resolved_after_arguments`]' failing half: run the arguments
+    /// for their trace lines and their own conditions, then report the
+    /// resolution failure if none of them raised first.
+    #[cold]
+    #[inline(never)]
+    fn arguments_before_failure(
+        &mut self,
+        code: &Code<'_>,
+        args: &[Option<Expr>],
+        failure: Failure,
+    ) -> Failure {
+        // The same three shapes `invoke_call`'s own loop has, for their trace
+        // lines and their failures; the values themselves are dropped, since
+        // there is no callee to hand them to.
+        for arg in args {
+            let raised = match arg {
+                None => {
+                    self.trace_argument(self.clause_state.current_value_indent, b"");
+                    continue;
+                }
+                Some(expr) if self.leaf_argument(expr) => self.eval_leaf_argument(code, expr).err(),
+                Some(expr) => self.eval_traced_argument(code, expr).err(),
+            };
+            if let Some(raised) = raised {
+                return raised;
+            }
+        }
+        failure
+    }
+
     /// Runs one named `CALL`: `resolve_call`, then [`Interp::invoke_named_call`].
     ///
     /// See `resolve_call`'s own doc for the resolution order and
@@ -5678,7 +5747,8 @@ impl Interp {
         search_labels: bool,
         args: &[Option<Expr>],
     ) -> Result<Flow, Failure> {
-        let resolved = self.resolve_call(name, search_labels)?;
+        let resolution = self.resolve_call(name, search_labels);
+        let resolved = self.resolved_after_arguments(code, resolution, args)?;
         self.invoke_named_call(code, resolved, name, args)
     }
 
@@ -5704,7 +5774,20 @@ impl Interp {
         // `RESULT` trace.
         let base_indent = self.clause_state.current_value_indent;
         let ended = self.invoke_call(code, resolved, name, args, CallType::Subroutine)?;
+        self.settle_call_result(ended, base_indent)
+    }
 
+    /// What a `CALL` does with the outcome its callee handed back: the
+    /// caller's own `>>>` and `RESULT`.
+    ///
+    /// `base_indent` is the `CALL` clause's own printed indent, captured
+    /// before the callee ran -- the callee overwrites `current_value_indent`
+    /// with its own clauses'.
+    ///
+    /// **Shared by both call paths rather than copied**, because the rules
+    /// below are the difference between a `CALL` and a function call and
+    /// nothing about how the arguments were evaluated.
+    fn settle_call_result(&mut self, ended: Ended, base_indent: usize) -> Result<Flow, Failure> {
         let value = match ended {
             // `EXIT` inside the callee ends the program rather than the
             // call, and so does running off the end of the body -- measured
@@ -5742,6 +5825,55 @@ impl Interp {
             None => self.clear_variable(frame, slot),
         }
         Ok(Flow::Next)
+    }
+
+    /// [`Interp::invoke_named_call`] over arguments the compiled stream has
+    /// already evaluated onto the argument stack above `mark`.
+    ///
+    /// **The same split `call_over_pushed_args` makes for a call in an
+    /// expression, made for the instruction**, and it is a different function
+    /// rather than a `CallType` on that one because the two differ after the
+    /// callee returns, not before: a subroutine settles `RESULT` and may hand
+    /// back an `EXIT` that leaves the program, where a function must produce a
+    /// value and raises 44.1 when it does not.
+    pub(crate) fn invoke_named_call_over_pushed_args(
+        &mut self,
+        resolved: Resolved,
+        name: &[u8],
+        mark: usize,
+    ) -> Result<Flow, Failure> {
+        let base_indent = self.clause_state.current_value_indent;
+        let ended = self.subroutine_over_pushed_args(resolved, name, mark)?;
+        self.settle_call_result(ended, base_indent)
+    }
+
+    /// The callee half of [`Interp::invoke_named_call_over_pushed_args`]: the
+    /// argument run is lent out, turned into `Argument`s, and removed again on
+    /// the way back whichever way the call ended.
+    fn subroutine_over_pushed_args(
+        &mut self,
+        resolved: Resolved,
+        name: &[u8],
+        mark: usize,
+    ) -> Result<Ended, Failure> {
+        let mut values = std::mem::take(&mut self.value_buffer);
+        let outcome = match resolved {
+            // No activation, no `Argument`s built -- the shortcut
+            // `call_over_values` takes, and the reason a `CALL` to a builtin
+            // reaches `Ended::Returned(Some(_))` with a value to settle.
+            Resolved::Builtin(target) => builtin::run(self, name, target, &values[mark..])
+                .map(|value| Ended::Returned(Some(value))),
+            _ => {
+                let arguments = values[mark..]
+                    .iter()
+                    .map(|value| value.map(Argument::Value))
+                    .collect();
+                self.invoke_call_over(resolved, name, arguments, CallType::Subroutine)
+            }
+        };
+        values.truncate(mark);
+        self.value_buffer = values;
+        outcome
     }
 
     /// Runs one instruction inside its own temps frame.

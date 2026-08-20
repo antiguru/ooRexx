@@ -1009,17 +1009,23 @@ pub(crate) fn compile(
                 close_region(&mut ops, at)?;
                 registers.release(mark);
             }
-            // A `CALL name`/`CALL "name"` clause is the call and nothing else,
-            // and it takes **no register**: an argument is not an `ObjRef` --
-            // a `>name` reference carries the caller's own slot with it -- so
-            // the arguments stay `Interp::invoke_call`'s, together with every
-            // `>A>` line and every intermediate their expressions emit.
+            // A `CALL name`/`CALL "name"` clause, whose arguments compile to
+            // ops of their own when every one of them is a value -- a `>name`
+            // reference carries the caller's own slot rather than an `ObjRef`,
+            // and an argument that is itself a call needs an address this
+            // instruction has no expression slot for, so either one keeps the
+            // whole clause on `Op::Call` and leaves the arguments, the `>A>`
+            // lines and their intermediates to `Interp::invoke_call`.
             //
             // The other three `Call` forms fall to `Generic` below.
             // `CALL ON`/`OFF` resolves no name at all, `CALL (expr)` learns
             // its name at run time and `CALL ns:name` is Phase 5's loud gap;
             // the first two have their own witnesses in `golden_tests.rs`.
             InstructionKind::Call(call) if matches!(&**call, Call::Named { .. }) => {
+                let Call::Named { args, .. } = &**call else {
+                    unreachable!("the guard above admits only `Call::Named`")
+                };
+                let mark = registers.mark();
                 let at = op_index(&ops)?;
                 let echo = echoes(trace, instruction);
                 ops.push(Op::Clause {
@@ -1027,11 +1033,63 @@ pub(crate) fn compile(
                     end: 0,
                 });
                 push_echo(&mut ops, echo, instruction_index(index)?);
-                ops.push(Op::Call {
-                    index: instruction_index(index)?,
-                    site: calls.reserve()?,
-                });
+                // **The arguments become ops of their own where they can**,
+                // exactly as `ExprKind::Call`'s arm does it, and the guard is
+                // the identical one: `native_shape` with no address declines a
+                // nested call -- which would need a slot this instruction has
+                // none of -- and declines the `>v` reference form, which
+                // carries a variable's home where the stack carries a value.
+                let native = u16::try_from(args.len()).is_ok()
+                    && args
+                        .iter()
+                        .all(|arg| arg.as_ref().is_none_or(|expr| native_shape(expr, None)));
+                if native {
+                    let argc = u16::try_from(args.len()).map_err(|_| ChunkTooLarge {
+                        what: "call arguments past u16",
+                    })?;
+                    for arg in args {
+                        let src = match arg {
+                            None => Op::ARG_OMITTED,
+                            Some(expr) => {
+                                let src = registers.alloc()?;
+                                push_native(
+                                    &mut ops,
+                                    echoes_values,
+                                    &mut consts,
+                                    &mut registers,
+                                    &mut hints,
+                                    &mut calls,
+                                    plan,
+                                    expr,
+                                    instruction_index(index)?,
+                                    0,
+                                    None,
+                                    src,
+                                )?;
+                                src
+                            }
+                        };
+                        ops.push(Op::PushArg { src });
+                        // Behind the argument's own ops, so its `>L>`/`>V>`
+                        // lines print first -- the order `invoke_call`'s own
+                        // loop produces.
+                        if echoes_values {
+                            ops.push(Op::TraceArgument { src });
+                        }
+                    }
+                    ops.push(Op::CallNamed {
+                        index: instruction_index(index)?,
+                        site: calls.reserve()?,
+                        argc,
+                    });
+                } else {
+                    ops.push(Op::Call {
+                        index: instruction_index(index)?,
+                        site: calls.reserve()?,
+                    });
+                }
                 close_region(&mut ops, at)?;
+                registers.release(mark);
             }
             // A message send as a whole clause: the plain form, the `~~`
             // form, and the message-assignment form. No register and no
@@ -2208,6 +2266,7 @@ fn assert_region_ops_name_their_clause(ops: &[Op]) {
                 | Op::Queue { index, .. }
                 | Op::WhenTest { index, .. }
                 | Op::Call { index, .. }
+                | Op::CallNamed { index, .. }
                 | Op::Message { index }
                 | Op::Expose { index }
                 | Op::Escape { index }

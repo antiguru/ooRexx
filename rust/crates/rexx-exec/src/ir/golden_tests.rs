@@ -1833,34 +1833,66 @@ fn one_body_under_two_trace_settings_is_two_cached_chunks() {
     );
 }
 
-/// A `CALL` compiles to a clause region holding one call op, and **no
-/// register**.
+/// A `CALL` compiles to a clause region whose arguments are ops of their own,
+/// ending in [`super::Op::CallNamed`].
 ///
-/// The two ops are the whole of what the tree-walker's own `Call` arm is,
-/// split at the one seam a stream can use: the clause boundary, which
-/// [`super::Op::Clause`] owns, and the call itself, which
-/// [`super::Op::Call`] runs through the same `Interp::resolve_call` and
+/// The ops are the whole of what the tree-walker's own `Call` arm is, split at
+/// the seams a stream can use: the clause boundary, which
+/// [`super::Op::Clause`] owns, each argument's own value, and the call itself,
+/// which runs through the same `Interp::resolve_call` and
 /// `Interp::invoke_named_call` that `step`'s own arm reaches.
 ///
-/// **The register count is the assertion that says where this promotion
-/// stops.** A call's arguments are expressions, and every other promoted
-/// instruction evaluates its expression into a register -- this one does not,
-/// because an argument is not an `ObjRef`: a `>name` reference carries the
-/// caller's slot with it, which no register holds. So the arguments stay
-/// `invoke_call`'s, and with them every `>A>` line and every intermediate the
-/// argument expressions emit.
+/// **The register count is the assertion that says the arguments moved.** A
+/// register per argument and an interned literal are exactly what
+/// `Op::PushArg` needs and what `Op::Call` -- which hands the argument nodes
+/// to `invoke_call` instead -- has neither of.
 #[test]
-fn a_call_compiles_to_a_clause_region_and_one_call_op() {
+fn a_call_compiles_its_arguments_to_ops_and_one_call_op() {
     let chunk = compile_for_test(b"call zsub 1\n").expect("compiles");
     assert_eq!(
         render(&chunk),
+        "0: Clause index=0 end=4\n\
+         1: LoadConstant dst=0\n\
+         2: PushArg src=0\n\
+         3: CallNamed index=0 site=0 argc=1\n"
+    );
+    assert_eq!(chunk.registers, 1);
+}
+
+/// **The two argument shapes that keep a `CALL` on [`super::Op::Call`]**, each
+/// beside the promoted form above so that what separates them is the argument
+/// and nothing else.
+///
+/// A nested call needs an address to reach its own node with, and this
+/// instruction has no expression slot to build one from; a `>name` reference
+/// carries the caller's own variable home, where the argument stack carries a
+/// value. `native_shape` with no address answers both, which is the same guard
+/// `ExprKind::Call`'s own arm uses.
+#[test]
+fn an_argument_that_is_not_a_plain_value_keeps_the_whole_call_unpromoted() {
+    let nested = compile_for_test(b"call zsub length('x')\n").expect("compiles");
+    assert_eq!(
+        render(&nested),
         "0: Clause index=0 end=2\n\
          1: Call index=0 site=0\n"
     );
-    assert_eq!(chunk.registers, 0);
-    // And nothing is interned: the argument's literal is evaluated from its
+    assert_eq!(nested.registers, 0);
+    // Nothing interned either: the argument's literal is evaluated from its
     // own node by `invoke_call`, not loaded from this chunk's table.
-    assert!(chunk.consts.is_empty());
+    assert!(nested.consts.is_empty());
+
+    let reference = compile_for_test(b"zp = 1\ncall zsub >zp\n").expect("compiles");
+    assert!(
+        render(&reference).contains("Call index=1 site=0\n"),
+        "a `>name` argument compiled to something other than Op::Call:\n{}",
+        render(&reference)
+    );
+    assert!(
+        !render(&reference).contains("CallNamed"),
+        "a `>name` argument reached Op::CallNamed, which carries values and \
+         not variable homes:\n{}",
+        render(&reference)
+    );
 }
 
 /// **Each call site takes a site index of its own, dense over the call ops.**
@@ -1878,10 +1910,14 @@ fn each_call_site_takes_a_resolution_site_of_its_own() {
     let chunk = compile_for_test(b"call zsub 1\ncall zsub 2\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=2\n\
-         1: Call index=0 site=0\n\
-         2: Clause index=1 end=4\n\
-         3: Call index=1 site=1\n"
+        "0: Clause index=0 end=4\n\
+         1: LoadConstant dst=0\n\
+         2: PushArg src=0\n\
+         3: CallNamed index=0 site=0 argc=1\n\
+         4: Clause index=1 end=8\n\
+         5: LoadConstant dst=0\n\
+         6: PushArg src=0\n\
+         7: CallNamed index=1 site=1 argc=1\n"
     );
 }
 
@@ -1893,9 +1929,11 @@ fn a_traced_call_carries_its_clause_echo_in_front_of_the_call() {
     let chunk = compile_for_test_under(b"call zsub 1\n", traced()).expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=3\n\
+        "0: Clause index=0 end=5\n\
          1: TraceClause index=0\n\
-         2: Call index=0 site=0\n"
+         2: LoadConstant dst=0\n\
+         3: PushArg src=0\n\
+         4: CallNamed index=0 site=0 argc=1\n"
     );
 }
 

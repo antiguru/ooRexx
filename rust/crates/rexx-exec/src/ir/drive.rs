@@ -256,6 +256,7 @@ fn undriven_op_name(op: &Op) -> &'static str {
         Op::Return { .. } => "Return",
         Op::Queue { .. } => "Queue",
         Op::Call { .. } => "Call",
+        Op::CallNamed { .. } => "CallNamed",
         Op::Message { .. } => "Message",
         Op::Expose { .. } => "Expose",
         Op::Escape { .. } => "Escape",
@@ -360,6 +361,50 @@ impl Interp {
         let value = self.call_over_pushed_args(resolved, spelling, mark);
         self.depth -= 1;
         value
+    }
+
+    /// One [`crate::ir::Op::CallNamed`]: resolve the callee off the site or
+    /// the instruction's own name, then run it over the `argc` arguments its
+    /// own ops left on the argument stack.
+    ///
+    /// **Deliberately not inlined into the driver**, for the reason
+    /// [`Interp::run_call_args`] gives: what it costs to inline is paid by
+    /// every op in the stream and not only by calls.
+    #[inline(never)]
+    fn run_call_named(
+        &mut self,
+        clause: &Instruction,
+        chunk: &Chunk,
+        site: u16,
+        argc: u16,
+    ) -> Result<Flow, Failure> {
+        let InstructionKind::Call(call) = &clause.kind else {
+            return Err(Loud::call_op_off_its_node().into());
+        };
+        let Call::Named { name, literal, .. } = &**call else {
+            return Err(Loud::call_op_off_its_node().into());
+        };
+        let Some(mark) = self.value_buffer.len().checked_sub(argc as usize) else {
+            return Err(Loud::call_op_off_its_node().into());
+        };
+        // The site's own kept answer and the resolution when it has none --
+        // `Op::Call`'s arm has the whole argument, and this is the same site
+        // table read the same way. The name comes off the instruction here
+        // rather than off a node, which is why this op needs no address where
+        // `Op::CallArgs` does.
+        let resolved = match chunk.resolved_call(site) {
+            Some(resolved) => {
+                #[cfg(test)]
+                count_call_site_hit();
+                resolved
+            }
+            None => {
+                let resolved = self.resolve_call(name, !*literal)?;
+                chunk.remember_call(site, resolved);
+                resolved
+            }
+        };
+        self.invoke_named_call_over_pushed_args(resolved, name, mark)
     }
 
     /// Closes the innermost `SELECT` branch if it runs out at `pc`.
@@ -1805,13 +1850,27 @@ impl Interp {
                                                 count_call_site_hit();
                                                 resolved
                                             }
-                                            None => match self.resolve_call(name, !*literal) {
-                                                Ok(resolved) => {
-                                                    chunk.remember_call(*site, resolved);
-                                                    resolved
+                                            // A failure is held until the
+                                            // arguments have run, which on
+                                            // this op they have not --
+                                            // `Op::CallNamed` took every
+                                            // clause whose arguments compile,
+                                            // so what is left here evaluates
+                                            // them inside `invoke_call`.
+                                            // `Interp::resolved_after_
+                                            // arguments` has the citation.
+                                            None => {
+                                                let resolution = self.resolve_call(name, !*literal);
+                                                match self.resolved_after_arguments(
+                                                    code, resolution, args,
+                                                ) {
+                                                    Ok(resolved) => {
+                                                        chunk.remember_call(*site, resolved);
+                                                        resolved
+                                                    }
+                                                    Err(failure) => break 'cold Err(failure),
                                                 }
-                                                Err(failure) => break 'cold Err(failure),
-                                            },
+                                            }
                                         };
                                         let flow = match self
                                             .invoke_named_call(code, resolved, name, args)
@@ -1820,6 +1879,22 @@ impl Interp {
                                             Err(failure) => break 'cold Err(failure),
                                         };
                                         break 'cold Ok(RegionEnd::Flowed(flow));
+                                    }
+                                    // The same clause with its arguments
+                                    // already computed by ops of this region.
+                                    // The body is behind a call for the reason
+                                    // `Op::CallArgs`'s arm gives.
+                                    Op::CallNamed { index, site, argc } => {
+                                        debug_assert_names_the_clause(
+                                            code,
+                                            *index,
+                                            clause,
+                                            "CallNamed",
+                                        );
+                                        match self.run_call_named(clause, chunk, *site, *argc) {
+                                            Ok(flow) => break 'cold Ok(RegionEnd::Flowed(flow)),
+                                            Err(failure) => break 'cold Err(failure),
+                                        }
                                     }
                                     // A message send that is a whole clause,
                                     // whichever form it was written in.

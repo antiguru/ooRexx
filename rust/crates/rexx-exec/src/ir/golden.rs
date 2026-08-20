@@ -273,6 +273,15 @@ pub(crate) fn render(chunk: &Chunk) -> String {
             Op::Call { index: at, site } => {
                 out.push_str(&format!("{index}: Call index={at} site={site}\n"));
             }
+            Op::CallNamed {
+                index: at,
+                site,
+                argc,
+            } => {
+                out.push_str(&format!(
+                    "{index}: CallNamed index={at} site={site} argc={argc}\n"
+                ));
+            }
             // No `site` to render, unlike `Op::Call` above: a send resolves
             // afresh every time (D28), so this op carries nothing but the
             // clause it runs.
