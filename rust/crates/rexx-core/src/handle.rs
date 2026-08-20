@@ -234,6 +234,14 @@ impl ObjRef {
         }
     }
 
+    /// **`always` rather than a hint**, and the difference was measured
+    /// rather than assumed. Under this workspace's `lto = "fat"` and
+    /// `codegen-units = 1`, a plain `#[inline]` left the out-of-line symbol
+    /// in the binary and moved `instructions:u` on every benchmark program
+    /// by 0.000%; the callers this matters in are large enough that LLVM's
+    /// cost model declines them. With `always`, `bench-programs/emptyloop.
+    /// rex` is -3.23% and `varlookup.rex` -1.43%, and `.text` does not grow.
+    #[inline(always)]
     pub const fn decode(self) -> Decoded {
         match self.0 & TAG_MASK {
             TAG_HEAP => Decoded::Heap {

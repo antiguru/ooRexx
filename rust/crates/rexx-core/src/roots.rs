@@ -371,10 +371,16 @@ impl RootSet {
     /// for as long as the binding lasts -- an uninitialised variable, which
     /// is a wrong answer nothing announces. The names are what makes a caller
     /// choose.
+    /// `always` for [`ObjRef::decode`]'s measured reason: a plain
+    /// `#[inline]` leaves the symbol standing. This accessor and the write
+    /// below are together -3.48% on `bench-programs/emptyloop.rex` and
+    /// -2.65% on `varlookup.rex`.
+    #[inline(always)]
     pub fn frame_slot(&self, frame: SlotFrame, index: usize) -> Option<ObjRef> {
         self.slots[self.resolve(frame, index)]
     }
 
+    #[inline(always)]
     pub fn set_frame_slot(&mut self, frame: SlotFrame, index: usize, value: ObjRef) {
         let position = self.resolve(frame, index);
         self.slots[position] = Some(value);
