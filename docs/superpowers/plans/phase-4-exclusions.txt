@@ -3767,3 +3767,60 @@ the oracle every time; these do not. So the whole file set is only as
 current as the last person who re-ran it, and the oracle is machine state
 that no file in the checkout records. The sweep that found this is a
 throwaway script; making it a test is the durable fix and nobody owns it.
+
+--------------------------------------------------------------------------
+NOTE, opened 2026-08-20: the syntax-error divergence is already recorded,
+and the parse-error corpus was checked for staleness and is clean
+--------------------------------------------------------------------------
+
+Status: NOT a defect and NOT a new row. Written down because it was
+rediscovered from scratch and the next person to notice it should find this
+instead of measuring it again.
+
+WHAT WAS SEEN. Every syntax error diverges at the rexx-run level. Measured
+2026-08-20 on seven shapes -- bad hex string, unmatched paren, THEN with no
+instruction, END with a stray name, a misspelt PARSE keyword, an unclosed
+quote, an assignment to a literal. The oracle exits 256 minus the major
+(241, 220, 242, 246, 231, 250, 225) and prints the clause echo, an
+`Error N running <path> line L:` line and an `Error N.M:` line. This crate
+exits NOT_IMPLEMENTED_EXIT and prints one line, `rexx-exec: N.M: <text>`.
+
+WHY IT IS NOT A ROW. Both halves are already decided and recorded.
+
+  * The number, the sub-number and the line ARE gated, in both directions,
+    by crates/rexx-parse/tests/errors.rs against build/bin/rexxc:
+    soundness (everything rexxc refuses to translate, this parser rejects
+    with the same major, sub and line) and completeness (everything rexxc
+    translates, this parser accepts).
+
+  * The message text, the substitutions, the clause echo and the exit
+    status are a deliberate deferral. lib.rs's parse-error arm says so in
+    place -- "Parse errors remain deliberately not reproduced byte for byte
+    ... wrong in the details on purpose and right in never being mistaken
+    for success" -- and the EXCLUSIONS section above has the reason it
+    cannot be closed yet: rexx-parse's ParseError carries the clause's
+    START byte with no end, so there is no span to echo, and parse_program
+    takes the text by value and returns no ProgramSource, so execute cannot
+    resolve the line.
+
+  * The exit code is deliberate too. NOT_IMPLEMENTED_EXIT is chosen to sit
+    outside 157..253, where 256 minus major lives, precisely so a
+    not-implemented failure cannot be mistaken for a raised condition.
+
+WHAT WAS WORTH CHECKING, AND THE RESULT. corpus/errors/parse-errors.tsv
+bakes rexxc's answers rather than recomputing them, so that cargo test
+needs no built C++ interpreter. That is the same shape as
+tests/ir_dual_cases, where six recordings had silently stopped matching the
+interpreter and this crate agreed with every one of them. The oracle was
+replaced on 2026-08-20, so the question was live.
+
+Measured: all 1020 rows re-run through build/bin/rexxc, comparing class,
+number, sub-number and line. ZERO disagree. The parse-error corpus did not
+go stale across the version change, where the runtime recordings did --
+consistent with the parser's error numbers being stable across 5.0 to 5.3
+while FUZZ and trace behaviour were not.
+
+SO THE GAP IS LATENT RATHER THAN ACTUAL, and the work item is the same one
+ir_dual_oracle.rs closed for the other corpus: a gated test that re-derives
+these rows against a live rexxc, so the next version change is loud instead
+of silent. Nobody owns it. It is not Phase 5 work.
