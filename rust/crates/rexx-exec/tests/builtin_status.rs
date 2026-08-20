@@ -87,7 +87,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rexx_exec::NOT_IMPLEMENTED_EXIT;
-use support::oracle::{Oracle, descriptor_diffs};
+use support::oracle::{Oracle, descriptor_diffs, did_not_finish};
 
 /// One row's classification. The spelling of each is the token that appears
 /// in `builtin-status.txt`, so the file and this enum cannot disagree about
@@ -225,6 +225,19 @@ fn measure(oracle: &Oracle, run_root: &Path, name: &str, program: &str) -> Measu
     let text = fs::read(&abs).unwrap_or_else(|e| panic!("cannot read {}: {e}", abs.display()));
     let rust = rexx_exec::run_program(path_str, text, rexx_exec::Invocation::none());
     let cpp = oracle.run(&abs);
+
+    // Checked here rather than left to `descriptor_diffs`'s own
+    // `expect_exit_code()` call: that panic has no `name` in it and fires
+    // from inside `support/oracle.rs`, naming neither this builtin nor any
+    // other -- this loop's caller (`classify`) sweeps every in-scope name,
+    // so a panic without one leaves an operator knowing only that some
+    // builtin's probe stopped finishing.
+    assert!(
+        !did_not_finish(&cpp),
+        "{name}: the oracle did not finish: {:?} -- a structural failure, not a \
+         byte comparison",
+        cpp.termination
+    );
 
     let diffs = descriptor_diffs(&rust, &cpp);
     // Order matters: a loud failure is a loud failure whatever the oracle

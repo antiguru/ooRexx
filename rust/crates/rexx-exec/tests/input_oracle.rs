@@ -66,7 +66,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use support::oracle::{CppOutcome, classify_termination, write_and_wait};
+use support::oracle::{CppOutcome, classify_termination, did_not_finish, write_and_wait};
 
 /// Env var that flips this file from a skip into the check.
 const GATE_ENV: &str = "REXX_CORPUS_GATE";
@@ -440,6 +440,21 @@ fn command_line_arguments_and_the_console_agree_with_the_oracle() {
 
         let rust = run_rust(&abs, case.args, case.stdin);
         let cpp = oracle.run_with(&abs, case.args, case.stdin);
+
+        // Structural, and checked before `diffs`: `termination` comparing
+        // equal is not agreement when neither side finished -- two
+        // `Signaled` runs compare equal the same way two `Exited(0)` runs
+        // do, and reading that as a pass is the one direction a structural
+        // failure must never go.
+        assert!(
+            !did_not_finish(&rust) && !did_not_finish(&cpp),
+            "{} [{}]: a run that does not finish is a structural failure, \
+             not a divergence to diff -- rust {:?}, oracle {:?}",
+            case.name,
+            case.why,
+            rust.termination,
+            cpp.termination
+        );
 
         let channels = diffs(&rust, &cpp);
         if !channels.is_empty() {

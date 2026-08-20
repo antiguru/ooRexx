@@ -58,7 +58,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use support::oracle::{Oracle, descriptor_diffs};
+use support::oracle::{Oracle, descriptor_diffs, did_not_finish};
 
 /// One swept program: a name for the failure message, and the whole
 /// single-clause-or-two source.
@@ -480,6 +480,18 @@ fn sweep_one(oracle: &Oracle, run_root: &Path, case: &Case) -> Option<String> {
     let text = fs::read(&abs).unwrap_or_else(|e| panic!("cannot read {}: {e}", abs.display()));
     let rust = rexx_exec::run_program(path, text, rexx_exec::Invocation::none());
     let cpp = oracle.run(&abs);
+
+    // Checked here rather than left to `descriptor_diffs`'s own
+    // `expect_exit_code()` call: that panic has no `case.name` in it and
+    // fires from inside `support/oracle.rs`, and this function's caller
+    // sweeps every case in one loop, so a panic without a name leaves an
+    // operator knowing only that some case's oracle run stopped finishing.
+    if did_not_finish(&cpp) {
+        return Some(format!(
+            "  {} did not finish: {:?} -- a structural failure, not a byte comparison",
+            case.name, cpp.termination
+        ));
+    }
 
     let diffs = descriptor_diffs(&rust, &cpp);
     if diffs.is_empty() {

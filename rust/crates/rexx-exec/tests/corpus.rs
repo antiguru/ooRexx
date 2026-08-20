@@ -185,7 +185,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use rexx_exec::Outcome;
-use support::oracle::{Oracle, StderrComparison, descriptor_diffs_with, wrapped_exit_code};
+use support::oracle::{
+    Oracle, StderrComparison, descriptor_diffs_with, did_not_finish, wrapped_exit_code,
+};
 
 /// Env var that flips this test from a progress report into the phase gate.
 /// See the module doc's "REPORT vs STRICT" section.
@@ -345,6 +347,27 @@ fn check_case(oracle: &Oracle, corpus_dir: &Path, rel_path: &str) -> Option<Mism
 
     let rust = run_rust(&abs);
     let cpp = oracle.run(&abs);
+
+    // Checked before `descriptor_diffs_with` calls `cpp.expect_exit_code()`
+    // itself: that panic has no `rel_path` in it and fires from inside
+    // `support/oracle.rs`, while this file's own report is built from the
+    // `Mismatch`es this function returns and printed only after the whole
+    // sweep finishes -- so the panic form is not merely less informative
+    // here, it never reaches a reader at all. Naming the path is this
+    // caller's job because it is the one thing `expect_exit_code` cannot
+    // know.
+    if did_not_finish(&cpp) {
+        return Some(Mismatch {
+            rel_path: rel_path.to_string(),
+            owner: None,
+            reason: format!(
+                "the oracle did not finish: {:?} -- a structural failure, not a byte \
+                 comparison",
+                cpp.termination
+            ),
+        });
+    }
+
     let rust_exit = wrapped_exit_code(rust.exit_code);
 
     // DEVIATION 0 applies to the stderr comparison unless `rel_path` opted
