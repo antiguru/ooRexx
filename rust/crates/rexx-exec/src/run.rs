@@ -5438,6 +5438,12 @@ impl Interp {
             CallContext {
                 name: name.to_vec(),
                 arguments,
+                // Nothing this function enters was reached by a message
+                // send, so there is no receiver to carry --
+                // `RexxActivation::getReceiver`'s `OREF_NULL` for a frame
+                // that is not a method's
+                // (`execution/RexxActivation.cpp:2348`).
+                receiver: None,
             },
         );
 

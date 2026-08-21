@@ -5,6 +5,7 @@
 //! wrong, which is what makes the containment property structural.
 
 use super::{CallTarget, Expr, ExprKind, PrefixOp, Tail, compound_parts};
+use crate::selector::SelectorTable;
 use crate::token::{Operator, SymbolTable};
 
 fn leaf(id: u32, span: std::ops::Range<usize>) -> Expr {
@@ -65,7 +66,7 @@ fn children_are_visited_in_source_order() {
     let node = Expr::new(
         ExprKind::Message {
             target: Box::new(leaf(0, 0..1)),
-            name: Box::from(&b"M"[..]),
+            name: SelectorTable::new().intern(b"M"),
             super_class: Some(Box::new(leaf(1, 4..5))),
             args: vec![Some(leaf(2, 6..7)), Some(leaf(3, 8..9))],
             cascade: false,
@@ -203,7 +204,7 @@ fn a_shape_quotes_a_message_name_so_a_blank_in_one_cannot_hide() {
     let blank_in_name = Expr::new(
         ExprKind::Message {
             target: Box::new(target()),
-            name: Box::from(&b"B C"[..]),
+            name: SelectorTable::new().intern(b"B C"),
             super_class: None,
             args: Vec::new(),
             cascade: false,
@@ -213,7 +214,7 @@ fn a_shape_quotes_a_message_name_so_a_blank_in_one_cannot_hide() {
     let name_then_argument = Expr::new(
         ExprKind::Message {
             target: Box::new(target()),
-            name: Box::from(&b"B"[..]),
+            name: SelectorTable::new().intern(b"B"),
             super_class: None,
             args: vec![Some(Expr::new(ExprKind::Variable(c), 4..5))],
             cascade: false,

@@ -856,10 +856,16 @@ impl<'a, 'c> Parser<'a, 'c> {
     fn collection_message(&mut self, target: Expr, from: usize) -> Result<Expr, ParseError> {
         let args = self.arg_list(Some(Tag::RightBracket))?;
         let extent = self.extent(from);
+        // Interned like a written name, where the oracle reaches for
+        // `GlobalNames::BRACKETS` (`parser/LanguageParser.cpp:3320`-`:3321`):
+        // its pool of pre-made names is a second pool this crate does not
+        // have, and one pool that holds the spelling however it was written
+        // is the same answer for a reader that compares selectors.
+        let name = self.ctx.selectors.borrow_mut().intern(b"[]");
         Ok(Expr::new(
             ExprKind::Message {
                 target: Box::new(target),
-                name: Box::from(&b"[]"[..]),
+                name,
                 super_class: None,
                 args,
                 cascade: false,
@@ -885,21 +891,24 @@ impl<'a, 'c> Parser<'a, 'c> {
         let name = match self.peek() {
             Some(token) if !self.is_terminator(Some(token), term) => match &token.kind {
                 // Already upcased by the scanner.
-                TokenKind::Symbol { id, .. } => Box::from(self.ctx.symbols.name(*id).as_bytes()),
+                TokenKind::Symbol { id, .. } => self.ctx.symbols.name(*id).as_bytes().to_vec(),
                 // `parseMessage` upcases a literal name too, with
                 // `RexxString::upper`, which is `Utilities::toUpper` per byte
                 // and so upcases ASCII only (`Utilities.hpp:52`). Measured,
                 // `"abc"~'length'`, `"abc"~'LENGTH'` and `"abc"~"lEnGtH"` all
                 // give 3.
                 TokenKind::Literal { value } => {
-                    let upper: Vec<u8> = value.iter().map(|b| b.to_ascii_uppercase()).collect();
-                    upper.into_boxed_slice()
+                    value.iter().map(|b| b.to_ascii_uppercase()).collect()
                 }
                 // `a~[3]` is 19.909: a bracket is not a message name.
                 _ => return Err(self.error(19, 909)),
             },
             _ => return Err(self.error(19, 909)),
         };
+        // Interned upcased, which is where `parseMessage` interns it:
+        // `messagename = commonString(messagename->upper())`
+        // (`parser/LanguageParser.cpp:3391`).
+        let name = self.ctx.selectors.borrow_mut().intern(&name);
         self.advance();
 
         let mut super_class = None;

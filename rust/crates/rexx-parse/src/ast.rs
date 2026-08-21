@@ -49,6 +49,7 @@
 use std::collections::BTreeMap;
 use std::ops::Range;
 
+use crate::selector::Selector;
 use crate::token::{Operator, SymbolId};
 // Only `shape` needs the table, to turn a `SymbolId` back into a spelling, and
 // `shape` renders trees for test assertions.
@@ -190,13 +191,16 @@ pub enum ExprKind {
         /// `parseMessage` upcases the name whether it came from a symbol or a
         /// literal. `[]` for the bracket form.
         ///
-        /// Bytes rather than a `SymbolId`, for two reasons. A method name is
-        /// resolved against a behaviour keyed by string, not against a
-        /// variable slot keyed by index, so the C++'s `commonString` is
-        /// deduplication and nothing more. And a name from a literal cannot be
-        /// interned here at all: `ParseCtx::symbols` is read-only during
-        /// parsing, and `scan` never saw `LENGTH` as a symbol in `a~'length'`.
-        name: Box<[u8]>,
+        /// A [`Selector`] rather than a `SymbolId`, because the tables answer
+        /// different questions: a `SymbolId` indexes the frame slot a
+        /// variable name resolves to, and a method name resolves against a
+        /// behaviour instead. A name from a literal has no `SymbolId` at all
+        /// -- `ParseCtx::symbols` is read-only once `scan` has run, and `scan`
+        /// never saw `LENGTH` as a symbol in `a~'length'` -- and
+        /// `ParseCtx::selectors` interns both spellings the same way, which
+        /// is what `commonString` does with them
+        /// (`parser/LanguageParser.cpp:3391`).
+        name: Selector,
         /// `target~name:super(...)`, the superclass override.
         super_class: Option<Box<Expr>>,
         args: Vec<Option<Expr>>,
@@ -466,7 +470,7 @@ impl Expr {
                 format!(
                     "(msg{twiddle} {} {}{sup}{})",
                     target.shape(symbols),
-                    quoted(name),
+                    quoted(name.bytes()),
                     render_args(symbols, args)
                 )
             }

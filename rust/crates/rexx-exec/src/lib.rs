@@ -3014,12 +3014,12 @@ struct InstalledMethodBody {
     directive: usize,
 }
 
-/// The name and arguments of one call in progress.
+/// The name, arguments and receiver of one call in progress.
 ///
-/// One struct rather than two `Interp` fields so that the save-and-restore
-/// in `Interp::invoke_call` is a single `mem::replace`: two fields would be
-/// two places to forget, which is precisely the defect shape this is
-/// modelled to avoid.
+/// One struct rather than separate `Interp` fields so that the
+/// save-and-restore in `Interp::invoke_call` is a single `mem::replace`:
+/// separate fields would be separate places to forget, which is precisely the
+/// defect shape this is modelled to avoid.
 #[derive(Default)]
 struct CallContext {
     /// The resolved routine name, as errors 40.3 and 40.4 spell it --
@@ -3036,6 +3036,19 @@ struct CallContext {
     /// left as `None` rather than closed up. Measured: that call into `use
     /// arg p, q, r` gives `[1] [Q] [3]`, so an omission holds its place.
     arguments: Vec<Option<Argument>>,
+    /// **The receiver, which is part of the calling convention** (D24): the
+    /// object a message send was addressed to, and `None` for a call that has
+    /// none.
+    ///
+    /// `RexxActivation::getReceiver` is the oracle's reader
+    /// (`execution/RexxActivation.cpp:2342`-`:2349`), and its `OREF_NULL` is
+    /// the same absence: code that a message send did not enter has no
+    /// receiver.
+    ///
+    /// **A callee's own `SELF` and the caller a send inside it resolves as
+    /// both come from here**, which is what the oracle's single
+    /// `getReceiver` makes them.
+    receiver: Option<ObjRef>,
 }
 
 /// Where a variable lives: a frame slot, or a name in a scope pool on some

@@ -10,8 +10,11 @@
 //! `parse_expr` are all `pub(crate)` and an integration test is a separate
 //! crate.
 
+use std::cell::RefCell;
+
 use crate::ast::{Expr, ExprKind};
 use crate::clause::split_clauses;
+use crate::selector::SelectorTable;
 use crate::token::{ParseCtx, ParseError, SymbolTable, TokenCursor};
 use crate::{ProgramSource, SourceKind, scan};
 
@@ -52,10 +55,12 @@ pub(super) fn parse(text: &str, entry: Entry) -> Result<(Expr, SymbolTable), Par
         "{text:?} was read as a label clause"
     );
     let result = {
+        let selectors = RefCell::new(SelectorTable::new());
         let ctx = ParseCtx {
             source: &source,
             tokens: &scanned.tokens,
             symbols: &scanned.symbols,
+            selectors: &selectors,
             keywords: &scanned.keywords,
             resources: &scanned.resources,
         };
@@ -677,10 +682,12 @@ fn an_empty_required_expression_raises_the_sub_number_the_caller_supplied() {
     // cursor is therefore built empty rather than derived from a clause.
     let source = ProgramSource::new(b"nop".to_vec(), SourceKind::Program);
     let scanned = scan(&source).expect("scans");
+    let selectors = RefCell::new(SelectorTable::new());
     let ctx = ParseCtx {
         source: &source,
         tokens: &scanned.tokens,
         symbols: &scanned.symbols,
+        selectors: &selectors,
         keywords: &scanned.keywords,
         resources: &scanned.resources,
     };
@@ -856,4 +863,71 @@ fn every_comparison_operator_parses_at_the_comparison_level() {
             "{op} did not parse at the comparison level"
         );
     }
+}
+
+/// Every message selector one program's `SAY` clauses send, in source order.
+fn program_selectors(text: &str) -> Vec<crate::Selector> {
+    let program = crate::parse_program(text.as_bytes().to_vec()).expect("the program parses");
+    program
+        .main
+        .instructions
+        .iter()
+        .map(|instruction| match &instruction.kind {
+            crate::InstructionKind::Say {
+                expression: Some(expr),
+            } => match &expr.kind {
+                ExprKind::Message { name, .. } => name.clone(),
+                other => panic!("a SAY of something other than a message send: {other:?}"),
+            },
+            other => panic!("an instruction other than SAY: {other:?}"),
+        })
+        .collect()
+}
+
+/// **The interning constraint, at the point the parse decides it** (D24):
+/// every site in one program that names a method holds the same selector,
+/// whichever spelling wrote it, and a different method is a different one.
+///
+/// `a~length` and `a~'length'` are the pair that makes it a parse-time
+/// property rather than a scanner one: the second name is a literal, which
+/// the scanner never saw as a symbol, and `parseMessage` upcases and interns
+/// both through one route (`parser/LanguageParser.cpp:3391`).
+///
+/// A parse that allocated per occurrence would leave every row of this test
+/// equal by value and none of them the same selector.
+#[test]
+fn one_method_name_is_one_selector_across_a_whole_program() {
+    let selectors = program_selectors(
+        "say a~length\n\
+         say b~length\n\
+         say c~'length'\n\
+         say d~reverse\n",
+    );
+    let (first, second, literal, other) =
+        (&selectors[0], &selectors[1], &selectors[2], &selectors[3]);
+
+    assert!(
+        crate::Selector::same(first, second),
+        "two symbol-spelled sends of one name hold two selectors"
+    );
+    assert!(
+        crate::Selector::same(first, literal),
+        "the literal spelling of one name holds a selector of its own"
+    );
+    assert!(!crate::Selector::same(first, other));
+    assert_eq!(first.bytes(), b"LENGTH");
+    assert_eq!(other.bytes(), b"REVERSE");
+}
+
+/// The bracket form is a message name like any other, and the parse interns
+/// it in the same pool: `"abc"[2]` and `"abc"~'[]'(2)` are one method
+/// (`parser/LanguageParser.cpp:3317`-`:3321`).
+#[test]
+fn the_bracket_form_and_the_written_name_are_one_selector() {
+    let selectors = program_selectors(
+        "say a[1]\n\
+         say b~'[]'(1)\n",
+    );
+    assert!(crate::Selector::same(&selectors[0], &selectors[1]));
+    assert_eq!(selectors[0].bytes(), b"[]");
 }

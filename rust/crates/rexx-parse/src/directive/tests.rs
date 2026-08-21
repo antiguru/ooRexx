@@ -30,6 +30,8 @@
 //! `::METHOD m CLASS` with no `::CLASS` above it is 99.905. Neither is a parse
 //! error and neither is raised here.
 
+use std::cell::RefCell;
+
 use crate::ast::{
     Access, AnnotationTarget, AttributeStyle, ConditionOption, ConstantValue, Directive,
     DirectiveKind, ExternalSpec, GuardOption, OptionsForm, PackageOption, Protection,
@@ -37,6 +39,7 @@ use crate::ast::{
 use crate::block::translate_block;
 use crate::clause::{ClauseCursor, split_clauses};
 use crate::directive_body;
+use crate::selector::SelectorTable;
 use crate::token::{Keywords, ParseCtx, ParseError, SymbolTable};
 use crate::{ProgramSource, SourceKind, scan};
 
@@ -67,10 +70,12 @@ fn parse_with_symbols(
     let source = ProgramSource::new(text.as_bytes().to_vec(), kind);
     let scanned = scan(&source)?;
     let result = {
+        let selectors = RefCell::new(SelectorTable::new());
         let ctx = ParseCtx {
             source: &source,
             tokens: &scanned.tokens,
             symbols: &scanned.symbols,
+            selectors: &selectors,
             keywords: &scanned.keywords,
             resources: &scanned.resources,
         };

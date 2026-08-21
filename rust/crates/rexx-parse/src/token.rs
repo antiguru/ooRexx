@@ -18,11 +18,13 @@
 //! and none of them belongs to one task alone.
 
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::Range;
 
 use crate::ProgramSource;
 use crate::scanner::ResourceBody;
+use crate::selector::SelectorTable;
 
 /// A parse-time error, identified the way the interpreter identifies it: a
 /// major number and a sub-number, as in `13.1` or `99.943`.
@@ -706,12 +708,21 @@ pub(crate) struct ParseCtx<'a> {
     ///
     /// Not for error substitutions: this phase does not reproduce them.
     ///
-    /// Read-only is not quite enough for the expression grammar, and Task 3.5
-    /// worked around it rather than widening this: a message name taken from a
-    /// literal, as in `a~'length'`, has to be upcased and would have to be
-    /// interned, and `scan` never saw it as a symbol. `ExprKind::Message`
-    /// therefore carries bytes where every other name carries a `SymbolId`.
+    /// Read-only is not quite enough for the expression grammar: a message
+    /// name taken from a literal, as in `a~'length'`, has to be upcased and
+    /// has to be interned, and `scan` never saw it as a symbol. `selectors`
+    /// below is where those go, which is why `ExprKind::Message` carries a
+    /// `Selector` where every other name carries a `SymbolId`.
     pub(crate) symbols: &'a SymbolTable,
+    /// The message names this parse has interned, which is what
+    /// `ExprKind::Message` holds one of.
+    ///
+    /// **A cell, because every `parse_*` function takes `&ParseCtx`** and a
+    /// message name is minted while one of them runs -- unlike `symbols`,
+    /// which `scan` has already filled. Each borrow is taken and dropped
+    /// inside the expression that interns one name, so no two are live at
+    /// once.
+    pub(crate) selectors: &'a RefCell<SelectorTable>,
     /// Every reserved *spelling* this parser recognises, pre-interned by `scan`
     /// before it reads any source, so their ids are fixed and every keyword
     /// test is an integer comparison. Keywords are NOT reserved words, so this

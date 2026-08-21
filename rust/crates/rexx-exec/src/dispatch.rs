@@ -287,6 +287,22 @@ enum Primitive {
     /// `CLASS_CREATE_SPECIAL(..., "String", ...)` and answer `String` for
     /// their own class.
     String,
+    /// A receiver whose whole value is in the handle's integer tag
+    /// ([`Decoded::SmallInt`]) -- **D24's `SmallInt` behaviour arm**.
+    ///
+    /// A kind of its own rather than folded into [`Primitive::String`], and
+    /// the reason is the route rather than the answer: the tag alone decides
+    /// this receiver's behaviour, without reaching the arena or testing the
+    /// class-identity range, and a receiver whose behaviour is decided that
+    /// cheaply is the one a send has to keep cheap. The answer it maps to is
+    /// `String`'s instance behaviour -- `CLASS_CREATE_SPECIAL(Integer,
+    /// "String", RexxIntegerClass)` (`classes/IntegerClass.cpp:2066`) -- and
+    /// measured, `12345~class~id` is `String` and `12345~length` is 5.
+    ///
+    /// [`Interp::receiver_behaviour`] is where the mapping is, and
+    /// `a_small_integer_receiver_takes_the_small_int_arm` is what holds the
+    /// two halves apart -- a distinct kind, one shared behaviour.
+    SmallInt,
     /// `.nil`, measured: `.nil~class~id` is `Object`.
     Object,
     /// A `Body::Array`. Measured, `.Array~superClasses~class~id` is `Array`.
@@ -338,6 +354,61 @@ pub(crate) struct MessageTerm<'a> {
     pub(crate) assigned: Option<&'a Expr>,
 }
 
+/// The sending side of a send, which the receiver does not carry (D53).
+///
+/// **One input per access scope that reads one.** `PRIVATE` compares
+/// the *caller's own receiver* against the receiver of the send --
+/// `RexxObject::checkPrivate` reads `activation->getReceiver()`
+/// (`classes/ObjectClass.cpp:616`), allows the send outright when the two are
+/// the same object (`:617`-`:620`), and refuses when the caller has no
+/// receiver at all (`:622`-`:626`). `PACKAGE` compares the method's package
+/// against the *caller's* -- `RexxObject::checkPackage` reads
+/// `activation->getPackage()` (`classes/ObjectClass.cpp:671`) and refuses
+/// when there is no calling activation (`:665`-`:669`).
+///
+/// **A parameter of [`Interp::resolve`] rather than something read off
+/// `Interp` inside it.** The oracle takes both off `getTopStackFrame()`, so
+/// both are properties of the activation the send is written in, and a
+/// resolution asked for outside a send -- by [`Interp::send_message`]'s own
+/// callers, or by a test -- has to be able to say which caller it is asking
+/// as, and a caller with neither half is a state both of the oracle's checks
+/// refuse rather than a state they cannot be asked about.
+///
+/// The C++'s spelling of `PRIVATE`'s input is the caller's **receiver**, not
+/// the caller's method scope: `:628` reads the scope off the *method* being
+/// resolved, which [`Resolution`] already carries.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) struct Caller {
+    /// The receiver of the call in progress, from the calling convention.
+    ///
+    /// `None` where the code the send is written in was not itself entered
+    /// by a message send, which is `RexxActivation::getReceiver`'s
+    /// `OREF_NULL` (`execution/RexxActivation.cpp:2342`-`:2349`). An
+    /// `INTERPRET` fragment answers its enclosing activation's receiver there
+    /// (`:2344`-`:2347`) and answers it here for the same reason: a fragment
+    /// runs in the activation that interpreted it, so the calling convention
+    /// it reads is that activation's.
+    receiver: Option<ObjRef>,
+    /// The package the sending code was translated in, which is the running
+    /// activation's program.
+    ///
+    /// `None` where no activation is running, which is `checkPackage`'s own
+    /// `activation == OREF_NULL` (`classes/ObjectClass.cpp:665`-`:669`).
+    package: Option<crate::plan::ProgramId>,
+}
+
+impl Caller {
+    /// The receiver of the call the send is written in.
+    pub(crate) fn receiver(self) -> Option<ObjRef> {
+        self.receiver
+    }
+
+    /// The package the send is written in.
+    pub(crate) fn package(self) -> Option<crate::plan::ProgramId> {
+        self.package
+    }
+}
+
 /// What a resolved message send names: the method, and the class its
 /// definition came from.
 ///
@@ -352,6 +423,26 @@ pub(crate) struct Resolution {
 }
 
 impl Interp {
+    /// The [`Caller`] a send written in the running activation resolves as.
+    ///
+    /// **The receiver is read out of the calling convention**
+    /// ([`crate::CallContext`]) rather than out of the running activation,
+    /// and that is where the oracle reads it too: `checkPrivate` asks
+    /// `getTopStackFrame()->getReceiver()` (`classes/ObjectClass.cpp:612`,
+    /// `:616`), which is the frame's own receiver and is `OREF_NULL` for a
+    /// routine or program frame. The convention is saved and restored around
+    /// every call, so a send inside a method reads that method's receiver and
+    /// a send after it returns reads the caller's again.
+    ///
+    /// The package is the running activation's program, which is the package
+    /// the sending clause was translated in.
+    pub(crate) fn caller(&self) -> Caller {
+        Caller {
+            receiver: self.call_context.receiver,
+            package: self.running_program(),
+        }
+    }
+
     /// The object model, built on first use.
     pub(crate) fn object_model(&mut self) -> &mut ObjectModel {
         self.object_model.get_or_insert_with(ObjectModel::bootstrap)
@@ -461,7 +552,8 @@ impl Interp {
     fn receiver_kind(&self, receiver: ObjRef) -> Result<Primitive, &'static str> {
         match receiver.decode() {
             Decoded::Nil => Ok(Primitive::Object),
-            Decoded::SmallInt(_) | Decoded::Text(_) => Ok(Primitive::String),
+            Decoded::SmallInt(_) => Ok(Primitive::SmallInt),
+            Decoded::Text(_) => Ok(Primitive::String),
             // **Asked before the arena is**, which is the whole point of
             // `rexx_core::CLASS_SLOT_BASE`: a class identity is heap-tagged
             // and names no slot, so reaching for the arena with one answers
@@ -517,7 +609,13 @@ impl Interp {
         let kind = self.receiver_kind(receiver)?;
         let model = self.object_model();
         Ok(match kind {
-            Primitive::String => Behaviour::Instance(model.string),
+            // Both arms answer one behaviour, which is what makes
+            // `Primitive::SmallInt` a route and not a divergence: the oracle
+            // gives `RexxInteger` the id `String`
+            // (`classes/IntegerClass.cpp:2066`), so a small integer's messages
+            // resolve against `String`'s instance behaviour exactly as a
+            // literal's do.
+            Primitive::String | Primitive::SmallInt => Behaviour::Instance(model.string),
             Primitive::Object => Behaviour::Instance(model.object),
             Primitive::Array => Behaviour::Instance(model.array),
             Primitive::Package => Behaviour::Instance(model.package),
@@ -537,12 +635,24 @@ impl Interp {
     /// behaviour as it stands at this instant, and a `~define` between two
     /// sends of the same name at the same call site must change the second
     /// one's answer.
+    ///
+    /// `caller` is the sending side, which the access scopes read and the
+    /// receiver does not carry -- [`Caller`] has each one's C++ site.
     pub(crate) fn resolve(
         &mut self,
         receiver: ObjRef,
         name: &[u8],
         start_scope: Option<ObjRef>,
+        caller: Caller,
     ) -> Option<Resolution> {
+        // A receiver reaches the calling convention only through a send from
+        // running code, and running code has a package: `Interp::caller`
+        // fills both halves together, so a receiver with no package beside it
+        // is a caller assembled somewhere else.
+        debug_assert!(
+            caller.receiver().is_none() || caller.package().is_some(),
+            "a caller with a receiver and no package"
+        );
         let behaviour = self.receiver_behaviour(receiver).ok()?;
         // Borrowed rather than owned wherever the name is UTF-8, which every
         // name a program can write is: `from_utf8_lossy` allocates only for
@@ -707,6 +817,31 @@ impl Interp {
         let frame = self.roots.push_slots(plan.len());
         let callee_id = self.next_activation_id();
         let super_scope = self.super_scope_for(receiver, resolution);
+        // **The calling convention, entered before anything reads it.** The
+        // receiver goes in here and is read back out below, so the identity
+        // the activation carries, the `SELF` the body reads and the caller a
+        // send inside the body resolves as all name the same value by
+        // construction rather than by each taking its own copy of this
+        // function's argument.
+        //
+        // Saved and restored with the level state further down -- which is
+        // where `Interp::invoke_call` does all of it -- and replaced ahead of
+        // that group because the bindings below read out of it.
+        let saved_context = std::mem::replace(
+            &mut self.call_context,
+            crate::CallContext {
+                name: name.to_vec(),
+                arguments: args
+                    .iter()
+                    .map(|arg| arg.map(crate::Argument::Value))
+                    .collect(),
+                receiver: Some(receiver),
+            },
+        );
+        let addressed = self
+            .call_context
+            .receiver
+            .expect("the calling convention replaced directly above carries the receiver");
         self.push_activation(Activation::method(
             callee_id,
             program,
@@ -717,7 +852,7 @@ impl Interp {
             MethodIdentity {
                 name: name.into(),
                 scope: resolution.scope,
-                receiver,
+                receiver: addressed,
             },
         ));
 
@@ -733,8 +868,15 @@ impl Interp {
         // function and would otherwise read an unset variable and answer
         // `SELF`. `slot_of` grows the frame only when the plan has no slot,
         // so a body that does mention them pays nothing.
+        //
+        // **`SELF` is the receiver of the send and not the scope the method
+        // was found at**, and the two part wherever a method is inherited:
+        // measured on `::class K` with a class method `m` and `::class J
+        // subclass K`, `.J~m` returning `self` answers `The J class` where
+        // the resolution's scope is `K`. Reading it out of the calling
+        // convention is what makes that the receiver by construction.
         let self_slot = self.slot_of(b"SELF");
-        self.set_variable(frame, self_slot, receiver);
+        self.set_variable(frame, self_slot, addressed);
         let super_slot = self.slot_of(b"SUPER");
         // `.nil` for the topmost scope, which is what `superScope` answers
         // there.
@@ -750,16 +892,6 @@ impl Interp {
         let saved_base = std::mem::replace(&mut self.activation_indent, 0);
         let saved_offset = std::mem::take(&mut self.indent_offset);
         let saved_line = std::mem::take(&mut self.clause_line_override);
-        let saved_context = std::mem::replace(
-            &mut self.call_context,
-            crate::CallContext {
-                name: name.to_vec(),
-                arguments: args
-                    .iter()
-                    .map(|arg| arg.map(crate::Argument::Value))
-                    .collect(),
-            },
-        );
 
         let ended = self.run_activation();
 
@@ -813,11 +945,12 @@ impl Interp {
         name: &[u8],
         start_scope: Option<ObjRef>,
         args: &[Option<ObjRef>],
+        caller: Caller,
     ) -> Result<Option<ObjRef>, Failure> {
         if let Err(kind) = self.receiver_kind(receiver) {
             return Err(Loud::receiver_class(kind).into());
         }
-        match self.resolve(receiver, name, start_scope) {
+        match self.resolve(receiver, name, start_scope, caller) {
             Some(resolution) => self.invoke(resolution, receiver, name, args),
             None => {
                 let target = self.message_target_text(receiver);
@@ -893,7 +1026,9 @@ impl Interp {
 
         let mut values = self.take_value_buffer();
         let evaluated = self.evaluate_message_arguments(code, args, assigned, &mut values);
-        let result = evaluated.and_then(|()| self.send_message(receiver, name, None, &values));
+        let caller = self.caller();
+        let result =
+            evaluated.and_then(|()| self.send_message(receiver, name, None, &values, caller));
         self.give_value_buffer(values);
         let sent = result?;
 
@@ -1228,7 +1363,7 @@ fn native_class(
     };
     let model = interp.object_model();
     Ok(match kind {
-        Primitive::String => model.string,
+        Primitive::String | Primitive::SmallInt => model.string,
         Primitive::Object => model.object,
         Primitive::Array => model.array,
         Primitive::Package => model.package,
@@ -1472,6 +1607,17 @@ fn native_reverse(
 mod tests {
     use super::*;
 
+    /// The caller a resolution asked for outside any send is asking as:
+    /// neither a receiver nor a package, which is the state
+    /// `RexxObject::checkPrivate` and `RexxObject::checkPackage` each refuse
+    /// (`classes/ObjectClass.cpp:622`-`:626`, `:665`-`:669`).
+    fn no_caller() -> Caller {
+        Caller {
+            receiver: None,
+            package: None,
+        }
+    }
+
     /// The object model is built on first use and not in `Interp::new`.
     ///
     /// **This is the shape of the 5.5 ms measurement, asserted rather than
@@ -1510,14 +1656,18 @@ mod tests {
         let object = interp.classes().lookup("Object").expect("Object is native");
 
         let own = interp
-            .resolve(receiver, b"LENGTH", None)
+            .resolve(receiver, b"LENGTH", None, no_caller())
             .expect("String answers LENGTH");
         assert_eq!(own.scope, string);
         let inherited = interp
-            .resolve(receiver, b"ISNIL", None)
+            .resolve(receiver, b"ISNIL", None, no_caller())
             .expect("Object's ISNIL reaches a String receiver");
         assert_eq!(inherited.scope, object);
-        assert!(interp.resolve(receiver, b"NOSUCHMETHOD", None).is_none());
+        assert!(
+            interp
+                .resolve(receiver, b"NOSUCHMETHOD", None, no_caller())
+                .is_none()
+        );
     }
 
     /// **The start-scope argument, which no program can reach yet.**
@@ -1545,10 +1695,26 @@ mod tests {
         let string = interp.classes().lookup("String").expect("String is native");
         let object = interp.classes().lookup("Object").expect("Object is native");
 
-        assert!(interp.resolve(receiver, b"ISNIL", Some(object)).is_some());
-        assert!(interp.resolve(receiver, b"LENGTH", Some(object)).is_none());
-        assert!(interp.resolve(receiver, b"ISNIL", Some(string)).is_some());
-        assert!(interp.resolve(receiver, b"LENGTH", Some(string)).is_some());
+        assert!(
+            interp
+                .resolve(receiver, b"ISNIL", Some(object), no_caller())
+                .is_some()
+        );
+        assert!(
+            interp
+                .resolve(receiver, b"LENGTH", Some(object), no_caller())
+                .is_none()
+        );
+        assert!(
+            interp
+                .resolve(receiver, b"ISNIL", Some(string), no_caller())
+                .is_some()
+        );
+        assert!(
+            interp
+                .resolve(receiver, b"LENGTH", Some(string), no_caller())
+                .is_some()
+        );
     }
 
     /// A name the class answers with no implementation here is **loud**, and
@@ -1561,11 +1727,11 @@ mod tests {
         let mut interp = Interp::new();
         let receiver = interp.text(b"abc");
         assert!(matches!(
-            interp.send_message(receiver, b"UPPER", None, &[]),
+            interp.send_message(receiver, b"UPPER", None, &[], no_caller()),
             Err(Failure::Loud(_))
         ));
         assert!(matches!(
-            interp.send_message(receiver, b"NOSUCHMETHOD", None, &[]),
+            interp.send_message(receiver, b"NOSUCHMETHOD", None, &[], no_caller()),
             Err(Failure::Raised(_))
         ));
     }
@@ -1626,13 +1792,13 @@ mod tests {
 
         let class = interp.classes().lookup("String").expect("String is native");
         assert!(matches!(
-            interp.send_message(class, b"LENGTH", None, &[]),
+            interp.send_message(class, b"LENGTH", None, &[], no_caller()),
             Err(Failure::Raised(_))
         ));
         let name = interp.text(b"LENGTH");
         assert_eq!(
             interp
-                .send_message(class, b"HASMETHOD", None, &[Some(name)])
+                .send_message(class, b"HASMETHOD", None, &[Some(name)], no_caller())
                 .expect("Object's HASMETHOD reaches a class object"),
             Some(interp.counted(0)),
             "a class object was asked about its instances' behaviour instead of its own"
@@ -1666,6 +1832,102 @@ mod tests {
             }
         }
         answer.expect("at least one engine ran")
+    }
+
+    /// **D24's `SmallInt` behaviour arm is taken for a small integer
+    /// receiver**, where the general path is what a receiver whose bytes are
+    /// in the arena takes.
+    ///
+    /// The pair is what makes it mean something, and each half fails on its
+    /// own kind of mistake:
+    ///
+    /// * the two receivers answer **different** kinds, so folding the tag
+    ///   into `Primitive::String` reddens the first assertion;
+    /// * they answer the **same** behaviour, so an arm that pointed the tag
+    ///   at another class reddens the second -- and that half is why no
+    ///   differential row moves: `RexxInteger`'s own id is `String`
+    ///   (`classes/IntegerClass.cpp:2066`), and measured, `12345~class~id` is
+    ///   `String` and `12345~length` is 5 on the oracle.
+    #[test]
+    fn a_small_integer_receiver_takes_the_small_int_arm() {
+        let mut interp = Interp::new();
+        let integer = ObjRef::small_int(12345).expect("12345 fits the tag");
+        assert!(
+            matches!(integer.decode(), Decoded::SmallInt(_)),
+            "the value model stopped holding 12345 in the tag, so this test's subject is gone"
+        );
+        let text = interp.text(b"12345");
+        assert!(
+            matches!(text.decode(), Decoded::Text(_)),
+            "the same digits as bytes went somewhere other than the handle's text arm"
+        );
+
+        assert_eq!(
+            interp
+                .receiver_kind(integer)
+                .expect("a small integer answers"),
+            Primitive::SmallInt,
+            "a tagged integer receiver went down the general path"
+        );
+        assert_eq!(
+            interp.receiver_kind(text).expect("a text handle answers"),
+            Primitive::String
+        );
+
+        let string = interp.classes().lookup("String").expect("String is native");
+        assert_eq!(
+            interp
+                .receiver_behaviour(integer)
+                .expect("a small integer resolves"),
+            Behaviour::Instance(string),
+            "the arm sends a small integer's messages somewhere other than String"
+        );
+        assert_eq!(
+            interp
+                .receiver_behaviour(text)
+                .expect("a text handle resolves"),
+            Behaviour::Instance(string)
+        );
+
+        assert_eq!(
+            both_engines("say 12345~length\n"),
+            (0, "5\n".to_string(), String::new())
+        );
+    }
+
+    /// **D24's receiver in the calling convention**: `SELF` is the object the
+    /// send was addressed to, taken from `crate::CallContext`, and not the
+    /// scope the resolution found the method at.
+    ///
+    /// The two part exactly where a method is inherited, which is what this
+    /// program is for: `m` is defined at `K`, the send is to `J`, and the
+    /// oracle answers `The J class` -- measured, rc 0, empty stderr. A
+    /// `SELF` re-derived from the resolution would answer `The K class`, and
+    /// a program whose receiver and scope are the same class cannot tell the
+    /// two apart.
+    ///
+    /// The second row is the convention's other state: a frame that is not a
+    /// method's carries no receiver, which is
+    /// `RexxActivation::getReceiver`'s `OREF_NULL`
+    /// (`execution/RexxActivation.cpp:2348`).
+    #[test]
+    fn a_method_send_binds_self_from_the_receiver_in_the_calling_convention() {
+        assert_eq!(
+            both_engines(
+                "say .J~m\n\
+                 ::class K\n\
+                 ::method m class\n  return self\n\
+                 ::class J subclass K\n"
+            ),
+            (0, "The J class\n".to_string(), String::new()),
+            "SELF is not the receiver of the send"
+        );
+
+        let interp = Interp::new();
+        assert!(
+            interp.caller().receiver().is_none(),
+            "a frame that is not a method's carries a receiver"
+        );
     }
 
     /// **`SELF` and `SUPER` are bound before the body's first instruction**,
@@ -1881,7 +2143,7 @@ mod tests {
             },
         );
         assert!(matches!(
-            interp.send_message(stem, b"LENGTH", None, &[]),
+            interp.send_message(stem, b"LENGTH", None, &[], no_caller()),
             Err(Failure::Loud(_))
         ));
     }

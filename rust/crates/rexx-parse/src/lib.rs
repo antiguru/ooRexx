@@ -51,6 +51,7 @@ mod error;
 mod expr;
 mod instruction;
 mod scanner;
+mod selector;
 mod source;
 mod token;
 
@@ -70,6 +71,7 @@ pub use ast::{
 /// against rather than hardcoding 50,000 in two places.
 pub use expr::MAX_EXPR_DEPTH;
 pub use scanner::{ResourceBody, Scanned, scan};
+pub use selector::Selector;
 pub use source::{ProgramSource, SourceKind};
 pub use token::{
     KeywordSet, Keywords, Operator, ParseError, SymbolClass, SymbolId, SymbolTable, Tag, Token,
@@ -79,6 +81,7 @@ pub use token::{
 use crate::block::translate_block;
 use crate::clause::{ClauseCursor, split_clauses};
 use crate::directive::parse_directive;
+use crate::selector::SelectorTable;
 use crate::token::ParseCtx;
 
 /// A whole program: everything `translate` produces from one source buffer
@@ -215,10 +218,16 @@ struct Parsed {
 /// call and no re-deriving where the main body ended from a fresh one.
 fn parse(source: &ProgramSource) -> Result<Parsed, ParseError> {
     let scanned = scan(source)?;
+    // Declared ahead of `ctx`, which borrows it, and dropped with the parse.
+    // A `Selector` in the tree holds the name's bytes itself, so what the
+    // pool's own entry buys is finding a spelling again while the parse is
+    // still reading names -- which is exactly as long as it lives.
+    let selectors = std::cell::RefCell::new(SelectorTable::new());
     let ctx = ParseCtx {
         source,
         tokens: &scanned.tokens,
         symbols: &scanned.symbols,
+        selectors: &selectors,
         keywords: &scanned.keywords,
         resources: &scanned.resources,
     };

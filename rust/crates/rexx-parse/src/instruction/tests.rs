@@ -10,9 +10,12 @@
 //! `parse_instruction` are all `pub(crate)` and an integration test is a
 //! separate crate.
 
+use std::cell::RefCell;
+
 use crate::ast::{ExprKind, Instruction, InstructionKind};
 use crate::block::translate_block;
 use crate::clause::{ClauseCursor, split_clauses};
+use crate::selector::SelectorTable;
 use crate::token::{Keywords, ParseCtx, ParseError, SymbolTable};
 use crate::{ProgramSource, SourceKind, scan};
 
@@ -38,10 +41,12 @@ fn parse_kind(text: &str, kind: SourceKind) -> Result<(Vec<Instruction>, SymbolT
     let source = ProgramSource::new(text.as_bytes().to_vec(), kind);
     let scanned = scan(&source).expect("the test input scans");
     let result = {
+        let selectors = RefCell::new(SelectorTable::new());
         let ctx = ParseCtx {
             source: &source,
             tokens: &scanned.tokens,
             symbols: &scanned.symbols,
+            selectors: &selectors,
             keywords: &scanned.keywords,
             resources: &scanned.resources,
         };
