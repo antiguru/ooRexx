@@ -39,6 +39,17 @@
 //! standing assertion over that -- so this is checked by a test that already
 //! exists rather than by a sentence here.
 //!
+//! # A verdict says the two sides agree; it does not say either answered
+//!
+//! Every probe here prints one line, so before any row gets a verdict the
+//! oracle's `stdout` line count is checked against
+//! [`expected_oracle_lines`] -- one, or none for the rows [`ORACLE_REFUSES`]
+//! names. Two interpreters that fail identically agree on all three
+//! descriptors, so without this a row whose probe the oracle never reached
+//! reads `agree` and is counted as satisfied with nothing asked. A row that
+//! fails the check keeps its place and is reported as `unanswered`, never as
+//! `agree`.
+//!
 //! # What this table cannot see
 //!
 //! A keyword neither `dire.xml` nor `DirectiveParser.cpp` names is outside the
@@ -209,6 +220,67 @@ fn owning_phase(row: &Row) -> Option<&'static str> {
 /// or sit in [`gate_tables::CLOSED_PHASES`].
 const PARSE_ERROR_RENDERING: &str = "deferred-parse-error-rendering";
 
+/// The rows whose probe the oracle refuses before it reaches its `say`.
+///
+/// **Why this table needs a list where gate table C derives one.** Every probe
+/// here prints one line, which is what `corpus/gate-tables/README.md` says
+/// they are for: "the oracle side shows the program ran rather than that it
+/// produced nothing". Without a check behind that sentence a row reads `agree`
+/// whenever the two interpreters fail *identically* -- same status, same
+/// `stderr`, both `stdout` empty -- and is counted as a satisfied row of its
+/// phase while neither side answered anything. Gate table C bounds each of its
+/// families from the probe's own derived text; these probes are hand-written
+/// and their row set carries no column that separates the ones the oracle
+/// refuses, so the separation is committed here, beside [`owning_phase`] and
+/// with the same standing: a human reads it out of a diff.
+///
+/// **Policed in both directions** by [`expected_oracle_lines`]'s caller: a row
+/// named here whose oracle *did* answer is as red as a row not named here
+/// whose oracle answered nothing. So the list cannot quietly grow to cover a
+/// probe that stopped working.
+///
+/// Each arm's reason, all of them the same shape -- the probe's own subject is
+/// what the oracle refuses:
+///
+/// * `::CLASS CLASS` and `::RESOURCE LIBRARY` are the row set's
+///   `cross-reference` rows: the section documents the name and the
+///   directive's own parser has no arm for it, so the directive is a syntax
+///   error and no clause of the program runs.
+/// * `::ATTRIBUTE`, `::METHOD` and `::ROUTINE`'s `EXTERNAL` name a shared
+///   library, and `::REQUIRES`'s `LIBRARY` and `NAMESPACE` name a package;
+///   neither is present on this build, so the failure is at install time,
+///   before the program's own first clause.
+const ORACLE_REFUSES: &[(&str, &str)] = &[
+    ("::ATTRIBUTE", "EXTERNAL"),
+    ("::CLASS", "CLASS"),
+    ("::METHOD", "EXTERNAL"),
+    ("::REQUIRES", "LIBRARY"),
+    ("::REQUIRES", "NAMESPACE"),
+    ("::RESOURCE", "LIBRARY"),
+    ("::ROUTINE", "EXTERNAL"),
+];
+
+/// How many lines of `stdout` a row's probe prints on the oracle: one, unless
+/// the row is one [`ORACLE_REFUSES`] names, and then none.
+fn expected_oracle_lines(row: &Row) -> usize {
+    let refused = ORACLE_REFUSES
+        .iter()
+        .any(|&(directive, keyword)| directive == row.directive && keyword == row.keyword);
+    usize::from(!refused)
+}
+
+/// Counts the lines of a program's `stdout`.
+///
+/// Empty input is no lines rather than one empty line: `split` on an empty
+/// slice yields one empty slice, which would make a program that printed
+/// nothing look as though it had answered.
+fn stdout_line_count(bytes: &[u8]) -> usize {
+    if bytes.is_empty() {
+        return 0;
+    }
+    bytes.split(|&b| b == b'\n').count() - usize::from(bytes.last() == Some(&b'\n'))
+}
+
 /// The five cells partition the cube of three booleans.
 ///
 /// The compiler already refuses a `verdict` that is non-exhaustive or has an
@@ -263,7 +335,13 @@ struct Measured {
     row: Row,
     probe: String,
     phase: &'static str,
-    verdict: Verdict,
+    /// `None` where the oracle did not answer the row's question at all, so
+    /// no comparison of the two sides means anything. **The row stays in the
+    /// table** rather than being dropped: one row fewer is a lower gated
+    /// count, and a close criterion phrased over that count would then be
+    /// satisfiable by removing evidence. It is reported as `unanswered`, is
+    /// never `agree`, and its own structural failure is what reddens the run.
+    verdict: Option<Verdict>,
     loud: bool,
     refused: Option<String>,
     oracle_exit: i32,
@@ -274,6 +352,18 @@ struct Measured {
     crate_stderr: Vec<u8>,
     core_uses: Vec<orx::Hit>,
     stream_uses: Vec<orx::Hit>,
+}
+
+/// The label for a row whose oracle side did not answer the row's question.
+const UNANSWERED: &str = "unanswered";
+
+/// The label a row's verdict is reported and tallied under, including the case
+/// where there is no verdict because the oracle answered nothing.
+fn verdict_label(verdict: Option<Verdict>) -> &'static str {
+    match verdict {
+        Some(verdict) => verdict.label(),
+        None => UNANSWERED,
+    }
 }
 
 /// Renders the `.orx` usage column: how many clauses in each file use the
@@ -401,11 +491,33 @@ fn directive_option_gate_table() {
             continue;
         }
 
+        // Before any verdict: did the oracle answer at all? Two sides that
+        // fail identically agree on all three descriptors, so a row whose
+        // probe the oracle never reached would read `agree` and be counted
+        // as satisfied with nothing asked.
+        let answered = stdout_line_count(&cpp.stdout);
+        let expected = expected_oracle_lines(&row);
+        if answered != expected {
+            structural.push(Structural {
+                subject: probe.clone(),
+                detail: format!(
+                    "the oracle answered {answered} line(s) on `stdout` where this row \
+                     expects {expected}. Every probe here prints one line so that the \
+                     oracle side shows the program ran; the rows the oracle refuses are \
+                     the ones `ORACLE_REFUSES` names, and this row is {}named there. \
+                     Either the probe stopped running or the list is wrong -- and a row \
+                     whose two sides both answer nothing reads `agree` for a question \
+                     neither was asked",
+                    if expected == 0 { "" } else { "not " }
+                ),
+            });
+        }
+
         let differs = compare_raw(&crate_side, &cpp);
         measured.push(Measured {
             probe,
             phase,
-            verdict: verdict(differs),
+            verdict: (answered == expected).then(|| verdict(differs)),
             loud: is_loud(&crate_side),
             refused: refused_construct(&crate_side.stderr),
             oracle_exit: cpp.expect_exit_code(),
@@ -496,7 +608,7 @@ fn directive_option_gate_table() {
     for row in &measured {
         report.line(&format!(
             "  {:<14} loud={:<3} {:<29} {:<12} {:<12} {:<16} {:<44} {}",
-            row.verdict.label(),
+            verdict_label(row.verdict),
             if row.loud { "yes" } else { "no" },
             row.phase,
             row.row.directive,
@@ -508,7 +620,7 @@ fn directive_option_gate_table() {
                 .and_then(|rest| rest.strip_prefix('/'))
                 .unwrap_or(&row.probe),
         ));
-        if row.verdict != Verdict::Agree {
+        if row.verdict != Some(Verdict::Agree) {
             report.line(&format!(
                 "      oracle rc={:<4} out={} err={}",
                 row.oracle_exit,
@@ -530,7 +642,7 @@ fn directive_option_gate_table() {
 
     let mut by_verdict: BTreeMap<&str, usize> = BTreeMap::new();
     for row in &measured {
-        *by_verdict.entry(row.verdict.label()).or_insert(0) += 1;
+        *by_verdict.entry(verdict_label(row.verdict)).or_insert(0) += 1;
     }
     report.line("");
     report.line("verdicts, over every row of this table:");
@@ -546,7 +658,10 @@ fn directive_option_gate_table() {
     for row in &measured {
         let entry = by_phase.entry(row.phase).or_insert((0, 0));
         entry.0 += 1;
-        if row.verdict != Verdict::Agree {
+        // `unanswered` is not `agree`, so it counts as open and, on a gated
+        // phase, as gated: a row nothing could answer must never make the
+        // gated count smaller.
+        if row.verdict != Some(Verdict::Agree) {
             entry.1 += 1;
         }
     }
@@ -572,7 +687,7 @@ fn directive_option_gate_table() {
 
     let gated: Vec<&Measured> = measured
         .iter()
-        .filter(|row| row.verdict != Verdict::Agree && verdict_is_gated(row.phase))
+        .filter(|row| row.verdict != Some(Verdict::Agree) && verdict_is_gated(row.phase))
         .collect();
     report.line("");
     report.line(&format!(

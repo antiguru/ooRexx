@@ -39,6 +39,14 @@ Gate table C's probes, run by `crates/rexx-exec/tests/gate_table_c.rs`:
   one line per row so that a single run answers the whole documented set for
   that class and arm.
 
+**Every row's oracle side is checked for having answered at all, before any
+verdict exists.** Two interpreters that fail identically agree on all three
+descriptors, so a row naming a class this build does not ship would otherwise
+read `agree` and count as satisfied. The bound is the derived probe text for
+`classes/`, `hierarchy/` and `methods/`, and a committed line count per section
+for `concepts/`, whose probes are hand-written. `directives/` has the same
+check, against the one line each of its probes prints.
+
 **Those last three are derived, text and all.** `gate_table_c.rs`'s
 `class_probe_text`, `edge_probe_text` and `method_probe_text` are the
 definition of what the programs contain, and every run compares the committed

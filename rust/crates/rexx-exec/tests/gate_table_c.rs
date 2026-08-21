@@ -45,6 +45,20 @@
 //! against its predecessor's. A **structural** failure is red in every mode
 //! and is never one of those.
 //!
+//! # A verdict says the two sides agree; it does not say either answered
+//!
+//! Before any row gets a verdict, the oracle's `stdout` is checked against
+//! the shape the row's probe could produce while asking its question --
+//! [`OracleShape`], bounded by the derived probe text for the families whose
+//! text is derived and by a committed count for the concept family, whose
+//! probes are hand-written. Two interpreters that fail identically at a
+//! probe's first instruction agree on all three descriptors, so without this
+//! a row over a class neither of them has reads `agree` and is counted as a
+//! satisfied row of its phase. A row that fails the check keeps its place in
+//! the table and is reported as `unanswered`, never as `agree`: dropping it
+//! would lower the gated count, which is a close criterion satisfiable by
+//! removing evidence.
+//!
 //! # The probe corpus is derived from the row set, and checked in both
 //! directions
 //!
@@ -253,6 +267,22 @@ struct Concept {
     authority: &'static str,
     /// The change that would redden the row, and who can first run it.
     control: &'static str,
+    /// How many lines of `stdout` this section's probe prints on the oracle.
+    ///
+    /// **The only committed expectation in this table, and it is a shape
+    /// rather than an answer.** The other families derive their bound from
+    /// the probe text, because that text is derived too; a concept probe is
+    /// hand-written against a page of prose and nothing derives it, so
+    /// without a number here a concept row that stopped reaching its
+    /// mechanism entirely would read `agree` the moment both interpreters
+    /// fell over alike. It can only make a row **fail** -- no line count can
+    /// turn a divergence into agreement -- and it holds no byte the oracle
+    /// answered.
+    ///
+    /// It also makes editing a concept probe a visible act: changing what the
+    /// program prints means changing this, in the same diff, which is the
+    /// nearest thing this family has to the derivation the others get.
+    oracle_lines: usize,
 }
 
 /// One arm per `provide.xml` section id.
@@ -278,6 +308,7 @@ const CONCEPTS: &[Concept] = &[
                     split into its own rows",
         control: "make `::CLASS ... ABSTRACT` or `::CLASS ... METACLASS` a no-op, so the \
                   declared class is indistinguishable from a plain one -- Task 8",
+        oracle_lines: 4,
     },
     Concept {
         id: "objcla",
@@ -287,6 +318,7 @@ const CONCEPTS: &[Concept] = &[
                     plan's handover puts instance construction in 5b",
         control: "rebuild an existing instance's method lookup from its class on every \
                   send, so a method defined after the instance was created answers -- 5b",
+        oracle_lines: 3,
     },
     Concept {
         id: "xmixin",
@@ -295,6 +327,7 @@ const CONCEPTS: &[Concept] = &[
         control: "answer `~baseClass` with the class itself rather than with the mixin's \
                   first non-mixin superclass, or merge an INHERIT target's methods in front \
                   of the class's own -- Task 7",
+        oracle_lines: 4,
     },
     Concept {
         id: "abscla",
@@ -304,6 +337,7 @@ const CONCEPTS: &[Concept] = &[
                     this section's probe",
         control: "drop `checkAbstract` from the `~new` path, so an abstract class \
                   constructs -- 5b",
+        oracle_lines: 1,
     },
     Concept {
         id: "xmetac",
@@ -311,6 +345,7 @@ const CONCEPTS: &[Concept] = &[
         authority: "spec enumeration: the metaclass graph and its circularity is 5a",
         control: "ignore `METACLASS`, so a class declared with one is still an instance of \
                   `.Class` -- Task 8",
+        oracle_lines: 3,
     },
     Concept {
         id: "xcremet",
@@ -320,6 +355,7 @@ const CONCEPTS: &[Concept] = &[
                     and Task 15's",
         control: "install a quoted `::CLASS` identifier under a different name, or give the \
                   new class a superclass other than Object -- Task 18",
+        oracle_lines: 3,
     },
     Concept {
         id: "usingcl",
@@ -328,6 +364,7 @@ const CONCEPTS: &[Concept] = &[
                     is the same factory protocol reached by message rather than by directive",
         control: "answer `~subclass` with a class whose superclass is Object rather than the \
                   receiver -- Task 7",
+        oracle_lines: 4,
     },
     Concept {
         id: "xscope",
@@ -336,6 +373,7 @@ const CONCEPTS: &[Concept] = &[
                     `Method~scope`, are 5a",
         control: "answer `~method` from the flattened all-scopes dictionary, so an inherited \
                   name answers where the oracle raises -- Task 9",
+        oracle_lines: 2,
     },
     Concept {
         id: "usesem",
@@ -344,6 +382,7 @@ const CONCEPTS: &[Concept] = &[
                     scope they create -- are 5b",
         control: "put a `setMethod` definition in the class's dictionary rather than in the \
                   object's own scope, so it reaches the class's other instances -- 5b",
+        oracle_lines: 4,
     },
     Concept {
         id: "methna",
@@ -352,6 +391,7 @@ const CONCEPTS: &[Concept] = &[
                     which the enumeration files under 5a and which are Task 21's and Task 9's",
         control: "stop uppercasing a method name as it is added, so a name defined in lower \
                   case is not found by the message that names it -- Task 21",
+        oracle_lines: 4,
     },
     Concept {
         id: "xmeths",
@@ -361,6 +401,7 @@ const CONCEPTS: &[Concept] = &[
                     `usesem`'s row",
         control: "search a superclass before the class's own dictionary, or drop the \
                   `UNKNOWN` step so a miss goes straight to NOMETHOD -- Task 12",
+        oracle_lines: 3,
     },
     Concept {
         id: "unkno",
@@ -370,6 +411,7 @@ const CONCEPTS: &[Concept] = &[
         control: "**delete the `UNKNOWN` step** and record that this row reddens. One of \
                   D50's two required controls; runnable only once the step exists, so \
                   **Task 12** owes it and carries it in its own \"Done when\"",
+        oracle_lines: 1,
     },
     Concept {
         id: "chsrod",
@@ -379,6 +421,7 @@ const CONCEPTS: &[Concept] = &[
         control: "start a scope-override send at the receiver's own class rather than at the \
                   named scope, which makes `self~type:super` recurse or answer the \
                   subclass's method -- Task 10",
+        oracle_lines: 1,
     },
     Concept {
         id: "pubpri",
@@ -386,6 +429,7 @@ const CONCEPTS: &[Concept] = &[
         authority: "spec enumeration: PUBLIC / PACKAGE / PRIVATE as three access scopes is 5a",
         control: "let a PRIVATE method answer a send from outside the object, so the \
                   outside-send line answers instead of raising 97.2 -- Task 13",
+        oracle_lines: 2,
     },
     Concept {
         id: "creo",
@@ -394,6 +438,7 @@ const CONCEPTS: &[Concept] = &[
                     `self~init:super` -- is 5b",
         control: "stop calling `init` after `~new` builds the object, or pass `~new`'s \
                   arguments to the wrong `init` -- 5b",
+        oracle_lines: 3,
     },
     Concept {
         id: "obdes",
@@ -403,6 +448,7 @@ const CONCEPTS: &[Concept] = &[
         control: "stop running `UNINIT` before the object's storage is reclaimed, which is \
                   **silent**: measured today the row is rc 0 with empty stderr on both \
                   sides and differs on stdout alone -- 5b",
+        oracle_lines: 2,
     },
     Concept {
         id: "reqstr",
@@ -414,6 +460,7 @@ const CONCEPTS: &[Concept] = &[
                   the wrong string**, which reddens the same row at rc 0 with empty stderr \
                   on both sides -- that second one is table C's mutation 3. **Task 14** \
                   owes both and carries them in its own \"Done when\"",
+        oracle_lines: 6,
     },
     Concept {
         id: "concurr",
@@ -422,6 +469,7 @@ const CONCEPTS: &[Concept] = &[
                     with the semantics Phase 6's",
         control: "refuse `REPLY` inside a method body, or stop returning its expression to \
                   the sender -- Task 16",
+        oracle_lines: 3,
     },
     Concept {
         id: "classmeth",
@@ -431,6 +479,7 @@ const CONCEPTS: &[Concept] = &[
                     Task 21's registry",
         control: "drop a class from the registry, so its `~id` line cannot answer -- \
                   Task 9, and again for the deferred classes at Task 21",
+        oracle_lines: 31,
     },
     Concept {
         id: "chi",
@@ -440,6 +489,7 @@ const CONCEPTS: &[Concept] = &[
                     and `~superClasses`",
         control: "answer `~superClass` with the whole superclass list's last element rather \
                   than the class's direct superclass -- Task 9",
+        oracle_lines: 8,
     },
     Concept {
         id: "methodsbyclass",
@@ -449,6 +499,7 @@ const CONCEPTS: &[Concept] = &[
                     handover puts instance construction in 5b",
         control: "route `matrix[2, 3] = 0` to a single-index `[]=`, so the element read back \
                   is not the one written -- 5b",
+        oracle_lines: 4,
     },
 ];
 
@@ -535,8 +586,11 @@ fn edge_probe_text(child: &str, parent: &str) -> String {
     );
     text.push_str(&format!("say 'child' .{child}~id\n"));
     text.push_str(&format!("say 'parent' .{parent}~id\n"));
+    // The marker is spelled once, in `DOCUMENTED_EDGE_MARKER`, because
+    // `check_documented_edge` reads the oracle's answer back by it.
     text.push_str(&format!(
-        "say 'documented-edge' .{child}~superClasses~hasItem(.{parent})\n"
+        "say '{}' .{child}~superClasses~hasItem(.{parent})\n",
+        DOCUMENTED_EDGE_MARKER.trim_end()
     ));
     text.push_str(&format!(
         "say 'superclasses' .{child}~superClasses~makeString('L', ' ')\n"
@@ -562,13 +616,24 @@ fn method_name_literal(name: &str) -> &str {
 
 /// The text of a (class, arm) method probe.
 ///
-/// **Which shape this takes comes from the committed `status` column rather
-/// than from anything measured here.** The class arm asks
-/// `.X~hasMethod`, which needs no instance. The instance arm needs one, and
-/// `class-set.txt` records for each class whether a bare `~new` constructs;
-/// where it does not, the probe still asks -- so the row's evidence is the
-/// raise the reference predicts rather than a line this table invented -- and
-/// [`expected_oracle_lines`] expects no output line from it.
+/// **Which shape this takes comes from the committed `status` column, and the
+/// column is a fact about the row set rather than a claim about the oracle.**
+/// The class arm asks `.X~hasMethod`, which needs no instance. The instance
+/// arm needs one, and `status` says whether the row set offers a way to get
+/// it: `covered` is "a bare `~new` constructs an instance on the oracle **or**
+/// a construction program is opted in", and `not-covered` says only that no
+/// construction program is committed -- its own header adds, in capitals,
+/// that it CARRIES NO CLAIM ABOUT THE ORACLE.
+///
+/// **This derives only the first limb of `covered`.** Every instance-arm
+/// program here opens with a bare `~new`, and there is no route to a
+/// committed construction program because none exists to route to. The task
+/// that commits the first one has to add that route here in the same change;
+/// what it must not do is flip a class to `covered` and leave the derived
+/// probe on a bare `~new` that raises. What it would see if it did is not a
+/// wrong verdict -- [`OracleShape::AllOrNothing`] admits a group that answered
+/// nothing -- but a group whose every row reads `agree` on the two sides
+/// raising alike, which is the standing hole the report counts on every run.
 fn method_probe_text(class: &str, arm: &str, status: &str, reason: &str, names: &[&str]) -> String {
     let mut text = if arm == "class" {
         format!(
@@ -616,23 +681,89 @@ fn method_probe_text(class: &str, arm: &str, status: &str, reason: &str, names: 
     text
 }
 
-/// How many lines of `stdout` the oracle must produce for a (class, arm)
-/// group, from the committed row set alone.
+/// What the oracle's `stdout` must look like for a row's probe to have asked
+/// the question the row is about.
 ///
-/// **This is the structural check that the shared program actually asks the
-/// whole documented set.** One line per row on the class arm; one line per
-/// row on the instance arm of a class a bare `~new` constructs; and none at
-/// all where it does not, because the probe's first instruction raises. A
-/// disagreement means the program and the row set have drifted, which is red
-/// in every mode: without it a probe that silently stopped asking half its
-/// names would leave those rows comparing an absent line against an absent
-/// line.
-fn expected_oracle_lines(arm: &str, status: &str, rows: usize) -> usize {
-    if arm == "class" || status == "covered" {
-        rows
-    } else {
-        0
+/// **The check every family here needs, and the reason it is not optional.**
+/// A verdict is a comparison of two sides; it says nothing about whether
+/// either side answered. Two interpreters that fail identically at a probe's
+/// first instruction agree on all three descriptors, so the row reads
+/// `agree` and is counted as satisfied while nothing was asked -- measured, a
+/// row naming a class neither interpreter has produces byte-identical `97.1`
+/// on both sides, empty `stdout`, identical exit status. `class-set.txt`'s
+/// header records `RegularExpression` being removed from the row set by hand
+/// for exactly that reason, so the case is not hypothetical: had it stayed,
+/// its wiring row would read `agree` today over a class this build does not
+/// ship, satisfying a "Done when" no interpreter can meet.
+///
+/// The bound comes from the probe's own text, never from a recording of what
+/// the oracle said. It can only make a row **fail**; nothing here can turn a
+/// divergence into agreement.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum OracleShape {
+    /// Exactly this many lines, because every `say` the program holds is
+    /// reached.
+    Exactly(usize),
+    /// Every line or none at all, and nothing between: the shape of a program
+    /// that constructs something first and asks its questions of the result,
+    /// where the construction either answers or raises.
+    AllOrNothing(usize),
+}
+
+impl OracleShape {
+    /// Whether `lines` is a count this shape admits.
+    fn admits(self, lines: usize) -> bool {
+        match self {
+            OracleShape::Exactly(want) => lines == want,
+            OracleShape::AllOrNothing(want) => lines == want || lines == 0,
+        }
     }
+
+    /// What this shape demands, for the failure message.
+    fn describe(self) -> String {
+        match self {
+            OracleShape::Exactly(want) => format!("exactly {want}"),
+            OracleShape::AllOrNothing(want) => format!("{want} or none"),
+        }
+    }
+}
+
+/// How many lines a derived probe prints when every `say` in it is reached.
+///
+/// Read off the derived text rather than counted by the caller, so the bound
+/// and the program cannot drift: they are the same string.
+fn derived_say_lines(text: &str) -> usize {
+    text.lines().filter(|line| line.starts_with("say ")).count()
+}
+
+/// Records a structural failure when the oracle's output is not a shape the
+/// probe could have produced while asking its row's question.
+///
+/// Returns whether the shape held, so a caller with a second check over the
+/// same output can skip it rather than report twice about a program that
+/// plainly did not run.
+fn check_oracle_shape(
+    probe: &str,
+    subject: &str,
+    shape: OracleShape,
+    oracle_stdout: &[u8],
+    structural: &mut Vec<Structural>,
+) -> bool {
+    let lines = stdout_lines(oracle_stdout).len();
+    if shape.admits(lines) {
+        return true;
+    }
+    structural.push(Structural {
+        subject: probe.to_string(),
+        detail: format!(
+            "the oracle answered {lines} line(s) where this row's probe asks for {}. The \
+             row for {subject} therefore has no answer to compare -- and two sides that \
+             both fail to answer agree on all three descriptors, so without this the row \
+             would read `agree` for a question nobody asked",
+            shape.describe()
+        ),
+    });
+    false
 }
 
 /// Splits a program's `stdout` into lines for per-row attribution.
@@ -680,6 +811,49 @@ fn method_row_stdout(oracle: &[Vec<u8>], crate_side: &[Vec<u8>], index: usize) -
     }
 }
 
+/// The marker an edge probe's derived text prints its documented-edge answer
+/// under.
+const DOCUMENTED_EDGE_MARKER: &str = "documented-edge ";
+
+/// Records a structural failure when the oracle does not confirm the edge the
+/// row claims.
+///
+/// **The row's own claim, asked of the oracle.** A hierarchy row says the
+/// documented parent is present in the child's `~superClasses`; if it is not,
+/// every instrument in this table still works and the row still reads `agree`
+/// whenever the two interpreters answer `0` alike -- a row that has become a
+/// statement about neither the book nor the build. What it is here to catch
+/// is a row whose claim the shipped interpreter contradicts, which is a
+/// finding for a maintainer rather than a verdict for a phase, so it is
+/// structural.
+///
+/// The marker is the one [`edge_probe_text`] writes, in the same file, so the
+/// two cannot drift.
+fn check_documented_edge(
+    probe: &str,
+    subject: &str,
+    oracle_stdout: &[u8],
+    structural: &mut Vec<Structural>,
+) {
+    let text = String::from_utf8_lossy(oracle_stdout);
+    let answer = text
+        .lines()
+        .find_map(|line| line.strip_prefix(DOCUMENTED_EDGE_MARKER));
+    if answer == Some("1") {
+        return;
+    }
+    structural.push(Structural {
+        subject: probe.to_string(),
+        detail: format!(
+            "the oracle does not confirm the documented edge {subject}: its \
+             `{DOCUMENTED_EDGE_MARKER}` answer is {answer:?}, not \"1\". The row claims the \
+             parent is present in the child's ~superClasses; where the shipped interpreter \
+             says otherwise, both sides can answer `0` alike and the row would read `agree` \
+             while asserting nothing about either the book or the build"
+        ),
+    });
+}
+
 /// One finished measurement, whatever row class it came from.
 struct Measured {
     kind: &'static str,
@@ -689,7 +863,13 @@ struct Measured {
     detail: String,
     probe: String,
     phase: &'static str,
-    verdict: Verdict,
+    /// `None` where the oracle did not answer the row's question at all, so
+    /// no comparison of the two sides means anything. **The row stays in the
+    /// table**: dropping it would leave one row fewer, a lower gated count,
+    /// and a close criterion phrased over that count satisfiable by removing
+    /// evidence. It is reported as `unanswered`, is never `agree`, and its
+    /// own structural failure is what makes the run red.
+    verdict: Option<Verdict>,
     loud: bool,
     refused: Option<String>,
     oracle_exit: i32,
@@ -790,13 +970,30 @@ fn probe_set(
     structural: &mut Vec<Structural>,
 ) -> BTreeSet<String> {
     let dir = corpus.join(subdir);
-    let on_disk: BTreeSet<String> = fs::read_dir(&dir)
-        .unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()))
-        .flatten()
-        .filter_map(|entry| entry.file_name().into_string().ok())
-        .filter(|name| name.ends_with(".rex"))
-        .map(|name| format!("{subdir}/{name}"))
-        .collect();
+    let mut on_disk: BTreeSet<String> = BTreeSet::new();
+    for entry in fs::read_dir(&dir).unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()))
+    {
+        let name = entry
+            .unwrap_or_else(|e| panic!("cannot read an entry of {}: {e}", dir.display()))
+            .file_name();
+        match name.clone().into_string() {
+            Ok(name) if name.ends_with(".rex") => {
+                on_disk.insert(format!("{subdir}/{name}"));
+            }
+            Ok(_) => {}
+            // A name no row can ever derive, because every derived path is
+            // built from ASCII. Dropping it would make the file invisible to
+            // the orphan half of the check below -- present in the directory,
+            // named by nothing, and never reported.
+            Err(_) => structural.push(Structural {
+                subject: format!("{subdir}/{}", name.to_string_lossy()),
+                detail: "a file in the probe directory whose name is not valid UTF-8. No \
+                         row derives such a path, so nothing runs it and the orphan check \
+                         cannot name it"
+                    .to_string(),
+            }),
+        }
+    }
     for missing in expected.difference(&on_disk) {
         structural.push(Structural {
             subject: missing.clone(),
@@ -817,11 +1014,44 @@ fn probe_set(
 
 /// Compares one derived probe program against its committed file, in both
 /// directions.
-fn check_probe_text(corpus: &Path, probe: &str, derived: &str, structural: &mut Vec<Structural>) {
+fn check_probe_text(
+    corpus: &Path,
+    probe: &str,
+    derived: &str,
+    on_disk: &BTreeSet<String>,
+    structural: &mut Vec<Structural>,
+) {
     let path = corpus.join(probe);
-    let Ok(committed) = fs::read_to_string(&path) else {
-        // Missing is the set check's case, already reported there.
-        return;
+    let committed = match fs::read_to_string(&path) {
+        Ok(committed) => committed,
+        Err(error) => {
+            // **Returning quietly here is only right for one of the ways this
+            // read fails, and the others leave the file in place.**
+            // `read_to_string` fails on invalid UTF-8 and on a permission
+            // error as well as on a missing file, and in both of those the
+            // program still exists, still runs, and still produces a verdict
+            // -- so a silent return turns off the only thing standing between
+            // a row's verdict and a program about a different subject.
+            // Measured: one `0xff` byte appended to a probe whose body asked
+            // about another class left the table exiting 0.
+            //
+            // Guarded on the directory listing for the reason `run_probe`'s
+            // own arm is: a genuinely missing file is the set check's case and
+            // has already been reported once there.
+            if on_disk.contains(probe) {
+                structural.push(Structural {
+                    subject: probe.to_string(),
+                    detail: format!(
+                        "the probe is listed in the directory but its bytes cannot be \
+                         read as text: {error}. The derivation check is what keeps a \
+                         probe from asking about a subject other than its row's, and it \
+                         cannot run on a file it cannot read -- so this is structural \
+                         rather than a check that quietly does not happen"
+                    ),
+                });
+            }
+            return;
+        }
     };
     if committed != derived {
         // The **first differing line**, not the head of either file. Every
@@ -846,11 +1076,21 @@ fn check_probe_text(corpus: &Path, probe: &str, derived: &str, structural: &mut 
 }
 
 /// The one-based number of the first line at which two texts differ, and that
-/// line from each side. A line present on one side only is reported as the
-/// empty string on the other.
+/// line from each side, **terminator included**. A line present on one side
+/// only is reported as the empty string on the other.
+///
+/// `split_inclusive`, not `lines`. `lines` strips the terminator and a
+/// trailing `\r` with it, and cannot see a missing final newline at all --
+/// so a file differing from its derivation *only* in line endings produced
+/// two identical empty strings and a message that told the reader nothing.
+/// Measured on both shapes: a stripped final newline and a CRLF conversion.
+/// This repository carries no `.gitattributes`, so a CRLF checkout puts every
+/// derived probe through this path at once, which is why the diagnostic has
+/// to survive it. The caller escapes both sides, so a `\r` and a missing
+/// `\n` are visible in the message.
 fn first_difference(left: &str, right: &str) -> (usize, String, String) {
-    let mut lefts = left.lines();
-    let mut rights = right.lines();
+    let mut lefts = left.split_inclusive('\n');
+    let mut rights = right.split_inclusive('\n');
     let mut at = 0usize;
     loop {
         at += 1;
@@ -899,6 +1139,65 @@ fn concept_rows<'a>(
         }
     }
     rows
+}
+
+/// The row-set text a derived probe copies into a Rexx block comment, checked
+/// for the one sequence that would end the comment early.
+///
+/// `class-set.txt`'s `reason` is free text and [`method_probe_text`] writes it
+/// between `/*` and `*/`. A reason containing `*/` closes the comment where it
+/// stands and leaves the rest of the header being parsed as Rexx -- and
+/// **nothing else here would notice**: the derivation is the definition, so
+/// the committed file matches it, and an instance group whose program now
+/// fails to parse answers no lines, which [`OracleShape::AllOrNothing`]
+/// admits. The fix belongs in the row file, so this names the row rather than
+/// escaping the text and carrying on.
+fn check_interpolated_text(classes: &[ClassRow], structural: &mut Vec<Structural>) {
+    for row in classes {
+        if row.reason.contains("*/") {
+            structural.push(Structural {
+                subject: format!("class-set.txt row {}", row.name),
+                detail: format!(
+                    "its `reason` contains `*/`, which ends the Rexx block comment the \
+                     derived probe writes it into: {:?}",
+                    row.reason
+                ),
+            });
+        }
+    }
+}
+
+/// Every hierarchy edge names, at both ends, a class the class row set carries
+/// as a class object.
+///
+/// **This is what makes the class wiring row the existence check for the other
+/// families.** A class row asks whether `.X` answers at all; an edge row and a
+/// method group both name a class, and neither asks that question of its own
+/// accord. Tying both back to `class-set.txt` means a name this build does not
+/// have is caught once, at its class row, rather than once per family or not
+/// at all. The method families are tied by the membership check the grouping
+/// does; this is the edge families' half.
+fn check_edge_endpoints(classes: &[ClassRow], edges: &[Edge], structural: &mut Vec<Structural>) {
+    let class_objects: BTreeSet<&str> = classes
+        .iter()
+        .filter(|row| row.entry == "class")
+        .map(|row| row.name.as_str())
+        .collect();
+    for edge in edges {
+        for (end, name) in [("child", &edge.child), ("parent", &edge.parent)] {
+            if !class_objects.contains(name.as_str()) {
+                structural.push(Structural {
+                    subject: format!("{} <- {}", edge.child, edge.parent),
+                    detail: format!(
+                        "its {end}, {name}, is not a `class` row of class-set.txt, so no \
+                         wiring row asks whether this build has it -- and an edge row \
+                         whose endpoints neither interpreter can answer for reads `agree` \
+                         on the two of them raising alike"
+                    ),
+                });
+            }
+        }
+    }
 }
 
 /// The `ArgUtil` assertion, carried here as a wiring row.
@@ -1045,6 +1344,7 @@ fn concept_and_class_gate_table() {
             &corpus,
             &class_probe(&row.name),
             &class_probe_text(&row.name),
+            &class_on_disk,
             &mut structural,
         );
     }
@@ -1053,6 +1353,7 @@ fn concept_and_class_gate_table() {
             &corpus,
             &edge_probe(&edge.child, &edge.parent),
             &edge_probe_text(&edge.child, &edge.parent),
+            &edge_on_disk,
             &mut structural,
         );
     }
@@ -1065,10 +1366,13 @@ fn concept_and_class_gate_table() {
             &corpus,
             &method_probe(class, arm),
             &method_probe_text(class, arm, status, reason, &names),
+            &method_on_disk,
             &mut structural,
         );
     }
 
+    check_interpolated_text(&classes, &mut structural);
+    check_edge_endpoints(&classes, &edges, &mut structural);
     let argutil = argutil_assertion(&classes, &edges, &mut structural);
 
     let mut measured: Vec<Measured> = Vec::new();
@@ -1086,6 +1390,13 @@ fn concept_and_class_gate_table() {
         ) else {
             continue;
         };
+        let answered = check_oracle_shape(
+            &probe,
+            &subject,
+            OracleShape::Exactly(concept.oracle_lines),
+            &ran.oracle_stdout,
+            &mut structural,
+        );
         measured.push(Measured {
             kind: "concept",
             subject: format!("{} {}", section.id, section.title),
@@ -1095,7 +1406,7 @@ fn concept_and_class_gate_table() {
             ),
             probe,
             phase: concept.phase,
-            verdict: verdict(ran.differs),
+            verdict: answered.then(|| verdict(ran.differs)),
             loud: ran.crate_loud,
             refused: ran.crate_refused,
             oracle_exit: ran.oracle_exit,
@@ -1119,13 +1430,28 @@ fn concept_and_class_gate_table() {
         ) else {
             continue;
         };
+        // `entry` is the row's own claim about what the `.environment` entry
+        // is -- `class-set.txt`'s header states it for the one row that is not
+        // a class object ("its .environment entry is an instance, not the
+        // class object") -- so it is the claim this checks rather than an
+        // assumption made about the oracle. A `class` row whose entry answers
+        // every question prints one line per question; a row whose entry is
+        // not a class object raises at the first and prints none.
+        let asked = derived_say_lines(&class_probe_text(&row.name));
+        let answered = check_oracle_shape(
+            &probe,
+            &row.name,
+            OracleShape::Exactly(if row.entry == "class" { asked } else { 0 }),
+            &ran.oracle_stdout,
+            &mut structural,
+        );
         measured.push(Measured {
             kind: "class",
             subject: row.name.clone(),
             detail: format!("{} {} {}", row.entry, row.status, row.cite),
             probe,
             phase: WIRING_PHASE,
-            verdict: verdict(ran.differs),
+            verdict: answered.then(|| verdict(ran.differs)),
             loud: ran.crate_loud,
             refused: ran.crate_refused,
             oracle_exit: ran.oracle_exit,
@@ -1150,13 +1476,24 @@ fn concept_and_class_gate_table() {
         ) else {
             continue;
         };
+        let asked = derived_say_lines(&edge_probe_text(&edge.child, &edge.parent));
+        let answered = check_oracle_shape(
+            &probe,
+            &subject,
+            OracleShape::Exactly(asked),
+            &ran.oracle_stdout,
+            &mut structural,
+        );
+        if answered {
+            check_documented_edge(&probe, &subject, &ran.oracle_stdout, &mut structural);
+        }
         measured.push(Measured {
             kind: "edge",
             subject,
             detail: format!("provide.xml:{}", edge.line),
             probe,
             phase: WIRING_PHASE,
-            verdict: verdict(ran.differs),
+            verdict: answered.then(|| verdict(ran.differs)),
             loud: ran.crate_loud,
             refused: ran.crate_refused,
             oracle_exit: ran.oracle_exit,
@@ -1169,9 +1506,9 @@ fn concept_and_class_gate_table() {
     }
 
     // One measurement per method row, from one run per (class, arm).
-    let mut method_measured: Vec<(usize, Verdict, bool, Option<String>)> = Vec::new();
+    let mut method_measured: Vec<(usize, Option<Verdict>, bool, Option<String>)> = Vec::new();
     let mut method_programs: Vec<MethodProgram> = Vec::new();
-    for (class, arm, status, _, rows) in &method_groups {
+    for (class, arm, _, _, rows) in &method_groups {
         let probe = method_probe(class, arm);
         let subject = format!("{class} ({arm} arm)");
         let Some(ran) = run_probe(
@@ -1192,20 +1529,29 @@ fn concept_and_class_gate_table() {
             .into_iter()
             .map(<[u8]>::to_vec)
             .collect();
-        let expected = expected_oracle_lines(arm, status, rows.len());
-        if oracle_lines.len() != expected {
-            structural.push(Structural {
-                subject: probe.clone(),
-                detail: format!(
-                    "the oracle answered {} line(s) where the row set says {expected}. The \
-                     program and the row set have drifted, so a row of this group would be \
-                     comparing a line that is not its own -- or an absent line against an \
-                     absent line, which reads `agree` for a question nobody asked",
-                    oracle_lines.len()
-                ),
-            });
-            continue;
-        }
+        // The class arm asks its questions of the class object directly, so
+        // every `say` is reached. The instance arm constructs first, and that
+        // construction either answers -- one line per row -- or raises, and
+        // no count between the two is reachable. **Neither is read off the
+        // row set's `status` column**: that column says whether a
+        // construction program is committed, and its own header says
+        // `not-covered` "CARRIES NO CLAIM ABOUT THE ORACLE".
+        //
+        // What this does not check is that the construction *succeeded*: a
+        // group whose `~new` raises answers none of its names, and every row
+        // of it can read `agree` on the two sides raising alike. The row that
+        // catches a class this build does not have at all is the class wiring
+        // row, which every method row reaches by the class-set membership
+        // check above; what stays uncovered is a class the build has whose
+        // constructor stopped constructing, and the report says how many rows
+        // sit there on every run.
+        let shape = if arm == "class" {
+            OracleShape::Exactly(rows.len())
+        } else {
+            OracleShape::AllOrNothing(rows.len())
+        };
+        let shape_held =
+            check_oracle_shape(&probe, &subject, shape, &ran.oracle_stdout, &mut structural);
         let whole_stdout_differs = ran.differs.stdout;
         for (at, &index) in rows.iter().enumerate() {
             let differs = Descriptors {
@@ -1213,9 +1559,24 @@ fn concept_and_class_gate_table() {
                 stdout: whole_stdout_differs && method_row_stdout(&oracle_lines, &crate_lines, at),
                 stderr: ran.differs.stderr,
             };
+            // **A row whose own line is absent from both sides was asked of
+            // neither, and has no verdict.** That is the group whose `~new`
+            // raised: the program answered none of its names, so `agree`
+            // would be a claim about a question nobody put and `diverge`
+            // would be a claim about the constructor rather than about this
+            // row. The group's own report line still carries the two sides'
+            // exit statuses and `stderr`, which is where the constructor's
+            // divergence is visible.
+            //
+            // One side answering and the other not is a real divergence and
+            // keeps its verdict.
+            let asked = oracle_lines.get(at).is_some() || crate_lines.get(at).is_some();
+            // Kept, not dropped, when the shape check failed: a group that
+            // vanished would take its rows out of every count, including the
+            // gated one.
             method_measured.push((
                 index,
-                verdict(differs),
+                (shape_held && asked).then(|| verdict(differs)),
                 ran.crate_loud,
                 ran.crate_refused.clone(),
             ));
@@ -1235,7 +1596,7 @@ fn concept_and_class_gate_table() {
             crate_stderr: ran.crate_stderr,
         });
     }
-    let method_verdicts: BTreeMap<usize, Verdict> = method_measured
+    let method_verdicts: BTreeMap<usize, Option<Verdict>> = method_measured
         .iter()
         .map(|(index, verdict, _, _)| (*index, *verdict))
         .collect();
@@ -1297,13 +1658,13 @@ fn concept_and_class_gate_table() {
          read the same verdict is listed row by row:",
     );
     for program in &method_programs {
-        let mut by_verdict: BTreeMap<Verdict, usize> = BTreeMap::new();
+        let mut by_verdict: BTreeMap<Option<Verdict>, usize> = BTreeMap::new();
         for &index in &program.rows {
             *by_verdict.entry(method_verdicts[&index]).or_insert(0) += 1;
         }
         let summary: Vec<String> = by_verdict
             .iter()
-            .map(|(verdict, count)| format!("{}={count}", verdict.label()))
+            .map(|(verdict, count)| format!("{}={count}", verdict_label(*verdict)))
             .collect();
         report.line(&format!(
             "  {:<28} {:<9} loud={:<3} {:<4} {:<4} row(s): {:<40} {}",
@@ -1323,13 +1684,16 @@ fn concept_and_class_gate_table() {
             for &index in &program.rows {
                 report.line(&format!(
                     "      {:<14} {} ({})",
-                    method_verdicts[&index].label(),
+                    verdict_label(method_verdicts[&index]),
                     method_rows[index].method,
                     method_rows[index].origin,
                 ));
             }
         }
-        if by_verdict.keys().any(|verdict| *verdict != Verdict::Agree) {
+        if by_verdict
+            .keys()
+            .any(|verdict| *verdict != Some(Verdict::Agree))
+        {
             report.line(&format!(
                 "      oracle rc={:<4} out={} err={}",
                 program.oracle_exit,
@@ -1354,15 +1718,18 @@ fn concept_and_class_gate_table() {
     let mut by_construct: BTreeMap<String, usize> = BTreeMap::new();
     let mut loud_rows = 0usize;
     let mut gated: Vec<String> = Vec::new();
-    let mut record = |verdict: Verdict,
+    let mut record = |verdict: Option<Verdict>,
                       phase: &'static str,
                       loud: bool,
                       refused: &Option<String>,
                       probe: &str| {
-        *by_verdict.entry(verdict.label()).or_insert(0) += 1;
+        *by_verdict.entry(verdict_label(verdict)).or_insert(0) += 1;
         let entry = by_phase.entry(phase).or_insert((0, 0));
         entry.0 += 1;
-        if verdict != Verdict::Agree {
+        // `unanswered` is not `agree`, so it counts as open and, on a gated
+        // phase, as gated. That is the safe direction: a row nothing could
+        // answer must never make the gated count smaller.
+        if verdict != Some(Verdict::Agree) {
             entry.1 += 1;
             if verdict_is_gated(phase) {
                 gated.push(probe.to_string());
@@ -1395,6 +1762,22 @@ fn concept_and_class_gate_table() {
     }
     report.line(&format!(
         "  loud (this crate declined rather than answered): {loud_rows}"
+    ));
+
+    // Said here, in the summary a reader meets the counts in, rather than
+    // only in a report nobody reads at the moment they see green. These are
+    // the rows whose group's probe raised at `~new` on the oracle: the
+    // documented names were never asked, so they are `unanswered` above
+    // rather than `agree`, and no run of this table can move them until an
+    // instance exists.
+    let constructor_raised: usize = method_programs
+        .iter()
+        .filter(|program| program.oracle_stdout.is_empty())
+        .map(|program| program.rows.len())
+        .sum();
+    report.line(&format!(
+        "  method rows whose group's probe raised at ~new on the oracle, so no documented \
+         name was asked on either side: {constructor_raised}"
     ));
 
     report.line("");
@@ -1452,12 +1835,24 @@ struct MethodProgram {
     crate_stderr: Vec<u8>,
 }
 
+/// The label a row's verdict is reported and tallied under, including the
+/// case where there is no verdict because the oracle answered nothing.
+fn verdict_label(verdict: Option<Verdict>) -> &'static str {
+    match verdict {
+        Some(verdict) => verdict.label(),
+        None => UNANSWERED,
+    }
+}
+
+/// The label for a row whose oracle side did not answer the row's question.
+const UNANSWERED: &str = "unanswered";
+
 /// One row of the report, with the three descriptors on both sides when the
 /// row is not `agree`.
 fn emit_row(report: &mut Report, row: &Measured, subdir: &str) {
     report.line(&format!(
         "  {:<14} loud={:<3} {:<4} {:<40} {:<34} {}",
-        row.verdict.label(),
+        verdict_label(row.verdict),
         if row.loud { "yes" } else { "no" },
         row.phase,
         row.subject,
@@ -1467,7 +1862,7 @@ fn emit_row(report: &mut Report, row: &Measured, subdir: &str) {
             .and_then(|rest| rest.strip_prefix('/'))
             .unwrap_or(&row.probe),
     ));
-    if row.verdict != Verdict::Agree {
+    if row.verdict != Some(Verdict::Agree) {
         report.line(&format!(
             "      oracle rc={:<4} out={} err={}",
             row.oracle_exit,
