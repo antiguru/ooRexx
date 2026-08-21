@@ -1,0 +1,34 @@
+# Table C's concept row set: every <section id> under provide.xml's
+# `provide` chapter, at every nesting level.
+#
+# One `id<TAB>depth<TAB>line<TAB>parent<TAB>title` per line, in document
+# order. `parent` is `-` for a section whose parent is the chapter.
+#
+# Derived by `cargo run -p rexx-extract --bin rexx-extract-docs`, whose
+# module is `src/docs/provide.rs`. Re-derived and compared in both
+# directions by `tests/extract_docs.rs`: a row that stops being derived
+# is as red as one that appears.
+#
+# derived-at: oodocs/rexxref/en-US r13198
+
+typcla	0	75	-	Types of Classes
+objcla	1	84	typcla	Object Classes
+xmixin	1	105	typcla	Mixin Classes
+abscla	1	134	typcla	Abstract Classes
+xmetac	1	155	typcla	Metaclasses
+xcremet	0	315	-	Creating and Using Classes and Methods
+usingcl	1	407	xcremet	Using Classes
+xscope	1	423	xcremet	Scope
+usesem	1	440	xcremet	Defining Instance Methods with SETMETHOD or ENHANCED
+methna	1	456	xcremet	Method Names
+xmeths	1	483	xcremet	Default Search Order for Method Selection
+unkno	1	526	xcremet	Defining an UNKNOWN Method
+chsrod	1	548	xcremet	Changing the Search Order for Methods
+pubpri	1	587	xcremet	Public, Package-Scope, and Private Methods
+creo	1	660	xcremet	Initialization
+obdes	1	709	xcremet	Object Destruction and Uninitialization
+reqstr	1	723	xcremet	Required String Values
+concurr	1	816	xcremet	Concurrency
+classmeth	0	824	-	Overview of Classes Provided by Rexx
+chi	1	828	classmeth	The Class Hierarchy
+methodsbyclass	1	1006	classmeth	Class Library Notes

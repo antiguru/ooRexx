@@ -1,0 +1,116 @@
+# Table D's row set: the directive and option surface, from dire.xml and
+# from interpreter/parser/DirectiveParser.cpp, unioned.
+#
+# One `directive<TAB>keyword<TAB>position<TAB>side<TAB>evidence` per
+# line, grouped by directive in the order DIRECTIVES lists and sorted
+# within a directive by (keyword, position).
+#
+# `position` is `subkeyword` or `value-of(NAME)`. The markup does not
+# distinguish an option from an option's value -- ::OPTIONS' <option>
+# occurrences include ENGINEERING and SCIENTIFIC, which the prose says
+# are values of FORM -- so the parser's switch nesting settles it.
+#
+# `side` is which authority produced the row. `cross-reference` means the
+# section documents the name and the directive's own parser has no arm
+# for it; the evidence says where one does handle it. ::CLASS's CLASS row
+# is the worked case: its METACLASS paragraph describes ::METHOD's CLASS
+# option.
+#
+# The parser side reads every SUBDIRECTIVE_* and SUBKEY_* token inside a
+# directive function, not only the SUBDIRECTIVE_* arms of its own switch,
+# and `evidence` records which form each is. Two reasons, both measured:
+# ::OPTIONS' FORM and NUMERIC values reach the parser as SUBKEY_* arms,
+# so the narrower rule marks four implemented keywords as documented-only;
+# and ::RESOURCE's END is recognised by an `if` rather than a `case`, so
+# the narrower rule gives it no row at all though it is both documented
+# and implemented.
+#
+# DirectiveParser.cpp is tracked in this repository, so it needs no
+# revision stamp of its own -- a change to it lands in the same history as
+# this file. The stamp below is dire.xml's.
+#
+# Derived by `cargo run -p rexx-extract --bin rexx-extract-docs`, whose
+# module is `src/docs/directives.rs`. Re-derived and compared in both
+# directions by `tests/extract_docs.rs`.
+#
+# derived-at: oodocs/rexxref/en-US r13198
+
+::ANNOTATE	ATTRIBUTE	subkeyword	both	DirectiveParser.cpp:2046 case SUBDIRECTIVE_ATTRIBUTE; dire.xml:79 indexterm
+::ANNOTATE	CLASS	subkeyword	both	DirectiveParser.cpp:1965 case SUBDIRECTIVE_CLASS; dire.xml:81 indexterm
+::ANNOTATE	CONSTANT	subkeyword	both	DirectiveParser.cpp:2066 case SUBDIRECTIVE_CONSTANT; dire.xml:83 indexterm
+::ANNOTATE	METHOD	subkeyword	both	DirectiveParser.cpp:2019 case SUBDIRECTIVE_METHOD; dire.xml:85 indexterm
+::ANNOTATE	PACKAGE	subkeyword	both	DirectiveParser.cpp:1957 case SUBDIRECTIVE_PACKAGE; dire.xml:87 indexterm
+::ANNOTATE	ROUTINE	subkeyword	both	DirectiveParser.cpp:1992 case SUBDIRECTIVE_ROUTINE; dire.xml:89 indexterm
+::ATTRIBUTE	ABSTRACT	subkeyword	both	DirectiveParser.cpp:1617 case SUBDIRECTIVE_ABSTRACT; dire.xml:205 indexterm
+::ATTRIBUTE	CLASS	subkeyword	both	DirectiveParser.cpp:1521 case SUBDIRECTIVE_CLASS; dire.xml:197 indexterm
+::ATTRIBUTE	DELEGATE	subkeyword	both	DirectiveParser.cpp:1627 case SUBDIRECTIVE_DELEGATE; dire.xml:206 indexterm
+::ATTRIBUTE	EXTERNAL	subkeyword	both	DirectiveParser.cpp:1599 case SUBDIRECTIVE_EXTERNAL; dire.xml:207 indexterm
+::ATTRIBUTE	GET	subkeyword	both	DirectiveParser.cpp:1500 case SUBDIRECTIVE_GET; dire.xml:195 indexterm
+::ATTRIBUTE	GUARDED	subkeyword	both	DirectiveParser.cpp:1590 case SUBDIRECTIVE_GUARDED; dire.xml:201 indexterm
+::ATTRIBUTE	PACKAGE	subkeyword	both	DirectiveParser.cpp:1551 case SUBDIRECTIVE_PACKAGE; dire.xml:200 indexterm
+::ATTRIBUTE	PRIVATE	subkeyword	both	DirectiveParser.cpp:1531 case SUBDIRECTIVE_PRIVATE; dire.xml:199 indexterm
+::ATTRIBUTE	PROTECTED	subkeyword	both	DirectiveParser.cpp:1561 case SUBDIRECTIVE_PROTECTED; dire.xml:204 indexterm
+::ATTRIBUTE	PUBLIC	subkeyword	both	DirectiveParser.cpp:1541 case SUBDIRECTIVE_PUBLIC; dire.xml:198 indexterm
+::ATTRIBUTE	SET	subkeyword	both	DirectiveParser.cpp:1510 case SUBDIRECTIVE_SET; dire.xml:196 indexterm
+::ATTRIBUTE	UNGUARDED	subkeyword	both	DirectiveParser.cpp:1581 case SUBDIRECTIVE_UNGUARDED; dire.xml:202 indexterm
+::ATTRIBUTE	UNPROTECTED	subkeyword	both	DirectiveParser.cpp:1571 case SUBDIRECTIVE_UNPROTECTED; dire.xml:203 indexterm
+::CLASS	ABSTRACT	subkeyword	both	DirectiveParser.cpp:477 case SUBDIRECTIVE_ABSTRACT; dire.xml:396 indexterm
+::CLASS	CLASS	subkeyword	cross-reference	dire.xml:428 <option>; classDirective has no arm for it, handled by ::ANNOTATE (DirectiveParser.cpp:1965), ::ATTRIBUTE (DirectiveParser.cpp:1521), ::METHOD (DirectiveParser.cpp:674)
+::CLASS	INHERIT	subkeyword	both	DirectiveParser.cpp:456 case SUBDIRECTIVE_INHERIT; dire.xml:395 indexterm
+::CLASS	METACLASS	subkeyword	both	DirectiveParser.cpp:396 case SUBDIRECTIVE_METACLASS; dire.xml:390 indexterm
+::CLASS	MIXINCLASS	subkeyword	both	DirectiveParser.cpp:443 case SUBDIRECTIVE_MIXINCLASS; dire.xml:392 indexterm
+::CLASS	PRIVATE	subkeyword	both	DirectiveParser.cpp:420 case SUBDIRECTIVE_PRIVATE; dire.xml:394 indexterm
+::CLASS	PUBLIC	subkeyword	both	DirectiveParser.cpp:408 case SUBDIRECTIVE_PUBLIC; dire.xml:393 indexterm
+::CLASS	SUBCLASS	subkeyword	both	DirectiveParser.cpp:431 case SUBDIRECTIVE_SUBCLASS; dire.xml:391 indexterm
+::METHOD	ABSTRACT	subkeyword	both	DirectiveParser.cpp:785 case SUBDIRECTIVE_ABSTRACT; dire.xml:631 indexterm
+::METHOD	ATTRIBUTE	subkeyword	both	DirectiveParser.cpp:774 case SUBDIRECTIVE_ATTRIBUTE; dire.xml:622 indexterm
+::METHOD	CLASS	subkeyword	both	DirectiveParser.cpp:674 case SUBDIRECTIVE_CLASS; dire.xml:623 indexterm
+::METHOD	DELEGATE	subkeyword	both	DirectiveParser.cpp:796 case SUBDIRECTIVE_DELEGATE; dire.xml:632 indexterm
+::METHOD	EXTERNAL	subkeyword	both	DirectiveParser.cpp:684 case SUBDIRECTIVE_EXTERNAL; dire.xml:633 indexterm
+::METHOD	GUARDED	subkeyword	both	DirectiveParser.cpp:763 case SUBDIRECTIVE_GUARDED; dire.xml:627 indexterm
+::METHOD	PACKAGE	subkeyword	both	DirectiveParser.cpp:711 case SUBDIRECTIVE_PACKAGE; dire.xml:625 indexterm
+::METHOD	PRIVATE	subkeyword	both	DirectiveParser.cpp:701 case SUBDIRECTIVE_PRIVATE; dire.xml:626 indexterm
+::METHOD	PROTECTED	subkeyword	both	DirectiveParser.cpp:732 case SUBDIRECTIVE_PROTECTED; dire.xml:630 indexterm
+::METHOD	PUBLIC	subkeyword	both	DirectiveParser.cpp:721 case SUBDIRECTIVE_PUBLIC; dire.xml:624 indexterm
+::METHOD	UNGUARDED	subkeyword	both	DirectiveParser.cpp:752 case SUBDIRECTIVE_UNGUARDED; dire.xml:628 indexterm
+::METHOD	UNPROTECTED	subkeyword	both	DirectiveParser.cpp:742 case SUBDIRECTIVE_UNPROTECTED; dire.xml:629 indexterm
+::OPTIONS	ALL	subkeyword	both	DirectiveParser.cpp:1265 case SUBDIRECTIVE_ALL; dire.xml:940 <option>
+::OPTIONS	CONDITION	value-of(ALL)	parser-only	DirectiveParser.cpp:1287 case SUBDIRECTIVE_CONDITION; no <option> or subkeyword indexterm in dire.xml's optionsd section
+::OPTIONS	CONDITION	value-of(ERROR)	parser-only	DirectiveParser.cpp:1128 case SUBDIRECTIVE_CONDITION; no <option> or subkeyword indexterm in dire.xml's optionsd section
+::OPTIONS	CONDITION	value-of(FAILURE)	parser-only	DirectiveParser.cpp:1159 case SUBDIRECTIVE_CONDITION; no <option> or subkeyword indexterm in dire.xml's optionsd section
+::OPTIONS	CONDITION	value-of(LOSTDIGITS)	parser-only	DirectiveParser.cpp:1190 case SUBDIRECTIVE_CONDITION; no <option> or subkeyword indexterm in dire.xml's optionsd section
+::OPTIONS	CONDITION	value-of(NOSTRING)	parser-only	DirectiveParser.cpp:1221 case SUBDIRECTIVE_CONDITION; no <option> or subkeyword indexterm in dire.xml's optionsd section
+::OPTIONS	CONDITION	value-of(NOTREADY)	parser-only	DirectiveParser.cpp:1251 case SUBDIRECTIVE_CONDITION; no <option> or subkeyword indexterm in dire.xml's optionsd section
+::OPTIONS	CONDITION	value-of(NOVALUE)	parser-only	DirectiveParser.cpp:1098 case SUBDIRECTIVE_CONDITION; no <option> or subkeyword indexterm in dire.xml's optionsd section
+::OPTIONS	DIGITS	subkeyword	both	DirectiveParser.cpp:971 case SUBDIRECTIVE_DIGITS; dire.xml:862 <option>
+::OPTIONS	ENGINEERING	value-of(FORM)	both	DirectiveParser.cpp:1015 case SUBKEY_ENGINEERING; dire.xml:892 <option>
+::OPTIONS	ERROR	subkeyword	both	DirectiveParser.cpp:1112 case SUBDIRECTIVE_ERROR; dire.xml:945 <option>
+::OPTIONS	ERROR	value-of(NOVALUE)	both	DirectiveParser.cpp:1091 case SUBDIRECTIVE_ERROR; dire.xml:945 <option>
+::OPTIONS	FAILURE	subkeyword	both	DirectiveParser.cpp:1142 case SUBDIRECTIVE_FAILURE; dire.xml:945 <option>
+::OPTIONS	FORM	subkeyword	both	DirectiveParser.cpp:999 case SUBDIRECTIVE_FORM; dire.xml:884 <option>
+::OPTIONS	FUZZ	subkeyword	both	DirectiveParser.cpp:1029 case SUBDIRECTIVE_FUZZ; dire.xml:903 <option>
+::OPTIONS	INHERIT	value-of(NUMERIC)	both	DirectiveParser.cpp:1347 case SUBKEY_INHERIT; dire.xml:932 <option>
+::OPTIONS	LOSTDIGITS	subkeyword	both	DirectiveParser.cpp:1173 case SUBDIRECTIVE_LOSTDIGITS; dire.xml:945 <option>
+::OPTIONS	NOINHERIT	value-of(NUMERIC)	both	DirectiveParser.cpp:1342 case SUBKEY_NOINHERIT; dire.xml:932 <option>
+::OPTIONS	NOPROLOG	subkeyword	both	DirectiveParser.cpp:1311 case SUBDIRECTIVE_NOPROLOG; dire.xml:998 <option>
+::OPTIONS	NOSTRING	subkeyword	both	DirectiveParser.cpp:1204 case SUBDIRECTIVE_NOSTRING; dire.xml:946 <option>
+::OPTIONS	NOTREADY	subkeyword	both	DirectiveParser.cpp:1235 case SUBDIRECTIVE_NOTREADY; dire.xml:946 <option>
+::OPTIONS	NOVALUE	subkeyword	both	DirectiveParser.cpp:1081 case SUBDIRECTIVE_NOVALUE; dire.xml:946 <option>
+::OPTIONS	NUMERIC	subkeyword	both	DirectiveParser.cpp:1331 case SUBDIRECTIVE_NUMERIC; dire.xml:926 <option>
+::OPTIONS	PROLOG	subkeyword	both	DirectiveParser.cpp:1321 case SUBDIRECTIVE_PROLOG; dire.xml:998 <option>
+::OPTIONS	SCIENTIFIC	value-of(FORM)	both	DirectiveParser.cpp:1010 case SUBKEY_SCIENTIFIC; dire.xml:891 <option>
+::OPTIONS	SYNTAX	value-of(ALL)	parser-only	DirectiveParser.cpp:1275 case SUBDIRECTIVE_SYNTAX; no <option> or subkeyword indexterm in dire.xml's optionsd section
+::OPTIONS	SYNTAX	value-of(ERROR)	parser-only	DirectiveParser.cpp:1122 case SUBDIRECTIVE_SYNTAX; no <option> or subkeyword indexterm in dire.xml's optionsd section
+::OPTIONS	SYNTAX	value-of(FAILURE)	parser-only	DirectiveParser.cpp:1152 case SUBDIRECTIVE_SYNTAX; no <option> or subkeyword indexterm in dire.xml's optionsd section
+::OPTIONS	SYNTAX	value-of(LOSTDIGITS)	parser-only	DirectiveParser.cpp:1183 case SUBDIRECTIVE_SYNTAX; no <option> or subkeyword indexterm in dire.xml's optionsd section
+::OPTIONS	SYNTAX	value-of(NOSTRING)	parser-only	DirectiveParser.cpp:1214 case SUBDIRECTIVE_SYNTAX; no <option> or subkeyword indexterm in dire.xml's optionsd section
+::OPTIONS	SYNTAX	value-of(NOTREADY)	parser-only	DirectiveParser.cpp:1245 case SUBDIRECTIVE_SYNTAX; no <option> or subkeyword indexterm in dire.xml's optionsd section
+::OPTIONS	SYNTAX	value-of(NOVALUE)	parser-only	DirectiveParser.cpp:1092 case SUBDIRECTIVE_SYNTAX; no <option> or subkeyword indexterm in dire.xml's optionsd section
+::OPTIONS	TRACE	subkeyword	both	DirectiveParser.cpp:1057 case SUBDIRECTIVE_TRACE; dire.xml:1023 <option>
+::REQUIRES	LIBRARY	subkeyword	both	DirectiveParser.cpp:2836 case SUBDIRECTIVE_LIBRARY; dire.xml:1051 indexterm
+::REQUIRES	NAMESPACE	subkeyword	both	DirectiveParser.cpp:2809 case SUBDIRECTIVE_NAMESPACE; dire.xml:1092 <option>
+::RESOURCE	END	subkeyword	parser-only	DirectiveParser.cpp:2295 comparison SUBDIRECTIVE_END; no <option> or subkeyword indexterm in dire.xml's resourced section
+::RESOURCE	LIBRARY	subkeyword	cross-reference	dire.xml:1140 indexterm; resourceDirective has no arm for it, handled by ::REQUIRES (DirectiveParser.cpp:2836)
+::ROUTINE	EXTERNAL	subkeyword	both	DirectiveParser.cpp:2603 case SUBDIRECTIVE_EXTERNAL; dire.xml:1233 indexterm
+::ROUTINE	PRIVATE	subkeyword	both	DirectiveParser.cpp:2629 case SUBDIRECTIVE_PRIVATE; dire.xml:1231 indexterm
+::ROUTINE	PUBLIC	subkeyword	both	DirectiveParser.cpp:2619 case SUBDIRECTIVE_PUBLIC; dire.xml:1232 indexterm

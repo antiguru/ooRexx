@@ -1,0 +1,1399 @@
+# Table C's method row set: one row per (class, method, arm, status).
+#
+# One
+# `class<TAB>method<TAB>arm<TAB>status<TAB>section<TAB>origin<TAB>reason`
+# per line. `section` is the mth* section the name came from and `origin`
+# is that section's file:line, so every row cites the book.
+#
+# `arm` is which readback instrument the row is asked on -- `class` is
+# `.X~hasMethod("M")` and `instance` is `.X~new~hasMethod("M")`.
+# Neither instrument answers both questions: measured,
+# `.Array~hasMethod("OF")` is 1 and `.Array~new~hasMethod("OF")` is 0.
+#
+# The completeness evidence over this file is that every `covered` row
+# answers on ONE ARM OR THE OTHER on the oracle. The scope to `covered`
+# is what makes it achievable: a `not-covered` class has no instance, so
+# measured, all three of `.Alarm~hasMethod("CANCEL")`,
+# `("TRIGGERED")` and `("SCHEDULEDTIME")` are 0 while `.Alarm~new`
+# raises 93.901.
+#
+# The two concatenation operators have no printable spelling, so they are
+# written as the placeholders the class tables use. Measured, the names are
+# the empty string and a single blank: `.Object~method("")` and
+# `.Object~method(" ")` both answer `The Method class`.
+#
+# RegularExpression has no rows here, as it has none in class-set.txt.
+#
+# Derived by `cargo run -p rexx-extract --bin rexx-extract-docs`, whose
+# module is `src/docs/classes.rs`. Re-derived and compared in both
+# directions by `tests/extract_docs.rs`.
+#
+#
+# Two derived lists, here rather than in prose because the
+# both-directions check polices a header exactly as it polices a row.
+#
+# (1) *classmethods.xml files in rexxref/en-US that no class table
+# includes. An extractor that globbed the directory instead of following
+# the xi:includes would key their members to no class, or to the wrong
+# one:
+#     objectclassmethods.xml
+#
+# (2) mth* sections in the four books that no class table names, and so
+# produce no row. These are the named exceptions the method-row
+# denominator allows -- every other mth* section is a row:
+#     mthObjectInit  fundclasses.xml:2883
+#     mthPropertiesNew  collclasses.xml:5759
+#     mthRegularExpressionNew  utilityclasses.xml:7217
+#     mthRegularExpressionMatch  utilityclasses.xml:7256
+#     mthRegularExpressionParse  utilityclasses.xml:7311
+#     mthRegularExpressionPos  utilityclasses.xml:7447
+#     mthRegularExpressionPosition  utilityclasses.xml:7494
+#     mthStackFrameExecutable  utilityclasses.xml:9488
+#
+# derived-at: oodocs/rexxref/en-US r13198
+
+Class	=	instance	not-covered	mthClassComparisonMethods	fundclasses.xml:134	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	==	instance	not-covered	mthClassComparisonMethods	fundclasses.xml:134	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	<>	instance	not-covered	mthClassComparisonMethods	fundclasses.xml:134	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	><	instance	not-covered	mthClassComparisonMethods	fundclasses.xml:134	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	\=	instance	not-covered	mthClassComparisonMethods	fundclasses.xml:134	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	\==	instance	not-covered	mthClassComparisonMethods	fundclasses.xml:134	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	activate	instance	not-covered	mthClassActivate	fundclasses.xml:194	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	annotation	instance	not-covered	mthClassAnnotation	fundclasses.xml:220	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	annotations	instance	not-covered	mthClassAnnotations	fundclasses.xml:244	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	baseClass	instance	not-covered	mthClassBaseClass	fundclasses.xml:268	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	defaultName	instance	not-covered	mthClassDefaultName	fundclasses.xml:287	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	define	instance	not-covered	mthClassDefine	fundclasses.xml:320	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	defineMethods	instance	not-covered	mthClassDefineMethods	fundclasses.xml:369	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	delete	instance	not-covered	mthClassDelete	fundclasses.xml:414	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	enhanced	instance	not-covered	mthClassEnhanced	fundclasses.xml:457	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	id	instance	not-covered	mthClassId	fundclasses.xml:501	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	inherit	instance	not-covered	mthClassInherit	fundclasses.xml:528	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	isAbstract	instance	not-covered	mthClassIsAbstract	fundclasses.xml:590	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	isMetaclass	instance	not-covered	mthClassIsMetaclass	fundclasses.xml:614	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	isSubclassOf	instance	not-covered	mthClassIsSubclassOf	fundclasses.xml:644	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	metaClass	instance	not-covered	mthClassMetaclass	fundclasses.xml:674	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	method	instance	not-covered	mthClassMethod	fundclasses.xml:700	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	methods	instance	not-covered	mthClassMethods	fundclasses.xml:734	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	mixinClass	instance	not-covered	mthClassMixinClass	fundclasses.xml:788	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	new	class	not-covered	mthClassNew	fundclasses.xml:838	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	package	instance	not-covered	mthClassPackage	fundclasses.xml:881	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	queryMixinClass	instance	not-covered	mthClassQueryMixinClass	fundclasses.xml:904	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	subclass	instance	not-covered	mthClassSubclass	fundclasses.xml:921	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	subclasses	instance	not-covered	mthClassSubclasses	fundclasses.xml:972	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	superClass	instance	not-covered	mthClassSuperclass	fundclasses.xml:991	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	superClasses	instance	not-covered	mthClassSuperclasses	fundclasses.xml:1021	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	uninherit	instance	not-covered	mthClassUninherit	fundclasses.xml:1058	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Message	new	class	not-covered	mthMessageNew	fundclasses.xml:1166	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Message	arguments	instance	not-covered	mthMessageArguments	fundclasses.xml:1228	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Message	completed	instance	not-covered	mthMessageCompleted	fundclasses.xml:1244	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Message	errorCondition	instance	not-covered	mthMessageErrorCondition	fundclasses.xml:1264	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Message	halt	instance	not-covered	mthMessageHalt	fundclasses.xml:1284	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Message	hasError	instance	not-covered	mthMessageHasError	fundclasses.xml:1365	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Message	hasResult	instance	not-covered	mthMessageHasResult	fundclasses.xml:1386	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Message	messageComplete	instance	not-covered	mthMessageMessageComplete	fundclasses.xml:1406	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Message	messageName	instance	not-covered	mthMessageMessageName	fundclasses.xml:1450	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Message	notify	instance	not-covered	mthMessageNotify	fundclasses.xml:1466	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Message	reply	instance	not-covered	mthMessageReply	fundclasses.xml:1548	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Message	replyWith	instance	not-covered	mthMessageReplyWith	fundclasses.xml:1597	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Message	result	instance	not-covered	mthMessageResult	fundclasses.xml:1643	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Message	send	instance	not-covered	mthMessageSend	fundclasses.xml:1667	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Message	sendWith	instance	not-covered	mthMessageSendWith	fundclasses.xml:1710	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Message	start	instance	not-covered	mthMessageStart	fundclasses.xml:1750	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Message	startWith	instance	not-covered	mthMessageStartWith	fundclasses.xml:1851	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Message	target	instance	not-covered	mthMessageTarget	fundclasses.xml:1904	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Message	triggered	instance	not-covered	mthMessageTriggered	fundclasses.xml:1922	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Message	wait	instance	not-covered	mthMessageWait	fundclasses.xml:1970	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Message	cancel	instance	not-covered	mthAlarmNotificationCancel	utilityclasses.xml:371	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Method	new	class	not-covered	mthMethodNew	fundclasses.xml:2042	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Method	loadExternalMethod	class	not-covered	mthMethodLoadExternalMethod	fundclasses.xml:2101	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Method	newFile	class	not-covered	mthMethodNewFile	fundclasses.xml:2072	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Method	annotation	instance	not-covered	mthMethodAnnotation	fundclasses.xml:2137	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Method	annotations	instance	not-covered	mthMethodAnnotations	fundclasses.xml:2163	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Method	isAbstract	instance	not-covered	mthMethodIsAbstract	fundclasses.xml:2188	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Method	isAttribute	instance	not-covered	mthMethodIsAttribute	fundclasses.xml:2214	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Method	isConstant	instance	not-covered	mthMethodIsConstant	fundclasses.xml:2236	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Method	isGuarded	instance	not-covered	mthMethodIsGuarded	fundclasses.xml:2259	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Method	isPackage	instance	not-covered	mthMethodIsPackage	fundclasses.xml:2280	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Method	isPrivate	instance	not-covered	mthMethodIsPrivate	fundclasses.xml:2299	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Method	isProtected	instance	not-covered	mthMethodIsProtected	fundclasses.xml:2321	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Method	package	instance	not-covered	mthMethodPackage	fundclasses.xml:2338	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Method	scope	instance	not-covered	mthMethodScope	fundclasses.xml:2358	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Method	setGuarded	instance	not-covered	mthMethodSetGuarded	fundclasses.xml:2390	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Method	setPrivate	instance	not-covered	mthMethodSetPrivate	fundclasses.xml:2413	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Method	setProtected	instance	not-covered	mthMethodSetProtected	fundclasses.xml:2433	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Method	setSecurityManager	instance	not-covered	mthMethodSetSecurityManager	fundclasses.xml:2451	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Method	setUnguarded	instance	not-covered	mthMethodSetUnguarded	fundclasses.xml:2472	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Method	source	instance	not-covered	mthMethodSource	fundclasses.xml:2499	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Object	new	class	covered	mthObjectNew	fundclasses.xml:2584	a bare ~new constructs an instance on the oracle
+Object	=	instance	covered	mthObjectComparisonMethods	fundclasses.xml:2600	a bare ~new constructs an instance on the oracle
+Object	==	instance	covered	mthObjectComparisonMethods	fundclasses.xml:2600	a bare ~new constructs an instance on the oracle
+Object	<>	instance	covered	mthObjectComparisonMethods	fundclasses.xml:2600	a bare ~new constructs an instance on the oracle
+Object	><	instance	covered	mthObjectComparisonMethods	fundclasses.xml:2600	a bare ~new constructs an instance on the oracle
+Object	\=	instance	covered	mthObjectComparisonMethods	fundclasses.xml:2600	a bare ~new constructs an instance on the oracle
+Object	\==	instance	covered	mthObjectComparisonMethods	fundclasses.xml:2600	a bare ~new constructs an instance on the oracle
+Object	(abuttal)	instance	covered	mthObjectConcatenationMethods	fundclasses.xml:2672	a bare ~new constructs an instance on the oracle
+Object	||	instance	covered	mthObjectConcatenationMethods	fundclasses.xml:2672	a bare ~new constructs an instance on the oracle
+Object	(blank)	instance	covered	mthObjectConcatenationMethods	fundclasses.xml:2672	a bare ~new constructs an instance on the oracle
+Object	class	instance	covered	mthObjectClass	fundclasses.xml:2710	a bare ~new constructs an instance on the oracle
+Object	copy	instance	covered	mthObjectCopy	fundclasses.xml:2727	a bare ~new constructs an instance on the oracle
+Object	defaultName	instance	covered	mthObjectDefaultName	fundclasses.xml:2761	a bare ~new constructs an instance on the oracle
+Object	hashCode	instance	covered	mthObjectHashCode	fundclasses.xml:2792	a bare ~new constructs an instance on the oracle
+Object	hasMethod	instance	covered	mthObjectHasMethod	fundclasses.xml:2838	a bare ~new constructs an instance on the oracle
+Object	identityHash	instance	covered	mthObjectIdentityHash	fundclasses.xml:2866	a bare ~new constructs an instance on the oracle
+Object	instanceMethod	instance	covered	mthObjectInstanceMethod	fundclasses.xml:2900	a bare ~new constructs an instance on the oracle
+Object	instanceMethods	instance	covered	mthObjectInstanceMethods	fundclasses.xml:2918	a bare ~new constructs an instance on the oracle
+Object	isA	instance	covered	mthObjectIsA	fundclasses.xml:2987	a bare ~new constructs an instance on the oracle
+Object	isInstanceOf	instance	covered	mthObjectIsInstanceOf	fundclasses.xml:3005	a bare ~new constructs an instance on the oracle
+Object	isNil	instance	covered	mthObjectIsNil	fundclasses.xml:3037	a bare ~new constructs an instance on the oracle
+Object	objectName	instance	covered	mthObjectObjectName	fundclasses.xml:3059	a bare ~new constructs an instance on the oracle
+Object	objectName=	instance	covered	mthObjectObjectNameEquals	fundclasses.xml:3081	a bare ~new constructs an instance on the oracle
+Object	request	instance	covered	mthObjectRequest	fundclasses.xml:3114	a bare ~new constructs an instance on the oracle
+Object	run	instance	covered	mthObjectRun	fundclasses.xml:3160	a bare ~new constructs an instance on the oracle
+Object	send	instance	covered	mthObjectSend	fundclasses.xml:3222	a bare ~new constructs an instance on the oracle
+Object	sendWith	instance	covered	mthObjectSendWith	fundclasses.xml:3265	a bare ~new constructs an instance on the oracle
+Object	setMethod	instance	covered	mthObjectSetMethod	fundclasses.xml:3310	a bare ~new constructs an instance on the oracle
+Object	start	instance	covered	mthObjectStart	fundclasses.xml:3369	a bare ~new constructs an instance on the oracle
+Object	startWith	instance	covered	mthObjectStartWith	fundclasses.xml:3421	a bare ~new constructs an instance on the oracle
+Object	string	instance	covered	mthObjectString	fundclasses.xml:3474	a bare ~new constructs an instance on the oracle
+Object	unsetMethod	instance	covered	mthObjectUnsetMethod	fundclasses.xml:3524	a bare ~new constructs an instance on the oracle
+Package	new	class	not-covered	mthPackageNew	fundclasses.xml:3639	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	defaultOptions	class	not-covered	mthPackageDefaultOptions	fundclasses.xml:3674	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	addClass	instance	not-covered	mthPackageAddClass	fundclasses.xml:3721	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	addPackage	instance	not-covered	mthPackageAddPackage	fundclasses.xml:3739	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	addPublicClass	instance	not-covered	mthPackageAddPublicClass	fundclasses.xml:3767	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	addPublicRoutine	instance	not-covered	mthPackageAddPublicRoutine	fundclasses.xml:3785	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	addRoutine	instance	not-covered	mthPackageAddRoutine	fundclasses.xml:3804	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	annotation	instance	not-covered	mthPackageAnnotation	fundclasses.xml:3825	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	annotations	instance	not-covered	mthPackageAnnotations	fundclasses.xml:3850	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	classes	instance	not-covered	mthPackageClasses	fundclasses.xml:3874	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	definedMethods	instance	not-covered	mthPackageDefinedMethods	fundclasses.xml:3897	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	digits	instance	not-covered	mthPackageDigits	fundclasses.xml:3915	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	findClass	instance	not-covered	mthPackageFindClass	fundclasses.xml:3935	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	findNamespace	instance	not-covered	mthPackageFindNamespace	fundclasses.xml:3970	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	findProgram	instance	not-covered	mthPackageFindProgram	fundclasses.xml:3994	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	findPublicClass	instance	not-covered	mthPackageFindPublicClass	fundclasses.xml:4019	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	findPublicRoutine	instance	not-covered	mthPackageFindPublicRoutine	fundclasses.xml:4045	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	findRoutine	instance	not-covered	mthPackageFindRoutine	fundclasses.xml:4071	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	form	instance	not-covered	mthPackageForm	fundclasses.xml:4091	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	fuzz	instance	not-covered	mthPackageFuzz	fundclasses.xml:4112	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	importedClasses	instance	not-covered	mthPackageImportedClasses	fundclasses.xml:4133	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	importedPackages	instance	not-covered	mthPackageImportedPackages	fundclasses.xml:4154	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	importedRoutines	instance	not-covered	mthPackageImportedRoutines	fundclasses.xml:4171	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	loadLibrary	instance	not-covered	mthPackageLoadLibrary	fundclasses.xml:4188	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	loadPackage	instance	not-covered	mthPackageLoadPackage	fundclasses.xml:4209	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	local	instance	not-covered	mthPackageLocal	fundclasses.xml:4243	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	name	instance	not-covered	mthPackageName	fundclasses.xml:4262	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	namespaces	instance	not-covered	mthPackageNamespaces	fundclasses.xml:4294	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	options	instance	not-covered	mthPackageOptions	fundclasses.xml:4316	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	prolog	instance	not-covered	mthPackageProlog	fundclasses.xml:4431	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	publicClasses	instance	not-covered	mthPackagePublicClasses	fundclasses.xml:4450	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	publicRoutines	instance	not-covered	mthPackagePublicRoutines	fundclasses.xml:4478	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	resource	instance	not-covered	mthPackageResource	fundclasses.xml:4509	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	resources	instance	not-covered	mthPackageResources	fundclasses.xml:4539	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	routines	instance	not-covered	mthPackageRoutines	fundclasses.xml:4572	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	setSecurityManager	instance	not-covered	mthPackageSetSecurityManager	fundclasses.xml:4592	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	source	instance	not-covered	mthPackageSource	fundclasses.xml:4614	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	sourceLine	instance	not-covered	mthPackageSourceLine	fundclasses.xml:4633	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	sourceSize	instance	not-covered	mthPackageSourceSize	fundclasses.xml:4651	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	trace	instance	not-covered	mthPackageTrace	fundclasses.xml:4668	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Routine	new	class	not-covered	mthRoutineNew	fundclasses.xml:4736	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Routine	loadExternalRoutine	class	not-covered	mthRoutineLoadExternalRoutine	fundclasses.xml:4792	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Routine	newFile	class	not-covered	mthRoutineNewFile	fundclasses.xml:4765	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Routine	[]	instance	not-covered	mthRoutineCallBrackets	fundclasses.xml:4829	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Routine	annotation	instance	not-covered	mthRoutineAnnotation	fundclasses.xml:4846	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Routine	annotations	instance	not-covered	mthRoutineAnnotations	fundclasses.xml:4872	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Routine	call	instance	not-covered	mthRoutineCall	fundclasses.xml:4896	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Routine	callWith	instance	not-covered	mthRoutineCallWith	fundclasses.xml:4916	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Routine	package	instance	not-covered	mthRoutinePackage	fundclasses.xml:4937	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Routine	setSecurityManager	instance	not-covered	mthRoutineSetSecurityManager	fundclasses.xml:4955	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Routine	source	instance	not-covered	mthRoutineSource	fundclasses.xml:4976	no construction program is committed; a bare ~new raises 88.901 on the oracle
+String	new	class	not-covered	mthStringNew	fundclasses.xml:5152	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	alnum	class	not-covered	mthStringAlnum	fundclasses.xml:5171	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	alpha	class	not-covered	mthStringAlpha	fundclasses.xml:5192	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	blank	class	not-covered	mthStringBlank	fundclasses.xml:5213	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	cntrl	class	not-covered	mthStringCntrl	fundclasses.xml:5233	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	cr	class	not-covered	mthStringCr	fundclasses.xml:5252	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	digit	class	not-covered	mthStringDigit	fundclasses.xml:5271	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	graph	class	not-covered	mthStringGraph	fundclasses.xml:5291	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	lower	class	not-covered	mthStringLowerClsMth	fundclasses.xml:5311	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	nl	class	not-covered	mthStringNl	fundclasses.xml:5331	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	null	class	not-covered	mthStringNull	fundclasses.xml:5348	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	print	class	not-covered	mthStringPrint	fundclasses.xml:5367	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	punct	class	not-covered	mthStringPunct	fundclasses.xml:5388	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	space	class	not-covered	mthStringSpaceClsMth	fundclasses.xml:5406	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	tab	class	not-covered	mthStringTab	fundclasses.xml:5427	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	upper	class	not-covered	mthStringUpperClsMth	fundclasses.xml:5446	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	xdigit	class	not-covered	mthStringXdigit	fundclasses.xml:5466	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	+	instance	not-covered	mthStringArithmeticMethods	fundclasses.xml:5485	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	-	instance	not-covered	mthStringArithmeticMethods	fundclasses.xml:5485	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	*	instance	not-covered	mthStringArithmeticMethods	fundclasses.xml:5485	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	**	instance	not-covered	mthStringArithmeticMethods	fundclasses.xml:5485	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	/	instance	not-covered	mthStringArithmeticMethods	fundclasses.xml:5485	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	//	instance	not-covered	mthStringArithmeticMethods	fundclasses.xml:5485	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	%	instance	not-covered	mthStringArithmeticMethods	fundclasses.xml:5485	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	=	instance	not-covered	mthStringComparisonMethods	fundclasses.xml:5601	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	==	instance	not-covered	mthStringComparisonMethods	fundclasses.xml:5601	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	<	instance	not-covered	mthStringComparisonMethods	fundclasses.xml:5601	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	<=	instance	not-covered	mthStringComparisonMethods	fundclasses.xml:5601	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	<<	instance	not-covered	mthStringComparisonMethods	fundclasses.xml:5601	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	<<=	instance	not-covered	mthStringComparisonMethods	fundclasses.xml:5601	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	<>	instance	not-covered	mthStringComparisonMethods	fundclasses.xml:5601	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	>	instance	not-covered	mthStringComparisonMethods	fundclasses.xml:5601	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	>=	instance	not-covered	mthStringComparisonMethods	fundclasses.xml:5601	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	><	instance	not-covered	mthStringComparisonMethods	fundclasses.xml:5601	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	>>	instance	not-covered	mthStringComparisonMethods	fundclasses.xml:5601	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	>>=	instance	not-covered	mthStringComparisonMethods	fundclasses.xml:5601	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	\=	instance	not-covered	mthStringComparisonMethods	fundclasses.xml:5601	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	\==	instance	not-covered	mthStringComparisonMethods	fundclasses.xml:5601	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	\<	instance	not-covered	mthStringComparisonMethods	fundclasses.xml:5601	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	\<<	instance	not-covered	mthStringComparisonMethods	fundclasses.xml:5601	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	\>	instance	not-covered	mthStringComparisonMethods	fundclasses.xml:5601	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	\>>	instance	not-covered	mthStringComparisonMethods	fundclasses.xml:5601	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	(abuttal)	instance	not-covered	mthStringConcatenationMethods	fundclasses.xml:5919	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	||	instance	not-covered	mthStringConcatenationMethods	fundclasses.xml:5919	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	(blank)	instance	not-covered	mthStringConcatenationMethods	fundclasses.xml:5919	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	\	instance	not-covered	mthStringLogicalMethods	fundclasses.xml:5840	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	&	instance	not-covered	mthStringLogicalMethods	fundclasses.xml:5840	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	&&	instance	not-covered	mthStringLogicalMethods	fundclasses.xml:5840	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	|	instance	not-covered	mthStringLogicalMethods	fundclasses.xml:5840	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	[]	instance	not-covered	mthStringAtGet	fundclasses.xml:5976	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	?	instance	not-covered	mthStringIif	fundclasses.xml:6012	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	abbrev	instance	not-covered	mthStringAbbrev	fundclasses.xml:6033	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	abs	instance	not-covered	mthStringAbs	fundclasses.xml:6092	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	append	instance	not-covered	mthStringAppend	fundclasses.xml:6121	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	b2x	instance	not-covered	mthStringB2x	fundclasses.xml:6135	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	bitAnd	instance	not-covered	mthStringBitAnd	fundclasses.xml:6191	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	bitOr	instance	not-covered	mthStringBitOr	fundclasses.xml:6233	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	bitXor	instance	not-covered	mthStringBitXor	fundclasses.xml:6275	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	c2d	instance	not-covered	mthStringC2d	fundclasses.xml:6321	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	c2x	instance	not-covered	mthStringC2x	fundclasses.xml:6384	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	caselessAbbrev	instance	not-covered	mthStringCaselessAbbrev	fundclasses.xml:6425	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	caselessChangeStr	instance	not-covered	mthStringCaselessChangeStr	fundclasses.xml:6491	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	caselessCompare	instance	not-covered	mthStringCaselessCompare	fundclasses.xml:6526	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	caselessCompareTo	instance	not-covered	mthStringCaselessCompareTo	fundclasses.xml:6566	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	caselessContains	instance	not-covered	mthStringCaselessContains	fundclasses.xml:6615	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	caselessContainsWord	instance	not-covered	mthStringCaselessContainsWord	fundclasses.xml:6654	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	caselessCountStr	instance	not-covered	mthStringCaselessCountStr	fundclasses.xml:6698	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	caselessEndsWith	instance	not-covered	mthStringCaselessEndsWith	fundclasses.xml:6732	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	caselessEquals	instance	not-covered	mthStringCaselessEquals	fundclasses.xml:6757	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	caselessLastPos	instance	not-covered	mthStringCaselessLastPos	fundclasses.xml:6789	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	caselessMatch	instance	not-covered	mthStringCaselessMatch	fundclasses.xml:6843	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	caselessMatchChar	instance	not-covered	mthStringCaselessMatchChar	fundclasses.xml:6891	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	caselessPos	instance	not-covered	mthStringCaselessPos	fundclasses.xml:6926	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	caselessStartsWith	instance	not-covered	mthStringCaselessStartsWith	fundclasses.xml:6980	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	caselessWordPos	instance	not-covered	mthStringCaselessWordPos	fundclasses.xml:7005	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	ceiling	instance	not-covered	mthStringCeiling	fundclasses.xml:7051	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	center	instance	not-covered	mthStringCenter	fundclasses.xml:7091	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	centre	instance	not-covered	mthStringCenter	fundclasses.xml:7091	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	changeStr	instance	not-covered	mthStringChangeStr	fundclasses.xml:7145	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	compare	instance	not-covered	mthStringCompare	fundclasses.xml:7181	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	compareTo	instance	not-covered	mthStringCompareTo	fundclasses.xml:7219	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	contains	instance	not-covered	mthStringContains	fundclasses.xml:7267	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	containsWord	instance	not-covered	mthStringContainsWord	fundclasses.xml:7314	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	copies	instance	not-covered	mthStringCopies	fundclasses.xml:7362	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	countStr	instance	not-covered	mthStringCountStr	fundclasses.xml:7394	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	d2c	instance	not-covered	mthStringD2c	fundclasses.xml:7421	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	d2x	instance	not-covered	mthStringD2x	fundclasses.xml:7466	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	dataType	instance	not-covered	mthStringDataType	fundclasses.xml:7517	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	decodeBase64	instance	not-covered	mthStringDecodeBase64	fundclasses.xml:7667	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	delStr	instance	not-covered	mthStringDelStr	fundclasses.xml:7697	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	delWord	instance	not-covered	mthStringDelWord	fundclasses.xml:7740	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	encodeBase64	instance	not-covered	mthStringEncodeBase64	fundclasses.xml:7788	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	endsWith	instance	not-covered	mthStringEndsWith	fundclasses.xml:7818	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	equals	instance	not-covered	mthStringEquals	fundclasses.xml:7842	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	floor	instance	not-covered	mthStringFloor	fundclasses.xml:7870	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	format	instance	not-covered	mthStringFormat	fundclasses.xml:7909	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	hashCode	instance	not-covered	mthStringHashCode	fundclasses.xml:8004	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	insert	instance	not-covered	mthStringInsert	fundclasses.xml:8030	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	lastPos	instance	not-covered	mthStringLastPos	fundclasses.xml:8077	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	left	instance	not-covered	mthStringLeft	fundclasses.xml:8126	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	length	instance	not-covered	mthStringLength	fundclasses.xml:8163	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	lower	instance	not-covered	mthStringLower	fundclasses.xml:8192	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	makeArray	instance	not-covered	mthStringMakeArray	fundclasses.xml:8223	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	makeString	instance	not-covered	mthStringMakeString	fundclasses.xml:8262	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	match	instance	not-covered	mthStringMatch	fundclasses.xml:8282	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	matchChar	instance	not-covered	mthStringMatchChar	fundclasses.xml:8325	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	max	instance	not-covered	mthStringMax	fundclasses.xml:8354	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	min	instance	not-covered	mthStringMin	fundclasses.xml:8383	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	modulo	instance	not-covered	mthStringModulo	fundclasses.xml:8415	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	overlay	instance	not-covered	mthStringOverlay	fundclasses.xml:8445	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	pos	instance	not-covered	mthStringPos	fundclasses.xml:8488	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	replaceAt	instance	not-covered	mthStringReplaceAt	fundclasses.xml:8539	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	reverse	instance	not-covered	mthStringReverse	fundclasses.xml:8582	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	right	instance	not-covered	mthStringRight	fundclasses.xml:8606	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	round	instance	not-covered	mthStringRound	fundclasses.xml:8646	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	sign	instance	not-covered	mthStringSign	fundclasses.xml:8684	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	space	instance	not-covered	mthStringSpace	fundclasses.xml:8717	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	startsWith	instance	not-covered	mthStringStartsWith	fundclasses.xml:8758	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	strip	instance	not-covered	mthStringStrip	fundclasses.xml:8783	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	subChar	instance	not-covered	mthStringSubChar	fundclasses.xml:8848	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	substr	instance	not-covered	mthStringSubstr	fundclasses.xml:8870	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	subWord	instance	not-covered	mthStringSubWord	fundclasses.xml:8920	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	subWords	instance	not-covered	mthStringSubWords	fundclasses.xml:8956	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	translate	instance	not-covered	mthStringTranslate	fundclasses.xml:9002	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	trunc	instance	not-covered	mthStringTrunc	fundclasses.xml:9076	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	upper	instance	not-covered	mthStringUpper	fundclasses.xml:9123	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	verify	instance	not-covered	mthStringVerify	fundclasses.xml:9154	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	word	instance	not-covered	mthStringWord	fundclasses.xml:9228	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	wordIndex	instance	not-covered	mthStringWordIndex	fundclasses.xml:9262	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	wordLength	instance	not-covered	mthStringWordLength	fundclasses.xml:9292	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	wordPos	instance	not-covered	mthStringWordPos	fundclasses.xml:9323	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	words	instance	not-covered	mthStringWords	fundclasses.xml:9366	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	x2b	instance	not-covered	mthStringX2b	fundclasses.xml:9399	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	x2c	instance	not-covered	mthStringX2c	fundclasses.xml:9448	no construction program is committed; a bare ~new raises 93.903 on the oracle
+String	x2d	instance	not-covered	mthStringX2d	fundclasses.xml:9486	no construction program is committed; a bare ~new raises 93.903 on the oracle
+Collection	[]	instance	covered	mthCollectionAtGet	collclasses.xml:221	a bare ~new constructs an instance on the oracle
+Collection	[]=	instance	covered	mthCollectionPutSet	collclasses.xml:244	a bare ~new constructs an instance on the oracle
+Collection	allIndexes	instance	covered	mthCollectionAllIndexes	collclasses.xml:262	a bare ~new constructs an instance on the oracle
+Collection	allItems	instance	covered	mthCollectionAllItems	collclasses.xml:280	a bare ~new constructs an instance on the oracle
+Collection	at	instance	covered	mthCollectionAt	collclasses.xml:297	a bare ~new constructs an instance on the oracle
+Collection	difference	instance	covered	mthCollectionDifference	collclasses.xml:318	a bare ~new constructs an instance on the oracle
+Collection	disjoint	instance	covered	mthCollectionDisjoint	collclasses.xml:340	a bare ~new constructs an instance on the oracle
+Collection	equivalent	instance	covered	mthCollectionEquivalent	collclasses.xml:363	a bare ~new constructs an instance on the oracle
+Collection	hasIndex	instance	covered	mthCollectionHasIndex	collclasses.xml:386	a bare ~new constructs an instance on the oracle
+Collection	hasItem	instance	covered	mthCollectionHasItem	collclasses.xml:404	a bare ~new constructs an instance on the oracle
+Collection	index	instance	covered	mthCollectionIndex	collclasses.xml:422	a bare ~new constructs an instance on the oracle
+Collection	intersection	instance	covered	mthCollectionIntersection	collclasses.xml:442	a bare ~new constructs an instance on the oracle
+Collection	items	instance	covered	mthCollectionItems	collclasses.xml:464	a bare ~new constructs an instance on the oracle
+Collection	makeArray	instance	covered	mthCollectionMakeArray	collclasses.xml:480	a bare ~new constructs an instance on the oracle
+Collection	put	instance	covered	mthCollectionPut	collclasses.xml:499	a bare ~new constructs an instance on the oracle
+Collection	subset	instance	covered	mthCollectionSubset	collclasses.xml:517	a bare ~new constructs an instance on the oracle
+Collection	supplier	instance	covered	mthCollectionSupplier	collclasses.xml:540	a bare ~new constructs an instance on the oracle
+Collection	union	instance	covered	mthCollectionUnion	collclasses.xml:560	a bare ~new constructs an instance on the oracle
+Collection	xor	instance	covered	mthCollectionXor	collclasses.xml:588	a bare ~new constructs an instance on the oracle
+MapCollection	of	class	covered	mthMapCollectionOf	collclasses.xml:668	a bare ~new constructs an instance on the oracle
+MapCollection	makeArray	instance	covered	mthMapCollectionMakeArray	collclasses.xml:696	a bare ~new constructs an instance on the oracle
+MapCollection	putAll	instance	covered	mthMapCollectionPutAll	collclasses.xml:714	a bare ~new constructs an instance on the oracle
+MapCollection	[]	instance	covered	mthCollectionAtGet	collclasses.xml:221	a bare ~new constructs an instance on the oracle
+MapCollection	[]=	instance	covered	mthCollectionPutSet	collclasses.xml:244	a bare ~new constructs an instance on the oracle
+MapCollection	allIndexes	instance	covered	mthCollectionAllIndexes	collclasses.xml:262	a bare ~new constructs an instance on the oracle
+MapCollection	allItems	instance	covered	mthCollectionAllItems	collclasses.xml:280	a bare ~new constructs an instance on the oracle
+MapCollection	at	instance	covered	mthCollectionAt	collclasses.xml:297	a bare ~new constructs an instance on the oracle
+MapCollection	difference	instance	covered	mthCollectionDifference	collclasses.xml:318	a bare ~new constructs an instance on the oracle
+MapCollection	disjoint	instance	covered	mthCollectionDisjoint	collclasses.xml:340	a bare ~new constructs an instance on the oracle
+MapCollection	equivalent	instance	covered	mthCollectionEquivalent	collclasses.xml:363	a bare ~new constructs an instance on the oracle
+MapCollection	hasIndex	instance	covered	mthCollectionHasIndex	collclasses.xml:386	a bare ~new constructs an instance on the oracle
+MapCollection	hasItem	instance	covered	mthCollectionHasItem	collclasses.xml:404	a bare ~new constructs an instance on the oracle
+MapCollection	index	instance	covered	mthCollectionIndex	collclasses.xml:422	a bare ~new constructs an instance on the oracle
+MapCollection	intersection	instance	covered	mthCollectionIntersection	collclasses.xml:442	a bare ~new constructs an instance on the oracle
+MapCollection	items	instance	covered	mthCollectionItems	collclasses.xml:464	a bare ~new constructs an instance on the oracle
+MapCollection	put	instance	covered	mthCollectionPut	collclasses.xml:499	a bare ~new constructs an instance on the oracle
+MapCollection	subset	instance	covered	mthCollectionSubset	collclasses.xml:517	a bare ~new constructs an instance on the oracle
+MapCollection	supplier	instance	covered	mthCollectionSupplier	collclasses.xml:540	a bare ~new constructs an instance on the oracle
+MapCollection	union	instance	covered	mthCollectionUnion	collclasses.xml:560	a bare ~new constructs an instance on the oracle
+MapCollection	xor	instance	covered	mthCollectionXor	collclasses.xml:588	a bare ~new constructs an instance on the oracle
+OrderedCollection	append	instance	covered	mthOrderedCollectionAppend	collclasses.xml:805	a bare ~new constructs an instance on the oracle
+OrderedCollection	appendAll	instance	covered	mthOrderedCollectionAppendAll	collclasses.xml:823	a bare ~new constructs an instance on the oracle
+OrderedCollection	delete	instance	covered	mthOrderedCollectionDelete	collclasses.xml:842	a bare ~new constructs an instance on the oracle
+OrderedCollection	difference	instance	covered	mthOrderedCollectionDifference	collclasses.xml:868	a bare ~new constructs an instance on the oracle
+OrderedCollection	first	instance	covered	mthOrderedCollectionFirst	collclasses.xml:888	a bare ~new constructs an instance on the oracle
+OrderedCollection	firstItem	instance	covered	mthOrderedCollectionFirstItem	collclasses.xml:905	a bare ~new constructs an instance on the oracle
+OrderedCollection	insert	instance	covered	mthOrderedCollectionInsert	collclasses.xml:922	a bare ~new constructs an instance on the oracle
+OrderedCollection	intersection	instance	covered	mthOrderedCollectionIntersection	collclasses.xml:953	a bare ~new constructs an instance on the oracle
+OrderedCollection	last	instance	covered	mthOrderedCollectionLast	collclasses.xml:973	a bare ~new constructs an instance on the oracle
+OrderedCollection	lastItem	instance	covered	mthOrderedCollectionLastItem	collclasses.xml:991	a bare ~new constructs an instance on the oracle
+OrderedCollection	next	instance	covered	mthOrderedCollectionNext	collclasses.xml:1008	a bare ~new constructs an instance on the oracle
+OrderedCollection	previous	instance	covered	mthOrderedCollectionPrevious	collclasses.xml:1027	a bare ~new constructs an instance on the oracle
+OrderedCollection	section	instance	covered	mthOrderedCollectionSection	collclasses.xml:1046	a bare ~new constructs an instance on the oracle
+OrderedCollection	sort	instance	covered	mthOrderedCollectionSort	collclasses.xml:1073	a bare ~new constructs an instance on the oracle
+OrderedCollection	sortWith	instance	covered	mthOrderedCollectionSortWith	collclasses.xml:1092	a bare ~new constructs an instance on the oracle
+OrderedCollection	stableSort	instance	covered	mthOrderedCollectionStableSort	collclasses.xml:1112	a bare ~new constructs an instance on the oracle
+OrderedCollection	stableSortWith	instance	covered	mthOrderedCollectionStableSortWith	collclasses.xml:1131	a bare ~new constructs an instance on the oracle
+OrderedCollection	subset	instance	covered	mthOrderedCollectionSubset	collclasses.xml:1151	a bare ~new constructs an instance on the oracle
+OrderedCollection	union	instance	covered	mthOrderedCollectionUnion	collclasses.xml:1173	a bare ~new constructs an instance on the oracle
+OrderedCollection	xor	instance	covered	mthOrderedCollectionXor	collclasses.xml:1200	a bare ~new constructs an instance on the oracle
+OrderedCollection	[]	instance	covered	mthCollectionAtGet	collclasses.xml:221	a bare ~new constructs an instance on the oracle
+OrderedCollection	[]=	instance	covered	mthCollectionPutSet	collclasses.xml:244	a bare ~new constructs an instance on the oracle
+OrderedCollection	allIndexes	instance	covered	mthCollectionAllIndexes	collclasses.xml:262	a bare ~new constructs an instance on the oracle
+OrderedCollection	allItems	instance	covered	mthCollectionAllItems	collclasses.xml:280	a bare ~new constructs an instance on the oracle
+OrderedCollection	at	instance	covered	mthCollectionAt	collclasses.xml:297	a bare ~new constructs an instance on the oracle
+OrderedCollection	disjoint	instance	covered	mthCollectionDisjoint	collclasses.xml:340	a bare ~new constructs an instance on the oracle
+OrderedCollection	equivalent	instance	covered	mthCollectionEquivalent	collclasses.xml:363	a bare ~new constructs an instance on the oracle
+OrderedCollection	hasIndex	instance	covered	mthCollectionHasIndex	collclasses.xml:386	a bare ~new constructs an instance on the oracle
+OrderedCollection	hasItem	instance	covered	mthCollectionHasItem	collclasses.xml:404	a bare ~new constructs an instance on the oracle
+OrderedCollection	index	instance	covered	mthCollectionIndex	collclasses.xml:422	a bare ~new constructs an instance on the oracle
+OrderedCollection	items	instance	covered	mthCollectionItems	collclasses.xml:464	a bare ~new constructs an instance on the oracle
+OrderedCollection	makeArray	instance	covered	mthCollectionMakeArray	collclasses.xml:480	a bare ~new constructs an instance on the oracle
+OrderedCollection	put	instance	covered	mthCollectionPut	collclasses.xml:499	a bare ~new constructs an instance on the oracle
+OrderedCollection	supplier	instance	covered	mthCollectionSupplier	collclasses.xml:540	a bare ~new constructs an instance on the oracle
+SetCollection	[]	instance	covered	mthCollectionAtGet	collclasses.xml:221	a bare ~new constructs an instance on the oracle
+SetCollection	[]=	instance	covered	mthCollectionPutSet	collclasses.xml:244	a bare ~new constructs an instance on the oracle
+SetCollection	allIndexes	instance	covered	mthCollectionAllIndexes	collclasses.xml:262	a bare ~new constructs an instance on the oracle
+SetCollection	allItems	instance	covered	mthCollectionAllItems	collclasses.xml:280	a bare ~new constructs an instance on the oracle
+SetCollection	at	instance	covered	mthCollectionAt	collclasses.xml:297	a bare ~new constructs an instance on the oracle
+SetCollection	difference	instance	covered	mthCollectionDifference	collclasses.xml:318	a bare ~new constructs an instance on the oracle
+SetCollection	disjoint	instance	covered	mthCollectionDisjoint	collclasses.xml:340	a bare ~new constructs an instance on the oracle
+SetCollection	equivalent	instance	covered	mthCollectionEquivalent	collclasses.xml:363	a bare ~new constructs an instance on the oracle
+SetCollection	hasIndex	instance	covered	mthCollectionHasIndex	collclasses.xml:386	a bare ~new constructs an instance on the oracle
+SetCollection	hasItem	instance	covered	mthCollectionHasItem	collclasses.xml:404	a bare ~new constructs an instance on the oracle
+SetCollection	index	instance	covered	mthCollectionIndex	collclasses.xml:422	a bare ~new constructs an instance on the oracle
+SetCollection	intersection	instance	covered	mthCollectionIntersection	collclasses.xml:442	a bare ~new constructs an instance on the oracle
+SetCollection	items	instance	covered	mthCollectionItems	collclasses.xml:464	a bare ~new constructs an instance on the oracle
+SetCollection	makeArray	instance	covered	mthCollectionMakeArray	collclasses.xml:480	a bare ~new constructs an instance on the oracle
+SetCollection	put	instance	covered	mthCollectionPut	collclasses.xml:499	a bare ~new constructs an instance on the oracle
+SetCollection	subset	instance	covered	mthCollectionSubset	collclasses.xml:517	a bare ~new constructs an instance on the oracle
+SetCollection	supplier	instance	covered	mthCollectionSupplier	collclasses.xml:540	a bare ~new constructs an instance on the oracle
+SetCollection	union	instance	covered	mthCollectionUnion	collclasses.xml:560	a bare ~new constructs an instance on the oracle
+SetCollection	xor	instance	covered	mthCollectionXor	collclasses.xml:588	a bare ~new constructs an instance on the oracle
+Array	new	class	covered	mthArrayNew	collclasses.xml:1380	a bare ~new constructs an instance on the oracle
+Array	of	class	covered	mthArrayOf	collclasses.xml:1418	a bare ~new constructs an instance on the oracle
+Array	[]	instance	covered	mthArrayAtGet	collclasses.xml:1452	a bare ~new constructs an instance on the oracle
+Array	[]=	instance	covered	mthArrayPutSet	collclasses.xml:1473	a bare ~new constructs an instance on the oracle
+Array	allIndexes	instance	covered	mthArrayAllIndexes	collclasses.xml:1494	a bare ~new constructs an instance on the oracle
+Array	allItems	instance	covered	mthArrayAllItems	collclasses.xml:1530	a bare ~new constructs an instance on the oracle
+Array	append	instance	covered	mthArrayAppend	collclasses.xml:1564	a bare ~new constructs an instance on the oracle
+Array	at	instance	covered	mthArrayAt	collclasses.xml:1591	a bare ~new constructs an instance on the oracle
+Array	delete	instance	covered	mthArrayDelete	collclasses.xml:1624	a bare ~new constructs an instance on the oracle
+Array	dimension	instance	covered	mthArrayDimension	collclasses.xml:1661	a bare ~new constructs an instance on the oracle
+Array	dimensions	instance	covered	mthArrayDimensions	collclasses.xml:1697	a bare ~new constructs an instance on the oracle
+Array	empty	instance	covered	mthArrayEmpty	collclasses.xml:1715	a bare ~new constructs an instance on the oracle
+Array	fill	instance	covered	mthArrayFill	collclasses.xml:1740	a bare ~new constructs an instance on the oracle
+Array	first	instance	covered	mthArrayFirst	collclasses.xml:1766	a bare ~new constructs an instance on the oracle
+Array	firstItem	instance	covered	mthArrayFirstItem	collclasses.xml:1794	a bare ~new constructs an instance on the oracle
+Array	hasIndex	instance	covered	mthArrayHasIndex	collclasses.xml:1820	a bare ~new constructs an instance on the oracle
+Array	hasItem	instance	covered	mthArrayHasItem	collclasses.xml:1851	a bare ~new constructs an instance on the oracle
+Array	index	instance	covered	mthArrayIndex	collclasses.xml:1880	a bare ~new constructs an instance on the oracle
+Array	insert	instance	covered	mthArrayInsert	collclasses.xml:1909	a bare ~new constructs an instance on the oracle
+Array	isEmpty	instance	covered	mthArrayIsEmpty	collclasses.xml:1966	a bare ~new constructs an instance on the oracle
+Array	items	instance	covered	mthArrayItems	collclasses.xml:1995	a bare ~new constructs an instance on the oracle
+Array	last	instance	covered	mthArrayLast	collclasses.xml:2020	a bare ~new constructs an instance on the oracle
+Array	lastItem	instance	covered	mthArrayLastItem	collclasses.xml:2047	a bare ~new constructs an instance on the oracle
+Array	makeArray	instance	covered	mthArrayMakeArray	collclasses.xml:2072	a bare ~new constructs an instance on the oracle
+Array	makeString	instance	covered	mthArrayMakeString	collclasses.xml:2100	a bare ~new constructs an instance on the oracle
+Array	next	instance	covered	mthArrayNext	collclasses.xml:2125	a bare ~new constructs an instance on the oracle
+Array	previous	instance	covered	mthArrayPrevious	collclasses.xml:2158	a bare ~new constructs an instance on the oracle
+Array	put	instance	covered	mthArrayPut	collclasses.xml:2191	a bare ~new constructs an instance on the oracle
+Array	remove	instance	covered	mthArrayRemove	collclasses.xml:2239	a bare ~new constructs an instance on the oracle
+Array	removeItem	instance	covered	mthArrayRemoveItem	collclasses.xml:2276	a bare ~new constructs an instance on the oracle
+Array	section	instance	covered	mthArraySection	collclasses.xml:2305	a bare ~new constructs an instance on the oracle
+Array	size	instance	covered	mthArraySize	collclasses.xml:2347	a bare ~new constructs an instance on the oracle
+Array	sort	instance	covered	mthArraySort	collclasses.xml:2365	a bare ~new constructs an instance on the oracle
+Array	sortWith	instance	covered	mthArraySortWith	collclasses.xml:2384	a bare ~new constructs an instance on the oracle
+Array	stableSort	instance	covered	mthArrayStableSort	collclasses.xml:2404	a bare ~new constructs an instance on the oracle
+Array	stableSortWith	instance	covered	mthArrayStableSortWith	collclasses.xml:2423	a bare ~new constructs an instance on the oracle
+Array	supplier	instance	covered	mthArraySupplier	collclasses.xml:2442	a bare ~new constructs an instance on the oracle
+Array	toString	instance	covered	mthArrayToString	collclasses.xml:2477	a bare ~new constructs an instance on the oracle
+Array	difference	instance	covered	mthCollectionDifference	collclasses.xml:318	a bare ~new constructs an instance on the oracle
+Array	disjoint	instance	covered	mthCollectionDisjoint	collclasses.xml:340	a bare ~new constructs an instance on the oracle
+Array	equivalent	instance	covered	mthCollectionEquivalent	collclasses.xml:363	a bare ~new constructs an instance on the oracle
+Array	intersection	instance	covered	mthCollectionIntersection	collclasses.xml:442	a bare ~new constructs an instance on the oracle
+Array	subset	instance	covered	mthCollectionSubset	collclasses.xml:517	a bare ~new constructs an instance on the oracle
+Array	union	instance	covered	mthCollectionUnion	collclasses.xml:560	a bare ~new constructs an instance on the oracle
+Array	xor	instance	covered	mthCollectionXor	collclasses.xml:588	a bare ~new constructs an instance on the oracle
+Array	appendAll	instance	covered	mthOrderedCollectionAppendAll	collclasses.xml:823	a bare ~new constructs an instance on the oracle
+Bag	new	class	covered	mthBagNew	collclasses.xml:2656	a bare ~new constructs an instance on the oracle
+Bag	of	class	covered	mthBagOf	collclasses.xml:2677	a bare ~new constructs an instance on the oracle
+Bag	[]	instance	covered	mthBagAtGet	collclasses.xml:2694	a bare ~new constructs an instance on the oracle
+Bag	[]=	instance	covered	mthBagPutSet	collclasses.xml:2824	a bare ~new constructs an instance on the oracle
+Bag	allAt	instance	covered	mthBagAllAt	collclasses.xml:2718	a bare ~new constructs an instance on the oracle
+Bag	allIndex	instance	covered	mthBagAllIndex	collclasses.xml:2741	a bare ~new constructs an instance on the oracle
+Bag	allIndexes	instance	covered	mthBagAllIndexes	collclasses.xml:2764	a bare ~new constructs an instance on the oracle
+Bag	allItems	instance	covered	mthBagAllItems	collclasses.xml:2785	a bare ~new constructs an instance on the oracle
+Bag	at	instance	covered	mthBagAt	collclasses.xml:2801	a bare ~new constructs an instance on the oracle
+Bag	difference	instance	covered	mthBagDifference	collclasses.xml:2845	a bare ~new constructs an instance on the oracle
+Bag	empty	instance	covered	mthBagEmpty	collclasses.xml:2864	a bare ~new constructs an instance on the oracle
+Bag	hasIndex	instance	covered	mthBagHasIndex	collclasses.xml:2880	a bare ~new constructs an instance on the oracle
+Bag	hasItem	instance	covered	mthBagHasItem	collclasses.xml:2902	a bare ~new constructs an instance on the oracle
+Bag	index	instance	covered	mthBagIndex	collclasses.xml:2926	a bare ~new constructs an instance on the oracle
+Bag	intersection	instance	covered	mthBagIntersection	collclasses.xml:2947	a bare ~new constructs an instance on the oracle
+Bag	isEmpty	instance	covered	mthBagIsEmpty	collclasses.xml:2966	a bare ~new constructs an instance on the oracle
+Bag	items	instance	covered	mthBagItems	collclasses.xml:2984	a bare ~new constructs an instance on the oracle
+Bag	makeArray	instance	covered	mthBagMakeArray	collclasses.xml:3007	a bare ~new constructs an instance on the oracle
+Bag	put	instance	covered	mthBagPut	collclasses.xml:3025	a bare ~new constructs an instance on the oracle
+Bag	putAll	instance	covered	mthBagPutAll	collclasses.xml:3046	a bare ~new constructs an instance on the oracle
+Bag	remove	instance	covered	mthBagRemove	collclasses.xml:3068	a bare ~new constructs an instance on the oracle
+Bag	removeAll	instance	covered	mthBagRemoveAll	collclasses.xml:3090	a bare ~new constructs an instance on the oracle
+Bag	removeItem	instance	covered	mthBagRemoveItem	collclasses.xml:3114	a bare ~new constructs an instance on the oracle
+Bag	subset	instance	covered	mthBagSubset	collclasses.xml:3137	a bare ~new constructs an instance on the oracle
+Bag	supplier	instance	covered	mthBagSupplier	collclasses.xml:3156	a bare ~new constructs an instance on the oracle
+Bag	union	instance	covered	mthBagUnion	collclasses.xml:3179	a bare ~new constructs an instance on the oracle
+Bag	uniqueIndexes	instance	covered	mthBagUniqueIndexes	collclasses.xml:3198	a bare ~new constructs an instance on the oracle
+Bag	xor	instance	covered	mthBagXor	collclasses.xml:3215	a bare ~new constructs an instance on the oracle
+Bag	disjoint	instance	covered	mthCollectionDisjoint	collclasses.xml:340	a bare ~new constructs an instance on the oracle
+Bag	equivalent	instance	covered	mthCollectionEquivalent	collclasses.xml:363	a bare ~new constructs an instance on the oracle
+CircularQueue	of	class	not-covered	mthCircularQueueOf	collclasses.xml:3332	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	append	instance	not-covered	mthCircularQueueAppend	collclasses.xml:3378	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	init	instance	not-covered	mthCircularQueueInit	collclasses.xml:3356	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	insert	instance	not-covered	mthCircularQueueInsert	collclasses.xml:3398	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	intersection	instance	not-covered	mthCircularQueueIntersection	collclasses.xml:3429	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	makeArray	instance	not-covered	mthCircularQueueMakeArray	collclasses.xml:3450	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	makeString	instance	not-covered	mthCircularQueueMakeString	collclasses.xml:3493	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	push	instance	not-covered	mthCircularQueuePush	collclasses.xml:3540	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	queue	instance	not-covered	mthCircularQueueQueue	collclasses.xml:3581	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	resize	instance	not-covered	mthCircularQueueResize	collclasses.xml:3619	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	section	instance	not-covered	mthCircularQueueSection	collclasses.xml:3671	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	size	instance	not-covered	mthCircularQueueSize	collclasses.xml:3711	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	string	instance	not-covered	mthCircularQueueString	collclasses.xml:3731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	supplier	instance	not-covered	mthCircularQueueSupplier	collclasses.xml:3776	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	union	instance	not-covered	mthCircularQueueUnion	collclasses.xml:3818	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	xor	instance	not-covered	mthCircularQueueXor	collclasses.xml:3849	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	[]	instance	not-covered	mthCollectionAtGet	collclasses.xml:221	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	[]=	instance	not-covered	mthCollectionPutSet	collclasses.xml:244	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	allIndexes	instance	not-covered	mthCollectionAllIndexes	collclasses.xml:262	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	allItems	instance	not-covered	mthCollectionAllItems	collclasses.xml:280	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	at	instance	not-covered	mthCollectionAt	collclasses.xml:297	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	difference	instance	not-covered	mthCollectionDifference	collclasses.xml:318	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	disjoint	instance	not-covered	mthCollectionDisjoint	collclasses.xml:340	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	equivalent	instance	not-covered	mthCollectionEquivalent	collclasses.xml:363	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	hasIndex	instance	not-covered	mthCollectionHasIndex	collclasses.xml:386	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	hasItem	instance	not-covered	mthCollectionHasItem	collclasses.xml:404	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	index	instance	not-covered	mthCollectionIndex	collclasses.xml:422	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	items	instance	not-covered	mthCollectionItems	collclasses.xml:464	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	put	instance	not-covered	mthCollectionPut	collclasses.xml:499	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	subset	instance	not-covered	mthCollectionSubset	collclasses.xml:517	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	appendAll	instance	not-covered	mthOrderedCollectionAppendAll	collclasses.xml:823	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	delete	instance	not-covered	mthOrderedCollectionDelete	collclasses.xml:842	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	first	instance	not-covered	mthOrderedCollectionFirst	collclasses.xml:888	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	firstItem	instance	not-covered	mthOrderedCollectionFirstItem	collclasses.xml:905	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	last	instance	not-covered	mthOrderedCollectionLast	collclasses.xml:973	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	lastItem	instance	not-covered	mthOrderedCollectionLastItem	collclasses.xml:991	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	next	instance	not-covered	mthOrderedCollectionNext	collclasses.xml:1008	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	previous	instance	not-covered	mthOrderedCollectionPrevious	collclasses.xml:1027	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	sort	instance	not-covered	mthOrderedCollectionSort	collclasses.xml:1073	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	sortWith	instance	not-covered	mthOrderedCollectionSortWith	collclasses.xml:1092	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	stableSort	instance	not-covered	mthOrderedCollectionStableSort	collclasses.xml:1112	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	stableSortWith	instance	not-covered	mthOrderedCollectionStableSortWith	collclasses.xml:1131	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	new	class	not-covered	mthQueueNew	collclasses.xml:6073	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	empty	instance	not-covered	mthQueueEmpty	collclasses.xml:6258	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	isEmpty	instance	not-covered	mthQueueIsEmpty	collclasses.xml:6425	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	peek	instance	not-covered	mthQueuePeek	collclasses.xml:6535	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	pull	instance	not-covered	mthQueuePull	collclasses.xml:6570	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	remove	instance	not-covered	mthQueueRemove	collclasses.xml:6640	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CircularQueue	removeItem	instance	not-covered	mthQueueRemoveItem	collclasses.xml:6659	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Directory	new	class	covered	mthDirectoryNew	collclasses.xml:4038	a bare ~new constructs an instance on the oracle
+Directory	[]	instance	covered	mthDirectoryAtGet	collclasses.xml:4062	a bare ~new constructs an instance on the oracle
+Directory	[]=	instance	covered	mthDirectoryPutSet	collclasses.xml:4080	a bare ~new constructs an instance on the oracle
+Directory	allIndexes	instance	covered	mthDirectoryAllIndexes	collclasses.xml:4099	a bare ~new constructs an instance on the oracle
+Directory	allItems	instance	covered	mthDirectoryAllItems	collclasses.xml:4116	a bare ~new constructs an instance on the oracle
+Directory	at	instance	covered	mthDirectoryAt	collclasses.xml:4134	a bare ~new constructs an instance on the oracle
+Directory	empty	instance	covered	mthDirectoryEmpty	collclasses.xml:4161	a bare ~new constructs an instance on the oracle
+Directory	entry	instance	covered	mthDirectoryEntry	collclasses.xml:4180	a bare ~new constructs an instance on the oracle
+Directory	hasEntry	instance	covered	mthDirectoryHasEntry	collclasses.xml:4202	a bare ~new constructs an instance on the oracle
+Directory	hasIndex	instance	covered	mthDirectoryHasIndex	collclasses.xml:4220	a bare ~new constructs an instance on the oracle
+Directory	hasItem	instance	covered	mthDirectoryHasItem	collclasses.xml:4239	a bare ~new constructs an instance on the oracle
+Directory	index	instance	covered	mthDirectoryIndex	collclasses.xml:4259	a bare ~new constructs an instance on the oracle
+Directory	isEmpty	instance	covered	mthDirectoryIsEmpty	collclasses.xml:4280	a bare ~new constructs an instance on the oracle
+Directory	items	instance	covered	mthDirectoryItems	collclasses.xml:4298	a bare ~new constructs an instance on the oracle
+Directory	makeArray	instance	covered	mthDirectoryMakeArray	collclasses.xml:4314	a bare ~new constructs an instance on the oracle
+Directory	put	instance	covered	mthDirectoryPut	collclasses.xml:4333	a bare ~new constructs an instance on the oracle
+Directory	remove	instance	covered	mthDirectoryRemove	collclasses.xml:4353	a bare ~new constructs an instance on the oracle
+Directory	removeEntry	instance	covered	mthDirectoryRemoveEntry	collclasses.xml:4378	a bare ~new constructs an instance on the oracle
+Directory	removeItem	instance	covered	mthDirectoryRemoveItem	collclasses.xml:4404	a bare ~new constructs an instance on the oracle
+Directory	setEntry	instance	covered	mthDirectorySetEntry	collclasses.xml:4424	a bare ~new constructs an instance on the oracle
+Directory	setMethod	instance	covered	mthDirectorySetMethod	collclasses.xml:4445	a bare ~new constructs an instance on the oracle
+Directory	supplier	instance	covered	mthDirectorySupplier	collclasses.xml:4486	a bare ~new constructs an instance on the oracle
+Directory	unknown	instance	covered	mthDirectoryUnknown	collclasses.xml:4506	a bare ~new constructs an instance on the oracle
+Directory	unsetMethod	instance	covered	mthDirectoryUnsetMethod	collclasses.xml:4538	a bare ~new constructs an instance on the oracle
+Directory	difference	instance	covered	mthCollectionDifference	collclasses.xml:318	a bare ~new constructs an instance on the oracle
+Directory	disjoint	instance	covered	mthCollectionDisjoint	collclasses.xml:340	a bare ~new constructs an instance on the oracle
+Directory	equivalent	instance	covered	mthCollectionEquivalent	collclasses.xml:363	a bare ~new constructs an instance on the oracle
+Directory	intersection	instance	covered	mthCollectionIntersection	collclasses.xml:442	a bare ~new constructs an instance on the oracle
+Directory	subset	instance	covered	mthCollectionSubset	collclasses.xml:517	a bare ~new constructs an instance on the oracle
+Directory	union	instance	covered	mthCollectionUnion	collclasses.xml:560	a bare ~new constructs an instance on the oracle
+Directory	xor	instance	covered	mthCollectionXor	collclasses.xml:588	a bare ~new constructs an instance on the oracle
+Directory	of	class	covered	mthMapCollectionOf	collclasses.xml:668	a bare ~new constructs an instance on the oracle
+Directory	putAll	instance	covered	mthMapCollectionPutAll	collclasses.xml:714	a bare ~new constructs an instance on the oracle
+IdentityTable	new	class	covered	mthIdentityTableNew	collclasses.xml:4683	a bare ~new constructs an instance on the oracle
+IdentityTable	[]	instance	covered	mthIdentityTableAtGet	collclasses.xml:4707	a bare ~new constructs an instance on the oracle
+IdentityTable	[]=	instance	covered	mthIdentityTablePutSet	collclasses.xml:4726	a bare ~new constructs an instance on the oracle
+IdentityTable	allIndexes	instance	covered	mthIdentityTableAllIndexes	collclasses.xml:4746	a bare ~new constructs an instance on the oracle
+IdentityTable	allItems	instance	covered	mthIdentityTableAllItems	collclasses.xml:4762	a bare ~new constructs an instance on the oracle
+IdentityTable	at	instance	covered	mthIdentityTableAt	collclasses.xml:4778	a bare ~new constructs an instance on the oracle
+IdentityTable	empty	instance	covered	mthIdentityTableEmpty	collclasses.xml:4797	a bare ~new constructs an instance on the oracle
+IdentityTable	hasIndex	instance	covered	mthIdentityTableHasIndex	collclasses.xml:4813	a bare ~new constructs an instance on the oracle
+IdentityTable	hasItem	instance	covered	mthIdentityTableHasItem	collclasses.xml:4831	a bare ~new constructs an instance on the oracle
+IdentityTable	index	instance	covered	mthIdentityTableIndex	collclasses.xml:4849	a bare ~new constructs an instance on the oracle
+IdentityTable	isEmpty	instance	covered	mthIdentityTableIsEmpty	collclasses.xml:4868	a bare ~new constructs an instance on the oracle
+IdentityTable	items	instance	covered	mthIdentityTableItems	collclasses.xml:4886	a bare ~new constructs an instance on the oracle
+IdentityTable	makeArray	instance	covered	mthIdentityTableMakeArray	collclasses.xml:4902	a bare ~new constructs an instance on the oracle
+IdentityTable	put	instance	covered	mthIdentityTablePut	collclasses.xml:4921	a bare ~new constructs an instance on the oracle
+IdentityTable	remove	instance	covered	mthIdentityTableRemove	collclasses.xml:4940	a bare ~new constructs an instance on the oracle
+IdentityTable	removeItem	instance	covered	mthIdentityTableRemoveItem	collclasses.xml:4959	a bare ~new constructs an instance on the oracle
+IdentityTable	supplier	instance	covered	mthIdentityTableSupplier	collclasses.xml:4978	a bare ~new constructs an instance on the oracle
+IdentityTable	difference	instance	covered	mthCollectionDifference	collclasses.xml:318	a bare ~new constructs an instance on the oracle
+IdentityTable	disjoint	instance	covered	mthCollectionDisjoint	collclasses.xml:340	a bare ~new constructs an instance on the oracle
+IdentityTable	equivalent	instance	covered	mthCollectionEquivalent	collclasses.xml:363	a bare ~new constructs an instance on the oracle
+IdentityTable	intersection	instance	covered	mthCollectionIntersection	collclasses.xml:442	a bare ~new constructs an instance on the oracle
+IdentityTable	subset	instance	covered	mthCollectionSubset	collclasses.xml:517	a bare ~new constructs an instance on the oracle
+IdentityTable	union	instance	covered	mthCollectionUnion	collclasses.xml:560	a bare ~new constructs an instance on the oracle
+IdentityTable	xor	instance	covered	mthCollectionXor	collclasses.xml:588	a bare ~new constructs an instance on the oracle
+IdentityTable	of	class	covered	mthMapCollectionOf	collclasses.xml:668	a bare ~new constructs an instance on the oracle
+IdentityTable	putAll	instance	covered	mthMapCollectionPutAll	collclasses.xml:714	a bare ~new constructs an instance on the oracle
+List	new	class	covered	mthListNew	collclasses.xml:5084	a bare ~new constructs an instance on the oracle
+List	of	class	covered	mthListOf	collclasses.xml:5105	a bare ~new constructs an instance on the oracle
+List	[]	instance	covered	mthListAtGet	collclasses.xml:5122	a bare ~new constructs an instance on the oracle
+List	[]=	instance	covered	mthListPutSet	collclasses.xml:5140	a bare ~new constructs an instance on the oracle
+List	allIndexes	instance	covered	mthListAllIndexes	collclasses.xml:5158	a bare ~new constructs an instance on the oracle
+List	allItems	instance	covered	mthListAllItems	collclasses.xml:5175	a bare ~new constructs an instance on the oracle
+List	append	instance	covered	mthListAppend	collclasses.xml:5192	a bare ~new constructs an instance on the oracle
+List	at	instance	covered	mthListAt	collclasses.xml:5210	a bare ~new constructs an instance on the oracle
+List	delete	instance	covered	mthListDelete	collclasses.xml:5229	a bare ~new constructs an instance on the oracle
+List	empty	instance	covered	mthListEmpty	collclasses.xml:5255	a bare ~new constructs an instance on the oracle
+List	first	instance	covered	mthListFirst	collclasses.xml:5271	a bare ~new constructs an instance on the oracle
+List	firstItem	instance	covered	mthListFirstItem	collclasses.xml:5289	a bare ~new constructs an instance on the oracle
+List	hasIndex	instance	covered	mthListHasIndex	collclasses.xml:5314	a bare ~new constructs an instance on the oracle
+List	hasItem	instance	covered	mthListHasItem	collclasses.xml:5333	a bare ~new constructs an instance on the oracle
+List	index	instance	covered	mthListIndex	collclasses.xml:5353	a bare ~new constructs an instance on the oracle
+List	insert	instance	covered	mthListInsert	collclasses.xml:5373	a bare ~new constructs an instance on the oracle
+List	isEmpty	instance	covered	mthListIsEmpty	collclasses.xml:5431	a bare ~new constructs an instance on the oracle
+List	items	instance	covered	mthListItems	collclasses.xml:5449	a bare ~new constructs an instance on the oracle
+List	last	instance	covered	mthListLast	collclasses.xml:5465	a bare ~new constructs an instance on the oracle
+List	lastItem	instance	covered	mthListLastItem	collclasses.xml:5482	a bare ~new constructs an instance on the oracle
+List	makeArray	instance	covered	mthListMakeArray	collclasses.xml:5499	a bare ~new constructs an instance on the oracle
+List	next	instance	covered	mthListNext	collclasses.xml:5518	a bare ~new constructs an instance on the oracle
+List	previous	instance	covered	mthListPrevious	collclasses.xml:5537	a bare ~new constructs an instance on the oracle
+List	put	instance	covered	mthListPut	collclasses.xml:5556	a bare ~new constructs an instance on the oracle
+List	remove	instance	covered	mthListRemove	collclasses.xml:5576	a bare ~new constructs an instance on the oracle
+List	removeItem	instance	covered	mthListRemoveItem	collclasses.xml:5600	a bare ~new constructs an instance on the oracle
+List	section	instance	covered	mthListSection	collclasses.xml:5621	a bare ~new constructs an instance on the oracle
+List	supplier	instance	covered	mthListSupplier	collclasses.xml:5647	a bare ~new constructs an instance on the oracle
+List	difference	instance	covered	mthCollectionDifference	collclasses.xml:318	a bare ~new constructs an instance on the oracle
+List	disjoint	instance	covered	mthCollectionDisjoint	collclasses.xml:340	a bare ~new constructs an instance on the oracle
+List	equivalent	instance	covered	mthCollectionEquivalent	collclasses.xml:363	a bare ~new constructs an instance on the oracle
+List	intersection	instance	covered	mthCollectionIntersection	collclasses.xml:442	a bare ~new constructs an instance on the oracle
+List	subset	instance	covered	mthCollectionSubset	collclasses.xml:517	a bare ~new constructs an instance on the oracle
+List	union	instance	covered	mthCollectionUnion	collclasses.xml:560	a bare ~new constructs an instance on the oracle
+List	xor	instance	covered	mthCollectionXor	collclasses.xml:588	a bare ~new constructs an instance on the oracle
+List	appendAll	instance	covered	mthOrderedCollectionAppendAll	collclasses.xml:823	a bare ~new constructs an instance on the oracle
+List	sort	instance	covered	mthOrderedCollectionSort	collclasses.xml:1073	a bare ~new constructs an instance on the oracle
+List	sortWith	instance	covered	mthOrderedCollectionSortWith	collclasses.xml:1092	a bare ~new constructs an instance on the oracle
+List	stableSort	instance	covered	mthOrderedCollectionStableSort	collclasses.xml:1112	a bare ~new constructs an instance on the oracle
+List	stableSortWith	instance	covered	mthOrderedCollectionStableSortWith	collclasses.xml:1131	a bare ~new constructs an instance on the oracle
+Properties	load	class	covered	mthPropertiesLoadClsMth	collclasses.xml:5737	a bare ~new constructs an instance on the oracle
+Properties	[]=	instance	covered	mthPropertiesPutSet	collclasses.xml:5783	a bare ~new constructs an instance on the oracle
+Properties	getLogical	instance	covered	mthPropertiesGetLogical	collclasses.xml:5802	a bare ~new constructs an instance on the oracle
+Properties	getProperty	instance	covered	mthPropertiesGetProperty	collclasses.xml:5823	a bare ~new constructs an instance on the oracle
+Properties	getWhole	instance	covered	mthPropertiesGetWhole	collclasses.xml:5842	a bare ~new constructs an instance on the oracle
+Properties	load	instance	covered	mthPropertiesLoad	collclasses.xml:5861	a bare ~new constructs an instance on the oracle
+Properties	put	instance	covered	mthPropertiesPut	collclasses.xml:5887	a bare ~new constructs an instance on the oracle
+Properties	save	instance	covered	mthPropertiesSave	collclasses.xml:5908	a bare ~new constructs an instance on the oracle
+Properties	setLogical	instance	covered	mthPropertiesSetLogical	collclasses.xml:5930	a bare ~new constructs an instance on the oracle
+Properties	setProperty	instance	covered	mthPropertiesSetProperty	collclasses.xml:5949	a bare ~new constructs an instance on the oracle
+Properties	setWhole	instance	covered	mthPropertiesSetWhole	collclasses.xml:5966	a bare ~new constructs an instance on the oracle
+Properties	[]	instance	covered	mthCollectionAtGet	collclasses.xml:221	a bare ~new constructs an instance on the oracle
+Properties	allIndexes	instance	covered	mthCollectionAllIndexes	collclasses.xml:262	a bare ~new constructs an instance on the oracle
+Properties	allItems	instance	covered	mthCollectionAllItems	collclasses.xml:280	a bare ~new constructs an instance on the oracle
+Properties	at	instance	covered	mthCollectionAt	collclasses.xml:297	a bare ~new constructs an instance on the oracle
+Properties	difference	instance	covered	mthCollectionDifference	collclasses.xml:318	a bare ~new constructs an instance on the oracle
+Properties	disjoint	instance	covered	mthCollectionDisjoint	collclasses.xml:340	a bare ~new constructs an instance on the oracle
+Properties	equivalent	instance	covered	mthCollectionEquivalent	collclasses.xml:363	a bare ~new constructs an instance on the oracle
+Properties	hasIndex	instance	covered	mthCollectionHasIndex	collclasses.xml:386	a bare ~new constructs an instance on the oracle
+Properties	hasItem	instance	covered	mthCollectionHasItem	collclasses.xml:404	a bare ~new constructs an instance on the oracle
+Properties	index	instance	covered	mthCollectionIndex	collclasses.xml:422	a bare ~new constructs an instance on the oracle
+Properties	intersection	instance	covered	mthCollectionIntersection	collclasses.xml:442	a bare ~new constructs an instance on the oracle
+Properties	items	instance	covered	mthCollectionItems	collclasses.xml:464	a bare ~new constructs an instance on the oracle
+Properties	makeArray	instance	covered	mthCollectionMakeArray	collclasses.xml:480	a bare ~new constructs an instance on the oracle
+Properties	subset	instance	covered	mthCollectionSubset	collclasses.xml:517	a bare ~new constructs an instance on the oracle
+Properties	supplier	instance	covered	mthCollectionSupplier	collclasses.xml:540	a bare ~new constructs an instance on the oracle
+Properties	union	instance	covered	mthCollectionUnion	collclasses.xml:560	a bare ~new constructs an instance on the oracle
+Properties	xor	instance	covered	mthCollectionXor	collclasses.xml:588	a bare ~new constructs an instance on the oracle
+Properties	of	class	covered	mthMapCollectionOf	collclasses.xml:668	a bare ~new constructs an instance on the oracle
+Properties	putAll	instance	covered	mthMapCollectionPutAll	collclasses.xml:714	a bare ~new constructs an instance on the oracle
+Properties	new	class	covered	mthDirectoryNew	collclasses.xml:4038	a bare ~new constructs an instance on the oracle
+Properties	empty	instance	covered	mthDirectoryEmpty	collclasses.xml:4161	a bare ~new constructs an instance on the oracle
+Properties	entry	instance	covered	mthDirectoryEntry	collclasses.xml:4180	a bare ~new constructs an instance on the oracle
+Properties	hasEntry	instance	covered	mthDirectoryHasEntry	collclasses.xml:4202	a bare ~new constructs an instance on the oracle
+Properties	isEmpty	instance	covered	mthDirectoryIsEmpty	collclasses.xml:4280	a bare ~new constructs an instance on the oracle
+Properties	remove	instance	covered	mthDirectoryRemove	collclasses.xml:4353	a bare ~new constructs an instance on the oracle
+Properties	removeEntry	instance	covered	mthDirectoryRemoveEntry	collclasses.xml:4378	a bare ~new constructs an instance on the oracle
+Properties	removeItem	instance	covered	mthDirectoryRemoveItem	collclasses.xml:4404	a bare ~new constructs an instance on the oracle
+Properties	setEntry	instance	covered	mthDirectorySetEntry	collclasses.xml:4424	a bare ~new constructs an instance on the oracle
+Properties	setMethod	instance	covered	mthDirectorySetMethod	collclasses.xml:4445	a bare ~new constructs an instance on the oracle
+Properties	unknown	instance	covered	mthDirectoryUnknown	collclasses.xml:4506	a bare ~new constructs an instance on the oracle
+Properties	unsetMethod	instance	covered	mthDirectoryUnsetMethod	collclasses.xml:4538	a bare ~new constructs an instance on the oracle
+Queue	new	class	covered	mthQueueNew	collclasses.xml:6073	a bare ~new constructs an instance on the oracle
+Queue	of	class	covered	mthQueueOf	collclasses.xml:6097	a bare ~new constructs an instance on the oracle
+Queue	[]	instance	covered	mthQueueAtGet	collclasses.xml:6114	a bare ~new constructs an instance on the oracle
+Queue	[]=	instance	covered	mthQueuePutSet	collclasses.xml:6132	a bare ~new constructs an instance on the oracle
+Queue	allIndexes	instance	covered	mthQueueAllIndexes	collclasses.xml:6152	a bare ~new constructs an instance on the oracle
+Queue	allItems	instance	covered	mthQueueAllItems	collclasses.xml:6173	a bare ~new constructs an instance on the oracle
+Queue	append	instance	covered	mthQueueAppend	collclasses.xml:6189	a bare ~new constructs an instance on the oracle
+Queue	at	instance	covered	mthQueueAt	collclasses.xml:6206	a bare ~new constructs an instance on the oracle
+Queue	delete	instance	covered	mthQueueDelete	collclasses.xml:6224	a bare ~new constructs an instance on the oracle
+Queue	empty	instance	covered	mthQueueEmpty	collclasses.xml:6258	a bare ~new constructs an instance on the oracle
+Queue	first	instance	covered	mthQueueFirst	collclasses.xml:6274	a bare ~new constructs an instance on the oracle
+Queue	firstItem	instance	covered	mthQueueFirstItem	collclasses.xml:6291	a bare ~new constructs an instance on the oracle
+Queue	hasIndex	instance	covered	mthQueueHasIndex	collclasses.xml:6308	a bare ~new constructs an instance on the oracle
+Queue	hasItem	instance	covered	mthQueueHasItem	collclasses.xml:6326	a bare ~new constructs an instance on the oracle
+Queue	index	instance	covered	mthQueueIndex	collclasses.xml:6346	a bare ~new constructs an instance on the oracle
+Queue	insert	instance	covered	mthQueueInsert	collclasses.xml:6366	a bare ~new constructs an instance on the oracle
+Queue	isEmpty	instance	covered	mthQueueIsEmpty	collclasses.xml:6425	a bare ~new constructs an instance on the oracle
+Queue	items	instance	covered	mthQueueItems	collclasses.xml:6443	a bare ~new constructs an instance on the oracle
+Queue	last	instance	covered	mthQueueLast	collclasses.xml:6463	a bare ~new constructs an instance on the oracle
+Queue	lastItem	instance	covered	mthQueueLastItem	collclasses.xml:6480	a bare ~new constructs an instance on the oracle
+Queue	makeArray	instance	covered	mthQueueMakeArray	collclasses.xml:6498	a bare ~new constructs an instance on the oracle
+Queue	next	instance	covered	mthQueueNext	collclasses.xml:6517	a bare ~new constructs an instance on the oracle
+Queue	peek	instance	covered	mthQueuePeek	collclasses.xml:6535	a bare ~new constructs an instance on the oracle
+Queue	previous	instance	covered	mthQueuePrevious	collclasses.xml:6552	a bare ~new constructs an instance on the oracle
+Queue	pull	instance	covered	mthQueuePull	collclasses.xml:6570	a bare ~new constructs an instance on the oracle
+Queue	push	instance	covered	mthQueuePush	collclasses.xml:6587	a bare ~new constructs an instance on the oracle
+Queue	put	instance	covered	mthQueuePut	collclasses.xml:6604	a bare ~new constructs an instance on the oracle
+Queue	queue	instance	covered	mthQueueQueue	collclasses.xml:6623	a bare ~new constructs an instance on the oracle
+Queue	remove	instance	covered	mthQueueRemove	collclasses.xml:6640	a bare ~new constructs an instance on the oracle
+Queue	removeItem	instance	covered	mthQueueRemoveItem	collclasses.xml:6659	a bare ~new constructs an instance on the oracle
+Queue	section	instance	covered	mthQueueSection	collclasses.xml:6679	a bare ~new constructs an instance on the oracle
+Queue	size	instance	covered	mthQueueSize	collclasses.xml:6707	a bare ~new constructs an instance on the oracle
+Queue	supplier	instance	covered	mthQueueSupplier	collclasses.xml:6724	a bare ~new constructs an instance on the oracle
+Queue	difference	instance	covered	mthCollectionDifference	collclasses.xml:318	a bare ~new constructs an instance on the oracle
+Queue	disjoint	instance	covered	mthCollectionDisjoint	collclasses.xml:340	a bare ~new constructs an instance on the oracle
+Queue	equivalent	instance	covered	mthCollectionEquivalent	collclasses.xml:363	a bare ~new constructs an instance on the oracle
+Queue	intersection	instance	covered	mthCollectionIntersection	collclasses.xml:442	a bare ~new constructs an instance on the oracle
+Queue	subset	instance	covered	mthCollectionSubset	collclasses.xml:517	a bare ~new constructs an instance on the oracle
+Queue	union	instance	covered	mthCollectionUnion	collclasses.xml:560	a bare ~new constructs an instance on the oracle
+Queue	xor	instance	covered	mthCollectionXor	collclasses.xml:588	a bare ~new constructs an instance on the oracle
+Queue	appendAll	instance	covered	mthOrderedCollectionAppendAll	collclasses.xml:823	a bare ~new constructs an instance on the oracle
+Queue	sort	instance	covered	mthOrderedCollectionSort	collclasses.xml:1073	a bare ~new constructs an instance on the oracle
+Queue	sortWith	instance	covered	mthOrderedCollectionSortWith	collclasses.xml:1092	a bare ~new constructs an instance on the oracle
+Queue	stableSort	instance	covered	mthOrderedCollectionStableSort	collclasses.xml:1112	a bare ~new constructs an instance on the oracle
+Queue	stableSortWith	instance	covered	mthOrderedCollectionStableSortWith	collclasses.xml:1131	a bare ~new constructs an instance on the oracle
+Relation	new	class	covered	mthRelationNew	collclasses.xml:6828	a bare ~new constructs an instance on the oracle
+Relation	[]	instance	covered	mthRelationAtGet	collclasses.xml:6852	a bare ~new constructs an instance on the oracle
+Relation	[]=	instance	covered	mthRelationPutSet	collclasses.xml:6870	a bare ~new constructs an instance on the oracle
+Relation	allAt	instance	covered	mthRelationAllAt	collclasses.xml:6888	a bare ~new constructs an instance on the oracle
+Relation	allIndex	instance	covered	mthRelationAllIndex	collclasses.xml:6909	a bare ~new constructs an instance on the oracle
+Relation	allIndexes	instance	covered	mthRelationAllIndexes	collclasses.xml:6930	a bare ~new constructs an instance on the oracle
+Relation	allItems	instance	covered	mthRelationAllItems	collclasses.xml:6951	a bare ~new constructs an instance on the oracle
+Relation	at	instance	covered	mthRelationAt	collclasses.xml:6967	a bare ~new constructs an instance on the oracle
+Relation	difference	instance	covered	mthRelationDifference	collclasses.xml:6992	a bare ~new constructs an instance on the oracle
+Relation	empty	instance	covered	mthRelationEmpty	collclasses.xml:7012	a bare ~new constructs an instance on the oracle
+Relation	hasIndex	instance	covered	mthRelationHasIndex	collclasses.xml:7028	a bare ~new constructs an instance on the oracle
+Relation	hasItem	instance	covered	mthRelationHasItem	collclasses.xml:7049	a bare ~new constructs an instance on the oracle
+Relation	index	instance	covered	mthRelationIndex	collclasses.xml:7073	a bare ~new constructs an instance on the oracle
+Relation	intersection	instance	covered	mthRelationIntersection	collclasses.xml:7095	a bare ~new constructs an instance on the oracle
+Relation	isEmpty	instance	covered	mthRelationIsEmpty	collclasses.xml:7115	a bare ~new constructs an instance on the oracle
+Relation	items	instance	covered	mthRelationItems	collclasses.xml:7133	a bare ~new constructs an instance on the oracle
+Relation	makeArray	instance	covered	mthRelationMakeArray	collclasses.xml:7155	a bare ~new constructs an instance on the oracle
+Relation	put	instance	covered	mthRelationPut	collclasses.xml:7173	a bare ~new constructs an instance on the oracle
+Relation	remove	instance	covered	mthRelationRemove	collclasses.xml:7195	a bare ~new constructs an instance on the oracle
+Relation	removeAll	instance	covered	mthRelationRemoveAll	collclasses.xml:7218	a bare ~new constructs an instance on the oracle
+Relation	removeItem	instance	covered	mthRelationRemoveItem	collclasses.xml:7240	a bare ~new constructs an instance on the oracle
+Relation	subset	instance	covered	mthRelationSubset	collclasses.xml:7275	a bare ~new constructs an instance on the oracle
+Relation	supplier	instance	covered	mthRelationSupplier	collclasses.xml:7296	a bare ~new constructs an instance on the oracle
+Relation	union	instance	covered	mthRelationUnion	collclasses.xml:7319	a bare ~new constructs an instance on the oracle
+Relation	uniqueIndexes	instance	covered	mthRelationUniqueIndexes	collclasses.xml:7338	a bare ~new constructs an instance on the oracle
+Relation	xor	instance	covered	mthRelationXor	collclasses.xml:7355	a bare ~new constructs an instance on the oracle
+Relation	disjoint	instance	covered	mthCollectionDisjoint	collclasses.xml:340	a bare ~new constructs an instance on the oracle
+Relation	equivalent	instance	covered	mthCollectionEquivalent	collclasses.xml:363	a bare ~new constructs an instance on the oracle
+Relation	of	class	covered	mthMapCollectionOf	collclasses.xml:668	a bare ~new constructs an instance on the oracle
+Relation	putAll	instance	covered	mthMapCollectionPutAll	collclasses.xml:714	a bare ~new constructs an instance on the oracle
+Set	new	class	covered	mthSetNew	collclasses.xml:7523	a bare ~new constructs an instance on the oracle
+Set	of	class	covered	mthSetOf	collclasses.xml:7506	a bare ~new constructs an instance on the oracle
+Set	[]	instance	covered	mthSetAtGet	collclasses.xml:7547	a bare ~new constructs an instance on the oracle
+Set	[]=	instance	covered	mthSetPutSet	collclasses.xml:7565	a bare ~new constructs an instance on the oracle
+Set	allIndexes	instance	covered	mthSetAllIndexes	collclasses.xml:7586	a bare ~new constructs an instance on the oracle
+Set	allItems	instance	covered	mthSetAllItems	collclasses.xml:7602	a bare ~new constructs an instance on the oracle
+Set	at	instance	covered	mthSetAt	collclasses.xml:7618	a bare ~new constructs an instance on the oracle
+Set	empty	instance	covered	mthSetEmpty	collclasses.xml:7637	a bare ~new constructs an instance on the oracle
+Set	hasIndex	instance	covered	mthSetHasIndex	collclasses.xml:7653	a bare ~new constructs an instance on the oracle
+Set	hasItem	instance	covered	mthSetHasItem	collclasses.xml:7671	a bare ~new constructs an instance on the oracle
+Set	index	instance	covered	mthSetIndex	collclasses.xml:7689	a bare ~new constructs an instance on the oracle
+Set	intersection	instance	covered	mthSetIntersection	collclasses.xml:7709	a bare ~new constructs an instance on the oracle
+Set	isEmpty	instance	covered	mthSetIsEmpty	collclasses.xml:7731	a bare ~new constructs an instance on the oracle
+Set	items	instance	covered	mthSetItems	collclasses.xml:7749	a bare ~new constructs an instance on the oracle
+Set	makeArray	instance	covered	mthSetMakeArray	collclasses.xml:7765	a bare ~new constructs an instance on the oracle
+Set	put	instance	covered	mthSetPut	collclasses.xml:7784	a bare ~new constructs an instance on the oracle
+Set	putAll	instance	covered	mthSetPutAll	collclasses.xml:7806	a bare ~new constructs an instance on the oracle
+Set	remove	instance	covered	mthSetRemove	collclasses.xml:7831	a bare ~new constructs an instance on the oracle
+Set	removeItem	instance	covered	mthSetRemoveItem	collclasses.xml:7850	a bare ~new constructs an instance on the oracle
+Set	subset	instance	covered	mthSetSubset	collclasses.xml:7869	a bare ~new constructs an instance on the oracle
+Set	supplier	instance	covered	mthSetSupplier	collclasses.xml:7892	a bare ~new constructs an instance on the oracle
+Set	union	instance	covered	mthSetUnion	collclasses.xml:7912	a bare ~new constructs an instance on the oracle
+Set	xor	instance	covered	mthSetXor	collclasses.xml:7939	a bare ~new constructs an instance on the oracle
+Set	difference	instance	covered	mthCollectionDifference	collclasses.xml:318	a bare ~new constructs an instance on the oracle
+Set	disjoint	instance	covered	mthCollectionDisjoint	collclasses.xml:340	a bare ~new constructs an instance on the oracle
+Set	equivalent	instance	covered	mthCollectionEquivalent	collclasses.xml:363	a bare ~new constructs an instance on the oracle
+Stem	new	class	covered	mthStemNew	collclasses.xml:8069	a bare ~new constructs an instance on the oracle
+Stem	[]	instance	covered	mthStemAtGet	collclasses.xml:8088	a bare ~new constructs an instance on the oracle
+Stem	[]=	instance	covered	mthStemPutSet	collclasses.xml:8125	a bare ~new constructs an instance on the oracle
+Stem	allIndexes	instance	covered	mthStemAllIndexes	collclasses.xml:8153	a bare ~new constructs an instance on the oracle
+Stem	allItems	instance	covered	mthStemAllItems	collclasses.xml:8169	a bare ~new constructs an instance on the oracle
+Stem	at	instance	covered	mthStemAt	collclasses.xml:8185	a bare ~new constructs an instance on the oracle
+Stem	empty	instance	covered	mthStemEmpty	collclasses.xml:8220	a bare ~new constructs an instance on the oracle
+Stem	hasIndex	instance	covered	mthStemHasIndex	collclasses.xml:8236	a bare ~new constructs an instance on the oracle
+Stem	hasItem	instance	covered	mthStemHasItem	collclasses.xml:8258	a bare ~new constructs an instance on the oracle
+Stem	index	instance	covered	mthStemIndex	collclasses.xml:8278	a bare ~new constructs an instance on the oracle
+Stem	isEmpty	instance	covered	mthStemIsEmpty	collclasses.xml:8297	a bare ~new constructs an instance on the oracle
+Stem	items	instance	covered	mthStemItems	collclasses.xml:8315	a bare ~new constructs an instance on the oracle
+Stem	makeArray	instance	covered	mthStemMakeArray	collclasses.xml:8331	a bare ~new constructs an instance on the oracle
+Stem	put	instance	covered	mthStemPut	collclasses.xml:8349	a bare ~new constructs an instance on the oracle
+Stem	remove	instance	covered	mthStemRemove	collclasses.xml:8377	a bare ~new constructs an instance on the oracle
+Stem	removeItem	instance	covered	mthStemRemoveItem	collclasses.xml:8401	a bare ~new constructs an instance on the oracle
+Stem	request	instance	covered	mthStemRequest	collclasses.xml:8422	a bare ~new constructs an instance on the oracle
+Stem	supplier	instance	covered	mthStemSupplier	collclasses.xml:8447	a bare ~new constructs an instance on the oracle
+Stem	toDirectory	instance	covered	mthStemToDirectory	collclasses.xml:8467	a bare ~new constructs an instance on the oracle
+Stem	unknown	instance	covered	mthStemUnknown	collclasses.xml:8485	a bare ~new constructs an instance on the oracle
+Stem	difference	instance	covered	mthCollectionDifference	collclasses.xml:318	a bare ~new constructs an instance on the oracle
+Stem	disjoint	instance	covered	mthCollectionDisjoint	collclasses.xml:340	a bare ~new constructs an instance on the oracle
+Stem	equivalent	instance	covered	mthCollectionEquivalent	collclasses.xml:363	a bare ~new constructs an instance on the oracle
+Stem	intersection	instance	covered	mthCollectionIntersection	collclasses.xml:442	a bare ~new constructs an instance on the oracle
+Stem	subset	instance	covered	mthCollectionSubset	collclasses.xml:517	a bare ~new constructs an instance on the oracle
+Stem	union	instance	covered	mthCollectionUnion	collclasses.xml:560	a bare ~new constructs an instance on the oracle
+Stem	xor	instance	covered	mthCollectionXor	collclasses.xml:588	a bare ~new constructs an instance on the oracle
+Stem	of	class	covered	mthMapCollectionOf	collclasses.xml:668	a bare ~new constructs an instance on the oracle
+Stem	putAll	instance	covered	mthMapCollectionPutAll	collclasses.xml:714	a bare ~new constructs an instance on the oracle
+StringTable	new	class	covered	mthStringTableNew	collclasses.xml:8602	a bare ~new constructs an instance on the oracle
+StringTable	[]	instance	covered	mthStringTableAtGet	collclasses.xml:8626	a bare ~new constructs an instance on the oracle
+StringTable	[]=	instance	covered	mthStringTablePutSet	collclasses.xml:8644	a bare ~new constructs an instance on the oracle
+StringTable	allIndexes	instance	covered	mthStringTableAllIndexes	collclasses.xml:8663	a bare ~new constructs an instance on the oracle
+StringTable	allItems	instance	covered	mthStringTableAllItems	collclasses.xml:8679	a bare ~new constructs an instance on the oracle
+StringTable	at	instance	covered	mthStringTableAt	collclasses.xml:8695	a bare ~new constructs an instance on the oracle
+StringTable	empty	instance	covered	mthStringTableEmpty	collclasses.xml:8720	a bare ~new constructs an instance on the oracle
+StringTable	entry	instance	covered	mthStringTableEntry	collclasses.xml:8737	a bare ~new constructs an instance on the oracle
+StringTable	hasEntry	instance	covered	mthStringTableHasEntry	collclasses.xml:8756	a bare ~new constructs an instance on the oracle
+StringTable	hasIndex	instance	covered	mthStringTableHasIndex	collclasses.xml:8774	a bare ~new constructs an instance on the oracle
+StringTable	hasItem	instance	covered	mthStringTableHasItem	collclasses.xml:8793	a bare ~new constructs an instance on the oracle
+StringTable	index	instance	covered	mthStringTableIndex	collclasses.xml:8813	a bare ~new constructs an instance on the oracle
+StringTable	isEmpty	instance	covered	mthStringTableIsEmpty	collclasses.xml:8834	a bare ~new constructs an instance on the oracle
+StringTable	items	instance	covered	mthStringTableItems	collclasses.xml:8852	a bare ~new constructs an instance on the oracle
+StringTable	makeArray	instance	covered	mthStringTableMakeArray	collclasses.xml:8868	a bare ~new constructs an instance on the oracle
+StringTable	put	instance	covered	mthStringTablePut	collclasses.xml:8887	a bare ~new constructs an instance on the oracle
+StringTable	remove	instance	covered	mthStringTableRemove	collclasses.xml:8907	a bare ~new constructs an instance on the oracle
+StringTable	removeEntry	instance	covered	mthStringTableRemoveEntry	collclasses.xml:8929	a bare ~new constructs an instance on the oracle
+StringTable	removeItem	instance	covered	mthStringTableRemoveItem	collclasses.xml:8952	a bare ~new constructs an instance on the oracle
+StringTable	setEntry	instance	covered	mthStringTableSetEntry	collclasses.xml:8972	a bare ~new constructs an instance on the oracle
+StringTable	supplier	instance	covered	mthStringTableSupplier	collclasses.xml:8993	a bare ~new constructs an instance on the oracle
+StringTable	unknown	instance	covered	mthStringTableUnknown	collclasses.xml:9013	a bare ~new constructs an instance on the oracle
+StringTable	difference	instance	covered	mthCollectionDifference	collclasses.xml:318	a bare ~new constructs an instance on the oracle
+StringTable	disjoint	instance	covered	mthCollectionDisjoint	collclasses.xml:340	a bare ~new constructs an instance on the oracle
+StringTable	equivalent	instance	covered	mthCollectionEquivalent	collclasses.xml:363	a bare ~new constructs an instance on the oracle
+StringTable	intersection	instance	covered	mthCollectionIntersection	collclasses.xml:442	a bare ~new constructs an instance on the oracle
+StringTable	subset	instance	covered	mthCollectionSubset	collclasses.xml:517	a bare ~new constructs an instance on the oracle
+StringTable	union	instance	covered	mthCollectionUnion	collclasses.xml:560	a bare ~new constructs an instance on the oracle
+StringTable	xor	instance	covered	mthCollectionXor	collclasses.xml:588	a bare ~new constructs an instance on the oracle
+StringTable	of	class	covered	mthMapCollectionOf	collclasses.xml:668	a bare ~new constructs an instance on the oracle
+StringTable	putAll	instance	covered	mthMapCollectionPutAll	collclasses.xml:714	a bare ~new constructs an instance on the oracle
+Table	new	class	covered	mthTableNew	collclasses.xml:9123	a bare ~new constructs an instance on the oracle
+Table	[]	instance	covered	mthTableAtGet	collclasses.xml:9147	a bare ~new constructs an instance on the oracle
+Table	[]=	instance	covered	mthTablePutSet	collclasses.xml:9165	a bare ~new constructs an instance on the oracle
+Table	allIndexes	instance	covered	mthTableAllIndexes	collclasses.xml:9184	a bare ~new constructs an instance on the oracle
+Table	allItems	instance	covered	mthTableAllItems	collclasses.xml:9200	a bare ~new constructs an instance on the oracle
+Table	at	instance	covered	mthTableAt	collclasses.xml:9216	a bare ~new constructs an instance on the oracle
+Table	empty	instance	covered	mthTableEmpty	collclasses.xml:9235	a bare ~new constructs an instance on the oracle
+Table	hasIndex	instance	covered	mthTableHasIndex	collclasses.xml:9251	a bare ~new constructs an instance on the oracle
+Table	hasItem	instance	covered	mthTableHasItem	collclasses.xml:9269	a bare ~new constructs an instance on the oracle
+Table	index	instance	covered	mthTableIndex	collclasses.xml:9289	a bare ~new constructs an instance on the oracle
+Table	isEmpty	instance	covered	mthTableIsEmpty	collclasses.xml:9309	a bare ~new constructs an instance on the oracle
+Table	items	instance	covered	mthTableItems	collclasses.xml:9327	a bare ~new constructs an instance on the oracle
+Table	makeArray	instance	covered	mthTableMakeArray	collclasses.xml:9343	a bare ~new constructs an instance on the oracle
+Table	put	instance	covered	mthTablePut	collclasses.xml:9362	a bare ~new constructs an instance on the oracle
+Table	remove	instance	covered	mthTableRemove	collclasses.xml:9381	a bare ~new constructs an instance on the oracle
+Table	removeItem	instance	covered	mthTableRemoveItem	collclasses.xml:9400	a bare ~new constructs an instance on the oracle
+Table	supplier	instance	covered	mthTableSupplier	collclasses.xml:9420	a bare ~new constructs an instance on the oracle
+Table	difference	instance	covered	mthCollectionDifference	collclasses.xml:318	a bare ~new constructs an instance on the oracle
+Table	disjoint	instance	covered	mthCollectionDisjoint	collclasses.xml:340	a bare ~new constructs an instance on the oracle
+Table	equivalent	instance	covered	mthCollectionEquivalent	collclasses.xml:363	a bare ~new constructs an instance on the oracle
+Table	intersection	instance	covered	mthCollectionIntersection	collclasses.xml:442	a bare ~new constructs an instance on the oracle
+Table	subset	instance	covered	mthCollectionSubset	collclasses.xml:517	a bare ~new constructs an instance on the oracle
+Table	union	instance	covered	mthCollectionUnion	collclasses.xml:560	a bare ~new constructs an instance on the oracle
+Table	xor	instance	covered	mthCollectionXor	collclasses.xml:588	a bare ~new constructs an instance on the oracle
+Table	of	class	covered	mthMapCollectionOf	collclasses.xml:668	a bare ~new constructs an instance on the oracle
+Table	putAll	instance	covered	mthMapCollectionPutAll	collclasses.xml:714	a bare ~new constructs an instance on the oracle
+Alarm	attachment	instance	not-covered	mthAlarmAttachment	utilityclasses.xml:100	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Alarm	cancel	instance	not-covered	mthAlarmCancel	utilityclasses.xml:128	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Alarm	canceled	instance	not-covered	mthAlarmCanceled	utilityclasses.xml:147	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Alarm	cancelled	instance	not-covered	mthAlarmCanceled	utilityclasses.xml:147	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Alarm	init	instance	not-covered	mthAlarmInit	utilityclasses.xml:170	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Alarm	scheduledTime	instance	not-covered	mthAlarmScheduledTime	utilityclasses.xml:288	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Alarm	triggered	instance	not-covered	mthAlarmTriggered	utilityclasses.xml:304	no construction program is committed; a bare ~new raises 93.901 on the oracle
+AlarmNotification	cancel	instance	covered	mthAlarmNotificationCancel	utilityclasses.xml:371	a bare ~new constructs an instance on the oracle
+AlarmNotification	triggered	instance	covered	mthAlarmNotificationTriggered	utilityclasses.xml:394	a bare ~new constructs an instance on the oracle
+Buffer	new	class	unreachable	mthBufferNew	utilityclasses.xml:459	the reference says instances come only from native code -- utilityclasses.xml:429 "can only be created using the native code application programming interfaces."
+Comparable	compareTo	instance	covered	mthComparableCompareTo	utilityclasses.xml:513	a bare ~new constructs an instance on the oracle
+Comparator	compare	instance	covered	mthComparatorCompare	utilityclasses.xml:607	a bare ~new constructs an instance on the oracle
+CaselessComparator	compare	instance	covered	mthCaselessComparatorCompare	utilityclasses.xml:679	a bare ~new constructs an instance on the oracle
+ColumnComparator	compare	instance	not-covered	mthColumnComparatorCompare	utilityclasses.xml:749	no construction program is committed; a bare ~new raises 93.901 on the oracle
+ColumnComparator	init	instance	not-covered	mthColumnComparatorInit	utilityclasses.xml:768	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CaselessColumnComparator	compare	instance	not-covered	mthCaselessColumnComparatorCompare	utilityclasses.xml:839	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CaselessColumnComparator	init	instance	not-covered	mthCaselessColumnComparatorInit	utilityclasses.xml:858	no construction program is committed; a bare ~new raises 93.901 on the oracle
+DescendingComparator	compare	instance	covered	mthDescendingComparatorCompare	utilityclasses.xml:932	a bare ~new constructs an instance on the oracle
+CaselessDescendingComparator	compare	instance	covered	mthCaselessDescendingComparatorCompare	utilityclasses.xml:1009	a bare ~new constructs an instance on the oracle
+InvertingComparator	compare	instance	not-covered	mthInvertingComparatorCompare	utilityclasses.xml:1080	no construction program is committed; a bare ~new raises 93.901 on the oracle
+InvertingComparator	init	instance	not-covered	mthInvertingComparatorInit	utilityclasses.xml:1099	no construction program is committed; a bare ~new raises 93.901 on the oracle
+NumericComparator	compare	instance	covered	mthNumericComparatorCompare	utilityclasses.xml:1180	a bare ~new constructs an instance on the oracle
+NumericComparator	init	instance	covered	mthNumericComparatorInit	utilityclasses.xml:1200	a bare ~new constructs an instance on the oracle
+DateTime	init	instance	covered	mthDateTimeInit	utilityclasses.xml:1775	a bare ~new constructs an instance on the oracle
+DateTime	fromBaseDate	class	covered	mthDateTimeFromBaseDate	utilityclasses.xml:1420	a bare ~new constructs an instance on the oracle
+DateTime	fromCivilTime	class	covered	mthDateTimeFromCivilTime	utilityclasses.xml:1668	a bare ~new constructs an instance on the oracle
+DateTime	fromEuropeanDate	class	covered	mthDateTimeFromEuropeanDate	utilityclasses.xml:1441	a bare ~new constructs an instance on the oracle
+DateTime	fromIsoDate	class	covered	mthDateTimeFromIsoDate	utilityclasses.xml:1732	a bare ~new constructs an instance on the oracle
+DateTime	fromLongTime	class	covered	mthDateTimeFromLongTime	utilityclasses.xml:1689	a bare ~new constructs an instance on the oracle
+DateTime	fromNormalDate	class	covered	mthDateTimeFromNormalDate	utilityclasses.xml:1467	a bare ~new constructs an instance on the oracle
+DateTime	fromNormalTime	class	covered	mthDateTimeFromNormalTime	utilityclasses.xml:1647	a bare ~new constructs an instance on the oracle
+DateTime	fromOrderedDate	class	covered	mthDateTimeFromOrderedDate	utilityclasses.xml:1492	a bare ~new constructs an instance on the oracle
+DateTime	fromOrdinalDate	class	covered	mthDateTimeFromOrdinalDate	utilityclasses.xml:1520	a bare ~new constructs an instance on the oracle
+DateTime	fromStandardDate	class	covered	mthDateTimeFromStandardDate	utilityclasses.xml:1555	a bare ~new constructs an instance on the oracle
+DateTime	fromTicks	class	covered	mthDateTimeFromTicks	utilityclasses.xml:1710	a bare ~new constructs an instance on the oracle
+DateTime	fromUsaDate	class	covered	mthDateTimeFromUsaDate	utilityclasses.xml:1580	a bare ~new constructs an instance on the oracle
+DateTime	fromUtcIsoDate	class	covered	mthDateTimeFromUtcIsoDate	utilityclasses.xml:1756	a bare ~new constructs an instance on the oracle
+DateTime	fromWeekNumberDate	class	covered	mthDateTimeFromWeekNumberDate	utilityclasses.xml:1607	a bare ~new constructs an instance on the oracle
+DateTime	maxDate	class	covered	mthDateTimeMaxDate	utilityclasses.xml:1383	a bare ~new constructs an instance on the oracle
+DateTime	minDate	class	covered	mthDateTimeMinDate	utilityclasses.xml:1365	a bare ~new constructs an instance on the oracle
+DateTime	today	class	covered	mthDateTimeToday	utilityclasses.xml:1401	a bare ~new constructs an instance on the oracle
+DateTime	+	instance	covered	mthDateTimeArithmeticMethods	utilityclasses.xml:1834	a bare ~new constructs an instance on the oracle
+DateTime	-	instance	covered	mthDateTimeArithmeticMethods	utilityclasses.xml:1834	a bare ~new constructs an instance on the oracle
+DateTime	addDays	instance	covered	mthDateTimeAddDays	utilityclasses.xml:2386	a bare ~new constructs an instance on the oracle
+DateTime	addHours	instance	covered	mthDateTimeAddHours	utilityclasses.xml:2416	a bare ~new constructs an instance on the oracle
+DateTime	addMicroseconds	instance	covered	mthDateTimeAddMicroseconds	utilityclasses.xml:2482	a bare ~new constructs an instance on the oracle
+DateTime	addMinutes	instance	covered	mthDateTimeAddMinutes	utilityclasses.xml:2438	a bare ~new constructs an instance on the oracle
+DateTime	addSeconds	instance	covered	mthDateTimeAddSeconds	utilityclasses.xml:2460	a bare ~new constructs an instance on the oracle
+DateTime	addWeeks	instance	covered	mthDateTimeAddWeeks	utilityclasses.xml:2363	a bare ~new constructs an instance on the oracle
+DateTime	addYears	instance	covered	mthDateTimeAddYears	utilityclasses.xml:2329	a bare ~new constructs an instance on the oracle
+DateTime	baseDate	instance	covered	mthDateTimeBaseDate	utilityclasses.xml:2548	a bare ~new constructs an instance on the oracle
+DateTime	civilTime	instance	covered	mthDateTimeCivilTime	utilityclasses.xml:2795	a bare ~new constructs an instance on the oracle
+DateTime	compareTo	instance	covered	mthDateTimeCompareTo	utilityclasses.xml:1926	a bare ~new constructs an instance on the oracle
+DateTime	date	instance	covered	mthDateTimeDate	utilityclasses.xml:3001	a bare ~new constructs an instance on the oracle
+DateTime	day	instance	covered	mthDateTimeDay	utilityclasses.xml:2122	a bare ~new constructs an instance on the oracle
+DateTime	dayMicroseconds	instance	covered	mthDateTimeDayMicroseconds	utilityclasses.xml:2293	a bare ~new constructs an instance on the oracle
+DateTime	dayMinutes	instance	covered	mthDateTimeDayMinutes	utilityclasses.xml:2257	a bare ~new constructs an instance on the oracle
+DateTime	dayName	instance	covered	mthDateTimeDayName	utilityclasses.xml:2689	a bare ~new constructs an instance on the oracle
+DateTime	daySeconds	instance	covered	mthDateTimeDaySeconds	utilityclasses.xml:2275	a bare ~new constructs an instance on the oracle
+DateTime	daysInMonth	instance	covered	mthDateTimeDaysInMonth	utilityclasses.xml:3076	a bare ~new constructs an instance on the oracle
+DateTime	daysInYear	instance	covered	mthDateTimeDaysInYear	utilityclasses.xml:3097	a bare ~new constructs an instance on the oracle
+DateTime	elapsed	instance	covered	mthDateTimeElapsed	utilityclasses.xml:3037	a bare ~new constructs an instance on the oracle
+DateTime	europeanDate	instance	covered	mthDateTimeEuropeanDate	utilityclasses.xml:2622	a bare ~new constructs an instance on the oracle
+DateTime	fullDate	instance	covered	mthDateTimeFullDate	utilityclasses.xml:2869	a bare ~new constructs an instance on the oracle
+DateTime	hashCode	instance	covered	mthDateTimeHashCode	utilityclasses.xml:2311	a bare ~new constructs an instance on the oracle
+DateTime	hours	instance	covered	mthDateTimeHours	utilityclasses.xml:2140	a bare ~new constructs an instance on the oracle
+DateTime	isLeapYear	instance	covered	mthDateTimeIsLeapYear	utilityclasses.xml:3058	a bare ~new constructs an instance on the oracle
+DateTime	isoDate	instance	covered	mthDateTimeIsoDate	utilityclasses.xml:2504	a bare ~new constructs an instance on the oracle
+DateTime	languageDate	instance	covered	mthDateTimeLanguageDate	utilityclasses.xml:2644	a bare ~new constructs an instance on the oracle
+DateTime	longTime	instance	covered	mthDateTimeLongTime	utilityclasses.xml:2850	a bare ~new constructs an instance on the oracle
+DateTime	makeString	instance	covered	mthDateTimeMakeString	utilityclasses.xml:2223	a bare ~new constructs an instance on the oracle
+DateTime	microseconds	instance	covered	mthDateTimeMicroseconds	utilityclasses.xml:2239	a bare ~new constructs an instance on the oracle
+DateTime	minutes	instance	covered	mthDateTimeMinutes	utilityclasses.xml:2158	a bare ~new constructs an instance on the oracle
+DateTime	month	instance	covered	mthDateTimeMonth	utilityclasses.xml:2104	a bare ~new constructs an instance on the oracle
+DateTime	monthName	instance	covered	mthDateTimeMonthName	utilityclasses.xml:2671	a bare ~new constructs an instance on the oracle
+DateTime	normalDate	instance	covered	mthDateTimeNormalDate	utilityclasses.xml:2707	a bare ~new constructs an instance on the oracle
+DateTime	normalTime	instance	covered	mthDateTimeNormalTime	utilityclasses.xml:2826	a bare ~new constructs an instance on the oracle
+DateTime	offset	instance	covered	mthDateTimeOffset	utilityclasses.xml:2982	a bare ~new constructs an instance on the oracle
+DateTime	orderedDate	instance	covered	mthDateTimeOrderedDate	utilityclasses.xml:2729	a bare ~new constructs an instance on the oracle
+DateTime	ordinalDate	instance	covered	mthDateTimeOrdinalDate	utilityclasses.xml:2178	a bare ~new constructs an instance on the oracle
+DateTime	seconds	instance	covered	mthDateTimeSeconds	utilityclasses.xml:2204	a bare ~new constructs an instance on the oracle
+DateTime	standardDate	instance	covered	mthDateTimeStandardDate	utilityclasses.xml:2751	a bare ~new constructs an instance on the oracle
+DateTime	string	instance	covered	mthDateTimeString	utilityclasses.xml:3116	a bare ~new constructs an instance on the oracle
+DateTime	ticks	instance	covered	mthDateTimeTicks	utilityclasses.xml:2962	a bare ~new constructs an instance on the oracle
+DateTime	timeOfDay	instance	covered	mthDateTimeTimeOfDay	utilityclasses.xml:3019	a bare ~new constructs an instance on the oracle
+DateTime	toLocalTime	instance	covered	mthDateTimeToLocalTime	utilityclasses.xml:2907	a bare ~new constructs an instance on the oracle
+DateTime	toTimezone	instance	covered	mthDateTimeToTimezone	utilityclasses.xml:2943	a bare ~new constructs an instance on the oracle
+DateTime	toUtcTime	instance	covered	mthDateTimeToUtcTime	utilityclasses.xml:2925	a bare ~new constructs an instance on the oracle
+DateTime	usaDate	instance	covered	mthDateTimeUsaDate	utilityclasses.xml:2773	a bare ~new constructs an instance on the oracle
+DateTime	utcDate	instance	covered	mthDateTimeUtcDate	utilityclasses.xml:2888	a bare ~new constructs an instance on the oracle
+DateTime	utcIsoDate	instance	covered	mthDateTimeUtcIsoDate	utilityclasses.xml:2525	a bare ~new constructs an instance on the oracle
+DateTime	weekDay	instance	covered	mthDateTimeWeekDay	utilityclasses.xml:2602	a bare ~new constructs an instance on the oracle
+DateTime	weekNumber	instance	covered	mthDateTimeWeekNumber	utilityclasses.xml:1947	a bare ~new constructs an instance on the oracle
+DateTime	weekNumberDate	instance	covered	mthDateTimeWeekNumberDate	utilityclasses.xml:1985	a bare ~new constructs an instance on the oracle
+DateTime	weekNumberYear	instance	covered	mthDateTimeWeekNumberYear	utilityclasses.xml:2017	a bare ~new constructs an instance on the oracle
+DateTime	weeksInYear	instance	covered	mthDateTimeWeeksInYear	utilityclasses.xml:2054	a bare ~new constructs an instance on the oracle
+DateTime	year	instance	covered	mthDateTimeYear	utilityclasses.xml:2086	a bare ~new constructs an instance on the oracle
+DateTime	yearDay	instance	covered	mthDateTimeYearDay	utilityclasses.xml:2573	a bare ~new constructs an instance on the oracle
+DateTime	=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+DateTime	==	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+DateTime	<	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+DateTime	<=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+DateTime	<<	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+DateTime	<<=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+DateTime	<>	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+DateTime	>	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+DateTime	>=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+DateTime	><	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+DateTime	>>	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+DateTime	>>=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+DateTime	\=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+DateTime	\==	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+DateTime	\<	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+DateTime	\<<	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+DateTime	\>	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+DateTime	\>>	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+EventSemaphore	new	class	covered	mthEventSemaphoreNew	utilityclasses.xml:3193	a bare ~new constructs an instance on the oracle
+EventSemaphore	isPosted	instance	covered	mthEventSemaphoreIsPosted	utilityclasses.xml:3208	a bare ~new constructs an instance on the oracle
+EventSemaphore	post	instance	covered	mthEventSemaphorePost	utilityclasses.xml:3237	a bare ~new constructs an instance on the oracle
+EventSemaphore	reset	instance	covered	mthEventSemaphoreReset	utilityclasses.xml:3259	a bare ~new constructs an instance on the oracle
+EventSemaphore	uninit	instance	covered	mthEventSemaphoreUninit	utilityclasses.xml:3278	a bare ~new constructs an instance on the oracle
+EventSemaphore	wait	instance	covered	mthEventSemaphoreWait	utilityclasses.xml:3297	a bare ~new constructs an instance on the oracle
+File	isCaseSensitive	class	not-covered	mthFileIsCaseSensitiveClsMth	utilityclasses.xml:3488	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	listRoots	class	not-covered	mthFileListRoots	utilityclasses.xml:3509	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	pathSeparator	class	not-covered	mthFilePathSeparatorClsMth	utilityclasses.xml:3536	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	readChars	class	not-covered	mthFileReadCharsClsMth	utilityclasses.xml:3556	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	readLines	class	not-covered	mthFileReadLinesClsMth	utilityclasses.xml:3579	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	searchPath	class	not-covered	mthFileSearchPath	utilityclasses.xml:3604	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	separator	class	not-covered	mthFileSeparatorClsMth	utilityclasses.xml:3640	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	temporaryPath	class	not-covered	mthFileTemporaryPath	utilityclasses.xml:3669	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	writeChars	class	not-covered	mthFileWriteCharsClsMth	utilityclasses.xml:3701	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	writeLines	class	not-covered	mthFileWriteLinesClsMth	utilityclasses.xml:3725	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	absoluteFile	instance	not-covered	mthFileAbsoluteFile	utilityclasses.xml:3753	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	absolutePath	instance	not-covered	mthFileAbsolutePath	utilityclasses.xml:3787	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	canRead	instance	not-covered	mthFileCanRead	utilityclasses.xml:3821	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	canWrite	instance	not-covered	mthFileCanWrite	utilityclasses.xml:3843	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	compareTo	instance	not-covered	mthFileCompareTo	utilityclasses.xml:3865	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	delete	instance	not-covered	mthFileDelete	utilityclasses.xml:3896	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	exists	instance	not-covered	mthFileExists	utilityclasses.xml:3916	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	extension	instance	not-covered	mthFileExtension	utilityclasses.xml:3936	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	hashCode	instance	not-covered	mthFileHashCode	utilityclasses.xml:3963	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	init	instance	not-covered	mthFileInit	utilityclasses.xml:3981	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	isCaseSensitive	instance	not-covered	mthFileIsCaseSensitive	utilityclasses.xml:4026	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	isDirectory	instance	not-covered	mthFileIsDirectory	utilityclasses.xml:4048	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	isFile	instance	not-covered	mthFileIsFile	utilityclasses.xml:4066	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	isHidden	instance	not-covered	mthFileIsHidden	utilityclasses.xml:4084	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	lastAccessed	instance	not-covered	mthFileLastAccessed	utilityclasses.xml:4119	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	lastModified	instance	not-covered	mthFileLastModified	utilityclasses.xml:4166	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	length	instance	not-covered	mthFileLength	utilityclasses.xml:4231	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	list	instance	not-covered	mthFileList	utilityclasses.xml:4249	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	listFiles	instance	not-covered	mthFileListFiles	utilityclasses.xml:4286	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	makeDir	instance	not-covered	mthFileMakeDir	utilityclasses.xml:4341	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	makeDirs	instance	not-covered	mthFileMakeDirs	utilityclasses.xml:4363	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	makeString	instance	not-covered	mthFileMakeString	utilityclasses.xml:4386	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	name	instance	not-covered	mthFileName	utilityclasses.xml:4401	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	parent	instance	not-covered	mthFileParent	utilityclasses.xml:4434	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	parentFile	instance	not-covered	mthFileParentFile	utilityclasses.xml:4466	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	path	instance	not-covered	mthFilePath	utilityclasses.xml:4486	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	pathSeparator	instance	not-covered	mthFilePathSeparator	utilityclasses.xml:4505	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	renameTo	instance	not-covered	mthFileRenameTo	utilityclasses.xml:4525	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	separator	instance	not-covered	mthFileSeparator	utilityclasses.xml:4549	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	setReadOnly	instance	not-covered	mthFileSetReadOnly	utilityclasses.xml:4569	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	setWritable	instance	not-covered	mthFileSetWritable	utilityclasses.xml:4594	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	string	instance	not-covered	mthFileString	utilityclasses.xml:4613	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	==	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	<	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	<=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	<<	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	<<=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	<>	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	>	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	>=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	><	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	>>	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	>>=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	\=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	\==	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	\<	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	\<<	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	\>	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	\>>	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+MessageNotification	messageComplete	instance	covered	mthMessageNotificationMessageComplete	utilityclasses.xml:4679	a bare ~new constructs an instance on the oracle
+Monitor	current	instance	covered	mthMonitorCurrent	utilityclasses.xml:4739	a bare ~new constructs an instance on the oracle
+Monitor	destination	instance	covered	mthMonitorDestination	utilityclasses.xml:4755	a bare ~new constructs an instance on the oracle
+Monitor	init	instance	covered	mthMonitorInit	utilityclasses.xml:4775	a bare ~new constructs an instance on the oracle
+Monitor	unknown	instance	covered	mthMonitorUnknown	utilityclasses.xml:4791	a bare ~new constructs an instance on the oracle
+MutableBuffer	new	class	covered	mthMutableBufferNew	utilityclasses.xml:4923	a bare ~new constructs an instance on the oracle
+MutableBuffer	[]	instance	covered	mthMutableBufferAtGet	utilityclasses.xml:4943	a bare ~new constructs an instance on the oracle
+MutableBuffer	[]=	instance	covered	mthMutableBufferPutSet	utilityclasses.xml:4976	a bare ~new constructs an instance on the oracle
+MutableBuffer	append	instance	covered	mthMutableBufferAppend	utilityclasses.xml:5015	a bare ~new constructs an instance on the oracle
+MutableBuffer	caselessChangeStr	instance	covered	mthMutableBufferCaselessChangeStr	utilityclasses.xml:5034	a bare ~new constructs an instance on the oracle
+MutableBuffer	caselessContains	instance	covered	mthMutableBufferCaselessContains	utilityclasses.xml:5060	a bare ~new constructs an instance on the oracle
+MutableBuffer	caselessContainsWord	instance	covered	mthMutableBufferCaselessContainsWord	utilityclasses.xml:5098	a bare ~new constructs an instance on the oracle
+MutableBuffer	caselessCountStr	instance	covered	mthMutableBufferCaselessCountStr	utilityclasses.xml:5141	a bare ~new constructs an instance on the oracle
+MutableBuffer	caselessEndsWith	instance	covered	mthMutableBufferCaselessEndsWith	utilityclasses.xml:5166	a bare ~new constructs an instance on the oracle
+MutableBuffer	caselessLastPos	instance	covered	mthMutableBufferCaselessLastPos	utilityclasses.xml:5190	a bare ~new constructs an instance on the oracle
+MutableBuffer	caselessMatch	instance	covered	mthMutableBufferCaselessMatch	utilityclasses.xml:5233	a bare ~new constructs an instance on the oracle
+MutableBuffer	caselessMatchChar	instance	covered	mthMutableBufferCaselessMatchChar	utilityclasses.xml:5271	a bare ~new constructs an instance on the oracle
+MutableBuffer	caselessPos	instance	covered	mthMutableBufferCaselessPos	utilityclasses.xml:5296	a bare ~new constructs an instance on the oracle
+MutableBuffer	caselessStartsWith	instance	covered	mthMutableBufferCaselessStartsWith	utilityclasses.xml:5336	a bare ~new constructs an instance on the oracle
+MutableBuffer	caselessWordPos	instance	covered	mthMutableBufferCaselessWordPos	utilityclasses.xml:5360	a bare ~new constructs an instance on the oracle
+MutableBuffer	changeStr	instance	covered	mthMutableBufferChangeStr	utilityclasses.xml:5393	a bare ~new constructs an instance on the oracle
+MutableBuffer	contains	instance	covered	mthMutableBufferContains	utilityclasses.xml:5417	a bare ~new constructs an instance on the oracle
+MutableBuffer	containsWord	instance	covered	mthMutableBufferContainsWord	utilityclasses.xml:5455	a bare ~new constructs an instance on the oracle
+MutableBuffer	countStr	instance	covered	mthMutableBufferCountStr	utilityclasses.xml:5499	a bare ~new constructs an instance on the oracle
+MutableBuffer	delete	instance	covered	mthMutableBufferDelStr	utilityclasses.xml:5517	a bare ~new constructs an instance on the oracle
+MutableBuffer	delStr	instance	covered	mthMutableBufferDelStr	utilityclasses.xml:5517	a bare ~new constructs an instance on the oracle
+MutableBuffer	delWord	instance	covered	mthMutableBufferDelWord	utilityclasses.xml:5556	a bare ~new constructs an instance on the oracle
+MutableBuffer	endsWith	instance	covered	mthMutableBufferEndsWith	utilityclasses.xml:5594	a bare ~new constructs an instance on the oracle
+MutableBuffer	getBufferSize	instance	covered	mthMutableBufferGetBufferSize	utilityclasses.xml:5617	a bare ~new constructs an instance on the oracle
+MutableBuffer	insert	instance	covered	mthMutableBufferInsert	utilityclasses.xml:5635	a bare ~new constructs an instance on the oracle
+MutableBuffer	lastPos	instance	covered	mthMutableBufferLastPos	utilityclasses.xml:5665	a bare ~new constructs an instance on the oracle
+MutableBuffer	length	instance	covered	mthMutableBufferLength	utilityclasses.xml:5718	a bare ~new constructs an instance on the oracle
+MutableBuffer	lower	instance	covered	mthMutableBufferLower	utilityclasses.xml:5734	a bare ~new constructs an instance on the oracle
+MutableBuffer	makeArray	instance	covered	mthMutableBufferMakeArray	utilityclasses.xml:5757	a bare ~new constructs an instance on the oracle
+MutableBuffer	makeString	instance	covered	mthMutableBufferMakeString	utilityclasses.xml:5783	a bare ~new constructs an instance on the oracle
+MutableBuffer	match	instance	covered	mthMutableBufferMatch	utilityclasses.xml:5800	a bare ~new constructs an instance on the oracle
+MutableBuffer	matchChar	instance	covered	mthMutableBufferMatchChar	utilityclasses.xml:5833	a bare ~new constructs an instance on the oracle
+MutableBuffer	overlay	instance	covered	mthMutableBufferOverlay	utilityclasses.xml:5852	a bare ~new constructs an instance on the oracle
+MutableBuffer	pos	instance	covered	mthMutableBufferPos	utilityclasses.xml:5878	a bare ~new constructs an instance on the oracle
+MutableBuffer	replaceAt	instance	covered	mthMutableBufferReplaceAt	utilityclasses.xml:5930	a bare ~new constructs an instance on the oracle
+MutableBuffer	setBufferSize	instance	covered	mthMutableBufferSetBufferSize	utilityclasses.xml:5964	a bare ~new constructs an instance on the oracle
+MutableBuffer	setText	instance	covered	mthMutableBufferSetText	utilityclasses.xml:5987	a bare ~new constructs an instance on the oracle
+MutableBuffer	space	instance	covered	mthMutableBufferSpace	utilityclasses.xml:6000	a bare ~new constructs an instance on the oracle
+MutableBuffer	startsWith	instance	covered	mthMutableBufferStartsWith	utilityclasses.xml:6029	a bare ~new constructs an instance on the oracle
+MutableBuffer	string	instance	covered	mthMutableBufferString	utilityclasses.xml:6052	a bare ~new constructs an instance on the oracle
+MutableBuffer	subChar	instance	covered	mthMutableBufferSubChar	utilityclasses.xml:6070	a bare ~new constructs an instance on the oracle
+MutableBuffer	substr	instance	covered	mthMutableBufferSubstr	utilityclasses.xml:6089	a bare ~new constructs an instance on the oracle
+MutableBuffer	subWord	instance	covered	mthMutableBufferSubWord	utilityclasses.xml:6113	a bare ~new constructs an instance on the oracle
+MutableBuffer	subWords	instance	covered	mthMutableBufferSubWords	utilityclasses.xml:6140	a bare ~new constructs an instance on the oracle
+MutableBuffer	translate	instance	covered	mthMutableBufferTranslate	utilityclasses.xml:6168	a bare ~new constructs an instance on the oracle
+MutableBuffer	upper	instance	covered	mthMutableBufferUpper	utilityclasses.xml:6221	a bare ~new constructs an instance on the oracle
+MutableBuffer	verify	instance	covered	mthMutableBufferVerify	utilityclasses.xml:6243	a bare ~new constructs an instance on the oracle
+MutableBuffer	word	instance	covered	mthMutableBufferWord	utilityclasses.xml:6322	a bare ~new constructs an instance on the oracle
+MutableBuffer	wordIndex	instance	covered	mthMutableBufferWordIndex	utilityclasses.xml:6348	a bare ~new constructs an instance on the oracle
+MutableBuffer	wordLength	instance	covered	mthMutableBufferWordLength	utilityclasses.xml:6371	a bare ~new constructs an instance on the oracle
+MutableBuffer	wordPos	instance	covered	mthMutableBufferWordPos	utilityclasses.xml:6393	a bare ~new constructs an instance on the oracle
+MutableBuffer	words	instance	covered	mthMutableBufferWords	utilityclasses.xml:6423	a bare ~new constructs an instance on the oracle
+MutexSemaphore	new	class	covered	mthMutexSemaphoreNew	utilityclasses.xml:6503	a bare ~new constructs an instance on the oracle
+MutexSemaphore	acquire	instance	covered	mthMutexSemaphoreAcquire	utilityclasses.xml:6518	a bare ~new constructs an instance on the oracle
+MutexSemaphore	release	instance	covered	mthMutexSemaphoreRelease	utilityclasses.xml:6606	a bare ~new constructs an instance on the oracle
+MutexSemaphore	uninit	instance	covered	mthMutexSemaphoreUninit	utilityclasses.xml:6628	a bare ~new constructs an instance on the oracle
+Orderable	=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+Orderable	==	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+Orderable	<	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+Orderable	<=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+Orderable	<<	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+Orderable	<<=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+Orderable	<>	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+Orderable	>	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+Orderable	>=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+Orderable	><	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+Orderable	>>	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+Orderable	>>=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+Orderable	\=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+Orderable	\==	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+Orderable	\<	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+Orderable	\<<	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+Orderable	\>	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+Orderable	\>>	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a bare ~new constructs an instance on the oracle
+Orderable	compareTo	instance	covered	mthOrderableCompareTo	utilityclasses.xml:6689	a bare ~new constructs an instance on the oracle
+Pointer	new	class	unreachable	mthPointerNew	utilityclasses.xml:6943	the reference says instances come only from native code -- utilityclasses.xml:6910 "can only be created using the native code application programming interfaces."
+Pointer	=	instance	unreachable	mthPointerComparisonMethods	utilityclasses.xml:6960	the reference says instances come only from native code -- utilityclasses.xml:6910 "can only be created using the native code application programming interfaces."
+Pointer	==	instance	unreachable	mthPointerComparisonMethods	utilityclasses.xml:6960	the reference says instances come only from native code -- utilityclasses.xml:6910 "can only be created using the native code application programming interfaces."
+Pointer	\=	instance	unreachable	mthPointerComparisonMethods	utilityclasses.xml:6960	the reference says instances come only from native code -- utilityclasses.xml:6910 "can only be created using the native code application programming interfaces."
+Pointer	\==	instance	unreachable	mthPointerComparisonMethods	utilityclasses.xml:6960	the reference says instances come only from native code -- utilityclasses.xml:6910 "can only be created using the native code application programming interfaces."
+Pointer	isNull	instance	unreachable	mthPointerIsNull	utilityclasses.xml:7023	the reference says instances come only from native code -- utilityclasses.xml:6910 "can only be created using the native code application programming interfaces."
+RexxContext	args	instance	not-covered	mthRexxContextArgs	utilityclasses.xml:7597	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7545 "They cannot be directly created by the user."
+RexxContext	condition	instance	not-covered	mthRexxContextCondition	utilityclasses.xml:7616	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7545 "They cannot be directly created by the user."
+RexxContext	digits	instance	not-covered	mthRexxContextDigits	utilityclasses.xml:7635	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7545 "They cannot be directly created by the user."
+RexxContext	executable	instance	not-covered	mthRexxContextExecutable	utilityclasses.xml:7653	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7545 "They cannot be directly created by the user."
+RexxContext	form	instance	not-covered	mthRexxContextForm	utilityclasses.xml:7675	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7545 "They cannot be directly created by the user."
+RexxContext	fuzz	instance	not-covered	mthRexxContextFuzz	utilityclasses.xml:7694	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7545 "They cannot be directly created by the user."
+RexxContext	interpreter	instance	not-covered	mthRexxContextInterpreter	utilityclasses.xml:7713	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7545 "They cannot be directly created by the user."
+RexxContext	invocation	instance	not-covered	mthRexxContextInvocation	utilityclasses.xml:7731	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7545 "They cannot be directly created by the user."
+RexxContext	line	instance	not-covered	mthRexxContextLine	utilityclasses.xml:7749	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7545 "They cannot be directly created by the user."
+RexxContext	name	instance	not-covered	mthRexxContextName	utilityclasses.xml:7767	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7545 "They cannot be directly created by the user."
+RexxContext	package	instance	not-covered	mthRexxContextPackage	utilityclasses.xml:7790	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7545 "They cannot be directly created by the user."
+RexxContext	rs	instance	not-covered	mthRexxContextRs	utilityclasses.xml:7808	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7545 "They cannot be directly created by the user."
+RexxContext	stackFrames	instance	not-covered	mthRexxContextStackFrames	utilityclasses.xml:7827	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7545 "They cannot be directly created by the user."
+RexxContext	thread	instance	not-covered	mthRexxContextThread	utilityclasses.xml:7846	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7545 "They cannot be directly created by the user."
+RexxContext	variables	instance	not-covered	mthRexxContextVariables	utilityclasses.xml:7864	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7545 "They cannot be directly created by the user."
+RexxInfo	architecture	instance	not-covered	mthRexxInfoArchitecture	utilityclasses.xml:8066	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	caseSensitiveFiles	instance	not-covered	mthRexxInfoCaseSensitiveFiles	utilityclasses.xml:8087	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	date	instance	not-covered	mthRexxInfoDate	utilityclasses.xml:8114	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	debug	instance	not-covered	mthRexxInfoDebug	utilityclasses.xml:8145	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	digits	instance	not-covered	mthRexxInfoDigits	utilityclasses.xml:8163	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	directorySeparator	instance	not-covered	mthRexxInfoDirectorySeparator	utilityclasses.xml:8194	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	endofline	instance	not-covered	mthRexxInfoEndofline	utilityclasses.xml:8217	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	executable	instance	not-covered	mthRexxInfoExecutable	utilityclasses.xml:8242	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	form	instance	not-covered	mthRexxInfoForm	utilityclasses.xml:8266	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	fuzz	instance	not-covered	mthRexxInfoFuzz	utilityclasses.xml:8297	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	internalDigits	instance	not-covered	mthRexxInfoInternalDigits	utilityclasses.xml:8328	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	internalMaxNumber	instance	not-covered	mthRexxInfoInternalMaxNumber	utilityclasses.xml:8352	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	internalMinNumber	instance	not-covered	mthRexxInfoInternalMinNumber	utilityclasses.xml:8382	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	languageLevel	instance	not-covered	mthRexxInfoLanguageLevel	utilityclasses.xml:8412	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	libraryPath	instance	not-covered	mthRexxInfoLibraryPath	utilityclasses.xml:8441	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	majorVersion	instance	not-covered	mthRexxInfoMajorVersion	utilityclasses.xml:8465	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	maxArraySize	instance	not-covered	mthRexxInfoMaxArraySize	utilityclasses.xml:8498	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	maxExponent	instance	not-covered	mthRexxInfoMaxExponent	utilityclasses.xml:8521	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	maxPathLength	instance	not-covered	mthRexxInfoMaxPathLength	utilityclasses.xml:8545	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	minExponent	instance	not-covered	mthRexxInfoMinExponent	utilityclasses.xml:8568	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	modification	instance	not-covered	mthRexxInfoModification	utilityclasses.xml:8592	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	name	instance	not-covered	mthRexxInfoName	utilityclasses.xml:8625	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	package	instance	not-covered	mthRexxInfoPackage	utilityclasses.xml:8663	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	pathSeparator	instance	not-covered	mthRexxInfoPathSeparator	utilityclasses.xml:8684	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	platform	instance	not-covered	mthRexxInfoPlatform	utilityclasses.xml:8706	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	release	instance	not-covered	mthRexxInfoRelease	utilityclasses.xml:8730	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	revision	instance	not-covered	mthRexxInfoRevision	utilityclasses.xml:8763	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxInfo	version	instance	not-covered	mthRexxInfoVersion	utilityclasses.xml:8785	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxQueue	new	class	covered	mthRexxQueueNew	utilityclasses.xml:8865	a bare ~new constructs an instance on the oracle
+RexxQueue	create	class	covered	mthRexxQueueCreate	utilityclasses.xml:8905	a bare ~new constructs an instance on the oracle
+RexxQueue	delete	class	covered	mthRexxQueueDeleteClsMth	utilityclasses.xml:8939	a bare ~new constructs an instance on the oracle
+RexxQueue	exists	class	covered	mthRexxQueueExists	utilityclasses.xml:8959	a bare ~new constructs an instance on the oracle
+RexxQueue	open	class	covered	mthRexxQueueOpen	utilityclasses.xml:8986	a bare ~new constructs an instance on the oracle
+RexxQueue	delete	instance	covered	mthRexxQueueDelete	utilityclasses.xml:9007	a bare ~new constructs an instance on the oracle
+RexxQueue	empty	instance	covered	mthRexxQueueEmpty	utilityclasses.xml:9037	a bare ~new constructs an instance on the oracle
+RexxQueue	get	instance	covered	mthRexxQueueGet	utilityclasses.xml:9056	a bare ~new constructs an instance on the oracle
+RexxQueue	init	instance	covered	mthRexxQueueInit	utilityclasses.xml:9074	a bare ~new constructs an instance on the oracle
+RexxQueue	lineIn	instance	covered	mthRexxQueueLineIn	utilityclasses.xml:9096	a bare ~new constructs an instance on the oracle
+RexxQueue	lineOut	instance	covered	mthRexxQueueLineOut	utilityclasses.xml:9114	a bare ~new constructs an instance on the oracle
+RexxQueue	makeArray	instance	covered	mthRexxQueueMakeArray	utilityclasses.xml:9132	a bare ~new constructs an instance on the oracle
+RexxQueue	pull	instance	covered	mthRexxQueuePull	utilityclasses.xml:9151	a bare ~new constructs an instance on the oracle
+RexxQueue	push	instance	covered	mthRexxQueuePush	utilityclasses.xml:9169	a bare ~new constructs an instance on the oracle
+RexxQueue	queue	instance	covered	mthRexxQueueQueue	utilityclasses.xml:9187	a bare ~new constructs an instance on the oracle
+RexxQueue	queued	instance	covered	mthRexxQueueQueued	utilityclasses.xml:9205	a bare ~new constructs an instance on the oracle
+RexxQueue	say	instance	covered	mthRexxQueueSay	utilityclasses.xml:9222	a bare ~new constructs an instance on the oracle
+RexxQueue	set	instance	covered	mthRexxQueueSet	utilityclasses.xml:9240	a bare ~new constructs an instance on the oracle
+Singleton	new	class	not-covered	mthSingletonNew	utilityclasses.xml:9303	no construction program is committed; a bare ~new raises 93.901 on the oracle
+StackFrame	arguments	instance	not-covered	mthStackFrameArguments	utilityclasses.xml:9450	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:9407 "StackFrame instances cannot be directly created by the user."
+StackFrame	context	instance	not-covered	mthStackFrameContext	utilityclasses.xml:9468	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:9407 "StackFrame instances cannot be directly created by the user."
+StackFrame	invocation	instance	not-covered	mthStackFrameInvocation	utilityclasses.xml:9510	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:9407 "StackFrame instances cannot be directly created by the user."
+StackFrame	line	instance	not-covered	mthStackFrameLine	utilityclasses.xml:9527	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:9407 "StackFrame instances cannot be directly created by the user."
+StackFrame	makeString	instance	not-covered	mthStackFrameMakeString	utilityclasses.xml:9546	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:9407 "StackFrame instances cannot be directly created by the user."
+StackFrame	name	instance	not-covered	mthStackFrameName	utilityclasses.xml:9564	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:9407 "StackFrame instances cannot be directly created by the user."
+StackFrame	string	instance	not-covered	mthStackFrameString	utilityclasses.xml:9608	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:9407 "StackFrame instances cannot be directly created by the user."
+StackFrame	target	instance	not-covered	mthStackFrameTarget	utilityclasses.xml:9626	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:9407 "StackFrame instances cannot be directly created by the user."
+StackFrame	traceLine	instance	not-covered	mthStackFrameTraceLine	utilityclasses.xml:9645	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:9407 "StackFrame instances cannot be directly created by the user."
+StackFrame	type	instance	not-covered	mthStackFrameType	utilityclasses.xml:9664	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:9407 "StackFrame instances cannot be directly created by the user."
+StreamSupplier	available	instance	not-covered	mthStreamSupplierAvailable	utilityclasses.xml:9804	no construction program is committed; a bare ~new raises 97.1 on the oracle
+StreamSupplier	index	instance	not-covered	mthStreamSupplierIndex	utilityclasses.xml:9824	no construction program is committed; a bare ~new raises 97.1 on the oracle
+StreamSupplier	init	instance	not-covered	mthStreamSupplierInit	utilityclasses.xml:9843	no construction program is committed; a bare ~new raises 97.1 on the oracle
+StreamSupplier	item	instance	not-covered	mthStreamSupplierItem	utilityclasses.xml:9859	no construction program is committed; a bare ~new raises 97.1 on the oracle
+StreamSupplier	next	instance	not-covered	mthStreamSupplierNext	utilityclasses.xml:9878	no construction program is committed; a bare ~new raises 97.1 on the oracle
+StreamSupplier	new	class	not-covered	mthSupplierNew	utilityclasses.xml:9956	no construction program is committed; a bare ~new raises 97.1 on the oracle
+StreamSupplier	allIndexes	instance	not-covered	mthSupplierAllIndexes	utilityclasses.xml:9984	no construction program is committed; a bare ~new raises 97.1 on the oracle
+StreamSupplier	allItems	instance	not-covered	mthSupplierAllItems	utilityclasses.xml:10003	no construction program is committed; a bare ~new raises 97.1 on the oracle
+StreamSupplier	supplier	instance	not-covered	mthSupplierSupplier	utilityclasses.xml:10147	no construction program is committed; a bare ~new raises 97.1 on the oracle
+Supplier	new	class	not-covered	mthSupplierNew	utilityclasses.xml:9956	no construction program is committed; a bare ~new raises 93.903 on the oracle
+Supplier	allIndexes	instance	not-covered	mthSupplierAllIndexes	utilityclasses.xml:9984	no construction program is committed; a bare ~new raises 93.903 on the oracle
+Supplier	allItems	instance	not-covered	mthSupplierAllItems	utilityclasses.xml:10003	no construction program is committed; a bare ~new raises 93.903 on the oracle
+Supplier	available	instance	not-covered	mthSupplierAvailable	utilityclasses.xml:10022	no construction program is committed; a bare ~new raises 93.903 on the oracle
+Supplier	index	instance	not-covered	mthSupplierIndex	utilityclasses.xml:10042	no construction program is committed; a bare ~new raises 93.903 on the oracle
+Supplier	item	instance	not-covered	mthSupplierItem	utilityclasses.xml:10079	no construction program is committed; a bare ~new raises 93.903 on the oracle
+Supplier	next	instance	not-covered	mthSupplierNext	utilityclasses.xml:10098	no construction program is committed; a bare ~new raises 93.903 on the oracle
+Supplier	supplier	instance	not-covered	mthSupplierSupplier	utilityclasses.xml:10147	no construction program is committed; a bare ~new raises 93.903 on the oracle
+Ticker	attachment	instance	not-covered	mthTickerAttachment	utilityclasses.xml:10218	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Ticker	cancel	instance	not-covered	mthTickerCancel	utilityclasses.xml:10251	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Ticker	canceled	instance	not-covered	mthTickerCanceled	utilityclasses.xml:10283	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Ticker	cancelled	instance	not-covered	mthTickerCanceled	utilityclasses.xml:10283	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Ticker	init	instance	not-covered	mthTickerInit	utilityclasses.xml:10313	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Ticker	interval	instance	not-covered	mthTickerInterval	utilityclasses.xml:10414	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	init	instance	not-covered	mthTimeSpanInit	utilityclasses.xml:10700	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	fromCivilTime	class	not-covered	mthTimeSpanFromCivilTime	utilityclasses.xml:10644	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	fromDays	class	not-covered	mthTimeSpanFromDays	utilityclasses.xml:10535	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	fromHours	class	not-covered	mthTimeSpanFromHours	utilityclasses.xml:10553	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	fromLongTime	class	not-covered	mthTimeSpanFromLongTime	utilityclasses.xml:10663	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	fromMicroseconds	class	not-covered	mthTimeSpanFromMicroseconds	utilityclasses.xml:10607	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	fromMinutes	class	not-covered	mthTimeSpanFromMinutes	utilityclasses.xml:10571	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	fromNormalTime	class	not-covered	mthTimeSpanFromNormalTime	utilityclasses.xml:10625	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	fromSeconds	class	not-covered	mthTimeSpanFromSeconds	utilityclasses.xml:10589	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	fromStringFormat	class	not-covered	mthTimeSpanFromStringFormat	utilityclasses.xml:10682	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	+	instance	not-covered	mthTimeSpanArithmeticMethods	utilityclasses.xml:10737	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	-	instance	not-covered	mthTimeSpanArithmeticMethods	utilityclasses.xml:10737	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	*	instance	not-covered	mthTimeSpanArithmeticMethods	utilityclasses.xml:10737	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	/	instance	not-covered	mthTimeSpanArithmeticMethods	utilityclasses.xml:10737	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	//	instance	not-covered	mthTimeSpanArithmeticMethods	utilityclasses.xml:10737	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	%	instance	not-covered	mthTimeSpanArithmeticMethods	utilityclasses.xml:10737	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	addDays	instance	not-covered	mthTimeSpanAddDays	utilityclasses.xml:11144	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	addHours	instance	not-covered	mthTimeSpanAddHours	utilityclasses.xml:11166	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	addMicroseconds	instance	not-covered	mthTimeSpanAddMicroseconds	utilityclasses.xml:11232	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	addMinutes	instance	not-covered	mthTimeSpanAddMinutes	utilityclasses.xml:11188	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	addSeconds	instance	not-covered	mthTimeSpanAddSeconds	utilityclasses.xml:11210	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	addWeeks	instance	not-covered	mthTimeSpanAddWeeks	utilityclasses.xml:11122	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	compareTo	instance	not-covered	mthTimeSpanCompareTo	utilityclasses.xml:10874	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	days	instance	not-covered	mthTimeSpanDays	utilityclasses.xml:10911	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	duration	instance	not-covered	mthTimeSpanDuration	utilityclasses.xml:10894	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	hashCode	instance	not-covered	mthTimeSpanHashCode	utilityclasses.xml:11104	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	hours	instance	not-covered	mthTimeSpanHours	utilityclasses.xml:10928	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	makeString	instance	not-covered	mthTimeSpanMakeString	utilityclasses.xml:10981	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	microseconds	instance	not-covered	mthTimeSpanMicroseconds	utilityclasses.xml:10997	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	minutes	instance	not-covered	mthTimeSpanMinutes	utilityclasses.xml:10945	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	seconds	instance	not-covered	mthTimeSpanSeconds	utilityclasses.xml:10962	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	sign	instance	not-covered	mthTimeSpanSign	utilityclasses.xml:11253	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	string	instance	not-covered	mthTimeSpanString	utilityclasses.xml:11274	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	totalDays	instance	not-covered	mthTimeSpanTotalDays	utilityclasses.xml:11014	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	totalHours	instance	not-covered	mthTimeSpanTotalHours	utilityclasses.xml:11032	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	totalMicroseconds	instance	not-covered	mthTimeSpanTotalMicroseconds	utilityclasses.xml:11086	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	totalMinutes	instance	not-covered	mthTimeSpanTotalMinutes	utilityclasses.xml:11050	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	totalSeconds	instance	not-covered	mthTimeSpanTotalSeconds	utilityclasses.xml:11068	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	==	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	<	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	<=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	<<	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	<<=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	<>	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	>	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	>=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	><	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	>>	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	>>=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	\=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	\==	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	\<	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	\<<	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	\>	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	\>>	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TraceObject	activate	class	covered	mthTraceObjectActivate	utilityclasses.xml:11396	a bare ~new constructs an instance on the oracle
+TraceObject	collector	class	covered	mthTraceObjectCollectorGet	utilityclasses.xml:11427	a bare ~new constructs an instance on the oracle
+TraceObject	collector=	class	covered	mthTraceObjectCollectorSet	utilityclasses.xml:11451	a bare ~new constructs an instance on the oracle
+TraceObject	counter	class	covered	mthTraceObjectCounterGet	utilityclasses.xml:11509	a bare ~new constructs an instance on the oracle
+TraceObject	makeStringImpl	class	covered	mthTraceObjectMakeStringImpl	utilityclasses.xml:11536	a bare ~new constructs an instance on the oracle
+TraceObject	new	class	covered	mthTraceObjectNew	utilityclasses.xml:11633	a bare ~new constructs an instance on the oracle
+TraceObject	notify	class	covered	mthTraceObjectNotifyGet	utilityclasses.xml:11934	a bare ~new constructs an instance on the oracle
+TraceObject	notify=	class	covered	mthTraceObjectNotifySet	utilityclasses.xml:11958	a bare ~new constructs an instance on the oracle
+TraceObject	option	class	covered	mthTraceObjectOptionGet	utilityclasses.xml:12011	a bare ~new constructs an instance on the oracle
+TraceObject	option=	class	covered	mthTraceObjectOptionSet	utilityclasses.xml:12036	a bare ~new constructs an instance on the oracle
+TraceObject	setMakeString	class	covered	mthTraceObjectSetMakeString	utilityclasses.xml:12104	a bare ~new constructs an instance on the oracle
+TraceObject	unsetMakeString	class	covered	mthTraceObjectUnsetMakeString	utilityclasses.xml:12140	a bare ~new constructs an instance on the oracle
+TraceObject	compareTo	instance	covered	mthTraceObjectCompareTo	utilityclasses.xml:12158	a bare ~new constructs an instance on the oracle
+TraceObject	makeString	instance	covered	mthTraceObjectMakeString	utilityclasses.xml:12180	a bare ~new constructs an instance on the oracle
+Validate	classType	class	covered	mthValidateClassType	utilityclasses.xml:12251	a bare ~new constructs an instance on the oracle
+Validate	length	class	covered	mthValidateLength	utilityclasses.xml:12271	a bare ~new constructs an instance on the oracle
+Validate	logical	class	covered	mthValidateLogical	utilityclasses.xml:12295	a bare ~new constructs an instance on the oracle
+Validate	nonNegativeNumber	class	covered	mthValidateNonNegativeNumber	utilityclasses.xml:12313	a bare ~new constructs an instance on the oracle
+Validate	nonNegativeWholeNumber	class	covered	mthValidateNonNegativeWholeNumber	utilityclasses.xml:12337	a bare ~new constructs an instance on the oracle
+Validate	number	class	covered	mthValidateNumber	utilityclasses.xml:12361	a bare ~new constructs an instance on the oracle
+Validate	numberRange	class	covered	mthValidateNumberRange	utilityclasses.xml:12381	a bare ~new constructs an instance on the oracle
+Validate	position	class	covered	mthValidatePosition	utilityclasses.xml:12406	a bare ~new constructs an instance on the oracle
+Validate	positiveNumber	class	covered	mthValidatePositiveNumber	utilityclasses.xml:12430	a bare ~new constructs an instance on the oracle
+Validate	positiveWholeNumber	class	covered	mthValidatePositiveWholeNumber	utilityclasses.xml:12475	a bare ~new constructs an instance on the oracle
+Validate	requestClassType	class	covered	mthValidateRequestClassType	utilityclasses.xml:12454	a bare ~new constructs an instance on the oracle
+Validate	wholeNumber	class	covered	mthValidateWholeNumber	utilityclasses.xml:12499	a bare ~new constructs an instance on the oracle
+Validate	wholeNumberRange	class	covered	mthValidateWholeNumberRange	utilityclasses.xml:12521	a bare ~new constructs an instance on the oracle
+VariableReference	name	instance	not-covered	mthVariableReferenceName	utilityclasses.xml:12599	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:12556-12557 "Calling the new method to create a VariableReference instance is not allowed."
+VariableReference	request	instance	not-covered	mthVariableReferenceRequest	utilityclasses.xml:12623	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:12556-12557 "Calling the new method to create a VariableReference instance is not allowed."
+VariableReference	unknown	instance	not-covered	mthVariableReferenceUnknown	utilityclasses.xml:12638	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:12556-12557 "Calling the new method to create a VariableReference instance is not allowed."
+VariableReference	value	instance	not-covered	mthVariableReferenceValue	utilityclasses.xml:12653	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:12556-12557 "Calling the new method to create a VariableReference instance is not allowed."
+WeakReference	new	class	not-covered	mthWeakReferenceNew	utilityclasses.xml:12740	no construction program is committed; a bare ~new raises 93.903 on the oracle
+WeakReference	value	instance	not-covered	mthWeakReferenceValue	utilityclasses.xml:12757	no construction program is committed; a bare ~new raises 93.903 on the oracle
+InputOutputStream	arrayOut	instance	covered	mthOutputStreamArrayOut	streamclasses.xml:288	a bare ~new constructs an instance on the oracle
+InputOutputStream	charIn	instance	covered	mthOutputStreamCharIn	streamclasses.xml:298	a bare ~new constructs an instance on the oracle
+InputOutputStream	charOut	instance	covered	mthOutputStreamCharOut	streamclasses.xml:308	a bare ~new constructs an instance on the oracle
+InputOutputStream	chars	instance	covered	mthOutputStreamChars	streamclasses.xml:318	a bare ~new constructs an instance on the oracle
+InputOutputStream	close	instance	covered	mthOutputStreamClose	streamclasses.xml:328	a bare ~new constructs an instance on the oracle
+InputOutputStream	lineIn	instance	covered	mthOutputStreamLineIn	streamclasses.xml:338	a bare ~new constructs an instance on the oracle
+InputOutputStream	lineOut	instance	covered	mthOutputStreamLineOut	streamclasses.xml:348	a bare ~new constructs an instance on the oracle
+InputOutputStream	lines	instance	covered	mthOutputStreamLines	streamclasses.xml:358	a bare ~new constructs an instance on the oracle
+InputOutputStream	open	instance	covered	mthOutputStreamOpen	streamclasses.xml:368	a bare ~new constructs an instance on the oracle
+InputOutputStream	position	instance	covered	mthOutputStreamPosition	streamclasses.xml:378	a bare ~new constructs an instance on the oracle
+InputOutputStream	arrayIn	instance	covered	mthInputStreamArrayIn	streamclasses.xml:145	a bare ~new constructs an instance on the oracle
+InputStream	arrayIn	instance	covered	mthInputStreamArrayIn	streamclasses.xml:145	a bare ~new constructs an instance on the oracle
+InputStream	charIn	instance	covered	mthInputStreamCharIn	streamclasses.xml:155	a bare ~new constructs an instance on the oracle
+InputStream	charOut	instance	covered	mthInputStreamCharOut	streamclasses.xml:165	a bare ~new constructs an instance on the oracle
+InputStream	chars	instance	covered	mthInputStreamChars	streamclasses.xml:175	a bare ~new constructs an instance on the oracle
+InputStream	close	instance	covered	mthInputStreamClose	streamclasses.xml:185	a bare ~new constructs an instance on the oracle
+InputStream	lineIn	instance	covered	mthInputStreamLineIn	streamclasses.xml:195	a bare ~new constructs an instance on the oracle
+InputStream	lineOut	instance	covered	mthInputStreamLineOut	streamclasses.xml:205	a bare ~new constructs an instance on the oracle
+InputStream	lines	instance	covered	mthInputStreamLines	streamclasses.xml:215	a bare ~new constructs an instance on the oracle
+InputStream	open	instance	covered	mthInputStreamOpen	streamclasses.xml:225	a bare ~new constructs an instance on the oracle
+InputStream	position	instance	covered	mthInputStreamPosition	streamclasses.xml:234	a bare ~new constructs an instance on the oracle
+OutputStream	arrayOut	instance	covered	mthOutputStreamArrayOut	streamclasses.xml:288	a bare ~new constructs an instance on the oracle
+OutputStream	charIn	instance	covered	mthOutputStreamCharIn	streamclasses.xml:298	a bare ~new constructs an instance on the oracle
+OutputStream	charOut	instance	covered	mthOutputStreamCharOut	streamclasses.xml:308	a bare ~new constructs an instance on the oracle
+OutputStream	chars	instance	covered	mthOutputStreamChars	streamclasses.xml:318	a bare ~new constructs an instance on the oracle
+OutputStream	close	instance	covered	mthOutputStreamClose	streamclasses.xml:328	a bare ~new constructs an instance on the oracle
+OutputStream	lineIn	instance	covered	mthOutputStreamLineIn	streamclasses.xml:338	a bare ~new constructs an instance on the oracle
+OutputStream	lineOut	instance	covered	mthOutputStreamLineOut	streamclasses.xml:348	a bare ~new constructs an instance on the oracle
+OutputStream	lines	instance	covered	mthOutputStreamLines	streamclasses.xml:358	a bare ~new constructs an instance on the oracle
+OutputStream	open	instance	covered	mthOutputStreamOpen	streamclasses.xml:368	a bare ~new constructs an instance on the oracle
+OutputStream	position	instance	covered	mthOutputStreamPosition	streamclasses.xml:378	a bare ~new constructs an instance on the oracle
+Stream	new	class	not-covered	mthStreamNew	streamclasses.xml:483	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	arrayIn	instance	not-covered	mthStreamArrayIn	streamclasses.xml:503	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	arrayOut	instance	not-covered	mthStreamArrayOut	streamclasses.xml:530	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	charIn	instance	not-covered	mthStreamCharIn	streamclasses.xml:553	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	charOut	instance	not-covered	mthStreamCharOut	streamclasses.xml:580	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	chars	instance	not-covered	mthStreamChars	streamclasses.xml:612	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	close	instance	not-covered	mthStreamClose	streamclasses.xml:639	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	command	instance	not-covered	mthStreamCommand	streamclasses.xml:661	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	description	instance	not-covered	mthStreamDescription	streamclasses.xml:1039	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	flush	instance	not-covered	mthStreamFlush	streamclasses.xml:1061	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	init	instance	not-covered	mthStreamInit	streamclasses.xml:1079	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	lineIn	instance	not-covered	mthStreamLineIn	streamclasses.xml:1098	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	lineOut	instance	not-covered	mthStreamLineOut	streamclasses.xml:1126	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	lines	instance	not-covered	mthStreamLines	streamclasses.xml:1152	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	makeArray	instance	not-covered	mthStreamMakeArray	streamclasses.xml:1201	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	open	instance	not-covered	mthStreamOpen	streamclasses.xml:1222	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	position	instance	not-covered	mthStreamPosition	streamclasses.xml:1333	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	qualify	instance	not-covered	mthStreamQualify	streamclasses.xml:1351	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	query	instance	not-covered	mthStreamQuery	streamclasses.xml:1368	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	say	instance	not-covered	mthStreamSay	streamclasses.xml:1509	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	seek	instance	not-covered	mthStreamSeek	streamclasses.xml:1528	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	state	instance	not-covered	mthStreamState	streamclasses.xml:1620	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	string	instance	not-covered	mthStreamString	streamclasses.xml:1667	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	supplier	instance	not-covered	mthStreamSupplier	streamclasses.xml:1685	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	uninit	instance	not-covered	mthStreamUninit	streamclasses.xml:1704	no construction program is committed; a bare ~new raises 93.901 on the oracle

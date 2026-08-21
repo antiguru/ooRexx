@@ -1,0 +1,76 @@
+# Table C's wiring edge set: the documented superclass-or-mixin edge per
+# class, from the indentation of provide.xml's `chi` <simplelist>.
+#
+# One `child<TAB>parent<TAB>level<TAB>line` per line, in document order.
+# `level` is the member's indentation in units of five &nbsp;; `line` is
+# its line in provide.xml. Each row claims the parent is PRESENT IN the
+# child's ~superClasses, never that it is the whole answer: the list
+# gives one edge per class by construction, and says so in its own
+# prose.
+#
+# Three rules. Comments are blanked before the members are read; the root
+# emits no self-edge; and these names emit no edge: RexxInfo.
+#
+# Derived by `cargo run -p rexx-extract --bin rexx-extract-docs`, whose
+# module is `src/docs/hierarchy.rs`. Re-derived and compared in both
+# directions by `tests/extract_docs.rs`.
+#
+# derived-at: oodocs/rexxref/en-US r13198
+
+Alarm	Object	0	841
+AlarmNotification	Object	0	842
+Buffer	Object	0	846
+Class	Object	0	847
+Collection	Object	0	848
+MapCollection	Collection	1	849
+Bag	MapCollection	2	850
+Directory	MapCollection	2	851
+Properties	Directory	3	852
+IdentityTable	MapCollection	2	853
+Relation	MapCollection	2	854
+Set	MapCollection	2	855
+Stem	MapCollection	2	856
+StringTable	MapCollection	2	857
+TraceObject	StringTable	3	858
+Table	MapCollection	2	859
+OrderedCollection	Collection	1	860
+Array	OrderedCollection	2	861
+List	OrderedCollection	2	862
+Queue	OrderedCollection	2	863
+CircularQueue	Queue	3	864
+SetCollection	Collection	1	865
+Comparable	Object	0	866
+DateTime	Comparable	1	867
+File	Comparable	1	868
+String	Comparable	1	869
+TimeSpan	Comparable	1	870
+Comparator	Object	0	871
+CaselessColumnComparator	Comparator	1	872
+CaselessComparator	Comparator	1	873
+CaselessDescendingComparator	Comparator	1	874
+ColumnComparator	Comparator	1	875
+DescendingComparator	Comparator	1	876
+InvertingComparator	Comparator	1	877
+NumericComparator	Comparator	1	878
+InputStream	Object	0	879
+InputOutputStream	InputStream	1	880
+Stream	InputOutputStream	2	881
+MessageNotification	Object	0	882
+Message	MessageNotification	1	883
+Method	Object	0	884
+Monitor	Object	0	885
+MutableBuffer	Object	0	886
+Orderable	Object	0	888
+OutputStream	Object	0	889
+Package	Object	0	890
+Pointer	Object	0	891
+RexxContext	Object	0	892
+RexxQueue	Object	0	894
+Routine	Object	0	895
+StackFrame	Object	0	896
+Supplier	Object	0	897
+StreamSupplier	Supplier	1	898
+Ticker	Object	0	899
+Validate	Object	0	900
+VariableReference	Object	0	901
+WeakReference	Object	0	902

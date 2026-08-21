@@ -41,7 +41,15 @@
 //! and a `::options novalue` directive that inverts what an unassigned symbol
 //! means. See that module's own doc.
 
+//! [`docs`] is a fifth mode, and the only one that does not read `ootest`. Its
+//! subject is `oodocs/`, the DocBook reference the object model is documented
+//! in, and its output is not a program or an assertion but the **row sets** the
+//! Phase 5 gate tables are checked against -- committed under
+//! `rust/corpus/docs/`, stamped with the upstream revision, and re-derived in
+//! both directions by a test. See that module's own doc.
+
 pub mod bif;
+pub mod docs;
 pub mod keyword;
 
 /// The set of `self~` messages that are assertions rather than fixture access.

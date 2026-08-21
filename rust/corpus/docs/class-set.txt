@@ -1,0 +1,93 @@
+# Table C's class row set: every <section id="cls..."> across
+# fundclasses.xml, collclasses.xml, utilityclasses.xml and
+# streamclasses.xml.
+#
+# One `name<TAB>entry<TAB>section<TAB>book:line<TAB>status<TAB>reason`
+# per line, in book order then document order.
+#
+# Three departures from the sections, each named rather than mechanical.
+# RegularExpression is out of the set: it is delivered by `::requires
+# "rxregexp.cls"` and that file is not on this build's search path, measured
+# 43.901 rc 213. RexxInfo is an `instance` row rather than a `class` row:
+# its .environment entry is an instance, not the class object. ArgUtil is
+# added: it is an .environment class the books document nowhere, and its
+# only citation is the XML comment at provide.xml:838.
+#
+# `status` is the spec's three row statuses. `covered` is a class a bare
+# ~new constructs, or one opted in with a committed construction
+# program -- none is committed today. `not-covered` says no construction
+# program is committed and CARRIES NO CLAIM ABOUT THE ORACLE.
+# `unreachable` is grounded in a sentence of the reference itself and
+# belongs to the classes whose sentence says instances come only from
+# native code; each such sentence is re-read at the line it cites on
+# every run.
+#
+# Derived by `cargo run -p rexx-extract --bin rexx-extract-docs`, whose
+# module is `src/docs/classes.rs`. Re-derived and compared in both
+# directions by `tests/extract_docs.rs`.
+#
+# derived-at: oodocs/rexxref/en-US r13198
+
+Class	class	clsClass	fundclasses.xml:51	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Message	class	clsMessage	fundclasses.xml:1093	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Method	class	clsMethod	fundclasses.xml:1987	not-covered	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Object	class	clsObject	fundclasses.xml:2519	covered	a bare ~new constructs an instance on the oracle
+Package	class	clsPackage	fundclasses.xml:3561	not-covered	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Routine	class	clsRoutine	fundclasses.xml:4689	not-covered	no construction program is committed; a bare ~new raises 88.901 on the oracle
+String	class	clsString	fundclasses.xml:4996	not-covered	no construction program is committed; a bare ~new raises 93.903 on the oracle
+Collection	class	clsCollection	collclasses.xml:170	covered	a bare ~new constructs an instance on the oracle
+MapCollection	class	clsMapCollection	collclasses.xml:612	covered	a bare ~new constructs an instance on the oracle
+OrderedCollection	class	clsOrderedCollection	collclasses.xml:741	covered	a bare ~new constructs an instance on the oracle
+SetCollection	class	clsSetCollection	collclasses.xml:1222	covered	a bare ~new constructs an instance on the oracle
+Array	class	clsArray	collclasses.xml:1267	covered	a bare ~new constructs an instance on the oracle
+Bag	class	clsBag	collclasses.xml:2566	covered	a bare ~new constructs an instance on the oracle
+CircularQueue	class	clsCircularQueue	collclasses.xml:3252	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Directory	class	clsDirectory	collclasses.xml:3943	covered	a bare ~new constructs an instance on the oracle
+IdentityTable	class	clsIdentityTable	collclasses.xml:4609	covered	a bare ~new constructs an instance on the oracle
+List	class	clsList	collclasses.xml:5000	covered	a bare ~new constructs an instance on the oracle
+Properties	class	clsProperties	collclasses.xml:5667	covered	a bare ~new constructs an instance on the oracle
+Queue	class	clsQueue	collclasses.xml:5984	covered	a bare ~new constructs an instance on the oracle
+Relation	class	clsRelation	collclasses.xml:6745	covered	a bare ~new constructs an instance on the oracle
+Set	class	clsSet	collclasses.xml:7420	covered	a bare ~new constructs an instance on the oracle
+Stem	class	clsStem	collclasses.xml:7964	covered	a bare ~new constructs an instance on the oracle
+StringTable	class	clsStringTable	collclasses.xml:8504	covered	a bare ~new constructs an instance on the oracle
+Table	class	clsTable	collclasses.xml:9048	covered	a bare ~new constructs an instance on the oracle
+Alarm	class	clsAlarm	utilityclasses.xml:51	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle
+AlarmNotification	class	clsAlarmNotification	utilityclasses.xml:322	covered	a bare ~new constructs an instance on the oracle
+Buffer	class	clsBuffer	utilityclasses.xml:421	unreachable	the reference says instances come only from native code -- utilityclasses.xml:429 "can only be created using the native code application programming interfaces."
+Comparable	class	clsComparable	utilityclasses.xml:481	covered	a bare ~new constructs an instance on the oracle
+Comparator	class	clsComparator	utilityclasses.xml:566	covered	a bare ~new constructs an instance on the oracle
+CaselessComparator	class	clsCaselessComparator	utilityclasses.xml:639	covered	a bare ~new constructs an instance on the oracle
+ColumnComparator	class	clsColumnComparator	utilityclasses.xml:708	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle
+CaselessColumnComparator	class	clsCaselessColumnComparator	utilityclasses.xml:798	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle
+DescendingComparator	class	clsDescendingComparator	utilityclasses.xml:888	covered	a bare ~new constructs an instance on the oracle
+CaselessDescendingComparator	class	clsCaselessDescendingComparator	utilityclasses.xml:965	covered	a bare ~new constructs an instance on the oracle
+InvertingComparator	class	clsInvertingComparator	utilityclasses.xml:1038	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle
+NumericComparator	class	clsNumericComparator	utilityclasses.xml:1139	covered	a bare ~new constructs an instance on the oracle
+DateTime	class	clsDateTime	utilityclasses.xml:1234	covered	a bare ~new constructs an instance on the oracle
+EventSemaphore	class	clsEventSemaphore	utilityclasses.xml:3142	covered	a bare ~new constructs an instance on the oracle
+File	class	clsFile	utilityclasses.xml:3382	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle
+MessageNotification	class	clsMessageNotification	utilityclasses.xml:4633	covered	a bare ~new constructs an instance on the oracle
+Monitor	class	clsMonitor	utilityclasses.xml:4701	covered	a bare ~new constructs an instance on the oracle
+MutableBuffer	class	clsMutableBuffer	utilityclasses.xml:4829	covered	a bare ~new constructs an instance on the oracle
+MutexSemaphore	class	clsMutexSemaphore	utilityclasses.xml:6451	covered	a bare ~new constructs an instance on the oracle
+Orderable	class	clsOrderable	utilityclasses.xml:6649	covered	a bare ~new constructs an instance on the oracle
+Pointer	class	clsPointer	utilityclasses.xml:6902	unreachable	the reference says instances come only from native code -- utilityclasses.xml:6910 "can only be created using the native code application programming interfaces."
+RexxContext	class	clsRexxContext	utilityclasses.xml:7533	not-covered	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7545 "They cannot be directly created by the user."
+RexxInfo	instance	clsRexxInfo	utilityclasses.xml:7934	not-covered	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."
+RexxQueue	class	clsRexxQueue	utilityclasses.xml:8811	covered	a bare ~new constructs an instance on the oracle
+Singleton	class	clsSingleton	utilityclasses.xml:9260	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle
+StackFrame	class	clsStackFrame	utilityclasses.xml:9396	not-covered	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:9407 "StackFrame instances cannot be directly created by the user."
+StreamSupplier	class	clsStreamSupplier	utilityclasses.xml:9754	not-covered	no construction program is committed; a bare ~new raises 97.1 on the oracle
+Supplier	class	clsSupplier	utilityclasses.xml:9903	not-covered	no construction program is committed; a bare ~new raises 93.903 on the oracle
+Ticker	class	clsTicker	utilityclasses.xml:10169	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	class	clsTimeSpan	utilityclasses.xml:10442	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TraceObject	class	clsTraceObject	utilityclasses.xml:11301	covered	a bare ~new constructs an instance on the oracle
+Validate	class	clsValidate	utilityclasses.xml:12201	covered	a bare ~new constructs an instance on the oracle
+VariableReference	class	clsVariableReference	utilityclasses.xml:12548	not-covered	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:12556-12557 "Calling the new method to create a VariableReference instance is not allowed."
+WeakReference	class	clsWeakReference	utilityclasses.xml:12698	not-covered	no construction program is committed; a bare ~new raises 93.903 on the oracle
+InputOutputStream	class	clsInputOutputStream	streamclasses.xml:57	covered	a bare ~new constructs an instance on the oracle
+InputStream	class	clsInputStream	streamclasses.xml:103	covered	a bare ~new constructs an instance on the oracle
+OutputStream	class	clsOutputStream	streamclasses.xml:245	covered	a bare ~new constructs an instance on the oracle
+Stream	class	clsStream	streamclasses.xml:389	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle
+ArgUtil	class	-	provide.xml:838	covered	a bare ~new constructs an instance on the oracle
