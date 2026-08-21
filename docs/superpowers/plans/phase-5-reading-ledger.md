@@ -295,7 +295,7 @@ a `|`-row written here would be read as one of (c)'s entries.
 # The spec's prose is hard-wrapped, so form 3's antecedent is often on the PREVIOUS line and the
 # carry has to cross a line break. It is cleared at a Markdown block boundary -- BLOCK below; the
 # one measured to change the output is the list item at spec :1400 -- and by any filename with no :N
-# own. Those two are what keep a `07:06` timestamp from being read as a citation and a roadmap
+# of its own. Those two are what keep a `07:06` timestamp from being read as a citation and a roadmap
 # `:492` from being read as `PackageClass.cpp:492`; each was measured by removing it.
 import re, sys
 ANYFILE = r'[A-Za-z0-9_./-]+\.(?:cpp|hpp|orx|xml|rs|md|txt|ent|cls)'
