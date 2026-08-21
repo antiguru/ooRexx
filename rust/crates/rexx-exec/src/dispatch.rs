@@ -859,12 +859,13 @@ impl Interp {
     /// `trace::push_clause`. Measured, the line carries no indent even for a
     /// send two `DO` levels deep.
     ///
-    /// `pub(crate)`: an arithmetic operator's left operand, and a
-    /// controlled `DO` header's numeric position, can each raise from
-    /// inside this same shape of frame when the receiver is a stem
-    /// forwarding to a native method -- see `eval.rs`'s
-    /// `Interp::blame_stem_forwarded_operator` -- and `eval.rs` is a
-    /// different module from this one.
+    /// `pub(crate)` rather than private to this module, because the rule for
+    /// who calls this is not "who sends a message": **anything that reaches a
+    /// native method's body and raises from inside it owes this line**, and a
+    /// send is only the most obvious way to get there. An operator forwarded
+    /// through a stem gets there without a send term, and so does the
+    /// machinery that installs a directive. Whichever module that is, the
+    /// frame is still the failing native method's.
     pub(crate) fn blame_native_method(&mut self, name: &[u8], scope: &str) {
         if self.failure_site.is_some() {
             return;

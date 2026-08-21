@@ -7607,6 +7607,10 @@ fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
             "::CLASS naming a namespace is not implemented (Phase 5)",
         ),
         (
+            b"say 'main ran'\n::class foo metaclass ns:other\n",
+            "::CLASS naming a namespace is not implemented (Phase 5)",
+        ),
+        (
             b"say 'main ran'\n::requires 'helper.rex'\n",
             "::REQUIRES is not implemented (Phase 5)",
         ),
@@ -7779,6 +7783,10 @@ fn a_class_keyword_gap_is_raised_inside_the_class_pass() {
         ),
         (
             "::class q inherit ns:other\n",
+            "::CLASS naming a namespace is not implemented (Phase 5)",
+        ),
+        (
+            "::class q metaclass ns:other\n",
             "::CLASS naming a namespace is not implemented (Phase 5)",
         ),
     ];

@@ -563,7 +563,7 @@ fn inherit_refuses_re_inheriting_the_same_mixin() {
 /// base-class checks hold trivially since `B`'s base is `A` itself),
 /// leaves `a.superclasses = [.., b]` and `b.superclasses = [a]`, and
 /// `update_sub_classes` (`class_graph.rs`) alternates `a -> b -> a`
-/// forever -- a stack overflow where the oracle raises a clean `98.943`.
+/// forever -- a stack overflow where the oracle raises a clean `98.944`.
 #[test]
 fn inherit_refuses_a_cycle_through_a_mixins_own_mixinclass_target() {
     let a = id(1);
@@ -581,24 +581,23 @@ fn inherit_refuses_a_cycle_through_a_mixins_own_mixinclass_target() {
     );
 }
 
-/// The `UNINIT` propagation flags, through each constructor that builds an
-/// inheritance edge: `subclass` (`ClassClass.cpp:1634`), `mixinClass`
-/// (`:1525`) and `inherit` (`:1364`).
+/// The `UNINIT` propagation flags **at this crate's own API**, through each
+/// constructor that builds an inheritance edge: `subclass`
+/// (`ClassClass.cpp:1634`), `mixinClass` (`:1525`) and `inherit` (`:1364`).
 ///
-/// **Read from the C++ rather than probed, and unlike
-/// `inheritInstanceMethods` above the reason is not that the mechanism is
-/// unreachable.** A class-side `::METHOD uninit` fires observably on the
-/// oracle -- measured, `::CLASS K` carrying one that says `self~id` prints
-/// `uninit on K` at rc 0 -- but what fires it is the collector, which this
-/// crate does not have: the flags are carried here and the firing is a later
-/// task's, so nothing a program can run reads them yet. That makes this test
-/// the only thing that can see them.
+/// **This is not evidence about what a Rexx program gets.** It calls
+/// `define` before `define_class`, an order `rexx-exec`'s directive install
+/// never produces -- that installer creates every class a file declares and
+/// only then attaches methods, so the flags a *declarable* class ends up
+/// with are decided by the pass it runs afterwards. `rexx-exec`'s own
+/// `the_uninit_flags_are_set_for_the_classes_a_file_declares` is the test
+/// for that half, and neither stands in for the other.
 ///
 /// The negative rows are what stop a build that sets the flag on every class
 /// from passing: a class whose ancestry carries no `UNINIT` answers `false`
 /// through each of those constructors as well.
 #[test]
-fn uninit_propagates_through_all_three_constructors() {
+fn uninit_propagates_through_all_three_constructors_at_the_graph_api() {
     let object = id(1);
     let parent = id(2);
     let child = id(3);
@@ -623,8 +622,27 @@ fn uninit_propagates_through_all_three_constructors() {
 
     // `subclass`.
     g.define_class(child, Some(parent), ClassKind::Regular, object);
-    assert!(!g.has_uninit(child), "the subclass defines none of its own");
     assert!(g.parent_has_uninit(child), "subclass propagation");
+
+    // **`has_uninit` is `false` here and the oracle's is `true`, and this
+    // records the divergence rather than blessing it.** The oracle's
+    // `subclass` calls `checkUninit` (`ClassClass.cpp:1628`), which sets the
+    // flag from the class's *flattened* instance behaviour, so an inheriting
+    // class has it. Measured: `::CLASS P` with an instance `::METHOD uninit`,
+    // `::CLASS K SUBCLASS P`, `o = .K~new` -- the oracle runs P's `uninit`
+    // for that instance, which only happens if `K` carries the flag.
+    // `ClassGraph::check_uninit` is that function, and this crate's
+    // constructors do not call it, because the caller that installs
+    // directives has to run it after the methods are attached instead.
+    assert!(
+        !g.has_uninit(child),
+        "before check_uninit, which is where this crate and the oracle differ"
+    );
+    g.check_uninit(child);
+    assert!(
+        g.has_uninit(child),
+        "and after it, which is the oracle's answer"
+    );
 
     // ...and transitively, which is what the oracle's own check gets by
     // asking `hasUninitDefined() || parentHasUninitDefined()` rather than

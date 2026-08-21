@@ -143,10 +143,25 @@ struct ClassDef {
     /// including `.Class` itself, self-referentially (measured:
     /// `.class~metaclass~id` is `"Class"`).
     metaclass: ObjRef,
-    /// This class defines `UNINIT` itself, so its instances have to be
-    /// registered for one when they are created -- oracle's `HAS_UNINIT`
-    /// class flag, which `RexxClass::defineMethod` sets for a method of that
-    /// name (`ClassClass.cpp:854`).
+    /// This class's instances need `UNINIT` run when they are collected --
+    /// oracle's `HAS_UNINIT` class flag, which is what
+    /// `completeNewObject` reads to register each new instance
+    /// (`ClassClass.cpp:1892`).
+    ///
+    /// **Two oracle sites set it and this crate has both**, which is what
+    /// [`ClassGraph::check_uninit`]'s own doc is about: `defineMethod`
+    /// (`:854`) when the instance method being added is named `UNINIT`, and
+    /// `checkUninit` (`:1214`) from the class's **flattened** instance
+    /// behaviour, so a class that inherits `UNINIT` and defines none has it
+    /// too. Measured on the oracle: `::CLASS P` with an instance
+    /// `::METHOD uninit`, `::CLASS K SUBCLASS P`, and `.K~new` runs P's
+    /// `uninit` for that instance.
+    ///
+    /// **A class-side `::METHOD uninit CLASS` does not set this**, measured:
+    /// two `.K~new` instances and a class-side `uninit` print `uninit on K`
+    /// once, not three times. That spelling reaches `hasUninitMethod` and
+    /// registers the class **object** itself (`:1222`), which is object
+    /// bookkeeping this crate does not model at all.
     has_uninit: bool,
     /// Some class this one inherits from carries `UNINIT` -- oracle's
     /// `PARENT_HAS_UNINIT`, set by each constructor that builds an
@@ -256,10 +271,56 @@ impl ClassGraph {
         def.has_uninit || def.parent_has_uninit
     }
 
-    /// Whether `class` defines `UNINIT` itself -- oracle's
-    /// `hasUninitDefined`.
+    /// Whether `class`'s instances need `UNINIT` -- oracle's
+    /// `hasUninitDefined`. See the field for the two sites that set it.
     pub fn has_uninit(&self, class: ObjRef) -> bool {
         self.classes[&class].has_uninit
+    }
+
+    /// Oracle's `RexxClass::checkUninit` (`ClassClass.cpp:1210`-`:1218`), the
+    /// half of it this crate can model: set [`Self::has_uninit`] when the
+    /// class's **flattened** instance behaviour answers `UNINIT`, whether the
+    /// class defines it or inherits it.
+    ///
+    /// **The other half is not here and is not a flag.** `checkUninit` goes on
+    /// to `if (hasUninitMethod()) requiresUninit();` (`:1222`), which asks the
+    /// class *object's own* behaviour -- the class side, where a
+    /// `::METHOD uninit CLASS` lands -- and enters the object in the
+    /// collector's uninit table. This crate has no such table.
+    ///
+    /// **Idempotent and one-way**, like the oracle's: it never clears the
+    /// flag. `RexxObject::checkUninit` (`ObjectClass.cpp:2604`) is a different
+    /// function that does clear, and it is about an object's own methods
+    /// rather than a class's.
+    pub fn check_uninit(&mut self, class: ObjRef) {
+        let handle = self.behaviour_handle(class, Side::Instance);
+        if self.behaviours[handle.0].dict.has_method("UNINIT") {
+            self.classes.get_mut(&class).unwrap().has_uninit = true;
+        }
+    }
+
+    /// Recompute [`Self::parent_has_uninit`] from the class's current
+    /// superclass list.
+    ///
+    /// **The oracle has no such function, and the reason this one exists is
+    /// the same reason `rexx-exec` rebuilds a class's behaviour after the
+    /// file's directives are all in.** The oracle attaches a class's methods
+    /// while it constructs the class, so the propagation the three
+    /// constructors do reads a finished parent; this crate creates every
+    /// class a file declares before it attaches any method, so at
+    /// construction time a parent's own `UNINIT` has not arrived yet. A
+    /// caller that installs in that order runs this over its classes in
+    /// dependency order once the methods are in, and the answer is the one
+    /// the constructors would have computed had the parent been complete.
+    pub fn refresh_parent_has_uninit(&mut self, class: ObjRef) {
+        let reached = self.classes[&class]
+            .superclasses
+            .clone()
+            .into_iter()
+            .any(|sup| self.uninit_reaches(sup));
+        if reached {
+            self.classes.get_mut(&class).unwrap().parent_has_uninit = true;
+        }
     }
 
     /// Whether a class `class` inherits from defines `UNINIT` -- oracle's

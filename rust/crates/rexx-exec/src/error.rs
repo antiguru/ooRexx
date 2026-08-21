@@ -501,9 +501,10 @@ impl Raised {
     /// 98.911: `::CLASS` directives whose declared targets cannot be put in
     /// an order. One substitution, the program's own path.
     ///
-    /// Measured, rc 158 with stdout empty, on three shapes: `::class a
-    /// subclass b` with `::class b subclass a`, `::class a subclass a` on its
-    /// own, and `::CLASS K INHERIT K`. Each gives `Error 98.911:  Cyclic
+    /// Measured, rc 158 with stdout empty, on `::class a subclass b` with
+    /// `::class b subclass a`, on `::class a subclass a` alone, on
+    /// `::CLASS K INHERIT K`, and on `::class a metaclass b` with
+    /// `::class b metaclass a`. Each gives `Error 98.911:  Cyclic
     /// inheritance in program "<path>".` and echoes the **first** of the
     /// class directives involved, which is what a resolver reporting the
     /// first target it could not place reports.

@@ -201,10 +201,20 @@ impl ClassRegistry {
         self.graph.base_class(class)
     }
 
-    /// Whether `class` defines `UNINIT` itself -- see
+    /// Whether `class`'s instances need `UNINIT` -- see
     /// [`ClassGraph::has_uninit`].
     pub fn has_uninit(&self, class: ObjRef) -> bool {
         self.graph.has_uninit(class)
+    }
+
+    /// See [`ClassGraph::check_uninit`].
+    pub fn check_uninit(&mut self, class: ObjRef) {
+        self.graph.check_uninit(class);
+    }
+
+    /// See [`ClassGraph::refresh_parent_has_uninit`].
+    pub fn refresh_parent_has_uninit(&mut self, class: ObjRef) {
+        self.graph.refresh_parent_has_uninit(class);
     }
 
     /// Whether a class `class` inherits from defines `UNINIT` -- see

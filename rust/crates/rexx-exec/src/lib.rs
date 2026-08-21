@@ -1220,9 +1220,9 @@ fn class_names_a_namespace(class: &ClassDirective) -> bool {
 /// slot, `mixin` telling the two apart), its `METACLASS`, and each entry of
 /// its `INHERIT` list.
 ///
-/// The set is the oracle's own, from `ClassDirective::addDependencies`
-/// (`interpreter/instructions/ClassDirective.cpp:327`-`:344`), which asks
-/// `checkDependency` about exactly these three.
+/// The set is the oracle's own: `ClassDirective::addDependencies`
+/// (`interpreter/instructions/ClassDirective.cpp:327`-`:344`) asks
+/// `checkDependency` about the same references and no others.
 fn class_references(class: &ClassDirective) -> impl Iterator<Item = &ClassRef> {
     class
         .subclass
@@ -1284,11 +1284,12 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
         // The namespace is a package this crate does not load, so the target
         // names nothing here whatever it names on the oracle -- unlike a bare
         // name, which `Interp::install_class_at` resolves against the file's
-        // own classes and then the registry. Measured, both `::CLASS M
-        // MIXINCLASS ns:Object` and `::CLASS K INHERIT ns:M`: the oracle is
-        // 98.987 `Namespace "NS" not found in package "<path>"` at rc 158,
-        // so the target is unreachable there too and the divergence is the
-        // report rather than the outcome.
+        // own classes and then the registry. Measured on `MIXINCLASS ns:`,
+        // `INHERIT ns:` and `METACLASS ns:` alike: the oracle is 98.987
+        // `Namespace "NS" not found in package "<path>"` at rc 158, so the
+        // target is unreachable there too and the divergence is the report
+        // rather than the outcome. This arm is reached before the `METACLASS`
+        // one below it, so a qualified metaclass target answers here.
         DirectiveKind::Class(class) if class_names_a_namespace(class) => {
             gap("::CLASS naming a namespace", "Phase 5")
         }
@@ -3527,6 +3528,28 @@ impl Interp {
         for class in classes.values() {
             self.classes().refresh_class_behaviour(*class);
         }
+
+        // **The `UNINIT` flags, for the same reason and at the same point.**
+        // The oracle attaches a class's methods while it constructs the class,
+        // so `subclass`'s own `checkUninit` (`ClassClass.cpp:1628`) and the
+        // propagation below it (`:1634`) both read a finished parent. This
+        // crate creates every class the file declares before it attaches any
+        // method, so at construction time a parent's own `UNINIT` has not
+        // arrived; running them here instead reads what the oracle's read.
+        //
+        // **In `order` and not over `classes.values()`**, which is the one
+        // difference from the rebuild above: `refresh_parent_has_uninit`
+        // reads its superclasses' flags rather than their dictionaries, so a
+        // parent has to be finished first, and `order` is the dependency
+        // order that guarantees it. `check_uninit` first and the propagation
+        // second, which is the oracle's order within a class.
+        for index in &order {
+            let Some(class) = classes.get(index).copied() else {
+                continue;
+            };
+            self.classes().check_uninit(class);
+            self.classes().refresh_parent_has_uninit(class);
+        }
         Ok(())
     }
 
@@ -5375,6 +5398,92 @@ say 1
                 .classes()
                 .own_instance_method_names(id)
                 .contains("BAR")
+        );
+    }
+
+    /// The `UNINIT` flags, **through the directive path** -- which is the
+    /// half `rexx-classes`' own graph-API test cannot reach.
+    ///
+    /// This crate creates every class a file declares before it attaches any
+    /// method, so a flag computed while the class is being constructed reads
+    /// a parent that has none of its methods yet. `install_directives` runs
+    /// `check_uninit` and `refresh_parent_has_uninit` over the file's classes
+    /// once the methods are in; without that pass every assertion below that
+    /// expects `true` reads `false` instead, for every program that can be
+    /// written.
+    ///
+    /// The oracle's own answer for this hierarchy is measured, and it is what
+    /// makes `has_uninit` on `KID` and `GRANDKID` right rather than merely
+    /// consistent: `::CLASS P` with an instance `::METHOD uninit`,
+    /// `::CLASS K SUBCLASS P`, and `o = .K~new` runs P's `uninit` for that
+    /// instance at rc 0 -- so the *subclass* is what registered it, which is
+    /// `HAS_UNINIT` being set on the subclass from its flattened behaviour.
+    #[test]
+    fn the_uninit_flags_are_set_for_the_classes_a_file_declares() {
+        let (mut interp, _program) = installed(
+            b"say 'main ran'
+              ::class Base
+              ::method uninit
+  return
+              ::class Kid subclass Base
+              ::class Grandkid subclass Kid
+              ::class Plain
+              ::class Plainkid subclass Plain
+",
+        );
+        let base = installed_class(&interp, "BASE");
+        let kid = installed_class(&interp, "KID");
+        let grandkid = installed_class(&interp, "GRANDKID");
+        let plain = installed_class(&interp, "PLAIN");
+        let plainkid = installed_class(&interp, "PLAINKID");
+
+        // The class that declares it, and the two that inherit it through
+        // the flattened behaviour the oracle's `checkUninit` reads.
+        assert!(interp.classes().has_uninit(base), "the declaring class");
+        assert!(interp.classes().has_uninit(kid), "its subclass");
+        assert!(
+            interp.classes().has_uninit(grandkid),
+            "and one generation further down"
+        );
+
+        // The separate flag, propagated rather than looked up.
+        assert!(!interp.classes().parent_has_uninit(base));
+        assert!(interp.classes().parent_has_uninit(kid));
+        assert!(interp.classes().parent_has_uninit(grandkid));
+
+        // The negative rows: an ancestry with no UNINIT in it leaves both
+        // flags clear, so a build that set them unconditionally fails here.
+        assert!(!interp.classes().has_uninit(plain));
+        assert!(!interp.classes().has_uninit(plainkid));
+        assert!(!interp.classes().parent_has_uninit(plainkid));
+    }
+
+    /// A class-side `::METHOD uninit CLASS` sets neither flag, and that is
+    /// the oracle's answer rather than a gap.
+    ///
+    /// Measured: a program making two `.K~new` instances under a class-side
+    /// `uninit` prints `uninit on K` **once**. The spelling registers the
+    /// class *object* through `hasUninitMethod` (`ClassClass.cpp:1222`), not
+    /// its instances through `HAS_UNINIT`, so a build that set `has_uninit`
+    /// here would over-register every instance the class ever makes.
+    #[test]
+    fn a_class_side_uninit_sets_neither_flag() {
+        let (mut interp, _program) = installed(
+            b"say 'main ran'
+              ::class K
+              ::method uninit class
+  return
+",
+        );
+        let id = installed_class(&interp, "K");
+        assert!(!interp.classes().has_uninit(id));
+        assert!(!interp.classes().parent_has_uninit(id));
+        assert!(
+            interp
+                .classes()
+                .own_class_method_names(id)
+                .contains("UNINIT"),
+            "the method did install, on the class side"
         );
     }
 

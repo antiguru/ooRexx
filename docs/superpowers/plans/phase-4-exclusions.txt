@@ -419,6 +419,7 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
     ::class foo subclass ns:other                         98.987 rc 158
     ::class foo mixinclass ns:other                       98.987 rc 158
     ::class foo inherit ns:other                          98.987 rc 158
+    ::class foo metaclass ns:other                        98.987 rc 158
     ::annotate routine nosuchrtn                          99.945 rc 157
     ::requires 'no_such_file_zz.rex'                      43.901 rc 213
     ::routine z external "LIBRARY nosuchlib nosuchfn"     98.903 rc 158
@@ -592,10 +593,15 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
   `class_inherit_*` refusal programs are the witnesses.
 
   METACLASS is still refused, under its own message. So is a namespace-
-  qualified target on any of SUBCLASS, MIXINCLASS and INHERIT, under one
-  message that names none of the three: the namespace is a package this crate
-  does not load, and the oracle's own answer for all three spellings is 98.987
-  rather than a resolution.
+  qualified target on any keyword that takes a class reference -- SUBCLASS,
+  MIXINCLASS, INHERIT and METACLASS -- under one message that names none of
+  them: the namespace is a package this crate does not load, and the oracle's
+  own answer is 98.987 for every one of those spellings rather than a
+  resolution. The namespace arm is reached first, so a qualified METACLASS
+  target gets the namespace message and not the METACLASS one; each of the
+  four has an in-crate row in
+  `every_directive_this_crate_cannot_install_refuses_before_the_first_clause`
+  and in `a_class_keyword_gap_is_raised_inside_the_class_pass`.
 
   THE ONE DELIBERATE OVER-REFUSAL, which rejects a program the oracle runs.
   It is not silent: it names a phase and exits with NOT_IMPLEMENTED_EXIT,
