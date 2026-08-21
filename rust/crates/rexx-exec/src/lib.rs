@@ -3706,7 +3706,7 @@ impl Interp {
             )?;
             self.inherit_mixin(program, directive, id, mixin)?;
         }
-        // `RexxClass::makeAbstract` (`ClassClass.cpp:1753`-`:1761`): a
+        // `RexxClass::makeAbstract` (`ClassClass.cpp:1754`-`:1761`): a
         // metaclass cannot be made abstract, and any other class takes the
         // keyword by setting a flag whose reader is `~new`.
         if class.abstract_ && self.classes().is_metaclass(id) {
@@ -3768,7 +3768,7 @@ impl Interp {
     /// **The refusal carries a native method's own traceback frame**, because
     /// the oracle reaches `RexxClass::inherit` by
     /// `classObject->sendMessage(GlobalNames::INHERIT, mixin, result)`
-    /// (`ClassDirective.cpp:224`) rather than by calling it. Measured, the
+    /// (`ClassDirective.cpp:230`) rather than by calling it. Measured, the
     /// report opens `       *-* Compiled method "INHERIT" with scope
     /// "Class".` above the directive's own echo -- the frame every failing
     /// native method contributes, from a send the install machinery makes.

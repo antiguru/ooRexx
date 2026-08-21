@@ -458,7 +458,8 @@ impl Raised {
     /// **No `Compiled method` frame on this one**, measured: the oracle
     /// resolves each `INHERIT` target before sending `INHERIT` to the class
     /// object (`ClassDirective::install`,
-    /// `interpreter/instructions/ClassDirective.cpp:214`-`:219`), so the
+    /// `interpreter/instructions/ClassDirective.cpp:222` for the lookup and
+    /// `:230` for the send), so the
     /// report opens with the directive's own echo. The refusals that come
     /// out of the send itself carry one.
     pub(crate) fn class_not_found(name: &[u8]) -> Raised {
@@ -519,7 +520,7 @@ impl Raised {
     ///
     /// **Raised after the directive's other refusals**, because
     /// `makeAbstract` is the last thing `ClassDirective::install` does
-    /// (`ClassDirective.cpp:246`-
+    /// (`ClassDirective.cpp:247`-
     /// `:249`): measured, the same directive with `INHERIT zzznotaclass`
     /// after it is 98.909, not this.
     pub(crate) fn abstract_metaclass(id: &[u8]) -> Raised {
