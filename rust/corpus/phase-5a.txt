@@ -251,10 +251,11 @@ lang/class_metaclass_cycle.rex
 # The program that runs carries the donation itself -- a metaclass's
 # instance methods reaching the class side -- together with the default
 # (a directive with no METACLASS takes its superclass's), a mixin with a
-# metaclass, and a metaclass declared later in the file. The two 97.1
-# programs are the boundaries of the donation: the class-side spelling on
-# the metaclass donates nothing, and a metaclass named on a directive that
-# derives from one is discarded.
+# metaclass, and a metaclass declared later in the file. Beside it sit the
+# programs that bound the donation, each one a shape the oracle answers 97.1
+# for because the method never reaches the class side at all -- a program
+# belongs there when its send resolves to nothing under the donation rule
+# the first program measures.
 lang/class_metaclass.rex
 lang/class_metaclass_class_method_does_not_donate.rex
 lang/class_metaclass_superclass_wins.rex

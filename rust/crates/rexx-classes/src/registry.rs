@@ -177,18 +177,30 @@ impl ClassRegistry {
         self.by_name.iter().map(|(name, id)| (name.as_str(), *id))
     }
 
-    /// `~class`. For a class object specifically, oracle's `~class` and
-    /// `~metaClass` coincide: a class's own `behaviour->setOwningClass`
-    /// argument is always its metaclass (`ClassClass.cpp:1615`,
-    /// `:736`/`:803` for the primitive bootstrap path), so the class an
-    /// object answers to via `~class` and the class it names as its
-    /// `~metaClass` are the same value, measured (`.string~class~id` and
-    /// `.string~metaclass~id` both `"Class"`). This does not hold for an
-    /// ordinary (non-class) object, whose `~class` is unrelated to any
+    /// `~class`, for a class object: the class its own behaviour belongs to
+    /// (`ClassClass.cpp:1615`, `:736`/`:803` for the primitive bootstrap
+    /// path) -- [`ClassGraph::owning_class`], **not**
+    /// [`ClassGraph::metaclass`].
+    ///
+    /// **They hold the same value wherever nothing overrides the field, which
+    /// is what makes reading either for the other look safe.** Measured,
+    /// `.string~class~id` and `.string~metaclass~id` are both `"Class"`, and so
+    /// are `.object`'s and `.class`'s own; and `native_classes` gives every
+    /// class it builds `.Object` as its superclass, so none of them is derived
+    /// from a metaclass at all. They come apart wherever a class is derived
+    /// from a
+    /// metaclass, because `subclass` moves the `metaClass` field to the
+    /// superclass (`:1590`) after handing `setOwningClass` the metaclass it
+    /// was given: measured, with `S` a metaclass, `::CLASS T SUBCLASS S
+    /// METACLASS M1` answers `.T~class~id` `M1` and `.T~metaClass~id` `S`,
+    /// and `::CLASS T2 SUBCLASS S`, naming no metaclass at all, answers
+    /// `Class` and `S`.
+    ///
+    /// An ordinary (non-class) object's `~class` is unrelated to any
     /// metaclass concept -- out of scope here, since this registry models
     /// only class objects.
     pub fn class_of(&self, class: ObjRef) -> ObjRef {
-        self.graph.metaclass(class)
+        self.graph.owning_class(class)
     }
 
     /// `~metaClass`.

@@ -3730,7 +3730,7 @@ impl Interp {
     /// **`not_found` is the caller's because the oracle's is**: each keyword's
     /// resolution has its own `reportException` in `ClassDirective::install`,
     /// and `METACLASS`'s is 98.908 where the others are 98.909
-    /// (`ClassDirective.cpp:180` against `:189` and `:223`). Nothing about
+    /// (`ClassDirective.cpp:180` against `:191` and `:225`). Nothing about
     /// the lookup itself differs, which is why they share this function.
     fn resolve_class_target(
         &mut self,
@@ -5400,10 +5400,8 @@ say 1
         assert_eq!(interp.classes().id_string(native), "Array");
     }
 
-    /// A bare `::CLASS` -- the only shape that reaches this far, since
-    /// `SUBCLASS`/`METACLASS`/`INHERIT` are still `directive_gap` above --
-    /// is `subclass Object`, `metaclass Class`, which is what
-    /// `RexxClass::subclass`'s own defaults give it. Had `install_class`
+    /// A bare `::CLASS` is `subclass Object`, `metaclass Class`, which is
+    /// what `RexxClass::subclass`'s own defaults give it. Had `install_class`
     /// left the superclass out, or named some other class, this would
     /// catch it.
     #[test]
@@ -5414,6 +5412,72 @@ say 1
         let class = interp.classes().lookup("Class").unwrap();
         assert_eq!(interp.classes().superclass(id), Some(object));
         assert_eq!(interp.classes().metaclass(id), class);
+    }
+
+    /// **`~metaClass` and `~class` are two different fields of a class
+    /// object, and a class derived from a metaclass is where they part.**
+    ///
+    /// `RexxClass::subclass` hands the metaclass it was given to
+    /// `setOwningClass` (`ClassClass.cpp:1615`), and only *then* moves the
+    /// `metaClass` field to the superclass when that superclass is itself a
+    /// metaclass (`:1590`). So the class object's behaviour goes on belonging
+    /// to the metaclass the directive named while the field answers the
+    /// superclass. Measured on the oracle, one program, `S` a metaclass:
+    ///
+    /// ```text
+    /// ::CLASS T SUBCLASS S METACLASS M1     ~metaClass S      ~class M1
+    /// ::CLASS T2 SUBCLASS S                 ~metaClass S      ~class Class
+    /// ::CLASS K METACLASS M1                ~metaClass M1     ~class M1
+    /// ::CLASS P                             ~metaClass Class  ~class Class
+    /// ```
+    ///
+    /// **Nothing differential can witness this, which is why the check is
+    /// in-crate.** Every program that could observe the split has to send
+    /// `~class`, and that send is refused here, so the split is not
+    /// expressible as a corpus row at all. What the test asserts is what the
+    /// *directive path* produced -- `installed` runs `install_directives`,
+    /// not a hand-built graph -- so it cannot pass over a layer a real
+    /// program does not reach.
+    ///
+    /// **Either way of collapsing the fields back into one fails it, at a
+    /// different assertion each time**, measured: reading `owning_class` off
+    /// the `metaclass` field fails `T~class`, and dropping the override so
+    /// both hold what the caller passed fails `T~metaClass`. So neither field
+    /// can stand in for the other in either direction.
+    #[test]
+    fn a_class_objects_metaclass_and_its_class_are_separate_fields() {
+        let (mut interp, _program) = installed(
+            b"say 'main ran'\n\
+              ::class M1 mixinclass class\n\
+              ::class S mixinclass class\n\
+              ::class T subclass S metaclass M1\n\
+              ::class T2 subclass S\n\
+              ::class K metaclass M1\n\
+              ::class P\n",
+        );
+        let class = interp.classes().lookup("Class").unwrap();
+        let m1 = installed_class(&interp, "M1");
+        let s = installed_class(&interp, "S");
+        let t = installed_class(&interp, "T");
+        let t2 = installed_class(&interp, "T2");
+        let k = installed_class(&interp, "K");
+        let p = installed_class(&interp, "P");
+
+        // Derived from a metaclass and naming one: the two fields disagree,
+        // and each holds what the other does not.
+        assert_eq!(interp.classes().metaclass(t), s, "T~metaClass");
+        assert_eq!(interp.classes().class_of(t), m1, "T~class");
+        // Derived from a metaclass, naming none: they disagree here too, so
+        // the split is not an artifact of writing METACLASS down.
+        assert_eq!(interp.classes().metaclass(t2), s, "T2~metaClass");
+        assert_eq!(interp.classes().class_of(t2), class, "T2~class");
+        // Naming one under a superclass that is not a metaclass, and naming
+        // none at all: nothing overrides, and the two agree. Without these
+        // the test would admit a build that simply answered different things.
+        assert_eq!(interp.classes().metaclass(k), m1, "K~metaClass");
+        assert_eq!(interp.classes().class_of(k), m1, "K~class");
+        assert_eq!(interp.classes().metaclass(p), class, "P~metaClass");
+        assert_eq!(interp.classes().class_of(p), class, "P~class");
     }
 
     /// The other half of the same install: a user class inherits `.Object`'s

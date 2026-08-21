@@ -142,7 +142,31 @@ struct ClassDef {
     /// Every class built by `interpreter/memory/Setup.cpp` has `.Class` here,
     /// including `.Class` itself, self-referentially (measured:
     /// `.class~metaclass~id` is `"Class"`).
+    ///
+    /// **This is not what `~class` answers**, and [`ClassDef::owning_class`]
+    /// is. The two differ for a class derived from a metaclass, because
+    /// `RexxClass::subclass` moves this field to the superclass (`:1590`)
+    /// after it has already handed the metaclass it was given to
+    /// `setOwningClass` (`:1615`).
     metaclass: ObjRef,
+    /// The class this class object's own behaviour belongs to -- oracle's
+    /// `behaviour->owningClass`, set from the metaclass `subclass` was given
+    /// or defaulted to (`ClassClass.cpp:1615`), and what `~class` answers for
+    /// a class object.
+    ///
+    /// **Separate from [`ClassDef::metaclass`] because the oracle writes them
+    /// from different values**, and a build reading one for the other is
+    /// wrong on every class derived from a metaclass. Measured, with `S` a
+    /// metaclass: `::CLASS T SUBCLASS S METACLASS M1` answers `.T~metaClass~id`
+    /// `S` and `.T~class~id` `M1`; and with no `METACLASS` named at all,
+    /// `::CLASS T2 SUBCLASS S` answers `S` and `Class`. They coincide
+    /// wherever nothing overrides the field -- `::CLASS K METACLASS M1` under
+    /// a plain superclass answers `M1` to both, and every class
+    /// `Setup.cpp` builds answers `Class` to both.
+    ///
+    /// `createClassBehaviour`'s merge reads [`ClassDef::metaclass`] and not
+    /// this (`:1123`-`:1127`), so the merge follows the override.
+    owning_class: ObjRef,
     /// This class may be named as another class's metaclass -- oracle's
     /// `META_CLASS` class flag, which `RexxClass::subclass` tests before it
     /// will build anything from the metaclass it was handed (`:1572`).
@@ -241,6 +265,12 @@ impl ClassGraph {
     /// instance `who`, answers `.S~who` with 97.1 -- `S`'s class side is
     /// built from `.Class` and `M1` reaches it nowhere -- while the same
     /// `M1` under `::CLASS S SUBCLASS Object METACLASS M1` answers `from M1`.
+    ///
+    /// **The override moves one field and not the other.** `metaclass` is
+    /// what the caller passed only until the override; [`ClassDef::owning_class`]
+    /// keeps it either way, because the oracle has already given that value
+    /// to `setOwningClass` (`:1615`) by the time `:1590` runs. See that
+    /// field for the shapes where the two answer differently.
     pub fn define_class(
         &mut self,
         id: ObjRef,
@@ -249,6 +279,7 @@ impl ClassGraph {
         metaclass: ObjRef,
     ) {
         let derived_from_metaclass = superclass.filter(|sup| self.classes[sup].is_metaclass);
+        let owning_class = metaclass;
         let metaclass = derived_from_metaclass.unwrap_or(metaclass);
         let (base_class, parent_has_uninit) = match kind {
             ClassKind::Regular => (id, superclass.is_some_and(|sup| self.uninit_reaches(sup))),
@@ -274,6 +305,7 @@ impl ClassGraph {
                 class_behaviour,
                 base_class,
                 metaclass,
+                owning_class,
                 is_metaclass: derived_from_metaclass.is_some(),
                 has_uninit: false,
                 parent_has_uninit,
@@ -662,6 +694,13 @@ impl ClassGraph {
     /// entry answers itself.
     pub fn metaclass(&self, class: ObjRef) -> ObjRef {
         self.classes[&class].metaclass
+    }
+
+    /// `class`'s own behaviour's owning class -- oracle's
+    /// `behaviour->owningClass`, and what `~class` answers for a class
+    /// object. See the field for why this is not [`ClassGraph::metaclass`].
+    pub fn owning_class(&self, class: ObjRef) -> ObjRef {
+        self.classes[&class].owning_class
     }
 
     /// Whether `class` may be named as another class's metaclass -- oracle's
