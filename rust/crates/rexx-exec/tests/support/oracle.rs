@@ -42,9 +42,12 @@
 //! project runs by hand everywhere else it touches the oracle. Without it the
 //! interpreter requests gigabytes mid-range and is OOM-killed.
 //! `std::process::Command` has no direct rlimit hook; the alternative is an
-//! `unsafe` `pre_exec` closure calling `setrlimit`, which the workspace
-//! forbids (`unsafe_code = "forbid"`) and which buys nothing a shell builtin
-//! does not already do for free. Verified directly, outside this test: `sh -c
+//! `unsafe` `pre_exec` closure calling `setrlimit`. The workspace lint is
+//! `unsafe_code = "deny"`, so that is an exception a site may be granted
+//! rather than one it cannot have -- and this one would buy nothing a shell
+//! builtin does not already do for free, which is why it was not asked for.
+//! `rust/CLAUDE.md` states the bar and `rexx-core/tests/unsafe_sites.rs`
+//! records the granted set. Verified directly, outside this test: `sh -c
 //! 'ulimit -v 1048576 && exec "$0" "$@"' python3 -c 'bytearray(2 * 1024 *
 //! 1024 * 1024)'` raises `MemoryError` under the limit and does not without
 //! it, and the same wrapper still runs an ordinary corpus program (`say
@@ -602,40 +605,123 @@ pub fn descriptor_diffs(rust: &Outcome, cpp: &CppOutcome) -> Vec<&'static str> {
     descriptor_diffs_with(rust, cpp, StderrComparison::Normalized)
 }
 
-/// [`descriptor_diffs`], with the caller choosing how `stderr` is compared.
-/// See [`StderrComparison`] for the two modes and why raw is opt-in rather
-/// than the default.
+/// Which of the three observable channels disagree, one field each.
+///
+/// **The answer callers should read, and [`descriptor_diffs_with`]'s labels
+/// are a rendering of it rather than a second copy.** A caller that needs to
+/// know *which* channel moved -- a verdict function, say -- reads these
+/// fields; a caller that needs to show a human what moved calls [`Self::labels`]
+/// or the `Vec`-returning wrapper. Recovering a channel by matching a label's
+/// text is the shape this type exists to remove: `contains` is a positive
+/// test, so a renamed or added label is not seen rather than reported, and a
+/// consumer built that way reads one input as permanently "did not differ"
+/// with nothing anywhere to notice.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct DescriptorDiff {
+    pub stdout: bool,
+    pub stderr: bool,
+    pub exit_code: bool,
+}
+
+impl DescriptorDiff {
+    /// Whether the two sides disagreed at all.
+    pub fn any(self) -> bool {
+        self.stdout || self.stderr || self.exit_code
+    }
+
+    /// The differing channels' names, in a fixed order, for a report.
+    ///
+    /// Derived from the fields on every call, so the rendering cannot claim a
+    /// channel the comparison did not find or omit one it did.
+    /// `labels_name_exactly_the_channels_that_differ` walks the whole cube of
+    /// three booleans and holds the two together.
+    pub fn labels(self) -> Vec<&'static str> {
+        let mut labels = Vec::new();
+        if self.stdout {
+            labels.push("stdout");
+        }
+        if self.stderr {
+            labels.push("stderr");
+        }
+        if self.exit_code {
+            labels.push("exit code");
+        }
+        labels
+    }
+}
+
+/// The three-channel comparison itself, with the caller choosing how `stderr`
+/// is compared. See [`StderrComparison`] for the two modes and why raw is
+/// opt-in rather than the default.
+pub fn descriptor_diff_with(
+    rust: &Outcome,
+    cpp: &CppOutcome,
+    stderr_mode: StderrComparison,
+) -> DescriptorDiff {
+    DescriptorDiff {
+        stdout: rust.stdout != cpp.stdout,
+        stderr: match stderr_mode {
+            StderrComparison::Normalized => {
+                super::normalize_stderr(&rust.stderr) != super::normalize_stderr(&cpp.stderr)
+            }
+            StderrComparison::Raw => rust.stderr != cpp.stderr,
+        },
+        exit_code: wrapped_exit_code(rust.exit_code) != cpp.expect_exit_code(),
+    }
+}
+
+/// [`descriptor_diff_with`] rendered as its labels, for the callers that print
+/// them or test the list for emptiness.
 pub fn descriptor_diffs_with(
     rust: &Outcome,
     cpp: &CppOutcome,
     stderr_mode: StderrComparison,
 ) -> Vec<&'static str> {
-    let mut diffs = Vec::new();
-    if rust.stdout != cpp.stdout {
-        diffs.push("stdout");
-    }
-    let stderr_differs = match stderr_mode {
-        StderrComparison::Normalized => {
-            super::normalize_stderr(&rust.stderr) != super::normalize_stderr(&cpp.stderr)
-        }
-        StderrComparison::Raw => rust.stderr != cpp.stderr,
-    };
-    if stderr_differs {
-        diffs.push("stderr");
-    }
-    if wrapped_exit_code(rust.exit_code) != cpp.expect_exit_code() {
-        diffs.push("exit code");
-    }
-    diffs
+    descriptor_diff_with(rust, cpp, stderr_mode).labels()
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        CppOutcome, StderrComparison, Termination, classify_termination, descriptor_diffs_with,
-        did_not_finish,
+        CppOutcome, DescriptorDiff, StderrComparison, Termination, classify_termination,
+        descriptor_diffs_with, did_not_finish,
     };
     use rexx_exec::{Outcome, StackSpan};
+
+    /// [`DescriptorDiff::labels`] names exactly the channels whose field is
+    /// set, over every combination of the three.
+    ///
+    /// **This is what keeps the rendering and the answer one quantity.** The
+    /// labels are what a report prints and what `corpus.rs` tests for
+    /// emptiness; the fields are what a verdict function reads. A label
+    /// dropped from the rendering would make a real divergence look like
+    /// agreement to the emptiness test, and a label added would name a
+    /// channel nothing compared -- neither is visible from either side alone.
+    #[test]
+    fn labels_name_exactly_the_channels_that_differ() {
+        for stdout in [false, true] {
+            for stderr in [false, true] {
+                for exit_code in [false, true] {
+                    let diff = DescriptorDiff {
+                        stdout,
+                        stderr,
+                        exit_code,
+                    };
+                    let labels = diff.labels();
+                    assert_eq!(labels.contains(&"stdout"), stdout, "{diff:?}");
+                    assert_eq!(labels.contains(&"stderr"), stderr, "{diff:?}");
+                    assert_eq!(labels.contains(&"exit code"), exit_code, "{diff:?}");
+                    assert_eq!(
+                        labels.len(),
+                        usize::from(stdout) + usize::from(stderr) + usize::from(exit_code),
+                        "{diff:?} rendered a label for a channel that did not differ, or \
+                         rendered one channel twice"
+                    );
+                    assert_eq!(diff.any(), !labels.is_empty(), "{diff:?}");
+                }
+            }
+        }
+    }
 
     fn outcome(stderr: &[u8]) -> Outcome {
         Outcome {

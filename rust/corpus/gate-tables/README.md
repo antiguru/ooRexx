@@ -35,7 +35,7 @@ difference. `rexx-diff --cpp <c++> --rs <rust>` over `corpus/` reports these
 probes' divergences, and that is the table's subject rather than a defect in
 the corpus.
 
-The harnesses that read a phase subset file are unaffected: all four copies of
+The harnesses that read a phase subset file are unaffected: every copy of
 `phase_subset_files_on_disk` read `corpus/` with a non-recursive `read_dir`
 filtered to `phase-*.txt`, and `corpus.rs`'s
 `the_differential_reads_every_phase_subset_file` asserts that set in both

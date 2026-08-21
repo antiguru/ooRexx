@@ -98,7 +98,7 @@ use std::process::{Command, Stdio};
 use rexx_exec::{Engine, Invocation, Outcome, run_program};
 
 use crate::support::oracle::{
-    CppOutcome, StderrComparison, descriptor_diffs_with, wrapped_exit_code,
+    CppOutcome, StderrComparison, descriptor_diff_with, wrapped_exit_code,
 };
 
 pub mod orx;
@@ -215,6 +215,26 @@ pub fn run_on_both_engines(abs: &Path) -> Outcome {
         excerpt(&ir.stderr),
     );
 
+    // Not a disagreement, and that is precisely why it needs its own check.
+    // `Engine::Ir` runs a body the instruction stream's index widths cannot
+    // hold on the tree-walker instead, counting it in `chunks_refused` -- so a
+    // refused body makes the assertion above a comparison of two tree-walker
+    // runs, tautologically true, while the row goes on being reported as a
+    // two-engine measurement. `ir_dual.rs` checks the same count for the same
+    // reason. The tree-walker arm compiles nothing, so a non-zero count there
+    // means the field stopped meaning what this reads it as.
+    assert!(
+        ir.chunks_refused == 0 && tree_walker.chunks_refused == 0,
+        "a body of {} did not run on the engine it was attributed to: the ir arm \
+         refused {} bodies to the tree-walker and the tree-walker arm counted {}, \
+         where it compiles nothing to refuse. The two arms can still agree while \
+         only one engine ever ran the program, so this is structural and not a \
+         verdict.",
+        abs.display(),
+        ir.chunks_refused,
+        tree_walker.chunks_refused,
+    );
+
     tree_walker
 }
 
@@ -228,14 +248,22 @@ pub fn run_on_both_engines(abs: &Path) -> Outcome {
 /// [`Verdict::DivergeStderr`] row into [`Verdict::Agree`] -- a green row
 /// making a byte-for-byte claim that was never checked byte for byte.
 ///
+/// **The producer is asked for a typed answer, not for prose to re-parse.**
+/// `descriptor_diff_with` returns a field per channel; its `Vec<&'static str>`
+/// sibling is a *rendering* for a report, and recovering a channel from that
+/// list by matching a label's text makes a rename in the producer read here as
+/// "this channel did not differ" -- silently, permanently, and in a direction
+/// `contains` cannot report, since a label it does not recognise is simply not
+/// found.
+///
 /// The caller checks the oracle run finished before calling this: the exit
 /// status of a killed or crashed process is not an answer to compare.
 pub fn compare_raw(crate_side: &Outcome, oracle: &CppOutcome) -> Descriptors {
-    let diffs = descriptor_diffs_with(crate_side, oracle, StderrComparison::Raw);
+    let diff = descriptor_diff_with(crate_side, oracle, StderrComparison::Raw);
     Descriptors {
-        status: diffs.contains(&"exit code"),
-        stdout: diffs.contains(&"stdout"),
-        stderr: diffs.contains(&"stderr"),
+        status: diff.exit_code,
+        stdout: diff.stdout,
+        stderr: diff.stderr,
     }
 }
 
@@ -419,8 +447,12 @@ impl Report {
 /// `sh -c 'cat >&2'` rather than `Command::new("cat")` directly: `cat`'s own
 /// stdout has to land on *this process's* real fd 2, which is exactly what a
 /// shell's `>&2` does, and reaching the same effect through `Stdio` alone
-/// would need a raw-fd constructor this workspace's `unsafe_code = "forbid"`
-/// rules out. `Stdio::inherit()` on the child's own stderr is what makes that
+/// would need a raw-fd constructor, which is `unsafe`. The workspace lint is
+/// `unsafe_code = "deny"`, so that is a grantable exception rather than a
+/// closed door -- and it is not worth granting for something a shell builtin
+/// already does, which is the bar `rust/CLAUDE.md` sets and
+/// `rexx-core/tests/unsafe_sites.rs` records the granted set of.
+/// `Stdio::inherit()` on the child's own stderr is what makes that
 /// `>&2` resolve to the real descriptor, upstream of libtest's thread-local
 /// capture.
 pub fn emit_uncaptured(text: &str) {

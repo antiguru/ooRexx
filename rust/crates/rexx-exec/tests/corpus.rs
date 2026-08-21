@@ -502,8 +502,11 @@ fn build_report(matched: usize, total: usize, mismatches: &[Mismatch], gate: boo
 /// stdout has to land on *this process's* real fd 2, and redirecting a
 /// child's stdout to a specific existing descriptor is exactly what a shell's
 /// `>&2` does; reaching for the same effect through `std::process::Stdio`
-/// alone would need a raw-fd constructor this workspace's `unsafe_code =
-/// "forbid"` lint rules out. Setting the `Command`'s own `stderr` to
+/// alone would need a raw-fd constructor, which is `unsafe`. The workspace
+/// lint is `unsafe_code = "deny"`, so that is a grantable exception rather
+/// than a closed door, and it is not worth granting for something a shell
+/// builtin already does -- the bar is `rust/CLAUDE.md`'s and the granted set
+/// is asserted by `rexx-core/tests/unsafe_sites.rs`. Setting the `Command`'s own `stderr` to
 /// `Stdio::inherit()` is what makes that `>&2` resolve to the *real* fd 2:
 /// a child's inherited descriptor is dup'd from the parent's at spawn time,
 /// upstream of libtest's thread-local capture.

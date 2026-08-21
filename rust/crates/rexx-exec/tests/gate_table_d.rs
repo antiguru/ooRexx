@@ -32,8 +32,8 @@
 //! They live under `corpus/gate-tables/`, not in a phase subset file. Most of
 //! them diverge, and `corpus/phase-5a.txt` means "agrees with the oracle"; a
 //! probe moves there in the task that makes its row agree. The corpus
-//! differential is unaffected by this subtree existing: the four copies of
-//! `phase_subset_files_on_disk` all read `corpus/` with a **non-recursive**
+//! differential is unaffected by this subtree existing: every copy of
+//! `phase_subset_files_on_disk` reads `corpus/` with a **non-recursive**
 //! `read_dir` filtered to `phase-*.txt`, either property alone being enough,
 //! and `corpus.rs`'s `the_differential_reads_every_phase_subset_file` is the
 //! standing assertion over that -- so this is checked by a test that already
@@ -167,6 +167,18 @@ fn read_rows() -> Vec<Row> {
 /// * `::ROUTINE ... EXTERNAL` naming a real shared library is **Phase 7's** and
 ///   its refusal is untouched by this phase, which the plan states in the same
 ///   place it moves `::METHOD ... EXTERNAL 'LIBRARY REXX name'` into 5a.
+///
+///   **This one row spans a boundary the plan asks a later task to draw, and
+///   the row cannot hold both sides of it.** A row's identity here is
+///   (directive, keyword, position), so `::ROUTINE r EXTERNAL 'LIBRARY <lib>
+///   <entry>'` and `::ROUTINE r EXTERNAL 'LIBRARY REXX <entry>'` are one row,
+///   and its probe picks the first. If the `LIBRARY REXX` form moves into 5a
+///   the way `::METHOD`'s did, that behaviour has **no row in this table**:
+///   the row that exists is filed against a phase the 5a gate never reads, and
+///   the moved form is outside the denominator. Closing that needs the row set
+///   to distinguish the two forms, which is `corpus/docs/directive-options.txt`'s
+///   shape and not this file's -- so the task that draws the boundary decides
+///   it, and this note is where it meets the consequence.
 /// * `::CLASS CLASS` and `::RESOURCE LIBRARY` are the row set's two
 ///   `cross-reference` rows: the section documents the name and the
 ///   directive's own parser has no arm for it, so both interpreters refuse
@@ -335,9 +347,30 @@ fn directive_option_gate_table() {
             });
             continue;
         };
-        let Ok(abs) = fs::canonicalize(corpus.join(&probe)) else {
-            // Already reported above as a missing probe; nothing to run.
-            continue;
+        // A channel of its own rather than a fallthrough to the set check
+        // above, because that check answers a different question. It reads
+        // `read_dir`, which lists an entry by name whatever the name resolves
+        // to -- so a probe that is a dangling symlink, or one whose bytes
+        // cannot be reached, is *present* in the listing, passes the set
+        // comparison, and would leave the table here. Measured: with that
+        // path silent, such a row simply vanishes -- the table reports one row
+        // fewer, no structural failure, exit 0, and the gated count one lower
+        // than it was. A close criterion phrased over the gated count is then
+        // satisfiable by removing evidence.
+        let abs = match fs::canonicalize(corpus.join(&probe)) {
+            Ok(abs) => abs,
+            Err(error) => {
+                structural.push(Structural {
+                    subject: probe.clone(),
+                    detail: format!(
+                        "the probe is listed in the directory but cannot be resolved: \
+                         {error}. The row for {} {} {} therefore has no program to run, \
+                         which is structural -- it is never a row the table drops",
+                        row.directive, row.keyword, row.position
+                    ),
+                });
+                continue;
+            }
         };
 
         let crate_side = run_on_both_engines(&abs);
