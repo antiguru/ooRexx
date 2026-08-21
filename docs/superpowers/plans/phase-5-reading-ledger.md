@@ -30,10 +30,10 @@ or claims wrong, the correction is recorded here, which is the route the plan sp
 |---|---|---|---|---|
 | `oodocs/rexxref/en-US/provide.xml` | every section of the `provide` chapter | spec author, 2026-08-17 | **done** — that reading produced the concept floor | r13198 (`svn info oodocs/rexxref`, checked 2026-08-21) |
 | `oodocs/rexxref/en-US/dire.xml` | every one of its nine directive sections | spec author, 2026-08-17 | **done** | r13198 |
-| `oodocs/rexxref/en-US/fundclasses.xml`, `collclasses.xml`, `utilityclasses.xml`, `streamclasses.xml` | every `cls*` section's own prose — not every `mth*` | Task 2, 2026-08-21 | **done** — every `<section id="cls…">`'s prose from its opening tag to its first nested section, extracted mechanically and read; findings below | r13198 |
+| `oodocs/rexxref/en-US/fundclasses.xml`, `collclasses.xml`, `utilityclasses.xml`, `streamclasses.xml` | every `cls*` section's own prose — not every `mth*` | Task 2, 2026-08-21 | **done against a stated extractor**, which is weaker than "done" and is the honest claim. The extractor [below](#the-cls-section-set-and-its-output) and its whole output are committed, so what was read is a span a reader can see rather than a sentence: each `cls*` section's own prose, from its opening tag to the line before its first nested section. A section written in a form its pattern misses is invisible to it exactly as a fourth C++ citation form is; findings below | r13198 |
 | `oodocs/rexxpg/en-US/classes.xml` | every section of "A Closer Look at Objects" | Task 2, 2026-08-21 | **done** — the whole chapter, `:46` to its closing `</chapter>` at `:1500`; every section listed below was read | r13198 (`svn info oodocs/rexxpg`) |
 | `ootest/` | one row per 5a mechanism in the spec's enumeration, naming the test group that pins it or recording that none does | Task 2, 2026-08-21 | **done** — the mapping is [below](#the-ootest-mapping); every test group named there was opened | r13178 (`svn info ootest`) |
-| the C++ | not readable end to end; the bounded stopping point is **every `file:line` the spec cites, verified** | Task 2, 2026-08-21 | **done against a stated extractor, which is a weaker claim than "done" and is the honest one.** Every citation the extractor [below](#the-check-and-its-output-rather-than-a-sentence-saying-it-passed) finds is resolved and placed — 90 of them, none unplaced, output committed. That extractor reaches three citation forms; **a fourth form would be invisible to it, and the third was invisible to its two predecessors**, which is how `ClassClass.cpp:988`-`:990` survived two rounds of checking. Read the row as "verified against a check whose reach is written down", not as "verified against the spec". The wrong ones are [below](#citations-found-wrong) | tracked `interpreter/` at `cb9563364`, identical to this worktree's at `e52bff06a` (see the note) |
+| the C++ | not readable end to end; the bounded stopping point is **every `file:line` the spec cites, verified** | Task 2, 2026-08-21 | **done against a stated extractor, which is a weaker claim than "done" and is the honest one.** Every citation the extractor [below](#the-check-and-its-output-rather-than-a-sentence-saying-it-passed) finds is resolved and placed — 92 of them, none unplaced, output committed. That extractor reaches three citation forms; **a fourth form would be invisible to it, the third was invisible to its two predecessors** — which is how `ClassClass.cpp:988`-`:990` survived two rounds of checking — **and the third form's own antecedent had a shape the round that added it did not have**, which is how `Setup.cpp:348-351` was printed for a citation into `MethodDictionary.cpp`. Read the row as "verified against a check whose reach is written down", not as "verified against the spec". The wrong ones are [below](#citations-found-wrong) | tracked `interpreter/` at `cb9563364`, identical to this worktree's at `e52bff06a` (see the note) |
 
 **`oodocs/` itself has no `svn info`** — `svn: E155007: … is not a working copy`, measured. Its two
 subdirectories are separate working copies and carry the revision, so a check run against the parent
@@ -49,6 +49,120 @@ which is the only file differing between that tree and this worktree's `interpre
 same content at both, and every citation below was resolved against content a later reader can get
 from either. The uncommitted hunk is machine state no file in the checkout records; it is written
 down here because that is the only place it can be.
+
+---
+
+### The `cls*` section set, and its output
+
+**The same rule the C++ row is held to.** A row saying a mechanical extraction was done and read is a
+completeness claim with nothing behind it a reader can check, and this document has twice carried one
+that was wrong. So the extraction and its output are committed instead. The script asserts that the
+narrow pattern and a case-insensitive, attribute-order-tolerant one find the same sections, because a
+denominator that moves when the pattern is rewritten is a property of the pattern and not of the
+books.
+
+```python
+# Every `<section id="cls...">` in the four class books, with the prose span the four-books row's
+# stopping point covers: the opening tag to the line before the first nested <section>, or to the
+# section's own </section> where it nests none.
+import re, sys
+NARROW = re.compile(r'<section id="(cls[^"]*)"')
+WIDE   = re.compile(r'<section[^>]*id=["\'](cls[^"\']*)', re.I)
+for path in sys.argv[1:]:
+    lines = open(path, encoding='utf-8').read().split('\n')
+    # The denominator has to be a property of the books and not of the pattern that found it, so the
+    # narrow form and a case-insensitive, attribute-order-tolerant form have to agree.
+    assert [m.group(1) for l in lines for m in [NARROW.search(l)] if m] == \
+           [m.group(1) for l in lines for m in [WIDE.search(l)] if m], path
+    for i, l in enumerate(lines):
+        m = NARROW.search(l)
+        if not m: continue
+        end = next(j for j in range(i + 1, len(lines))
+                   if '<section' in lines[j] or '</section>' in lines[j])
+        print('%-20s %-28s :%-6d :%-6d %d lines' %
+              (path.split('/')[-1], m.group(1), i + 1, end, end - i))
+```
+
+```
+python3 cls-sections.py oodocs/rexxref/en-US/fundclasses.xml oodocs/rexxref/en-US/collclasses.xml \
+                        oodocs/rexxref/en-US/utilityclasses.xml oodocs/rexxref/en-US/streamclasses.xml
+```
+
+63 rows — 7, 17, 35 and 4 across the four books:
+
+```
+fundclasses.xml      clsClass                     :51     :133    83 lines
+fundclasses.xml      clsMessage                   :1093   :1165   73 lines
+fundclasses.xml      clsMethod                    :1987   :2041   55 lines
+fundclasses.xml      clsObject                    :2519   :2583   65 lines
+fundclasses.xml      clsPackage                   :3561   :3638   78 lines
+fundclasses.xml      clsRoutine                   :4689   :4735   47 lines
+fundclasses.xml      clsString                    :4996   :5151   156 lines
+collclasses.xml      clsCollection                :170    :220    51 lines
+collclasses.xml      clsMapCollection             :612    :667    56 lines
+collclasses.xml      clsOrderedCollection         :741    :804    64 lines
+collclasses.xml      clsSetCollection             :1222   :1264   43 lines
+collclasses.xml      clsArray                     :1267   :1379   113 lines
+collclasses.xml      clsBag                       :2566   :2655   90 lines
+collclasses.xml      clsCircularQueue             :3252   :3331   80 lines
+collclasses.xml      clsDirectory                 :3943   :4037   95 lines
+collclasses.xml      clsIdentityTable             :4609   :4682   74 lines
+collclasses.xml      clsList                      :5000   :5083   84 lines
+collclasses.xml      clsProperties                :5667   :5736   70 lines
+collclasses.xml      clsQueue                     :5984   :6072   89 lines
+collclasses.xml      clsRelation                  :6745   :6827   83 lines
+collclasses.xml      clsSet                       :7420   :7505   86 lines
+collclasses.xml      clsStem                      :7964   :8068   105 lines
+collclasses.xml      clsStringTable               :8504   :8601   98 lines
+collclasses.xml      clsTable                     :9048   :9122   75 lines
+utilityclasses.xml   clsAlarm                     :51     :99     49 lines
+utilityclasses.xml   clsAlarmNotification         :322    :370    49 lines
+utilityclasses.xml   clsBuffer                    :421    :458    38 lines
+utilityclasses.xml   clsComparable                :481    :512    32 lines
+utilityclasses.xml   clsComparator                :566    :606    41 lines
+utilityclasses.xml   clsCaselessComparator        :639    :678    40 lines
+utilityclasses.xml   clsColumnComparator          :708    :748    41 lines
+utilityclasses.xml   clsCaselessColumnComparator  :798    :838    41 lines
+utilityclasses.xml   clsDescendingComparator      :888    :931    44 lines
+utilityclasses.xml   clsCaselessDescendingComparator :965    :1008   44 lines
+utilityclasses.xml   clsInvertingComparator       :1038   :1079   42 lines
+utilityclasses.xml   clsNumericComparator         :1139   :1179   41 lines
+utilityclasses.xml   clsDateTime                  :1234   :1364   131 lines
+utilityclasses.xml   clsEventSemaphore            :3142   :3192   51 lines
+utilityclasses.xml   clsFile                      :3382   :3487   106 lines
+utilityclasses.xml   clsMessageNotification       :4633   :4678   46 lines
+utilityclasses.xml   clsMonitor                   :4701   :4738   38 lines
+utilityclasses.xml   clsMutableBuffer             :4829   :4922   94 lines
+utilityclasses.xml   clsMutexSemaphore            :6451   :6502   52 lines
+utilityclasses.xml   clsOrderable                 :6649   :6688   40 lines
+utilityclasses.xml   clsPointer                   :6902   :6942   41 lines
+utilityclasses.xml   clsRegularExpression         :7042   :7216   175 lines
+utilityclasses.xml   clsRexxContext               :7533   :7596   64 lines
+utilityclasses.xml   clsRexxInfo                  :7934   :8065   132 lines
+utilityclasses.xml   clsRexxQueue                 :8811   :8864   54 lines
+utilityclasses.xml   clsSingleton                 :9260   :9302   43 lines
+utilityclasses.xml   clsStackFrame                :9396   :9449   54 lines
+utilityclasses.xml   clsStreamSupplier            :9754   :9803   50 lines
+utilityclasses.xml   clsSupplier                  :9903   :9955   53 lines
+utilityclasses.xml   clsTicker                    :10169  :10217  49 lines
+utilityclasses.xml   clsTimeSpan                  :10442  :10534  93 lines
+utilityclasses.xml   clsTraceObject               :11301  :11395  95 lines
+utilityclasses.xml   clsValidate                  :12201  :12250  50 lines
+utilityclasses.xml   clsVariableReference         :12548  :12598  51 lines
+utilityclasses.xml   clsWeakReference             :12698  :12739  42 lines
+streamclasses.xml    clsInputOutputStream         :57     :100    44 lines
+streamclasses.xml    clsInputStream               :103    :144    42 lines
+streamclasses.xml    clsOutputStream              :245    :287    43 lines
+streamclasses.xml    clsStream                    :389    :482    94 lines
+```
+
+**And it fails when it should**, run rather than asserted: narrow the section pattern to `clsA` and
+the cross-width assertion raises `AssertionError: oodocs/rexxref/en-US/fundclasses.xml`, exit 1. Two
+rows of the block are checkable against citations this document already makes elsewhere and by a
+different route — `clsBuffer` opens `utilityclasses.xml:421` and `clsPointer` opens `:6902`, which is
+what the `.orx` and XML list below says. The stopping point is the span, not the section: everything
+from the first nested `<section` onwards is `mth*` material and is the method-row extractor task's,
+which is what the row's "not every `mth*`" means.
 
 ---
 
@@ -133,38 +247,90 @@ running anything, and a later task diffs it.
 
 The extractor reaches the **three** citation forms the spec uses, which is the axis every earlier
 version missed: an explicit `Setup.cpp:1809`; a symbol-qualified `defineMethod :819`, file implicit;
-and a bare `:988`-`:990` **continuing an earlier citation in the same parenthesis**. The third form
-is what hid `ClassClass.cpp:988`-`:990` from two rounds of checking. Two further rules are
-load-bearing and were wrong while drafting this: the carried filename **resets at every line**
--- without that it leaks across lines and reports a `07:06` timestamp as `Setup.cpp:06` -- and it
-**resets on any filename, not only a C++ one** -- without that a bare `:453` following an `.orx` name
-is attributed to the last `.cpp` seen. Both mistakes were made here and both are visible in the
-output's `form` column.
+and a bare `:988`-`:990` **continuing an earlier citation**. The third form is what hid
+`ClassClass.cpp:988`-`:990` from two rounds of checking, and it is the form the spec's hard wrapping
+keeps moving: **its antecedent is often on the previous line**, because a wrap is not a choice the
+author makes about the citation. So the carry crosses a line break, and is cleared at a Markdown
+block boundary or by any filename that has no `:N` of its own. Its antecedent is a filename **or** a
+`Class::method` name -- the spec writes `MethodDictionary::hideMethod` is `put(TheNilObject, name)`
+(`:348-351`), and until this round that came out as `Setup.cpp:348-351`, which is the
+`StartClassDefinition` macro's comment and is not what the spec cites.
+
+**Every rule in the script is there because breaking it changes the output, and each was broken to
+check that.** As a list rather than a table on purpose: this section sits inside list (c)'s span, and
+a `|`-row written here would be read as one of (c)'s entries.
+
+* **the carry crosses a line break** -- reset it at every line, as the previous round did, and the
+  output loses `ClassClass.hpp:180` and `:189` and goes to 43 `UNPLACED`, because list (a)'s own runs
+  of line numbers wrap too;
+* **cleared at a Markdown block boundary** -- remove that and `07:06`, a build timestamp at spec
+  `:1401`, is read as a citation;
+* **cleared by any filename that has no `:N` of its own** -- remove that and the roadmap's `:482` and
+  `:492` are read as `PackageClass.cpp`'s;
+* **and that clearing fires on any filename, not only a C++ one** -- narrow the extension set to C++
+  and the output gains five rows: four `.orx` citations read as `DirectiveParser.cpp`'s, and the
+  spec's `corpus.rs:244` read through the `Class::method` carry instead.
+  **Against the previous round's script this rule was inert**: narrowing it there changed no byte,
+  because the per-line reset already covered it. Relaxing that reset is what makes it do something,
+  and it is stated here against the script it is now in;
+* **a `Class::method` may be a third-form antecedent** -- clear the carry there instead and
+  `:348-351` is dropped with no row printed at all, which is the silent form of the same defect;
+* **only the row's own citation cell counts, not the whole row** -- count the whole row and
+  `createInstanceBehaviour :1148` comes out `found-wrong`, placed by the row that names it as the
+  *correct* sibling;
+* **the explicit form is matched by file, not by line number alone** -- match by line number alone
+  and **nothing changes**. A guard, not a load-bearing rule, and stated as one: with the cell
+  narrowing above in place it decides nothing in this document. Without that narrowing it is what
+  keeps `Setup.cpp:1285` out of the found-wrong table, whose `:1285` is `PackageClass.cpp`'s.
 
 ```python
 # Every C++ file:line the spec cites, and which ledger list places it.
 # The spec uses three citation forms and this reaches all three:
 #   1 explicit   `Setup.cpp:1809`
 #   2 symbolic   `defineMethod :819`      -- file implicit in the symbol
-#   3 continuing `comment at :988-:990`   -- bare, continuing form 1 earlier on the same line
-# The carried file resets on ANY filename, so a bare :N after a .orx/.xml/.rs/.md name is not a C++ cite.
+#   3 continuing `comment at :988-:990`   -- bare, continuing the citation before it
+# Form 3's antecedent is a filename OR a `Class::method` name: the spec writes
+# `MethodDictionary::hideMethod` is `put(TheNilObject, name)` (`:348-351`), and without the second
+# source that :348-351 is attributed to the last .cpp seen, which is Setup.cpp and is wrong.
+# The spec's prose is hard-wrapped, so form 3's antecedent is often on the PREVIOUS line and the
+# carry has to cross a line break. It is cleared at a Markdown block boundary -- BLOCK below; the
+# one measured to change the output is the list item at spec :1400 -- and by any filename with no :N
+# own. Those two are what keep a `07:06` timestamp from being read as a citation and a roadmap
+# `:492` from being read as `PackageClass.cpp:492`; each was measured by removing it.
 import re, sys
 ANYFILE = r'[A-Za-z0-9_./-]+\.(?:cpp|hpp|orx|xml|rs|md|txt|ent|cls)'
 TOK     = r':\s*(\d+(?:\s*-\s*`?:?\s*\d+)?)'
 SYM     = r'([A-Za-z_][A-Za-z_0-9]*(?:::[A-Za-z_][A-Za-z_0-9]*)?(?:\(\))?)\s'
-rows = []
-for ln, line in enumerate(open(sys.argv[1], encoding='utf-8'), 1):
-    carry = None          # the carry never crosses a line: a bare :N is a continuation, not a memory
-    for m in re.finditer(r'(?:(%s)|%s)?\s*%s' % (ANYFILE, SYM, TOK), line):
-        f, sym, n = m.group(1), m.group(2), re.sub(r'[\s`]', '', m.group(3)).replace('::', '-')
-        if f:
-            carry = f.split('/')[-1]
-            if not carry.endswith(('.cpp', '.hpp')): continue
-            rows.append((carry, n, ln, 'explicit'))
-        elif sym and not sym[0].isdigit():
-            rows.append(('(via %s)' % sym, n, ln, 'symbolic'))
-        elif carry and carry.endswith(('.cpp', '.hpp')):
-            rows.append((carry, n, ln, 'continuing'))
+QUAL    = r'([A-Za-z_][A-Za-z_0-9]*::[A-Za-z_][A-Za-z_0-9]*)'
+# A filename may be separated from its own :N by backticks, which is how list (a) writes its runs;
+# a symbol may not, or every English word in front of a backticked `:N` becomes one.
+CITE  = re.compile(r'(?:(%s)[\s`]*|%s)?\s*%s|(%s)|%s' % (ANYFILE, SYM, TOK, ANYFILE, QUAL))
+BLOCK = re.compile(r'[ \t]*(?:$|[-*+>][ \t]|\d+\.[ \t]|#|\||```)')
+def cites(text):
+    rows, carry = [], None
+    for ln, line in enumerate(text.split('\n'), 1):
+        if BLOCK.match(line):
+            carry = None
+        for m in CITE.finditer(line):
+            f, sym, n, bare, qual = m.groups()
+            if bare:
+                carry = None      # a filename with no :N of its own ends the citation before it
+                continue
+            if qual:
+                carry = '(via %s)' % qual
+                continue
+            n = re.sub(r'[\s`]', '', n).replace('::', '-')
+            if f:
+                carry = f.split('/')[-1]
+                if not carry.endswith(('.cpp', '.hpp')):
+                    carry = None  # a .orx/.xml/.rs/.md name is not a C++ cite and ends the carry
+                    continue
+                rows.append((carry, n, ln, 'explicit'))
+            elif sym and not sym[0].isdigit():
+                rows.append(('(via %s)' % sym, n, ln, 'symbolic'))
+            elif carry:
+                rows.append((carry, n, ln, 'continuing'))
+    return rows
 # The ledger with its fenced blocks blanked out. This script is itself quoted in one of them and
 # names these markers, and its output block quotes every token: without the blanking the marker
 # search finds THIS TEXT first and truncates the span it is meant to measure. Measured while
@@ -176,24 +342,43 @@ MARKS = ['## Citations found wrong', '**(a) ', '**(b) ', '**(c) ', '### In-tree 
 assert all(led.count(m) == 1 for m in MARKS), [(m, led.count(m)) for m in MARKS]
 at = [led.find(m) for m in MARKS]
 assert at == sorted(at), list(zip(MARKS, at))
-BOUNDS = list(zip(['found-wrong', '(a)', '(b)', '(c)'], at, at[1:]))
-def where(tok):
-    # a token placed either alone, or as either end of a range the ledger writes as :LO-HI
-    pats = [r':%s\b' % t for t in (tok, tok.split('-')[0])] + [r':\d+-%s\b' % tok.split('-')[0]]
-    for name, a, b in BOUNDS:
-        span = led[a:b].split('\n')
-        # Only the entries count, not the prose around them: three of the four lists are tables, and
-        # this document discusses its own citations in the paragraphs beside them. Without this,
-        # deleting a table row leaves the token "placed" by the sentence that mentions it -- measured:
-        # the delete-a-row control did not fire until the search was narrowed to the rows themselves.
-        body = [l for l in span if l.startswith('|')] if name != '(a)' else span
-        if any(re.search(pt, l) for l in body for pt in pats): return name
+def entries(name, a, b):
+    span = led[a:b].split('\n')
+    # Only the entries count, not the prose around them: three of the four lists are tables, and
+    # this document discusses its own citations in the paragraphs beside them. Without this,
+    # deleting a table row leaves the token "placed" by the sentence that mentions it -- measured:
+    # the delete-a-row control did not fire until the search was narrowed to the rows themselves.
+    # And within a row, only the cell naming the citation: the other cells describe neighbours, so
+    # the found-wrong table's `createInstanceBehaviour :1148` -- named there as the CORRECT sibling
+    # -- placed that citation in the found-wrong list, which list (a) contradicts.
+    if name == '(a)':
+        return '\n'.join(span)
+    return '\n| '.join(l.split('|')[1] for l in span if l.startswith('|'))
+def placed(body):
+    out = set()
+    for f, n, _, _ in cites(body):
+        for k in (n, n.split('-')[0], n.split('-')[-1]):
+            out.add((f, k))
+            out.add(('*', k))     # the line number alone, for the forms whose file is not stated
+    return out
+PLACES = [(name, placed(entries(name, a, b)))
+          for name, a, b in zip(['found-wrong', '(a)', '(b)', '(c)'], at, at[1:])]
+def where(f, n, how):
+    # Where the filename is on the token itself it is trustworthy, so the entry has to place THAT
+    # file's line rather than any file's; the other two forms do not state a file this can trust and
+    # match on the line number alone. A guard rather than a load-bearing rule: with the narrowing
+    # above in place, removing it changes no byte of the output -- measured. Without that narrowing
+    # it is what keeps `Setup.cpp:1285` out of the found-wrong table, whose :1285 is
+    # PackageClass.cpp's.
+    key = f if how == 'explicit' else '*'
+    for name, p in PLACES:
+        if any((key, k) in p for k in (n, n.split('-')[0])): return name
     return '** UNPLACED **'
 seen = set()
-for f, n, ln, how in rows:
+for f, n, ln, how in cites(open(sys.argv[1], encoding='utf-8').read()):
     if (f, n) in seen: continue
     seen.add((f, n))
-    print('%-26s :%-11s spec:%-5s %-11s %s' % (f, n, ln, how, where(n)))
+    print('%-26s :%-11s spec:%-5s %-11s %s' % (f, n, ln, how, where(f, n, how)))
 ```
 
 ```
@@ -201,7 +386,7 @@ python3 spec-cpp-citations.py docs/superpowers/specs/2026-08-17-phase-5-object-m
                               docs/superpowers/plans/phase-5-reading-ledger.md | sort -k1,1 -k2,2V
 ```
 
-Run against this document, it prints 90 rows -- 72 placed in (a), 9 in (b), 3 in (c), 6 in the
+Run against this document, it prints 92 rows -- 76 placed in (a), 9 in (b), 3 in (c), 4 in the
 found-wrong table -- and **no `UNPLACED`**:
 
 ```
@@ -214,7 +399,9 @@ ClassClass.cpp             :990         spec:946   continuing  (b)
 ClassClass.cpp             :1210        spec:157   explicit    (a)
 ClassClass.cpp             :1882        spec:156   explicit    (a)
 ClassClass.hpp             :176-186     spec:1360  explicit    (c)
+ClassClass.hpp             :180         spec:1361  continuing  (a)
 ClassClass.hpp             :180-189     spec:116   explicit    (a)
+ClassClass.hpp             :189         spec:1361  continuing  (a)
 ClassDirective.cpp         :257         spec:133   explicit    (a)
 ClassDirective.cpp         :273         spec:133   continuing  (b)
 DirectiveParser.cpp        :334-490     spec:129   explicit    (a)
@@ -231,7 +418,6 @@ Setup.cpp                  :185         spec:1349  explicit    (a)
 Setup.cpp                  :325-329     spec:1359  explicit    (c)
 Setup.cpp                  :331         spec:141   explicit    (a)
 Setup.cpp                  :332         spec:141   continuing  (a)
-Setup.cpp                  :348-351     spec:126   continuing  (a)
 Setup.cpp                  :360-361     spec:126   explicit    (a)
 Setup.cpp                  :371         spec:786   explicit    (a)
 Setup.cpp                  :371-372     spec:126   continuing  (a)
@@ -239,7 +425,7 @@ Setup.cpp                  :396         spec:1349  continuing  (a)
 Setup.cpp                  :688         spec:1396  explicit    (a)
 Setup.cpp                  :792-804     spec:126   continuing  (a)
 Setup.cpp                  :795         spec:806   explicit    (c)
-Setup.cpp                  :1285        spec:371   explicit    found-wrong
+Setup.cpp                  :1285        spec:371   explicit    (a)
 Setup.cpp                  :1307-1312   spec:126   continuing  (a)
 Setup.cpp                  :1399-1404   spec:126   continuing  (a)
 Setup.cpp                  :1781        spec:152   explicit    (a)
@@ -247,6 +433,7 @@ Setup.cpp                  :1809        spec:124   explicit    (a)
 (via DirectoryClass::setMethodRexx) :480         spec:152   symbolic    (a)
 (via LanguageParser::addMethod) :610         spec:138   symbolic    found-wrong
 (via MethodDictionary::addMethod) :164         spec:122   symbolic    (a)
+(via MethodDictionary::hideMethod) :348-351     spec:126   continuing  (a)
 (via PackageClass::findClass) :1086        spec:153   symbolic    (b)
 (via RexxClass::createInstance) :1854        spec:118   symbolic    (a)
 (via RexxClass::setAnnotations) :343         spec:135   symbolic    (a)
@@ -265,7 +452,7 @@ Setup.cpp                  :1809        spec:124   explicit    (a)
 (via createClassBehaviour) :1119        spec:117   symbolic    found-wrong
 (via createConstantGetterMethod) :2518        spec:132   symbolic    (a)
 (via createDelegateMethod) :2438        spec:159   symbolic    (a)
-(via createInstanceBehaviour) :1148        spec:117   symbolic    found-wrong
+(via createInstanceBehaviour) :1148        spec:117   symbolic    (a)
 (via defaultName)          :1760        spec:146   symbolic    (a)
 (via defineMethod)         :819         spec:123   symbolic    (a)
 (via findSuperMethod)      :434         spec:122   symbolic    (a)
@@ -297,6 +484,14 @@ Setup.cpp                  :1809        spec:124   explicit    (a)
 (via validateScopeOverride) :1950        spec:140   symbolic    (a)
 ```
 
+**Two labels in that block moved this round, and both moved off `found-wrong`.** `Setup.cpp:1285`
+and `createInstanceBehaviour :1148` read `found-wrong` until now, while list (a) -- this document's
+own record that a citation is **correct** -- carried both. Neither is in the found-wrong table: its
+`:1285` is one of `PackageClass.cpp`'s three loops, and its `:1148` is named there as the *correct*
+sibling of the citation the row is about. **The label column no longer depends on the order the four
+lists happen to be searched in.** Over all 24 orderings of them this output is one string; the
+previous round's script gives eight, and nothing in it said which ordering was the right one.
+
 **The round trip, because a committed output nobody re-runs is a sentence with extra steps.** The
 block above was produced by pulling the `python` block out of **this file's raw bytes** with `sed`,
 stripping its two fence lines, and running the result against this file and the spec; its output is
@@ -318,9 +513,12 @@ self-match and the prose-quoted marker — were made while writing this paragrap
 caught both.
 
 **What this derivation still cannot do**, said here because the sentence it replaces did not say it:
-it finds citations of three forms and places them by line number, so a fourth form nobody has thought
-of is invisible to it exactly as the third was, and a token that happens to appear in a list under an
-*unrelated* file counts as placed. It is a better instrument than the sentence, not a complete one.
+it finds citations of three forms, so a fourth form nobody has thought of is invisible to it exactly
+as the third was -- and the third form's *antecedent* had a shape nobody had thought of until this
+round, which is the same defect one level down. Only the explicit form states a file this can trust;
+for the other two, a token that happens to appear under an *unrelated* file in the same list still
+counts as placed, and `Setup.cpp:348-351` is what that looked like before the `Class::method`
+antecedent was added. It is a better instrument than the sentence, not a complete one.
 
 Two entries deserve a note because the shape that made `ClassClass.hpp:176-186` wrong is present and
 harmless in them. `classDirective :334-490` bounds a function running to `:495`, and
@@ -411,9 +609,15 @@ extensions — and `find ootest -type f -not -path '*/.svn/*' | sed 's/.*\.//' |
 -rn` shows what five would still have missed: alongside `testGroup` 409, `rex` 49, `cls` 9,
 `testUnit` 7 and `oodTestGroup` 2 it prints **`CLS` 1** — `ootest/framework/OOREXXUNIT.CLS`, the
 ooTest framework itself, which `--include='*.cls'` does **not** match because the glob is
-case-sensitive (measured: that include exits 1 on `ootest/framework/`, `--include='*.[cC][lL][sS]'`
-returns the file) — and `norex` 1, `other` 1, `test1` 2, `test2` 1, plus four extensionless files,
+case-sensitive — and `norex` 1, `other` 1, `test1` 2, `test2` 1, plus four extensionless files,
 several of which are the fixtures for the very search-order tests row `:153` is about.
+
+**That case-sensitivity pair is measured, and the pattern is half the measurement.** Over
+`ootest/framework/` for `#!/usr/bin/env rexx` — `OOREXXUNIT.CLS`'s own first line, the file being
+2289 lines — `--include='*.cls'` exits 1 and `--include='*.[cC][lL][sS]'` returns it. Under a
+pattern the sibling `.cls` files also match, both forms exit 0 and the pair demonstrates nothing.
+Until fix round 4 this paragraph gave the conclusion without the pattern, which is the defect the
+rest of the section is about, one level in.
 
 **A filter narrow enough to write down is narrow enough to be wrong.** So there is none: the searches
 run over every file under `ootest/` except `.svn` metadata, which is the widest form available, and
@@ -452,7 +656,7 @@ statement about a search, and the searches are named.**
 | `:132`, `:133`, `:134` | `::CONSTANT`, its parenthesised form, its forward-reference refusal | `base/directives/CONSTANT.testGroup` — bare-token `::constant` 76 and `ACTIVATE` 5, `test_expression_self` at `:457` for `:133`'s "with `self` bound to the class", and `:480`-`:482` pinning real constants as resolved before expression constants |
 | `:135` | `::ANNOTATE`'s six targets and `~annotation`/`~annotations` | `base/directives/ANNOTATE.testGroup` — bare-token `::annotate` 76, pattern `~annotations?\b` 70. The spec's own citation, now verified |
 | `:136` | install is three passes; a cycle is 98.911 | **all three, and upstream has a file written for nothing else.** The **cycle**: `base/directives/CLASS.testGroup`, pattern `98\.911`, 5. The direct pin is `base/class/Class.testGroup:962` `::method test_activate`, which creates a results directory (`:964`), calls `.context~package~loadPackage("class.testgroup.cls")` (`:966`) and asserts at `:968` that the package reported no failure and at `:970`-`:972` that all three of its classes' `activate` methods ran. **`base/class/class.testgroup.cls`** (70 lines, same directory) is that package, and every assertion in it is about this mechanism — see the row below for what it pins. Two incidental pins sit beside it: `base/directives/REQUIRES.testGroup:320` `test_activate` writes a requires file (`:324`) whose `::class test public` carries `::method activate class` doing `.local~activatetest = .test2`, with `::class test2 public` declared **after** it, and asserts at `:331` that `.local~activateTest` is that class object — pass 3 after pass 1, on one forward reference; and `base/directives/CONSTANT.testGroup:496` `test_expression_activate`, commented "expression constants are evaluated at class creation time / they should already be availabe to the class activate() method", runs the `::resource activate` at `:486`-`:494` whose `::method activate class` (`:489`) reads `::constant d (2 * 2)` (`:493`) and asserts `4` at `:499` — pass 2 before pass 3, with `:480`-`:482` pinning real constants before expression ones. Together these pin the structure `PackageClass::processInstall`'s three loops (`:1276`, `:1285`, `:1294`) implement |
-| `:137` | class-object initialization: `INIT`, then `INHERIT`, then `ACTIVATE` | **`ACTIVATE` is pinned hard, including an ordering no other row here mentions; `INIT`-before-`INHERIT` is what nothing found reaches.** `base/class/class.testgroup.cls`, loaded by `Class.testGroup:962`, declares `::class class1 subclass class3` (`:12`), `::class class2` (`:33`) and `::class class3` (`:49`), **each carrying both an `::method init class` and an `::method activate class`**, and its activate bodies assert four separate things with their own failure messages: (a) **every class object exists before any `activate` runs** — `.class1~isa(.class)`, `.class2~isa(.class)`, `.class3~isa(.class)` checked inside all three activates (`:25`-`:27`, `:43`-`:45`, `:59`-`:61`), which is pass 1 complete before pass 3 begins, asserted three times over and strictly stronger than `REQUIRES.testGroup:320`; (b) **`activate` order follows the dependency graph** — `class2` first as "the first class without a dependency" (`:32`), then `class3`, then `class1` which subclasses it, each direction named (`:20`-`:23`, `:38`-`:41`, `:54`-`:57`); (c) **an instance can be created and a method sent inside `activate`** — `instance = self~new` then `instance~foo`, commented "this should not give an error" (`:16`-`:18`); (d) **the package prolog runs after every `activate`** (`:5`-`:9`). **Ordering is the half no other row in this ledger names.** For `INIT`-before-`INHERIT`, the searches run: `/bin/grep -ariEl --exclude-dir=.svn '::method[[:space:]]+.?init[[:space:]]+class' ootest/` returns **29** files over the whole checkout, of which exactly **one** also matches `::method[[:space:]]+.?activate` — this same `.cls`. **And it does not carry the discriminator either: its three `::method init class` bodies are each a bare `nop` (`:14`, `:35`, `:51`), so the one file that declares both directives asserts nothing whatever about `init`.** and the `:137` pattern in the block below the table returns nothing, exit 1. So no test found asserts the spec's own discriminator, `self~hasMethod("MM")` answering 0 in `init` and 1 in `activate`. **An earlier draft of this row stated that intersection with a `grep` that had no `-E`, so under BRE it matched zero files and the row's `none` came out of an empty first term rather than an empty intersection — and it restricted the extensions to `*.testGroup`, which is what hid this file** |
+| `:137` | class-object initialization: `INIT`, then `INHERIT`, then `ACTIVATE` | **`ACTIVATE` is pinned hard, including an ordering no other row here mentions; `INIT`-before-`INHERIT` is what nothing found reaches.** `base/class/class.testgroup.cls`, loaded by `Class.testGroup:962`, declares `::class class1 subclass class3` (`:12`), `::class class2` (`:33`) and `::class class3` (`:49`), **each carrying both an `::method init class` and an `::method activate class`**, and its activate bodies assert four separate things with their own failure messages: (a) **every class object exists before any `activate` runs** — `.class1~isa(.class)`, `.class2~isa(.class)`, `.class3~isa(.class)` checked inside all three activates (`:25`-`:27`, `:43`-`:45`, `:59`-`:61`), which is pass 1 complete before pass 3 begins, asserted three times over and strictly stronger than `REQUIRES.testGroup:320`; (b) **`activate` order follows the dependency graph** — `class2` first as "the first class without a dependency" (`:32`), then `class3`, then `class1` which subclasses it, each direction named (`:20`-`:23`, `:38`-`:41`, `:54`-`:57`); (c) **an instance can be created and a method sent inside `activate`** — `instance = self~new` then `instance~foo`, commented "this should not give an error" (`:16`-`:18`); (d) **the package prolog runs after every `activate`** (`:5`-`:9`). **Ordering is the half no other row in this ledger names.** For `INIT`-before-`INHERIT`, the searches run: `/bin/grep -ariEl --exclude-dir=.svn '::method[[:space:]]+.?init[[:space:]]+class' ootest/` returns **29** files over the whole checkout, of which exactly **one** also matches `::method[[:space:]]+.?activate` — this same `.cls`. **And it does not carry the discriminator either: its three `::method init class` bodies are each a bare `nop` (`:14`, `:35`, `:51`), so the one file that declares both directives asserts nothing whatever about `init`.** And the `:137` pattern in the block below the table returns nothing, exit 1. So no test found asserts the spec's own discriminator, `self~hasMethod("MM")` answering 0 in `init` and 1 in `activate`. **An earlier draft of this row stated that intersection with a `grep` that had no `-E`, so under BRE it matched zero files and the row's `none` came out of an empty first term rather than an empty intersection — and it restricted the extensions to `*.testGroup`, which is what hid this file** |
 | `:138` | floating `::METHOD`/`::ATTRIBUTE`/`::CONSTANT` reach `.METHODS` | `base/directives/METHOD.testGroup` and `base/class/Class.testGroup` — pattern `\.methods\b`, 3 and 4 |
 | `:139` | the complete method search order, including `UNKNOWN` and NOMETHOD | **nothing found for the `UNKNOWN` step itself, and this is the row the spec exists for.** `/bin/grep -ariEl --exclude-dir=.svn '::method[[:space:]]+.?unknown' ootest/` returns exactly three files: `base/class/Object.testGroup`, `base/security.manager/SecurityManager.testGroup` and `base/rexxutil/platform/windows/SysUnicode.testGroup`. The only object-model one is `Object.testGroup:1487` and `:1493` (`unknown` and `unknown class`), and reading both, they are **scaffolding** — their whole body is `if name == "UNINIT" then .UninitTracker~recordUninit(self)`, so `UNKNOWN` is the instrument for UNINIT tests, not their subject. NOMETHOD is asserted in `base/keyword/SIGNAL.testGroup` (3), `base/keyword/RAISE.testGroup` (2) and `base/bif/CONDITION.testGroup` (2), bare-token pattern — as a *condition*, not as dispatch's last step |
 | `:140` | changing the search order — `~m:scope`, `~m:super` | **pinned, but through the alternative send paths rather than the `:super` syntax.** `base/class/Object.testGroup:1159`-`:1253` and `base/class/Message.testGroup:700`-`:912` are families of `*_override_from_nonself*` tests asserting `93.957` — which is `validateScopeOverride` (`ObjectClass.cpp:1950`), this row's own implementation citation — reached through `~send`/`~sendWith`/`~start`/`~startWith`. `base/class/Message.testGroup:372` is `test_super_override`. The **`~m:super` source syntax** is what is thin: `:super` occurs once each in `base/class/Class.testGroup`, `base/class/Object.testGroup` and `base/keyword/ADDRESS.testGroup`, and nowhere else |
@@ -481,7 +685,8 @@ A `|` inside a GFM table cell has to be written `\|`, which renders correctly an
 `/bin/grep -E` reads `\|` as a *literal* pipe, so a pattern copied out of a table cell in the raw
 file matches nothing and exits 1 — reading as upstream drift when nothing moved, which is the one
 misreading this document exists to prevent. So the patterns that need a `|` live here instead, where
-they paste as written. All are run over `ootest/` with the extension set above, at r13178.
+they paste as written. All are run over `ootest/` at r13178 in the unfiltered form above — the whole
+checkout, `--exclude-dir=.svn`, no extension set — and all nine were re-run in it.
 
 ```
 :124  (supplier|\.set|\.bag|\.relation)[^;]*~hasMethod|hasMethod\("(ALLITEMS|ALLINDEXES|SUPPLIER)"
