@@ -240,6 +240,21 @@ with the value or error number `build/bin/rexx` gave for each, read by
 interpreter. Its own header records how it was generated and what the columns
 mean.
 
+### `gate-tables/` -- the Phase 5 gate tables' probe programs
+
+`.rex` files, and **not** a `rexx-diff` corpus in the sense the top of this
+file means. Each one is the probe for one row of a Phase 5 gate table, and
+most of them diverge from the oracle today, which is what their row records.
+`gate-tables/README.md` says which table reads which subdirectory and what a
+missing or unnamed probe does.
+
+The determinism rule above still binds them, because `rexx-diff`'s walk is
+recursive and its self-test (`--cpp X --rs X`) reads every `.rex` under
+`corpus/`: measured with the subtree in place, 204 programs, 0 divergences,
+exit 0. What does not bind them is agreement between the two interpreters --
+`rexx-diff --cpp <c++> --rs <rust>` reports their divergences, and each of
+those is a gate-table row rather than a corpus defect.
+
 ### `errors/` — Phase 3, the parse-error gate
 
 Not a `rexx-diff` corpus either.

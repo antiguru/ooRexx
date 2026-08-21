@@ -1,0 +1,2 @@
+say 'main'
+::options prolog
