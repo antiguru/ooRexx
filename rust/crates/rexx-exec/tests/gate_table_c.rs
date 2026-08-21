@@ -321,9 +321,11 @@ const CONCEPTS: &[Concept] = &[
                     split into its own rows",
         control: "make `::CLASS ... METACLASS` a no-op, so the declared class is an \
                   instance of `.Class` like a plain one -- Task 9. The section's abstract \
-                  kind has no control here: this probe asks each class its `~class~id`, \
-                  which an abstract class answers exactly as a plain one does, and \
-                  abstract-class enforcement is `abscla`'s row and 5b's",
+                  kind has no control here and is not owed one: this probe asks each class \
+                  its `~class~id`, which an abstract class answers exactly as a plain one \
+                  does, and abstract enforcement is `abscla`'s row, at 5b because the check \
+                  lives inside `~new` -- a discriminator added here would duplicate that row \
+                  rather than cover a gap",
         oracle_lines: 4,
     },
     Concept {
