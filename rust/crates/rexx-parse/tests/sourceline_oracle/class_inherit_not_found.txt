@@ -1,0 +1,7 @@
+count 6
+/* An INHERIT target no name resolves to: 98.909, refused before the
+   program's first clause, and with no traceback frame above the directive's
+   own echo -- the oracle resolves each target before it sends INHERIT. */
+say 'main ran'
+
+::class d inherit c

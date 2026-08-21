@@ -14,7 +14,7 @@
 //! directly, cross-checked against its *effect* on the shipped `.Supplier`,
 //! `.Set` and `.Bag` classes, which a running script can and does measure.
 
-use rexx_classes::{ClassGraph, ClassKind, MethodId};
+use rexx_classes::{ClassGraph, ClassKind, InheritRefusal, MethodId};
 use rexx_core::ObjRef;
 
 /// Every test builds its own tiny graph, so a plain counter naming test
@@ -53,8 +53,8 @@ fn first_listed_inherit_mixin_wins_a_name_conflict() {
     g.define(mixin2, "METHODA", MethodId(2));
 
     g.define_class(combo, Some(object), ClassKind::Regular, object);
-    g.inherit(combo, mixin1);
-    g.inherit(combo, mixin2);
+    g.inherit(combo, mixin1).expect("a legal inherit");
+    g.inherit(combo, mixin2).expect("a legal inherit");
 
     assert_eq!(
         g.lookup_at(g.instance_behaviour_handle(combo), "METHODA"),
@@ -81,8 +81,8 @@ fn reversing_the_inherit_list_reverses_the_winner() {
     g.define(mixin2, "METHODA", MethodId(2));
 
     g.define_class(combo, Some(object), ClassKind::Regular, object);
-    g.inherit(combo, mixin2);
-    g.inherit(combo, mixin1);
+    g.inherit(combo, mixin2).expect("a legal inherit");
+    g.inherit(combo, mixin1).expect("a legal inherit");
 
     assert_eq!(
         g.lookup_at(g.instance_behaviour_handle(combo), "METHODA"),
@@ -110,7 +110,7 @@ fn an_explicit_superclass_outranks_every_inherited_mixin() {
     g.define(mixin1, "METHODA", MethodId(2));
 
     g.define_class(combo, Some(base), ClassKind::Regular, object);
-    g.inherit(combo, mixin1);
+    g.inherit(combo, mixin1).expect("a legal inherit");
 
     assert_eq!(
         g.lookup_at(g.instance_behaviour_handle(combo), "METHODA"),
@@ -145,16 +145,16 @@ fn a_diamond_still_prefers_the_first_listed_mixin_and_keeps_the_common_ancestors
     g.define(mixin_base, "METHODY", MethodId(2)); // BASE_Y
 
     g.define_class(mixin_a, Some(object), ClassKind::Mixin, object);
-    g.inherit(mixin_a, mixin_base);
+    g.inherit(mixin_a, mixin_base).expect("a legal inherit");
     g.define(mixin_a, "METHODX", MethodId(3)); // A_X
 
     g.define_class(mixin_b, Some(object), ClassKind::Mixin, object);
-    g.inherit(mixin_b, mixin_base);
+    g.inherit(mixin_b, mixin_base).expect("a legal inherit");
     g.define(mixin_b, "METHODX", MethodId(4)); // B_X
 
     g.define_class(combo, Some(object), ClassKind::Regular, object);
-    g.inherit(combo, mixin_a);
-    g.inherit(combo, mixin_b);
+    g.inherit(combo, mixin_a).expect("a legal inherit");
+    g.inherit(combo, mixin_b).expect("a legal inherit");
 
     let handle = g.instance_behaviour_handle(combo);
     assert_eq!(
@@ -255,7 +255,7 @@ fn inherit_reaches_an_instance_created_before_it() {
     g.define(mixin1, "BAR", MethodId(1));
 
     let old_handle = g.instance_behaviour_handle(widget); // "old = .Widget~new"
-    g.inherit(widget, mixin1);
+    g.inherit(widget, mixin1).expect("a legal inherit");
 
     assert!(
         g.has_method_at(old_handle, "BAR"),
@@ -287,7 +287,7 @@ fn inherit_on_a_superclass_reaches_an_existing_subclass_instance_too() {
     let old_base = g.instance_behaviour_handle(base);
     let old_sub = g.instance_behaviour_handle(sub);
 
-    g.inherit(base, mixin1);
+    g.inherit(base, mixin1).expect("a legal inherit");
 
     assert!(
         g.has_method_at(old_base, "BAZ"),
@@ -327,7 +327,7 @@ fn inherit_donates_a_mixins_class_side_methods_to_the_class_object_not_its_insta
     g.class_define(greeter_mixin, "GREET", MethodId(1));
 
     g.define_class(my_class, Some(object), ClassKind::Regular, object);
-    g.inherit(my_class, greeter_mixin);
+    g.inherit(my_class, greeter_mixin).expect("a legal inherit");
 
     assert!(
         g.class_has_method(my_class, "GREET"),
@@ -446,10 +446,14 @@ fn two_classes_with_identical_ancestors_can_still_answer_to_different_method_set
     // same two ~inherit calls in the same order CoreClasses.orx does.
     g.define_class(set_like, Some(object), ClassKind::Regular, object);
     g.define_class(bag_like, Some(object), ClassKind::Regular, object);
-    g.inherit(set_like, map_collection);
-    g.inherit(set_like, set_collection);
-    g.inherit(bag_like, map_collection);
-    g.inherit(bag_like, set_collection);
+    g.inherit(set_like, map_collection)
+        .expect("a legal inherit");
+    g.inherit(set_like, set_collection)
+        .expect("a legal inherit");
+    g.inherit(bag_like, map_collection)
+        .expect("a legal inherit");
+    g.inherit(bag_like, set_collection)
+        .expect("a legal inherit");
 
     g.inherit_instance_methods(set_like, set_mixin);
     g.inherit_instance_methods(bag_like, bag_mixin);
@@ -495,7 +499,6 @@ fn two_classes_with_identical_ancestors_can_still_answer_to_different_method_set
 /// cascade would merge `plain`'s methods into `combo` as if the
 /// relationship were legal.
 #[test]
-#[should_panic(expected = "is not a MIXINCLASS")]
 fn inherit_refuses_a_non_mixin_class() {
     let object = id(1);
     let plain = id(2);
@@ -506,7 +509,16 @@ fn inherit_refuses_a_non_mixin_class() {
     g.define_class(plain, Some(object), ClassKind::Regular, object);
     g.define_class(combo, Some(object), ClassKind::Regular, object);
 
-    g.inherit(combo, plain);
+    assert_eq!(
+        g.inherit(combo, plain),
+        Err(InheritRefusal::NotAMixin),
+        "an ordinary class is not an INHERIT target"
+    );
+    assert_eq!(
+        g.ancestors(combo),
+        [object],
+        "a refused inherit adds no superclass edge"
+    );
 }
 
 /// Guard: `inherit` refuses a `mixin` that is already an ancestor of
@@ -518,7 +530,6 @@ fn inherit_refuses_a_non_mixin_class() {
 /// consequence, but the graph itself would be wrong, and a later rebuild
 /// of `mixin` would redundantly rebuild `class` twice over.
 #[test]
-#[should_panic(expected = "re-inheriting it is a recursive inherit")]
 fn inherit_refuses_re_inheriting_the_same_mixin() {
     let object = id(1);
     let mixin1 = id(2);
@@ -529,8 +540,18 @@ fn inherit_refuses_re_inheriting_the_same_mixin() {
     g.define_class(mixin1, Some(object), ClassKind::Mixin, object);
     g.define_class(combo, Some(object), ClassKind::Regular, object);
 
-    g.inherit(combo, mixin1);
-    g.inherit(combo, mixin1); // already an ancestor
+    g.inherit(combo, mixin1)
+        .expect("the first inherit is legal");
+    assert_eq!(
+        g.inherit(combo, mixin1),
+        Err(InheritRefusal::Recursive),
+        "the mixin is already an ancestor"
+    );
+    assert_eq!(
+        g.ancestors(combo),
+        [object, mixin1],
+        "the refused second inherit added no duplicate edge"
+    );
 }
 
 /// Guard: `inherit` refuses making `class` an ancestor of a `mixin` that
@@ -544,7 +565,6 @@ fn inherit_refuses_re_inheriting_the_same_mixin() {
 /// `update_sub_classes` (`class_graph.rs`) alternates `a -> b -> a`
 /// forever -- a stack overflow where the oracle raises a clean `98.943`.
 #[test]
-#[should_panic(expected = "would make each an ancestor of the other")]
 fn inherit_refuses_a_cycle_through_a_mixins_own_mixinclass_target() {
     let a = id(1);
     let b = id(2);
@@ -553,7 +573,117 @@ fn inherit_refuses_a_cycle_through_a_mixins_own_mixinclass_target() {
     g.define_class(a, None, ClassKind::Regular, a);
     g.define_class(b, Some(a), ClassKind::Mixin, a); // B mixinclass A
 
-    g.inherit(a, b); // .A~inherit(.B) -- would cycle without the guard
+    // .A~inherit(.B) -- would cycle without the guard.
+    assert_eq!(g.inherit(a, b), Err(InheritRefusal::Recursive));
+    assert!(
+        g.ancestors(a).is_empty(),
+        "the root class gained no superclass from the refused inherit"
+    );
+}
+
+/// The `UNINIT` propagation flags, through each constructor that builds an
+/// inheritance edge: `subclass` (`ClassClass.cpp:1634`), `mixinClass`
+/// (`:1525`) and `inherit` (`:1364`).
+///
+/// **Read from the C++ rather than probed, and unlike
+/// `inheritInstanceMethods` above the reason is not that the mechanism is
+/// unreachable.** A class-side `::METHOD uninit` fires observably on the
+/// oracle -- measured, `::CLASS K` carrying one that says `self~id` prints
+/// `uninit on K` at rc 0 -- but what fires it is the collector, which this
+/// crate does not have: the flags are carried here and the firing is a later
+/// task's, so nothing a program can run reads them yet. That makes this test
+/// the only thing that can see them.
+///
+/// The negative rows are what stop a build that sets the flag on every class
+/// from passing: a class whose ancestry carries no `UNINIT` answers `false`
+/// through each of those constructors as well.
+#[test]
+fn uninit_propagates_through_all_three_constructors() {
+    let object = id(1);
+    let parent = id(2);
+    let child = id(3);
+    let grandchild = id(4);
+    let mixin_of_parent = id(5);
+    let plain = id(6);
+    let plain_child = id(7);
+    let mixin = id(8);
+    let inheritor = id(9);
+    let plain_mixin = id(10);
+    let plain_inheritor = id(11);
+
+    let mut g = ClassGraph::new();
+    g.define_class(object, None, ClassKind::Regular, object);
+
+    // `parent` defines UNINIT itself, which is `defineMethod`'s own flag
+    // (`:852`-`:857`) and not something a caller sets.
+    g.define_class(parent, Some(object), ClassKind::Regular, object);
+    g.define(parent, "UNINIT", MethodId(1));
+    assert!(g.has_uninit(parent), "the class that defines UNINIT");
+    assert!(!g.parent_has_uninit(parent), "and nothing above it does");
+
+    // `subclass`.
+    g.define_class(child, Some(parent), ClassKind::Regular, object);
+    assert!(!g.has_uninit(child), "the subclass defines none of its own");
+    assert!(g.parent_has_uninit(child), "subclass propagation");
+
+    // ...and transitively, which is what the oracle's own check gets by
+    // asking `hasUninitDefined() || parentHasUninitDefined()` rather than
+    // walking the chain.
+    g.define_class(grandchild, Some(child), ClassKind::Regular, object);
+    assert!(
+        g.parent_has_uninit(grandchild),
+        "through a second generation"
+    );
+
+    // `mixinClass`.
+    g.define_class(mixin_of_parent, Some(parent), ClassKind::Mixin, object);
+    assert!(
+        g.parent_has_uninit(mixin_of_parent),
+        "mixinClass propagation"
+    );
+
+    // `inherit`.
+    g.define_class(mixin, Some(object), ClassKind::Mixin, object);
+    g.define(mixin, "UNINIT", MethodId(2));
+    g.define_class(inheritor, Some(object), ClassKind::Regular, object);
+    assert!(
+        !g.parent_has_uninit(inheritor),
+        "nothing is propagated before the inherit"
+    );
+    g.inherit(inheritor, mixin).expect("a legal inherit");
+    assert!(g.parent_has_uninit(inheritor), "inherit propagation");
+
+    // The negative row for each constructor: an ancestry with no UNINIT
+    // anywhere in it leaves the flag clear.
+    g.define_class(plain, Some(object), ClassKind::Regular, object);
+    g.define_class(plain_child, Some(plain), ClassKind::Regular, object);
+    g.define_class(plain_mixin, Some(object), ClassKind::Mixin, object);
+    g.define_class(plain_inheritor, Some(object), ClassKind::Regular, object);
+    g.inherit(plain_inheritor, plain_mixin)
+        .expect("a legal inherit");
+    assert!(!g.parent_has_uninit(plain_child), "subclass, no UNINIT");
+    assert!(!g.parent_has_uninit(plain_mixin), "mixinClass, no UNINIT");
+    assert!(!g.parent_has_uninit(plain_inheritor), "inherit, no UNINIT");
+}
+
+/// A refused `inherit` propagates nothing -- the oracle's own
+/// `setParentHasUninitDefined` is the last statement of `RexxClass::inherit`
+/// (`:1364`-`:1367`) and every `reportException` above it leaves the
+/// function first.
+#[test]
+fn a_refused_inherit_propagates_no_uninit_flag() {
+    let object = id(1);
+    let plain = id(2);
+    let combo = id(3);
+
+    let mut g = ClassGraph::new();
+    g.define_class(object, None, ClassKind::Regular, object);
+    g.define_class(plain, Some(object), ClassKind::Regular, object);
+    g.define(plain, "UNINIT", MethodId(1));
+    g.define_class(combo, Some(object), ClassKind::Regular, object);
+
+    assert_eq!(g.inherit(combo, plain), Err(InheritRefusal::NotAMixin));
+    assert!(!g.parent_has_uninit(combo));
 }
 
 // ---------------------------------------------------------------------
@@ -612,14 +742,14 @@ fn a_scope_rooted_lookup_can_disagree_with_the_ordinary_lookup() {
     g.define_class(mixin_base, Some(object), ClassKind::Mixin, object);
     g.define(mixin_base, "METHODX", MethodId(1));
     g.define_class(mixin_a, Some(object), ClassKind::Mixin, object);
-    g.inherit(mixin_a, mixin_base);
+    g.inherit(mixin_a, mixin_base).expect("a legal inherit");
     g.define(mixin_a, "METHODX", MethodId(2));
     g.define_class(mixin_b, Some(object), ClassKind::Mixin, object);
-    g.inherit(mixin_b, mixin_base);
+    g.inherit(mixin_b, mixin_base).expect("a legal inherit");
     g.define(mixin_b, "METHODX", MethodId(3));
     g.define_class(combo, Some(object), ClassKind::Regular, object);
-    g.inherit(combo, mixin_a);
-    g.inherit(combo, mixin_b);
+    g.inherit(combo, mixin_a).expect("a legal inherit");
+    g.inherit(combo, mixin_b).expect("a legal inherit");
 
     let handle = g.instance_behaviour_handle(combo);
     assert_eq!(
@@ -658,7 +788,7 @@ fn every_cascade_against_a_handle_bumps_its_version_by_exactly_one() {
     let sub_handle = g.instance_behaviour_handle(sub);
     let v0 = g.version_at(sub_handle);
 
-    g.inherit(base, mixin1); // cascades to sub in place
+    g.inherit(base, mixin1).expect("a legal inherit"); // cascades to sub in place
     assert_eq!(g.version_at(sub_handle), v0 + 1);
 
     let orphaned = g.instance_behaviour_handle(base);

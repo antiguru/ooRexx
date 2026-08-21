@@ -7523,7 +7523,7 @@ fn the_invocation_prefixes_are_gated_on_more_than_the_trace_letter() {
 /// **This is the half that stops "any directive is a gap".** Each source
 /// below was measured on the oracle in a clean directory: rc 0, stdout
 /// `main ran`, stderr empty. A version of `directive_gap` that refused on
-/// presence passes every refusal test in this file and fails all seven of
+/// presence passes every refusal test in this file and fails every one of
 /// these.
 #[test]
 fn every_directive_this_crate_can_install_leaves_the_program_alone() {
@@ -7536,6 +7536,14 @@ fn every_directive_this_crate_can_install_leaves_the_program_alone() {
         (
             "::CLASS with a ::ATTRIBUTE",
             b"say 'main ran'\n::class foo\n::attribute baz\n",
+        ),
+        (
+            "::CLASS MIXINCLASS",
+            b"say 'main ran'\n::class mx mixinclass object\n",
+        ),
+        (
+            "::CLASS INHERIT",
+            b"say 'main ran'\n::class mx mixinclass object\n::class foo inherit mx\n",
         ),
         (
             "a loose ::METHOD with no ::CLASS",
@@ -7571,7 +7579,7 @@ fn every_directive_this_crate_can_install_leaves_the_program_alone() {
 /// what `corpus.rs` and `keyword-exempt.txt` read to attribute a failure.
 /// The **empty stdout** is what says the refusal happened at install
 /// rather than at the call: every source below has `say 'main ran'` as
-/// its first clause, and the oracle prints nothing for the five it also
+/// its first clause, and the oracle prints nothing for the ones it also
 /// refuses.
 ///
 /// The `::REQUIRES` row is not the over-refusal case:
@@ -7583,20 +7591,20 @@ fn every_directive_this_crate_can_install_leaves_the_program_alone() {
 fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
     let cases: &[(&[u8], &str)] = &[
         (
-            b"say 'main ran'\n::class foo mixinclass zzznotaclass\n",
-            "::CLASS MIXINCLASS is not implemented (Phase 5)",
-        ),
-        (
             b"say 'main ran'\n::class foo metaclass zzznotaclass\n",
             "::CLASS METACLASS is not implemented (Phase 5)",
         ),
         (
-            b"say 'main ran'\n::class bar inherit zzznotaclass\n",
-            "::CLASS INHERIT is not implemented (Phase 5)",
+            b"say 'main ran'\n::class foo subclass ns:other\n",
+            "::CLASS naming a namespace is not implemented (Phase 5)",
         ),
         (
-            b"say 'main ran'\n::class foo subclass ns:other\n",
-            "::CLASS SUBCLASS naming a namespace is not implemented (Phase 5)",
+            b"say 'main ran'\n::class foo mixinclass ns:other\n",
+            "::CLASS naming a namespace is not implemented (Phase 5)",
+        ),
+        (
+            b"say 'main ran'\n::class foo inherit ns:other\n",
+            "::CLASS naming a namespace is not implemented (Phase 5)",
         ),
         (
             b"say 'main ran'\n::requires 'helper.rex'\n",
@@ -7735,11 +7743,11 @@ fn a_gap_the_oracle_diagnoses_before_a_class_refuses_ahead_of_the_class_error() 
 /// **A `::CLASS` keyword gap is raised inside the class pass, and that is
 /// asserted here rather than left incidental.**
 ///
-/// `MIXINCLASS`, `METACLASS`, `INHERIT` and `SUBCLASS ns:` need no stage of
-/// their own: `Interp::install_class_at` consults [`directive_gap`] itself, so
-/// the refusal is raised while the classes are being created -- which is where
-/// the oracle diagnoses them too. Nothing asserted that until this test, so a
-/// change to `install_class_at` could have moved them with nothing going red.
+/// The `::CLASS` forms [`directive_gap`] still names need no stage of their
+/// own: `Interp::install_class_at` consults it itself, so the refusal is
+/// raised while the classes are being created -- which is where the oracle
+/// diagnoses them too. Nothing asserted that until this test, so a change to
+/// `install_class_at` could have moved them with nothing going red.
 ///
 /// Each form appears in two programs and they pin opposite sides:
 ///
@@ -7758,20 +7766,20 @@ fn a_class_keyword_gap_is_raised_inside_the_class_pass() {
     let cycle = "::class a subclass b\n::class b subclass a\n";
     let cases: &[(&str, &str)] = &[
         (
-            "::class q mixinclass zzzm\n",
-            "::CLASS MIXINCLASS is not implemented (Phase 5)",
-        ),
-        (
             "::class q metaclass zzzm\n",
             "::CLASS METACLASS is not implemented (Phase 5)",
         ),
         (
-            "::class q inherit zzzi\n",
-            "::CLASS INHERIT is not implemented (Phase 5)",
+            "::class q subclass ns:other\n",
+            "::CLASS naming a namespace is not implemented (Phase 5)",
         ),
         (
-            "::class q subclass ns:other\n",
-            "::CLASS SUBCLASS naming a namespace is not implemented (Phase 5)",
+            "::class q mixinclass ns:other\n",
+            "::CLASS naming a namespace is not implemented (Phase 5)",
+        ),
+        (
+            "::class q inherit ns:other\n",
+            "::CLASS naming a namespace is not implemented (Phase 5)",
         ),
     ];
     for (gap, message) in cases {

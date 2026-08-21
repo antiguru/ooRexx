@@ -36,12 +36,12 @@
 //! evaluates or steps through one needs it equally and none of them is a
 //! better owner than the crate root.
 
-use rexx_classes::{ClassKind, MethodId};
+use rexx_classes::{ClassKind, InheritRefusal, MethodId};
 use rexx_core::{Body, Heap, NameMap, ObjRef, RootSet, SlotFrame, SlotRef};
 use rexx_parse::{
-    Access, AnnotationTarget, AttributeDirective, AttributeStyle, ClassDirective, CodeBody,
-    ConstantValue, Directive, DirectiveKind, Expr, ExprKind, InstructionKind, MethodDirective,
-    Operator, Program, SymbolId, SymbolTable, compound_parts, parse_program,
+    Access, AnnotationTarget, AttributeDirective, AttributeStyle, ClassDirective, ClassRef,
+    CodeBody, ConstantValue, Directive, DirectiveKind, Expr, ExprKind, InstructionKind,
+    MethodDirective, Operator, Program, SymbolId, SymbolTable, compound_parts, parse_program,
 };
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
@@ -1206,6 +1206,31 @@ fn owned_message(name: &str, owner: Option<&'static str>) -> String {
     }
 }
 
+/// Whether any class reference on this `::CLASS` is namespace-qualified.
+///
+/// Every reference the directive can carry is asked, `METACLASS`'s included:
+/// the qualification is what makes a target unreachable, and which keyword
+/// wrote it down does not change that. [`class_references`] is the one place
+/// that says which references a `::CLASS` has.
+fn class_names_a_namespace(class: &ClassDirective) -> bool {
+    class_references(class).any(|target| target.namespace.is_some())
+}
+
+/// Every class this `::CLASS` names: its `SUBCLASS`/`MIXINCLASS` target (one
+/// slot, `mixin` telling the two apart), its `METACLASS`, and each entry of
+/// its `INHERIT` list.
+///
+/// The set is the oracle's own, from `ClassDirective::addDependencies`
+/// (`interpreter/instructions/ClassDirective.cpp:327`-`:344`), which asks
+/// `checkDependency` about exactly these three.
+fn class_references(class: &ClassDirective) -> impl Iterator<Item = &ClassRef> {
+    class
+        .subclass
+        .iter()
+        .chain(class.metaclass.iter())
+        .chain(class.inherit.iter())
+}
+
 /// The gap a `::` directive declares at install time, or `None` for one this
 /// crate can install.
 ///
@@ -1255,32 +1280,23 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
         // and `::options trace labels` makes every `::ROUTINE` in the file
         // emit its own `>I>`/`<I<` pair.
         DirectiveKind::Options(_) => gap("::OPTIONS", "Phase 5"),
-        // **Three keywords and three messages, because the three are at
-        // different stages.** `SUBCLASS` installs (`class_install_order`
-        // orders the file's own classes by it and `Interp::install_class_at`
-        // resolves the target); `MIXINCLASS` fills the same field with
-        // `mixin` set and is a different construct -- `setMixinClass` makes
-        // the class a mixin as well as setting the superclass -- and
-        // `INHERIT` and `METACLASS` are their own. One message covering all
-        // of them would name a construct this crate installs.
-        DirectiveKind::Class(class) if class.mixin => gap("::CLASS MIXINCLASS", "Phase 5"),
-        // `SUBCLASS ns:name`. The namespace is a package this crate does not
-        // load, so the target names nothing here whatever it names on the
-        // oracle -- unlike a bare name, which `Interp::install_class_at`
-        // resolves against the file's own classes and then the registry.
-        DirectiveKind::Class(class)
-            if class
-                .subclass
-                .as_ref()
-                .is_some_and(|target| target.namespace.is_some()) =>
-        {
-            gap("::CLASS SUBCLASS naming a namespace", "Phase 5")
+        // **`ns:name` on any of the keywords that take a class reference.**
+        // The namespace is a package this crate does not load, so the target
+        // names nothing here whatever it names on the oracle -- unlike a bare
+        // name, which `Interp::install_class_at` resolves against the file's
+        // own classes and then the registry. Measured, both `::CLASS M
+        // MIXINCLASS ns:Object` and `::CLASS K INHERIT ns:M`: the oracle is
+        // 98.987 `Namespace "NS" not found in package "<path>"` at rc 158,
+        // so the target is unreachable there too and the divergence is the
+        // report rather than the outcome.
+        DirectiveKind::Class(class) if class_names_a_namespace(class) => {
+            gap("::CLASS naming a namespace", "Phase 5")
         }
+        // Its own message, because `SUBCLASS`, `MIXINCLASS` and `INHERIT`
+        // install: one message covering all of them would name a construct
+        // this crate installs.
         DirectiveKind::Class(class) if class.metaclass.is_some() => {
             gap("::CLASS METACLASS", "Phase 5")
-        }
-        DirectiveKind::Class(class) if !class.inherit.is_empty() => {
-            gap("::CLASS INHERIT", "Phase 5")
         }
         // Resolves its target against the accumulated package: measured,
         // `::annotate routine nosuchrtn` is 99.945 rc 157. `::ANNOTATE
@@ -1392,8 +1408,24 @@ fn staged_gap(program: &Program, stage: fn(&DirectiveKind) -> bool) -> Option<Lo
         .find_map(|directive| directive_gap(&directive.kind))
 }
 
-/// The order a file's `::CLASS` directives install in: each class after the
-/// one its `SUBCLASS` names, when that target is declared in the same file.
+/// The directives this one must be installed after: every class it names
+/// that this file also declares, unqualified.
+///
+/// `ClassDirective::checkDependency`
+/// (`interpreter/instructions/ClassDirective.cpp:294`-`:310`) skips a
+/// qualified reference, because a `ns:name` target comes out of a package
+/// the sort has no say over; [`class_references`] is what it is asked about.
+fn class_dependencies<'a>(
+    class: &'a ClassDirective,
+    declared: &'a HashMap<Box<[u8]>, usize>,
+) -> impl Iterator<Item = usize> + 'a {
+    class_references(class)
+        .filter(|target| target.namespace.is_none())
+        .filter_map(|target| declared.get(target.name.as_ref()).copied())
+}
+
+/// The order a file's `::CLASS` directives install in: each class after every
+/// class it names, when that target is declared in the same file.
 ///
 /// **Not source order, and the oracle's is not either.** Measured, rc 0:
 /// `::class c subclass b` / `::class b subclass a` / `::class a` runs a class
@@ -1423,8 +1455,8 @@ fn staged_gap(program: &Program, stage: fn(&DirectiveKind) -> bool) -> Option<Lo
 /// **`Err` is a cycle**, carrying the directive to blame: the root of the walk
 /// that closed the loop, which is what the oracle echoes. Measured, rc 158
 /// with stdout empty and the **first** of the directives echoed, on `::class a
-/// subclass b` with `::class b subclass a`, and on `::class a subclass a`
-/// alone.
+/// subclass b` with `::class b subclass a`, on `::class a subclass a`
+/// alone, and on `::CLASS K INHERIT K`.
 ///
 /// Depth-first over source order rather than repeated sweeps, so that the
 /// walk that finds a cycle still holds the root that started it.
@@ -1456,30 +1488,30 @@ fn class_install_order(
                 stack.pop();
                 continue;
             };
-            // The class this one names, when the file declares it. A target
-            // the file does not declare is the registry's and is nobody's
+            // The classes this one names that the file declares. A target the
+            // file does not declare is the registry's and is nobody's
             // predecessor here.
-            let target = class
-                .subclass
-                .as_ref()
-                .and_then(|target| declared.get(target.name.as_ref()).copied());
-            match target {
-                // Already on this walk without having finished, so every
-                // class from it up to here is waiting on it. A class naming
-                // itself reaches this on its second visit, which is the
-                // one-entry case of the same thing.
-                Some(target) if matches!(state.get(&target), Some(Visit::OnStack)) => {
-                    return Err(root);
+            let mut waiting = false;
+            for target in class_dependencies(class, declared) {
+                match state.get(&target) {
+                    // Already on this walk without having finished, so every
+                    // class from it up to here is waiting on it. A class
+                    // naming itself reaches this on its second visit, which
+                    // is the one-entry case of the same thing.
+                    Some(Visit::OnStack) => return Err(root),
+                    Some(Visit::Done) => {}
+                    None => {
+                        stack.push(target);
+                        waiting = true;
+                    }
                 }
-                Some(target) if !matches!(state.get(&target), Some(Visit::Done)) => {
-                    state.insert(index, Visit::OnStack);
-                    stack.push(target);
-                }
-                _ => {
-                    state.insert(index, Visit::Done);
-                    order.push(index);
-                    stack.pop();
-                }
+            }
+            if waiting {
+                state.insert(index, Visit::OnStack);
+            } else {
+                state.insert(index, Visit::Done);
+                order.push(index);
+                stack.pop();
             }
         }
     }
@@ -3503,13 +3535,21 @@ impl Interp {
     /// class table under the uppercased one.
     ///
     /// **`superclass` is the caller's, and `metaclass` is not.** A `::CLASS`
-    /// naming a `METACLASS`, a `MIXINCLASS` or an `INHERIT` is still a
-    /// `directive_gap` above and never reaches here, so the metaclass is
-    /// always the default `RexxClass::subclass` gives it
-    /// (`ClassClass.cpp:1562`, and `Setup.cpp`'s every `StartClassDefinition`
-    /// block passes the same pair). The superclass is `.Object` for the bare
-    /// form and whatever `SUBCLASS` named otherwise, which
-    /// [`Interp::install_class_at`] has already resolved.
+    /// naming a `METACLASS` is still a `directive_gap` above and never
+    /// reaches here, so the metaclass is always the default
+    /// `RexxClass::subclass` gives it (`ClassClass.cpp:1562`, and
+    /// `Setup.cpp`'s every `StartClassDefinition` block passes the same
+    /// pair). The superclass is `.Object` for the bare form and whatever
+    /// `SUBCLASS` or `MIXINCLASS` named otherwise, which
+    /// [`Interp::install_class_at`] has already resolved -- the two keywords
+    /// fill one slot, exactly as `RexxClass::mixinClass` builds its result by
+    /// calling `subclass` on the same target (`ClassClass.cpp:1514`-`:1519`).
+    ///
+    /// **`mixin` and not the slot's presence is what makes a class a
+    /// `Mixin`**, which is the whole reason `ClassDirective` carries the flag
+    /// beside the shared slot. The difference is observable: a `Mixin`'s
+    /// `~baseClass` is its target's, so `::CLASS M MIXINCLASS Object` answers
+    /// `The Object class` where a `Regular` class answers itself.
     ///
     /// `String::from_utf8_lossy` rather than a hard requirement: a class
     /// name is close to always ASCII in practice and `ClassRegistry`'s API
@@ -3532,12 +3572,14 @@ impl Interp {
         // does not go into `.environment`, and registering it there would let
         // `::class array` displace the environment's own `Array` for every
         // later lookup rather than only for this package's.
-        let id = self.classes().define_unregistered_class(
-            &name,
-            Some(superclass),
-            ClassKind::Regular,
-            metaclass,
-        );
+        let kind = if class.mixin {
+            ClassKind::Mixin
+        } else {
+            ClassKind::Regular
+        };
+        let id = self
+            .classes()
+            .define_unregistered_class(&name, Some(superclass), kind, metaclass);
         // The package's own installed-class table, which is what `.NAME`
         // resolution reads first -- see `environment.rs`'s
         // `record_package_class` for why the registry's flat table is not
@@ -3546,15 +3588,19 @@ impl Interp {
         id
     }
 
-    /// Installs the `::CLASS` at `index`, whose `SUBCLASS` chain
+    /// Installs the `::CLASS` at `index`, whose declared targets
     /// [`class_install_order`] has already put before it.
     ///
-    /// **A target the file does not declare is the registry's**, and one the
-    /// registry does not hold is 98.909 naming it -- measured, rc 158 with
-    /// stdout empty. A target the file *does* declare wins over a registry
-    /// entry of the same name, measured: `::class array` carrying a class
-    /// method, with `::class k2 subclass array` under it, answers that method
-    /// through `.k2`.
+    /// **The order inside the directive is the oracle's**
+    /// (`ClassDirective::install`,
+    /// `interpreter/instructions/ClassDirective.cpp:165`-`:229`): resolve the
+    /// `SUBCLASS`/`MIXINCLASS` target, create the class from it, then walk
+    /// the `INHERIT` list left to right sending `INHERIT` to the new class
+    /// for each entry. Each send appends to the end of the superclass list
+    /// (`superClasses->addLast`), and the cascade walks that list in reverse,
+    /// so the leftmost `INHERIT` is folded in last among the mixins and wins
+    /// a name conflict between them -- while the `SUBCLASS` target, first in
+    /// the list, is folded in last of all and outranks every mixin.
     ///
     /// **The directive's own gap is checked here** rather than left to the
     /// pass that walks source order, which runs after every class is
@@ -3576,28 +3622,101 @@ impl Interp {
         };
         let superclass = match &class.subclass {
             None => self.root_and_metaclass().0,
-            Some(target) => match declared.get(target.name.as_ref()) {
-                // Already installed, because `class_install_order` put it
-                // ahead of this one; a `None` here would be that ordering and
-                // this loop disagreeing, which is an internal inconsistency
-                // and gets this crate's loud refusal rather than a panic.
-                Some(other) => match installed.get(other) {
-                    Some(id) => *id,
-                    None => return Err(Loud::missing_body().into()),
-                },
-                None => {
-                    let name = String::from_utf8_lossy(&target.name).into_owned();
-                    match self.classes().lookup(&name) {
-                        Some(id) => id,
-                        None => {
-                            self.blame_directive(program, directive);
-                            return Err(Raised::class_not_found(&target.name).into());
-                        }
+            Some(target) => {
+                self.resolve_class_target(program, directive, target, declared, installed)?
+            }
+        };
+        let id = self.install_class(program_id, class, superclass);
+        for target in &class.inherit {
+            let mixin =
+                self.resolve_class_target(program, directive, target, declared, installed)?;
+            self.inherit_mixin(program, directive, id, mixin)?;
+        }
+        Ok(id)
+    }
+
+    /// One `SUBCLASS`, `MIXINCLASS` or `INHERIT` target, resolved against the
+    /// file's own `::CLASS` names and then the registry.
+    ///
+    /// **A target the file does not declare is the registry's**, and one the
+    /// registry does not hold is 98.909 naming it -- measured, rc 158 with
+    /// stdout empty. A target the file *does* declare wins over a registry
+    /// entry of the same name, measured: `::class array` carrying a class
+    /// method, with `::class k2 subclass array` under it, answers that method
+    /// through `.k2`.
+    fn resolve_class_target(
+        &mut self,
+        program: &Rc<Program>,
+        directive: &Directive,
+        target: &ClassRef,
+        declared: &HashMap<Box<[u8]>, usize>,
+        installed: &HashMap<usize, ObjRef>,
+    ) -> Result<ObjRef, Failure> {
+        match declared.get(target.name.as_ref()) {
+            // Already installed, because `class_install_order` put it ahead
+            // of this one; a `None` here would be that ordering and its
+            // caller's loop disagreeing, which is an internal inconsistency
+            // and gets this crate's loud refusal rather than a panic.
+            Some(other) => match installed.get(other) {
+                Some(id) => Ok(*id),
+                None => Err(Loud::missing_body().into()),
+            },
+            None => {
+                let name = String::from_utf8_lossy(&target.name).into_owned();
+                match self.classes().lookup(&name) {
+                    Some(id) => Ok(id),
+                    None => {
+                        self.blame_directive(program, directive);
+                        Err(Raised::class_not_found(&target.name).into())
                     }
                 }
-            },
+            }
+        }
+    }
+
+    /// One `INHERIT` entry, as the send the oracle makes for it.
+    ///
+    /// **The refusal carries a native method's own traceback frame**, because
+    /// the oracle reaches `RexxClass::inherit` by
+    /// `classObject->sendMessage(GlobalNames::INHERIT, mixin, result)`
+    /// (`ClassDirective.cpp:224`) rather than by calling it. Measured, the
+    /// report opens `       *-* Compiled method "INHERIT" with scope
+    /// "Class".` above the directive's own echo -- the frame every failing
+    /// native method contributes, from a send the install machinery makes.
+    ///
+    /// The scope is read from the registry rather than written down: it is
+    /// the id of the class whose instance dictionary holds `INHERIT`, which
+    /// is the metaclass every `::CLASS` is an instance of.
+    fn inherit_mixin(
+        &mut self,
+        program: &Rc<Program>,
+        directive: &Directive,
+        class: ObjRef,
+        mixin: ObjRef,
+    ) -> Result<(), Failure> {
+        let Err(refusal) = self.classes().inherit(class, mixin) else {
+            return Ok(());
         };
-        Ok(self.install_class(program_id, class, superclass))
+        // `Interp::class_default_name` borrows out of the registry, so the
+        // substitutions are taken before the blaming below reborrows it.
+        let mixin_name = self.class_default_name(mixin).to_vec();
+        let raised = match refusal {
+            InheritRefusal::NotAMixin => Raised::inherit_needs_a_mixinclass(&mixin_name),
+            InheritRefusal::Recursive => {
+                let class_name = self.class_default_name(class).to_vec();
+                Raised::recursive_inherit(&class_name, &mixin_name)
+            }
+            InheritRefusal::BaseClass(base) => {
+                let class_name = self.class_default_name(class).to_vec();
+                let base_name = self.class_default_name(base).to_vec();
+                Raised::inherit_base_class(&class_name, &mixin_name, &base_name)
+            }
+        };
+        let scope = self.root_and_metaclass().1;
+        let scope = self.classes().id_string(scope).to_string();
+        self.blame_native_method(b"INHERIT", &scope);
+        self.blame_directive(program, directive);
+        Err(raised.into())
     }
 
     /// `::METHOD`'s own R9 install: the name lands in `class`'s instance

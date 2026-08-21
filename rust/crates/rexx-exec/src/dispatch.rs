@@ -159,6 +159,7 @@ struct NativeEntry {
 /// copies `Object`'s entry (its `MethodId` included) into `String`'s
 /// behaviour.
 static NATIVE_METHODS: &[(&str, &str, usize, NativeMethod)] = &[
+    ("Class", "BASECLASS", 0, native_base_class),
     ("Object", "HASMETHOD", 1, native_has_method),
     ("Object", "ISNIL", 0, native_is_nil),
     ("String", "LENGTH", 0, native_length),
@@ -964,6 +965,34 @@ fn native_has_method(
         Behaviour::ClassSide(class) => classes.class_has_method(class, &name),
     };
     Ok(interp.counted(usize::from(answers)))
+}
+
+/// `Class~baseClass`: `RexxClass::getBaseClass`, bound as a method of
+/// `.Class` by `Setup.cpp:455`.
+///
+/// A class declared `MIXINCLASS` answers its target's own base class and
+/// every other class answers itself, which is the one thing about a class
+/// that says whether it is a mixin -- measured, `::CLASS M MIXINCLASS
+/// Object` and `::CLASS P` answer `The Object class` and `The P class`.
+///
+/// **The instance-behaviour arm is unreachable**, and answers loudly rather
+/// than picking a class: `BASECLASS` is in `.Class`'s own dictionary, and the
+/// only receiver whose behaviour that dictionary reaches is a class object,
+/// whose behaviour is `ClassSide`. Nothing this crate can build is an
+/// *instance* of `.Class` without being one.
+fn native_base_class(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    match interp.receiver_behaviour(receiver) {
+        Ok(Behaviour::ClassSide(class)) => Ok(interp.classes().base_class(class)),
+        Ok(Behaviour::Instance(_)) => {
+            Err(Loud::receiver_class("a value that is not a class object").into())
+        }
+        Err(kind) => Err(Loud::receiver_class(kind).into()),
+    }
 }
 
 /// `Object~isNil`: `1` for `.nil` and `0` for everything else.

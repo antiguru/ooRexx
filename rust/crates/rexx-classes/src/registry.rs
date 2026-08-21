@@ -28,7 +28,7 @@
 //! path other than this flat table (no `.environment`/`.local` chain, no
 //! `.context`/`.rexxinfo`-style dynamic instance).
 
-use crate::class_graph::{ClassGraph, ClassKind};
+use crate::class_graph::{ClassGraph, ClassKind, InheritRefusal};
 use crate::method_dict::MethodId;
 use rexx_core::ObjRef;
 use std::collections::HashMap;
@@ -194,6 +194,23 @@ impl ClassRegistry {
     /// `~metaClass`.
     pub fn metaclass(&self, class: ObjRef) -> ObjRef {
         self.graph.metaclass(class)
+    }
+
+    /// `~baseClass` -- see [`ClassGraph::base_class`].
+    pub fn base_class(&self, class: ObjRef) -> ObjRef {
+        self.graph.base_class(class)
+    }
+
+    /// Whether `class` defines `UNINIT` itself -- see
+    /// [`ClassGraph::has_uninit`].
+    pub fn has_uninit(&self, class: ObjRef) -> bool {
+        self.graph.has_uninit(class)
+    }
+
+    /// Whether a class `class` inherits from defines `UNINIT` -- see
+    /// [`ClassGraph::parent_has_uninit`].
+    pub fn parent_has_uninit(&self, class: ObjRef) -> bool {
+        self.graph.parent_has_uninit(class)
     }
 
     /// `~superClass` -- the first entry of `~superClasses`, oracle's
@@ -384,8 +401,8 @@ impl ClassRegistry {
     /// `mixinclass class` probe needs it: `inheritInstanceMethods` (below)
     /// never adds a superclass edge, so it cannot reach the metaclass side
     /// the way `~inherit` does (D44).
-    pub fn inherit(&mut self, class: ObjRef, mixin: ObjRef) {
-        self.graph.inherit(class, mixin);
+    pub fn inherit(&mut self, class: ObjRef, mixin: ObjRef) -> Result<(), InheritRefusal> {
+        self.graph.inherit(class, mixin)
     }
 
     /// `inheritInstanceMethods` by name -- oracle's `Setup.cpp` bootstrap

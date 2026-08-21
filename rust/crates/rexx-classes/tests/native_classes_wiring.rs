@@ -10,7 +10,9 @@
 //! committed precisely so this claim is checkable rather than merely
 //! asserted.
 
-use rexx_classes::{ClassKind, ClassRegistry, deferred_classes, native_classes, setup_class_names};
+use rexx_classes::{
+    ClassKind, ClassRegistry, InheritRefusal, deferred_classes, native_classes, setup_class_names,
+};
 use rexx_core::ObjRef;
 use std::collections::BTreeSet;
 
@@ -110,13 +112,23 @@ fn the_metaclass_merge_carries_the_metaclasss_scope_not_just_its_methods() {
 /// `.Class` in scope (only the class-behaviour does, via the metaclass
 /// merge every class gets).
 #[test]
-#[should_panic(expected = "not a subclass of")]
 fn an_ordinary_object_hierarchy_class_cannot_inherit_a_mixinclass_class_mixin() {
     let (mut r, object, class) = bootstrap_object_and_class();
     let mixin = r.define_class("Mixin", Some(class), ClassKind::Mixin, class);
     r.add_class_method(mixin, "GREET");
     let ordinary = r.define_class("MySingleton", Some(object), ClassKind::Regular, class);
-    r.inherit(ordinary, mixin);
+
+    // The refusal carries the base class the recorded message names, which
+    // is `.Class` and not the mixin.
+    assert_eq!(
+        r.inherit(ordinary, mixin),
+        Err(InheritRefusal::BaseClass(class)),
+        "mixinclass_class1.rex recorded 98.943 naming base class \"The Class class\""
+    );
+    assert!(
+        !r.class_has_method(ordinary, "GREET"),
+        "the refused inherit donated nothing"
+    );
 }
 
 /// `q3.rex`: `Mixin mixinclass class` with a class method `GREET`;
@@ -137,7 +149,7 @@ fn a_class_subclassing_class_itself_can_inherit_a_mixinclass_class_mixin() {
     r.add_class_method(mixin, "GREET");
     let mymeta = r.define_class("MyMeta", Some(class), ClassKind::Regular, class);
 
-    r.inherit(mymeta, mixin);
+    r.inherit(mymeta, mixin).expect("a legal inherit");
 
     assert!(
         r.class_has_method(mymeta, "GREET"),

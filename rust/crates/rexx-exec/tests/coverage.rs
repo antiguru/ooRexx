@@ -956,6 +956,17 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     // Fix round 3, finding 1: the same forwarded frame reached through a
     // non-strict comparison's own numeric conversion.
     "lang/operator_frame_stem_compare_overflow.rex",
+    // Phase 5a (2026-08-17 plan) Task 7: `::CLASS ... MIXINCLASS` and
+    // `::CLASS ... INHERIT`, and the refusal ladder `INHERIT` brings with it.
+    "lang/class_mixinclass.rex",
+    "lang/class_inherit_order.rex",
+    "lang/class_inherit_not_found.rex",
+    "lang/class_inherit_trailing_keyword.rex",
+    "lang/class_inherit_not_a_mixin.rex",
+    "lang/class_inherit_base_class.rex",
+    "lang/class_inherit_recursive.rex",
+    "lang/class_inherit_cycle.rex",
+    "lang/class_metaclass_cycle.rex",
 ];
 
 #[test]

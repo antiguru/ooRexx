@@ -1,0 +1,9 @@
+count 8
+/* The same mixin named twice on one INHERIT: the second send finds it
+   already an ancestor and is 98.944. The first send succeeded, so this is
+   the refusal that arrives after part of the directive has been applied. */
+say 'main ran'
+
+::CLASS M MIXINCLASS Object
+
+::CLASS K INHERIT M M

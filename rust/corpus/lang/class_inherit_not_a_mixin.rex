@@ -1,0 +1,8 @@
+/* An INHERIT target that exists and is not a MIXINCLASS: 98.942, naming the
+   target's defaultName. The report opens with the traceback frame of the
+   INHERIT method the install machinery sends, above the directive's echo. */
+say 'main ran'
+
+::class c
+
+::class d inherit c

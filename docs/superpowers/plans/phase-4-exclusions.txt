@@ -404,6 +404,8 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
     ::class foo
     ::class foo + ::method bar
     ::class foo + ::attribute baz
+    ::class mx mixinclass object
+    ::class mx mixinclass object + ::class foo inherit mx
     ::constant kk 5
     ::resource foo ... ::END
     ::annotate package author 'me'
@@ -413,10 +415,10 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
   refused here, loudly, naming Phase 5 (or Phase 7 for the EXTERNAL forms,
   which need a library loaded):
 
-    ::class foo mixinclass zzznotaclass                   98.909 rc 158
     ::class foo metaclass zzznotaclass                    98.908 rc 158
-    ::class bar inherit zzznotaclass                      98.909 rc 158
     ::class foo subclass ns:other                         98.987 rc 158
+    ::class foo mixinclass ns:other                       98.987 rc 158
+    ::class foo inherit ns:other                          98.987 rc 158
     ::annotate routine nosuchrtn                          99.945 rc 157
     ::requires 'no_such_file_zz.rex'                      43.901 rc 213
     ::routine z external "LIBRARY nosuchlib nosuchfn"     98.903 rc 158
@@ -569,8 +571,31 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
   `corpus/lang/class_subclass_not_found.rex` are the witnesses; the two
   errors a bad target reaches, 98.909 and 98.911 (cyclic), have their own
   measurements on `Raised::class_not_found` and `Raised::cyclic_inheritance`.
-  MIXINCLASS, METACLASS and INHERIT are still refused, each under its own
-  message now rather than one covering all four.
+
+  CLOSED DEFECT: ::CLASS ... MIXINCLASS AND ::CLASS ... INHERIT WERE REFUSED
+  AND ARE NOT ANY MORE. Both install, on both engines. `::class k mixinclass
+  object` is rc 0 on both sides and `.k~baseClass` is `The Object class`,
+  which is the observable that separates a mixin from a plain subclass; an
+  INHERIT list is walked left to right, each entry appended to the end of the
+  superclass list, so a class's own methods beat its explicit superclass's,
+  which beats its leftmost mixin's, which beats the next. `INHERIT` brings a
+  refusal ladder with it and every rung of it matches the oracle byte for
+  byte: 98.909 for a target that resolves to nothing (which is also what a
+  keyword written after the mixin list gets, since INHERIT consumes to the end
+  of the clause), 98.942 for a target that is not a MIXINCLASS, 98.943 for one
+  whose base class the inheriting class does not have in scope, 98.944 for one
+  already in the hierarchy, and 98.911 when the INHERIT targets cannot be
+  ordered. The three that come out of the INHERIT message send carry the
+  `Compiled method "INHERIT" with scope "Class".` frame line the oracle emits;
+  the ones raised while resolving a target, and the ordering error, do not.
+  `corpus/lang/class_mixinclass.rex`, `class_inherit_order.rex` and the six
+  `class_inherit_*` refusal programs are the witnesses.
+
+  METACLASS is still refused, under its own message. So is a namespace-
+  qualified target on any of SUBCLASS, MIXINCLASS and INHERIT, under one
+  message that names none of the three: the namespace is a package this crate
+  does not load, and the oracle's own answer for all three spellings is 98.987
+  rather than a resolution.
 
   THE ONE DELIBERATE OVER-REFUSAL, which rejects a program the oracle runs.
   It is not silent: it names a phase and exits with NOT_IMPLEMENTED_EXIT,

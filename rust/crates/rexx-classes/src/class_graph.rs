@@ -32,10 +32,12 @@
 //!   cannot see at all: `tests/behaviour_wiring.rs` is built around that
 //!   fact.
 //!
-//! What this crate does not model: message dispatch, method bodies, and error
-//! raising for an invalid `inherit` (the `assert!`s in [`ClassGraph::inherit`]
-//! are this crate's own sanity checks, not the oracle's `SYNTAX` conditions
-//! -- that belongs to whichever later task wires `~inherit` to a raise).
+//! What this crate does not model: message dispatch, method bodies, and the
+//! `SYNTAX` conditions themselves -- [`ClassGraph::inherit`] answers an
+//! [`InheritRefusal`] naming the condition the oracle reports, and the caller
+//! raises it, because the oracle's messages substitute a class's
+//! `~defaultName` and carry a traceback frame that belongs to whoever sent
+//! the message.
 //! A metaclass's own instance dictionary merging into a class's class-side
 //! behaviour (`RexxClass::createClassBehaviour`'s `metaClass->mergeInstanceBehaviour`
 //! branch, D44) **is** modelled, in [`ClassGraph::cascade_build`]'s
@@ -58,6 +60,28 @@ use std::collections::{BTreeSet, HashMap};
 pub enum ClassKind {
     Regular,
     Mixin,
+}
+
+/// Why [`ClassGraph::inherit`] refused to build the edge, each variant named
+/// for the `SYNTAX` condition `RexxClass::inherit` reports in its place
+/// (`ClassClass.cpp:1298`-`1332`).
+///
+/// The caller raises: this crate models no condition machinery, and the
+/// oracle's messages substitute a class's `~defaultName`, which is
+/// [`crate::ClassRegistry`]'s to render and not this graph's.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum InheritRefusal {
+    /// `Error_Execution_mixinclass` (`:1299`), 98.942: the target is not a
+    /// `MIXINCLASS`, so nothing may inherit it.
+    NotAMixin,
+    /// `Error_Execution_recursive_inherit` (`:1311`, `:1317`), 98.944: one of
+    /// the two classes is already an ancestor of the other, in whichever
+    /// direction.
+    Recursive,
+    /// `Error_Execution_baseclass` (`:1323`, `:1329`), 98.943: the inheriting
+    /// class does not already have the mixin's base class in scope. The base
+    /// class travels with the refusal because the oracle's message names it.
+    BaseClass(ObjRef),
 }
 
 /// Which of a class's two behaviours (D44) an internal cascade operation
@@ -119,6 +143,16 @@ struct ClassDef {
     /// including `.Class` itself, self-referentially (measured:
     /// `.class~metaclass~id` is `"Class"`).
     metaclass: ObjRef,
+    /// This class defines `UNINIT` itself, so its instances have to be
+    /// registered for one when they are created -- oracle's `HAS_UNINIT`
+    /// class flag, which `RexxClass::defineMethod` sets for a method of that
+    /// name (`ClassClass.cpp:854`).
+    has_uninit: bool,
+    /// Some class this one inherits from carries `UNINIT` -- oracle's
+    /// `PARENT_HAS_UNINIT`, set by each constructor that builds an
+    /// inheritance edge: `subclass` (`:1634`), `mixinClass` (`:1525`) and
+    /// `inherit` (`:1364`).
+    parent_has_uninit: bool,
 }
 
 /// The class graph and its behaviour storage.
@@ -164,6 +198,14 @@ impl ClassGraph {
     /// oracle's `TheObjectClass != this` guard) -- which is exactly what
     /// bootstrapping `.Object` and `.Class`'s mutual reference requires: each
     /// names the other before both exist.
+    ///
+    /// **`UNINIT` propagates here for both kinds**, one arm each, because
+    /// the oracle writes them as separate tests on separate functions:
+    /// `subclass`'s (`ClassClass.cpp:1634`) reads the parent the new class is
+    /// being derived from, and `mixinClass`'s (`:1525`) reads the class the
+    /// `MIXINCLASS` target names. They ask the same question of the same
+    /// object, and both are kept so that a build losing either one is a build
+    /// something can catch.
     pub fn define_class(
         &mut self,
         id: ObjRef,
@@ -171,11 +213,14 @@ impl ClassGraph {
         kind: ClassKind,
         metaclass: ObjRef,
     ) {
-        let base_class = match kind {
-            ClassKind::Regular => id,
+        let (base_class, parent_has_uninit) = match kind {
+            ClassKind::Regular => (id, superclass.is_some_and(|sup| self.uninit_reaches(sup))),
             ClassKind::Mixin => {
                 let target = superclass.expect("a mixin class names its MIXINCLASS target");
-                self.classes[&target].base_class
+                (
+                    self.classes[&target].base_class,
+                    self.uninit_reaches(target),
+                )
             }
         };
         let instance_behaviour = self.alloc_behaviour();
@@ -192,6 +237,8 @@ impl ClassGraph {
                 class_behaviour,
                 base_class,
                 metaclass,
+                has_uninit: false,
+                parent_has_uninit,
             },
         );
         if let Some(sup) = superclass {
@@ -199,6 +246,26 @@ impl ClassGraph {
         }
         self.rebuild_behaviour(id, Side::Instance);
         self.rebuild_behaviour(id, Side::Class);
+    }
+
+    /// Oracle's `hasUninitDefined() || parentHasUninitDefined()`, the exact
+    /// pair every propagation site asks about the class it is deriving from
+    /// (`ClassClass.cpp:1364`, `:1525`, `:1634`).
+    fn uninit_reaches(&self, class: ObjRef) -> bool {
+        let def = &self.classes[&class];
+        def.has_uninit || def.parent_has_uninit
+    }
+
+    /// Whether `class` defines `UNINIT` itself -- oracle's
+    /// `hasUninitDefined`.
+    pub fn has_uninit(&self, class: ObjRef) -> bool {
+        self.classes[&class].has_uninit
+    }
+
+    /// Whether a class `class` inherits from defines `UNINIT` -- oracle's
+    /// `parentHasUninitDefined`.
+    pub fn parent_has_uninit(&self, class: ObjRef) -> bool {
+        self.classes[&class].parent_has_uninit
     }
 
     fn behaviour_handle(&self, class: ObjRef, side: Side) -> BehaviourHandle {
@@ -336,12 +403,19 @@ impl ClassGraph {
     /// [`BehaviourHandle`] and the old one is never written to again,
     /// while every subclass keeps its own existing handle and is rebuilt
     /// in place (D43).
+    ///
+    /// **A method named `UNINIT` marks the class** (`:852`-`:857`), which is
+    /// what makes the flag [`Self::has_uninit`] answers a fact about the
+    /// class rather than something a caller has to set by hand. The name is
+    /// matched case-insensitively because the oracle compares against the
+    /// upcased lookup name `defineMethod` was handed, and
+    /// [`MethodDict::add_method`] takes the key in either spelling.
     pub fn define(&mut self, class: ObjRef, name: &str, method: MethodId) {
-        self.classes
-            .get_mut(&class)
-            .expect("define: unknown class")
-            .own_instance_methods
-            .add_method(name, class, method);
+        let def = self.classes.get_mut(&class).expect("define: unknown class");
+        def.own_instance_methods.add_method(name, class, method);
+        if name.eq_ignore_ascii_case("UNINIT") {
+            def.has_uninit = true;
+        }
         let fresh = self.alloc_behaviour();
         self.classes.get_mut(&class).unwrap().instance_behaviour = fresh;
         self.update_instance_sub_classes(class);
@@ -386,9 +460,8 @@ impl ClassGraph {
     /// instance created before this call sees the donated methods
     /// immediately, unlike [`define`](Self::define).
     ///
-    /// The five `assert!`s are this crate's own sanity checks standing in
-    /// for the oracle's validation (`:1298-1332`), each named for the
-    /// `SYNTAX` condition it stands in for:
+    /// The refusals are the oracle's own validation (`:1298`-`:1332`), each
+    /// answered as the [`InheritRefusal`] named for the condition it reports:
     /// * `Error_Execution_mixinclass` (`:1299`) -- `mixin` must actually be
     ///   a `MIXINCLASS`.
     /// * `Error_Execution_recursive_inherit` (`:1311`, `mixin` already an
@@ -398,37 +471,32 @@ impl ClassGraph {
     ///   followed by `inherit(a, b)` (`.A~inherit(.B)`) passes every other
     ///   check, leaves `a.superclasses = [.., b]` and `b.superclasses =
     ///   [a]`, and `update_sub_classes` alternates `a -> b -> a` forever --
-    ///   a stack overflow where the oracle raises a clean `98.943`.
+    ///   a stack overflow where the oracle raises a clean `98.944`.
     /// * `Error_Execution_baseclass` (`:1323`, `:1329`) -- `mixin` can only
     ///   be inherited by a class whose own two behaviours already have
     ///   `mixin`'s `base_class` in scope.
     ///
-    /// Raising the oracle's actual syntax conditions on violation is later
-    /// work (dispatch wiring's, once `SIGNAL ON SYNTAX` exists to catch
-    /// them); this crate only refuses to build a graph the oracle itself
-    /// would refuse.
-    pub fn inherit(&mut self, class: ObjRef, mixin: ObjRef) {
-        assert!(
-            matches!(self.classes[&mixin].kind, ClassKind::Mixin),
-            "inherit: {mixin:?} is not a MIXINCLASS"
-        );
-        assert!(
-            !self.behaviour_has_scope(class, Side::Class, mixin),
-            "inherit: {mixin:?} is already an ancestor of {class:?} -- re-inheriting it is a recursive inherit"
-        );
-        assert!(
-            !self.behaviour_has_scope(mixin, Side::Class, class),
-            "inherit: {class:?} is already an ancestor of {mixin:?} -- inheriting it would make each an ancestor of the other"
-        );
+    /// **`UNINIT` propagates at the tail of this function** (`:1364`): a
+    /// mixin that carries `UNINIT`, itself or through its own ancestors,
+    /// gives the inheriting class `parent_has_uninit`. It runs after the
+    /// cascade, as the oracle's does, and not at all on a refusal.
+    pub fn inherit(&mut self, class: ObjRef, mixin: ObjRef) -> Result<(), InheritRefusal> {
+        if !matches!(self.classes[&mixin].kind, ClassKind::Mixin) {
+            return Err(InheritRefusal::NotAMixin);
+        }
+        if self.behaviour_has_scope(class, Side::Class, mixin) {
+            return Err(InheritRefusal::Recursive);
+        }
+        if self.behaviour_has_scope(mixin, Side::Class, class) {
+            return Err(InheritRefusal::Recursive);
+        }
         let mixin_base = self.classes[&mixin].base_class;
-        assert!(
-            self.behaviour_has_scope(class, Side::Class, mixin_base),
-            "inherit: {class:?} itself is not a subclass of {mixin:?}'s MIXINCLASS base {mixin_base:?}"
-        );
-        assert!(
-            self.behaviour_has_scope(class, Side::Instance, mixin_base),
-            "inherit: {class:?}'s instances are not a subclass of {mixin:?}'s MIXINCLASS base {mixin_base:?}"
-        );
+        if !self.behaviour_has_scope(class, Side::Class, mixin_base) {
+            return Err(InheritRefusal::BaseClass(mixin_base));
+        }
+        if !self.behaviour_has_scope(class, Side::Instance, mixin_base) {
+            return Err(InheritRefusal::BaseClass(mixin_base));
+        }
         self.classes
             .get_mut(&class)
             .unwrap()
@@ -436,6 +504,10 @@ impl ClassGraph {
             .push(mixin);
         self.classes.get_mut(&mixin).unwrap().subclasses.push(class);
         self.update_sub_classes(class);
+        if self.uninit_reaches(mixin) {
+            self.classes.get_mut(&class).unwrap().parent_has_uninit = true;
+        }
+        Ok(())
     }
 
     /// `inheritInstanceMethods`. Oracle's `RexxClass::inheritInstanceMethods`
@@ -506,6 +578,14 @@ impl ClassGraph {
     /// entry answers itself.
     pub fn metaclass(&self, class: ObjRef) -> ObjRef {
         self.classes[&class].metaclass
+    }
+
+    /// `~baseClass` -- oracle's `getBaseClass` (`Setup.cpp:455` binds it as a
+    /// method of `.Class`). A `Regular` class answers itself; a `Mixin`
+    /// answers whatever its `MIXINCLASS` target's own base class is, which is
+    /// the value [`ClassGraph::inherit`]'s compatibility check reads.
+    pub fn base_class(&self, class: ObjRef) -> ObjRef {
+        self.classes[&class].base_class
     }
 
     /// Force a class-behaviour rebuild without adding a method -- an escape

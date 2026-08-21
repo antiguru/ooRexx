@@ -1,0 +1,36 @@
+count 35
+/* MIXINCLASS: what makes a mixin different from a subclass.
+
+   The merge order first. K names P as its superclass and M1 as a mixin, and
+   defines no M of its own, so the candidates are P's and M1's -- the
+   explicit superclass wins. K2 is the negative control that says this
+   program is measuring the order rather than the presence: it declares the
+   same superclass and the same mixin, defines its own M, and answers that
+   under any merge order at all.
+
+   Then ~baseClass, which is the mixin's own observable: a MIXINCLASS answers
+   the base class of the class it names, and every other class answers
+   itself. A mixin of a mixin carries the first one's base along with it. */
+say .K~m
+say .K2~m
+say .M1~baseClass
+say .P~baseClass
+say .K~baseClass
+say .M2~baseClass
+say .M2~m
+
+::CLASS P
+::METHOD m CLASS
+  return 'parent'
+
+::CLASS M1 MIXINCLASS Object
+::METHOD m CLASS
+  return 'mixin'
+
+::CLASS K SUBCLASS P INHERIT M1
+
+::CLASS K2 SUBCLASS P INHERIT M1
+::METHOD m CLASS
+  return 'own'
+
+::CLASS M2 MIXINCLASS M1

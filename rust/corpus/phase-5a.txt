@@ -218,3 +218,29 @@ lang/operator_frame_stem_do_exponent_range.rex
 # comparison and the non-numeric fallback never reach `compare_numbers` and
 # stay frameless, which this program does not exercise.
 lang/operator_frame_stem_compare_overflow.rex
+
+# Phase 5a (2026-08-17 plan) Task 7: `::CLASS ... MIXINCLASS` and
+# `::CLASS ... INHERIT`.
+#
+# The programs that run carry the discriminators: the merge order (a class's
+# own methods, then its explicit superclass, then its mixins leftmost first),
+# the diamond, a forward `INHERIT`, and `~baseClass`, which is the only thing
+# about an installed class that says whether it is a mixin.
+lang/class_mixinclass.rex
+lang/class_inherit_order.rex
+# The refusal ladder, one program per condition the oracle raises. A
+# condition raised by the `INHERIT` message send itself carries a native
+# method's traceback frame; one raised while resolving a target, and the
+# install-ordering error, do not.
+lang/class_inherit_not_found.rex
+lang/class_inherit_trailing_keyword.rex
+lang/class_inherit_not_a_mixin.rex
+lang/class_inherit_base_class.rex
+lang/class_inherit_recursive.rex
+lang/class_inherit_cycle.rex
+# A `METACLASS` target is a dependency too, which is what
+# `ClassDirective::addDependencies` asks `checkDependency` about alongside
+# the other two. The directive itself is still refused here, so a cycle is
+# the only shape of it that can agree with the oracle -- and it is what
+# stops the dependency edge being an unwitnessed line in the diff.
+lang/class_metaclass_cycle.rex

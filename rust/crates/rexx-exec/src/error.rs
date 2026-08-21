@@ -442,25 +442,71 @@ impl Raised {
         Raised::syntax(99, 903, Vec::new())
     }
 
-    /// 98.909: a `::CLASS` directive naming a `SUBCLASS` no name resolves to.
-    /// One substitution, the target's upcased spelling.
+    /// 98.909: a `::CLASS` directive naming a `SUBCLASS` or an `INHERIT`
+    /// target no name resolves to. One substitution, the target's upcased
+    /// spelling.
     ///
     /// Measured, rc 158 with stdout empty: `::class b subclass zzznotaclass`
     /// after `say 'main'` gives `Error 98.909:  Class "ZZZNOTACLASS" not
     /// found.` with the directive's own clause echoed and the program's first
-    /// clause never run.
+    /// clause never run. `::class d inherit c` with no `c` anywhere is the
+    /// same error naming `"C"`, and so is `::CLASS K INHERIT M PUBLIC`
+    /// naming `"PUBLIC"` -- `INHERIT` consumes every remaining token of the
+    /// clause, so the trailing keyword is read as a class name and never
+    /// reaches an access check.
+    ///
+    /// **No `Compiled method` frame on this one**, measured: the oracle
+    /// resolves each `INHERIT` target before sending `INHERIT` to the class
+    /// object (`ClassDirective::install`,
+    /// `interpreter/instructions/ClassDirective.cpp:214`-`:219`), so the
+    /// report opens with the directive's own echo. The refusals that come
+    /// out of the send itself carry one.
     pub(crate) fn class_not_found(name: &[u8]) -> Raised {
         Raised::syntax(98, 909, vec![name.to_vec()])
     }
 
-    /// 98.911: `::CLASS` directives whose `SUBCLASS` targets cannot be put in
+    /// 98.942: an `INHERIT` target that is not a `MIXINCLASS`. One
+    /// substitution, the target's `~defaultName`.
+    ///
+    /// Measured, rc 158 with stdout empty, on `::class c` followed by
+    /// `::class d inherit c`: `Error 98.942:  Class "The C class" must be a
+    /// MIXINCLASS for INHERIT.`, above it the directive's own echo, and above
+    /// *that* `       *-* Compiled method "INHERIT" with scope "Class".`
+    pub(crate) fn inherit_needs_a_mixinclass(mixin: &[u8]) -> Raised {
+        Raised::syntax(98, 942, vec![mixin.to_vec()])
+    }
+
+    /// 98.943: an `INHERIT` target whose base class the inheriting class does
+    /// not already have in scope. Three substitutions: the inheriting class,
+    /// the mixin, and the mixin's base class, each a `~defaultName`.
+    ///
+    /// Measured, rc 158, on `::CLASS P` / `::CLASS M MIXINCLASS P` /
+    /// `::CLASS K INHERIT M`: `Error 98.943:  Class "The K class" is not a
+    /// subclass of "The M class" base class "The P class".`
+    pub(crate) fn inherit_base_class(class: &[u8], mixin: &[u8], base: &[u8]) -> Raised {
+        Raised::syntax(98, 943, vec![class.to_vec(), mixin.to_vec(), base.to_vec()])
+    }
+
+    /// 98.944: an `INHERIT` target that is already part of the inheriting
+    /// class's own hierarchy, in either direction. Two substitutions, the
+    /// inheriting class's `~defaultName` and the mixin's.
+    ///
+    /// Measured, rc 158, on `::CLASS M MIXINCLASS Object` / `::CLASS K
+    /// INHERIT M M`: `Error 98.944:  Class "The K class" cannot inherit from
+    /// itself, a superclass, or a subclass ("The M class").`
+    pub(crate) fn recursive_inherit(class: &[u8], mixin: &[u8]) -> Raised {
+        Raised::syntax(98, 944, vec![class.to_vec(), mixin.to_vec()])
+    }
+
+    /// 98.911: `::CLASS` directives whose declared targets cannot be put in
     /// an order. One substitution, the program's own path.
     ///
-    /// Measured, rc 158 with stdout empty, on two shapes: `::class a subclass
-    /// b` with `::class b subclass a`, and `::class a subclass a` on its own.
-    /// Both give `Error 98.911:  Cyclic inheritance in program "<path>".` and
-    /// both echo the **first** of the class directives, which is what a
-    /// resolver reporting the first target it could not place reports.
+    /// Measured, rc 158 with stdout empty, on three shapes: `::class a
+    /// subclass b` with `::class b subclass a`, `::class a subclass a` on its
+    /// own, and `::CLASS K INHERIT K`. Each gives `Error 98.911:  Cyclic
+    /// inheritance in program "<path>".` and echoes the **first** of the
+    /// class directives involved, which is what a resolver reporting the
+    /// first target it could not place reports.
     pub(crate) fn cyclic_inheritance(path: &str) -> Raised {
         Raised::syntax(98, 911, vec![path.as_bytes().to_vec()])
     }

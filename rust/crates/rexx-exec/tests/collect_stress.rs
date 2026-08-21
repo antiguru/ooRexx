@@ -156,11 +156,23 @@ const SUBSET_FILES: &[&str] = &[
 /// A program belongs here because of what it contains, not because it was
 /// inconvenient -- see the both-directions assertion at the use site.
 const NO_ALLOCATION_PROGRAMS: &[&str] = &[
-    // Both refuse before the main body's first clause: the class directive
-    // whose target does not resolve, and the pair whose targets cannot be
-    // ordered. Nothing has been asked of the arena by then.
+    // The class-directive refusals: each is refused before the main body's
+    // first clause, and nothing has been asked of the arena by then.
+    "lang/class_inherit_base_class.rex",
+    "lang/class_inherit_cycle.rex",
+    "lang/class_inherit_not_a_mixin.rex",
+    "lang/class_inherit_not_found.rex",
+    "lang/class_inherit_recursive.rex",
+    "lang/class_inherit_trailing_keyword.rex",
+    "lang/class_metaclass_cycle.rex",
     "lang/class_subclass_cycle.rex",
     "lang/class_subclass_not_found.rex",
+    // These run rather than refusing, and still allocate nothing: every
+    // value they say is either a class method's short literal result or a
+    // class object's own `~defaultName`, which is rendered out of the
+    // registry rather than built as a value.
+    "lang/class_inherit_order.rex",
+    "lang/class_mixinclass.rex",
     "lang/comparison_families.rex",
     "lang/comparison_operators_remaining.rex",
     "lang/deep_nested_expr.rex",
