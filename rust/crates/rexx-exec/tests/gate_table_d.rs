@@ -176,9 +176,10 @@ fn read_rows() -> Vec<Row> {
 ///   the way `::METHOD`'s did, that behaviour has **no row in this table**:
 ///   the row that exists is filed against a phase the 5a gate never reads, and
 ///   the moved form is outside the denominator. Closing that needs the row set
-///   to distinguish the two forms, which is `corpus/docs/directive-options.txt`'s
-///   shape and not this file's -- so the task that draws the boundary decides
-///   it, and this note is where it meets the consequence.
+///   to distinguish the two forms, which is
+///   `corpus/docs/directive-options.txt`'s shape and not this file's -- so the
+///   task that draws the boundary decides it, and this note is where it meets
+///   the consequence.
 /// * `::CLASS CLASS` and `::RESOURCE LIBRARY` are the row set's two
 ///   `cross-reference` rows: the section documents the name and the
 ///   directive's own parser has no arm for it, so both interpreters refuse
@@ -350,25 +351,37 @@ fn directive_option_gate_table() {
         // A channel of its own rather than a fallthrough to the set check
         // above, because that check answers a different question. It reads
         // `read_dir`, which lists an entry by name whatever the name resolves
-        // to -- so a probe that is a dangling symlink, or one whose bytes
-        // cannot be reached, is *present* in the listing, passes the set
-        // comparison, and would leave the table here. Measured: with that
-        // path silent, such a row simply vanishes -- the table reports one row
-        // fewer, no structural failure, exit 0, and the gated count one lower
-        // than it was. A close criterion phrased over the gated count is then
-        // satisfiable by removing evidence.
+        // to -- so a probe that is a **dangling symlink** is present in the
+        // listing, passes the set comparison, and would leave the table here.
+        // Measured: with this path silent, such a row simply vanishes -- one
+        // row fewer, no structural failure, exit 0, and the gated count one
+        // lower than it was. A close criterion phrased over the gated count is
+        // then satisfiable by removing evidence.
+        //
+        // **A probe whose bytes cannot be read is not this arm's case**, which
+        // is worth saying because it is the other thing "unreadable" suggests:
+        // measured, a `chmod 000` probe canonicalises fine and fails in
+        // `run_on_both_engines`'s own read, naming the path.
         let abs = match fs::canonicalize(corpus.join(&probe)) {
             Ok(abs) => abs,
             Err(error) => {
-                structural.push(Structural {
-                    subject: probe.clone(),
-                    detail: format!(
-                        "the probe is listed in the directory but cannot be resolved: \
-                         {error}. The row for {} {} {} therefore has no program to run, \
-                         which is structural -- it is never a row the table drops",
-                        row.directive, row.keyword, row.position
-                    ),
-                });
+                // Guarded, because a row whose probe was simply deleted
+                // reaches here too and the set check has already reported it.
+                // Without the guard that row reports twice and this message
+                // states the one fact separating the two cases -- that the
+                // name is in the listing -- about a name that is not.
+                if on_disk.contains(&probe) {
+                    structural.push(Structural {
+                        subject: probe.clone(),
+                        detail: format!(
+                            "the probe is listed in the directory but cannot be \
+                             resolved: {error}. The row for {} {} {} therefore has no \
+                             program to run, which is structural -- it is never a row \
+                             the table drops",
+                            row.directive, row.keyword, row.position
+                        ),
+                    });
+                }
                 continue;
             }
         };

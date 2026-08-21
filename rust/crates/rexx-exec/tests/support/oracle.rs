@@ -610,12 +610,12 @@ pub fn descriptor_diffs(rust: &Outcome, cpp: &CppOutcome) -> Vec<&'static str> {
 /// **The answer callers should read, and [`descriptor_diffs_with`]'s labels
 /// are a rendering of it rather than a second copy.** A caller that needs to
 /// know *which* channel moved -- a verdict function, say -- reads these
-/// fields; a caller that needs to show a human what moved calls [`Self::labels`]
-/// or the `Vec`-returning wrapper. Recovering a channel by matching a label's
-/// text is the shape this type exists to remove: `contains` is a positive
-/// test, so a renamed or added label is not seen rather than reported, and a
-/// consumer built that way reads one input as permanently "did not differ"
-/// with nothing anywhere to notice.
+/// fields; a caller that needs to show a human what moved calls
+/// [`Self::labels`] or the `Vec`-returning wrapper. Recovering a channel by
+/// matching a label's text is the shape this type exists to remove:
+/// `contains` is a positive test, so a renamed or added label is not seen
+/// rather than reported, and a consumer built that way reads one input as
+/// permanently "did not differ" with nothing anywhere to notice.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct DescriptorDiff {
     pub stdout: bool,

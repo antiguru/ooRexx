@@ -506,8 +506,9 @@ fn build_report(matched: usize, total: usize, mismatches: &[Mismatch], gate: boo
 /// lint is `unsafe_code = "deny"`, so that is a grantable exception rather
 /// than a closed door, and it is not worth granting for something a shell
 /// builtin already does -- the bar is `rust/CLAUDE.md`'s and the granted set
-/// is asserted by `rexx-core/tests/unsafe_sites.rs`. Setting the `Command`'s own `stderr` to
-/// `Stdio::inherit()` is what makes that `>&2` resolve to the *real* fd 2:
+/// is asserted by `rexx-core/tests/unsafe_sites.rs`. Setting the `Command`'s
+/// own `stderr` to `Stdio::inherit()` is what makes that `>&2` resolve to the
+/// *real* fd 2:
 /// a child's inherited descriptor is dup'd from the parent's at spawn time,
 /// upstream of libtest's thread-local capture.
 fn emit_uncaptured(text: &str) {

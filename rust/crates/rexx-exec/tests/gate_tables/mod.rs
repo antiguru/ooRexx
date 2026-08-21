@@ -47,11 +47,12 @@
 //! # Both engines run, and a disagreement is structural
 //!
 //! [`run_on_both_engines`] runs the probe twice in process, through
-//! `Invocation::with_engine`, and asserts the two agree on all three
-//! descriptors **before** any verdict exists. The assertion is unconditional
-//! and names the program: the two engines disagreeing is not a fact about the
-//! oracle, so routing it through a verdict channel that a gate mode can relax
-//! would let it be absorbed silently.
+//! `Invocation::with_engine`, and asserts **before any verdict exists** that
+//! the two agree on all three descriptors and that neither refused a body to
+//! the other. Both assertions are unconditional and name the program: neither
+//! the engines disagreeing nor the ir arm quietly running on the tree-walker
+//! is a fact about the oracle, so routing either through a verdict channel a
+//! gate mode can relax would let it be absorbed silently.
 //!
 //! `REXX_ENGINE` is deliberately not used. It is read once per process by the
 //! `rexx-run` binary, which cannot give two arms inside one `cargo test`
@@ -176,9 +177,12 @@ pub fn verdict(differs: Descriptors) -> Verdict {
 /// Runs `abs` in process on both engines and returns the outcome they agree
 /// on.
 ///
-/// **The assertion is unconditional and names the program.** See the module
-/// doc: the two engines disagreeing is a structural failure, and there is no
-/// mode in which it is a verdict.
+/// **Two assertions, both unconditional and both naming the program**, because
+/// there are two ways a returned outcome can fail to be a two-engine
+/// measurement and only one of them is the engines disagreeing. The other is
+/// the ir arm refusing the body to the tree-walker, which leaves the two
+/// *agreeing* while one engine never ran the program. Neither is a fact about
+/// the oracle, so neither is a verdict and no mode relaxes either.
 ///
 /// **In process, and therefore unbounded.** An oracle run is a subprocess and
 /// carries a deadline; these two are calls, and nothing can kill them. What
