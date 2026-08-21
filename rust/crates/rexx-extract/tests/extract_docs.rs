@@ -282,8 +282,8 @@ fn the_concept_row_set_carries_the_two_sections_the_gate_was_written_for() {
 /// Every method row's `origin` lands on a line that names the row's `section`.
 ///
 /// The header promises `origin` is where the name came from, and for most rows
-/// that is the `<section id="mth…">` line while for a row whose class-table
-/// member overrides the displayed name it is the `<member><xref linkend="mth…">`
+/// that is the `<section id="mth...">` line while for a row whose class-table
+/// member overrides the displayed name it is the `<member><xref linkend="mth...">`
 /// line. Both spellings carry the id, so one assertion covers both -- and it is
 /// the assertion that catches an offset error, which is how a member's line
 /// inside a section slice can come out counted from the section instead of from
