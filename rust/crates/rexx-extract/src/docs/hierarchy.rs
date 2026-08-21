@@ -25,7 +25,7 @@
 //! [`edges_from_members`] carries its own assertion for that reason; see the
 //! assertion's own comment.
 
-use crate::docs::xml::{Member, attribute, members};
+use crate::docs::xml::{Member, members};
 
 /// A level of indentation is five `&nbsp;`, verbatim: the entity has no local
 /// definition, so it reaches a text-level extractor unresolved.
@@ -159,19 +159,6 @@ fn indent_level(inner: &str, line: usize) -> usize {
          five, so its level is not the book's"
     );
     level
-}
-
-/// The `linkend` of every `<xref>` in a member, used by the class-set
-/// extractor to answer which documented classes the hierarchy list carries.
-pub fn linkends(members: &[Member]) -> Vec<String> {
-    members
-        .iter()
-        .filter_map(|m| {
-            m.inner
-                .find("<xref ")
-                .and_then(|x| attribute(&m.inner[x..], "linkend"))
-        })
-        .collect()
 }
 
 /// `child<TAB>parent<TAB>level<TAB>line`, one per row.
