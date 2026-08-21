@@ -1,0 +1,38 @@
+/* Array~makeString, which is the only thing a program in this phase can do
+ * with the array ~superClasses answers, and the string value an array has in
+ * a string context.
+ *
+ * The two are different answers and the rows are side by side for that
+ * reason: makeString('C') concatenates where the string context joins with
+ * the line ending, which is makeString's own default. A third answer, the one
+ * RexxObject::stringRexx gives, is not asked for here: ~string reports
+ * stringValue(), which for an array is its default name, and
+ * array_unknown_method.rex beside it is where those bytes are compared.
+ *
+ * T below has more than one superclass so a separator has somewhere to
+ * appear; the empty rows are .Object's own list, which holds nothing.
+ *
+ * The option argument's first character decides, upcased, and the whole
+ * argument omitted means L -- rows 'lower' and 'default'.
+ */
+
+t = .T~superClasses
+say 'default [' t~makeString ']'
+say 'line [' t~makeString('L') ']'
+say 'line-sep [' t~makeString('L', ' ') ']'
+say 'line-bar [' t~makeString('L', '|') ']'
+say 'line-empty-sep [' t~makeString('L', '') ']'
+say 'char [' t~makeString('C') ']'
+say 'lower [' t~makeString('line') ']'
+say 'string-context [' 'x't ']'
+say 'length' t~makeString('C')~length
+
+e = .Object~superClasses
+say 'empty-default [' e~makeString ']'
+say 'empty-sep [' e~makeString('L', ' ') ']'
+say 'empty-char [' e~makeString('C') ']'
+say 'empty-string-context [' 'x'e ']'
+
+::CLASS MX MIXINCLASS Object
+::CLASS B
+::CLASS T SUBCLASS B INHERIT MX

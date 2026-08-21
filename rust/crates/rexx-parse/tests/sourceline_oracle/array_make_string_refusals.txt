@@ -1,0 +1,49 @@
+count 48
+/* makeString's own refusals, which are where its declared parameter count and
+ * what its body accepts come apart: the method declares two parameters, so
+ * three arguments is 93.902 saying `2 expected`, while a separator given with
+ * the C form is 93.902 saying `1 expected` -- raised by the body, because C
+ * takes no separator at all.
+ *
+ * Beside them the option itself: 93.915 names the accepted set and the
+ * argument's own text, and an argument with no string value is refused ahead
+ * of that check.
+ *
+ * The rows that answer are the neighbouring successes: L with a separator and
+ * C without one, which are the two forms the refusals bound.
+ *
+ * The last send is untrapped so the 93.915 text and the frame line the
+ * refusal carries are compared as bytes. rc 163.
+ */
+
+signal on syntax name trapped
+t = .T~superClasses
+n = 0
+
+next:
+n = n + 1
+select
+  when n = 1 then say n 'answered' t~makeString('C', '-')
+  when n = 2 then say n 'answered' t~makeString('L', ' ', 'z')
+  when n = 3 then say n 'answered' t~makeString('X')
+  when n = 4 then say n 'answered' t~makeString('')
+  when n = 5 then say n 'answered' t~makeString(.nil)
+  when n = 6 then say n 'answered' t~makeString('L', .nil)
+  when n = 7 then say n 'answered' t~makeString('L', ' ')
+  when n = 8 then say n 'answered' t~makeString('C')
+  otherwise signal done
+end
+signal next
+
+trapped:
+say n 'raised' rc'.'condition('E')
+signal on syntax name trapped
+signal next
+
+done:
+signal off syntax
+say t~makeString('X')
+
+::CLASS MX MIXINCLASS Object
+::CLASS B
+::CLASS T SUBCLASS B INHERIT MX

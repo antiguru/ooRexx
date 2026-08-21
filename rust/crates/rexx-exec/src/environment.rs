@@ -614,6 +614,79 @@ impl Interp {
             .entry(program)
             .or_default()
             .insert(name.to_ascii_uppercase().into(), class);
+        self.class_packages.insert(class, program);
+    }
+
+    /// The package object `class~package` answers, built on first use.
+    ///
+    /// A class this crate's own bootstrap registered belongs to the `REXX`
+    /// package; one a `::CLASS` installed belongs to its program's. Measured,
+    /// `(.K~package == .Array~package)` is `0` for a `::class K`.
+    pub(crate) fn package_object_for(&mut self, class: ObjRef) -> ObjRef {
+        let program = self.class_packages.get(&class).copied();
+        if let Some(found) = self.package_objects.get(&program).copied() {
+            return found;
+        }
+        let package_class = self.package_class();
+        // The `REXX` package was given its name by the interpreter's own
+        // startup rather than derived from a class id, exactly as `.environment`
+        // and `.local` were, and a package a program installed into
+        // carries no name of its own -- measured, `.Array~package` renders
+        // `The REXX Package` and a `::CLASS`'s renders `a Package`.
+        let rendered = match program {
+            None => b"The REXX Package".to_vec(),
+            Some(_) => default_object_name(self.class_id_text(package_class))
+                .as_bytes()
+                .to_vec(),
+        };
+        let object = self.alloc_with(
+            BehaviourId::OBJECT,
+            Body::Native(Box::new(NativeObject::new(package_class, &rendered))),
+        );
+        // A package object outlives every send that can reach it and is
+        // reachable from no other object, so the root is a global rather than
+        // a temp -- the position `.environment` and `.local` are in.
+        self.roots.add_global(&package_root_key(program), object);
+        self.package_objects.insert(program, object);
+        object
+    }
+
+    /// `Package~name`'s answer for a package object this crate built, or
+    /// `None` for a handle [`Interp::package_object_for`] did not produce.
+    ///
+    /// `REXX` for the primitive classes' package; for a program's own package
+    /// the path `PARSE SOURCE`'s third word carries, which is what the oracle
+    /// names -- measured, a `::CLASS` in a file answers that file's own
+    /// absolute path.
+    ///
+    /// The `None` is an internal inconsistency and not a program's doing:
+    /// `receiver_kind` admits a `Body::Native` as a package by its class, and
+    /// this crate builds one only above. Answered rather than panicked, so the
+    /// caller can refuse loudly.
+    pub(crate) fn package_name(&self, package: ObjRef) -> Option<Vec<u8>> {
+        let program = self
+            .package_objects
+            .iter()
+            .find(|(_, object)| **object == package)
+            .map(|(program, _)| *program)?;
+        Some(match program {
+            None => b"REXX".to_vec(),
+            // A program's own package. This phase loads one program, so its
+            // path is the running program's.
+            Some(_) => self.program_path.clone().into_bytes(),
+        })
+    }
+}
+
+/// The [`rexx_core::RootSet::add_global`] key one package object is held
+/// under.
+///
+/// Keyed by string, so each package needs a distinct one; the `REXX` package
+/// and each program's are different objects and must not displace each other.
+fn package_root_key(program: Option<ProgramId>) -> String {
+    match program {
+        None => "the REXX package".to_string(),
+        Some(ProgramId(id)) => format!("the package of program {id}"),
     }
 }
 
@@ -625,7 +698,7 @@ impl Interp {
 /// which renders `enhanced <id>` instead. No object this crate builds carries
 /// an enhanced behaviour, and `~enhanced` is not a message it answers, so
 /// there is nothing here for that arm to describe.
-fn default_object_name(id: &str) -> String {
+pub(crate) fn default_object_name(id: &str) -> String {
     let vowel = id
         .as_bytes()
         .first()

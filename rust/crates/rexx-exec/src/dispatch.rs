@@ -73,7 +73,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use rexx_classes::{ClassRegistry, MethodId};
-use rexx_core::{Body, Decoded, ObjRef};
+use rexx_core::{BehaviourId, Body, Decoded, NativeObject, ObjRef};
 use rexx_parse::Expr;
 
 use crate::activation::{Activation, MethodIdentity, body_of};
@@ -159,12 +159,31 @@ struct NativeEntry {
 /// copies `Object`'s entry (its `MethodId` included) into `String`'s
 /// behaviour.
 static NATIVE_METHODS: &[(&str, &str, usize, NativeMethod)] = &[
+    ("Array", "MAKESTRING", 2, native_array_make_string),
     ("Class", "BASECLASS", 0, native_base_class),
+    ("Class", "ID", 0, native_id),
+    ("Class", "ISSUBCLASSOF", 1, native_is_subclass_of),
+    ("Class", "METACLASS", 0, native_metaclass),
+    ("Class", "METHOD", 1, native_method),
+    ("Class", "PACKAGE", 0, native_package),
+    ("Class", "SUPERCLASS", 0, native_superclass),
+    ("Class", "SUPERCLASSES", 0, native_superclasses),
+    ("Object", "CLASS", 0, native_class),
     ("Object", "HASMETHOD", 1, native_has_method),
+    ("Object", "IDENTITYHASH", 0, native_identity_hash),
+    ("Object", "ISA", 1, native_is_a),
     ("Object", "ISNIL", 0, native_is_nil),
+    ("Package", "NAME", 0, native_package_name),
     ("String", "LENGTH", 0, native_length),
     ("String", "REVERSE", 0, native_reverse),
 ];
+
+/// `~defaultName` for an array -- `RexxObject::defaultName`'s article rule
+/// applied to `.Array`'s id, which is what `stringValue()` answers for one.
+///
+/// A constant rather than a lookup because every array this crate builds is an
+/// instance of `.Array` itself: `native_superclasses` is the one constructor.
+const ARRAY_DEFAULT_NAME: &[u8] = b"an Array";
 
 /// The class model this crate dispatches against, and the implementations
 /// its `MethodId`s name.
@@ -176,15 +195,18 @@ static NATIVE_METHODS: &[(&str, &str, usize, NativeMethod)] = &[
 pub(crate) struct ObjectModel {
     classes: ClassRegistry,
     natives: HashMap<MethodId, NativeEntry>,
-    /// `.String`, `.Object` and `.Class`, resolved once at bootstrap. These
-    /// are handles into `classes` and not a second model of it, and holding
-    /// them buys two things: a send does not look its receiver's class up by
-    /// name (which upcases and allocates) on every message, and neither a
-    /// send nor a `::CLASS` install can be redirected by a program that
-    /// declares a class of one of those three names.
+    /// The classes a value this crate builds answers to, and `.Class`,
+    /// resolved once at bootstrap. These are handles into `classes` and not a
+    /// second model of it, and holding them buys two things: a send does not
+    /// look its receiver's class up by name (which upcases and allocates) on
+    /// every message, and neither a send nor a `::CLASS` install can be
+    /// redirected by a program that declares a class of one of these names.
     string: ObjRef,
     object: ObjRef,
     metaclass: ObjRef,
+    array: ObjRef,
+    package: ObjRef,
+    method: ObjRef,
 }
 
 impl ObjectModel {
@@ -220,12 +242,20 @@ impl ObjectModel {
         let string = classes.lookup("String").expect("String is a native class");
         let object = classes.lookup("Object").expect("Object is a native class");
         let metaclass = classes.lookup("Class").expect("Class is a native class");
+        let array = classes.lookup("Array").expect("Array is a native class");
+        let package = classes
+            .lookup("Package")
+            .expect("Package is a native class");
+        let method = classes.lookup("Method").expect("Method is a native class");
         ObjectModel {
             classes,
             natives,
             string,
             object,
             metaclass,
+            array,
+            package,
+            method,
         }
     }
 }
@@ -242,6 +272,11 @@ enum Primitive {
     String,
     /// `.nil`, measured: `.nil~class~id` is `Object`.
     Object,
+    /// A `Body::Array`. Measured, `.Array~superClasses~class~id` is `Array`.
+    Array,
+    /// A `Body::Native` whose class is `.Package` -- what `~package` answers.
+    /// Measured, `.Array~package~class~id` is `Package`.
+    Package,
     /// The receiver **is** a class object, so its messages resolve against
     /// that class's own class behaviour rather than against any class's
     /// instance behaviour. Measured, `::class K` plus `::method m class`:
@@ -377,6 +412,12 @@ impl Interp {
         self.object_model().string
     }
 
+    /// `.Package`: the class of the object `~package` answers, which
+    /// `environment.rs` builds one of per package.
+    pub(crate) fn package_class(&mut self) -> ObjRef {
+        self.object_model().package
+    }
+
     /// Which native class a value answers to, or the value's own shape when
     /// this phase builds no class for it.
     ///
@@ -393,6 +434,13 @@ impl Interp {
     /// answers as itself rather than as an instance of anything: its
     /// behaviour is that class's class behaviour, which is where `::METHOD
     /// ... CLASS` installs.
+    ///
+    /// An **array** answers, because `~superClasses` puts one in a program's
+    /// hands. A name `.Array`'s behaviour here does not hold is the oracle's
+    /// 97.1, which is the same answer a `String` receiver already gets for a
+    /// name the prologue donates and this crate has not: `CoreClasses.orx:93`
+    /// and `:97` are the same `~inherit` and the gap belongs to whichever task
+    /// runs that file, not to one value kind.
     fn receiver_kind(&self, receiver: ObjRef) -> Result<Primitive, &'static str> {
         match receiver.decode() {
             Decoded::Nil => Ok(Primitive::Object),
@@ -412,9 +460,21 @@ impl Interp {
                 Some(object) => match &object.body {
                     Body::Text { .. } | Body::Num { .. } => Ok(Primitive::String),
                     Body::Stem { .. } => Err("a stem"),
-                    Body::Array(_) => Err("an array"),
+                    Body::Array(_) => Ok(Primitive::Array),
                     Body::Instance(_) => Err("an instance of a user class"),
                     Body::WeakRef(_) => Err("a weak reference"),
+                    // The package object `~package` answers. `.Package`'s
+                    // instance behaviour here is `Setup.cpp`'s whole set --
+                    // neither `CoreClasses.orx` nor `StreamClasses.orx` names
+                    // `.Package` at all, checked -- so a name it does not hold
+                    // is a name the running oracle does not hold either, and
+                    // 97.1 is the right answer rather than a guess.
+                    Body::Native(native)
+                        if self.object_model.as_ref().map(|model| model.package)
+                            == Some(native.class()) =>
+                    {
+                        Ok(Primitive::Package)
+                    }
                     // `.environment`, `.local`, `.methods` and `.context`.
                     // Their classes are in the registry, so there is a
                     // behaviour to resolve against -- what is missing is a
@@ -436,6 +496,8 @@ impl Interp {
         Ok(match kind {
             Primitive::String => Behaviour::Instance(model.string),
             Primitive::Object => Behaviour::Instance(model.object),
+            Primitive::Array => Behaviour::Instance(model.array),
+            Primitive::Package => Behaviour::Instance(model.package),
             Primitive::Class(class) => Behaviour::ClassSide(class),
         })
     }
@@ -735,10 +797,26 @@ impl Interp {
         match self.resolve(receiver, name, start_scope) {
             Some(resolution) => self.invoke(resolution, receiver, name, args),
             None => {
-                let target = self.to_text(receiver).to_vec();
+                let target = self.message_target_text(receiver);
                 Err(Raised::no_method(&target, name).into())
             }
         }
+    }
+
+    /// The receiver as 97.1 names it: `stringValue()`, which is **not** the
+    /// string value [`Interp::to_text`] answers for every receiver.
+    ///
+    /// An array is where the two part. `RexxObject::stringValue` for an array
+    /// is its default name, while a string context reaches
+    /// `ArrayClass::makeString` and gets the items joined
+    /// (`classes/ArrayClass.cpp:1841`). Measured, `a = .Array~superClasses`:
+    /// `say a + 1` reports `Object "an Array" does not understand message
+    /// "+".` where `say 'x'a` prints the two class names on two lines.
+    fn message_target_text(&mut self, receiver: ObjRef) -> Vec<u8> {
+        if matches!(self.receiver_kind(receiver), Ok(Primitive::Array)) {
+            return ARRAY_DEFAULT_NAME.to_vec();
+        }
+        self.to_text(receiver).to_vec()
     }
 
     /// One whole `target~name(...)` term: the receiver, the scope override,
@@ -988,24 +1066,343 @@ fn native_has_method(
 /// that says whether it is a mixin -- measured, `::CLASS M MIXINCLASS
 /// Object` and `::CLASS P` answer `The Object class` and `The P class`.
 ///
-/// **The instance-behaviour arm is unreachable**, and answers loudly rather
-/// than picking a class: `BASECLASS` is in `.Class`'s own dictionary, and the
-/// only receiver whose behaviour that dictionary reaches is a class object,
-/// whose behaviour is `ClassSide`. Nothing this crate can build is an
-/// *instance* of `.Class` without being one.
+/// The non-class-object arm is unreachable, for the reason
+/// [`class_receiver`] gives.
 fn native_base_class(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<ObjRef, Failure> {
-    match interp.receiver_behaviour(receiver) {
-        Ok(Behaviour::ClassSide(class)) => Ok(interp.classes().base_class(class)),
-        Ok(Behaviour::Instance(_)) => {
-            Err(Loud::receiver_class("a value that is not a class object").into())
-        }
+    let class = class_receiver(interp, receiver)?;
+    Ok(interp.classes().base_class(class))
+}
+
+/// The class object a receiver whose messages resolve against a class's
+/// **class** behaviour is, or the refusal for one that is not a class object.
+///
+/// Every method in `.Class`'s own instance dictionary is in this position:
+/// the only receiver whose behaviour that dictionary reaches is a class
+/// object, and nothing this crate can build is an *instance* of `.Class`
+/// without being one. Answering from the instance arm would mean picking a
+/// class, so it refuses instead.
+fn class_receiver(interp: &Interp, receiver: ObjRef) -> Result<ObjRef, Failure> {
+    match interp.receiver_kind(receiver) {
+        Ok(Primitive::Class(class)) => Ok(class),
+        Ok(_) => Err(Loud::receiver_class("a value that is not a class object").into()),
         Err(kind) => Err(Loud::receiver_class(kind).into()),
     }
+}
+
+/// The argument a method that requires a class object was given --
+/// `classArgument(other, TheClassClass, "class")`
+/// (`runtime/MethodArguments.hpp:727`), which refuses an omitted argument
+/// with 88.901 and a value that is not a class object with 88.914.
+///
+/// Measured at rc 168: `.Array~isSubclassOf()` reports `Missing argument;
+/// argument class is required.` and `.Array~isA('abc')` reports `Argument
+/// class must be an instance of the Class class.`
+fn class_argument(args: &[Option<ObjRef>]) -> Result<ObjRef, Failure> {
+    let Some(Some(argument)) = args.first().copied() else {
+        return Err(Raised::missing_named_argument("class").into());
+    };
+    match argument.class_id() {
+        Some(_) => Ok(argument),
+        None => Err(Raised::argument_not_a_class("class").into()),
+    }
+}
+
+/// `Class~id`: the name the class was declared with, case unmodified --
+/// `RexxClass::getId` (`classes/ClassClass.cpp:596`).
+///
+/// Measured, `.array~id` is `Array` and `::class Foo` makes `.Foo~id` `Foo`.
+fn native_id(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    let id = interp.class_id_text(class).as_bytes().to_vec();
+    Ok(interp.text_built(id))
+}
+
+/// `Class~metaClass`: `RexxClass::getMetaClass` (`classes/ClassClass.cpp:1626`).
+///
+/// **Not `~class`**, and the pair parts iff the superclass is a metaclass and
+/// is not the named-or-inherited metaclass -- `ClassRegistry::class_of` carries
+/// the measured rows and the rule.
+fn native_metaclass(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    Ok(interp.classes().metaclass(class))
+}
+
+/// `Class~superClass`: the class's own direct superclass, or `.nil` for
+/// `.Object` -- `RexxClass::getSuperClass` (`classes/ClassClass.cpp:1707`),
+/// which reads the **first** entry of the superclass list and not its last.
+///
+/// Measured, `.Array~superClass` is `The Object class` while
+/// `.Array~superClasses` holds `The Object class` and `The OrderedCollection
+/// class`, so the first entry and the whole list are different answers;
+/// `.Object~superClass` is `The NIL object`.
+fn native_superclass(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    Ok(interp.classes().superclass(class).unwrap_or(ObjRef::NIL))
+}
+
+/// `Class~superClasses`: a **fresh** array of the class's own direct
+/// superclasses -- `RexxClass::getSuperClasses`
+/// (`classes/ClassClass.cpp:1721`), which copies the list rather than handing
+/// out the class's own.
+///
+/// Measured, `(.Array~superClasses == .Array~superClasses)` is `0`: two sends
+/// answer two objects.
+fn native_superclasses(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    let items = interp.classes().superclasses(class).to_vec();
+    // Every item is a class identity, which lives outside the arena
+    // (`rexx_core::CLASS_SLOT_BASE`), so the allocation below cannot collect
+    // one of them out from under this array.
+    Ok(interp.alloc_with(BehaviourId::ARRAY, Body::Array(items)))
+}
+
+/// `Object~class`: the class whose behaviour answers this receiver's
+/// messages -- `RexxObject::classObject`.
+///
+/// For a class object this is [`ClassRegistry::class_of`], the class the class
+/// object's own behaviour belongs to, and **not** its metaclass; that
+/// function's doc carries the measured rows where the two part.
+///
+/// [`ClassRegistry::class_of`]: rexx_classes::ClassRegistry::class_of
+fn native_class(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    let kind = match interp.receiver_kind(receiver) {
+        Ok(kind) => kind,
+        Err(gap) => return Err(Loud::receiver_class(gap).into()),
+    };
+    let model = interp.object_model();
+    Ok(match kind {
+        Primitive::String => model.string,
+        Primitive::Object => model.object,
+        Primitive::Array => model.array,
+        Primitive::Package => model.package,
+        Primitive::Class(class) => model.classes.class_of(class),
+    })
+}
+
+/// `Object~isA(class)`: whether the receiver's **class** is `class` or a
+/// subclass of it -- `RexxObject::isInstanceOfRexx`
+/// (`classes/ObjectClass.cpp:286`), which asks `classObject()` and not the
+/// receiver.
+///
+/// The indirection through `~class` is the whole difference from
+/// [`native_is_subclass_of`], and it is measurable on a class object as
+/// receiver: `.Array~isA(.Class)` is `1` because `.Array~class` is `.Class`,
+/// and `.Array~isA(.Array)` is `0` where `.Array~isSubclassOf(.Array)` is `1`.
+fn native_is_a(
+    interp: &mut Interp,
+    cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    let other = class_argument(args)?;
+    let own = native_class(interp, cleared, receiver, &[])?;
+    let answer = interp.classes().is_a(own, other);
+    Ok(interp.counted(usize::from(answer)))
+}
+
+/// `Class~isSubclassOf(class)`: whether the receiver **is** `class` or derives
+/// from it -- `RexxClass::isSubclassOf` (`classes/ClassClass.cpp:1692`),
+/// which asks `isCompatibleWith` on the receiver itself.
+fn native_is_subclass_of(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    let other = class_argument(args)?;
+    let class = class_receiver(interp, receiver)?;
+    let answer = interp.classes().is_a(class, other);
+    Ok(interp.counted(usize::from(answer)))
+}
+
+/// `Object~identityHash`.
+///
+/// **Answers the handle**, which is deviation 4's licence read at this
+/// message: identity in this crate is handle equality, and what its answers
+/// *mean* is 5c's. The oracle's own answer is derived from the object's
+/// address, so no differential row can compare the two -- the corpus cannot
+/// witness this method and `dispatch.rs`'s own tests are the instrument.
+fn native_identity_hash(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    let bits = receiver.bits().to_string().into_bytes();
+    Ok(interp.text_built(bits))
+}
+
+/// `Class~method(name)`: the method object `name` names **in this class's own
+/// instance dictionary**, and 97.1 for anything else.
+///
+/// `RexxClass::method` (`classes/ClassClass.cpp:984`) retrieves from
+/// `instanceMethodDictionary` directly, so an inherited name, a donated name
+/// and a class-side name all raise. Measured, three descriptors:
+/// `.Array~method("APPEND")` answers `a Method`; `.Array~method("STRING")`,
+/// whose name `.Object` defines and `.Array`'s flattened behaviour holds, is
+/// 97.1 at rc 159; and `.K~method("M")` for `::method m class` is 97.1 too,
+/// while the same directive without `CLASS` answers.
+fn native_method(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    let Some(Some(argument)) = args.first().copied() else {
+        return Err(Raised::missing_named_argument("method name").into());
+    };
+    if lacks_a_string_value(interp, argument) {
+        return Err(Raised::named_argument_needs_a_string_value("method name").into());
+    }
+    let name = interp.to_text(argument).to_ascii_uppercase();
+    let class = class_receiver(interp, receiver)?;
+    let found = interp
+        .classes()
+        .has_own_instance_method(class, &String::from_utf8_lossy(&name));
+    if !found {
+        let target = interp.class_default_name(class).to_vec();
+        return Err(Raised::no_method(&target, &name).into());
+    }
+    let method_class = interp.object_model().method;
+    let rendered = crate::environment::default_object_name(interp.class_id_text(method_class));
+    Ok(interp.alloc_with(
+        BehaviourId::OBJECT,
+        Body::Native(Box::new(NativeObject::new(
+            method_class,
+            rendered.as_bytes(),
+        ))),
+    ))
+}
+
+/// `Array~makeString(format, separator)`: the array's items as one string --
+/// `ArrayClass::toString` (`classes/ArrayClass.cpp:1856`), which `MakeString`
+/// and `ToString` both name (`memory/Setup.cpp:733`-`:734`).
+///
+/// `L` joins the items with `separator`, defaulting to the line ending; `C`
+/// concatenates them and **refuses a separator**, which is where the method's
+/// own declared arity of 2 and the 93.902 it raises for its own second
+/// argument come apart. Measured at rc 163:
+/// `.Array~superClasses~makeString('C', '-')` reports `1 expected` where
+/// `.Array~superClasses~makeString('L', ' ', 'z')` reports `2 expected`, and
+/// `makeString('X')` is 93.915 naming `"CL"`.
+fn native_array_make_string(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    // `optionalOptionArgument(format, 'L', ARG_ONE)`: the option's first
+    // character, upcased, with the whole argument omitted meaning `L`.
+    let form = match args.first().copied().flatten() {
+        None => b'L',
+        Some(argument) => {
+            if lacks_a_string_value(interp, argument) {
+                return Err(Raised::argument_needs_a_string_value(1).into());
+            }
+            let text = interp.to_text(argument).to_vec();
+            match text.first().copied().map(|byte| byte.to_ascii_uppercase()) {
+                Some(byte @ (b'L' | b'C')) => byte,
+                _ => return Err(Raised::method_option_not_recognised("CL", &text).into()),
+            }
+        }
+    };
+    let separator = args.get(1).copied().flatten();
+    if form == b'C' && separator.is_some() {
+        return Err(Raised::too_many_method_arguments(1).into());
+    }
+    let separator = match separator {
+        None if form == b'L' => b"\n".to_vec(),
+        None => Vec::new(),
+        Some(argument) => {
+            if lacks_a_string_value(interp, argument) {
+                return Err(Raised::argument_needs_a_string_value(2).into());
+            }
+            interp.to_text(argument).to_vec()
+        }
+    };
+    let items = match interp.heap.get(receiver).map(|object| &object.body) {
+        Some(Body::Array(items)) => items.clone(),
+        // Unreachable: `MAKESTRING` is in `.Array`'s own dictionary, and the
+        // only receiver whose behaviour that dictionary reaches is a
+        // `Body::Array`. Loud rather than a panic, this crate's rule for an
+        // internal inconsistency.
+        _ => return Err(Loud::receiver_class("a value that is not an array").into()),
+    };
+    let mut out = Vec::new();
+    for (at, item) in items.iter().enumerate() {
+        if at > 0 {
+            out.extend_from_slice(&separator);
+        }
+        let bytes = interp.to_text(*item).to_vec();
+        out.extend_from_slice(&bytes);
+    }
+    Ok(interp.text_built(out))
+}
+
+/// `Class~package`: the package the class was defined in --
+/// `RexxClass::getPackage` (`classes/ClassClass.cpp:1932`).
+///
+/// Measured, three descriptors: `.Array~package` renders `The REXX Package`
+/// and `.Array~package~name` is `REXX`, while a `::CLASS` in a user file
+/// answers `a Package` whose `~name` is that file's own path. Measured too,
+/// `(.Array~package == .String~package)` is `1` and
+/// `(.K~package == .Array~package)` is `0`.
+fn native_package(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    Ok(interp.package_object_for(class))
+}
+
+/// `Package~name`: the package's own name -- `PackageClass::getName`.
+///
+/// `REXX` for the package the primitive classes belong to, and the program's
+/// own path for a package a `::CLASS` installed into.
+fn native_package_name(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    // Loud rather than a panic where the receiver is a package handle this
+    // crate did not build, which is `Interp::package_name`'s own `None`.
+    let Some(name) = interp.package_name(receiver) else {
+        return Err(Loud::receiver_class("a package object this crate did not build").into());
+    };
+    Ok(interp.text_built(name))
 }
 
 /// `Object~isNil`: `1` for `.nil` and `0` for everything else.
@@ -1457,5 +1854,91 @@ mod tests {
             interp.send_message(stem, b"LENGTH", None, &[]),
             Err(Failure::Loud(_))
         ));
+    }
+
+    /// `~identityHash` answers, and **the corpus cannot witness it**: the
+    /// oracle's answer is derived from the object's address, so no differential
+    /// row can compare the two and this test is the whole instrument.
+    ///
+    /// What it pins is the half deviation 4 does not license away. The method
+    /// answers rather than refusing; it answers something a Rexx program can
+    /// use as a whole number; and equal handles answer equally while different
+    /// handles do not, which is the identity model that deviation names -- so
+    /// a build answering a constant answers and is usable, and still fails the
+    /// row that asks two different handles.
+    ///
+    /// `==` and not `=`, and `numeric digits 20` rather than the default:
+    /// measured, the answer is wider than nine significant digits, so a
+    /// numeric comparison at the default `DIGITS` rounds two different
+    /// handles' answers together and reports them equal.
+    #[test]
+    fn identity_hash_answers_a_number_that_follows_the_handle() {
+        assert_eq!(
+            both_engines(
+                "numeric digits 20\n\
+                 say (.Array~identityHash == .Array~identityHash)\n\
+                 say (.Array~identityHash == .String~identityHash)\n\
+                 say datatype(.Array~identityHash, 'W')\n"
+            ),
+            (0, "1\n0\n1\n".to_string(), String::new())
+        );
+    }
+
+    /// The reflection protocol answers on both engines for a receiver that is
+    /// not a class object, which is where `~class` and `~isA` differ from the
+    /// `.Class`-scope methods beside them.
+    ///
+    /// `corpus/lang/class_reflection.rex` runs these same shapes against the
+    /// live oracle. Here to keep the split loud without `REXX_CORPUS_GATE`: a
+    /// build that answered `~class` from `receiver_kind`'s class arm alone
+    /// would refuse every row below, and nothing outside the gate would say so.
+    #[test]
+    fn the_object_protocol_answers_a_receiver_that_is_not_a_class_object() {
+        assert_eq!(
+            both_engines(
+                "say 'abc'~class~id\n\
+                 say (12345)~class~id\n\
+                 say .nil~class~id\n\
+                 say .Class~superClasses~class~id\n\
+                 say .Array~package~class~id\n\
+                 say 'abc'~isA(.String) .nil~isA(.Object) 'abc'~isA(.Array)\n"
+            ),
+            (
+                0,
+                "String\nString\nObject\nArray\nPackage\n1 1 0\n".to_string(),
+                String::new()
+            )
+        );
+    }
+
+    /// A name in `.Class`'s own dictionary does not reach a receiver that is
+    /// not a class object.
+    ///
+    /// This is what makes [`class_receiver`]'s non-class arm unreachable, and
+    /// asserting it here rather than asserting the arm is deliberate: reaching
+    /// the arm needs a [`Cleared`] token, and building one outside
+    /// [`Interp::invoke`] would add a second call to the dispatch seam, which
+    /// `tests/dispatch_seam.rs` bounds at one.
+    ///
+    /// The rows are the receiver kinds a program can put on the left of a
+    /// send: a string, `.nil`, an array and a package object. `~id` is the row
+    /// that would answer if the class-side and instance-side dictionaries were
+    /// one.
+    #[test]
+    fn a_class_scope_name_does_not_reach_a_receiver_that_is_not_a_class_object() {
+        for source in [
+            "say 'abc'~id\n",
+            "say .nil~id\n",
+            "say .Class~superClasses~id\n",
+            "say .Array~package~id\n",
+            "say 'abc'~superClasses\n",
+        ] {
+            let (code, stdout, stderr) = both_engines(source);
+            assert_eq!((code, stdout.as_str()), (159, ""), "{source:?}");
+            assert!(
+                stderr.contains("Error 97.1:"),
+                "{source:?} answered or refused instead of raising: {stderr:?}"
+            );
+        }
     }
 }

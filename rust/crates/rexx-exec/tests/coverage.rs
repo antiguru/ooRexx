@@ -977,6 +977,18 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/class_abstract_metaclass.rex",
     "lang/class_abstract_metaclass_subclass.rex",
     "lang/class_abstract_metaclass_after_inherit.rex",
+    // Phase 5a (2026-08-17 plan) Task 9: the Object and Class reflection
+    // protocol, `~method`'s own-dictionary rule, the argument refusals of the
+    // methods that take one, and what a program can do with the array
+    // `~superClasses` answers.
+    "lang/class_reflection.rex",
+    "lang/class_package.rex",
+    "lang/class_method_own_dictionary.rex",
+    "lang/class_method_class_side_raises.rex",
+    "lang/class_reflection_argument_ladder.rex",
+    "lang/array_make_string.rex",
+    "lang/array_make_string_refusals.rex",
+    "lang/array_unknown_method.rex",
 ];
 
 #[test]

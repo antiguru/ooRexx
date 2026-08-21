@@ -1,0 +1,13 @@
+count 12
+/* A name .Array's behaviour does not answer is 97.1, and the object the
+ * message names is `an Array`.
+ *
+ * That target is stringValue(), which for an array is its default name -- and
+ * not the string value a string context asks for, which is the items joined
+ * (ArrayClass::makeString, classes/ArrayClass.cpp:1841). The pair with
+ * array_make_string.rex's `string-context` row is what separates them: a build
+ * using one string for both disagrees with one of the two, and the array here
+ * holds an item so the joined form is not empty. rc 159.
+ */
+
+say .Class~superClasses~nosuchname

@@ -1,0 +1,75 @@
+/* The Object and Class reflection protocol, asked of a class this file
+ * declares and of the primitive classes.
+ *
+ * ~class and ~metaClass are asked side by side because they are different
+ * answers: ~class reads the class its own behaviour belongs to and ~metaClass
+ * reads the metaclass. T2 below is a row where they part -- it derives from a
+ * metaclass without naming one, so ~metaClass is MC and ~class is Class.
+ *
+ * ~superClass and ~superClasses are asked side by side for the same reason:
+ * one is the first entry of the other and never its last, which T shows by
+ * having a second.
+ *
+ * ~isA and ~isSubclassOf part on a class object as receiver: ~isA asks the
+ * receiver's ~class, so .Array~isA(.Array) is 0 where
+ * .Array~isSubclassOf(.Array) is 1.
+ *
+ * The primitive rows are the classes whose superclass list this crate has:
+ * every class CoreClasses.orx sends ~inherit gains a mixin there that no
+ * ::CLASS in this file can add, and asking one of those would be asking
+ * about the prologue rather than about this protocol.
+ */
+
+say 'k-id' .K~id
+say 'k-class' .K~class
+say 'k-metaclass' .K~metaClass
+say 'k-superclass' .K~superClass
+say 'k-superclasses [' .K~superClasses~makeString('L', ' ') ']'
+say 'k-isa-class' .K~isA(.Class)
+say 'k-isa-object' .K~isA(.Object)
+say 'k-isa-k' .K~isA(.K)
+say 'k-issub-object' .K~isSubclassOf(.Object)
+say 'k-issub-k' .K~isSubclassOf(.K)
+say 'k-issub-array' .K~isSubclassOf(.Array)
+
+say 't-superclass' .T~superClass
+say 't-superclasses [' .T~superClasses~makeString('L', ' ') ']'
+say 't-issub-b' .T~isSubclassOf(.B)
+say 't-issub-mx' .T~isSubclassOf(.MX)
+
+say 't2-metaclass' .T2~metaClass
+say 't2-class' .T2~class
+
+say 'object-superclass' .Object~superClass
+say 'object-superclasses [' .Object~superClasses~makeString('L', ' ') ']'
+say 'object-class' .Object~class
+say 'object-metaclass' .Object~metaClass
+
+say 'class-id' .Class~id
+say 'class-superclass' .Class~superClass
+say 'class-superclasses [' .Class~superClasses~makeString('L', ' ') ']'
+say 'class-class' .Class~class
+say 'class-isa-class' .Class~isA(.Class)
+
+say 'method-id' .Method~id
+say 'method-superclasses [' .Method~superClasses~makeString('L', ' ') ']'
+say 'package-id' .Package~id
+say 'routine-id' .Routine~id
+say 'supplier-id' .Supplier~id
+say 'weakreference-id' .WeakReference~id
+
+say 'nil-class' .nil~class
+say 'string-class' 'abc'~class
+say 'number-class' (12345)~class
+say 'string-isa-string' 'abc'~isA(.String)
+say 'string-isa-object' 'abc'~isA(.Object)
+say 'string-isa-array' 'abc'~isA(.Array)
+say 'array-class' .K~superClasses~class
+say 'array-isa-array' .K~superClasses~isA(.Array)
+
+::CLASS MC MIXINCLASS Class
+::CLASS B
+::CLASS MX MIXINCLASS Object
+::CLASS T SUBCLASS B INHERIT MX
+::CLASS T2 SUBCLASS MC
+::CLASS K

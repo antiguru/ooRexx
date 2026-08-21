@@ -818,6 +818,14 @@ impl ClassGraph {
         self.classes[&class].own_instance_methods.method_names()
     }
 
+    /// Whether `name` is in `class`'s own, unflattened instance-method
+    /// dictionary -- the same set [`Self::own_instance_method_names`]
+    /// enumerates, asked about one name so a caller does not build the set to
+    /// throw it away.
+    pub fn has_own_instance_method(&self, class: ObjRef, name: &str) -> bool {
+        self.classes[&class].own_instance_methods.has_method(name)
+    }
+
     /// `class`'s own, unflattened class-method names -- oracle's
     /// `classMethodDictionary`, what `class~instanceMethods(class)` answers
     /// when sent to the class object itself (its own receiver behaviour is

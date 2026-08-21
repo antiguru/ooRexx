@@ -1541,6 +1541,13 @@ impl Interp {
         }
         match &self.heap.get(value)?.body {
             Body::Native(_) => Some("one of the interpreter's own objects"),
+            // An array *does* have a string value -- `ArrayClass::makeString`
+            // joins its items -- so concatenation, which never asks here,
+            // agrees with the oracle. Every operator that does ask needs a
+            // number or a truth value, and the oracle answers 97.1 for those:
+            // `.Array` defines no arithmetic, comparison or logical method,
+            // so the send finds nothing rather than converting.
+            Body::Array(_) => Some("an array"),
             // **The redirect every conversion here takes, taken here too.**
             // A stem with a default answers *as* that default -- `to_text`
             // and `to_number` both chase it -- so a check that stopped at the
@@ -3343,6 +3350,33 @@ mod object_operand_tests {
                 "==",
                 "one of the interpreter's own objects",
             ),
+            // An array, which `~superClasses` puts in a program's hands.
+            // oracle 97.1 at rc 159, `Object "an Array" does not understand
+            // message "+"` -- `.Array` defines no arithmetic or logical
+            // method, so the send finds nothing.
+            (b"say (.Object~superClasses + 1)\n", "+", "an array"),
+            (b"say (.Object~superClasses & 1)\n", "&", "an array"),
+            // oracle 1 -- `Object`'s own identity comparison, which this
+            // crate does not model. A build converting through the array's
+            // string value answers here instead, and the string value is the
+            // items joined, which is a real string.
+            (b"say (.Object~superClasses = '')\n", "=", "an array"),
+            (b"say (.Object~superClasses == '')\n", "==", "an array"),
+            // A package object, which `~package` puts in a program's hands
+            // and which reaches the same arm `.environment` does.
+            // oracle 97.1 at rc 159
+            (
+                b"say (.Array~package + 1)\n",
+                "+",
+                "one of the interpreter's own objects",
+            ),
+            // oracle 1 -- one package object, measured:
+            // `(.Array~package == .String~package)`
+            (
+                b"say (.Array~package == .String~package)\n",
+                "==",
+                "one of the interpreter's own objects",
+            ),
         ];
         for (source, op, kind) in cases {
             let (code, stdout, stderr) = both_engines(source);
@@ -3379,6 +3413,11 @@ mod object_operand_tests {
                 b"do i = .environment to 5\nend\n",
                 "initial",
                 "one of the interpreter's own objects",
+            ),
+            (
+                b"do i = .Object~superClasses to 5\nend\n",
+                "initial",
+                "an array",
             ),
         ];
         for (source, role, kind) in cases {

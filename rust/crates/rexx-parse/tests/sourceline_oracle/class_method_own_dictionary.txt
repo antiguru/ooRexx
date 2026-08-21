@@ -1,0 +1,71 @@
+count 70
+/* ~method reads the class's own instance dictionary and nothing else
+ * (RexxClass::method, classes/ClassClass.cpp:984, which retrieves from
+ * instanceMethodDictionary directly).
+ *
+ * This is the guard against a build that flattens every scope onto one class:
+ * such a build answers the rows below that raise here, and an inherited name
+ * is the shape it would answer first. There is no table C row for it --
+ * nothing in the documentation supplies an expected answer for the scope
+ * question -- so this program and class_method_class_side_raises.rex beside it
+ * are the whole of the protection.
+ *
+ * The classes the rows cover: Array, whose own dictionary holds APPEND and
+ * whose flattened behaviour also holds .Object's STRING; Class, whose own
+ * dictionary holds ID; Object, whose own dictionary holds HASMETHOD; and K
+ * below, which declares one instance method and one class method of its own.
+ *
+ * The pair is what pins the rule to "this class's own dictionary" rather than
+ * to something coincidental: .Array~hasMethod is 1 for names this raises for,
+ * so a build asking the flattened behaviour agrees with every answering row
+ * and disagrees with every raising one.
+ *
+ * The argument is upcased before the lookup, measured -- row 2.
+ *
+ * The trap hides the traceback the refusals carry, so the last send is
+ * untrapped and pins those bytes: the frame line the oracle emits for a
+ * refusal raised inside a native method reached by a message send, and the
+ * 97.1 text naming the class object as the target. rc 159.
+ */
+
+signal on syntax name trapped
+n = 0
+
+next:
+n = n + 1
+select
+  when n = 1 then say n 'answered' .Array~method('APPEND')
+  when n = 2 then say n 'answered' .Array~method('append')
+  when n = 3 then say n 'answered' .Array~method('MAKESTRING')
+  when n = 4 then say n 'answered' .Class~method('ID')
+  when n = 5 then say n 'answered' .Object~method('HASMETHOD')
+  when n = 6 then say n 'answered' .K~method('OWN')
+  /* STRING is .Object's, and .Array's flattened behaviour holds it. */
+  when n = 7 then say n 'answered' .Array~method('STRING')
+  /* ID is .Class's instance method; .Array answers it as a class object and
+     it is not in .Array's own dictionary. */
+  when n = 8 then say n 'answered' .Array~method('ID')
+  /* SIDE is K's own class method, which lives in the class dictionary. */
+  when n = 9 then say n 'answered' .K~method('SIDE')
+  when n = 10 then say n 'answered' .K~method('NOSUCHNAME')
+  otherwise signal done
+end
+signal next
+
+trapped:
+say n 'raised' rc'.'condition('E')
+signal on syntax name trapped
+signal next
+
+done:
+say 'hasmethod-string' .Array~hasMethod('STRING')
+say 'hasmethod-id' .Array~hasMethod('ID')
+say 'hasmethod-side' .K~hasMethod('SIDE')
+signal off syntax
+say .Array~method('STRING')
+
+::CLASS K
+::METHOD own
+  return 'own'
+::METHOD side CLASS
+  return 'side'

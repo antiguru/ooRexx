@@ -296,6 +296,16 @@ impl ClassRegistry {
         self.graph.own_instance_method_names(class)
     }
 
+    /// `~method`'s own lookup: whether `name` is in `class`'s own,
+    /// unflattened instance-method dictionary -- oracle's
+    /// `RexxClass::method`, which retrieves from `instanceMethodDictionary`
+    /// directly (`ClassClass.cpp:984`) and so answers nothing for an
+    /// inherited, donated or class-side name. See
+    /// [`ClassGraph::has_own_instance_method`].
+    pub fn has_own_instance_method(&self, class: ObjRef, name: &str) -> bool {
+        self.graph.has_own_instance_method(class, name)
+    }
+
     /// `class`'s own, unflattened class-method names -- see
     /// [`ClassGraph::own_class_method_names`].
     pub fn own_class_method_names(&self, class: ObjRef) -> std::collections::BTreeSet<String> {

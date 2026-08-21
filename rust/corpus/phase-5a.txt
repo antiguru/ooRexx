@@ -272,3 +272,34 @@ lang/class_metaclass_not_a_metaclass.rex
 lang/class_abstract_metaclass.rex
 lang/class_abstract_metaclass_subclass.rex
 lang/class_abstract_metaclass_after_inherit.rex
+
+# Phase 5a (2026-08-17 plan) Task 9: the Object and Class reflection
+# protocol.
+#
+# The protocol itself, asked of a class a ::CLASS declares and of the
+# primitive classes whose superclass list this crate has -- the ones
+# CoreClasses.orx sends ~inherit gain a mixin no directive here can add, and
+# asking one of those would be asking about the prologue.
+lang/class_reflection.rex
+lang/class_package.rex
+# ~method reads the class's own instance dictionary and nothing else, which is
+# the guard against a build that flattens every scope onto one class. There is
+# no table C row for the scope question, so these programs are the whole of it:
+# one
+# carries the answering rows and ends untrapped on a donated name, the other
+# ends untrapped on the class's own class method, and a build reading the class
+# behaviour instead answers one and raises the other.
+lang/class_method_own_dictionary.rex
+lang/class_method_class_side_raises.rex
+# The argument refusals of the methods that take one, which name their
+# argument where the ones already here number it.
+lang/class_reflection_argument_ladder.rex
+# ~superClasses answers an array, so Array~makeString is what a program can do
+# with one -- both its forms, its separator, the empty list, and the string
+# value an array has in a string context, which is a different answer from
+# either form.
+lang/array_make_string.rex
+lang/array_make_string_refusals.rex
+# The array's own name in a 97.1, which is stringValue() and not the string
+# value a string context asks for.
+lang/array_unknown_method.rex

@@ -2336,6 +2336,22 @@ struct Interp {
     /// step of the order mean anything: two packages may each declare a class
     /// of one name.
     package_classes: HashMap<ProgramId, HashMap<Box<[u8]>, ObjRef>>,
+    /// Which program's `::CLASS` directive created a class -- the other
+    /// direction of [`package_classes`], which `~package` reads.
+    ///
+    /// A class absent here came from `rexx_classes::native_classes` and
+    /// belongs to the `REXX` package; `Interp::record_package_class` fills both
+    /// tables, so a class cannot be in one and not the other.
+    ///
+    /// [`package_classes`]: Interp::package_classes
+    class_packages: HashMap<ObjRef, ProgramId>,
+    /// The package objects `~package` answers, keyed by the program whose
+    /// directives installed the class -- `None` being the `REXX` package the
+    /// primitive classes belong to.
+    ///
+    /// Cached rather than built per send, because the oracle answers one
+    /// object: measured, `(.Array~package == .String~package)` is `1`.
+    package_objects: HashMap<Option<ProgramId>, ObjRef>,
     /// Which `(program, directive)` a [`rexx_classes::MethodId`] `install_directives`
     /// minted names -- the "bodies are stored" half of R9, addressed by the
     /// same identity `ClassRegistry::add_instance_method`/`add_class_method`
@@ -3150,6 +3166,8 @@ impl Interp {
             class_variables: HashMap::new(),
             environment: None,
             package_classes: HashMap::new(),
+            class_packages: HashMap::new(),
+            package_objects: HashMap::new(),
             method_bodies: HashMap::new(),
             out: Vec::new(),
             trace: Vec::new(),

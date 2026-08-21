@@ -1,0 +1,24 @@
+/* ~package, and the ~name of what it answers.
+ *
+ * The primitive classes belong to one package, whose name is REXX and which
+ * renders as The REXX Package; a class a ::CLASS directive installed belongs
+ * to its own file's package, which renders as a Package and whose name is
+ * that file's path. So the pair of rows is what says ~package reads the
+ * class rather than answering one object for everything.
+ *
+ * The name of this file's own package is the same string PARSE SOURCE's third
+ * word carries, which the last row asks beside it.
+ */
+
+say 'array-package' .Array~package
+say 'array-package-name' .Array~package~name
+say 'string-package-name' .String~package~name
+say 'class-package-name' .Class~package~name
+say 'k-package' .K~package
+say 'k-package-name' .K~package~name
+say 'k-package-class' .K~package~class
+say 'k-package-isa-package' .K~package~isA(.Package)
+parse source . . source
+say 'parse-source' source
+
+::CLASS K

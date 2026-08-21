@@ -1329,6 +1329,34 @@ impl Raised {
         Raised::syntax(88, 914, vec![b"SCOPE".to_vec(), b"Class".to_vec()])
     }
 
+    /// 88.914: an argument the method requires to be a class object is not
+    /// one. `argument` is the name the raise site substitutes.
+    ///
+    /// The oracle's `classArgument(other, TheClassClass, "class")`
+    /// (`runtime/MethodArguments.hpp:727`) passes the name, so it varies with
+    /// the method where [`scope_override_not_a_class`]'s is fixed. Measured
+    /// at rc 168: `.Array~isA('abc')` and `.Array~isSubclassOf('abc')` both
+    /// report `Argument class must be an instance of the Class class.`
+    ///
+    /// [`scope_override_not_a_class`]: Raised::scope_override_not_a_class
+    pub(crate) fn argument_not_a_class(argument: &str) -> Raised {
+        Raised::syntax(
+            88,
+            914,
+            vec![argument.as_bytes().to_vec(), b"Class".to_vec()],
+        )
+    }
+
+    /// 88.901: a method argument the oracle names rather than numbers was
+    /// omitted.
+    ///
+    /// Measured at rc 168: `.Array~method()` reports `Missing argument;
+    /// argument method name is required.` and `.Array~isSubclassOf()` reports
+    /// `argument class`.
+    pub(crate) fn missing_named_argument(argument: &str) -> Raised {
+        Raised::syntax(88, 901, vec![argument.as_bytes().to_vec()])
+    }
+
     /// 88.909: a method argument has no string value. `position` is
     /// 1-based in the method's own argument list.
     ///
@@ -1337,6 +1365,27 @@ impl Raised {
     /// a number has a string value and `.nil` does not.
     pub(crate) fn argument_needs_a_string_value(position: usize) -> Raised {
         Raised::syntax(88, 909, vec![position.to_string().into_bytes()])
+    }
+
+    /// 88.909 for an argument the oracle names rather than numbers.
+    ///
+    /// `stringArgument`'s overloads differ in exactly this substitution
+    /// (`runtime/MethodArguments.hpp`), and `RexxClass::method` passes
+    /// `"method name"` (`classes/ClassClass.cpp:985`). Measured at rc 168:
+    /// `.Array~method(.nil)` reports `Argument method name must have a string
+    /// value.`
+    pub(crate) fn named_argument_needs_a_string_value(argument: &str) -> Raised {
+        Raised::syntax(88, 909, vec![argument.as_bytes().to_vec()])
+    }
+
+    /// 93.915: a method's option argument is not one of the letters it
+    /// accepts. `options` is the accepted set as the oracle spells it and
+    /// `found` is the argument's own rendered bytes.
+    ///
+    /// Measured at rc 163: `.Array~superClasses~makeString('X')` reports
+    /// `Method option must be one of "CL"; found "X".`
+    pub(crate) fn method_option_not_recognised(options: &str, found: &[u8]) -> Raised {
+        Raised::syntax(93, 915, vec![options.as_bytes().to_vec(), found.to_vec()])
     }
 
     /// 97.1: the receiver's behaviour answers no method of that name.

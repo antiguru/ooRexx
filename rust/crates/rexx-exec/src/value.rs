@@ -586,19 +586,20 @@ impl Interp {
             Decoded::Heap { .. } => {}
         }
 
-        let stem_default = {
+        let redirect = {
             let Some(object) = self.heap.get(value) else {
                 return self.not_in_arena(value).len();
             };
-            match &object.body {
-                Body::Stem {
-                    default: Some(d), ..
-                } => Some(*d),
-                _ => None,
-            }
+            Redirect::of(&object.body)
         };
-        if let Some(default) = stem_default {
-            return self.text_len_inner(default);
+        match redirect {
+            Redirect::StemDefault(default) => return self.text_len_inner(default),
+            // Built rather than measured off the object, because an array's
+            // string value exists nowhere until something asks for it -- the
+            // same position a tagged integer's digits are in, reached one
+            // indirection later.
+            Redirect::ArrayItems(items) => return self.array_string(&items).len(),
+            Redirect::None => {}
         }
 
         let object = self.heap.get_mut(value).expect("a live value");
@@ -617,9 +618,41 @@ impl Interp {
             Body::Stem { name, .. } => name.len(),
             Body::Native(native) => native.rendered().len(),
             other => unreachable!(
-                "the value model only creates Text, Num, Stem and Native, got {other:?}"
+                "the value model only creates Text, Num, Stem, Array and Native, got {other:?}"
             ),
         }
+    }
+
+    /// An array's own string value: each item's string value, joined by the
+    /// platform line ending -- `ArrayClass::toString(OREF_NULL, OREF_NULL)`,
+    /// which `ArrayClass::makeString` forwards to
+    /// (`classes/ArrayClass.cpp:1841`), and which is therefore what a string
+    /// context asks an array for.
+    ///
+    /// The oracle asks each item for `stringValue()` at that loop rather than
+    /// `requestString()`, and its own comment there says what the difference
+    /// is: an array held inside an array renders as its default name instead
+    /// of being joined in turn. The items of every array this crate builds
+    /// are class objects (`dispatch.rs`'s `native_superclasses` is the one
+    /// constructor), and a class object's `stringValue()` is its default
+    /// name, which is what [`to_text`] answers for one.
+    ///
+    /// Measured, three descriptors: `a = .Array~superClasses; say 'A['a']B'`
+    /// renders `A[The Object class` and `The OrderedCollection class]B` on two
+    /// lines, and `.Object~superClasses` -- which holds nothing -- renders
+    /// empty.
+    ///
+    /// [`to_text`]: Interp::to_text
+    fn array_string(&mut self, items: &[ObjRef]) -> Vec<u8> {
+        let mut out = Vec::new();
+        for (at, item) in items.iter().enumerate() {
+            if at > 0 {
+                out.push(b'\n');
+            }
+            let bytes = self.to_text(*item).into_owned();
+            out.extend_from_slice(&bytes);
+        }
+        out
     }
 
     #[allow(
@@ -656,25 +689,26 @@ impl Interp {
             Decoded::Heap { .. } => {}
         }
 
-        let stem_default = {
+        let redirect = {
             // **The class arm rides the `None` this lookup already
             // produces**, and costs nothing when it does not fire --
             // [`Interp::not_in_arena`] has the measurement and the reason.
             let Some(object) = self.heap.get(value) else {
                 return Cow::Borrowed(self.not_in_arena(value));
             };
-            match &object.body {
-                Body::Stem {
-                    default: Some(d), ..
-                } => Some(*d),
-                _ => None,
-            }
+            Redirect::of(&object.body)
         };
-        if let Some(default) = stem_default {
+        match redirect {
             // `Cow::Owned`: the borrow this recursive call returns is tied
             // to `self`, not to `value`'s own object, so the two Cows
             // cannot share one lifetime.
-            return Cow::Owned(self.to_text(default).into_owned());
+            Redirect::StemDefault(default) => {
+                return Cow::Owned(self.to_text(default).into_owned());
+            }
+            // An array's string value is built here and stored nowhere, so it
+            // is `Cow::Owned` and `try_text` answers `None` for one.
+            Redirect::ArrayItems(items) => return Cow::Owned(self.array_string(&items)),
+            Redirect::None => {}
         }
 
         let object = self.heap.get_mut(value).expect("a live value");
@@ -702,7 +736,7 @@ impl Interp {
             // derive theirs from a class id -- `environment.rs` builds both.
             Body::Native(native) => Cow::Borrowed(native.rendered()),
             other => unreachable!(
-                "the value model only creates Text, Num, Stem and Native, got {other:?}"
+                "the value model only creates Text, Num, Stem, Array and Native, got {other:?}"
             ),
         }
     }
@@ -719,14 +753,16 @@ impl Interp {
     /// is locally correct and locally explained. A shared borrow composes,
     /// so callers that only *read* bytes stop paying for the borrow shape.
     ///
-    /// `None` has exactly two causes and both are "there is nothing to
-    /// borrow", never "this value has no text":
+    /// Every cause of `None` is "there is nothing to borrow", never "this
+    /// value has no text":
     ///
     /// * a tagged small integer, whose digits are stored nowhere at all --
     ///   the value *is* the integer, and its rendering is computed fresh
     ///   every time it is asked for;
     /// * a `Body::Num` whose `text` cache is still empty, which needs the
-    ///   `&mut` fill only [`to_text`] can do.
+    ///   `&mut` fill only [`to_text`] can do;
+    /// * a `Body::Array`, whose string value is joined out of its items on
+    ///   demand and cached nowhere.
     ///
     /// [`render`] turns the second cause into the first and the first into
     /// an owned buffer, so the two together let a caller take shared borrows
@@ -767,8 +803,11 @@ impl Interp {
             } => self.try_text(*default),
             Body::Stem { name, .. } => Some(name),
             Body::Native(native) => Some(native.rendered()),
+            // Joined on demand by `to_text` and held nowhere, which is one of
+            // the causes of `None` this function's doc names.
+            Body::Array(_) => None,
             other => unreachable!(
-                "the value model only creates Text, Num, Stem and Native, got {other:?}"
+                "the value model only creates Text, Num, Stem, Array and Native, got {other:?}"
             ),
         }
     }
@@ -978,9 +1017,21 @@ impl Interp {
             // and never numeric, so this answers the marker rather
             // than parsing what `to_text` would produce.
             Body::Native(_) => Err(NotNumeric),
+            // Parses the array's own string value, the same bytes
+            // `to_text` renders, rather than answering the marker
+            // outright: a one-item array holding a number has a
+            // numeric string value, and `Interp::operator_operand_gap`
+            // -- not this function -- is what keeps an array out of
+            // arithmetic, where the oracle's answer is 97.1 and not a
+            // conversion at all.
+            Body::Array(items) => {
+                let items = items.clone();
+                let bytes = self.array_string(&items);
+                Number::parse_bytes(&bytes).ok_or(NotNumeric)
+            }
             other => {
                 unreachable!(
-                    "the value model only creates Text, Num, Stem and Native, got \
+                    "the value model only creates Text, Num, Stem, Array and Native, got \
                      {other:?}"
                 )
             }
@@ -1191,6 +1242,38 @@ enum Carried {
     /// same trade [`Carried::Inline`] makes: the caller already owns this, so
     /// a value that exists only as a tag costs no allocation to read.
     Scratch { buffer: [u8; TEXT_SCRATCH], at: u8 },
+}
+
+/// What a value's text has to be read from somewhere other than the object
+/// holding it.
+///
+/// Both [`Interp::to_text`] and [`Interp::text_len`] end their heap lookup
+/// with this, and the reason is the borrow: the arms after it hand back a
+/// borrow of the object, so the whole match is held for the caller's lifetime
+/// and nothing inside it can reach the interpreter again. Deciding here, off
+/// a shared borrow that ends, is what lets a stem chase its default and an
+/// array join its items.
+enum Redirect {
+    /// A stem with a default answers *as* that default.
+    StemDefault(ObjRef),
+    /// An array's items, copied out because rendering each one needs the
+    /// interpreter mutably.
+    ArrayItems(Vec<ObjRef>),
+    /// The object's own body holds the text.
+    None,
+}
+
+impl Redirect {
+    fn of(body: &Body) -> Redirect {
+        match body {
+            Body::Stem {
+                default: Some(default),
+                ..
+            } => Redirect::StemDefault(*default),
+            Body::Array(items) => Redirect::ArrayItems(items.clone()),
+            _ => Redirect::None,
+        }
+    }
 }
 
 impl Rendered {

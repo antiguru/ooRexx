@@ -184,6 +184,12 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     // values, so nothing is asked of the arena on that path either.
     "lang/class_metaclass_class_method_does_not_donate.rex",
     "lang/class_metaclass_superclass_wins.rex",
+    // `~method`'s own 97.1, which is the same shape: the name it looks up is
+    // upcased into a local buffer and the target is the class object's
+    // `~defaultName`, so the refusal never reaches the arena. Its sibling
+    // `class_method_own_dictionary.rex` does, because the rows before its own
+    // refusal each build a `Method` object.
+    "lang/class_method_class_side_raises.rex",
     "lang/comparison_families.rex",
     "lang/comparison_operators_remaining.rex",
     "lang/deep_nested_expr.rex",
