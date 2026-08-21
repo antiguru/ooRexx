@@ -30,8 +30,10 @@ Gate table C's probes, run by `crates/rexx-exec/tests/gate_table_c.rs`:
   derives a program that exercises a documented mechanism; the file stem is
   the section id, so a section with no program is a missing file and
   structural.
-* `classes/` -- one per row of `../docs/class-set.txt`, asking the questions
-  the class surface is wired by.
+* `classes/` -- one per row of `../docs/class-set.txt`, asking what the
+  `.environment` entry renders as and what its class is -- questions any entry
+  answers -- and then the questions the class surface is wired by, which only
+  a class object answers.
 * `hierarchy/` -- one per row of `../docs/hierarchy-edges.txt`, asserting the
   documented parent is **present in** the child's `~superClasses` and never
   that it is the whole answer.
@@ -58,10 +60,11 @@ read `agree` and count as satisfied. What the check is per directory:
 * `directives/` -- **one line for most rows and none for the rows the oracle
   refuses**, which are named in `ORACLE_REFUSES` in
   `crates/rexx-exec/tests/gate_table_d.rs` and policed in both directions.
-  Measured, those probes print nothing at all: they open with `say 'main'`
-  like the rest, but their refusal is a translate-time or install-time failure
-  and both precede the program's first clause. So what those rows are required
-  to answer is the report the oracle writes on `stderr`.
+  Each of those probes asks for output before its directive -- asserted, not
+  assumed -- and the oracle prints none of it, so what those rows are required
+  to answer is the report it writes on `stderr` instead. `gate_table_d.rs`'s
+  module doc carries what was measured about a `stdout` bound for them, and
+  why the answer is not the same for all of them.
 
 A row that fails its check keeps its place in the table and is reported as
 `unanswered`. It is never `agree`, and it still counts against the gate.

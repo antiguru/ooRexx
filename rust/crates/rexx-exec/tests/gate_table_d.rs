@@ -56,13 +56,24 @@
 //! denominator, because the row set is their union and nothing else.
 //!
 //! **For a row [`ORACLE_REFUSES`] names, what is checked is that the oracle
-//! refused, not what it refused.** Those rows print nothing on `stdout` --
-//! measured, and it is not a probe that could be written differently: the
-//! refusal is a translate-time or install-time failure, and both precede the
-//! program's own first clause, so a line printed "before" the directive does
-//! not exist. The bound is therefore that the oracle wrote a report on
-//! `stderr` at all. A probe rewritten to fail for an unrelated reason still
-//! writes one and is not caught here; nothing derives these programs, so the
+//! refused, not what it refused.** The bound is on `stderr` because a report
+//! there is the answer **every** one of these rows gives, not because no
+//! other answer could exist for any of them. What was measured, on a
+//! construction built to look for one: each row's own directive preceded by a
+//! `::REQUIRES` of a helper program whose prologue prints, so that something
+//! runs at install time before the refusing directive is reached. The helper
+//! printed for the `::REQUIRES NAMESPACE` row, at rc 213; for the others --
+//! `::ATTRIBUTE EXTERNAL`, `::METHOD EXTERNAL`, `::ROUTINE EXTERNAL`,
+//! `::REQUIRES LIBRARY`, `::CLASS CLASS`, `::RESOURCE LIBRARY` -- `stdout`
+//! stayed empty, at rc 166, 166, 158, 158, 231, 231. **So "nothing can run
+//! before these" is false**: installing a `::REQUIRES` runs the required
+//! program, and install time is not before Rexx code runs, it is Rexx code
+//! running. Whether that makes a `stdout` bound available for the
+//! `::REQUIRES NAMESPACE` row on its own is a question for the task that
+//! gives this row set an expected-output column; it is not built here.
+//!
+//! A probe rewritten to fail for an unrelated reason still writes a report on
+//! `stderr` and is not caught; nothing derives these programs, so the
 //! instrument against that is the diff. The task that could close it is one
 //! that gives table D's row set a column saying what each row's probe is
 //! expected to produce -- the same standing gate table C's `entry` and
@@ -291,21 +302,58 @@ fn expected_oracle_lines(row: &Row) -> usize {
 /// Whether the oracle answered a refusing row's question.
 ///
 /// **A bound of zero lines is satisfied by a program that produced nothing at
-/// all**, which is the whole of finding 1 reintroduced through the other side
-/// of the same `if`: a refusing row's two sides both print nothing on
-/// `stdout`, so `compare_raw` agrees and the row reads `agree` with nothing
-/// asked. Measured, replacing such a row's probe with a program reading `nop`
-/// did exactly that and took the 5a open count down by one.
+/// all**, which is finding 1 through the other side of the same `if`: a
+/// refusing row's two sides both print nothing on `stdout`, so `compare_raw`
+/// agrees and the row reads `agree` with nothing asked.
 ///
-/// **A non-zero `stdout` bound does not exist for these rows, and that was
-/// measured rather than assumed.** Every probe here already opens with
-/// `say 'main'`; for these the oracle prints nothing, because the refusal is
-/// a translate-time or install-time failure and both precede the program's
-/// first clause. So the answer these rows do give is a refusal on `stderr`,
-/// and that is what is required: measured, each of them writes a report there
-/// (the shortest 244 bytes) while `nop` writes none.
+/// What these rows do answer is the refusal itself, and the oracle writes it
+/// on `stderr`: measured, each of them writes a report there, the shortest
+/// 244 bytes, while a program reading `nop` writes none. That is the bound.
+/// [`check_refusing_probe_says`] is the other half of it -- these probes ask
+/// something before the directive refuses, so their empty `stdout` is a
+/// refusal rather than an empty program.
+///
+/// The module doc carries what was measured about a `stdout` bound for these
+/// rows, and why the answer is not the same for all of them.
 fn refusal_answered(oracle_stderr: &[u8]) -> bool {
     !oracle_stderr.is_empty()
+}
+
+/// Every row [`ORACLE_REFUSES`] names has a probe that asks something before
+/// its directive.
+///
+/// **What makes the empty `stdout` those rows produce evidence.** A program
+/// with no `SAY` before its first directive prints nothing whether or not
+/// anything refuses it, so the `stderr` bound would be resting on a `stdout`
+/// that carries no information. Asserted rather than written down, because
+/// the property is load-bearing for that bound and the probes are
+/// hand-written.
+fn check_refusing_probe_says(
+    corpus: &Path,
+    row: &Row,
+    probe: &str,
+    structural: &mut Vec<Structural>,
+) {
+    let Ok(text) = fs::read_to_string(corpus.join(probe)) else {
+        // Missing or unreadable is the set check's case, reported there.
+        return;
+    };
+    let asks = text
+        .lines()
+        .take_while(|line| !line.trim_start().starts_with("::"))
+        .any(|line| line.trim_start().starts_with("say "));
+    if !asks {
+        structural.push(Structural {
+            subject: probe.to_string(),
+            detail: format!(
+                "`ORACLE_REFUSES` names {} {}, so this row's bound is that the oracle \
+                 wrote a report on `stderr` and printed nothing on `stdout` -- and the \
+                 second half means nothing unless the program asks for output before its \
+                 first directive. This one has no `say` clause there",
+                row.directive, row.keyword
+            ),
+        });
+    }
 }
 
 /// The five cells partition the cube of three booleans.
@@ -512,6 +560,9 @@ fn directive_option_gate_table() {
         // as satisfied with nothing asked.
         let answered = stdout_lines(&cpp.stdout).len();
         let expected = expected_oracle_lines(&row);
+        if oracle_refuses(&row) {
+            check_refusing_probe_says(&corpus, &row, &probe, &mut structural);
+        }
         let refusal_missing = expected == 0 && !refusal_answered(&cpp.stderr);
         if refusal_missing {
             structural.push(Structural {

@@ -19,9 +19,11 @@
 //!   chapter (`provide-sections.txt`), each naming the probe program that
 //!   exercises the section's mechanism and the negative control that would
 //!   redden it;
-//! * **wiring rows**, one per class in `class-set.txt` -- asked `~id`,
-//!   `~class`, `~superClass`, `~superClasses`, `~metaClass` and
-//!   `~isA(.Class)` -- and one per documented edge in `hierarchy-edges.txt`;
+//! * **wiring rows**, one per class in `class-set.txt` -- asked what the
+//!   `.environment` entry renders as and what its class is, questions any
+//!   entry answers, and then `~id`, `~class`, `~superClass`, `~superClasses`,
+//!   `~metaClass` and `~isA(.Class)`, which only a class object answers --
+//!   and one per documented edge in `hierarchy-edges.txt`;
 //! * **the `ArgUtil` assertion**, which is a wiring row with **no verdict
 //!   channel** for the reason [`argutil_assertion`] gives in full;
 //! * **method rows**, one per (class, method, arm) in `class-methods.txt`,
@@ -57,7 +59,11 @@
 //! the shape the row's probe could produce while asking its question --
 //! [`OracleShape`], bounded by the derived probe text for the families whose
 //! text is derived and by a committed count for the concept family, whose
-//! probes are hand-written. Two interpreters that fail identically at a
+//! probes are hand-written. For a class row that bound is read through the
+//! `entry` column, and it is paired with [`check_entry_present`], because a
+//! count alone cannot tell an entry from a name nothing defines: an
+//! unresolved environment symbol answers the opening questions as a string.
+//! Two interpreters that fail identically at a
 //! probe's first instruction agree on all three descriptors, so without this
 //! a row over a class neither of them has reads `agree` and is counted as a
 //! satisfied row of its phase. A row that fails the check keeps its place in
@@ -635,6 +641,33 @@ fn class_probe_shape(name: &str, entry: &str) -> OracleShape {
 /// check, both silently. Recognised here, so a fourth kind is a structural
 /// failure that names the row.
 const ENTRY_KINDS: &[&str] = &["class", "instance"];
+
+/// Every concept row's committed line count is one a probe can be evidence
+/// for.
+///
+/// **Zero is not.** A bound of zero lines is satisfied by a program that
+/// produced nothing at all, so a concept row committed at zero would read
+/// `agree` the moment both interpreters fell over alike -- the same defect
+/// the bound exists to catch, through the one arm of it that a committed
+/// number rather than a derivation decides.
+fn check_concept_line_counts(
+    concepts: &[(&Section, &'static Concept)],
+    structural: &mut Vec<Structural>,
+) {
+    for (section, concept) in concepts {
+        if concept.oracle_lines == 0 {
+            structural.push(Structural {
+                subject: format!("CONCEPTS arm {}", section.id),
+                detail: "its `oracle_lines` is zero, and a bound of zero lines is met by a \
+                         program that produced nothing at all. A concept probe exercises a \
+                         mechanism and prints what it observed; one that prints nothing is \
+                         not evidence, and the row would read `agree` on both interpreters \
+                         failing alike"
+                    .to_string(),
+            });
+        }
+    }
+}
 
 /// Every class row's `entry` column is a value this file knows how to read.
 fn check_entry_kinds(classes: &[ClassRow], structural: &mut Vec<Structural>) {
@@ -1477,6 +1510,7 @@ fn concept_and_class_gate_table() {
         );
     }
 
+    check_concept_line_counts(&concepts, &mut structural);
     check_entry_kinds(&classes, &mut structural);
     check_interpolated_text(&classes, &mut structural);
     check_edge_endpoints(&classes, &edges, &mut structural);
