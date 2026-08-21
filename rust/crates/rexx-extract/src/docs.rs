@@ -184,6 +184,7 @@ pub fn derive(
     let (includes, unincluded) = classmethod_files(&book_dir, &books)?;
     let method_rows = classes::method_rows(&books, &includes, &class_rows);
     let unreferenced = classes::unreferenced_sections(&books, &method_rows);
+    let no_methods = classes::classes_without_method_rows(&class_rows, &method_rows);
 
     let dire_xml = read("dire.xml")?;
     let parser_path = interpreter.join("parser/DirectiveParser.cpp");
@@ -219,7 +220,7 @@ pub fn derive(
         (
             "class-methods.txt",
             RowSet {
-                header: method_header(&stamp, &unincluded, &unreferenced),
+                header: method_header(&stamp, &unincluded, &unreferenced, &no_methods),
                 rows: classes::method_set_rows(&method_rows),
             },
         ),
@@ -293,11 +294,12 @@ fn method_header(
     stamp: &str,
     unincluded: &[String],
     unreferenced: &[(String, String, usize)],
+    no_methods: &[(String, String)],
 ) -> Vec<String> {
     let mut header = classes::class_methods_header(stamp);
     let mut extra = vec![
         String::new(),
-        "Two derived lists, here rather than in prose because the".into(),
+        "Three derived lists, here rather than in prose because the".into(),
         "both-directions check polices a header exactly as it polices a row.".into(),
         String::new(),
         "(1) *classmethods.xml files in rexxref/en-US that no class table".into(),
@@ -323,6 +325,22 @@ fn method_header(
             unreferenced
                 .iter()
                 .map(|(id, file, line)| format!("    {id}  {file}:{line}")),
+        );
+    }
+    extra.extend([
+        String::new(),
+        "(3) classes that class-set.txt carries and that have no row here at".into(),
+        "all, with why their method set is empty. A class with zero method rows".into(),
+        "and no stated reason reads to a later reader exactly like a row that".into(),
+        "went missing:".into(),
+    ]);
+    if no_methods.is_empty() {
+        extra.push("    (none)".into());
+    } else {
+        extra.extend(
+            no_methods
+                .iter()
+                .map(|(name, why)| format!("    {name}  --  {why}")),
         );
     }
     extra.push(String::new());

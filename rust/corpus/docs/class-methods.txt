@@ -29,7 +29,7 @@
 # directions by `tests/extract_docs.rs`.
 #
 #
-# Two derived lists, here rather than in prose because the
+# Three derived lists, here rather than in prose because the
 # both-directions check polices a header exactly as it polices a row.
 #
 # (1) *classmethods.xml files in rexxref/en-US that no class table
@@ -49,6 +49,12 @@
 #     mthRegularExpressionPos  utilityclasses.xml:7447
 #     mthRegularExpressionPosition  utilityclasses.xml:7494
 #     mthStackFrameExecutable  utilityclasses.xml:9488
+#
+# (3) classes that class-set.txt carries and that have no row here at
+# all, with why their method set is empty. A class with zero method rows
+# and no stated reason reads to a later reader exactly like a row that
+# went missing:
+#     ArgUtil  --  the books document it nowhere; its only citation is provide.xml
 #
 # derived-at: oodocs/rexxref/en-US r13198
 
@@ -913,6 +919,7 @@ InvertingComparator	init	instance	not-covered	mthInvertingComparatorInit	utility
 NumericComparator	compare	instance	covered	mthNumericComparatorCompare	utilityclasses.xml:1180	a bare ~new constructs an instance on the oracle
 NumericComparator	init	instance	covered	mthNumericComparatorInit	utilityclasses.xml:1200	a bare ~new constructs an instance on the oracle
 DateTime	init	instance	covered	mthDateTimeInit	utilityclasses.xml:1775	a bare ~new constructs an instance on the oracle
+DateTime	new	class	covered	mthDateTimeInit	utilityclasses.xml:1775	a bare ~new constructs an instance on the oracle
 DateTime	fromBaseDate	class	covered	mthDateTimeFromBaseDate	utilityclasses.xml:1420	a bare ~new constructs an instance on the oracle
 DateTime	fromCivilTime	class	covered	mthDateTimeFromCivilTime	utilityclasses.xml:1668	a bare ~new constructs an instance on the oracle
 DateTime	fromEuropeanDate	class	covered	mthDateTimeFromEuropeanDate	utilityclasses.xml:1441	a bare ~new constructs an instance on the oracle
@@ -1253,6 +1260,7 @@ Ticker	cancelled	instance	not-covered	mthTickerCanceled	utilityclasses.xml:10283
 Ticker	init	instance	not-covered	mthTickerInit	utilityclasses.xml:10313	no construction program is committed; a bare ~new raises 93.901 on the oracle
 Ticker	interval	instance	not-covered	mthTickerInterval	utilityclasses.xml:10414	no construction program is committed; a bare ~new raises 93.901 on the oracle
 TimeSpan	init	instance	not-covered	mthTimeSpanInit	utilityclasses.xml:10700	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	new	class	not-covered	mthTimeSpanInit	utilityclasses.xml:10700	no construction program is committed; a bare ~new raises 93.901 on the oracle
 TimeSpan	fromCivilTime	class	not-covered	mthTimeSpanFromCivilTime	utilityclasses.xml:10644	no construction program is committed; a bare ~new raises 93.901 on the oracle
 TimeSpan	fromDays	class	not-covered	mthTimeSpanFromDays	utilityclasses.xml:10535	no construction program is committed; a bare ~new raises 93.901 on the oracle
 TimeSpan	fromHours	class	not-covered	mthTimeSpanFromHours	utilityclasses.xml:10553	no construction program is committed; a bare ~new raises 93.901 on the oracle

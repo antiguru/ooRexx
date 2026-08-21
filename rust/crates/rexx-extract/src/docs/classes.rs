@@ -185,11 +185,12 @@ pub const CONSTRUCTION: &[(&str, &str)] = &[
 /// still at the cited line -- so a citation that goes stale reddens instead of
 /// being carried.
 ///
-/// **`unreachable` belongs to the two rows whose sentence says instances come
-/// only from native code**, and to nothing else. The other four say the user
-/// cannot construct one and name a Rexx-level route to obtain one, which is a
-/// different claim; they are `not-covered` with a documented, trivial opt-in
-/// program available, and this task writes none.
+/// **`unreachable` belongs to a row whose sentence says instances come only
+/// from native code**, and to no other. A row whose sentence says the user
+/// cannot construct one and names a Rexx-level route to obtain one makes a
+/// different claim; those are `not-covered`, with a documented and trivial
+/// opt-in construction program available and none committed. The `Status` in
+/// each row below is which of the two it is.
 pub const UNCONSTRUCTIBLE: &[(&str, usize, usize, &str, Status)] = &[
     (
         "Buffer",
@@ -264,6 +265,36 @@ const OPERATOR_PLACEHOLDERS: &[(&str, &str)] = &[("(abuttal)", ""), ("(blank)", 
 /// methods of its own. Both classes carrying it still receive method rows,
 /// from the mixin sets their tables `xi:include`.
 const NO_OWN_METHODS: &str = "(no class or instance methods)";
+
+/// The `xrefstyle` under which a class-table member displays the target
+/// section's own `<title>`, which is what makes the title the method's name.
+const TITLE_XREFSTYLE: &str = "select:title";
+
+/// Class-table members whose `xrefstyle` **overrides** the displayed name, and
+/// the text it displays instead.
+///
+/// `template:<text>` replaces the rendered link text outright, so the book's
+/// own table shows a name the target section's `<title>` does not carry:
+/// `clsDateTime`'s constructor entry displays `new (Inherited Class Method)`
+/// and points at `mthDateTimeInit`, whose title is `init`. Measured,
+/// **both names answer** -- `.DateTime~hasMethod("NEW")` is `1` and
+/// `.DateTime~new~hasMethod("INIT")` is `1` -- so the row set carries both,
+/// the title's name and the displayed one.
+///
+/// **This is a named exception list and [`method_rows`] asserts against it**,
+/// in the shape `hierarchy`'s `ArgUtil` assertion already uses. Rule 1 there
+/// and this rule here are the same hazard: an extractor misreading the book in
+/// a direction nothing downstream contradicts. The both-directions check is
+/// structurally blind to both, because a row that was never derived has no arm
+/// to disagree about and the committed file agrees perfectly with its absence.
+///
+/// The style text is part of the key, so an upstream edit to the displayed
+/// name reddens rather than being read as the old one.
+const TEMPLATE_MEMBERS: &[(&str, &str)] = &[
+    ("mthDateTimeInit", "template:new (Inherited Class Method)"),
+    ("mthRexxQueueNew", "template:new (Inherited Class Method)"),
+    ("mthTimeSpanInit", "template:new (Inherited Class Method)"),
+];
 
 /// One book, comment-blanked, with its section index.
 pub struct Book {
@@ -390,11 +421,12 @@ pub fn class_rows(books: &[Book], argutil_citation: &str) -> Vec<ClassRow> {
 /// Re-reads each [`UNCONSTRUCTIBLE`] sentence at the lines it cites, so a
 /// citation that has gone stale reddens rather than being carried.
 ///
-/// The cited span is tag-stripped and whitespace-collapsed first: three of the
-/// six sentences wrap across a line break and one carries an `<xref>` in the
-/// middle, so a raw substring test on one line could only be written for the
-/// half of a sentence that happens to fit -- which is a citation to half a
-/// claim.
+/// The cited span is tag-stripped and whitespace-collapsed first, because a
+/// sentence in these books may wrap across a line break or carry an `<xref>`
+/// in the middle. A raw substring test on one line could then only be written
+/// for the half of a sentence that happens to fit, which is a citation to half
+/// a claim; that a row's span is a range rather than one line is what says it
+/// wraps.
 fn unconstructible_index(
     books: &[Book],
 ) -> BTreeMap<&'static str, (usize, usize, &'static str, Status)> {
@@ -536,16 +568,8 @@ pub fn method_rows(
             continue;
         }
         let head = section.head(&book.text);
-        let mut listed: Vec<(String, String, String)> = Vec::new();
-        for member in members(head) {
-            if let Some(target) = member.linkend.as_deref().filter(|t| t.starts_with("mth")) {
-                listed.push((
-                    target.to_string(),
-                    member.trailing.clone(),
-                    book.name.clone(),
-                ));
-            }
-        }
+        let mut listed: Vec<Listed> = Vec::new();
+        listed.extend(listed_members(head, &book.name));
         for (href, line) in xincludes(head) {
             if !href.ends_with("classmethods.xml") {
                 continue;
@@ -553,11 +577,7 @@ pub fn method_rows(
             let text = includes.get(&href).unwrap_or_else(|| {
                 panic!("{}:{line} includes {href}, which was not read", book.name)
             });
-            for member in members(text) {
-                if let Some(target) = member.linkend.as_deref().filter(|t| t.starts_with("mth")) {
-                    listed.push((target.to_string(), member.trailing.clone(), href.clone()));
-                }
-            }
+            listed.extend(listed_members(text, &href));
         }
         assert!(
             !listed.is_empty() || head.contains(NO_OWN_METHODS),
@@ -574,28 +594,102 @@ pub fn method_rows(
             .get(name.as_str())
             .copied()
             .unwrap_or_else(|| panic!("{name} has a method set and no class row"));
-        for (target, trailing, source) in listed {
+        for entry in listed {
+            let Listed {
+                target,
+                xrefstyle,
+                trailing,
+                source,
+            } = entry;
             let (title, line, file) = titles
                 .get(&target)
                 .unwrap_or_else(|| panic!("{source} names {target}, which has no <section>"))
                 .clone();
-            for (method, arm) in names_of(&target, &title, &trailing, &source) {
-                if !seen.insert((method.clone(), arm)) {
-                    continue;
+            for displayed in displayed_names(&target, xrefstyle.as_deref(), &title, &source) {
+                for (method, arm) in names_of(&target, &displayed, &trailing, &source) {
+                    if !seen.insert((method.clone(), arm)) {
+                        continue;
+                    }
+                    out.push(MethodRow {
+                        class: name.clone(),
+                        method,
+                        arm,
+                        status: row_status,
+                        section: target.clone(),
+                        origin: format!("{file}:{line}"),
+                        reason: reason.to_string(),
+                    });
                 }
-                out.push(MethodRow {
-                    class: name.clone(),
-                    method,
-                    arm,
-                    status: row_status,
-                    section: target.clone(),
-                    origin: format!("{file}:{line}"),
-                    reason: reason.to_string(),
-                });
             }
         }
     }
     out
+}
+
+/// One `<member>` of a class table, as the row derivation needs it.
+struct Listed {
+    /// The `mth*` section the member links to.
+    target: String,
+    /// The `<xref>`'s `xrefstyle`, which decides what the book displays.
+    xrefstyle: Option<String>,
+    /// Text after the `<xref/>`, where a group heading spells out its
+    /// operators.
+    trailing: String,
+    /// The file the member was read from, for a failure message.
+    source: String,
+}
+
+fn listed_members(text: &str, source: &str) -> Vec<Listed> {
+    members(text)
+        .into_iter()
+        .filter(|m| m.linkend.as_deref().is_some_and(|t| t.starts_with("mth")))
+        .map(|m| Listed {
+            target: m.linkend.unwrap_or_default(),
+            xrefstyle: m.xrefstyle,
+            trailing: m.trailing,
+            source: source.to_string(),
+        })
+        .collect()
+}
+
+/// Every name the book **displays** for one class-table member.
+///
+/// Normally exactly one, the target section's own `<title>`. A member whose
+/// `xrefstyle` overrides the displayed text yields two: the title's name and
+/// the displayed one, because measured on the oracle both answer.
+///
+/// **Panics on any other `xrefstyle`**, which is the guard: a `template:`
+/// member added upstream, or one whose displayed text changes, reddens instead
+/// of being read as its target's title. Nothing downstream can see that
+/// mistake -- the row it should have produced was never derived, so it has no
+/// arm to disagree about and the both-directions check compares the extractor
+/// with itself.
+fn displayed_names(
+    section: &str,
+    xrefstyle: Option<&str>,
+    title: &str,
+    source: &str,
+) -> Vec<String> {
+    let style = xrefstyle.unwrap_or_else(|| {
+        panic!("{source} names {section} in a <member> whose <xref> carries no xrefstyle")
+    });
+    if style.starts_with(TITLE_XREFSTYLE) {
+        return vec![title.to_string()];
+    }
+    let template = TEMPLATE_MEMBERS
+        .iter()
+        .find(|(id, expected)| *id == section && *expected == style)
+        .map(|(_, expected)| expected.trim_start_matches("template:"))
+        .unwrap_or_else(|| {
+            panic!(
+                "{source} names {section} with xrefstyle {style:?}, which neither displays the \
+                 target section's own title nor is a member this extractor has decided about. \
+                 The book displays something other than {title:?} here, so deriving the name from \
+                 the title would emit a name the book does not show and silently omit the one it \
+                 does"
+            )
+        });
+    vec![title.to_string(), template.to_string()]
 }
 
 /// The method names one class-table member yields, and the arm each takes.
@@ -711,6 +805,35 @@ pub fn unreferenced_sections(books: &[Book], rows: &[MethodRow]) -> Vec<(String,
         }
     }
     out
+}
+
+/// Every class in the class set that has no method row, with the reason its
+/// method set is empty.
+///
+/// Derived rather than described, because the alternative is a reader with the
+/// two committed files and no report -- which is every reader until the plan
+/// closes -- finding a class with zero method rows and no stated reason, and
+/// having to decide whether it is deliberate or a row that went missing.
+pub fn classes_without_method_rows(
+    class_rows: &[ClassRow],
+    method_rows: &[MethodRow],
+) -> Vec<(String, String)> {
+    let with_rows: BTreeSet<&str> = method_rows.iter().map(|r| r.class.as_str()).collect();
+    class_rows
+        .iter()
+        .filter(|r| !with_rows.contains(r.name.as_str()))
+        .map(|r| {
+            let why = if r.section == "-" {
+                format!(
+                    "the books document it nowhere; its only citation is {}",
+                    r.book
+                )
+            } else {
+                format!("{} names no methods in {}", r.section, r.book)
+            };
+            (r.name.clone(), why)
+        })
+        .collect()
 }
 
 /// `name<TAB>entry<TAB>section<TAB>book:line<TAB>status<TAB>reason`.
@@ -950,6 +1073,74 @@ mod tests {
             names("&added50;canceled/cancelled"),
             ["canceled", "cancelled"]
         );
+    }
+
+    #[test]
+    fn an_ordinary_member_displays_its_targets_own_title() {
+        assert_eq!(
+            displayed_names("mthArrayAppend", Some("select:title"), "append", "x"),
+            ["append"]
+        );
+    }
+
+    /// A `template:` member displays a name its target's title does not carry,
+    /// so the row set needs both. Measured, both answer:
+    /// `.DateTime~hasMethod("NEW")` is `1` and `.DateTime~new~hasMethod("INIT")`
+    /// is `1`.
+    #[test]
+    fn a_template_member_yields_the_displayed_name_beside_the_title() {
+        let out = displayed_names(
+            "mthDateTimeInit",
+            Some("template:new (Inherited Class Method)"),
+            "init",
+            "utilityclasses.xml",
+        );
+        assert_eq!(out, ["init", "new (Inherited Class Method)"]);
+        let names: Vec<(String, Arm)> = out
+            .iter()
+            .flat_map(|d| names_of("mthDateTimeInit", d, "", "utilityclasses.xml"))
+            .collect();
+        assert_eq!(
+            names,
+            [
+                ("init".to_string(), Arm::Instance),
+                ("new".to_string(), Arm::Class)
+            ]
+        );
+    }
+
+    /// The guard. A sixth `template:` member added upstream must redden, not
+    /// drift: the row it should produce would never be derived, and a check
+    /// comparing the extractor with itself cannot see a row that does not
+    /// exist on either side.
+    #[test]
+    #[should_panic(expected = "which neither displays the target section's own title")]
+    fn an_unrecognised_xrefstyle_is_loud() {
+        displayed_names(
+            "mthArrayAppend",
+            Some("template:add"),
+            "append",
+            "collclasses.xml",
+        );
+    }
+
+    /// The displayed text is part of the key, so an upstream edit to it is a
+    /// different member and reddens too.
+    #[test]
+    #[should_panic(expected = "which neither displays the target section's own title")]
+    fn a_template_member_whose_displayed_text_changed_is_loud() {
+        displayed_names(
+            "mthDateTimeInit",
+            Some("template:new (Class Method)"),
+            "init",
+            "utilityclasses.xml",
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "carries no xrefstyle")]
+    fn a_member_with_no_xrefstyle_is_loud() {
+        displayed_names("mthArrayAppend", None, "append", "collclasses.xml");
     }
 
     #[test]

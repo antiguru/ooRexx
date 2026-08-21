@@ -229,6 +229,12 @@ pub struct Member {
     pub inner: String,
     /// The first `<xref linkend="...">`'s target, if the member has one.
     pub linkend: Option<String>,
+    /// That same `<xref>`'s `xrefstyle`, which decides what the book
+    /// **displays** for the link. `select:title` renders the target section's
+    /// own `<title>`; `template:<text>` replaces it with `<text>` outright, so
+    /// an extractor that reads only the target's title reads a name the book
+    /// does not show.
+    pub xrefstyle: Option<String>,
     /// The text after that `<xref .../>`, trimmed. This is where the class
     /// tables spell out the operator methods a group heading documents --
     /// `mthObjectComparisonMethods` is followed by `= == &lt;> >&lt; \= \==`.
@@ -245,23 +251,26 @@ pub fn members(text: &str) -> Vec<Member> {
             break;
         };
         let inner = &text[from..end];
-        let (linkend, trailing) = match inner.find("<xref ") {
+        let (linkend, xrefstyle, trailing) = match inner.find("<xref ") {
             Some(x) => {
                 let tag_end = inner[x..]
                     .find("/>")
                     .map(|e| x + e + 2)
                     .unwrap_or(inner.len());
+                let tag = &inner[x..tag_end];
                 (
-                    attribute(&inner[x..tag_end], "linkend"),
+                    attribute(tag, "linkend"),
+                    attribute(tag, "xrefstyle"),
                     inner[tag_end..].trim().to_string(),
                 )
             }
-            None => (None, String::new()),
+            None => (None, None, String::new()),
         };
         out.push(Member {
             line: line_of(text, at),
             inner: inner.to_string(),
             linkend,
+            xrefstyle,
             trailing,
         });
         i = end + "</member>".len();
@@ -372,6 +381,20 @@ mod tests {
         );
         assert_eq!(out[0].trailing, r"= == &lt;> >&lt; \= \==");
         assert_eq!(decode_predefined(&out[0].trailing), r"= == <> >< \= \==");
+        assert_eq!(out[0].xrefstyle.as_deref(), Some("select:title"));
+    }
+
+    /// The attribute that decides what the book displays for the link, read
+    /// off the same `<xref>` as the target.
+    #[test]
+    fn a_member_keeps_the_xrefstyle_that_overrides_the_displayed_name() {
+        let src = r#"<member><xref linkend="mthDateTimeInit" xrefstyle="template:new (Inherited Class Method)"/></member>"#;
+        let out = members(src);
+        assert_eq!(out[0].linkend.as_deref(), Some("mthDateTimeInit"));
+        assert_eq!(
+            out[0].xrefstyle.as_deref(),
+            Some("template:new (Inherited Class Method)")
+        );
     }
 
     #[test]
