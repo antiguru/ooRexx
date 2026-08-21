@@ -1834,42 +1834,42 @@ fn every_keyword_reaches_its_instruction_node() {
 /// moves it.
 const CORPUS: &[(&str, &str, usize)] = &[
     (
-        "keyword_as_variable",
+        "lang/keyword_as_variable.rex",
         include_str!("../../../../corpus/lang/keyword_as_variable.rex"),
         46,
     ),
     (
-        "do_variants",
+        "lang/do_variants.rex",
         include_str!("../../../../corpus/lang/do_variants.rex"),
         31,
     ),
     (
-        "select_when",
+        "lang/select_when.rex",
         include_str!("../../../../corpus/lang/select_when.rex"),
         25,
     ),
     (
-        "parse_template",
+        "lang/parse_template.rex",
         include_str!("../../../../corpus/lang/parse_template.rex"),
         12,
     ),
     (
-        "condition_syntax",
+        "lang/condition_syntax.rex",
         include_str!("../../../../corpus/lang/condition_syntax.rex"),
         4,
     ),
     (
-        "call_procedure",
+        "lang/call_procedure.rex",
         include_str!("../../../../corpus/lang/call_procedure.rex"),
         24,
     ),
     (
-        "stem_compound",
+        "lang/stem_compound.rex",
         include_str!("../../../../corpus/lang/stem_compound.rex"),
         18,
     ),
     (
-        "interpret_dynamic",
+        "lang/interpret_dynamic.rex",
         include_str!("../../../../corpus/lang/interpret_dynamic.rex"),
         // 8 until 4b's Task 1 appended `interpret "zork = 42"` and
         // `interpret "say zork"`, so that the program witnesses a name bound
@@ -1878,28 +1878,28 @@ const CORPUS: &[(&str, &str, usize)] = &[
         10,
     ),
     (
-        "arith_digits",
+        "lang/arith_digits.rex",
         include_str!("../../../../corpus/lang/arith_digits.rex"),
         13,
     ),
     (
-        "trace_output",
+        "lang/trace_output.rex",
         include_str!("../../../../corpus/lang/trace_output.rex"),
         8,
     ),
     (
-        "source_arg",
+        "lang/source_arg.rex",
         include_str!("../../../../corpus/lang/source_arg.rex"),
         13,
     ),
     (
-        "string_builtins",
+        "lang/string_builtins.rex",
         include_str!("../../../../corpus/lang/string_builtins.rex"),
         21,
     ),
     (
-        "primitive_classes",
-        include_str!("../../../../corpus/lang/primitive_classes.rex"),
+        "gate-tables/concepts/classmeth.rex",
+        include_str!("../../../../corpus/gate-tables/concepts/classmeth.rex"),
         31,
     ),
 ];
@@ -1907,8 +1907,8 @@ const CORPUS: &[(&str, &str, usize)] = &[
 #[test]
 fn the_corpus_programs_parse() {
     for (name, source, expected) in CORPUS {
-        let instructions = parse(source)
-            .unwrap_or_else(|e| panic!("corpus/lang/{name}.rex failed to parse: {e:?}"));
+        let instructions =
+            parse(source).unwrap_or_else(|e| panic!("corpus/{name} failed to parse: {e:?}"));
         // The pinned count. The first version of this asserted
         // `>= clauses.len()`, which asserted almost nothing: the loop yields at
         // least one instruction per clause by construction and only stops early
@@ -1916,7 +1916,7 @@ fn the_corpus_programs_parse() {
         assert_eq!(
             instructions.len(),
             *expected,
-            "corpus/lang/{name}.rex parsed to a different number of instructions"
+            "corpus/{name} parsed to a different number of instructions"
         );
         // And the spans are in order and in range, so a mis-split cannot pass
         // by producing the right COUNT of wrong nodes.
@@ -1926,7 +1926,7 @@ fn the_corpus_programs_parse() {
                 instruction.clause_span.start >= previous
                     && instruction.clause_span.start <= instruction.clause_span.end
                     && instruction.clause_span.end <= source.len(),
-                "corpus/lang/{name}.rex: span {:?} is out of order or out of range",
+                "corpus/{name}: span {:?} is out of order or out of range",
                 instruction.clause_span
             );
             previous = instruction.clause_span.start;
@@ -1940,7 +1940,7 @@ fn the_keyword_as_variable_corpus_parses_every_keyword_as_a_variable() {
     // names, runs a DO loop and a SELECT while their names hold values, uses a
     // stem named `end.`, a compound tail spelled `if`, and PARSE while `parse`
     // is a variable.
-    assert_eq!(CORPUS[0].0, "keyword_as_variable");
+    assert_eq!(CORPUS[0].0, "lang/keyword_as_variable.rex");
     let source = CORPUS[0].1;
     let instructions = ok(source);
     let produced = names(&instructions);

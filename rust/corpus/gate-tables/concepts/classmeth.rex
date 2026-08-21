@@ -1,4 +1,7 @@
-/* Note: .integer is not an environment symbol -- Integer is internal and not
+/* provide.xml `classmeth`: an overview of the classes Rexx defines. Each one
+   reachable as an environment symbol is asked for its ~id.
+
+   .integer is not an environment symbol -- Integer is internal and not
    exposed. .rexxinfo is an instance rather than a class, so it has no ~id. */
 say .array~id
 say .string~id

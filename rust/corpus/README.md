@@ -138,7 +138,6 @@ witness to the file as its own construct starts agreeing with the oracle.
 | `string_builtins.rex` | 20 string builtins including the `C2X`/`X2C`/`D2X`/`X2D` conversions |
 | `trace_output.rex` | `TRACE I` output formatting, which is observable |
 | `source_arg.rex` | `PARSE SOURCE`, `SOURCELINE()`, `ARG()` option forms |
-| `primitive_classes.rex` | `~id` of every class reachable as an environment symbol |
 | `whitespace_significant.rex` | `f(x)` vs `f (x)`, abuttal forms, and the empty-binary-literal trap |
 
 ### Phase 4a additions -- executor control flow
@@ -284,7 +283,8 @@ asserting the wrong output, and only caught by running it.
 
 `.integer` is not an environment symbol; `Integer` is internal and unexposed.
 `.rexxinfo` is an *instance*, not a class, so it has no `~id`. Both were in
-the first draft of `primitive_classes.rex` and both failed.
+the first draft of the program that is now
+`gate-tables/concepts/classmeth.rex` and both failed.
 
 `LEAVE name`/`ITERATE name` accept two different kinds of name, and a
 *clause* label is neither of them. `outer: do i = 1 to 3` then `leave outer`
