@@ -1,0 +1,46 @@
+/* Table C method rows: Package, instance arm. corpus/docs/class-set.txt
+   records this class as `not-covered`, because
+   no construction program is committed; a bare ~new raises 88.901 on the oracle.
+   So ~new raises and no line below it is reached; the row's evidence
+   is that raise, which is what the row set says there is to have.
+   Derived by crates/rexx-exec/tests/gate_table_c.rs, which re-derives
+   this file on every run and compares it in both directions. */
+o = .Package~new
+say 'instance' o~hasMethod("addClass")
+say 'instance' o~hasMethod("addPackage")
+say 'instance' o~hasMethod("addPublicClass")
+say 'instance' o~hasMethod("addPublicRoutine")
+say 'instance' o~hasMethod("addRoutine")
+say 'instance' o~hasMethod("annotation")
+say 'instance' o~hasMethod("annotations")
+say 'instance' o~hasMethod("classes")
+say 'instance' o~hasMethod("definedMethods")
+say 'instance' o~hasMethod("digits")
+say 'instance' o~hasMethod("findClass")
+say 'instance' o~hasMethod("findNamespace")
+say 'instance' o~hasMethod("findProgram")
+say 'instance' o~hasMethod("findPublicClass")
+say 'instance' o~hasMethod("findPublicRoutine")
+say 'instance' o~hasMethod("findRoutine")
+say 'instance' o~hasMethod("form")
+say 'instance' o~hasMethod("fuzz")
+say 'instance' o~hasMethod("importedClasses")
+say 'instance' o~hasMethod("importedPackages")
+say 'instance' o~hasMethod("importedRoutines")
+say 'instance' o~hasMethod("loadLibrary")
+say 'instance' o~hasMethod("loadPackage")
+say 'instance' o~hasMethod("local")
+say 'instance' o~hasMethod("name")
+say 'instance' o~hasMethod("namespaces")
+say 'instance' o~hasMethod("options")
+say 'instance' o~hasMethod("prolog")
+say 'instance' o~hasMethod("publicClasses")
+say 'instance' o~hasMethod("publicRoutines")
+say 'instance' o~hasMethod("resource")
+say 'instance' o~hasMethod("resources")
+say 'instance' o~hasMethod("routines")
+say 'instance' o~hasMethod("setSecurityManager")
+say 'instance' o~hasMethod("source")
+say 'instance' o~hasMethod("sourceLine")
+say 'instance' o~hasMethod("sourceSize")
+say 'instance' o~hasMethod("trace")

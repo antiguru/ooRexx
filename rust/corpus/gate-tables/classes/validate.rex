@@ -1,0 +1,12 @@
+/* Table C wiring row: the .Validate environment entry, asked the questions
+   the class surface is wired by -- ~id, ~class, ~superClass,
+   ~superClasses, ~metaClass and ~isA(.Class). Derived from
+   corpus/docs/class-set.txt by crates/rexx-exec/tests/gate_table_c.rs,
+   which re-derives this file on every run and compares it in both
+   directions. */
+say 'id' .Validate~id
+say 'class' .Validate~class
+say 'superclass' .Validate~superClass
+say 'superclasses' .Validate~superClasses~makeString('L', ' ')
+say 'metaclass' .Validate~metaClass
+say 'isa-class' .Validate~isA(.Class)

@@ -21,6 +21,39 @@ Each program exercises its row's keyword at its row's position and prints one
 line, so the oracle side shows the program ran rather than that it produced
 nothing.
 
+## `concepts/`, `classes/`, `hierarchy/` and `methods/`
+
+Gate table C's probes, run by `crates/rexx-exec/tests/gate_table_c.rs`:
+
+* `concepts/` -- one per `<section id>` of `provide.xml`'s `provide` chapter,
+  from `../docs/provide-sections.txt`. **Hand-written**, because nothing
+  derives a program that exercises a documented mechanism; the file stem is
+  the section id, so a section with no program is a missing file and
+  structural.
+* `classes/` -- one per row of `../docs/class-set.txt`, asking the questions
+  the class surface is wired by.
+* `hierarchy/` -- one per row of `../docs/hierarchy-edges.txt`, asserting the
+  documented parent is **present in** the child's `~superClasses` and never
+  that it is the whole answer.
+* `methods/` -- one per (class, arm) of `../docs/class-methods.txt`, printing
+  one line per row so that a single run answers the whole documented set for
+  that class and arm.
+
+**Those last three are derived, text and all.** `gate_table_c.rs`'s
+`class_probe_text`, `edge_probe_text` and `method_probe_text` are the
+definition of what the programs contain, and every run compares the committed
+file against the re-derivation in both directions. Editing one of them by hand
+reddens the table; the way to change one is to change the derivation. A
+path-only check -- table D's property -- cannot see a probe that asks about
+the wrong subject, and a probe asking the wrong question agrees with the
+oracle for the wrong reason.
+
+`concepts/classmeth.rex` was `../lang/primitive_classes.rex` until it became
+this table's probe for the `classmeth` section. It is still a parse fixture of
+`crates/rexx-parse/src/instruction/tests.rs`, which is what it was reached as
+before; what it is no longer is a file under `corpus/lang/` that no
+`phase-*.txt` names.
+
 ## What still applies here, and what does not
 
 **The determinism rule applies.** A program here must produce byte-identical
@@ -28,7 +61,7 @@ output on every run of the same interpreter, exactly as `../README.md`
 requires -- `rexx-diff`'s self-test (`--cpp X --rs X`) walks `corpus/`
 recursively and reads every `.rex` under it, including these, so a
 non-deterministic probe would break it. Measured with this subtree in place:
-204 programs, 0 divergences, exit 0.
+440 programs, 0 divergences, exit 0.
 
 **Agreement between the two interpreters does not apply**, which is the whole
 difference. `rexx-diff --cpp <c++> --rs <rust>` over `corpus/` reports these

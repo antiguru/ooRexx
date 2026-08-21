@@ -249,7 +249,7 @@ missing or unnamed probe does.
 
 The determinism rule above still binds them, because `rexx-diff`'s walk is
 recursive and its self-test (`--cpp X --rs X`) reads every `.rex` under
-`corpus/`: measured with the subtree in place, 204 programs, 0 divergences,
+`corpus/`: measured with the subtree in place, 440 programs, 0 divergences,
 exit 0. What does not bind them is agreement between the two interpreters --
 `rexx-diff --cpp <c++> --rs <rust>` reports their divergences, and each of
 those is a gate-table row rather than a corpus defect.

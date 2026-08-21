@@ -1,0 +1,37 @@
+/* Table C method rows: Object, instance arm -- one line per method
+   corpus/docs/class-methods.txt documents on this arm, asked of a bare
+   ~new instance, in the row set's own order. Derived by
+   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+   every run and compares it in both directions. */
+o = .Object~new
+say 'instance' o~hasMethod("=")
+say 'instance' o~hasMethod("==")
+say 'instance' o~hasMethod("<>")
+say 'instance' o~hasMethod("><")
+say 'instance' o~hasMethod("\=")
+say 'instance' o~hasMethod("\==")
+say 'instance' o~hasMethod("")
+say 'instance' o~hasMethod("||")
+say 'instance' o~hasMethod(" ")
+say 'instance' o~hasMethod("class")
+say 'instance' o~hasMethod("copy")
+say 'instance' o~hasMethod("defaultName")
+say 'instance' o~hasMethod("hashCode")
+say 'instance' o~hasMethod("hasMethod")
+say 'instance' o~hasMethod("identityHash")
+say 'instance' o~hasMethod("instanceMethod")
+say 'instance' o~hasMethod("instanceMethods")
+say 'instance' o~hasMethod("isA")
+say 'instance' o~hasMethod("isInstanceOf")
+say 'instance' o~hasMethod("isNil")
+say 'instance' o~hasMethod("objectName")
+say 'instance' o~hasMethod("objectName=")
+say 'instance' o~hasMethod("request")
+say 'instance' o~hasMethod("run")
+say 'instance' o~hasMethod("send")
+say 'instance' o~hasMethod("sendWith")
+say 'instance' o~hasMethod("setMethod")
+say 'instance' o~hasMethod("start")
+say 'instance' o~hasMethod("startWith")
+say 'instance' o~hasMethod("string")
+say 'instance' o~hasMethod("unsetMethod")
