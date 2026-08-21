@@ -860,12 +860,24 @@ impl Interp {
     /// send two `DO` levels deep.
     ///
     /// `pub(crate)` rather than private to this module, because the rule for
-    /// who calls this is not "who sends a message": **anything that reaches a
-    /// native method's body and raises from inside it owes this line**, and a
-    /// send is only the most obvious way to get there. An operator forwarded
-    /// through a stem gets there without a send term, and so does the
-    /// machinery that installs a directive. Whichever module that is, the
-    /// frame is still the failing native method's.
+    /// who calls this is not "who wrote a send term": **the line is owed
+    /// wherever the oracle reached the failing native method's body by a
+    /// message send**, whatever put that send there. A `~` in the source is
+    /// the obvious route and not the only one -- a stem forwarding an
+    /// operator to its default value reaches the method through
+    /// `value->messageSend` with no send term anywhere in sight
+    /// (`classes/StemClass.cpp:280`).
+    ///
+    /// **Being inside a native method's body is not the condition; having
+    /// been sent to is**, and `ClassDirective::install` is the discriminating
+    /// pair by itself. It reaches `INHERIT` by `classObject->sendMessage`
+    /// (`instructions/ClassDirective.cpp:230`) and that send's refusals carry
+    /// this line; it *calls* `subclass()` and `mixinClass()` (`:205`, `:200`)
+    /// and the 99.927 those raise carries none -- both measured, on one
+    /// directive, and `RexxClass::subclass` is the very body a `~subclass`
+    /// send would have entered. So a caller reaching a native method by a
+    /// direct call owes nothing here, and reading the condition as "raises
+    /// from inside a native method" over-predicts exactly there.
     pub(crate) fn blame_native_method(&mut self, name: &[u8], scope: &str) {
         if self.failure_site.is_some() {
             return;
