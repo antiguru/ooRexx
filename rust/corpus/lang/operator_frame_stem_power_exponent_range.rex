@@ -1,0 +1,10 @@
+/* Fix round 2, finding 1: the same forwarded frame as
+ * operator_frame_stem_divide_by_zero.rex, reached instead through the power
+ * operator's own exponent range check -- `s.` converts fine (its default is
+ * "1") and the exponent, evaluated separately, is what fails past that
+ * conversion. Measured, rc 230, stderr opening
+ * `       *-* Compiled method "**" with scope "String".`.
+ */
+
+s. = 1
+say s. ** 999999999999

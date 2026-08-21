@@ -311,7 +311,7 @@ const RAW_STDERR_COMPARISON: &[&str] = &[
     // resting on whatever DEVIATION 0's normaliser happens to do to them.
     // Measured, od-verified: the gap after the frame line's own `*-*` marker
     // is exactly one space on both sides today, so normalisation is
-    // currently a no-op on these three programs' stderr; raw mode is the
+    // currently a no-op on every entry below's stderr; raw mode is the
     // comparison that still asserts those bytes rather than one that would
     // pass by coincidence if the gap ever widened.
     "lang/operator_frame_stem_plus.rex",
@@ -326,6 +326,18 @@ const RAW_STDERR_COMPARISON: &[&str] = &[
     "lang/operator_frame_stem_do_initial.rex",
     "lang/operator_frame_stem_do_to.rex",
     "lang/operator_frame_stem_do_by.rex",
+    // Fix round 2, finding 1: the frame belongs to the receiver of a
+    // forwarded operator whatever step of evaluating it raises, not only its
+    // own conversion. Each program below reaches the frame from a different
+    // failing step past that conversion -- arithmetic overflow, the power
+    // exponent's own range check, a non-logical operand on `&` and on prefix
+    // `\`, and a DO header's own range check -- and the same raw-mode
+    // reasoning above applies to each unchanged.
+    "lang/operator_frame_stem_divide_by_zero.rex",
+    "lang/operator_frame_stem_power_exponent_range.rex",
+    "lang/operator_frame_stem_logical_and.rex",
+    "lang/operator_frame_stem_prefix_not.rex",
+    "lang/operator_frame_stem_do_exponent_range.rex",
 ];
 
 /// Every entry in [`RAW_STDERR_COMPARISON`] is a line some phase subset file

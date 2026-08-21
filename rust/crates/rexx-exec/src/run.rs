@@ -7285,20 +7285,27 @@ impl Interp {
         if let Some(kind) = self.operator_operand_gap(value) {
             return Err(Loud::object_position(role.value_name(), kind).into());
         }
-        // Each header position is rounded through a real unary `+` on the
-        // oracle (this function's own doc), so a stem receiver here carries
-        // the identical operator-forwarded frame `Interp::arith_left_operand`
-        // does, through the same `Interp::blame_stem_forwarded_operator`.
-        // Measured, all three positions: `do i = b. to 5`, `do i = 1 to b.`
-        // and `do i = 1 by b. to 3` each differ from the oracle in exactly
-        // that one line before this call is here.
-        match self.arith_operand(value) {
-            Ok(operand) => Ok(round_via_unary_plus(&operand, entry_digits).map_err(Raised::from)?),
-            Err(failure) => {
-                self.blame_stem_forwarded_operator(b"+", value);
-                Err(failure)
-            }
+        let result = self.header_number_body(value, entry_digits);
+        // Blamed on any failure past the object-position check above, not
+        // only `arith_operand`'s own conversion -- the same reason
+        // `Interp::arith_general` (`eval.rs`) blames its own whole
+        // computation rather than only `Interp::arith_left_operand`'s.
+        // Measured: `numeric digits 1; s. = '9.9E999999999'; do i = s. to
+        // 5` is 42.901 with the frame, past a conversion that already
+        // succeeded -- `round_via_unary_plus`'s own range check is what
+        // raises, still inside the same forwarded unary `+`.
+        if result.is_err() {
+            self.blame_stem_forwarded_operator(b"+", value);
         }
+        result
+    }
+
+    /// [`Interp::header_number`]'s own computation for a position that
+    /// reaches it (`Initial`, `To` and `By` -- see that function's own
+    /// doc), wrapped by it so every failing step is blamed once.
+    fn header_number_body(&mut self, value: ObjRef, entry_digits: u64) -> Result<Number, Failure> {
+        let operand = self.arith_operand(value)?;
+        Ok(round_via_unary_plus(&operand, entry_digits).map_err(Raised::from)?)
     }
 
     /// A `DO`/`LOOP` past its header: the construct itself, driven from the

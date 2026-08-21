@@ -946,6 +946,13 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/operator_frame_stem_do_initial.rex",
     "lang/operator_frame_stem_do_to.rex",
     "lang/operator_frame_stem_do_by.rex",
+    // Fix round 2, finding 1: the same forwarded frame reached from a
+    // failing step past the receiver's own conversion.
+    "lang/operator_frame_stem_divide_by_zero.rex",
+    "lang/operator_frame_stem_power_exponent_range.rex",
+    "lang/operator_frame_stem_logical_and.rex",
+    "lang/operator_frame_stem_prefix_not.rex",
+    "lang/operator_frame_stem_do_exponent_range.rex",
 ];
 
 #[test]

@@ -812,6 +812,21 @@ impl Interp {
     /// [`Interp::concat_values`] states: both arms below allocate the value
     /// they answer with.
     pub(crate) fn apply_prefix(&mut self, op: PrefixOp, value: ObjRef) -> Result<ObjRef, Failure> {
+        let result = self.apply_prefix_body(op, value);
+        // Blamed on any failure, the same reason `Interp::arith_general`
+        // gives: measured, `s. = 'abc'; say \s.` is 34.901 with the frame,
+        // even though `\` never converts its operand to a number at all --
+        // the frame belongs to the forwarded activation, not to which of
+        // its checks raised.
+        if result.is_err() {
+            self.blame_stem_forwarded_operator(op.spelling().as_bytes(), value);
+        }
+        result
+    }
+
+    /// [`Interp::apply_prefix`]'s own computation, wrapped by it for the
+    /// reason [`Interp::arith_general_body`] is.
+    fn apply_prefix_body(&mut self, op: PrefixOp, value: ObjRef) -> Result<ObjRef, Failure> {
         let result = match op {
             PrefixOp::Plus | PrefixOp::Minus => {
                 let number = self.arith_left_operand(op.spelling(), value)?;
@@ -944,6 +959,35 @@ impl Interp {
         left_value: ObjRef,
         right_value: ObjRef,
     ) -> Result<ObjRef, Failure> {
+        let result = self.arith_general_body(op, left_value, right_value);
+        // **Blamed on any failure past this point, not only the left
+        // operand's own conversion.** The oracle's forwarded native method
+        // runs to completion or fails; whichever of its own steps raises --
+        // the base's conversion, the argument's, or the arithmetic itself --
+        // is still inside that one activation. Measured: `s. = 1; say s. /
+        // 0` is 42.3 with the frame, `s. = 1; say s. ** 999999999999` is
+        // 26.8 with the frame (the base converts fine; the *exponent*
+        // fails), and `s. = 1; say s. + .array` is 41.1 with the frame even
+        // though it is the *right* operand's own conversion that fails --
+        // all three past `arith_left_operand`'s own return. Also
+        // `blame_stem_forwarded_operator`'s own no-op case: a non-stem
+        // receiver reaches this exactly as before, since the predicate it
+        // runs is unchanged.
+        if result.is_err() {
+            self.blame_stem_forwarded_operator(op.spelling().as_bytes(), left_value);
+        }
+        result
+    }
+
+    /// [`Interp::arith_general`]'s own computation, wrapped by it so every
+    /// failing path -- not only [`Interp::arith_left_operand`]'s -- is
+    /// blamed once, in the one place that already knows the receiver.
+    fn arith_general_body(
+        &mut self,
+        op: Operator,
+        left_value: ObjRef,
+        right_value: ObjRef,
+    ) -> Result<ObjRef, Failure> {
         let digits = self.activation().settings.digits();
         let form = self.activation().settings.form();
 
@@ -1012,23 +1056,28 @@ impl Interp {
     /// [`NotNumeric`] whatever this decides, so a program doing arithmetic on
     /// numbers never reaches the test.
     ///
-    /// A stem receiver's own failure carries the native-method traceback
-    /// frame; a plain string's does not, and both are measured. A plain
-    /// string receiver, `say 'abc'` `+ 1`, is 41.1 with no `Compiled
-    /// method` line; a stem receiver, `say b.` `+ 1`, is the same 41.1
-    /// *with* one reading `scope "String"`, even though `b.~class` is `The
-    /// Stem class` -- because a stem answers no operator itself and
-    /// forwards the message to its default value (`StemClass`'s own
-    /// `UNKNOWN`, the same forward `a. = 'dflt'; say a.~length` already
-    /// reaches), and that forward is a real message dispatch landing on the
-    /// default's own native method, where a plain `String`'s or
-    /// `NumberString`'s operator is this crate's own direct arithmetic and
-    /// never dispatches at all.
-    ///
-    /// Measured also: a stem receiver whose right operand fails instead,
-    /// `say 2` `+ b.`, carries no frame, because the forwarded method's
-    /// own *argument* failing is not the same as the forwarded method
-    /// itself failing. That path is [`Interp::arith_operand`]'s.
+    /// **This function's own failure carries no frame by itself.** The frame
+    /// belongs to the *receiver* of a forwarded operator, whatever step of
+    /// evaluating that operator raises -- this function's own conversion,
+    /// the other operand's, or the arithmetic past both -- so
+    /// [`Interp::arith_general`] and [`Interp::apply_prefix`] blame once,
+    /// wrapping their whole computation, rather than this function blaming
+    /// its own narrower failure. Measured: a plain string receiver, `say
+    /// 'abc'` `+ 1`, is 41.1 with no `Compiled method` line; a stem
+    /// receiver, `say b.` `+ 1`, is the same 41.1 *with* one reading `scope
+    /// "String"`, even though `b.~class` is `The Stem class` -- because a
+    /// stem answers no operator itself and forwards the message to its
+    /// default value (`StemClass`'s own `UNKNOWN`, the same forward `a. =
+    /// 'dflt'; say a.~length` already reaches), and that forward is a real
+    /// message dispatch landing on the default's own native method, where a
+    /// plain `String`'s or `NumberString`'s operator is this crate's own
+    /// direct arithmetic and never dispatches at all. And measured, past
+    /// this function's own return: a stem receiver whose *right* operand
+    /// fails instead, `say s.` `+ .array` (`s.` a valid number), still
+    /// carries the frame -- the forwarded method's own argument failing is
+    /// still that method failing -- where `say 2` `+ b.` (the receiver `2`,
+    /// not a stem) carries none regardless of which operand fails, because
+    /// no forwarding happens there at all.
     fn arith_left_operand(&mut self, op: &str, value: ObjRef) -> Result<Number, Failure> {
         match self.to_number(value) {
             Ok(number) => Ok(number),
@@ -1036,7 +1085,6 @@ impl Interp {
                 if let Some(kind) = self.operator_operand_gap(value) {
                     return Err(Loud::operator_operand(op, kind).into());
                 }
-                self.blame_stem_forwarded_operator(op.as_bytes(), value);
                 let text = self.to_text(value).to_vec();
                 Err(Raised::nonnumeric(&text).into())
             }
@@ -1045,12 +1093,22 @@ impl Interp {
 
     /// Renders the operator-forwarded native-method frame for `op` when
     /// `value` is a stem whose forward reaches a method that actually runs
-    /// -- a no-op otherwise. Shared by [`Interp::arith_left_operand`] (a
-    /// binary operator's left operand and a prefix operator's sole operand)
-    /// and `Interp::header_number` (`run.rs`), the other receiver of a real
-    /// unary `+` this crate models: measured, `do i = b. to 5`, `do i = 1 to
-    /// b.` and `do i = 1 by b. to 3` each carry the identical frame, scope
-    /// `"String"`, one per header position.
+    /// -- a no-op otherwise.
+    ///
+    /// **Called once per operator, wrapping the whole computation over
+    /// `value` rather than any one step of it** -- [`Interp::arith_general`],
+    /// [`Interp::apply_prefix`] and [`Interp::logical_values`] each call
+    /// this on any failure of their own, and `Interp::header_number`
+    /// (`run.rs`) does the same for the other receiver of a real unary `+`
+    /// this crate models. The frame belongs to the receiver, not to which
+    /// step of evaluating its operator raised: measured, `s. = 1; say s. /
+    /// 0` (an arithmetic overflow past a valid conversion), `say s. **
+    /// 999999999999` (the exponent's own range check), `s. = 'abc'; say s.
+    /// & 1` and `say \s.` (a non-logical operand on `&` and on prefix `\`),
+    /// and `numeric digits 1; s. = '9.9E999999999'; do i = s. to 5` (a DO
+    /// header's own range check past a valid conversion) all carry the
+    /// frame, scope `"String"`, none of them a conversion failure of
+    /// `value` itself.
     pub(crate) fn blame_stem_forwarded_operator(&mut self, op: &[u8], value: ObjRef) {
         if !self.is_stem_receiver(value) {
             return;
@@ -1074,11 +1132,14 @@ impl Interp {
     /// default) and `s. = "abc"` (a `String` default) both carry the frame,
     /// scope `"String"`.
     ///
-    /// Only reached once [`Interp::operator_operand_gap`] has already
-    /// answered `None` for `value`, so a class object or one of this crate's
-    /// own native objects never reaches here -- `heap.get` answers `None`
-    /// for a class handle (see [`Interp::not_in_arena`]) and this answers
-    /// `false` for it either way.
+    /// **Safe to call whether or not [`Interp::operator_operand_gap`] has
+    /// already answered `value`.** A class object or one of this crate's
+    /// own native objects answers `false` here on its own account --
+    /// `heap.get` answers `None` for a class handle (see
+    /// [`Interp::not_in_arena`]) and neither shape is a `Stem` -- so a
+    /// caller that blames on any failure after already trying the gap check
+    /// (as [`Interp::arith_general`] and [`Interp::header_number`] do) gets
+    /// the same answer this function would give if the gap had never run.
     fn is_stem_receiver(&self, value: ObjRef) -> bool {
         let Decoded::Heap { .. } = value.decode() else {
             return false;
@@ -1095,10 +1156,17 @@ impl Interp {
 
     /// Whether `value` is `String`/`Number`-valued, chasing a nested stem's
     /// own default the way [`Interp::to_number`] and
-    /// [`Interp::operator_operand_gap`] both do. `.nil`, a class object and
-    /// one of this crate's own native objects answer none of the arithmetic
-    /// operators, so a forward landing on one of them never reaches a
-    /// method to raise from.
+    /// [`Interp::operator_operand_gap`] both do. `.nil` and a class object
+    /// answer no arithmetic operator on the oracle, so a forward landing on
+    /// either never reaches a method to raise from.
+    ///
+    /// One of this crate's own native objects answers `false` here too, but
+    /// for a narrower reason: this crate registers no operator method for
+    /// one, whatever the oracle itself does for a particular one of them.
+    /// Measured, `.environment + 1` is rc 0 on the oracle, `Directory`
+    /// forwarding through its own `UNKNOWN` -- which this phase implements
+    /// nothing of, so the gap is this crate's registry, not a property every
+    /// native object shares on the oracle.
     fn stem_default_is_string_or_number(&self, value: ObjRef) -> bool {
         match value.decode() {
             Decoded::Nil => false,
@@ -1365,6 +1433,25 @@ impl Interp {
     /// **Both operands must already be rooted by the caller**, for the reason
     /// [`Interp::concat_values`] states: the result value below allocates.
     fn logical_values(
+        &mut self,
+        op: Operator,
+        left_value: ObjRef,
+        right_value: ObjRef,
+    ) -> Result<ObjRef, Failure> {
+        let result = self.logical_values_body(op, left_value, right_value);
+        // Blamed on any failure, the same reason `Interp::arith_general`
+        // gives: measured, `s. = 1; say s. & 'x'` is 34.901 with the frame
+        // even though it is the *right* operand's own text that fails the
+        // logical check.
+        if result.is_err() {
+            self.blame_stem_forwarded_operator(op.spelling().as_bytes(), left_value);
+        }
+        result
+    }
+
+    /// [`Interp::logical_values`]'s own computation, wrapped by it for the
+    /// reason [`Interp::arith_general_body`] is.
+    fn logical_values_body(
         &mut self,
         op: Operator,
         left_value: ObjRef,
