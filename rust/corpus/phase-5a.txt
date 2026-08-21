@@ -284,11 +284,10 @@ lang/class_reflection.rex
 lang/class_package.rex
 # ~method reads the class's own instance dictionary and nothing else, which is
 # the guard against a build that flattens every scope onto one class. There is
-# no table C row for the scope question, so these programs are the whole of it:
-# one
-# carries the answering rows and ends untrapped on a donated name, the other
-# ends untrapped on the class's own class method, and a build reading the class
-# behaviour instead answers one and raises the other.
+# no table C row for the scope question, so these programs are the whole of
+# it: one carries the answering rows and ends untrapped on a donated name, the
+# other ends untrapped on the class's own class method, and a build reading the
+# class behaviour instead answers one and raises the other.
 lang/class_method_own_dictionary.rex
 lang/class_method_class_side_raises.rex
 # The argument refusals of the methods that take one, which name their

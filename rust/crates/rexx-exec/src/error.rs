@@ -1350,9 +1350,11 @@ impl Raised {
     /// 88.901: a method argument the oracle names rather than numbers was
     /// omitted.
     ///
-    /// Measured at rc 168: `.Array~method()` reports `Missing argument;
-    /// argument method name is required.` and `.Array~isSubclassOf()` reports
-    /// `argument class`.
+    /// The named overload of `stringArgument` raises it
+    /// (`runtime/MethodArguments.hpp:161`, whose `OREF_NULL` arm is
+    /// `reportException(Error_Invalid_argument_noarg, name)`). Measured at rc
+    /// 168: `.Array~method()` reports `Missing argument; argument method name
+    /// is required.` and `.Array~isSubclassOf()` reports `argument class`.
     pub(crate) fn missing_named_argument(argument: &str) -> Raised {
         Raised::syntax(88, 901, vec![argument.as_bytes().to_vec()])
     }
@@ -1369,9 +1371,10 @@ impl Raised {
 
     /// 88.909 for an argument the oracle names rather than numbers.
     ///
-    /// `stringArgument`'s overloads differ in exactly this substitution
-    /// (`runtime/MethodArguments.hpp`), and `RexxClass::method` passes
-    /// `"method name"` (`classes/ClassClass.cpp:987`). Measured at rc 168:
+    /// `stringArgument`'s overloads differ in exactly this substitution --
+    /// `runtime/MethodArguments.hpp:136` takes a position and `:161` takes a
+    /// name -- and `RexxClass::method` passes `"method name"`
+    /// (`classes/ClassClass.cpp:987`). Measured at rc 168:
     /// `.Array~method(.nil)` reports `Argument method name must have a string
     /// value.`
     pub(crate) fn named_argument_needs_a_string_value(argument: &str) -> Raised {

@@ -12,7 +12,9 @@
  * C without one, which are the two forms the refusals bound.
  *
  * The last send is untrapped so the 93.915 text and the frame line the
- * refusal carries are compared as bytes. rc 163.
+ * refusal carries are compared as bytes -- and it is the ~toString spelling,
+ * so the frame's own name is read from the message rather than assumed to be
+ * the implementation's. rc 163.
  */
 
 signal on syntax name trapped
@@ -30,6 +32,12 @@ select
   when n = 6 then say n 'answered' t~makeString('L', .nil)
   when n = 7 then say n 'answered' t~makeString('L', ' ')
   when n = 8 then say n 'answered' t~makeString('C')
+  /* ~toString is the same function under a second name, so it refuses the
+     same shapes -- and the untrapped send at the end pins that the frame line
+     names the message that was sent and not the implementation. */
+  when n = 9 then say n 'answered' t~toString('C', '-')
+  when n = 10 then say n 'answered' t~toString('X')
+  when n = 11 then say n 'answered' t~toString('L', ' ')
   otherwise signal done
 end
 signal next
@@ -41,7 +49,7 @@ signal next
 
 done:
 signal off syntax
-say t~makeString('X')
+say t~toString('X')
 
 ::CLASS MX MIXINCLASS Object
 ::CLASS B

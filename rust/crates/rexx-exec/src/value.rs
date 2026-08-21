@@ -666,9 +666,11 @@ impl Interp {
     fn array_string_of(&mut self, value: ObjRef) -> Vec<u8> {
         let items = match self.heap.get(value).map(|object| &object.body) {
             Some(Body::Array(items)) => items.clone(),
-            // Unreachable: the only caller has just read `Redirect::Array`
-            // off this handle's own body. An array of no items renders empty,
-            // which is what this answers.
+            // Unreachable: every caller has just read `Redirect::Array` off
+            // this handle's own body, or -- `heap_to_number`'s, which does not
+            // go through `Redirect` at all -- has just matched
+            // `Body::Array`. An array of no items renders empty, which is what
+            // this answers.
             _ => Vec::new(),
         };
         self.array_string(&items)

@@ -1,7 +1,8 @@
-count 41
-/* Array~makeString, which is the only thing a program in this phase can do
- * with the array ~superClasses answers, and the string value an array has in
- * a string context.
+count 55
+/* Array~makeString and Array~toString, which are what a program can do with
+ * the array ~superClasses answers -- dispatch.rs's NATIVE_METHODS is where the
+ * set of names an array answers is written down -- and the string value an
+ * array has in a string context.
  *
  * The two are different answers and the rows are side by side for that
  * reason: makeString('C') concatenates where the string context joins with
@@ -31,11 +32,24 @@ say 'omit-both [' t~makeString(,) ']'
 say 'string-context [' 'x't ']'
 say 'length' t~makeString('C')~length
 
+/* ~toString is the same C++ function under a second name (Setup.cpp:733-:734
+   both bind ArrayClass::toString at arity 2), so each row above has its
+   toString twin here. The pair is what would catch the two names coming
+   apart, which a single implementation cannot do and a second one could. */
+say 'ts-default [' t~toString ']'
+say 'ts-line-sep [' t~toString('L', ' ') ']'
+say 'ts-char [' t~toString('C') ']'
+say 'ts-lower [' t~toString('line') ']'
+say 'ts-omit-option [' t~toString(, '/') ']'
+say 'own-makestring' .Array~method('MAKESTRING')
+say 'own-tostring' .Array~method('TOSTRING')
+
 e = .Object~superClasses
 say 'empty-default [' e~makeString ']'
 say 'empty-sep [' e~makeString('L', ' ') ']'
 say 'empty-char [' e~makeString('C') ']'
 say 'empty-string-context [' 'x'e ']'
+say 'empty-tostring [' e~toString ']'
 
 ::CLASS MX MIXINCLASS Object
 ::CLASS B

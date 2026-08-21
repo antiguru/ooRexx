@@ -160,6 +160,17 @@ struct NativeEntry {
 /// behaviour.
 static NATIVE_METHODS: &[(&str, &str, usize, NativeMethod)] = &[
     ("Array", "MAKESTRING", 2, native_array_make_string),
+    // The same C++ function under a second name, `Setup.cpp:733`-`:734`
+    // binding `ArrayClass::toString` twice with the same arity. Measured, the
+    // two agree on every shape `array_make_string.rex` and
+    // `array_make_string_refusals.rex` ask -- the default, `L` with and
+    // without a separator, `C`, a lower-case option, an option omitted in
+    // place, the empty list, 93.915 and the `C`-with-separator 93.902 -- and
+    // the traceback frame names the message that was sent rather than the
+    // implementation, so `~toString` reads `Compiled method "TOSTRING" with
+    // scope "Array".` A second row here rather than a second function,
+    // because a second function is where the two could come to disagree.
+    ("Array", "TOSTRING", 2, native_array_make_string),
     ("Class", "BASECLASS", 0, native_base_class),
     ("Class", "ID", 0, native_id),
     ("Class", "ISSUBCLASSOF", 1, native_is_subclass_of),
@@ -470,11 +481,17 @@ impl Interp {
                     Body::Instance(_) => Err("an instance of a user class"),
                     Body::WeakRef(_) => Err("a weak reference"),
                     // The package object `~package` answers. `.Package`'s
-                    // instance behaviour here is `Setup.cpp`'s whole set --
-                    // neither `CoreClasses.orx` nor `StreamClasses.orx` names
-                    // `.Package` at all, checked -- so a name it does not hold
-                    // is a name the running oracle does not hold either, and
-                    // 97.1 is the right answer rather than a guess.
+                    // instance behaviour here is `Setup.cpp`'s whole set, so a
+                    // name it does not hold is a name the running oracle does
+                    // not hold either, and 97.1 is the right answer rather than
+                    // a guess.
+                    //
+                    // The prologue leaves `.Package` alone, and the claim is as
+                    // wide as the pattern behind it: case-insensitive
+                    // `\.package\b` over `interpreter/RexxClasses/`'s
+                    // `CoreClasses.orx` and `StreamClasses.orx` matches nothing
+                    // in either file, where the same pattern for `.array`
+                    // matches in both.
                     Body::Native(native)
                         if self.object_model.as_ref().map(|model| model.package)
                             == Some(native.class()) =>
@@ -1189,11 +1206,14 @@ fn native_superclasses(
 }
 
 /// `Object~class`: the class whose behaviour answers this receiver's
-/// messages -- `RexxObject::classObject`.
+/// messages -- `RexxObject::classObject` (`classes/ObjectClass.cpp:1814`),
+/// whose whole body is `behaviour->getOwningClass()`.
 ///
 /// For a class object this is [`ClassRegistry::class_of`], the class the class
 /// object's own behaviour belongs to, and **not** its metaclass; that
-/// function's doc carries the measured rows where the two part.
+/// function's doc carries the measured rows where the two part. The C++ body
+/// is what says which: the owning class is a field of the behaviour, and the
+/// metaclass is a field of the class.
 ///
 /// [`ClassRegistry::class_of`]: rexx_classes::ClassRegistry::class_of
 fn native_class(
@@ -1311,9 +1331,11 @@ fn native_method(
     ))
 }
 
-/// `Array~makeString(format, separator)`: the array's items as one string --
-/// `ArrayClass::toString` (`classes/ArrayClass.cpp:1856`), which `MakeString`
-/// and `ToString` both name (`memory/Setup.cpp:733`-`:734`).
+/// `Array~makeString(format, separator)` and `Array~toString(format,
+/// separator)`: the array's items as one string -- `ArrayClass::toString`
+/// (`classes/ArrayClass.cpp:1856`), which `MakeString` and `ToString` both
+/// name at the same arity (`memory/Setup.cpp:733`-`:734`), which is why one
+/// function answers both rows.
 ///
 /// `L` joins the items with `separator`, defaulting to the line ending; `C`
 /// concatenates them and **refuses a separator**, which is where the method's
@@ -1394,7 +1416,8 @@ fn native_package(
     Ok(interp.package_object_for(class))
 }
 
-/// `Package~name`: the package's own name -- `PackageClass::getName`.
+/// `Package~name`: the package's own name -- `PackageClass::getProgramName`
+/// (`classes/PackageClass.hpp:147`), bound as `Name` by `memory/Setup.cpp:1189`.
 ///
 /// `REXX` for the package the primitive classes belong to, and the program's
 /// own path for a package a `::CLASS` installed into.
@@ -1927,10 +1950,10 @@ mod tests {
     /// [`Interp::invoke`] would add a second call to the dispatch seam, which
     /// `tests/dispatch_seam.rs` bounds at one.
     ///
-    /// The rows are the receiver kinds a program can put on the left of a
-    /// send: a string, `.nil`, an array and a package object. `~id` is the row
-    /// that would answer if the class-side and instance-side dictionaries were
-    /// one.
+    /// One row per receiver kind `Interp::receiver_kind` admits that is not a
+    /// class object; that function is where membership is decided. `~id` is
+    /// the name that would answer if the class-side and instance-side
+    /// dictionaries were one.
     #[test]
     fn a_class_scope_name_does_not_reach_a_receiver_that_is_not_a_class_object() {
         for source in [
