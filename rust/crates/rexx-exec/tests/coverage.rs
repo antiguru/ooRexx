@@ -953,6 +953,9 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/operator_frame_stem_logical_and.rex",
     "lang/operator_frame_stem_prefix_not.rex",
     "lang/operator_frame_stem_do_exponent_range.rex",
+    // Fix round 3, finding 1: the same forwarded frame reached through a
+    // non-strict comparison's own numeric conversion.
+    "lang/operator_frame_stem_compare_overflow.rex",
 ];
 
 #[test]

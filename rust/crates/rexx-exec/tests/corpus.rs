@@ -338,6 +338,11 @@ const RAW_STDERR_COMPARISON: &[&str] = &[
     "lang/operator_frame_stem_logical_and.rex",
     "lang/operator_frame_stem_prefix_not.rex",
     "lang/operator_frame_stem_do_exponent_range.rex",
+    // Fix round 3, finding 1: the same forwarded frame reached through a
+    // non-strict comparison's own numeric conversion, the operator family
+    // whose need for a number -- not whether it is arithmetic -- is what
+    // decides whether it reaches this frame at all.
+    "lang/operator_frame_stem_compare_overflow.rex",
 ];
 
 /// Every entry in [`RAW_STDERR_COMPARISON`] is a line some phase subset file

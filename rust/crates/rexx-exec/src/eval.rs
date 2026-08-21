@@ -964,15 +964,17 @@ impl Interp {
         // operand's own conversion.** The oracle's forwarded native method
         // runs to completion or fails; whichever of its own steps raises --
         // the base's conversion, the argument's, or the arithmetic itself --
-        // is still inside that one activation. Measured: `s. = 1; say s. /
+        // is still inside that one activation, each of them past
+        // `arith_left_operand`'s own return. Measured: `s. = 1; say s. /
         // 0` is 42.3 with the frame, `s. = 1; say s. ** 999999999999` is
         // 26.8 with the frame (the base converts fine; the *exponent*
         // fails), and `s. = 1; say s. + .array` is 41.1 with the frame even
-        // though it is the *right* operand's own conversion that fails --
-        // all three past `arith_left_operand`'s own return. Also
-        // `blame_stem_forwarded_operator`'s own no-op case: a non-stem
-        // receiver reaches this exactly as before, since the predicate it
-        // runs is unchanged.
+        // though it is the *right* operand's own conversion that fails.
+        // `blame_stem_forwarded_operator`'s own predicate is unchanged, but
+        // this call site is not: a non-stem receiver now reaches it on any
+        // failure here, where the removed inline call inside
+        // `arith_left_operand` only reached it from that function's own
+        // narrower branch.
         if result.is_err() {
             self.blame_stem_forwarded_operator(op.spelling().as_bytes(), left_value);
         }
@@ -1049,8 +1051,9 @@ impl Interp {
     /// an operator and does not follow that rule: `Interp::header_number`
     /// checks every position, because each is rounded through a unary
     /// operator of its own -- and each is a receiver of that unary operator
-    /// exactly as this function's own operand is, which is why it shares
-    /// [`Interp::blame_stem_forwarded_operator`] with it below.
+    /// exactly as this function's own operand is, which is why
+    /// `Interp::header_number` calls [`Interp::blame_stem_forwarded_operator`]
+    /// the same way [`Interp::arith_general`] does, not this function.
     ///
     /// Entirely on the failing path: an object of either shape is
     /// [`NotNumeric`] whatever this decides, so a program doing arithmetic on
@@ -1298,6 +1301,33 @@ impl Interp {
     /// plan's "do not quietly defeat the cache by using the `&str` entry
     /// point" is about, not a prohibition on calling `to_number` at all.
     fn compare_values(
+        &mut self,
+        op: Operator,
+        left_value: ObjRef,
+        right_value: ObjRef,
+    ) -> Result<ObjRef, Failure> {
+        let result = self.compare_values_body(op, left_value, right_value);
+        // Blamed on any failure, the same reason `Interp::arith_general`
+        // gives -- and comparison does have one, corrected from this task's
+        // own earlier premise: `compare_numbers` converts both operands to
+        // a `Number` and can overflow when both are numeric, exactly as an
+        // arithmetic operator's operands can. Measured: `numeric digits 1;
+        // s. = '9.9E999999999'; say s. > 1` is rc 214 with the frame; the
+        // same overflow with `1 > s.` (the receiver `1`, not a stem) is the
+        // identical rc 214 with no frame, because `is_stem_receiver`
+        // answers `false` for the plain-number receiver regardless of which
+        // operand overflowed. Strict `==`/`>>` and the non-numeric fallback
+        // (`compare_strings`) never reach `compare_numbers` at all, so they
+        // stay rc 0 and frameless, unaffected by this wrapping.
+        if result.is_err() {
+            self.blame_stem_forwarded_operator(op.spelling().as_bytes(), left_value);
+        }
+        result
+    }
+
+    /// [`Interp::compare_values`]'s own computation, wrapped by it for the
+    /// reason [`Interp::arith_general_body`] is.
+    fn compare_values_body(
         &mut self,
         op: Operator,
         left_value: ObjRef,

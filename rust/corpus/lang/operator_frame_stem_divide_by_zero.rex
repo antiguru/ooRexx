@@ -1,8 +1,9 @@
 /* Fix round 2, finding 1: the frame belongs to the receiver of a forwarded
  * operator whatever step raises, not only its own conversion -- here `s.`
- * converts fine (its default is "1") and the divisor's own arithmetic
- * overflow is what raises, past that conversion. Measured, rc 214, stderr
- * opening `       *-* Compiled method "/" with scope "String".`.
+ * converts fine (its default is "1") and the division's own zero check is
+ * what raises -- the divisor is `0`, not an overflow -- past that
+ * conversion. Measured, rc 214, stderr opening
+ * `       *-* Compiled method "/" with scope "String".`.
  */
 
 s. = 1
