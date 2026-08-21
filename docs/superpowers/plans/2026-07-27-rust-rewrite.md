@@ -489,7 +489,9 @@ So the remaining gap needs a structural change, and **anything that restructures
 The order within Phase 4 is therefore 4a, 4b, 4c, **4d-1** (measure, attribute, write the gate -- closed 2026-08-09), **4e** (the IR), **4f** (the optimisation loop, superseding 4d-2).
 
 **4e is not justified by the parity gate and must not be designed against it.**
-Its reasons are prior and architectural: it founds OO dispatch for Phase 5 by making a call site a patchable slot, it is the shape a Cranelift or WebAssembly backend consumes, and it makes trace an emission decision rather than a mode flag.
+Its reasons are prior and architectural: it makes a classic call site a patchable slot, it is the shape a Cranelift or WebAssembly backend consumes, and it makes trace an emission decision rather than a mode flag.
+**The slot is not what founds OO dispatch, and this sentence claimed it was until 2026-08-22.** D28 keeps message resolution dynamic with no per-call-site cache (`docs/superpowers/specs/2026-08-17-phase-5-object-model.md:1123`), and the IR is built that way rather than merely left that way: `Op::Message` carries no `site` field (`rust/crates/rexx-exec/src/ir.rs:1037`-`:1040`, `:1060`) where `Op::Call`'s `site` is the classic-call cache (`rust/crates/rexx-exec/src/ir.rs:1509`), and no send reaches that cache (`rust/crates/rexx-exec/src/dispatch.rs:23`-`:27`).
+What the IR does give OO dispatch is the `resolve`/`invoke` pair both engines share and the clause region a send op sits inside; `ClassGraph`'s per-behaviour version is what a send cache would guard on, and nothing reads it.
 Whether it also moves the benchmark ratios is 4f's measurement, taken afterwards against a characterised noise band. The `spike/bytecode-vm` speedups are withdrawn and the mechanics spike measured none.
 
 ---
