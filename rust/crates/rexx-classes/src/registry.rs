@@ -182,19 +182,23 @@ impl ClassRegistry {
     /// path) -- [`ClassGraph::owning_class`], **not**
     /// [`ClassGraph::metaclass`].
     ///
-    /// **They hold the same value wherever nothing overrides the field, which
-    /// is what makes reading either for the other look safe.** Measured,
-    /// `.string~class~id` and `.string~metaclass~id` are both `"Class"`, and so
-    /// are `.object`'s and `.class`'s own; and `native_classes` gives every
-    /// class it builds `.Object` as its superclass, so none of them is derived
-    /// from a metaclass at all. They come apart wherever a class is derived
-    /// from a
-    /// metaclass, because `subclass` moves the `metaClass` field to the
-    /// superclass (`:1590`) after handing `setOwningClass` the metaclass it
-    /// was given: measured, with `S` a metaclass, `::CLASS T SUBCLASS S
-    /// METACLASS M1` answers `.T~class~id` `M1` and `.T~metaClass~id` `S`,
-    /// and `::CLASS T2 SUBCLASS S`, naming no metaclass at all, answers
-    /// `Class` and `S`.
+    /// **They part iff the superclass is a metaclass and is not the
+    /// named-or-inherited metaclass** -- measured, and stated as an `iff`
+    /// because deriving from a metaclass is necessary and not sufficient.
+    /// `::CLASS T SUBCLASS MC METACLASS M1` parts, answering `~class` `M1`
+    /// and `~metaClass` `MC`, and so does `::CLASS T2 SUBCLASS MC` with no
+    /// `METACLASS` named, answering `Class` and `MC`. But
+    /// `::CLASS M3 SUBCLASS MC METACLASS MC` answers `MC` to both, and so do
+    /// `::class MC MIXINCLASS Class` and `::class Z SUBCLASS Class` -- every
+    /// one of those derives from a metaclass, and coincides because the
+    /// superclass is the metaclass in play.
+    ///
+    /// Anywhere the superclass is not a metaclass, nothing overrides and the
+    /// two agree: measured, `.string~class~id` and `.string~metaclass~id` are
+    /// both `"Class"`, and so are `.object`'s and `.class`'s own. Every class
+    /// `native_classes` builds names `.Object` as its superclass, or is
+    /// `.Object` itself and names none, so none of them derives from a
+    /// metaclass at all.
     ///
     /// An ordinary (non-class) object's `~class` is unrelated to any
     /// metaclass concept -- out of scope here, since this registry models

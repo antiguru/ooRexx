@@ -144,10 +144,11 @@ struct ClassDef {
     /// `.class~metaclass~id` is `"Class"`).
     ///
     /// **This is not what `~class` answers**, and [`ClassDef::owning_class`]
-    /// is. The two differ for a class derived from a metaclass, because
-    /// `RexxClass::subclass` moves this field to the superclass (`:1590`)
-    /// after it has already handed the metaclass it was given to
-    /// `setOwningClass` (`:1615`).
+    /// is. `RexxClass::subclass` writes this field to the superclass at
+    /// `:1590` and *then*, at `:1615`, hands `setOwningClass` the local
+    /// `meta_class` it was given -- a different location, never reassigned by
+    /// the write at `:1590`. See [`ClassDef::owning_class`] for exactly when
+    /// the two end up holding different classes.
     metaclass: ObjRef,
     /// The class this class object's own behaviour belongs to -- oracle's
     /// `behaviour->owningClass`, set from the metaclass `subclass` was given
@@ -155,14 +156,24 @@ struct ClassDef {
     /// a class object.
     ///
     /// **Separate from [`ClassDef::metaclass`] because the oracle writes them
-    /// from different values**, and a build reading one for the other is
-    /// wrong on every class derived from a metaclass. Measured, with `S` a
-    /// metaclass: `::CLASS T SUBCLASS S METACLASS M1` answers `.T~metaClass~id`
-    /// `S` and `.T~class~id` `M1`; and with no `METACLASS` named at all,
-    /// `::CLASS T2 SUBCLASS S` answers `S` and `Class`. They coincide
-    /// wherever nothing overrides the field -- `::CLASS K METACLASS M1` under
-    /// a plain superclass answers `M1` to both, and every class
-    /// `Setup.cpp` builds answers `Class` to both.
+    /// from different values.** The exact condition, measured: **the two part
+    /// iff the superclass is a metaclass and is not the named-or-inherited
+    /// metaclass.** Where they part, this field holds the named-or-inherited
+    /// metaclass and `metaclass` holds the superclass.
+    ///
+    /// ```text
+    /// ::CLASS T  SUBCLASS MC METACLASS M1   ~metaClass MC     ~class M1      part
+    /// ::CLASS T2 SUBCLASS MC                ~metaClass MC     ~class Class   part
+    /// ::CLASS M3 SUBCLASS MC METACLASS MC   ~metaClass MC     ~class MC      same
+    /// ::class MC MIXINCLASS Class           ~metaClass Class  ~class Class   same
+    /// ::class Z  SUBCLASS Class             ~metaClass Class  ~class Class   same
+    /// ::CLASS K  METACLASS M1               ~metaClass M1     ~class M1      same
+    /// ```
+    ///
+    /// **Deriving from a metaclass is necessary and not sufficient**, which
+    /// the `M3`, `MC` and `Z` rows are there to show: each derives from a
+    /// metaclass and each coincides, because the superclass *is* the
+    /// metaclass in play.
     ///
     /// `createClassBehaviour`'s merge reads [`ClassDef::metaclass`] and not
     /// this (`:1123`-`:1127`), so the merge follows the override.
@@ -266,11 +277,12 @@ impl ClassGraph {
     /// built from `.Class` and `M1` reaches it nowhere -- while the same
     /// `M1` under `::CLASS S SUBCLASS Object METACLASS M1` answers `from M1`.
     ///
-    /// **The override moves one field and not the other.** `metaclass` is
-    /// what the caller passed only until the override; [`ClassDef::owning_class`]
-    /// keeps it either way, because the oracle has already given that value
-    /// to `setOwningClass` (`:1615`) by the time `:1590` runs. See that
-    /// field for the shapes where the two answer differently.
+    /// **The override moves one field and not the other.** `:1590` writes the
+    /// `metaClass` field to the superclass; `:1615`, later, hands
+    /// `setOwningClass` the local `meta_class`, which that write never
+    /// touched. So `metaclass` here follows the override and
+    /// [`ClassDef::owning_class`] keeps what the caller passed. See that
+    /// field for exactly when the two end up different.
     pub fn define_class(
         &mut self,
         id: ObjRef,

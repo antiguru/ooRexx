@@ -5415,35 +5415,52 @@ say 1
     }
 
     /// **`~metaClass` and `~class` are two different fields of a class
-    /// object, and a class derived from a metaclass is where they part.**
+    /// object, and they part iff the superclass is a metaclass and is not the
+    /// named-or-inherited metaclass.**
     ///
-    /// `RexxClass::subclass` hands the metaclass it was given to
-    /// `setOwningClass` (`ClassClass.cpp:1615`), and only *then* moves the
-    /// `metaClass` field to the superclass when that superclass is itself a
-    /// metaclass (`:1590`). So the class object's behaviour goes on belonging
-    /// to the metaclass the directive named while the field answers the
-    /// superclass. Measured on the oracle, one program, `S` a metaclass:
+    /// `RexxClass::subclass` writes the `metaClass` field to the superclass at
+    /// `ClassClass.cpp:1590`, when that superclass is itself a metaclass, and
+    /// *then* at `:1615` hands `setOwningClass` the local `meta_class` it was
+    /// given -- a different location, which the write at `:1590` never
+    /// touched. So where the two differ, the field answers the superclass and
+    /// the behaviour goes on belonging to the named-or-inherited metaclass.
+    ///
+    /// Measured on the oracle, for the very program below -- `S` and `M1` are
+    /// both metaclasses, and the right-hand column says which rows this test
+    /// asserts:
     ///
     /// ```text
-    /// ::CLASS T SUBCLASS S METACLASS M1     ~metaClass S      ~class M1
-    /// ::CLASS T2 SUBCLASS S                 ~metaClass S      ~class Class
-    /// ::CLASS K METACLASS M1                ~metaClass M1     ~class M1
-    /// ::CLASS P                             ~metaClass Class  ~class Class
+    /// ::class S  MIXINCLASS Class         ~metaClass Class  ~class Class   same
+    /// ::class M1 MIXINCLASS Class         ~metaClass Class  ~class Class   same
+    /// ::class T  SUBCLASS S METACLASS M1  ~metaClass S      ~class M1      part   asserted
+    /// ::class T2 SUBCLASS S               ~metaClass S      ~class Class   part   asserted
+    /// ::class K  METACLASS M1             ~metaClass M1     ~class M1      same   asserted
+    /// ::class P                           ~metaClass Class  ~class Class   same   asserted
     /// ```
+    ///
+    /// **Deriving from a metaclass is necessary and not sufficient**, and the
+    /// counterexample is the first row: `S` derives from `.Class`, a
+    /// metaclass, and still answers `Class` to both, because there the
+    /// superclass *is* the metaclass in play. A rule stated as "derived from a
+    /// metaclass" alone would predict a divergence there and be wrong.
+    /// Measured on the oracle, `::CLASS M3 SUBCLASS S METACLASS S` answers `S`
+    /// to both for the same reason.
     ///
     /// **Nothing differential can witness this, which is why the check is
     /// in-crate.** Every program that could observe the split has to send
-    /// `~class`, and that send is refused here, so the split is not
-    /// expressible as a corpus row at all. What the test asserts is what the
+    /// `~class` or `~request` -- `RexxObject::requestRexx` reads the same
+    /// `behaviour->getOwningClass()` to build its `MAKExxxx` name
+    /// (`ObjectClass.cpp:1916`) -- and both sends are refused here, so the
+    /// split is not expressible as a corpus row at all. What the test asserts is what the
     /// *directive path* produced -- `installed` runs `install_directives`,
     /// not a hand-built graph -- so it cannot pass over a layer a real
     /// program does not reach.
     ///
-    /// **Either way of collapsing the fields back into one fails it, at a
-    /// different assertion each time**, measured: reading `owning_class` off
-    /// the `metaclass` field fails `T~class`, and dropping the override so
-    /// both hold what the caller passed fails `T~metaClass`. So neither field
-    /// can stand in for the other in either direction.
+    /// **Collapsing the fields back into one fails it whichever field is made
+    /// to stand in for the other, and at a different assertion each time**,
+    /// measured: reading `owning_class` off the `metaclass` field fails the
+    /// `T~class` row, and dropping the override so both hold what the caller
+    /// passed fails the `T~metaClass` row.
     #[test]
     fn a_class_objects_metaclass_and_its_class_are_separate_fields() {
         let (mut interp, _program) = installed(

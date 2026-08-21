@@ -600,15 +600,18 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
   mc`, answers `.k~m` at rc 0 on both sides, while the same `::method m
   class` is 97.1 -- the class-side spelling lands in the metaclass's own
   class dictionary, which nothing merges. A directive naming no METACLASS
-  takes its superclass's, so the edge reaches a subclass of `k` too; and
-  deriving from a metaclass discards a named METACLASS altogether, since the
-  SUPERCLASS becomes the metaclass whatever the directive said -- `.Class`
-  where the superclass is `.Class` itself, and the superclass otherwise.
-  Measured, with `S` a metaclass: `::CLASS T SUBCLASS S METACLASS M1` answers
-  `.T~metaClass~id` `S`. That is the field `~metaClass` reads; `~class` reads a
-  different one, and the same T answers `.T~class~id` `M1`, because
-  `setOwningClass` is handed the named metaclass before the field is moved.
-  `ClassRegistry::class_of` carries the shapes where the two part. The refusals
+  takes its superclass's, so the edge reaches a subclass of `k` too; and where
+  the superclass is itself a metaclass, the SUPERCLASS becomes the class's
+  metaclass whatever the directive said. A named METACLASS is not discarded by
+  that, though: it survives as the class's `~class`. The oracle writes two
+  fields here -- `metaClass` at ClassClass.cpp:1590, and then the behaviour's
+  owning class at :1615 from the metaclass the directive named or inherited,
+  which the earlier write never touched. Measured, with MC a metaclass:
+  `::CLASS T SUBCLASS MC METACLASS M1` answers `.T~metaClass~id` MC and
+  `.T~class~id` M1. THEY PART IFF THE SUPERCLASS IS A METACLASS AND IS NOT THE
+  NAMED-OR-INHERITED METACLASS -- deriving from a metaclass is necessary and
+  not sufficient, and `::CLASS M3 SUBCLASS MC METACLASS MC` answers MC to both.
+  `ClassRegistry::class_of` carries the shapes. The refusals
   are the oracle's: 98.908 for a target no name resolves to, resolved ahead
   of SUBCLASS's 98.909; 99.927 for a target that resolves to a class
   metaclass-ness never reached; 98.911 when the targets cannot be ordered.
