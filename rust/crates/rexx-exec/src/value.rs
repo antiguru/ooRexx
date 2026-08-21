@@ -598,7 +598,7 @@ impl Interp {
             // string value exists nowhere until something asks for it -- the
             // same position a tagged integer's digits are in, reached one
             // indirection later.
-            Redirect::ArrayItems(items) => return self.array_string(&items).len(),
+            Redirect::Array => return self.array_string_of(value).len(),
             Redirect::None => {}
         }
 
@@ -655,6 +655,25 @@ impl Interp {
         out
     }
 
+    /// [`array_string`] for an array named by its handle, whose items it looks
+    /// up itself.
+    ///
+    /// The second lookup [`Redirect::Array`] costs is here, and it is on the
+    /// array path alone -- see that variant's own doc for what carrying the
+    /// items instead cost every heap string.
+    ///
+    /// [`array_string`]: Interp::array_string
+    fn array_string_of(&mut self, value: ObjRef) -> Vec<u8> {
+        let items = match self.heap.get(value).map(|object| &object.body) {
+            Some(Body::Array(items)) => items.clone(),
+            // Unreachable: the only caller has just read `Redirect::Array`
+            // off this handle's own body. An array of no items renders empty,
+            // which is what this answers.
+            _ => Vec::new(),
+        };
+        self.array_string(&items)
+    }
+
     #[allow(
         clippy::wrong_self_convention,
         reason = "the interface name is D15's, and `&mut self` is load-bearing \
@@ -707,7 +726,7 @@ impl Interp {
             }
             // An array's string value is built here and stored nowhere, so it
             // is `Cow::Owned` and `try_text` answers `None` for one.
-            Redirect::ArrayItems(items) => return Cow::Owned(self.array_string(&items)),
+            Redirect::Array => return Cow::Owned(self.array_string_of(value)),
             Redirect::None => {}
         }
 
@@ -1024,9 +1043,8 @@ impl Interp {
             // -- not this function -- is what keeps an array out of
             // arithmetic, where the oracle's answer is 97.1 and not a
             // conversion at all.
-            Body::Array(items) => {
-                let items = items.clone();
-                let bytes = self.array_string(&items);
+            Body::Array(_) => {
+                let bytes = self.array_string_of(value);
                 Number::parse_bytes(&bytes).ok_or(NotNumeric)
             }
             other => {
@@ -1253,12 +1271,20 @@ enum Carried {
 /// and nothing inside it can reach the interpreter again. Deciding here, off
 /// a shared borrow that ends, is what lets a stem chase its default and an
 /// array join its items.
+///
+/// **`Array` carries no items, and that is a measured decision.** A variant
+/// holding the `Vec` this type would then need drop glue for, and it is
+/// returned by value on the path every heap string's rendering takes: carrying
+/// one cost `strings` +1.061% of `instructions:u` on the compiled engine and
+/// `alloc4c` +0.271%, against 1.000000 on the axes that name no string.
+/// Looking the items up again in the arm costs a second `heap.get` on arrays
+/// alone.
+#[derive(Copy, Clone)]
 enum Redirect {
     /// A stem with a default answers *as* that default.
     StemDefault(ObjRef),
-    /// An array's items, copied out because rendering each one needs the
-    /// interpreter mutably.
-    ArrayItems(Vec<ObjRef>),
+    /// An array joins its items, which the arm reads back out of the object.
+    Array,
     /// The object's own body holds the text.
     None,
 }
@@ -1270,7 +1296,7 @@ impl Redirect {
                 default: Some(default),
                 ..
             } => Redirect::StemDefault(*default),
-            Body::Array(items) => Redirect::ArrayItems(items.clone()),
+            Body::Array(_) => Redirect::Array,
             _ => Redirect::None,
         }
     }

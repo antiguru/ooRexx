@@ -3356,10 +3356,13 @@ mod object_operand_tests {
             // method, so the send finds nothing.
             (b"say (.Object~superClasses + 1)\n", "+", "an array"),
             (b"say (.Object~superClasses & 1)\n", "&", "an array"),
-            // oracle 1 -- `Object`'s own identity comparison, which this
-            // crate does not model. A build converting through the array's
-            // string value answers here instead, and the string value is the
-            // items joined, which is a real string.
+            // oracle 0 on both, measured -- `Object`'s own identity
+            // comparison, which this crate does not model. **A build
+            // converting through the array's string value answers `1`**: the
+            // array is `.Object`'s own superclass list, which holds nothing,
+            // so the items joined are the empty string. Measured, three
+            // descriptors, `say (.Object~superClasses = '')` and the `==`
+            // form: `0` on the oracle at rc 0.
             (b"say (.Object~superClasses = '')\n", "=", "an array"),
             (b"say (.Object~superClasses == '')\n", "==", "an array"),
             // A package object, which `~package` puts in a program's hands

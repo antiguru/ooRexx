@@ -1371,7 +1371,7 @@ impl Raised {
     ///
     /// `stringArgument`'s overloads differ in exactly this substitution
     /// (`runtime/MethodArguments.hpp`), and `RexxClass::method` passes
-    /// `"method name"` (`classes/ClassClass.cpp:985`). Measured at rc 168:
+    /// `"method name"` (`classes/ClassClass.cpp:987`). Measured at rc 168:
     /// `.Array~method(.nil)` reports `Argument method name must have a string
     /// value.`
     pub(crate) fn named_argument_needs_a_string_value(argument: &str) -> Raised {

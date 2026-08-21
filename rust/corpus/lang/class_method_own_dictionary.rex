@@ -12,7 +12,10 @@
  * The classes the rows cover: Array, whose own dictionary holds APPEND and
  * whose flattened behaviour also holds .Object's STRING; Class, whose own
  * dictionary holds ID; Object, whose own dictionary holds HASMETHOD; and K
- * below, which declares one instance method and one class method of its own.
+ * below, which declares a ::METHOD, a ::METHOD ... CLASS, an ::ATTRIBUTE and
+ * an ::ATTRIBUTE ... CLASS of its own. The attribute rows are the only names
+ * asked for here that are not plain symbols: a setter's resolved name carries
+ * an appended `=`.
  *
  * The pair is what pins the rule to "this class's own dictionary" rather than
  * to something coincidental: .Array~hasMethod is 1 for names this raises for,
@@ -47,6 +50,14 @@ select
   /* SIDE is K's own class method, which lives in the class dictionary. */
   when n = 9 then say n 'answered' .K~method('SIDE')
   when n = 10 then say n 'answered' .K~method('NOSUCHNAME')
+  /* The ::ATTRIBUTE pair, whose setter's name carries a trailing `=` -- the
+     only name here that is not a plain symbol. */
+  when n = 11 then say n 'answered' .K~method('A')
+  when n = 12 then say n 'answered' .K~method('A=')
+  /* ::ATTRIBUTE ... CLASS puts its accessors in the class dictionary, the
+     same place ::METHOD ... CLASS puts SIDE. */
+  when n = 13 then say n 'answered' .K~method('B')
+  when n = 14 then say n 'answered' .K~method('B=')
   otherwise signal done
 end
 signal next
@@ -68,3 +79,5 @@ say .Array~method('STRING')
   return 'own'
 ::METHOD side CLASS
   return 'side'
+::ATTRIBUTE a
+::ATTRIBUTE b CLASS

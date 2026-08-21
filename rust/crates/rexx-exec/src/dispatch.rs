@@ -179,7 +179,13 @@ static NATIVE_METHODS: &[(&str, &str, usize, NativeMethod)] = &[
 ];
 
 /// `~defaultName` for an array -- `RexxObject::defaultName`'s article rule
-/// applied to `.Array`'s id, which is what `stringValue()` answers for one.
+/// (`classes/ObjectClass.cpp:1760`) applied to `.Array`'s id.
+///
+/// This is what `stringValue()` answers for an array: `RexxObject::stringValue`
+/// sends `OBJECTNAME` (`classes/ObjectClass.cpp:1157`), which falls through to
+/// `defaultName()` for an object nothing has named. Measured, `a =
+/// .Array~superClasses`: `a~objectName` and `a~defaultName` are both `an
+/// Array`.
 ///
 /// A constant rather than a lookup because every array this crate builds is an
 /// instance of `.Array` itself: `native_superclasses` is the one constructor.
@@ -807,7 +813,7 @@ impl Interp {
     /// string value [`Interp::to_text`] answers for every receiver.
     ///
     /// An array is where the two part. `RexxObject::stringValue` for an array
-    /// is its default name, while a string context reaches
+    /// is [`ARRAY_DEFAULT_NAME`], while a string context reaches
     /// `ArrayClass::makeString` and gets the items joined
     /// (`classes/ArrayClass.cpp:1841`). Measured, `a = .Array~superClasses`:
     /// `say a + 1` reports `Object "an Array" does not understand message
@@ -1113,7 +1119,7 @@ fn class_argument(args: &[Option<ObjRef>]) -> Result<ObjRef, Failure> {
 }
 
 /// `Class~id`: the name the class was declared with, case unmodified --
-/// `RexxClass::getId` (`classes/ClassClass.cpp:596`).
+/// `RexxClass::getId` (`classes/ClassClass.cpp:385`).
 ///
 /// Measured, `.array~id` is `Array` and `::class Foo` makes `.Foo~id` `Foo`.
 fn native_id(
@@ -1127,7 +1133,7 @@ fn native_id(
     Ok(interp.text_built(id))
 }
 
-/// `Class~metaClass`: `RexxClass::getMetaClass` (`classes/ClassClass.cpp:1626`).
+/// `Class~metaClass`: `RexxClass::getMetaClass` (`classes/ClassClass.cpp:419`).
 ///
 /// **Not `~class`**, and the pair parts iff the superclass is a metaclass and
 /// is not the named-or-inherited metaclass -- `ClassRegistry::class_of` carries
@@ -1143,8 +1149,9 @@ fn native_metaclass(
 }
 
 /// `Class~superClass`: the class's own direct superclass, or `.nil` for
-/// `.Object` -- `RexxClass::getSuperClass` (`classes/ClassClass.cpp:1707`),
-/// which reads the **first** entry of the superclass list and not its last.
+/// `.Object` -- `RexxClass::getSuperClass` (`classes/ClassClass.cpp:441`),
+/// whose body is `superClasses->getFirstItem()`, so it reads the **first** entry
+/// of the superclass list and not its last.
 ///
 /// Measured, `.Array~superClass` is `The Object class` while
 /// `.Array~superClasses` holds `The Object class` and `The OrderedCollection
@@ -1162,8 +1169,8 @@ fn native_superclass(
 
 /// `Class~superClasses`: a **fresh** array of the class's own direct
 /// superclasses -- `RexxClass::getSuperClasses`
-/// (`classes/ClassClass.cpp:1721`), which copies the list rather than handing
-/// out the class's own.
+/// (`classes/ClassClass.cpp:458`), whose body is `superClasses->copy()`, so it
+/// hands out a copy rather than the class's own list.
 ///
 /// Measured, `(.Array~superClasses == .Array~superClasses)` is `0`: two sends
 /// answer two objects.
@@ -1370,7 +1377,7 @@ fn native_array_make_string(
 }
 
 /// `Class~package`: the package the class was defined in --
-/// `RexxClass::getPackage` (`classes/ClassClass.cpp:1932`).
+/// `RexxClass::getPackage` (`classes/ClassClass.cpp:1732`).
 ///
 /// Measured, three descriptors: `.Array~package` renders `The REXX Package`
 /// and `.Array~package~name` is `REXX`, while a `::CLASS` in a user file

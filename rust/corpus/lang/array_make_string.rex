@@ -12,8 +12,9 @@
  * T below has more than one superclass so a separator has somewhere to
  * appear; the empty rows are .Object's own list, which holds nothing.
  *
- * The option argument's first character decides, upcased, and the whole
- * argument omitted means L -- rows 'lower' and 'default'.
+ * The option argument's first character decides, upcased, and the argument
+ * omitted means L whether it is left off the end or omitted in place -- rows
+ * 'lower', 'default', 'omit-option' and 'omit-both'.
  */
 
 t = .T~superClasses
@@ -24,6 +25,8 @@ say 'line-bar [' t~makeString('L', '|') ']'
 say 'line-empty-sep [' t~makeString('L', '') ']'
 say 'char [' t~makeString('C') ']'
 say 'lower [' t~makeString('line') ']'
+say 'omit-option [' t~makeString(, '/') ']'
+say 'omit-both [' t~makeString(,) ']'
 say 'string-context [' 'x't ']'
 say 'length' t~makeString('C')~length
 
