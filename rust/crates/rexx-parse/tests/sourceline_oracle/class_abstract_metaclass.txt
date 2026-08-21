@@ -1,0 +1,8 @@
+count 7
+/* ABSTRACT on a metaclass: 98.990, rc 158, naming the class's own ~id
+   unquoted rather than its ~defaultName. This is the whole of ABSTRACT that
+   is observable before ~new lands, since the flag it otherwise sets is read
+   there. */
+say 'main ran'
+
+::CLASS S MIXINCLASS Class ABSTRACT

@@ -244,3 +244,30 @@ lang/class_inherit_cycle.rex
 # the only shape of it that can agree with the oracle -- and it is what
 # stops the dependency edge being an unwitnessed line in the diff.
 lang/class_metaclass_cycle.rex
+
+# Phase 5a (2026-08-17 plan) Task 8: `::CLASS ... METACLASS`, and the rest of
+# `::CLASS`'s option surface.
+#
+# The program that runs carries the donation itself -- a metaclass's
+# instance methods reaching the class side -- together with the default
+# (a directive with no METACLASS takes its superclass's), a mixin with a
+# metaclass, and a metaclass declared later in the file. The two 97.1
+# programs are the boundaries of the donation: the class-side spelling on
+# the metaclass donates nothing, and a metaclass named on a directive that
+# derives from one is discarded.
+lang/class_metaclass.rex
+lang/class_metaclass_class_method_does_not_donate.rex
+lang/class_metaclass_superclass_wins.rex
+# The refusal ladder, each program shaped so it pins where its check sits as
+# well as what it reports. 98.908 is METACLASS's own not-found error and is
+# raised ahead of SUBCLASS's 98.909; 99.927 is a target that resolves to a
+# class metaclass-ness never reached, tested before deriving from a metaclass
+# discards the target altogether.
+lang/class_metaclass_not_found.rex
+lang/class_metaclass_not_a_metaclass.rex
+# ABSTRACT's effect a program can reach before ~new: a metaclass cannot be
+# made abstract. Its position in the directive is pinned too -- the INHERIT
+# list is walked first.
+lang/class_abstract_metaclass.rex
+lang/class_abstract_metaclass_subclass.rex
+lang/class_abstract_metaclass_after_inherit.rex

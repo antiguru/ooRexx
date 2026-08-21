@@ -158,6 +158,9 @@ const SUBSET_FILES: &[&str] = &[
 const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     // The class-directive refusals: each is refused before the main body's
     // first clause, and nothing has been asked of the arena by then.
+    "lang/class_abstract_metaclass.rex",
+    "lang/class_abstract_metaclass_after_inherit.rex",
+    "lang/class_abstract_metaclass_subclass.rex",
     "lang/class_inherit_base_class.rex",
     "lang/class_inherit_cycle.rex",
     "lang/class_inherit_not_a_mixin.rex",
@@ -165,6 +168,8 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/class_inherit_recursive.rex",
     "lang/class_inherit_trailing_keyword.rex",
     "lang/class_metaclass_cycle.rex",
+    "lang/class_metaclass_not_a_metaclass.rex",
+    "lang/class_metaclass_not_found.rex",
     "lang/class_subclass_cycle.rex",
     "lang/class_subclass_not_found.rex",
     // These run rather than refusing, and still allocate nothing: every
@@ -173,6 +178,12 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     // registry rather than built as a value.
     "lang/class_inherit_order.rex",
     "lang/class_mixinclass.rex",
+    // These reach their first clause and raise 97.1 from the send in it. The
+    // report substitutes the receiver's `~defaultName` and the message name,
+    // both rendered out of the registry and the plan rather than built as
+    // values, so nothing is asked of the arena on that path either.
+    "lang/class_metaclass_class_method_does_not_donate.rex",
+    "lang/class_metaclass_superclass_wins.rex",
     "lang/comparison_families.rex",
     "lang/comparison_operators_remaining.rex",
     "lang/deep_nested_expr.rex",

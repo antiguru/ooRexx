@@ -1,0 +1,13 @@
+count 12
+/* Deriving from a metaclass discards the METACLASS the directive names.
+   .Class is a metaclass, so S's own metaclass is .Class and M1 donates
+   nothing: 97.1 rc 159. The other side of the same rule is
+   class_metaclass.rex's M row, where the superclass is .Object and the
+   named metaclass does donate. */
+say .S~who
+
+::CLASS M1 MIXINCLASS Class
+::METHOD who
+  return 'from M1'
+
+::CLASS S MIXINCLASS Class METACLASS M1

@@ -143,6 +143,17 @@ struct ClassDef {
     /// including `.Class` itself, self-referentially (measured:
     /// `.class~metaclass~id` is `"Class"`).
     metaclass: ObjRef,
+    /// This class may be named as another class's metaclass -- oracle's
+    /// `META_CLASS` class flag, which `RexxClass::subclass` tests before it
+    /// will build anything from the metaclass it was handed (`:1572`).
+    ///
+    /// **Deriving from a metaclass is what sets it** (`:1586`-`:1589`), so it
+    /// travels down from `.Class` through `SUBCLASS` and `MIXINCLASS` alike,
+    /// and [`ClassGraph::bootstrap_metaclass`] is what starts the chain.
+    /// `::CLASS ... METACLASS` does *not* set it on the class being declared:
+    /// measured, `.K~isMetaClass` is `0` for `::CLASS K METACLASS S` while
+    /// `.S~isMetaClass` is `1` for `::CLASS S MIXINCLASS Class`.
+    is_metaclass: bool,
     /// This class's instances need `UNINIT` run when they are collected --
     /// oracle's `HAS_UNINIT` class flag, which is what
     /// `completeNewObject` reads to register each new instance
@@ -222,6 +233,14 @@ impl ClassGraph {
     /// `MIXINCLASS` target names. They ask the same question of the same
     /// object, and both are kept so that a build losing either one is a build
     /// something can catch.
+    ///
+    /// **Deriving from a metaclass overrides `metaclass`** (`:1586`-`:1591`):
+    /// the new class becomes a metaclass itself and takes `superclass` as its
+    /// own metaclass, whatever the caller passed. Measured: `::CLASS S
+    /// MIXINCLASS Class METACLASS M1`, with `M1` a metaclass carrying an
+    /// instance `who`, answers `.S~who` with 97.1 -- `S`'s class side is
+    /// built from `.Class` and `M1` reaches it nowhere -- while the same
+    /// `M1` under `::CLASS S SUBCLASS Object METACLASS M1` answers `from M1`.
     pub fn define_class(
         &mut self,
         id: ObjRef,
@@ -229,6 +248,8 @@ impl ClassGraph {
         kind: ClassKind,
         metaclass: ObjRef,
     ) {
+        let derived_from_metaclass = superclass.filter(|sup| self.classes[sup].is_metaclass);
+        let metaclass = derived_from_metaclass.unwrap_or(metaclass);
         let (base_class, parent_has_uninit) = match kind {
             ClassKind::Regular => (id, superclass.is_some_and(|sup| self.uninit_reaches(sup))),
             ClassKind::Mixin => {
@@ -253,6 +274,7 @@ impl ClassGraph {
                 class_behaviour,
                 base_class,
                 metaclass,
+                is_metaclass: derived_from_metaclass.is_some(),
                 has_uninit: false,
                 parent_has_uninit,
             },
@@ -642,6 +664,14 @@ impl ClassGraph {
         self.classes[&class].metaclass
     }
 
+    /// Whether `class` may be named as another class's metaclass -- oracle's
+    /// `isMetaClass`, and the flag `RexxClass::subclass` refuses on
+    /// (`ClassClass.cpp:1572`, `Error_Translation_bad_metaclass`). See the
+    /// field for what sets it.
+    pub fn is_metaclass(&self, class: ObjRef) -> bool {
+        self.classes[&class].is_metaclass
+    }
+
     /// `~baseClass` -- oracle's `getBaseClass` (`Setup.cpp:455` binds it as a
     /// method of `.Class`). A `Regular` class answers itself; a `Mixin`
     /// answers whatever its `MIXINCLASS` target's own base class is, which is
@@ -707,6 +737,24 @@ impl ClassGraph {
         let handle = self.behaviour_handle(root, Side::Class);
         self.behaviours[handle.0].dict.merge(&meta_dict);
         self.behaviours[handle.0].version += 1;
+    }
+
+    /// Mark `class` a metaclass without deriving it from one -- oracle's
+    /// `buildFinalClassBehaviour`'s `if (this == TheClassClass)
+    /// setMetaClass();` (`ClassClass.cpp:744`-`:747`), which is where the
+    /// chain [`ClassGraph::define_class`] propagates starts.
+    ///
+    /// [`ClassGraph::define_class`] cannot produce this on its own: it reads
+    /// the flag off the superclass, and `.Class`'s superclass is `.Object`,
+    /// which is not a metaclass. Bootstrap code calls this once, for the same
+    /// reason it calls [`ClassGraph::bootstrap_root_class_behaviour`] -- the
+    /// oracle gives `.Object` and `.Class` a dedicated construction path and
+    /// this crate has one unified one.
+    pub fn bootstrap_metaclass(&mut self, class: ObjRef) {
+        self.classes
+            .get_mut(&class)
+            .expect("bootstrap_metaclass: unknown class")
+            .is_metaclass = true;
     }
 
     /// `class`'s own, unflattened instance-method names -- oracle's

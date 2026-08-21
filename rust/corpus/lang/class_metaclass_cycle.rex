@@ -1,7 +1,7 @@
 /* A METACLASS target is a dependency as much as a SUBCLASS or an INHERIT
    target is, so a pair naming each other cannot be ordered: 98.911, blaming
-   the first of them. The directive is otherwise refused here, which is why
-   this shape and not an installing one is what witnesses the edge. */
+   the first of them. The ordering runs before any class is created, so this
+   answers ahead of whatever the two directives would otherwise install. */
 say 'main ran'
 
 ::class a metaclass b

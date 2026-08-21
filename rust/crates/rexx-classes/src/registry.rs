@@ -196,6 +196,16 @@ impl ClassRegistry {
         self.graph.metaclass(class)
     }
 
+    /// `~isMetaClass` -- see [`ClassGraph::is_metaclass`].
+    pub fn is_metaclass(&self, class: ObjRef) -> bool {
+        self.graph.is_metaclass(class)
+    }
+
+    /// See [`ClassGraph::bootstrap_metaclass`].
+    pub fn bootstrap_metaclass(&mut self, class: ObjRef) {
+        self.graph.bootstrap_metaclass(class);
+    }
+
     /// `~baseClass` -- see [`ClassGraph::base_class`].
     pub fn base_class(&self, class: ObjRef) -> ObjRef {
         self.graph.base_class(class)

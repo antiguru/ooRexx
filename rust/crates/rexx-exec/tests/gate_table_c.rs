@@ -319,8 +319,11 @@ const CONCEPTS: &[Concept] = &[
         phase: "5a",
         authority: "spec enumeration: the four kinds themselves are 5a, with enforcement \
                     split into its own rows",
-        control: "make `::CLASS ... ABSTRACT` or `::CLASS ... METACLASS` a no-op, so the \
-                  declared class is indistinguishable from a plain one -- Task 8",
+        control: "make `::CLASS ... METACLASS` a no-op, so the declared class is an \
+                  instance of `.Class` like a plain one -- Task 9. The section's abstract \
+                  kind has no control here: this probe asks each class its `~class~id`, \
+                  which an abstract class answers exactly as a plain one does, and \
+                  abstract-class enforcement is `abscla`'s row and 5b's",
         oracle_lines: 4,
     },
     Concept {
@@ -357,7 +360,8 @@ const CONCEPTS: &[Concept] = &[
         phase: "5a",
         authority: "spec enumeration: the metaclass graph and its circularity is 5a",
         control: "ignore `METACLASS`, so a class declared with one is still an instance of \
-                  `.Class` -- Task 8",
+                  `.Class` -- Task 9, which is where this probe's `~id` and `~class` land; \
+                  `::CLASS ... METACLASS` itself installs from Task 8",
         oracle_lines: 3,
     },
     Concept {

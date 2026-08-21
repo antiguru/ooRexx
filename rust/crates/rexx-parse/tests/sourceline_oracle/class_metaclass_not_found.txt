@@ -1,0 +1,7 @@
+count 6
+/* A METACLASS target no name resolves to: 98.908, which is its own error
+   rather than SUBCLASS's 98.909. Both targets here fail to resolve, and the
+   metaclass is the one blamed, because the directive resolves it first. */
+say 'main ran'
+
+::class k metaclass zzznometa subclass zzznosub

@@ -302,6 +302,13 @@ pub fn native_classes() -> ClassRegistry {
         ClassKind::Regular,
         class_id,
     );
+    // `.Class` is where metaclass-ness starts, and nothing derives it from a
+    // metaclass -- its superclass is `.Object`. The oracle seeds it by hand
+    // in the same dedicated bootstrap constructor (`ClassClass.cpp:744`-
+    // `:747`); see `ClassGraph::bootstrap_metaclass`. Which of the classes
+    // below inherits it is `ClassGraph::define_class`'s decision, read off
+    // the superclass each is given here.
+    registry.bootstrap_metaclass(class_id);
     replay(&mut registry, object_id, definition_for("Object"));
     replay(&mut registry, class_id, definition_for("Class"));
     // `.Class`'s own class-behaviour self-merge (D44's self-reference) ran

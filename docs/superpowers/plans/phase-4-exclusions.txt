@@ -406,6 +406,7 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
     ::class foo + ::attribute baz
     ::class mx mixinclass object
     ::class mx mixinclass object + ::class foo inherit mx
+    ::class mc mixinclass class + ::class foo metaclass mc
     ::constant kk 5
     ::resource foo ... ::END
     ::annotate package author 'me'
@@ -415,7 +416,6 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
   refused here, loudly, naming Phase 5 (or Phase 7 for the EXTERNAL forms,
   which need a library loaded):
 
-    ::class foo metaclass zzznotaclass                    98.908 rc 158
     ::class foo subclass ns:other                         98.987 rc 158
     ::class foo mixinclass ns:other                       98.987 rc 158
     ::class foo inherit ns:other                          98.987 rc 158
@@ -592,14 +592,30 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
   `corpus/lang/class_mixinclass.rex`, `class_inherit_order.rex` and the six
   `class_inherit_*` refusal programs are the witnesses.
 
-  METACLASS is still refused, under its own message. So is a namespace-
-  qualified target on any keyword that takes a class reference -- SUBCLASS,
-  MIXINCLASS, INHERIT and METACLASS -- under one message that names none of
-  them: the namespace is a package this crate does not load, and the oracle's
-  own answer is 98.987 for every one of those spellings rather than a
-  resolution. The namespace arm is reached first, so a qualified METACLASS
-  target gets the namespace message and not the METACLASS one; every spelling
-  named above has an in-crate row in
+  CLOSED DEFECT: ::CLASS ... METACLASS WAS REFUSED AND IS NOT ANY MORE. It
+  installs, on both engines. A metaclass donates its own INSTANCE methods to
+  the class side of every class built from it, which is the only way a
+  program reads the edge until `~class` and `~metaClass` land: `::class mc
+  mixinclass class` with an instance `::method m`, and `::class k metaclass
+  mc`, answers `.k~m` at rc 0 on both sides, while the same `::method m
+  class` is 97.1 -- the class-side spelling lands in the metaclass's own
+  class dictionary, which nothing merges. A directive naming no METACLASS
+  takes its superclass's, so the edge reaches a subclass of `k` too; and
+  deriving from a metaclass discards a named METACLASS altogether, since
+  `.Class` is then the metaclass whatever the directive said. The refusals
+  are the oracle's: 98.908 for a target no name resolves to, resolved ahead
+  of SUBCLASS's 98.909; 99.927 for a target that resolves to a class
+  metaclass-ness never reached; 98.911 when the targets cannot be ordered.
+  ABSTRACT brings one of its own, 98.990, for a class that is a metaclass --
+  the effect of ABSTRACT a program can observe before `~new`. The
+  `corpus/lang/class_metaclass*.rex` and `class_abstract_metaclass*.rex`
+  programs are the witnesses.
+
+  A namespace-qualified target on any keyword that takes a class reference --
+  SUBCLASS, MIXINCLASS, INHERIT and METACLASS -- is still refused, under one
+  message that names none of them: the namespace is a package this crate does
+  not load, and the oracle's own answer is 98.987 for every one of those
+  spellings rather than a resolution. Every spelling has an in-crate row in
   `every_directive_this_crate_cannot_install_refuses_before_the_first_clause`
   and in `a_class_keyword_gap_is_raised_inside_the_class_pass`.
 

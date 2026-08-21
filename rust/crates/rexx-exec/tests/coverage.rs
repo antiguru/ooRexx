@@ -967,6 +967,16 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/class_inherit_recursive.rex",
     "lang/class_inherit_cycle.rex",
     "lang/class_metaclass_cycle.rex",
+    // Phase 5a (2026-08-17 plan) Task 8: `::CLASS ... METACLASS`, the
+    // refusals it brings, and ABSTRACT on a metaclass.
+    "lang/class_metaclass.rex",
+    "lang/class_metaclass_class_method_does_not_donate.rex",
+    "lang/class_metaclass_superclass_wins.rex",
+    "lang/class_metaclass_not_found.rex",
+    "lang/class_metaclass_not_a_metaclass.rex",
+    "lang/class_abstract_metaclass.rex",
+    "lang/class_abstract_metaclass_subclass.rex",
+    "lang/class_abstract_metaclass_after_inherit.rex",
 ];
 
 #[test]

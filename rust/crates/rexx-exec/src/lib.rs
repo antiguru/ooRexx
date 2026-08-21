@@ -1288,16 +1288,11 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
         // `INHERIT ns:` and `METACLASS ns:` alike: the oracle is 98.987
         // `Namespace "NS" not found in package "<path>"` at rc 158, so the
         // target is unreachable there too and the divergence is the report
-        // rather than the outcome. This arm is reached before the `METACLASS`
-        // one below it, so a qualified metaclass target answers here.
+        // rather than the outcome. A qualified target on any of them answers
+        // here, whichever keyword wrote it -- [`class_names_a_namespace`] is
+        // what asks.
         DirectiveKind::Class(class) if class_names_a_namespace(class) => {
             gap("::CLASS naming a namespace", "Phase 5")
-        }
-        // Its own message, because `SUBCLASS`, `MIXINCLASS` and `INHERIT`
-        // install: one message covering all of them would name a construct
-        // this crate installs.
-        DirectiveKind::Class(class) if class.metaclass.is_some() => {
-            gap("::CLASS METACLASS", "Phase 5")
         }
         // Resolves its target against the accumulated package: measured,
         // `::annotate routine nosuchrtn` is 99.945 rc 157. `::ANNOTATE
@@ -3521,10 +3516,23 @@ impl Interp {
         // rc 0: `::class c subclass b` / `::class b subclass a` / `::class a`
         // with a class method on `a` answers that method through `.c`.
         //
-        // One rebuild per class and no ordering between them: `cascade_build`
-        // walks the superclass chain and merges each ancestor's **own**
-        // dictionary rather than its built behaviour, so a chain is complete
-        // after its last class is rebuilt whichever order the rebuilds ran in.
+        // **The metaclass edge is rebuilt by the same loop, and it is why the
+        // rebuild is on the class side.** `cascade_build`'s class-side arm
+        // merges the metaclass's flattened *instance* behaviour, so a
+        // `METACLASS` whose own `::METHOD` directives arrive after the class
+        // was created reaches the class side only once something rebuilds it
+        // -- the oracle's own `updateSubClasses` builds the class behaviour
+        // second for exactly this reason, "because the added methods may have
+        // an impact on metaclasses" (`ClassClass.cpp:1036`).
+        //
+        // One rebuild per class and no ordering between them. The class side
+        // reads each ancestor's **own** dictionary, which the cascade walks
+        // rather than reading a built behaviour, and the metaclass's
+        // flattened instance behaviour, which
+        // `ClassRegistry::add_instance_method` has already brought up to date
+        // for every class in the file -- it rebuilds the receiving class's
+        // instance side and cascades to its subclasses on every call, so the
+        // instance behaviours are final before this loop starts.
         for class in classes.values() {
             self.classes().refresh_class_behaviour(*class);
         }
@@ -3559,16 +3567,15 @@ impl Interp {
     /// carrying the name as written, and an entry in the running package's own
     /// class table under the uppercased one.
     ///
-    /// **`superclass` is the caller's, and `metaclass` is not.** A `::CLASS`
-    /// naming a `METACLASS` is still a `directive_gap` above and never
-    /// reaches here, so the metaclass is always the default
-    /// `RexxClass::subclass` gives it (`ClassClass.cpp:1562`, and
-    /// `Setup.cpp`'s every `StartClassDefinition` block passes the same
-    /// pair). The superclass is `.Object` for the bare form and whatever
-    /// `SUBCLASS` or `MIXINCLASS` named otherwise, which
-    /// [`Interp::install_class_at`] has already resolved -- the two keywords
+    /// **Both `superclass` and `metaclass` are the caller's**, resolved by
+    /// [`Interp::install_class_at`] against the file's own `::CLASS` names and
+    /// then the registry. The superclass is `.Object` for the bare form and
+    /// whatever `SUBCLASS` or `MIXINCLASS` named otherwise -- the two keywords
     /// fill one slot, exactly as `RexxClass::mixinClass` builds its result by
     /// calling `subclass` on the same target (`ClassClass.cpp:1514`-`:1519`).
+    /// The metaclass is what `METACLASS` named, or the superclass's own where
+    /// the directive names none, which is `RexxClass::subclass`'s default
+    /// (`ClassClass.cpp:1566`-`:1569`).
     ///
     /// **`mixin` and not the slot's presence is what makes a class a
     /// `Mixin`**, which is the whole reason `ClassDirective` carries the flag
@@ -3590,9 +3597,9 @@ impl Interp {
         program: ProgramId,
         class: &ClassDirective,
         superclass: ObjRef,
+        metaclass: ObjRef,
     ) -> ObjRef {
         let name = String::from_utf8_lossy(&class.name).into_owned();
-        let metaclass = self.root_and_metaclass().1;
         // `define_unregistered_class`, not `define_class`: an installed class
         // does not go into `.environment`, and registering it there would let
         // `::class array` displace the environment's own `Array` for every
@@ -3618,14 +3625,21 @@ impl Interp {
     ///
     /// **The order inside the directive is the oracle's**
     /// (`ClassDirective::install`,
-    /// `interpreter/instructions/ClassDirective.cpp:165`-`:229`): resolve the
-    /// `SUBCLASS`/`MIXINCLASS` target, create the class from it, then walk
-    /// the `INHERIT` list left to right sending `INHERIT` to the new class
-    /// for each entry. Each send appends to the end of the superclass list
-    /// (`superClasses->addLast`), and the cascade walks that list in reverse,
-    /// so the leftmost `INHERIT` is folded in last among the mixins and wins
-    /// a name conflict between them -- while the `SUBCLASS` target, first in
-    /// the list, is folded in last of all and outranks every mixin.
+    /// `interpreter/instructions/ClassDirective.cpp:165`-`:249`): resolve the
+    /// `METACLASS` target, then the `SUBCLASS`/`MIXINCLASS` one, create the
+    /// class from the pair, then walk the `INHERIT` list left to right
+    /// sending `INHERIT` to the new class for each entry, and finally apply
+    /// `ABSTRACT`. Each `INHERIT` send appends to the end of the superclass
+    /// list (`superClasses->addLast`), and the cascade walks that list in
+    /// reverse, so the leftmost `INHERIT` is folded in last among the mixins
+    /// and wins a name conflict between them -- while the `SUBCLASS` target,
+    /// first in the list, is folded in last of all and outranks every mixin.
+    ///
+    /// **That order is what decides which refusal a directive owing more
+    /// than one gets**, and each boundary is measured on the oracle: `::class k
+    /// metaclass zzznometa subclass zzznosub` is 98.908 and not 98.909, and
+    /// `::CLASS S MIXINCLASS Class ABSTRACT INHERIT zzznotaclass` is 98.909
+    /// and not 98.990.
     ///
     /// **The directive's own gap is checked here** rather than left to the
     /// pass that walks source order, which runs after every class is
@@ -3645,30 +3659,79 @@ impl Interp {
         let DirectiveKind::Class(class) = &directive.kind else {
             return Err(Loud::missing_body().into());
         };
+        let named_metaclass = match &class.metaclass {
+            None => None,
+            Some(target) => Some(self.resolve_class_target(
+                program,
+                directive,
+                target,
+                declared,
+                installed,
+                Raised::metaclass_not_found,
+            )?),
+        };
         let superclass = match &class.subclass {
             None => self.root_and_metaclass().0,
-            Some(target) => {
-                self.resolve_class_target(program, directive, target, declared, installed)?
-            }
+            Some(target) => self.resolve_class_target(
+                program,
+                directive,
+                target,
+                declared,
+                installed,
+                Raised::class_not_found,
+            )?,
         };
-        let id = self.install_class(program_id, class, superclass);
+        // `RexxClass::subclass`'s own opening (`ClassClass.cpp:1566`-
+        // `:1575`): a directive naming no `METACLASS` derives from the
+        // superclass's own, and either way the value has to be a metaclass
+        // before anything is built from it. Measured, `::CLASS S MIXINCLASS
+        // Class METACLASS Object` raises this even though deriving from
+        // `.Class` then discards the named metaclass -- the test is on what
+        // the directive named, not on what the class ends up with.
+        let metaclass = named_metaclass.unwrap_or_else(|| self.classes().metaclass(superclass));
+        if !self.classes().is_metaclass(metaclass) {
+            let name = self.class_default_name(metaclass).to_vec();
+            self.blame_directive(program, directive);
+            return Err(Raised::bad_metaclass(&name).into());
+        }
+        let id = self.install_class(program_id, class, superclass, metaclass);
         for target in &class.inherit {
-            let mixin =
-                self.resolve_class_target(program, directive, target, declared, installed)?;
+            let mixin = self.resolve_class_target(
+                program,
+                directive,
+                target,
+                declared,
+                installed,
+                Raised::class_not_found,
+            )?;
             self.inherit_mixin(program, directive, id, mixin)?;
+        }
+        // `RexxClass::makeAbstract` (`ClassClass.cpp:1753`-`:1761`): a
+        // metaclass cannot be made abstract, and any other class takes the
+        // keyword by setting a flag whose reader is `~new`.
+        if class.abstract_ && self.classes().is_metaclass(id) {
+            let class_id = self.class_id_text(id).as_bytes().to_vec();
+            self.blame_directive(program, directive);
+            return Err(Raised::abstract_metaclass(&class_id).into());
         }
         Ok(id)
     }
 
-    /// One `SUBCLASS`, `MIXINCLASS` or `INHERIT` target, resolved against the
-    /// file's own `::CLASS` names and then the registry.
+    /// One class reference on a `::CLASS`, resolved against the file's own
+    /// `::CLASS` names and then the registry.
     ///
     /// **A target the file does not declare is the registry's**, and one the
-    /// registry does not hold is 98.909 naming it -- measured, rc 158 with
-    /// stdout empty. A target the file *does* declare wins over a registry
-    /// entry of the same name, measured: `::class array` carrying a class
-    /// method, with `::class k2 subclass array` under it, answers that method
-    /// through `.k2`.
+    /// registry does not hold raises `not_found` naming it -- measured, rc 158
+    /// with stdout empty. A target the file *does* declare wins over a
+    /// registry entry of the same name, measured: `::class array` carrying a
+    /// class method, with `::class k2 subclass array` under it, answers that
+    /// method through `.k2`.
+    ///
+    /// **`not_found` is the caller's because the oracle's is**: each keyword's
+    /// resolution has its own `reportException` in `ClassDirective::install`,
+    /// and `METACLASS`'s is 98.908 where the others are 98.909
+    /// (`ClassDirective.cpp:180` against `:189` and `:223`). Nothing about
+    /// the lookup itself differs, which is why they share this function.
     fn resolve_class_target(
         &mut self,
         program: &Rc<Program>,
@@ -3676,6 +3739,7 @@ impl Interp {
         target: &ClassRef,
         declared: &HashMap<Box<[u8]>, usize>,
         installed: &HashMap<usize, ObjRef>,
+        not_found: fn(&[u8]) -> Raised,
     ) -> Result<ObjRef, Failure> {
         match declared.get(target.name.as_ref()) {
             // Already installed, because `class_install_order` put it ahead
@@ -3692,7 +3756,7 @@ impl Interp {
                     Some(id) => Ok(id),
                     None => {
                         self.blame_directive(program, directive);
-                        Err(Raised::class_not_found(&target.name).into())
+                        Err(not_found(&target.name).into())
                     }
                 }
             }

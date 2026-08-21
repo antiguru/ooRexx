@@ -1,0 +1,12 @@
+/* A METACLASS target that resolves to a class metaclass-ness never reached:
+   99.927, a translation error at rc 157 raised from install, naming the
+   target's ~defaultName.
+
+   The shape is the one that also pins where the check sits. S derives from
+   .Class, so S's own metaclass is .Class whatever METACLASS said -- and the
+   named target is still checked, because the oracle tests it before it
+   builds anything. A build checking after that override runs this program at
+   rc 0. */
+say 'main ran'
+
+::CLASS S MIXINCLASS Class METACLASS Object

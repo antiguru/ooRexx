@@ -465,6 +465,67 @@ impl Raised {
         Raised::syntax(98, 909, vec![name.to_vec()])
     }
 
+    /// 98.908: a `::CLASS` directive naming a `METACLASS` target no name
+    /// resolves to. One substitution, the target's upcased spelling.
+    ///
+    /// A separate error from [`Raised::class_not_found`], because
+    /// `ClassDirective::install` resolves the metaclass through its own
+    /// `reportException` (`ClassDirective.cpp:180`). Measured, rc 158 with
+    /// stdout empty: `::class k metaclass zzznotaclass` after `say 'main ran'`
+    /// gives `Error 98.908:  Metaclass "ZZZNOTACLASS" not found.` with the
+    /// directive's own clause echoed. The spelling is upcased even when the
+    /// reference is a quoted literal -- measured, `::class k metaclass
+    /// "zzzm"` names `"ZZZM"`.
+    ///
+    /// **No `Compiled method` frame**, measured: the oracle raises this from
+    /// the directive's own install, before it calls anything on the class it
+    /// is about to derive from.
+    pub(crate) fn metaclass_not_found(name: &[u8]) -> Raised {
+        Raised::syntax(98, 908, vec![name.to_vec()])
+    }
+
+    /// 99.927: a `METACLASS` target that resolves to a class which is not a
+    /// metaclass. One substitution, the target's `~defaultName`.
+    ///
+    /// A *translation* error on the oracle, rc 157, raised from install:
+    /// `RexxClass::subclass` tests the metaclass it was handed before it
+    /// builds anything (`ClassClass.cpp:1572`). Measured on `::class k
+    /// metaclass object`: `Error 99 ... Translation error.` and `Error
+    /// 99.927:  "The Object class" is not a valid metaclass.`, the
+    /// directive's own clause echoed and stdout empty.
+    ///
+    /// **Raised even where the metaclass is then discarded**: measured,
+    /// `::CLASS S MIXINCLASS Class METACLASS Object` is the same 99.927,
+    /// although deriving from `.Class` overrides the `METACLASS` the
+    /// directive names (`ClassGraph::define_class`).
+    ///
+    /// **No `Compiled method` frame**, measured, although
+    /// `RexxClass::subclass` is the body of the `~subclass` *method*: a
+    /// directive calls it rather than sending it, so no activation of it is
+    /// on the stack to contribute a frame. `Interp::inherit_mixin`'s
+    /// `INHERIT` is the contrasting case in the same install.
+    pub(crate) fn bad_metaclass(metaclass: &[u8]) -> Raised {
+        Raised::syntax(99, 927, vec![metaclass.to_vec()])
+    }
+
+    /// 98.990: `::CLASS ... ABSTRACT` on a class that is a metaclass. One
+    /// substitution, the class's own `~id`, and the message quotes nothing
+    /// around it.
+    ///
+    /// Measured, rc 158 with stdout empty, on `::CLASS S MIXINCLASS Class
+    /// ABSTRACT`: `Error 98.990:  Class S is a metaclass and cannot be made
+    /// ABSTRACT.` The id is upcased because the directive's own name is --
+    /// `::class s mixinclass class abstract` names `S`.
+    ///
+    /// **Raised after the directive's other refusals**, because
+    /// `makeAbstract` is the last thing `ClassDirective::install` does
+    /// (`ClassDirective.cpp:246`-
+    /// `:249`): measured, the same directive with `INHERIT zzznotaclass`
+    /// after it is 98.909, not this.
+    pub(crate) fn abstract_metaclass(id: &[u8]) -> Raised {
+        Raised::syntax(98, 990, vec![id.to_vec()])
+    }
+
     /// 98.942: an `INHERIT` target that is not a `MIXINCLASS`. One
     /// substitution, the target's `~defaultName`.
     ///
