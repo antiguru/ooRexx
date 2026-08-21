@@ -33,7 +33,7 @@ or claims wrong, the correction is recorded here, which is the route the plan sp
 | `oodocs/rexxref/en-US/fundclasses.xml`, `collclasses.xml`, `utilityclasses.xml`, `streamclasses.xml` | every `cls*` section's own prose — not every `mth*` | Task 2, 2026-08-21 | **done** — every `<section id="cls…">`'s prose from its opening tag to its first nested section, extracted mechanically and read; findings below | r13198 |
 | `oodocs/rexxpg/en-US/classes.xml` | every section of "A Closer Look at Objects" | Task 2, 2026-08-21 | **done** — the whole chapter, `:46` to its closing `</chapter>` at `:1500`; every section listed below was read | r13198 (`svn info oodocs/rexxpg`) |
 | `ootest/` | one row per 5a mechanism in the spec's enumeration, naming the test group that pins it or recording that none does | Task 2, 2026-08-21 | **done** — the mapping is [below](#the-ootest-mapping); every test group named there was opened | r13178 (`svn info ootest`) |
-| the C++ | not readable end to end; the bounded stopping point is **every `file:line` the spec cites, verified** | Task 2, 2026-08-21 | **done** — every citation resolved; the wrong ones are [below](#citations-found-wrong) | tracked `interpreter/` at `cb9563364`, identical to this worktree's at `e52bff06a` (see the note) |
+| the C++ | not readable end to end; the bounded stopping point is **every `file:line` the spec cites, verified** | Task 2, 2026-08-21 | **done against a stated extractor, which is a weaker claim than "done" and is the honest one.** Every citation the extractor [below](#the-check-and-its-output-rather-than-a-sentence-saying-it-passed) finds is resolved and placed — 90 of them, none unplaced, output committed. That extractor reaches three citation forms; **a fourth form would be invisible to it, and the third was invisible to its two predecessors**, which is how `ClassClass.cpp:988`-`:990` survived two rounds of checking. Read the row as "verified against a check whose reach is written down", not as "verified against the spec". The wrong ones are [below](#citations-found-wrong) | tracked `interpreter/` at `cb9563364`, identical to this worktree's at `e52bff06a` (see the note) |
 
 **`oodocs/` itself has no `svn info`** — `svn: E155007: … is not a working copy`, measured. Its two
 subdirectories are separate working copies and carry the revision, so a check run against the parent
@@ -104,21 +104,223 @@ should expect a statement, not a declaration.
 | `ClassDirective.cpp :243` and `:273` (spec `:1358`, `:133`) | `ClassDirective::install` (`:165`) and `resolveConstants` (`:257`) | `:243` is `classObject->setAnnotations(annotations)` — the spec cites it *as* the wrong answer it is correcting, so it is correct as used; `:273` is `code->setScope(classObject)` inside `resolveConstants`, the statement `:133` is about |
 | `LanguageParser.cpp:3292` (spec `:172`) | `LanguageParser::parseQualifiedSymbol`, `:3261` | `return new ClassResolver(namespaceName, qualifiedName);` — the construction the `>N>` argument turns on |
 | `ExpressionClassResolver.cpp:135` (spec `:172`) | `ClassResolver::evaluate`, `:124` | `context->traceClassResolution(namespaceName, className, resolvedClass);` — the prefix's only caller |
+| `ClassClass.cpp:988`-`:990` (spec `:946`) | `RexxClass::method`, `:984` | the three-line comment `// we keep the instance methods defined at this level in a separate / method dictionary that is used to build the behaviour.  We can retrieve / the method directly from there.` — the sentence the spec quotes as "defined at this level". Correct as cited; **it was in no list until fix round 3**, because the extractor that placed the others could not see its citation form |
 
-**(c) Two the spec cites that neither list above placed, found by re-running the conservation check
+**(c) Citations the spec makes that (a) and (b) do not place, found by running the conservation check
 against the *spec* rather than against this ledger's own earlier list.** The C++ row's stopping point
 is "every `file:line` the spec cites, verified", so the denominator is the spec's citations, and
-checking the split against the list it replaced could not see a citation the list never had. Extracted
-mechanically — every `File.(cpp|hpp):N` in the spec, plus every bare `name :N` — and matched against
-this document, exactly two came back unplaced:
+checking the split against the list it replaced could not see a citation that list never had. Three
+belong here, and a fourth — `ClassClass.cpp:988`-`:990` — belongs in (b) and is there now. **Two of
+those four took a further round each to find**: one because the extractor could not see its citation
+form, one because the check counted a citation as placed when the surrounding prose merely mentioned
+it.
+The extractor and its full output are [below](#the-check-and-its-output-rather-than-a-sentence-saying-it-passed).
 
 | citation | what is there | standing |
 |---|---|---|
 | `Setup.cpp:325-329` (spec `:1359`) | the `TheCommonRetrievers` preamble: a two-line comment, `TheCommonRetrievers = new_string_table()` at `:327`, a blank, and the comment at `:329`-`:330`. The `SELF` and `SUPER` puts are `:331` and `:332` | **the spec cites it as an example of a wrong citation** and corrects it in the same sentence. Verified: `:325`-`:329` stops one line before the `SELF` put, so the spec's correction is right. Nothing further owed |
+| `ClassClass.hpp:176-186` (spec `:1360`) | `:176` is `static RexxClass *classInstance;`, `:178` `protected:`, and the `ClassFlag` enum runs `:180` `typedef enum` to `:189` `} ClassFlag;`. The cited range therefore starts four lines above the enum and stops at `:186` `PRIMITIVE_CLASS`, before `:187` `PARENT_HAS_UNINIT` and `:188` `ABSTRACT` | **the spec cites it as an example of a wrong citation** and corrects it to `:180`-`:189` in the same sentence, saying the cited range "stopped before `PARENT_HAS_UNINIT` and `ABSTRACT`, the two flags the Object-Destruction and abstract rows depend on". Verified at the header: both statements hold. Nothing further owed. **This row exists because the check found it** — the citation had been discussed in the prose below the tables and placed by no entry, and the check only saw that once it was narrowed to entries |
 | `Setup.cpp:795`-`:797` (spec `:806`) | `:795` is **blank**; the comment the spec quotes runs `:796` `// to be consistent with our other Collections, also`, `:797` `// - remove all four sort methods (will always be inherited from OrderedCollection)`, `:798` `// - remove makeString, toString` | **imprecise, and short at the end that matters.** The range starts on a blank and **stops before `:798`**, which is the `makeString` half — and the spec's own sentence at `:806` is about exactly that contrast, that the sort family is donated back and `makeString` is not. Corrected: **`Setup.cpp:796`-`:798`** |
 
-With those placed, every C++ `file:line` the spec cites appears in (a), (b), (c) or the
-found-wrong table, and the check that says so is run over the spec.
+### The check, and its output, rather than a sentence saying it passed
+
+**A completeness assertion cannot be checked at a glance and rots silently; its output can.** Two
+consecutive rounds of this document carried a sentence of the form "every citation the spec makes is
+placed", and both times it was wrong -- the second time while the check behind it had just been
+re-run. **The sentence is what stops the next reader looking**, so it is replaced by the derivation:
+the extractor, its invocation, and its whole output, committed. A reader spots a missing row without
+running anything, and a later task diffs it.
+
+The extractor reaches the **three** citation forms the spec uses, which is the axis every earlier
+version missed: an explicit `Setup.cpp:1809`; a symbol-qualified `defineMethod :819`, file implicit;
+and a bare `:988`-`:990` **continuing an earlier citation in the same parenthesis**. The third form
+is what hid `ClassClass.cpp:988`-`:990` from two rounds of checking. Two further rules are
+load-bearing and were wrong while drafting this: the carried filename **resets at every line**
+-- without that it leaks across lines and reports a `07:06` timestamp as `Setup.cpp:06` -- and it
+**resets on any filename, not only a C++ one** -- without that a bare `:453` following an `.orx` name
+is attributed to the last `.cpp` seen. Both mistakes were made here and both are visible in the
+output's `form` column.
+
+```python
+# Every C++ file:line the spec cites, and which ledger list places it.
+# The spec uses three citation forms and this reaches all three:
+#   1 explicit   `Setup.cpp:1809`
+#   2 symbolic   `defineMethod :819`      -- file implicit in the symbol
+#   3 continuing `comment at :988-:990`   -- bare, continuing form 1 earlier on the same line
+# The carried file resets on ANY filename, so a bare :N after a .orx/.xml/.rs/.md name is not a C++ cite.
+import re, sys
+ANYFILE = r'[A-Za-z0-9_./-]+\.(?:cpp|hpp|orx|xml|rs|md|txt|ent|cls)'
+TOK     = r':\s*(\d+(?:\s*-\s*`?:?\s*\d+)?)'
+SYM     = r'([A-Za-z_][A-Za-z_0-9]*(?:::[A-Za-z_][A-Za-z_0-9]*)?(?:\(\))?)\s'
+rows = []
+for ln, line in enumerate(open(sys.argv[1], encoding='utf-8'), 1):
+    carry = None          # the carry never crosses a line: a bare :N is a continuation, not a memory
+    for m in re.finditer(r'(?:(%s)|%s)?\s*%s' % (ANYFILE, SYM, TOK), line):
+        f, sym, n = m.group(1), m.group(2), re.sub(r'[\s`]', '', m.group(3)).replace('::', '-')
+        if f:
+            carry = f.split('/')[-1]
+            if not carry.endswith(('.cpp', '.hpp')): continue
+            rows.append((carry, n, ln, 'explicit'))
+        elif sym and not sym[0].isdigit():
+            rows.append(('(via %s)' % sym, n, ln, 'symbolic'))
+        elif carry and carry.endswith(('.cpp', '.hpp')):
+            rows.append((carry, n, ln, 'continuing'))
+# The ledger with its fenced blocks blanked out. This script is itself quoted in one of them and
+# names these markers, and its output block quotes every token: without the blanking the marker
+# search finds THIS TEXT first and truncates the span it is meant to measure. Measured while
+# drafting: '### In-tree Rust' resolved inside the script's own MARKS line and (c) lost 130 lines.
+led = re.sub(r'(?ms)^```.*?^```', '', open(sys.argv[2], encoding='utf-8').read())
+MARKS = ['## Citations found wrong', '**(a) ', '**(b) ', '**(c) ', '### In-tree Rust']
+# A marker that is missing or duplicated would silently merge two lists and mis-attribute every
+# citation in them, so both are fatal rather than quietly absorbed.
+assert all(led.count(m) == 1 for m in MARKS), [(m, led.count(m)) for m in MARKS]
+at = [led.find(m) for m in MARKS]
+assert at == sorted(at), list(zip(MARKS, at))
+BOUNDS = list(zip(['found-wrong', '(a)', '(b)', '(c)'], at, at[1:]))
+def where(tok):
+    # a token placed either alone, or as either end of a range the ledger writes as :LO-HI
+    pats = [r':%s\b' % t for t in (tok, tok.split('-')[0])] + [r':\d+-%s\b' % tok.split('-')[0]]
+    for name, a, b in BOUNDS:
+        span = led[a:b].split('\n')
+        # Only the entries count, not the prose around them: three of the four lists are tables, and
+        # this document discusses its own citations in the paragraphs beside them. Without this,
+        # deleting a table row leaves the token "placed" by the sentence that mentions it -- measured:
+        # the delete-a-row control did not fire until the search was narrowed to the rows themselves.
+        body = [l for l in span if l.startswith('|')] if name != '(a)' else span
+        if any(re.search(pt, l) for l in body for pt in pats): return name
+    return '** UNPLACED **'
+seen = set()
+for f, n, ln, how in rows:
+    if (f, n) in seen: continue
+    seen.add((f, n))
+    print('%-26s :%-11s spec:%-5s %-11s %s' % (f, n, ln, how, where(n)))
+```
+
+```
+python3 spec-cpp-citations.py docs/superpowers/specs/2026-08-17-phase-5-object-model.md \
+                              docs/superpowers/plans/phase-5-reading-ledger.md | sort -k1,1 -k2,2V
+```
+
+Run against this document, it prints 90 rows -- 72 placed in (a), 9 in (b), 3 in (c), 6 in the
+found-wrong table -- and **no `UNPLACED`**:
+
+```
+ClassClass.cpp             :134         spec:1134  explicit    (a)
+ClassClass.cpp             :558         spec:124   explicit    (a)
+ClassClass.cpp             :819         spec:128   explicit    (a)
+ClassClass.cpp             :984         spec:946   explicit    (a)
+ClassClass.cpp             :988         spec:946   continuing  (b)
+ClassClass.cpp             :990         spec:946   continuing  (b)
+ClassClass.cpp             :1210        spec:157   explicit    (a)
+ClassClass.cpp             :1882        spec:156   explicit    (a)
+ClassClass.hpp             :176-186     spec:1360  explicit    (c)
+ClassClass.hpp             :180-189     spec:116   explicit    (a)
+ClassDirective.cpp         :257         spec:133   explicit    (a)
+ClassDirective.cpp         :273         spec:133   continuing  (b)
+DirectiveParser.cpp        :334-490     spec:129   explicit    (a)
+DirectiveParser.cpp        :948         spec:1351  explicit    (a)
+ExpressionClassResolver.cpp :135         spec:172   explicit    (b)
+LanguageParser.cpp         :3292        spec:172   explicit    (b)
+ObjectClass.cpp            :1696        spec:147   explicit    (a)
+ObjectClass.cpp            :1829        spec:158   explicit    (a)
+ObjectClass.cpp            :2185        spec:162   explicit    (a)
+ObjectClass.cpp            :2579        spec:157   explicit    (a)
+PackageClass.cpp           :1432        spec:1363  explicit    (a)
+RexxActivation.hpp         :357         spec:172   explicit    (a)
+Setup.cpp                  :185         spec:1349  explicit    (a)
+Setup.cpp                  :325-329     spec:1359  explicit    (c)
+Setup.cpp                  :331         spec:141   explicit    (a)
+Setup.cpp                  :332         spec:141   continuing  (a)
+Setup.cpp                  :348-351     spec:126   continuing  (a)
+Setup.cpp                  :360-361     spec:126   explicit    (a)
+Setup.cpp                  :371         spec:786   explicit    (a)
+Setup.cpp                  :371-372     spec:126   continuing  (a)
+Setup.cpp                  :396         spec:1349  continuing  (a)
+Setup.cpp                  :688         spec:1396  explicit    (a)
+Setup.cpp                  :792-804     spec:126   continuing  (a)
+Setup.cpp                  :795         spec:806   explicit    (c)
+Setup.cpp                  :1285        spec:371   explicit    found-wrong
+Setup.cpp                  :1307-1312   spec:126   continuing  (a)
+Setup.cpp                  :1399-1404   spec:126   continuing  (a)
+Setup.cpp                  :1781        spec:152   explicit    (a)
+Setup.cpp                  :1809        spec:124   explicit    (a)
+(via DirectoryClass::setMethodRexx) :480         spec:152   symbolic    (a)
+(via LanguageParser::addMethod) :610         spec:138   symbolic    found-wrong
+(via MethodDictionary::addMethod) :164         spec:122   symbolic    (a)
+(via PackageClass::findClass) :1086        spec:153   symbolic    (b)
+(via RexxClass::createInstance) :1854        spec:118   symbolic    (a)
+(via RexxClass::setAnnotations) :343         spec:135   symbolic    (a)
+(via RexxClass::subclass)  :1631        spec:137   symbolic    (b)
+(via addPublicClassRexx)   :1944        spec:154   symbolic    (a)
+(via addScope)             :594         spec:122   symbolic    (a)
+(via annotateDirective)    :1940        spec:135   symbolic    (a)
+(via attributeDirective)   :1457-1850   spec:131   symbolic    found-wrong
+(via buildFinalClassBehaviour) :654         spec:118   symbolic    (a)
+(via checkAbstract)        :1741        spec:160   symbolic    (a)
+(via checkPackage)         :659         spec:142   symbolic    (a)
+(via checkPrivate)         :609         spec:142   symbolic    (a)
+(via checkRestrictedMethod) :697         spec:158   symbolic    (a)
+(via checkUninit)          :1210        spec:1364  symbolic    (a)
+(via completeNewObject)    :1882        spec:1364  symbolic    (a)
+(via createClassBehaviour) :1119        spec:117   symbolic    found-wrong
+(via createConstantGetterMethod) :2518        spec:132   symbolic    (a)
+(via createDelegateMethod) :2438        spec:159   symbolic    (a)
+(via createInstanceBehaviour) :1148        spec:117   symbolic    found-wrong
+(via defaultName)          :1760        spec:146   symbolic    (a)
+(via defineMethod)         :819         spec:123   symbolic    (a)
+(via findSuperMethod)      :434         spec:122   symbolic    (a)
+(via getObjectVariables)   :2489        spec:144   symbolic    (a)
+(via getPackageLocal)      :2169        spec:154   symbolic    (a)
+(via inherit())            :1322        spec:119   symbolic    (b)
+(via inherit)              :1287        spec:123   symbolic    (a)
+(via liveGeneral)          :134         spec:127   symbolic    (a)
+(via makeAbstract)         :1754        spec:160   symbolic    (a)
+(via messageSend)          :866         spec:139   symbolic    (a)
+(via messageSend)          :919         spec:140   symbolic    (a)
+(via methodDirective)      :629-812     spec:130   symbolic    (a)
+(via mixinClass())         :1514        spec:119   symbolic    (a)
+(via optionsDirective)     :948         spec:164   symbolic    (a)
+(via parseClassReference)  :287         spec:163   symbolic    (a)
+(via processInstall)       :1268-1298   spec:136   symbolic    found-wrong
+(via processProtectedMethod) :976         spec:143   symbolic    (a)
+(via processUnknown)       :1002        spec:139   symbolic    (a)
+(via requestStringNoNOSTRING) :1302        spec:146   symbolic    (a)
+(via requestString)        :1235        spec:146   symbolic    (a)
+(via requiresDirective)    :2779        spec:163   symbolic    (a)
+(via resolveConstants)     :243         spec:1358  symbolic    (b)
+(via resolveDependencies)  :1801        spec:136   symbolic    (a)
+(via resourceDirective)    :2266        spec:165   symbolic    (a)
+(via routineDirective)     :2565        spec:166   symbolic    (a)
+(via unknownValue)         :591         spec:152   symbolic    (a)
+(via updateInstanceSubClasses) :1071        spec:125   symbolic    (a)
+(via updateSubClasses)     :1036        spec:125   symbolic    (a)
+(via validateScopeOverride) :1950        spec:140   symbolic    (a)
+```
+
+**The round trip, because a committed output nobody re-runs is a sentence with extra steps.** The
+block above was produced by pulling the `python` block out of **this file's raw bytes** with `sed`,
+stripping its two fence lines, and running the result against this file and the spec; its output is
+byte-identical to what is pasted. **And it fails when it should**, on two controls, both run:
+
+* **reword one list's heading** — the marker assertion raises, naming that marker with a count of
+  zero, rather than silently merging two lists and mis-attributing every citation in them. That
+  merge is what the first version of this script actually did;
+* **delete one table row** — the `ClassClass.cpp:988`-`:990` row, and its two tokens come back
+  `UNPLACED`. That control did **not** fire until the search was narrowed to the lists' *entries*:
+  with the whole section in scope, the paragraphs that discuss a citation placed it, so a deleted
+  row stayed "placed" by the sentence about it. Narrowing it is also what found
+  `ClassClass.hpp:176-186`, which no entry placed at all.
+
+**The markers are deliberately not quoted anywhere in this document's prose**, only inside the
+script's own fenced block: a marker written outside a fence is one the blanking cannot remove, and
+the count assertion then fires on the document rather than on a fault. Both of those mistakes — the
+self-match and the prose-quoted marker — were made while writing this paragraph, and the assertion
+caught both.
+
+**What this derivation still cannot do**, said here because the sentence it replaces did not say it:
+it finds citations of three forms and places them by line number, so a fourth form nobody has thought
+of is invisible to it exactly as the third was, and a token that happens to appear in a list under an
+*unrelated* file counts as placed. It is a better instrument than the sentence, not a complete one.
 
 Two entries deserve a note because the shape that made `ClassClass.hpp:176-186` wrong is present and
 harmless in them. `classDirective :334-490` bounds a function running to `:495`, and
@@ -195,20 +397,30 @@ Re-run under it they are 12, 12, 6 and 9 again. Two more were under-documented t
 reproduce reads to a later reader as upstream drift when nothing upstream moved**, and this document
 is exactly where that misreading would happen.
 
-**The extension set, because restricting it is how this table has now been wrong three times.**
-`ootest/` is not only `*.testGroup`. Measured — `find ootest -type f -not -path '*/.svn/*' | sed
-'s/.*\.//' | sort | uniq -c | sort -rn` — the test-carrying extensions are **`.testGroup` 409,
-`.rex` 49, `.cls` 9, `.testUnit` 7, `.oodTestGroup` 2**. **Every negative in this table has been
-re-run over all five**, as
+**There is no extension filter, and that is the fix rather than a wider one.** Every negative below
+is run over the whole checkout:
 
 ```
---include=*.testGroup --include=*.rex --include=*.cls --include=*.testUnit --include=*.oodTestGroup
+/bin/grep -ari --exclude-dir=.svn '<pattern>' ootest/
 ```
 
-**Where a row writes `<extensions>` inside a command, substitute that line**; it is spelled out here
-rather than repeated in thirty cells. The widening is what found row `:137`'s counterexample: the file
-upstream wrote for the install passes is a `.cls`, and every earlier search for it used
-`--include='*.testGroup'` alone.
+**Restricting the extension set is how this table has been wrong twice, and the second time was the
+repair for the first.** Row `:137` first searched `--include='*.testGroup'` and so could not see
+`class.testgroup.cls`, the one file upstream wrote for the install passes. The repair named five
+extensions — and `find ootest -type f -not -path '*/.svn/*' | sed 's/.*\.//' | sort | uniq -c | sort
+-rn` shows what five would still have missed: alongside `testGroup` 409, `rex` 49, `cls` 9,
+`testUnit` 7 and `oodTestGroup` 2 it prints **`CLS` 1** — `ootest/framework/OOREXXUNIT.CLS`, the
+ooTest framework itself, which `--include='*.cls'` does **not** match because the glob is
+case-sensitive (measured: that include exits 1 on `ootest/framework/`, `--include='*.[cC][lL][sS]'`
+returns the file) — and `norex` 1, `other` 1, `test1` 2, `test2` 1, plus four extensionless files,
+several of which are the fixtures for the very search-order tests row `:153` is about.
+
+**A filter narrow enough to write down is narrow enough to be wrong.** So there is none: the searches
+run over every file under `ootest/` except `.svn` metadata, which is the widest form available, and
+**every negative below was re-run in that form**. Nothing changed under it — `:124`, `:137`'s phrasing
+search and `:126`'s name filter still exit 1; `:139` returns its three files, `:146` its four, `:170`
+its one, `:153` its three, `:126` its four; and `:137`'s intersection goes to 29 files with the same
+single member.
 
 **And every negative claim below is written as what a search can support** — "no line matching
 `<pattern>` under `<paths>` at r13178" — never as "nothing upstream pins this". The first is
@@ -229,9 +441,9 @@ statement about a search, and the searches are named.**
 | `:121` | merge order among several `INHERIT`s — leftmost first | **pinned at the scope-list level, not at method precedence.** `base/directives/CLASS.testGroup`'s `test_inherit` (`:355`) asserts `~superClasses` as an **ordered** list, and the assertion moves when the directive's mixin order moves: `::class test inherit rexx:comparable 'orderable'` gives `(.Object, .Comparable, .Orderable)` (`:386`), `inherit testMixin rexx:comparable 'orderable'` gives `(.Object, mixin, .Comparable, .Orderable)` (`:401`, `:415`), and `inherit comparable 'testMixin' rexx:orderable` gives `(.Object, .Comparable, mixin, .Orderable)` (`:432`, `:449`). Those last two differ only in the mixins' declared order, so the pair discriminates leftmost-first. What it does not reach is which mixin's *method body* wins: `base/class/Orderable.testGroup:441`'s `::class TestOrderable inherit Orderable Comparable` defines its own `compareTo` |
 | `:122` | method dictionary: one entry per scope, `addFront`, scope list and scope orders | `base/class/Class.testGroup` — patterns `~define\(` 29 and `~uninherit\(` 9 |
 | `:123` | `~define` copies the behaviour, `~inherit` mutates it in place | `base/class/Class.testGroup`'s `test_class_define` (`:976`) is the D43 witness upstream already has: `t1 = .testDefine1~new`, then `.testDefine1~define('test1', …)`, then `t1~hasMethod('test1')` still **false** while a freshly built `t2` answers true (`:977`-`:982`). `test_define_delete` (`:1012`) is its `delete` twin |
-| `:124` | `inheritInstanceMethods` — donation with no superclass edge | **nothing found, and here is how wide the search was.** `/bin/grep -aril <extensions> 'inheritInstanceMethods' ootest/` exits **1** — no file, over all five extensions. Searching for the *effect* rather than the name, the `:124` pattern in the block below the table also exits **1**. Consistent with the mechanism being image-build-only and removed by `Setup.cpp:1809` |
+| `:124` | `inheritInstanceMethods` — donation with no superclass edge | **nothing found, and here is how wide the search was.** `/bin/grep -aril --exclude-dir=.svn 'inheritInstanceMethods' ootest/` exits **1** — no file, over the whole checkout. Searching for the *effect* rather than the name, the `:124` pattern in the block below the table also exits **1**, likewise over the whole checkout. Consistent with the mechanism being image-build-only and removed by `Setup.cpp:1809` |
 | `:125` | the cascade, instance-side vs both sides | `base/class/Class.testGroup`'s `test_class_define` (`:976`), against `::class testDefine2 subclass testDefine1` (`:1444`-`:1445`): `.testDefine1~define('test1', …)` and then `t3 = .testDefine2~new` answering `test1` with `123` (`:984`-`:986`) is the cascade to a subclass. Later in the same test, redefining on `testDefine1` changes what a **new** `testDefine2` instance answers (`:996`-`:1000`). The class-side-versus-both-sides half of the row — `updateSubClasses` against `updateInstanceSubClasses` — is not separated by any test |
-| `:126` | native method removal and hiding at image build | **the mechanism yes, its image-build application no.** The `.nil`-tombstone *mechanism* is pinned at the Rexx level by `base/class/Class.testGroup`'s one-argument `~define`: `.test_a~define("testmethod")` at **`:198`** in `::METHOD "test_DEFINE"` (**`:188`**), commented "make it unaccessible for new instances", with its observable at `:205`; and `.test_b2~define("testmethod")` at **`:227`** in `::METHOD "test_DELETE"` (**`:218`**), commented at `:226` "even if superclass implements it!", with its observables at `:236`-`:237`. `test_class_define` (`:976`) carries a third, `.testDefine2~define('TEST1')` at `:1002`, whose send then raises **97.1** (`:1003`-`:1004`) — the row's `.nil`-to-`UNKNOWN` limb, with its error code. All of that is the same `put(TheNilObject, name)` `MethodDictionary::hideMethod` (`:348`-`:351`) performs, reached through `define`, which is exactly how `collclasses.xml:8064`-`:8067` describes Stem's six. What is **not** pinned is the application at image build: the `:126` pattern in the block below the table returns exactly four files over all five extensions — `base/directives/ATTRIBUTE.testGroup`, `base/class/Class.testGroup`, `base/class/Object.testGroup`, `API/oo/METHOD.testGroup` — and **none of their hits names any of the twenty-one names `Setup.cpp` removes or hides**, checked by piping that output through the `:126-names` pattern in the block below the table, which exits 1; `base/class/Stem.testGroup` contains no `hasMethod` call at all (`/bin/grep -aci 'hasMethod'` is 0). The nearest thing is the **composition**, for Queue only — `base/class/Queue.testGroup:452` `test_stableSort` runs `a = .queue~of` then `a~stableSort`, which is `Setup.cpp`'s `RemoveMethod("stableSort")` composed with `CoreClasses.orx`'s re-donation through `OrderedCollection`, and which the spec establishes is the only observable form |
+| `:126` | native method removal and hiding at image build | **the mechanism yes, its image-build application no.** The `.nil`-tombstone *mechanism* is pinned at the Rexx level by `base/class/Class.testGroup`'s one-argument `~define`: `.test_a~define("testmethod")` at **`:198`** in `::METHOD "test_DEFINE"` (**`:188`**), commented "make it unaccessible for new instances", with its observable at `:205`; and `.test_b2~define("testmethod")` at **`:227`** in `::METHOD "test_DELETE"` (**`:218`**), commented at `:226` "even if superclass implements it!", with its observables at `:236`-`:237`. `test_class_define` (`:976`) carries a third, `.testDefine2~define('TEST1')` at `:1002`, whose send then raises **97.1** (`:1003`-`:1004`) — the row's `.nil`-to-`UNKNOWN` limb, with its error code. All of that is the same `put(TheNilObject, name)` `MethodDictionary::hideMethod` (`:348`-`:351`) performs, reached through `define`, which is exactly how `collclasses.xml:8064`-`:8067` describes Stem's six. What is **not** pinned is the application at image build: the `:126` pattern in the block below the table returns exactly four files — `base/directives/ATTRIBUTE.testGroup`, `base/class/Class.testGroup`, `base/class/Object.testGroup`, `API/oo/METHOD.testGroup` — and **none of their hits names any of the twenty-one names `Setup.cpp` removes or hides**, checked by piping that output through the `:126-names` pattern in the block below the table, which exits 1; `base/class/Stem.testGroup` contains no `hasMethod` call at all (`/bin/grep -aci 'hasMethod'` is 0). The nearest thing is the **composition**, for Queue only — `base/class/Queue.testGroup:452` `test_stableSort` runs `a = .queue~of` then `a~stableSort`, which is `Setup.cpp`'s `RemoveMethod("stableSort")` composed with `CoreClasses.orx`'s re-donation through `OrderedCollection`, and which the spec establishes is the only observable form |
 | `:127` | the REXX_DEFINED lock | `base/class/Class.testGroup` — pattern `98\.985`, 7. Its first is `test_REXX_DEFINED_01` at `:415`, `expectSyntax(98.985)` over `.object~inherit(.String)` |
 | `:128` | `~define` / `~defineMethods` / `~delete` / `~uninherit` / `~enhanced` | `base/class/Class.testGroup` — patterns `~defineMethods?\(` 12, `~uninherit\(` 9, `~enhanced\(` 2; `base/class/Object.testGroup` — `~enhanced\(` 3 |
 | `:129` | `::CLASS` option surface | `base/directives/CLASS.testGroup` |
@@ -240,27 +452,27 @@ statement about a search, and the searches are named.**
 | `:132`, `:133`, `:134` | `::CONSTANT`, its parenthesised form, its forward-reference refusal | `base/directives/CONSTANT.testGroup` — bare-token `::constant` 76 and `ACTIVATE` 5, `test_expression_self` at `:457` for `:133`'s "with `self` bound to the class", and `:480`-`:482` pinning real constants as resolved before expression constants |
 | `:135` | `::ANNOTATE`'s six targets and `~annotation`/`~annotations` | `base/directives/ANNOTATE.testGroup` — bare-token `::annotate` 76, pattern `~annotations?\b` 70. The spec's own citation, now verified |
 | `:136` | install is three passes; a cycle is 98.911 | **all three, and upstream has a file written for nothing else.** The **cycle**: `base/directives/CLASS.testGroup`, pattern `98\.911`, 5. The direct pin is `base/class/Class.testGroup:962` `::method test_activate`, which creates a results directory (`:964`), calls `.context~package~loadPackage("class.testgroup.cls")` (`:966`) and asserts at `:968` that the package reported no failure and at `:970`-`:972` that all three of its classes' `activate` methods ran. **`base/class/class.testgroup.cls`** (70 lines, same directory) is that package, and every assertion in it is about this mechanism — see the row below for what it pins. Two incidental pins sit beside it: `base/directives/REQUIRES.testGroup:320` `test_activate` writes a requires file (`:324`) whose `::class test public` carries `::method activate class` doing `.local~activatetest = .test2`, with `::class test2 public` declared **after** it, and asserts at `:331` that `.local~activateTest` is that class object — pass 3 after pass 1, on one forward reference; and `base/directives/CONSTANT.testGroup:496` `test_expression_activate`, commented "expression constants are evaluated at class creation time / they should already be availabe to the class activate() method", runs the `::resource activate` at `:486`-`:494` whose `::method activate class` (`:489`) reads `::constant d (2 * 2)` (`:493`) and asserts `4` at `:499` — pass 2 before pass 3, with `:480`-`:482` pinning real constants before expression ones. Together these pin the structure `PackageClass::processInstall`'s three loops (`:1276`, `:1285`, `:1294`) implement |
-| `:137` | class-object initialization: `INIT`, then `INHERIT`, then `ACTIVATE` | **`ACTIVATE` is pinned hard, including an ordering no other row here mentions; `INIT`-before-`INHERIT` is what nothing found reaches.** `base/class/class.testgroup.cls`, loaded by `Class.testGroup:962`, declares `::class class1 subclass class3` (`:12`), `::class class2` (`:33`) and `::class class3` (`:49`), **each carrying both an `::method init class` and an `::method activate class`**, and its activate bodies assert four separate things with their own failure messages: (a) **every class object exists before any `activate` runs** — `.class1~isa(.class)`, `.class2~isa(.class)`, `.class3~isa(.class)` checked inside all three activates (`:25`-`:27`, `:43`-`:45`, `:59`-`:61`), which is pass 1 complete before pass 3 begins, asserted three times over and strictly stronger than `REQUIRES.testGroup:320`; (b) **`activate` order follows the dependency graph** — `class2` first as "the first class without a dependency" (`:32`), then `class3`, then `class1` which subclasses it, each direction named (`:20`-`:23`, `:38`-`:41`, `:54`-`:57`); (c) **an instance can be created and a method sent inside `activate`** — `instance = self~new` then `instance~foo`, commented "this should not give an error" (`:16`-`:18`); (d) **the package prolog runs after every `activate`** (`:5`-`:9`). **Ordering is the half no other row in this ledger names.** For `INIT`-before-`INHERIT`, the searches run: over the five extensions, `/bin/grep -ariEl … '::method[[:space:]]+.?init[[:space:]]+class' ootest/` returns 27 files, of which exactly **one** — this `.cls` — also matches `::method[[:space:]]+.?activate`; and the `:137` pattern in the block below the table returns nothing, exit 1. So no test found asserts the spec's own discriminator, `self~hasMethod("MM")` answering 0 in `init` and 1 in `activate`. **An earlier draft of this row stated that intersection with a `grep` that had no `-E`, so under BRE it matched zero files and the row's `none` came out of an empty first term rather than an empty intersection — and it restricted the extensions to `*.testGroup`, which is what hid this file** |
+| `:137` | class-object initialization: `INIT`, then `INHERIT`, then `ACTIVATE` | **`ACTIVATE` is pinned hard, including an ordering no other row here mentions; `INIT`-before-`INHERIT` is what nothing found reaches.** `base/class/class.testgroup.cls`, loaded by `Class.testGroup:962`, declares `::class class1 subclass class3` (`:12`), `::class class2` (`:33`) and `::class class3` (`:49`), **each carrying both an `::method init class` and an `::method activate class`**, and its activate bodies assert four separate things with their own failure messages: (a) **every class object exists before any `activate` runs** — `.class1~isa(.class)`, `.class2~isa(.class)`, `.class3~isa(.class)` checked inside all three activates (`:25`-`:27`, `:43`-`:45`, `:59`-`:61`), which is pass 1 complete before pass 3 begins, asserted three times over and strictly stronger than `REQUIRES.testGroup:320`; (b) **`activate` order follows the dependency graph** — `class2` first as "the first class without a dependency" (`:32`), then `class3`, then `class1` which subclasses it, each direction named (`:20`-`:23`, `:38`-`:41`, `:54`-`:57`); (c) **an instance can be created and a method sent inside `activate`** — `instance = self~new` then `instance~foo`, commented "this should not give an error" (`:16`-`:18`); (d) **the package prolog runs after every `activate`** (`:5`-`:9`). **Ordering is the half no other row in this ledger names.** For `INIT`-before-`INHERIT`, the searches run: `/bin/grep -ariEl --exclude-dir=.svn '::method[[:space:]]+.?init[[:space:]]+class' ootest/` returns **29** files over the whole checkout, of which exactly **one** also matches `::method[[:space:]]+.?activate` — this same `.cls`. **And it does not carry the discriminator either: its three `::method init class` bodies are each a bare `nop` (`:14`, `:35`, `:51`), so the one file that declares both directives asserts nothing whatever about `init`.** and the `:137` pattern in the block below the table returns nothing, exit 1. So no test found asserts the spec's own discriminator, `self~hasMethod("MM")` answering 0 in `init` and 1 in `activate`. **An earlier draft of this row stated that intersection with a `grep` that had no `-E`, so under BRE it matched zero files and the row's `none` came out of an empty first term rather than an empty intersection — and it restricted the extensions to `*.testGroup`, which is what hid this file** |
 | `:138` | floating `::METHOD`/`::ATTRIBUTE`/`::CONSTANT` reach `.METHODS` | `base/directives/METHOD.testGroup` and `base/class/Class.testGroup` — pattern `\.methods\b`, 3 and 4 |
-| `:139` | the complete method search order, including `UNKNOWN` and NOMETHOD | **nothing found for the `UNKNOWN` step itself, and this is the row the spec exists for.** `/bin/grep -ariEl <extensions> '::method[[:space:]]+.?unknown' ootest/` returns exactly three files over all five extensions: `base/class/Object.testGroup`, `base/security.manager/SecurityManager.testGroup` and `base/rexxutil/platform/windows/SysUnicode.testGroup`. The only object-model one is `Object.testGroup:1487` and `:1493` (`unknown` and `unknown class`), and reading both, they are **scaffolding** — their whole body is `if name == "UNINIT" then .UninitTracker~recordUninit(self)`, so `UNKNOWN` is the instrument for UNINIT tests, not their subject. NOMETHOD is asserted in `base/keyword/SIGNAL.testGroup` (3), `base/keyword/RAISE.testGroup` (2) and `base/bif/CONDITION.testGroup` (2), bare-token pattern — as a *condition*, not as dispatch's last step |
+| `:139` | the complete method search order, including `UNKNOWN` and NOMETHOD | **nothing found for the `UNKNOWN` step itself, and this is the row the spec exists for.** `/bin/grep -ariEl --exclude-dir=.svn '::method[[:space:]]+.?unknown' ootest/` returns exactly three files: `base/class/Object.testGroup`, `base/security.manager/SecurityManager.testGroup` and `base/rexxutil/platform/windows/SysUnicode.testGroup`. The only object-model one is `Object.testGroup:1487` and `:1493` (`unknown` and `unknown class`), and reading both, they are **scaffolding** — their whole body is `if name == "UNINIT" then .UninitTracker~recordUninit(self)`, so `UNKNOWN` is the instrument for UNINIT tests, not their subject. NOMETHOD is asserted in `base/keyword/SIGNAL.testGroup` (3), `base/keyword/RAISE.testGroup` (2) and `base/bif/CONDITION.testGroup` (2), bare-token pattern — as a *condition*, not as dispatch's last step |
 | `:140` | changing the search order — `~m:scope`, `~m:super` | **pinned, but through the alternative send paths rather than the `:super` syntax.** `base/class/Object.testGroup:1159`-`:1253` and `base/class/Message.testGroup:700`-`:912` are families of `*_override_from_nonself*` tests asserting `93.957` — which is `validateScopeOverride` (`ObjectClass.cpp:1950`), this row's own implementation citation — reached through `~send`/`~sendWith`/`~start`/`~startWith`. `base/class/Message.testGroup:372` is `test_super_override`. The **`~m:super` source syntax** is what is thin: `:super` occurs once each in `base/class/Class.testGroup`, `base/class/Object.testGroup` and `base/keyword/ADDRESS.testGroup`, and nowhere else |
 | `:141` | `SELF`, `SUPER` | **pinned, thinly, and the first draft of this row said "pinned by nothing that is about them" on a search that only looked for a dedicated group.** `base/keyword/USELOCAL.testGroup:119`-`:120` builds a `use local` class method assigning `result = 1; rc = 2; self = 3; super = 4; sigl = 5`, reads the five back through class attributes, and asserts at `:131` that the answer is `"RESULT RC SELF SUPER SIGL"` — i.e. the five special variables are protected from assignment and keep their own values. `ooRexx/API/oo/FUNCTION.testGroup`'s `TestGetAllVariables1` (`:1053`) asserts `assertSame(self, d['SELF'])` and `assertSame(super, d['SUPER'])` against the C API's variable-pool dump (`:1055`-`:1056`), which pins both *values* but needs the native API to run. There is still **no dedicated group**: `base/special.variables/` holds only `RESULT_RC_SIGL.testGroup` |
 | `:142` | `PUBLIC` / `PACKAGE` / `PRIVATE` as three access scopes | `base/directives/METHOD.testGroup` — the `private` (12) and `package` (12) arms, counted under `::method[^;]*\bX\b` as in `:130` |
 | `:143` | `PROTECTED` routes the send through the security manager | `base/security.manager/SecurityManager.testGroup` — the `:143` pattern in the block below the table, 32 |
 | `:144` | scope-keyed instance variables, `EXPOSE`, lazy creation | `base/keyword/EXPOSE.testGroup` |
 | `:145` | class-scope instance variables | `base/keyword/TRACE_TraceObject.testGroup:455`-`:468` — `::attribute baseline class` and `::method init class` with `expose a b baseline`, which is the shape `CoreClasses.orx:3996`'s `::method activate class` needs |
-| `:146` | Required String Values — `request("STRING")` → `makeString` → NOSTRING → `defaultName` | **split, and the `makeString` limb is unpinned.** `base/class/MethodArgs.testGroup` carries the receiver-by-receiver arm — `test_request_string_class` (`:137`), `_object`, `_string`, `_method`, `_routine`, `_package`, `_message`, `_stream`, `_mutablebuffer`, `_file` — and `base/keyword/VarRef.testGroup:134` has `test_request_nostring`. But nothing found reaches the `makeString` limb: `/bin/grep -ariEl <extensions> '::method[[:space:]]+.?makeString' ootest/` returns, over all five extensions, exactly `API/oo/METHOD.testGroup`, `API/oo/FUNCTION.testGroup`, `extensions/json/json.testGroup` and `base/class/Array.testGroup` — the last defining Array's own method rather than exercising the protocol, and no `base/` group at all. The limb the spec was written for is the one upstream does not pin either |
+| `:146` | Required String Values — `request("STRING")` → `makeString` → NOSTRING → `defaultName` | **split, and the `makeString` limb is unpinned.** `base/class/MethodArgs.testGroup` carries the receiver-by-receiver arm — `test_request_string_class` (`:137`), `_object`, `_string`, `_method`, `_routine`, `_package`, `_message`, `_stream`, `_mutablebuffer`, `_file` — and `base/keyword/VarRef.testGroup:134` has `test_request_nostring`. But nothing found reaches the `makeString` limb: `/bin/grep -ariEl --exclude-dir=.svn '::method[[:space:]]+.?makeString' ootest/` returns exactly `API/oo/METHOD.testGroup`, `API/oo/FUNCTION.testGroup`, `extensions/json/json.testGroup` and `base/class/Array.testGroup` — the last defining Array's own method rather than exercising the protocol, and no `base/` group at all. The limb the spec was written for is the one upstream does not pin either |
 | `:147` | `~objectName`, `~objectName=`, `~string`, `~request` | `base/class/Object.testGroup` and `ooRexx/doc/rexxref/chapter5/Section1.testGroup` — bare-token `objectName`, 11 and 10 |
 | `:148` | the `Object`/`Class` native protocol | `base/directives/CLASS.testGroup` and `base/class/Class.testGroup` — bare-token `~isSubclassOf` 23 / 20, `~metaClass` 9 / 4, `~superClasses` 8 / 2; plus `base/class/Object.testGroup` |
 | `:150` | `~identityHash` — the message-answering arm, which is 5a's | `base/class/Object.testGroup` — bare-token `~identityHash`, 24 |
 | `:151` | `.environment`, `.local`, `.context`, `.methods` as objects | `base/runtime.objects/environmentEntries.testGroup` (its `test_local_entries` `:69` and `test_local_monitors` `:76`), `base/class/RexxContext.testGroup` (`.context` 47) |
 | `:152` | Directory entry methods | `base/class/collections/directory.testGroup` — the `:152` pattern in the block below the table, 12; and `base/class/Directory.testGroup` |
-| `:153` | the eight-step environment-symbol search order | **one step boundary is pinned, and the first draft said no group walks the order because it searched for the order by name rather than for a precedence assertion.** `base/class/Package.testGroup:782` `test_package_local` sets `.local~packageTest = "ABC"` (`:783`), builds a package whose own code sets `.context~package~local~packageTest = 'DEF'` and whose routine returns the **environment symbol** `.packageTest` (`:784`), and asserts `"DEF"` at `:786` — **the package-local directory beating `.local`**, which is `searchord`'s step 5 over step 6 and the exact claim D33's amendment makes. Reproduced independently on the oracle, rc 0 with empty stderr, stdout `DEF` / `DEF`. Beyond that boundary: `base/runtime.objects/environmentEntries.testGroup` covers `.local`'s contents and `base/bif/VALUE.testGroup` the `.environment` step (pattern `\.environment\b`, 4), and nothing found walks the whole order — the `:153` pattern in the block below the table, run over all five extensions, returns three files and no more — `base/directives/REQUIRES.testGroup` (the `::REQUIRES` file search order), `base/keyword/CALL.testGroup` (the external-function search order) and `base/rexxutil/Macrospace.testGroup` (the macro search order, `:154` and `:160`, plus a `#define` comment at `:83`). Three different subjects, none of them this one. An earlier draft of this row named only the first two |
+| `:153` | the eight-step environment-symbol search order | **one step boundary is pinned, and the first draft said no group walks the order because it searched for the order by name rather than for a precedence assertion.** `base/class/Package.testGroup:782` `test_package_local` sets `.local~packageTest = "ABC"` (`:783`), builds a package whose own code sets `.context~package~local~packageTest = 'DEF'` and whose routine returns the **environment symbol** `.packageTest` (`:784`), and asserts `"DEF"` at `:786` — **the package-local directory beating `.local`**, which is `searchord`'s step 5 over step 6 and the exact claim D33's amendment makes. Reproduced independently on the oracle, rc 0 with empty stderr, stdout `DEF` / `DEF`. Beyond that boundary: `base/runtime.objects/environmentEntries.testGroup` covers `.local`'s contents and `base/bif/VALUE.testGroup` the `.environment` step (pattern `\.environment\b`, 4), and nothing found walks the whole order — the `:153` pattern in the block below the table, run over the whole checkout, returns three files and no more — `base/directives/REQUIRES.testGroup` (the `::REQUIRES` file search order), `base/keyword/CALL.testGroup` (the external-function search order) and `base/rexxutil/Macrospace.testGroup` (the macro search order, `:154` and `:160`, plus a `#define` comment at `:83`). Three different subjects, none of them this one. An earlier draft of this row named only the first two |
 | `:154` | `.Package` — `addClass`, `addPublicClass`, `publicClasses`, `~name`, install | `base/class/Package.testGroup` — the `:154` pattern in the block below the table, 52 |
 | `:155` | the native entry-point registry for `EXTERNAL 'LIBRARY REXX name'` | `base/directives/METHOD.testGroup`, `base/directives/ATTRIBUTE.testGroup` and `base/directives/ROUTINE.testGroup` — pattern `EXTERNAL[[:space:]]+['\"]LIBRARY`, 14 / 14 / 10 |
 | `:160` | abstract-**method** enforcement | `base/directives/ATTRIBUTE.testGroup` and `base/directives/METHOD.testGroup` — pattern `93\.965`, 8 and 1 |
 | `:169` | `GUARDED`/`UNGUARDED`, `REPLY`, `GUARD` legality | `base/keyword/GUARD.testGroup` — the `:169` pattern in the block below the table, 60; `base/keyword/REPLY.testGroup` — pattern `\breply\b`, 33 |
-| `:170` | the `*-* Compiled method "X" with scope "Y".` traceback line | **nothing found in the object model.** `/bin/grep -ariEl <extensions> 'Compiled method' ootest/` returns exactly one file over all five extensions, `base/source.file/incorrectCharacters.testGroup` (6 lines), which is about source encoding. No object-model group asserts the frame line |
+| `:170` | the `*-* Compiled method "X" with scope "Y".` traceback line | **nothing found in the object model.** `/bin/grep -ariEl --exclude-dir=.svn 'Compiled method' ootest/` returns exactly one file, `base/source.file/incorrectCharacters.testGroup` (6 lines), which is about source encoding. No object-model group asserts the frame line |
 | `:171` | `>M>` trace prefix | `base/keyword/TRACE.testGroup` — bare-token `>M>`, 4 |
 
 ### The patterns that contain a `|`, given here because a table cell cannot hold one
@@ -537,10 +749,14 @@ extractor pointed at the block never sees it, which is why the assertion is stat
 comment rather than over that sentence.
 
 **The same hazard is live in every file the method-row denominator names, and the spec's denominator
-table does not carry the rule.** Measured, comparing each file's raw count against its count after
-`perl -0777 -pe 's/<!--.*?-->//gs'`:
+table does not carry the rule.** Measured, per file, as
 
-| file | `<member><xref linkend="mth…"` total | outside comments |
+```
+/bin/grep -ac '<member><xref linkend="mth' FILE
+perl -0777 -pe 's/<!--.*?-->//gs' FILE | /bin/grep -ac '<member><xref linkend="mth'
+```
+
+| file | member `<xref>`s, total | outside comments |
 |---|---|---|
 | `fundclasses.xml` | 255 | 249 |
 | `collclasses.xml` | 354 | 345 |
@@ -551,9 +767,10 @@ table does not carry the rule.** Measured, comparing each file's raw count again
 | `supplierclassmethods.xml` | 9 | 8 |
 
 The last three are `*classmethods.xml` include files, whose `<member>`s the denominator names
-explicitly. And the section-keyed half has the hazard too, once: `<section id="mth…">` counts
-250 / 346 / 372 / 45 across the four books, of which **`utilityclasses.xml`'s `mthSupplierInit`
-(`:10062`) sits inside a comment opened at `:10061`**. Their sum is 1013 — the number the spec's
+explicitly. And the section-keyed half has the hazard too, once: the same pair of commands with
+`'<section id="mth'` as the pattern gives 250 / 346 / 372 / 45 raw across the four books and
+250 / 346 / **371** / 45 stripped, the single difference being **`utilityclasses.xml`'s
+`mthSupplierInit` (`:10062`), inside a comment opened at `:10061`**. Their sum is 1013 — the number the spec's
 entity-prefix bullet uses — so **the spec's own 1013 includes the withdrawn section and the live
 figure is 1012.**
 
