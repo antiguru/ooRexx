@@ -598,8 +598,8 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
   them: the namespace is a package this crate does not load, and the oracle's
   own answer is 98.987 for every one of those spellings rather than a
   resolution. The namespace arm is reached first, so a qualified METACLASS
-  target gets the namespace message and not the METACLASS one; each of the
-  four has an in-crate row in
+  target gets the namespace message and not the METACLASS one; every spelling
+  named above has an in-crate row in
   `every_directive_this_crate_cannot_install_refuses_before_the_first_clause`
   and in `a_class_keyword_gap_is_raised_inside_the_class_pass`.
 

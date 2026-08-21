@@ -148,14 +148,15 @@ struct ClassDef {
     /// `completeNewObject` reads to register each new instance
     /// (`ClassClass.cpp:1892`).
     ///
-    /// **Two oracle sites set it and this crate has both**, which is what
-    /// [`ClassGraph::check_uninit`]'s own doc is about: `defineMethod`
-    /// (`:854`) when the instance method being added is named `UNINIT`, and
-    /// `checkUninit` (`:1214`) from the class's **flattened** instance
-    /// behaviour, so a class that inherits `UNINIT` and defines none has it
-    /// too. Measured on the oracle: `::CLASS P` with an instance
-    /// `::METHOD uninit`, `::CLASS K SUBCLASS P`, and `.K~new` runs P's
-    /// `uninit` for that instance.
+    /// **What sets it, on either side, is an instance method named `UNINIT`
+    /// becoming reachable from the class** -- by being added to it, which is
+    /// `defineMethod` (`:854`), or by being inherited, which `checkUninit`
+    /// (`:1217`) picks up from the **flattened** instance behaviour. So a
+    /// class that inherits `UNINIT` and defines none has the flag. Measured
+    /// on the oracle: `::CLASS P` with an instance `::METHOD uninit`,
+    /// `::CLASS K SUBCLASS P`, and `.K~new` runs P's `uninit` for that
+    /// instance. [`ClassGraph::define`] and [`ClassGraph::check_uninit`] are
+    /// where this crate decides it.
     ///
     /// **A class-side `::METHOD uninit CLASS` does not set this**, measured:
     /// two `.K~new` instances and a class-side `uninit` print `uninit on K`
@@ -272,7 +273,7 @@ impl ClassGraph {
     }
 
     /// Whether `class`'s instances need `UNINIT` -- oracle's
-    /// `hasUninitDefined`. See the field for the two sites that set it.
+    /// `hasUninitDefined`. See the field for what sets it.
     pub fn has_uninit(&self, class: ObjRef) -> bool {
         self.classes[&class].has_uninit
     }
@@ -305,10 +306,10 @@ impl ClassGraph {
     /// **The oracle has no such function, and the reason this one exists is
     /// the same reason `rexx-exec` rebuilds a class's behaviour after the
     /// file's directives are all in.** The oracle attaches a class's methods
-    /// while it constructs the class, so the propagation the three
-    /// constructors do reads a finished parent; this crate creates every
-    /// class a file declares before it attaches any method, so at
-    /// construction time a parent's own `UNINIT` has not arrived yet. A
+    /// while it constructs the class, so each site that propagates this flag
+    /// -- see the field for which -- reads a finished parent; this crate
+    /// creates every class a file declares before it attaches any method, so
+    /// at construction time a parent's own `UNINIT` has not arrived yet. A
     /// caller that installs in that order runs this over its classes in
     /// dependency order once the methods are in, and the answer is the one
     /// the constructors would have computed had the parent been complete.

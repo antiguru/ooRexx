@@ -3543,10 +3543,12 @@ impl Interp {
         // parent has to be finished first, and `order` is the dependency
         // order that guarantees it. `check_uninit` first and the propagation
         // second, which is the oracle's order within a class.
+        //
+        // Indexed rather than looked up: the loop above walks this same
+        // `order` and inserts an entry for every index in it, and nothing in
+        // between removes one, so a miss here is not a case to handle.
         for index in &order {
-            let Some(class) = classes.get(index).copied() else {
-                continue;
-            };
+            let class = classes[index];
             self.classes().check_uninit(class);
             self.classes().refresh_parent_has_uninit(class);
         }
@@ -5408,9 +5410,17 @@ say 1
     /// method, so a flag computed while the class is being constructed reads
     /// a parent that has none of its methods yet. `install_directives` runs
     /// `check_uninit` and `refresh_parent_has_uninit` over the file's classes
-    /// once the methods are in; without that pass every assertion below that
-    /// expects `true` reads `false` instead, for every program that can be
-    /// written.
+    /// once the methods are in.
+    ///
+    /// **Each call in that pass is witnessed separately, measured by deleting
+    /// it on its own.** Dropping `check_uninit` reddens the `has_uninit(kid)`
+    /// row; dropping `refresh_parent_has_uninit` reddens the
+    /// `parent_has_uninit(kid)` row; dropping the whole pass reddens the
+    /// former, since it is asserted earlier. `has_uninit(base)` survives
+    /// every one of those, because [`ClassGraph::define`] sets it when the
+    /// `::METHOD uninit` is attached -- so the declaring class is not what
+    /// this pass is for, and an assertion on it alone would not have caught
+    /// the pass going missing.
     ///
     /// The oracle's own answer for this hierarchy is measured, and it is what
     /// makes `has_uninit` on `KID` and `GRANDKID` right rather than merely
@@ -5437,8 +5447,8 @@ say 1
         let plain = installed_class(&interp, "PLAIN");
         let plainkid = installed_class(&interp, "PLAINKID");
 
-        // The class that declares it, and the two that inherit it through
-        // the flattened behaviour the oracle's `checkUninit` reads.
+        // The class that declares it, and the ones that reach it through the
+        // flattened behaviour the oracle's `checkUninit` reads.
         assert!(interp.classes().has_uninit(base), "the declaring class");
         assert!(interp.classes().has_uninit(kid), "its subclass");
         assert!(
