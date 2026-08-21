@@ -1009,6 +1009,25 @@ impl Interp {
     /// Entirely on the failing path: an object of either shape is
     /// [`NotNumeric`] whatever this decides, so a program doing arithmetic on
     /// numbers never reaches the test.
+    ///
+    /// A stem receiver's own failure carries the native-method traceback
+    /// frame; a plain string's does not, and both are measured. A plain
+    /// string receiver, `say 'abc'` `+ 1`, is 41.1 with no `Compiled
+    /// method` line; a stem receiver, `say b.` `+ 1`, is the same 41.1
+    /// *with* one reading `scope "String"`, even though `b.~class` is `The
+    /// Stem class` -- because a stem answers no operator itself and
+    /// forwards the message to its default value (`StemClass`'s own
+    /// `UNKNOWN`, the same forward `a. = 'dflt'; say a.~length` already
+    /// reaches), and that forward is a real message dispatch landing on the
+    /// default's own native method, where a plain `String`'s or
+    /// `NumberString`'s operator is this crate's own direct arithmetic and
+    /// never dispatches at all.
+    ///
+    /// Measured also: a stem receiver whose right operand fails instead,
+    /// `say 2` `+ b.`, carries no frame, because the forwarded method's
+    /// own *argument* failing is not the same as the forwarded method
+    /// itself failing. That path is [`Interp::arith_operand`]'s, not this
+    /// one, and unchanged here.
     fn arith_left_operand(&mut self, op: &str, value: ObjRef) -> Result<Number, Failure> {
         match self.to_number(value) {
             Ok(number) => Ok(number),
@@ -1016,10 +1035,44 @@ impl Interp {
                 if let Some(kind) = self.operator_operand_gap(value) {
                     return Err(Loud::operator_operand(op, kind).into());
                 }
+                if self.is_stem_receiver(value) {
+                    let scope = self.string_class();
+                    let scope_id = self.classes().id_string(scope).to_string();
+                    self.blame_native_method(op.as_bytes(), &scope_id);
+                }
                 let text = self.to_text(value).to_vec();
                 Err(Raised::nonnumeric(&text).into())
             }
         }
+    }
+
+    /// Whether `value` is itself a stem handle, as opposed to a plain
+    /// `String`/`Number` value or something [`Interp::operator_operand_gap`]
+    /// already named.
+    ///
+    /// **The one predicate [`Interp::arith_left_operand`] needs and
+    /// `operator_operand_gap` does not already answer.** That function
+    /// chases a stem's default to ask whether the *default* is one of the
+    /// two object shapes no operator answers; this asks about the *handle
+    /// itself*, because the frame belongs to a stem receiver whether or not
+    /// its default is set -- measured, both `b.` (no default) and `s. =
+    /// "abc"; ... s.` (a `String` default) carry the frame identically, the
+    /// oracle's scope `"String"` in both, so the test cannot be "does the
+    /// default fail to parse" and must be "is the receiver a stem at all".
+    ///
+    /// Only reached once [`Interp::operator_operand_gap`] has already
+    /// answered `None` for `value`, so a class object or one of this crate's
+    /// own native objects never reaches here -- `heap.get` answers `None`
+    /// for a class handle (see [`Interp::not_in_arena`]) and this answers
+    /// `false` for it either way.
+    fn is_stem_receiver(&self, value: ObjRef) -> bool {
+        if !matches!(value.decode(), Decoded::Heap { .. }) {
+            return false;
+        }
+        matches!(
+            self.heap.get(value).map(|object| &object.body),
+            Some(Body::Stem { .. })
+        )
     }
 
     /// The shared body of `||`/`Abuttal` (no separator) and `Blank` (one

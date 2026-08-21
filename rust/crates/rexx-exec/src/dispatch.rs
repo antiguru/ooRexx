@@ -369,6 +369,13 @@ impl Interp {
         (model.object, model.metaclass)
     }
 
+    /// `.String`: the class every string-valued receiver answers to, and the
+    /// scope a stem-forwarded operator's traceback frame names -- see
+    /// `eval.rs`'s `Interp::is_stem_receiver`.
+    pub(crate) fn string_class(&mut self) -> ObjRef {
+        self.object_model().string
+    }
+
     /// Which native class a value answers to, or the value's own shape when
     /// this phase builds no class for it.
     ///
@@ -850,7 +857,12 @@ impl Interp {
     /// front of it, so the bytes are rendered here rather than assembled by
     /// `trace::push_clause`. Measured, the line carries no indent even for a
     /// send two `DO` levels deep.
-    fn blame_native_method(&mut self, name: &[u8], scope: &str) {
+    ///
+    /// `pub(crate)` since Phase 5a Task 6: an arithmetic operator's left
+    /// operand can raise from inside this same shape of frame -- see
+    /// `eval.rs`'s `Interp::is_stem_receiver` for which operand shapes reach
+    /// one -- and `eval.rs` is a different module from this one.
+    pub(crate) fn blame_native_method(&mut self, name: &[u8], scope: &str) {
         if self.failure_site.is_some() {
             return;
         }

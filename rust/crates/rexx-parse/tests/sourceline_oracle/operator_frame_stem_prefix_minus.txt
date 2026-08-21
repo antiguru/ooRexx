@@ -1,0 +1,8 @@
+count 7
+/* Phase 5a Task 6: the same forwarded frame reached through a prefix
+ * operator instead of an infix one, whose dispatch is a different path that
+ * happens to collide with infix minus's own frame text. Measured, rc 215,
+ * stderr opening `       *-* Compiled method "-" with scope "String".`.
+ */
+
+say -b.

@@ -935,6 +935,12 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     // Task 8 fix round 1: the failing-::CONSTANT blame target under a
     // dependency-ordered class install.
     "lang/directive_constant_blames_the_last_installed_class.rex",
+    // Phase 5a (2026-08-17 plan) Task 6: an operator forwarded through a
+    // stem to its default value's own native method carries the
+    // `Compiled method` traceback frame the oracle emits, scope "String".
+    "lang/operator_frame_stem_plus.rex",
+    "lang/operator_frame_stem_power.rex",
+    "lang/operator_frame_stem_prefix_minus.rex",
 ];
 
 #[test]

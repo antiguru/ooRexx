@@ -160,3 +160,19 @@ lang/expose_two_scopes.rex
 # under exactly the backwards reading this one is green under. Measured, each
 # positional rule built in turn: 105 of 106, one program differing each time.
 lang/directive_constant_blames_the_last_installed_class.rex
+
+# Phase 5a (2026-08-17 plan) Task 6: the native-method frame in a traceback,
+# the operator half. An error raised inside a native method an *operator*
+# invoked carries the same `*-* Compiled method "X" with scope "Y".` frame
+# line the oracle emits, when the operator reaches that method through a
+# stem's own forward to its default value rather than running directly on a
+# `String`/`Number` value -- `b.~class` is `The Stem class` while the frame
+# reads scope `String`, the class of the method that actually raises. The
+# three vary the operator: infix `+`, infix `**` so the frame's own name is
+# read rather than assumed, and prefix `-`, whose dispatch path is different
+# from infix `-` and happens to collide with its frame text. Compared raw
+# (see corpus.rs's RAW_STDERR_COMPARISON), because the frame's own leading
+# whitespace and its absent line number are part of the bytes.
+lang/operator_frame_stem_plus.rex
+lang/operator_frame_stem_power.rex
+lang/operator_frame_stem_prefix_minus.rex

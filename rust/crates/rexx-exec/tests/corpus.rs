@@ -305,6 +305,14 @@ const RAW_STDERR_COMPARISON: &[&str] = &[
     // name -- `"B"` against `"B="` -- which is the only place a program can
     // read that name itself rather than infer it from which body ran.
     "lang/method_attribute_set_body.rex",
+    // Phase 5a (2026-08-17 plan) Task 6: the operator-forwarded native-method
+    // frame. `normalize_stderr`'s `TRACE_PREFIX_CLAUSE` marker is `*-*`, the
+    // same three bytes this frame line opens with, so the default comparison
+    // would collapse the frame's own leading run of spaces -- exactly the
+    // bytes the frame's own doc says are part of what is under test here.
+    "lang/operator_frame_stem_plus.rex",
+    "lang/operator_frame_stem_power.rex",
+    "lang/operator_frame_stem_prefix_minus.rex",
 ];
 
 /// Every entry in [`RAW_STDERR_COMPARISON`] is a line some phase subset file
@@ -322,14 +330,12 @@ const RAW_STDERR_COMPARISON: &[&str] = &[
 /// level up. Without this test, only a human reading the diff would catch
 /// that.
 ///
-/// **This test is vacuous today, and that is expected, not decoration.**
-/// `RAW_STDERR_COMPARISON` is empty as of Task 1 -- no program has opted out
-/// of DEVIATION 0 yet -- so this iterates zero rows and passes trivially. It
-/// becomes load-bearing the moment a later task adds the first entry: had
-/// that entry been misspelled relative to its subset line, this test would
-/// fail with the exact path named, where today (and without this test) the
-/// same typo would compile, run, and report a passing byte-for-byte
-/// comparison that silently used the normalised path instead.
+/// **`RAW_STDERR_COMPARISON` holds entries, so this test is load-bearing
+/// rather than an iteration over zero rows.** Any entry misspelled relative
+/// to its subset line fails this test with the exact path named, where
+/// without it the same typo would compile, run, and report a passing
+/// byte-for-byte comparison that had silently used the normalised path
+/// instead.
 #[test]
 fn raw_stderr_comparison_only_names_programs_the_subset_actually_runs() {
     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
