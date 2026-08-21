@@ -278,3 +278,46 @@ fn the_concept_row_set_carries_the_two_sections_the_gate_was_written_for() {
         assert!(ids.contains(id), "provide-sections.txt has no {id} row");
     }
 }
+
+/// Every method row's `origin` lands on a line that names the row's `section`.
+///
+/// The header promises `origin` is where the name came from, and for most rows
+/// that is the `<section id="mth…">` line while for a row whose class-table
+/// member overrides the displayed name it is the `<member><xref linkend="mth…">`
+/// line. Both spellings carry the id, so one assertion covers both -- and it is
+/// the assertion that catches an offset error, which is how a member's line
+/// inside a section slice can come out counted from the section instead of from
+/// the file.
+#[test]
+fn every_method_rows_origin_line_names_its_section() {
+    let Some(root) = oodocs() else { return };
+    let book_dir = root.join(docs::REXXREF);
+    let mut files: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let text: &'static str = Box::leak(committed("class-methods.txt").into_boxed_str());
+    for row in rows_of(text) {
+        let mut f = row.split('\t');
+        let section = f.nth(4).unwrap_or_default();
+        let origin = f.next().unwrap_or_default();
+        let (file, line) = origin
+            .rsplit_once(':')
+            .unwrap_or_else(|| panic!("{origin} is not a file:line"));
+        let line: usize = line
+            .parse()
+            .unwrap_or_else(|e| panic!("{origin} has no line number: {e}"));
+        let lines = files.entry(file.to_string()).or_insert_with(|| {
+            let path = book_dir.join(file);
+            std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()))
+                .lines()
+                .map(str::to_string)
+                .collect()
+        });
+        let found = lines
+            .get(line - 1)
+            .unwrap_or_else(|| panic!("{file} has no line {line}"));
+        assert!(
+            found.contains(section),
+            "the row citing {origin} names {section}, and that line reads {found:?}"
+        );
+    }
+}

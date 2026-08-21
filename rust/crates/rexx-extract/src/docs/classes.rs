@@ -33,7 +33,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::docs::xml::{
-    Section, blank_comments, decode_predefined, members, sections, split_revision_marker, xincludes,
+    Section, blank_comments, decode_predefined, line_of, members, sections, split_revision_marker,
+    xincludes,
 };
 
 /// The class the book documents but which this build cannot load: it is
@@ -418,15 +419,20 @@ pub fn class_rows(books: &[Book], argutil_citation: &str) -> Vec<ClassRow> {
     out
 }
 
-/// Re-reads each [`UNCONSTRUCTIBLE`] sentence at the lines it cites, so a
+/// Re-reads each [`UNCONSTRUCTIBLE`] quotation at the lines it cites, so a
 /// citation that has gone stale reddens rather than being carried.
 ///
-/// The cited span is tag-stripped and whitespace-collapsed first, because a
-/// sentence in these books may wrap across a line break or carry an `<xref>`
-/// in the middle. A raw substring test on one line could then only be written
-/// for the half of a sentence that happens to fit, which is a citation to half
-/// a claim; that a row's span is a range rather than one line is what says it
-/// wraps.
+/// **A row's span is the lines its own quoted text occupies**, not the lines
+/// the book's whole sentence occupies. `Buffer`'s sentence begins on a line
+/// above the one cited for it; the row quotes the clause, so the row cites the
+/// clause's line. A span written as a range is one whose quotation crosses a
+/// line break.
+///
+/// The span is joined, tag-stripped and whitespace-collapsed before the
+/// substring test, because a quotation may cross a line break and may carry
+/// inline markup -- `VariableReference`'s carries a `<methodname>`. A raw
+/// substring test on one line could then only be written for the part of a
+/// quotation that happens to fit, which is a citation to part of a claim.
 fn unconstructible_index(
     books: &[Book],
 ) -> BTreeMap<&'static str, (usize, usize, &'static str, Status)> {
@@ -569,7 +575,10 @@ pub fn method_rows(
         }
         let head = section.head(&book.text);
         let mut listed: Vec<Listed> = Vec::new();
-        listed.extend(listed_members(head, &book.name));
+        // `head` is a slice of the book, so a member's line inside it counts
+        // from the section's opening tag rather than from the file.
+        let head_base = line_of(&book.text, section.body_start) - 1;
+        listed.extend(listed_members(head, &book.name, head_base));
         for (href, line) in xincludes(head) {
             if !href.ends_with("classmethods.xml") {
                 continue;
@@ -577,7 +586,9 @@ pub fn method_rows(
             let text = includes.get(&href).unwrap_or_else(|| {
                 panic!("{}:{line} includes {href}, which was not read", book.name)
             });
-            listed.extend(listed_members(text, &href));
+            // An include is read whole, so its member lines are already the
+            // file's.
+            listed.extend(listed_members(text, &href, 0));
         }
         assert!(
             !listed.is_empty() || head.contains(NO_OWN_METHODS),
@@ -600,12 +611,25 @@ pub fn method_rows(
                 xrefstyle,
                 trailing,
                 source,
+                line: member_line,
             } = entry;
             let (title, line, file) = titles
                 .get(&target)
                 .unwrap_or_else(|| panic!("{source} names {target}, which has no <section>"))
                 .clone();
-            for displayed in displayed_names(&target, xrefstyle.as_deref(), &title, &source) {
+            for (displayed, from_xrefstyle) in
+                displayed_names(&target, xrefstyle.as_deref(), &title, &source)
+            {
+                // A row cites where its own name came from. Normally that is
+                // the `mth*` section whose title it is; for a name the class
+                // table's `xrefstyle` displays instead, following the
+                // section's line would land on a title that does not carry
+                // the name at all.
+                let origin = if from_xrefstyle {
+                    format!("{source}:{member_line}")
+                } else {
+                    format!("{file}:{line}")
+                };
                 for (method, arm) in names_of(&target, &displayed, &trailing, &source) {
                     if !seen.insert((method.clone(), arm)) {
                         continue;
@@ -616,7 +640,7 @@ pub fn method_rows(
                         arm,
                         status: row_status,
                         section: target.clone(),
-                        origin: format!("{file}:{line}"),
+                        origin: origin.clone(),
                         reason: reason.to_string(),
                     });
                 }
@@ -635,11 +659,15 @@ struct Listed {
     /// Text after the `<xref/>`, where a group heading spells out its
     /// operators.
     trailing: String,
-    /// The file the member was read from, for a failure message.
+    /// The file the member was read from: a book, or the `*classmethods.xml`
+    /// a class table includes.
     source: String,
+    /// The member's own line in that file. This is the citation a row carries
+    /// when the member's `xrefstyle` is where its name came from.
+    line: usize,
 }
 
-fn listed_members(text: &str, source: &str) -> Vec<Listed> {
+fn listed_members(text: &str, source: &str, base_line: usize) -> Vec<Listed> {
     members(text)
         .into_iter()
         .filter(|m| m.linkend.as_deref().is_some_and(|t| t.starts_with("mth")))
@@ -648,11 +676,13 @@ fn listed_members(text: &str, source: &str) -> Vec<Listed> {
             xrefstyle: m.xrefstyle,
             trailing: m.trailing,
             source: source.to_string(),
+            line: base_line + m.line,
         })
         .collect()
 }
 
-/// Every name the book **displays** for one class-table member.
+/// Every name the book **displays** for one class-table member, each with
+/// whether it came from the `xrefstyle` rather than from the target's title.
 ///
 /// Normally exactly one, the target section's own `<title>`. A member whose
 /// `xrefstyle` overrides the displayed text yields two: the title's name and
@@ -669,12 +699,12 @@ fn displayed_names(
     xrefstyle: Option<&str>,
     title: &str,
     source: &str,
-) -> Vec<String> {
+) -> Vec<(String, bool)> {
     let style = xrefstyle.unwrap_or_else(|| {
         panic!("{source} names {section} in a <member> whose <xref> carries no xrefstyle")
     });
     if style.starts_with(TITLE_XREFSTYLE) {
-        return vec![title.to_string()];
+        return vec![(title.to_string(), false)];
     }
     let template = TEMPLATE_MEMBERS
         .iter()
@@ -689,7 +719,7 @@ fn displayed_names(
                  does"
             )
         });
-    vec![title.to_string(), template.to_string()]
+    vec![(title.to_string(), false), (template.to_string(), true)]
 }
 
 /// The method names one class-table member yields, and the arm each takes.
@@ -825,11 +855,11 @@ pub fn classes_without_method_rows(
         .map(|r| {
             let why = if r.section == "-" {
                 format!(
-                    "the books document it nowhere; its only citation is {}",
-                    r.book
+                    "the books document it nowhere; its only citation is {}:{}",
+                    r.book, r.line
                 )
             } else {
-                format!("{} names no methods in {}", r.section, r.book)
+                format!("{} names no methods, {}:{}", r.section, r.book, r.line)
             };
             (r.name.clone(), why)
         })
@@ -941,8 +971,33 @@ pub fn class_methods_header(stamp: &str) -> Vec<String> {
         "Table C's method row set: one row per (class, method, arm, status).".into(),
         String::new(),
         "One `class<TAB>method<TAB>arm<TAB>status<TAB>section<TAB>origin<TAB>reason`".into(),
-        "per line. `section` is the mth* section the name came from and `origin`".into(),
-        "is that section's file:line, so every row cites the book.".into(),
+        "per line. `section` is the mth* section that documents the method, and".into(),
+        "`origin` is the file:line WHERE THE NAME CAME FROM -- so every row".into(),
+        "cites the book, and following the citation lands on the name.".into(),
+        String::new(),
+        "Those two are usually the same place and for a few rows they are not,".into(),
+        "because the book does not always display a section's own title. A".into(),
+        "class table's `<member>` links to its `mth*` section through an".into(),
+        "`<xref>` whose `xrefstyle` decides the rendered text: `select:title`".into(),
+        "renders that section's `<title>`, and `template:<text>` replaces it".into(),
+        "with `<text>` outright. Where a member overrides the title, the row".into(),
+        "set carries BOTH names -- the title's and the displayed one -- because".into(),
+        "measured on the oracle both answer, and the row whose name came from".into(),
+        "the override cites the member rather than the section.".into(),
+        String::new(),
+        "clsDateTime's constructor entry is the worked case: the member at".into(),
+        "utilityclasses.xml:1281 displays `new (Inherited Class Method)` and".into(),
+        "points at mthDateTimeInit, whose title is `init`. So `DateTime init`".into(),
+        "cites the section at :1775 and `DateTime new` cites the member at".into(),
+        ":1281. Measured, .DateTime~hasMethod(\"NEW\") is 1 with the instance arm".into(),
+        "0, and .DateTime~hasMethod(\"INIT\") and .DateTime~new~hasMethod(\"INIT\")".into(),
+        "are both 1. clsTimeSpan is the same shape at :10492.".into(),
+        String::new(),
+        "An xrefstyle that neither renders the title nor is one the extractor".into(),
+        "has decided about is a hard error, not a fallback to the title: the".into(),
+        "row it should have produced would never be derived, and a check".into(),
+        "comparing the derivation against this file cannot see a row that is".into(),
+        "absent from both sides.".into(),
         String::new(),
         "`arm` is which readback instrument the row is asked on -- `class` is".into(),
         "`.X~hasMethod(\"M\")` and `instance` is `.X~new~hasMethod(\"M\")`.".into(),
@@ -1079,7 +1134,7 @@ mod tests {
     fn an_ordinary_member_displays_its_targets_own_title() {
         assert_eq!(
             displayed_names("mthArrayAppend", Some("select:title"), "append", "x"),
-            ["append"]
+            [("append".to_string(), false)]
         );
     }
 
@@ -1095,10 +1150,19 @@ mod tests {
             "init",
             "utilityclasses.xml",
         );
-        assert_eq!(out, ["init", "new (Inherited Class Method)"]);
+        assert_eq!(
+            out,
+            [
+                ("init".to_string(), false),
+                ("new (Inherited Class Method)".to_string(), true)
+            ]
+        );
+        // The second name is flagged as coming from the xrefstyle, which is
+        // what makes its row cite the member rather than the section whose
+        // title does not carry it.
         let names: Vec<(String, Arm)> = out
             .iter()
-            .flat_map(|d| names_of("mthDateTimeInit", d, "", "utilityclasses.xml"))
+            .flat_map(|(d, _)| names_of("mthDateTimeInit", d, "", "utilityclasses.xml"))
             .collect();
         assert_eq!(
             names,

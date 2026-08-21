@@ -2,8 +2,33 @@
 #
 # One
 # `class<TAB>method<TAB>arm<TAB>status<TAB>section<TAB>origin<TAB>reason`
-# per line. `section` is the mth* section the name came from and `origin`
-# is that section's file:line, so every row cites the book.
+# per line. `section` is the mth* section that documents the method, and
+# `origin` is the file:line WHERE THE NAME CAME FROM -- so every row
+# cites the book, and following the citation lands on the name.
+#
+# Those two are usually the same place and for a few rows they are not,
+# because the book does not always display a section's own title. A
+# class table's `<member>` links to its `mth*` section through an
+# `<xref>` whose `xrefstyle` decides the rendered text: `select:title`
+# renders that section's `<title>`, and `template:<text>` replaces it
+# with `<text>` outright. Where a member overrides the title, the row
+# set carries BOTH names -- the title's and the displayed one -- because
+# measured on the oracle both answer, and the row whose name came from
+# the override cites the member rather than the section.
+#
+# clsDateTime's constructor entry is the worked case: the member at
+# utilityclasses.xml:1281 displays `new (Inherited Class Method)` and
+# points at mthDateTimeInit, whose title is `init`. So `DateTime init`
+# cites the section at :1775 and `DateTime new` cites the member at
+# :1281. Measured, .DateTime~hasMethod("NEW") is 1 with the instance arm
+# 0, and .DateTime~hasMethod("INIT") and .DateTime~new~hasMethod("INIT")
+# are both 1. clsTimeSpan is the same shape at :10492.
+#
+# An xrefstyle that neither renders the title nor is one the extractor
+# has decided about is a hard error, not a fallback to the title: the
+# row it should have produced would never be derived, and a check
+# comparing the derivation against this file cannot see a row that is
+# absent from both sides.
 #
 # `arm` is which readback instrument the row is asked on -- `class` is
 # `.X~hasMethod("M")` and `instance` is `.X~new~hasMethod("M")`.
@@ -54,7 +79,7 @@
 # all, with why their method set is empty. A class with zero method rows
 # and no stated reason reads to a later reader exactly like a row that
 # went missing:
-#     ArgUtil  --  the books document it nowhere; its only citation is provide.xml
+#     ArgUtil  --  the books document it nowhere; its only citation is provide.xml:838
 #
 # derived-at: oodocs/rexxref/en-US r13198
 
@@ -919,7 +944,7 @@ InvertingComparator	init	instance	not-covered	mthInvertingComparatorInit	utility
 NumericComparator	compare	instance	covered	mthNumericComparatorCompare	utilityclasses.xml:1180	a bare ~new constructs an instance on the oracle
 NumericComparator	init	instance	covered	mthNumericComparatorInit	utilityclasses.xml:1200	a bare ~new constructs an instance on the oracle
 DateTime	init	instance	covered	mthDateTimeInit	utilityclasses.xml:1775	a bare ~new constructs an instance on the oracle
-DateTime	new	class	covered	mthDateTimeInit	utilityclasses.xml:1775	a bare ~new constructs an instance on the oracle
+DateTime	new	class	covered	mthDateTimeInit	utilityclasses.xml:1281	a bare ~new constructs an instance on the oracle
 DateTime	fromBaseDate	class	covered	mthDateTimeFromBaseDate	utilityclasses.xml:1420	a bare ~new constructs an instance on the oracle
 DateTime	fromCivilTime	class	covered	mthDateTimeFromCivilTime	utilityclasses.xml:1668	a bare ~new constructs an instance on the oracle
 DateTime	fromEuropeanDate	class	covered	mthDateTimeFromEuropeanDate	utilityclasses.xml:1441	a bare ~new constructs an instance on the oracle
@@ -1260,7 +1285,7 @@ Ticker	cancelled	instance	not-covered	mthTickerCanceled	utilityclasses.xml:10283
 Ticker	init	instance	not-covered	mthTickerInit	utilityclasses.xml:10313	no construction program is committed; a bare ~new raises 93.901 on the oracle
 Ticker	interval	instance	not-covered	mthTickerInterval	utilityclasses.xml:10414	no construction program is committed; a bare ~new raises 93.901 on the oracle
 TimeSpan	init	instance	not-covered	mthTimeSpanInit	utilityclasses.xml:10700	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	new	class	not-covered	mthTimeSpanInit	utilityclasses.xml:10700	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	new	class	not-covered	mthTimeSpanInit	utilityclasses.xml:10492	no construction program is committed; a bare ~new raises 93.901 on the oracle
 TimeSpan	fromCivilTime	class	not-covered	mthTimeSpanFromCivilTime	utilityclasses.xml:10644	no construction program is committed; a bare ~new raises 93.901 on the oracle
 TimeSpan	fromDays	class	not-covered	mthTimeSpanFromDays	utilityclasses.xml:10535	no construction program is committed; a bare ~new raises 93.901 on the oracle
 TimeSpan	fromHours	class	not-covered	mthTimeSpanFromHours	utilityclasses.xml:10553	no construction program is committed; a bare ~new raises 93.901 on the oracle
