@@ -1,0 +1,10 @@
+count 9
+/* Fix round 1, finding 3: a controlled DO's initial value is rounded
+ * through a real unary `+` on the oracle, so a stem receiver here carries
+ * the same forwarded native-method frame an operator's own left operand
+ * does. Measured, rc 215, stderr opening
+ * `       *-* Compiled method "+" with scope "String".`.
+ */
+
+do i = b. to 5
+end

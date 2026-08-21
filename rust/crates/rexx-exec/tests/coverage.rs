@@ -941,6 +941,11 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/operator_frame_stem_plus.rex",
     "lang/operator_frame_stem_power.rex",
     "lang/operator_frame_stem_prefix_minus.rex",
+    // Fix round 1, finding 3: the same forwarded frame reached from a
+    // controlled DO header's numeric position, one program per position.
+    "lang/operator_frame_stem_do_initial.rex",
+    "lang/operator_frame_stem_do_to.rex",
+    "lang/operator_frame_stem_do_by.rex",
 ];
 
 #[test]

@@ -167,12 +167,25 @@ lang/directive_constant_blames_the_last_installed_class.rex
 # line the oracle emits, when the operator reaches that method through a
 # stem's own forward to its default value rather than running directly on a
 # `String`/`Number` value -- `b.~class` is `The Stem class` while the frame
-# reads scope `String`, the class of the method that actually raises. The
-# three vary the operator: infix `+`, infix `**` so the frame's own name is
-# read rather than assumed, and prefix `-`, whose dispatch path is different
-# from infix `-` and happens to collide with its frame text. Compared raw
-# (see corpus.rs's RAW_STDERR_COMPARISON), because the frame's own leading
-# whitespace and its absent line number are part of the bytes.
+# reads scope `String`, the class of the method that actually raises.
+# Varies the operator across the three programs: infix `+`, infix `**` so
+# the frame's own name is read rather than assumed, and prefix `-`, whose
+# dispatch path is different from infix `-` and happens to collide with its
+# frame text. Compared raw (see corpus.rs's RAW_STDERR_COMPARISON) so the
+# comparison asserts the frame's own bytes -- leading whitespace and absent
+# line number included -- rather than resting on what DEVIATION 0's
+# normaliser happens to do to them; measured, od-verified, that normaliser
+# is currently a no-op on all three programs' stderr.
 lang/operator_frame_stem_plus.rex
 lang/operator_frame_stem_power.rex
 lang/operator_frame_stem_prefix_minus.rex
+
+# Fix round 1, finding 3: the same forwarded frame reached from a
+# controlled `DO` header's numeric position instead of from an operator
+# directly. `Interp::header_number` rounds each header position through a
+# real unary `+` on the oracle, so a stem in any of the three positions
+# carries the identical frame, one program per position -- the initial
+# value, the `TO` bound and the `BY` increment.
+lang/operator_frame_stem_do_initial.rex
+lang/operator_frame_stem_do_to.rex
+lang/operator_frame_stem_do_by.rex

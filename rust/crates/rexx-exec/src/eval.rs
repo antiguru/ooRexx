@@ -1004,7 +1004,9 @@ impl Interp {
     /// the right one keeps the ordinary 41.1. A controlled `DO` header is not
     /// an operator and does not follow that rule: `Interp::header_number`
     /// checks every position, because each is rounded through a unary
-    /// operator of its own.
+    /// operator of its own -- and each is a receiver of that unary operator
+    /// exactly as this function's own operand is, which is why it shares
+    /// [`Interp::blame_stem_forwarded_operator`] with it below.
     ///
     /// Entirely on the failing path: an object of either shape is
     /// [`NotNumeric`] whatever this decides, so a program doing arithmetic on
@@ -1026,8 +1028,7 @@ impl Interp {
     /// Measured also: a stem receiver whose right operand fails instead,
     /// `say 2` `+ b.`, carries no frame, because the forwarded method's
     /// own *argument* failing is not the same as the forwarded method
-    /// itself failing. That path is [`Interp::arith_operand`]'s, not this
-    /// one, and unchanged here.
+    /// itself failing. That path is [`Interp::arith_operand`]'s.
     fn arith_left_operand(&mut self, op: &str, value: ObjRef) -> Result<Number, Failure> {
         match self.to_number(value) {
             Ok(number) => Ok(number),
@@ -1035,30 +1036,43 @@ impl Interp {
                 if let Some(kind) = self.operator_operand_gap(value) {
                     return Err(Loud::operator_operand(op, kind).into());
                 }
-                if self.is_stem_receiver(value) {
-                    let scope = self.string_class();
-                    let scope_id = self.classes().id_string(scope).to_string();
-                    self.blame_native_method(op.as_bytes(), &scope_id);
-                }
+                self.blame_stem_forwarded_operator(op.as_bytes(), value);
                 let text = self.to_text(value).to_vec();
                 Err(Raised::nonnumeric(&text).into())
             }
         }
     }
 
-    /// Whether `value` is itself a stem handle, as opposed to a plain
-    /// `String`/`Number` value or something [`Interp::operator_operand_gap`]
-    /// already named.
+    /// Renders the operator-forwarded native-method frame for `op` when
+    /// `value` is a stem whose forward reaches a method that actually runs
+    /// -- a no-op otherwise. Shared by [`Interp::arith_left_operand`] (a
+    /// binary operator's left operand and a prefix operator's sole operand)
+    /// and `Interp::header_number` (`run.rs`), the other receiver of a real
+    /// unary `+` this crate models: measured, `do i = b. to 5`, `do i = 1 to
+    /// b.` and `do i = 1 by b. to 3` each carry the identical frame, scope
+    /// `"String"`, one per header position.
+    pub(crate) fn blame_stem_forwarded_operator(&mut self, op: &[u8], value: ObjRef) {
+        if !self.is_stem_receiver(value) {
+            return;
+        }
+        let scope = self.string_class();
+        let scope_id = self.classes().id_string(scope).to_string();
+        self.blame_native_method(op, &scope_id);
+    }
+
+    /// Whether `value` is a stem whose forwarded operator would actually
+    /// reach a native method to run: true for an unset stem (its own name
+    /// is a `String`) and for one whose default is itself `String`/
+    /// `Number`-valued; false for `.nil` and for anything
+    /// [`Interp::operator_operand_gap`] already named.
     ///
-    /// **The one predicate [`Interp::arith_left_operand`] needs and
-    /// `operator_operand_gap` does not already answer.** That function
-    /// chases a stem's default to ask whether the *default* is one of the
-    /// two object shapes no operator answers; this asks about the *handle
-    /// itself*, because the frame belongs to a stem receiver whether or not
-    /// its default is set -- measured, both `b.` (no default) and `s. =
-    /// "abc"; ... s.` (a `String` default) carry the frame identically, the
-    /// oracle's scope `"String"` in both, so the test cannot be "does the
-    /// default fail to parse" and must be "is the receiver a stem at all".
+    /// **The oracle's frame requires the forwarded method to have actually
+    /// run and raised, and `.nil` answers no operator at all.** Measured:
+    /// `s. = .nil` then `say s. + 1` is 97.1 on the oracle, "does not
+    /// understand message +", with no `Compiled method` line, because the
+    /// forward never reaches a method to raise from -- where `b.` (no
+    /// default) and `s. = "abc"` (a `String` default) both carry the frame,
+    /// scope `"String"`.
     ///
     /// Only reached once [`Interp::operator_operand_gap`] has already
     /// answered `None` for `value`, so a class object or one of this crate's
@@ -1066,13 +1080,44 @@ impl Interp {
     /// for a class handle (see [`Interp::not_in_arena`]) and this answers
     /// `false` for it either way.
     fn is_stem_receiver(&self, value: ObjRef) -> bool {
-        if !matches!(value.decode(), Decoded::Heap { .. }) {
+        let Decoded::Heap { .. } = value.decode() else {
             return false;
+        };
+        match self.heap.get(value).map(|object| &object.body) {
+            Some(Body::Stem { default: None, .. }) => true,
+            Some(Body::Stem {
+                default: Some(default),
+                ..
+            }) => self.stem_default_is_string_or_number(*default),
+            _ => false,
         }
-        matches!(
-            self.heap.get(value).map(|object| &object.body),
-            Some(Body::Stem { .. })
-        )
+    }
+
+    /// Whether `value` is `String`/`Number`-valued, chasing a nested stem's
+    /// own default the way [`Interp::to_number`] and
+    /// [`Interp::operator_operand_gap`] both do. `.nil`, a class object and
+    /// one of this crate's own native objects answer none of the arithmetic
+    /// operators, so a forward landing on one of them never reaches a
+    /// method to raise from.
+    fn stem_default_is_string_or_number(&self, value: ObjRef) -> bool {
+        match value.decode() {
+            Decoded::Nil => false,
+            Decoded::SmallInt(_) | Decoded::Text(_) => true,
+            Decoded::Heap { slot, generation } => {
+                if is_class_slot(slot, generation) {
+                    return false;
+                }
+                match self.heap.get(value).map(|object| &object.body) {
+                    Some(Body::Text { .. }) | Some(Body::Num { .. }) => true,
+                    Some(Body::Stem { default: None, .. }) => true,
+                    Some(Body::Stem {
+                        default: Some(default),
+                        ..
+                    }) => self.stem_default_is_string_or_number(*default),
+                    _ => false,
+                }
+            }
+        }
     }
 
     /// The shared body of `||`/`Abuttal` (no separator) and `Blank` (one
@@ -3528,5 +3573,30 @@ mod object_operand_tests {
                 String::from_utf8_lossy(source)
             );
         }
+    }
+
+    /// A stem whose default value answers no operator at all -- `.nil` --
+    /// never reaches a method to run, so its own forwarded failure carries
+    /// no traceback frame, unlike `b.` (no default) and a `String`-defaulted
+    /// stem, both of which do.
+    ///
+    /// Measured on the oracle: `s. = .nil` then `say s. + 1` is 97.1, "does
+    /// not understand message +", with no `Compiled method` line. This
+    /// crate's own answer differs from the oracle on this program before and
+    /// after this test -- `41.1` against a `.nil` default rather than
+    /// `97.1` -- and closing that gap belongs to whichever task owns 97.1's
+    /// forwarding rule, not this one; only the frame line is this test's
+    /// concern, and it must not appear.
+    #[test]
+    fn a_nil_defaulted_stem_carries_no_operator_frame() {
+        let (code, stdout, stderr) = both_engines(b"s. = .nil\nsay s. + 1\n");
+        assert_eq!(code, 215, "{stderr:?}");
+        assert_eq!(stdout, "");
+        assert!(
+            !stderr.contains("Compiled method"),
+            "a `.nil`-defaulted stem's own arithmetic failure must carry no \
+             operator-forwarded frame -- no method ever ran to raise from -- \
+             but got {stderr:?}"
+        );
     }
 }

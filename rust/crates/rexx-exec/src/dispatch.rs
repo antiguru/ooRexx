@@ -858,10 +858,12 @@ impl Interp {
     /// `trace::push_clause`. Measured, the line carries no indent even for a
     /// send two `DO` levels deep.
     ///
-    /// `pub(crate)` since Phase 5a Task 6: an arithmetic operator's left
-    /// operand can raise from inside this same shape of frame -- see
-    /// `eval.rs`'s `Interp::is_stem_receiver` for which operand shapes reach
-    /// one -- and `eval.rs` is a different module from this one.
+    /// `pub(crate)`: an arithmetic operator's left operand, and a
+    /// controlled `DO` header's numeric position, can each raise from
+    /// inside this same shape of frame when the receiver is a stem
+    /// forwarding to a native method -- see `eval.rs`'s
+    /// `Interp::blame_stem_forwarded_operator` -- and `eval.rs` is a
+    /// different module from this one.
     pub(crate) fn blame_native_method(&mut self, name: &[u8], scope: &str) {
         if self.failure_site.is_some() {
             return;

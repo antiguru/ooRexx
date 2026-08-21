@@ -7285,8 +7285,20 @@ impl Interp {
         if let Some(kind) = self.operator_operand_gap(value) {
             return Err(Loud::object_position(role.value_name(), kind).into());
         }
-        let operand = self.arith_operand(value)?;
-        Ok(round_via_unary_plus(&operand, entry_digits).map_err(Raised::from)?)
+        // Each header position is rounded through a real unary `+` on the
+        // oracle (this function's own doc), so a stem receiver here carries
+        // the identical operator-forwarded frame `Interp::arith_left_operand`
+        // does, through the same `Interp::blame_stem_forwarded_operator`.
+        // Measured, all three positions: `do i = b. to 5`, `do i = 1 to b.`
+        // and `do i = 1 by b. to 3` each differ from the oracle in exactly
+        // that one line before this call is here.
+        match self.arith_operand(value) {
+            Ok(operand) => Ok(round_via_unary_plus(&operand, entry_digits).map_err(Raised::from)?),
+            Err(failure) => {
+                self.blame_stem_forwarded_operator(b"+", value);
+                Err(failure)
+            }
+        }
     }
 
     /// A `DO`/`LOOP` past its header: the construct itself, driven from the

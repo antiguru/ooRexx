@@ -306,13 +306,26 @@ const RAW_STDERR_COMPARISON: &[&str] = &[
     // read that name itself rather than infer it from which body ran.
     "lang/method_attribute_set_body.rex",
     // Phase 5a (2026-08-17 plan) Task 6: the operator-forwarded native-method
-    // frame. `normalize_stderr`'s `TRACE_PREFIX_CLAUSE` marker is `*-*`, the
-    // same three bytes this frame line opens with, so the default comparison
-    // would collapse the frame's own leading run of spaces -- exactly the
-    // bytes the frame's own doc says are part of what is under test here.
+    // frame. Raw mode is what asserts the frame line's own bytes -- its
+    // leading whitespace and its absent line number included -- rather than
+    // resting on whatever DEVIATION 0's normaliser happens to do to them.
+    // Measured, od-verified: the gap after the frame line's own `*-*` marker
+    // is exactly one space on both sides today, so normalisation is
+    // currently a no-op on these three programs' stderr; raw mode is the
+    // comparison that still asserts those bytes rather than one that would
+    // pass by coincidence if the gap ever widened.
     "lang/operator_frame_stem_plus.rex",
     "lang/operator_frame_stem_power.rex",
     "lang/operator_frame_stem_prefix_minus.rex",
+    // Fix round 1, finding 3: the same forwarded frame reached from a
+    // controlled `DO` header's numeric position rather than from an
+    // operator directly, one program per position. `Interp::header_number`
+    // rounds each position through a real unary `+`, so a stem position
+    // carries the identical frame -- and the same raw-mode reasoning above
+    // applies to it unchanged.
+    "lang/operator_frame_stem_do_initial.rex",
+    "lang/operator_frame_stem_do_to.rex",
+    "lang/operator_frame_stem_do_by.rex",
 ];
 
 /// Every entry in [`RAW_STDERR_COMPARISON`] is a line some phase subset file

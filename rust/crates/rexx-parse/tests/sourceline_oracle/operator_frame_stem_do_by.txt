@@ -1,0 +1,9 @@
+count 8
+/* Fix round 1, finding 3: the same forwarded frame as
+ * operator_frame_stem_do_initial.rex, at the DO header's BY increment
+ * instead of its initial value. Measured, rc 215, stderr opening
+ * `       *-* Compiled method "+" with scope "String".`.
+ */
+
+do i = 1 by b. to 3
+end
