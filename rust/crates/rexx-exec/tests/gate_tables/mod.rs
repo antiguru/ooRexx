@@ -369,6 +369,42 @@ pub fn verdict_is_gated(phase: &str) -> bool {
     corpus_gate() && (closing_phase().as_deref() == Some(phase) || CLOSED_PHASES.contains(&phase))
 }
 
+/// The name a row is reported and gated under when the oracle did not answer
+/// its question at all, so no comparison of the two sides means anything.
+///
+/// Not a [`Verdict`]: the five cells partition the descriptor cube, and this
+/// is the case where the cube has nothing in it to partition.
+pub const UNANSWERED: &str = "unanswered";
+
+/// The label a row is reported and tallied under, whether or not it has a
+/// verdict.
+///
+/// Both gate tables render `None` the same way because they are read
+/// together: one string, in the module both already link, rather than a copy
+/// per binary that nothing holds equal.
+pub fn verdict_label(verdict: Option<Verdict>) -> &'static str {
+    match verdict {
+        Some(verdict) => verdict.label(),
+        None => UNANSWERED,
+    }
+}
+
+/// Splits a program's `stdout` into its lines.
+///
+/// Empty input is no lines rather than one empty line. `split` on an empty
+/// slice yields one empty slice, which would make a program that printed
+/// nothing look as though it had answered.
+pub fn stdout_lines(bytes: &[u8]) -> Vec<&[u8]> {
+    if bytes.is_empty() {
+        return Vec::new();
+    }
+    let mut lines: Vec<&[u8]> = bytes.split(|&b| b == b'\n').collect();
+    if bytes.last() == Some(&b'\n') {
+        lines.pop();
+    }
+    lines
+}
+
 /// Bounds a byte string to a short, readable, escaped excerpt, so a row's
 /// three channels stay diagnosable from the report without reprinting a
 /// program's entire output.

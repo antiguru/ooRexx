@@ -27,12 +27,18 @@
 //! * **method rows**, one per (class, method, arm) in `class-methods.txt`,
 //!   owned by 5c and reported here rather than gated.
 //!
-//! # The table types no expected bytes
+//! # The table types no expected bytes, and one expected count
 //!
-//! As in table D, no oracle answer is recorded anywhere in this file or
+//! As in table D, no oracle *answer* is recorded anywhere in this file or
 //! beside it. Every row's oracle column is produced by launching the oracle
 //! on the run that reports it, so a row cannot pass by agreeing with a
 //! recording of itself.
+//!
+//! The one exception is [`Concept::oracle_lines`], a line count per concept
+//! row. It is a shape and not an answer -- it holds no byte the oracle
+//! produced, and it can only make a row **fail** -- and the concept family is
+//! the one whose probes nothing derives, so it is where the bound has to come
+//! from somewhere. Its own doc carries the rest.
 //!
 //! # A non-`agree` row is not a failing test
 //!
@@ -115,7 +121,8 @@ use std::path::{Path, PathBuf};
 
 use gate_tables::{
     Descriptors, Report, Structural, Verdict, assert_no_structural_failures, compare_raw, excerpt,
-    is_loud, refused_construct, run_on_both_engines, verdict, verdict_is_gated,
+    is_loud, refused_construct, run_on_both_engines, stdout_lines, verdict, verdict_is_gated,
+    verdict_label,
 };
 use support::oracle::{CppOutcome, did_not_finish, wrapped_exit_code};
 
@@ -543,29 +550,149 @@ fn method_probe(class: &str, arm: &str) -> String {
     format!("{METHOD_SUBDIR}/{}__{arm}.rex", class.to_ascii_lowercase())
 }
 
+/// The marker a class probe prints the `.environment` entry itself under.
+///
+/// [`check_entry_present`] reads the oracle's answer back by it, so it is
+/// spelled once and both sides of that pair are in this file.
+const ENTRY_MARKER: &str = "entry ";
+
+/// The questions a class wiring row asks that **any** `.environment` entry
+/// answers, whether it is a class object or an instance.
+///
+/// Split out from the rest because the split is the row's bound: an `entry`
+/// column reading `class` says every question below answers, and one reading
+/// `instance` says only these do. See [`class_probe_shape`].
+fn class_probe_entry_questions(name: &str) -> Vec<String> {
+    vec![
+        format!("say '{}' .{name}\n", ENTRY_MARKER.trim_end()),
+        format!("say 'class-of-entry' .{name}~class~id\n"),
+    ]
+}
+
+/// The questions a class wiring row asks that only a **class object** answers.
+fn class_probe_class_questions(name: &str) -> Vec<String> {
+    vec![
+        format!("say 'id' .{name}~id\n"),
+        format!("say 'class' .{name}~class\n"),
+        format!("say 'superclass' .{name}~superClass\n"),
+        format!("say 'superclasses' .{name}~superClasses~makeString('L', ' ')\n"),
+        format!("say 'metaclass' .{name}~metaClass\n"),
+        format!("say 'isa-class' .{name}~isA(.Class)\n"),
+    ]
+}
+
 /// The text of a class wiring row's probe.
 ///
 /// **This function is the definition of the program**, not a copy of it: the
 /// committed file is compared against this on every run, in both directions,
 /// so a probe cannot ask about a class other than its row's.
+///
+/// One text for every row, whatever its `entry` column says; what the column
+/// decides is how many of these lines the entry can answer, which is
+/// [`class_probe_shape`]'s job.
 fn class_probe_text(name: &str) -> String {
     let mut text = format!(
-        "/* Table C wiring row: the .{name} environment entry, asked the questions\n\
-         \x20  the class surface is wired by -- ~id, ~class, ~superClass,\n\
-         \x20  ~superClasses, ~metaClass and ~isA(.Class). Derived from\n\
-         \x20  corpus/docs/class-set.txt by crates/rexx-exec/tests/gate_table_c.rs,\n\
-         \x20  which re-derives this file on every run and compares it in both\n\
-         \x20  directions. */\n"
+        "/* Table C wiring row: the .{name} environment entry, asked what it\n\
+         \x20  renders as and what its class is -- questions any entry answers --\n\
+         \x20  and then the questions the class surface is wired by: ~id, ~class,\n\
+         \x20  ~superClass, ~superClasses, ~metaClass and ~isA(.Class). Derived\n\
+         \x20  from corpus/docs/class-set.txt by\n\
+         \x20  crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on\n\
+         \x20  every run and compares it in both directions. */\n"
     );
-    text.push_str(&format!("say 'id' .{name}~id\n"));
-    text.push_str(&format!("say 'class' .{name}~class\n"));
-    text.push_str(&format!("say 'superclass' .{name}~superClass\n"));
-    text.push_str(&format!(
-        "say 'superclasses' .{name}~superClasses~makeString('L', ' ')\n"
-    ));
-    text.push_str(&format!("say 'metaclass' .{name}~metaClass\n"));
-    text.push_str(&format!("say 'isa-class' .{name}~isA(.Class)\n"));
+    for line in class_probe_entry_questions(name) {
+        text.push_str(&line);
+    }
+    for line in class_probe_class_questions(name) {
+        text.push_str(&line);
+    }
     text
+}
+
+/// How many lines a class wiring row's probe prints on the oracle.
+///
+/// **This is the arm the `entry` column decides, and it must not be zero.**
+/// A bound of zero is satisfied by a program that produced nothing at all, so
+/// a row filed as an instance entry over a name the build does not have would
+/// read `agree` on the two interpreters raising alike -- the same defect the
+/// class arm's bound exists to catch, reintroduced through the other side of
+/// the same `if`. The instance shape therefore opens with questions any entry
+/// answers, and its bound is how many of those there are.
+fn class_probe_shape(name: &str, entry: &str) -> OracleShape {
+    let entry_questions = class_probe_entry_questions(name).len();
+    match entry {
+        "class" => OracleShape::Exactly(entry_questions + class_probe_class_questions(name).len()),
+        _ => OracleShape::Exactly(entry_questions),
+    }
+}
+
+/// The `entry` values [`class_probe_shape`] and [`check_edge_endpoints`] know
+/// how to read.
+///
+/// **Read at two decision sites and validated nowhere is how a typo exempts a
+/// row instead of reddening it**: an unrecognised value falls to the
+/// instance arm's bound and drops out of the edge families' referential
+/// check, both silently. Recognised here, so a fourth kind is a structural
+/// failure that names the row.
+const ENTRY_KINDS: &[&str] = &["class", "instance"];
+
+/// Every class row's `entry` column is a value this file knows how to read.
+fn check_entry_kinds(classes: &[ClassRow], structural: &mut Vec<Structural>) {
+    for row in classes {
+        if !ENTRY_KINDS.contains(&row.entry.as_str()) {
+            structural.push(Structural {
+                subject: format!("class-set.txt row {}", row.name),
+                detail: format!(
+                    "its `entry` column reads {:?}, which is not one of {ENTRY_KINDS:?}. \
+                     Both the bound on its probe's output and its place in the hierarchy \
+                     rows' referential check are decided by that column, so an \
+                     unrecognised value exempts the row from each rather than reddening",
+                    row.entry
+                ),
+            });
+        }
+    }
+}
+
+/// Records a structural failure when the oracle does not resolve the row's
+/// name to an `.environment` entry at all.
+///
+/// **What separates a real entry from a name nothing defines**, and why a
+/// line count cannot do it alone: an unresolved environment symbol evaluates
+/// to its own name as a string, so `.Zork` renders as `.ZORK` and answers
+/// `~class~id` with `String` -- one line either way, and both interpreters
+/// agree on it. Measured, `.Array` renders as `The Array class` and
+/// `.RexxInfo` as `a RexxInfo`. So the discriminator is the rendering, and it
+/// is checked here rather than in the probe because the probe cannot fail;
+/// it is the row's own claim that this name is an entry.
+fn check_entry_present(
+    probe: &str,
+    name: &str,
+    oracle_stdout: &[u8],
+    structural: &mut Vec<Structural>,
+) -> bool {
+    let text = String::from_utf8_lossy(oracle_stdout);
+    let answer = text
+        .lines()
+        .find_map(|line| line.strip_prefix(ENTRY_MARKER));
+    let unresolved = format!(".{}", name.to_ascii_uppercase());
+    if let Some(answer) = answer
+        && answer != unresolved
+    {
+        return true;
+    }
+    structural.push(Structural {
+        subject: probe.to_string(),
+        detail: format!(
+            "the oracle does not resolve .{name} to an `.environment` entry: its \
+             `{ENTRY_MARKER}` answer is {answer:?}, which is how an unresolved \
+             environment symbol renders. The row claims this name is an entry; where the \
+             shipped build has no such name, both interpreters raise alike on every \
+             question below and the row would read `agree` over a class that does not \
+             exist"
+        ),
+    });
+    false
 }
 
 /// The text of a hierarchy edge row's probe.
@@ -764,23 +891,6 @@ fn check_oracle_shape(
         ),
     });
     false
-}
-
-/// Splits a program's `stdout` into lines for per-row attribution.
-///
-/// Empty input is no lines rather than one empty line. `split` on an empty
-/// slice yields one empty slice, which would make a program that printed
-/// nothing look as though it had answered one row -- the shape the instance
-/// arm of a class with no instance produces on every run.
-fn stdout_lines(bytes: &[u8]) -> Vec<&[u8]> {
-    if bytes.is_empty() {
-        return Vec::new();
-    }
-    let mut lines: Vec<&[u8]> = bytes.split(|&b| b == b'\n').collect();
-    if bytes.last() == Some(&b'\n') {
-        lines.pop();
-    }
-    lines
 }
 
 /// Whether one method row's own `stdout` channel differs.
@@ -1032,8 +1142,6 @@ fn check_probe_text(
             // program still exists, still runs, and still produces a verdict
             // -- so a silent return turns off the only thing standing between
             // a row's verdict and a program about a different subject.
-            // Measured: one `0xff` byte appended to a probe whose body asked
-            // about another class left the table exiting 0.
             //
             // Guarded on the directory listing for the reason `run_probe`'s
             // own arm is: a genuinely missing file is the set check's case and
@@ -1080,14 +1188,12 @@ fn check_probe_text(
 /// only is reported as the empty string on the other.
 ///
 /// `split_inclusive`, not `lines`. `lines` strips the terminator and a
-/// trailing `\r` with it, and cannot see a missing final newline at all --
-/// so a file differing from its derivation *only* in line endings produced
-/// two identical empty strings and a message that told the reader nothing.
-/// Measured on both shapes: a stripped final newline and a CRLF conversion.
-/// This repository carries no `.gitattributes`, so a CRLF checkout puts every
-/// derived probe through this path at once, which is why the diagnostic has
-/// to survive it. The caller escapes both sides, so a `\r` and a missing
-/// `\n` are visible in the message.
+/// trailing `\r` with it, and cannot see a missing final newline at all, so a
+/// file differing from its derivation *only* in line endings is a difference
+/// this function has to be able to point at. This repository carries no
+/// `.gitattributes`, so a CRLF checkout puts every derived probe through this
+/// path at once. The caller escapes both sides, so a `\r` and a missing `\n`
+/// are visible in the message.
 fn first_difference(left: &str, right: &str) -> (usize, String, String) {
     let mut lefts = left.split_inclusive('\n');
     let mut rights = right.split_inclusive('\n');
@@ -1371,6 +1477,7 @@ fn concept_and_class_gate_table() {
         );
     }
 
+    check_entry_kinds(&classes, &mut structural);
     check_interpolated_text(&classes, &mut structural);
     check_edge_endpoints(&classes, &edges, &mut structural);
     let argutil = argutil_assertion(&classes, &edges, &mut structural);
@@ -1430,21 +1537,19 @@ fn concept_and_class_gate_table() {
         ) else {
             continue;
         };
-        // `entry` is the row's own claim about what the `.environment` entry
-        // is -- `class-set.txt`'s header states it for the one row that is not
-        // a class object ("its .environment entry is an instance, not the
-        // class object") -- so it is the claim this checks rather than an
-        // assumption made about the oracle. A `class` row whose entry answers
-        // every question prints one line per question; a row whose entry is
-        // not a class object raises at the first and prints none.
-        let asked = derived_say_lines(&class_probe_text(&row.name));
-        let answered = check_oracle_shape(
-            &probe,
-            &row.name,
-            OracleShape::Exactly(if row.entry == "class" { asked } else { 0 }),
-            &ran.oracle_stdout,
-            &mut structural,
-        );
+        // Two checks, and neither subsumes the other. The bound says the
+        // program printed what a row filed this way prints; the presence
+        // check says the name is an entry at all, which no line count can
+        // decide because an unresolved environment symbol answers the
+        // opening questions as a string.
+        let answered =
+            check_oracle_shape(
+                &probe,
+                &row.name,
+                class_probe_shape(&row.name, &row.entry),
+                &ran.oracle_stdout,
+                &mut structural,
+            ) && check_entry_present(&probe, &row.name, &ran.oracle_stdout, &mut structural);
         measured.push(Measured {
             kind: "class",
             subject: row.name.clone(),
@@ -1766,18 +1871,23 @@ fn concept_and_class_gate_table() {
 
     // Said here, in the summary a reader meets the counts in, rather than
     // only in a report nobody reads at the moment they see green. These are
-    // the rows whose group's probe raised at `~new` on the oracle: the
-    // documented names were never asked, so they are `unanswered` above
-    // rather than `agree`, and no run of this table can move them until an
-    // instance exists.
-    let constructor_raised: usize = method_programs
+    // the method rows no documented name was asked of: their group's probe
+    // raised before reaching them, so they are `unanswered` above rather than
+    // `agree`, and no run of this table can move them until an instance
+    // exists.
+    //
+    // Counted from the verdicts themselves rather than from the oracle's own
+    // output, because the sentence and the column have to agree: a group
+    // whose oracle raised while this crate answered has rows that **were**
+    // asked on one side, and an oracle-only predicate would put them in this
+    // line while the table reported them as divergences.
+    let unasked = method_measured
         .iter()
-        .filter(|program| program.oracle_stdout.is_empty())
-        .map(|program| program.rows.len())
-        .sum();
+        .filter(|(_, verdict, _, _)| verdict.is_none())
+        .count();
     report.line(&format!(
-        "  method rows whose group's probe raised at ~new on the oracle, so no documented \
-         name was asked on either side: {constructor_raised}"
+        "  method rows no documented name was asked of, on either side, because their \
+         group's probe raised first: {unasked}"
     ));
 
     report.line("");
@@ -1834,18 +1944,6 @@ struct MethodProgram {
     crate_stdout: Vec<u8>,
     crate_stderr: Vec<u8>,
 }
-
-/// The label a row's verdict is reported and tallied under, including the
-/// case where there is no verdict because the oracle answered nothing.
-fn verdict_label(verdict: Option<Verdict>) -> &'static str {
-    match verdict {
-        Some(verdict) => verdict.label(),
-        None => UNANSWERED,
-    }
-}
-
-/// The label for a row whose oracle side did not answer the row's question.
-const UNANSWERED: &str = "unanswered";
 
 /// One row of the report, with the three descriptors on both sides when the
 /// row is not `agree`.

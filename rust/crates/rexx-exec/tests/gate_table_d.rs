@@ -55,6 +55,20 @@
 //! A keyword neither `dire.xml` nor `DirectiveParser.cpp` names is outside the
 //! denominator, because the row set is their union and nothing else.
 //!
+//! **For a row [`ORACLE_REFUSES`] names, what is checked is that the oracle
+//! refused, not what it refused.** Those rows print nothing on `stdout` --
+//! measured, and it is not a probe that could be written differently: the
+//! refusal is a translate-time or install-time failure, and both precede the
+//! program's own first clause, so a line printed "before" the directive does
+//! not exist. The bound is therefore that the oracle wrote a report on
+//! `stderr` at all. A probe rewritten to fail for an unrelated reason still
+//! writes one and is not caught here; nothing derives these programs, so the
+//! instrument against that is the diff. The task that could close it is one
+//! that gives table D's row set a column saying what each row's probe is
+//! expected to produce -- the same standing gate table C's `entry` and
+//! `status` columns have, and the same "a plan task's committed output"
+//! ruling that put those there.
+//!
 //! And a row's verdict is about a directive **keyword**. A probe exercises the
 //! keyword at its position; what the directive then does with it is only
 //! visible here to the extent that the program's three descriptors show it. A
@@ -80,7 +94,8 @@ use std::path::{Path, PathBuf};
 use gate_tables::orx::{self, CORE_CLASSES, STREAM_CLASSES};
 use gate_tables::{
     Descriptors, Report, Structural, Verdict, assert_no_structural_failures, compare_raw, excerpt,
-    is_loud, refused_construct, run_on_both_engines, verdict, verdict_is_gated,
+    is_loud, refused_construct, run_on_both_engines, stdout_lines, verdict, verdict_is_gated,
+    verdict_label,
 };
 use support::oracle::{did_not_finish, wrapped_exit_code};
 
@@ -260,25 +275,37 @@ const ORACLE_REFUSES: &[(&str, &str)] = &[
     ("::ROUTINE", "EXTERNAL"),
 ];
 
+/// Whether [`ORACLE_REFUSES`] names this row.
+fn oracle_refuses(row: &Row) -> bool {
+    ORACLE_REFUSES
+        .iter()
+        .any(|&(directive, keyword)| directive == row.directive && keyword == row.keyword)
+}
+
 /// How many lines of `stdout` a row's probe prints on the oracle: one, unless
 /// the row is one [`ORACLE_REFUSES`] names, and then none.
 fn expected_oracle_lines(row: &Row) -> usize {
-    let refused = ORACLE_REFUSES
-        .iter()
-        .any(|&(directive, keyword)| directive == row.directive && keyword == row.keyword);
-    usize::from(!refused)
+    usize::from(!oracle_refuses(row))
 }
 
-/// Counts the lines of a program's `stdout`.
+/// Whether the oracle answered a refusing row's question.
 ///
-/// Empty input is no lines rather than one empty line: `split` on an empty
-/// slice yields one empty slice, which would make a program that printed
-/// nothing look as though it had answered.
-fn stdout_line_count(bytes: &[u8]) -> usize {
-    if bytes.is_empty() {
-        return 0;
-    }
-    bytes.split(|&b| b == b'\n').count() - usize::from(bytes.last() == Some(&b'\n'))
+/// **A bound of zero lines is satisfied by a program that produced nothing at
+/// all**, which is the whole of finding 1 reintroduced through the other side
+/// of the same `if`: a refusing row's two sides both print nothing on
+/// `stdout`, so `compare_raw` agrees and the row reads `agree` with nothing
+/// asked. Measured, replacing such a row's probe with a program reading `nop`
+/// did exactly that and took the 5a open count down by one.
+///
+/// **A non-zero `stdout` bound does not exist for these rows, and that was
+/// measured rather than assumed.** Every probe here already opens with
+/// `say 'main'`; for these the oracle prints nothing, because the refusal is
+/// a translate-time or install-time failure and both precede the program's
+/// first clause. So the answer these rows do give is a refusal on `stderr`,
+/// and that is what is required: measured, each of them writes a report there
+/// (the shortest 244 bytes) while `nop` writes none.
+fn refusal_answered(oracle_stderr: &[u8]) -> bool {
+    !oracle_stderr.is_empty()
 }
 
 /// The five cells partition the cube of three booleans.
@@ -352,18 +379,6 @@ struct Measured {
     crate_stderr: Vec<u8>,
     core_uses: Vec<orx::Hit>,
     stream_uses: Vec<orx::Hit>,
-}
-
-/// The label for a row whose oracle side did not answer the row's question.
-const UNANSWERED: &str = "unanswered";
-
-/// The label a row's verdict is reported and tallied under, including the case
-/// where there is no verdict because the oracle answered nothing.
-fn verdict_label(verdict: Option<Verdict>) -> &'static str {
-    match verdict {
-        Some(verdict) => verdict.label(),
-        None => UNANSWERED,
-    }
 }
 
 /// Renders the `.orx` usage column: how many clauses in each file use the
@@ -495,8 +510,20 @@ fn directive_option_gate_table() {
         // fail identically agree on all three descriptors, so a row whose
         // probe the oracle never reached would read `agree` and be counted
         // as satisfied with nothing asked.
-        let answered = stdout_line_count(&cpp.stdout);
+        let answered = stdout_lines(&cpp.stdout).len();
         let expected = expected_oracle_lines(&row);
+        let refusal_missing = expected == 0 && !refusal_answered(&cpp.stderr);
+        if refusal_missing {
+            structural.push(Structural {
+                subject: probe.clone(),
+                detail: "the oracle refuses this row's probe, so its answer is the report \
+                         it writes on `stderr` -- and it wrote none. A row whose two sides \
+                         both produce nothing on either channel agrees on all three \
+                         descriptors and would read `agree` for a question neither was \
+                         asked"
+                    .to_string(),
+            });
+        }
         if answered != expected {
             structural.push(Structural {
                 subject: probe.clone(),
@@ -517,7 +544,7 @@ fn directive_option_gate_table() {
         measured.push(Measured {
             probe,
             phase,
-            verdict: (answered == expected).then(|| verdict(differs)),
+            verdict: (answered == expected && !refusal_missing).then(|| verdict(differs)),
             loud: is_loud(&crate_side),
             refused: refused_construct(&crate_side.stderr),
             oracle_exit: cpp.expect_exit_code(),

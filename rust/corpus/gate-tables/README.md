@@ -42,10 +42,29 @@ Gate table C's probes, run by `crates/rexx-exec/tests/gate_table_c.rs`:
 **Every row's oracle side is checked for having answered at all, before any
 verdict exists.** Two interpreters that fail identically agree on all three
 descriptors, so a row naming a class this build does not ship would otherwise
-read `agree` and count as satisfied. The bound is the derived probe text for
-`classes/`, `hierarchy/` and `methods/`, and a committed line count per section
-for `concepts/`, whose probes are hand-written. `directives/` has the same
-check, against the one line each of its probes prints.
+read `agree` and count as satisfied. What the check is per directory:
+
+* `classes/` -- the derived probe text, **gated on the row's `entry` column**:
+  a `class` entry answers every question the probe asks, an `instance` entry
+  only the opening ones. On top of that, the oracle has to resolve the name to
+  an entry at all, which a line count cannot decide: an unresolved environment
+  symbol evaluates to its own name as a string and answers those opening
+  questions too.
+* `hierarchy/` and `methods/` -- the derived probe text; a method group's
+  instance arm may answer every line or none, since its `~new` either
+  constructs or raises.
+* `concepts/` -- a committed line count per section, because these probes are
+  hand-written and nothing derives them.
+* `directives/` -- **one line for most rows and none for the rows the oracle
+  refuses**, which are named in `ORACLE_REFUSES` in
+  `crates/rexx-exec/tests/gate_table_d.rs` and policed in both directions.
+  Measured, those probes print nothing at all: they open with `say 'main'`
+  like the rest, but their refusal is a translate-time or install-time failure
+  and both precede the program's first clause. So what those rows are required
+  to answer is the report the oracle writes on `stderr`.
+
+A row that fails its check keeps its place in the table and is reported as
+`unanswered`. It is never `agree`, and it still counts against the gate.
 
 **Those last three are derived, text and all.** `gate_table_c.rs`'s
 `class_probe_text`, `edge_probe_text` and `method_probe_text` are the
