@@ -970,11 +970,9 @@ impl Interp {
         // 26.8 with the frame (the base converts fine; the *exponent*
         // fails), and `s. = 1; say s. + .array` is 41.1 with the frame even
         // though it is the *right* operand's own conversion that fails.
-        // `blame_stem_forwarded_operator`'s own predicate is unchanged, but
-        // this call site is not: a non-stem receiver now reaches it on any
-        // failure here, where the removed inline call inside
-        // `arith_left_operand` only reached it from that function's own
-        // narrower branch.
+        // The receiver test is `blame_stem_forwarded_operator`'s own, so
+        // this site gates on failure alone and hands it every failing path
+        // here, leaving a non-stem receiver for that predicate to discard.
         if result.is_err() {
             self.blame_stem_forwarded_operator(op.spelling().as_bytes(), left_value);
         }
@@ -1099,11 +1097,12 @@ impl Interp {
     /// -- a no-op otherwise.
     ///
     /// **Called once per operator, wrapping the whole computation over
-    /// `value` rather than any one step of it** -- [`Interp::arith_general`],
-    /// [`Interp::apply_prefix`] and [`Interp::logical_values`] each call
-    /// this on any failure of their own, and `Interp::header_number`
-    /// (`run.rs`) does the same for the other receiver of a real unary `+`
-    /// this crate models. The frame belongs to the receiver, not to which
+    /// `value` rather than any one step of it.** A caller is an adapter
+    /// that evaluates one operator whose receiver is `value`, and it calls
+    /// this on any failure of its own -- `Interp::header_number` (`run.rs`)
+    /// among them, where a controlled `DO` header position is not written
+    /// as an operator but is rounded through a real unary `+` whose
+    /// receiver it is. The frame belongs to the receiver, not to which
     /// step of evaluating its operator raised: measured, `s. = 1; say s. /
     /// 0` (an arithmetic overflow past a valid conversion), `say s. **
     /// 999999999999` (the exponent's own range check), `s. = 'abc'; say s.

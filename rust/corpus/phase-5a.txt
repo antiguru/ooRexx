@@ -210,10 +210,11 @@ lang/operator_frame_stem_do_exponent_range.rex
 # operator families split by whether the operator needs a number, not by
 # whether it is arithmetic, so a non-strict comparison reaches the same
 # forwarded frame once both operands are numeric. `Interp::compare_values`
-# joins the same blame-on-any-failure shape the other four adapters already
-# have. One program stands for the six non-strict comparison operators that
-# reach `compare_values`'s numeric path (`>` here; `<`, `>=`, `<=`, `=` and
-# `\=` were measured to carry the identical frame). Strict comparison and
-# the non-numeric fallback never reach `compare_numbers` and stay frameless,
-# which this program does not exercise.
+# joins the same blame-on-any-failure shape the other adapters have. One
+# program stands for the operators that reach `compare_values`'s numeric
+# path -- `>` here, and an operator is on that path when `is_comparison`
+# admits it and `is_strict_compare` rejects it, both in `eval.rs`, which is
+# where that set is written down in code rather than in prose. Strict
+# comparison and the non-numeric fallback never reach `compare_numbers` and
+# stay frameless, which this program does not exercise.
 lang/operator_frame_stem_compare_overflow.rex
