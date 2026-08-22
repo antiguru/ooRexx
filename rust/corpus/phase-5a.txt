@@ -337,3 +337,12 @@ lang/array_trace.rex
 lang/raise_additional_array.rex
 lang/raise_array_spelling.rex
 lang/raise_keyword_object_traces.rex
+
+# Fix round 2: a nested array as a substitution item, which needs a list inside
+# a list and so became reachable only once the parenthesised list evaluated --
+# measured, both shapes are rc 120 loud at f4b21eadb~1. The item is rendered by
+# stringValue(), so it reads `an Array` rather than its inner elements joined.
+# One program per spelling, both raw-compared, for the reason the pair above is
+# two programs.
+lang/raise_array_nested.rex
+lang/raise_additional_nested.rex

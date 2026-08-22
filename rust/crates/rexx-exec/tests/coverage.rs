@@ -998,6 +998,8 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/raise_additional_array.rex",
     "lang/raise_array_spelling.rex",
     "lang/raise_keyword_object_traces.rex",
+    "lang/raise_array_nested.rex",
+    "lang/raise_additional_nested.rex",
 ];
 
 #[test]

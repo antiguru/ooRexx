@@ -1,0 +1,15 @@
+count 14
+/* The same nested item on the ADDITIONAL spelling, which is the other half of
+ * the pair raise_array_nested.rex opens: the two arms reach one renderer today,
+ * so a change to it moves both, and one program per spelling is what keeps the
+ * pair pinned if they ever stop sharing it.
+ *
+ * The report is byte-identical to raise_array_nested.rex's. The traces are not:
+ * an element written in an ARRAY list gets two `>A>` lines where a
+ * parenthesised list gets one per written element plus a `>>>` of its own, and
+ * the inner list contributes its own set of those either way.
+ *
+ * Untrapped, traced and raw-compared for the reasons that program gives. rc 216.
+ */
+trace i
+raise syntax 40.4 additional ((1,2),,'X')

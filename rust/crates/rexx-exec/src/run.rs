@@ -4657,7 +4657,22 @@ impl Interp {
                 // (.environment)` and `array (.array, 'b')` are all rc 216
                 // and byte-identical here. A check on this arm refused all
                 // three.
-                let rendered = self.to_text(value).to_vec();
+                //
+                // **`stringValue()` renders them, in the substitution and on
+                // both trace lines alike**, which the `ADDITIONAL` arm above
+                // reaches through the same [`Interp::string_value_text`]. A
+                // nested array is where that parts from the string value:
+                // measured, three descriptors, `raise syntax 93.900 array
+                // ((1,2),3)` reports `Error 93.900:  an Array.` and traces
+                // `>A>   "an Array"` twice for the inner list, where joining
+                // its elements reported and traced `1` and `2` on two lines.
+                //
+                // **The two arms share the renderer and not the slots**, and
+                // that is the shape of the construct rather than a compromise:
+                // an `ARRAY` list's elements come from the parse and there is
+                // no array object to read slots off, where `ADDITIONAL`'s one
+                // value is the array and its slots are the whole list.
+                let rendered = self.string_value_text(value);
                 self.trace_argument(indent, &rendered);
                 self.trace_argument(indent, &rendered);
                 additional.push(rendered);

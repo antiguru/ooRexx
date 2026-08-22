@@ -1933,11 +1933,18 @@ fn do_over_a_non_stem_target_iterates_once_yielding_itself() {
 
 /// `DO OVER ... FOR` on a non-stem target: `FOR 0` skips the one
 /// iteration entirely; any `FOR` at least `1` still runs it exactly
-/// once (there is only ever one item). Not independently measured
-/// against the oracle (no oracle transcript pins `OVER ... FOR` on a
-/// non-stem target specifically); implemented as the direct, minimal
-/// extension of `FOR`'s own general "caps the iteration count" rule,
-/// and named as a judgement call in the report.
+/// once (there is only ever one item).
+///
+/// **The control variable is bound either way, and that half is what this
+/// test did not assert.** `RexxInstructionDoOverFor::iterate` is
+/// `doblock->checkOver(context, stack) && doblock->checkFor()`
+/// (`instructions/DoOverInstruction.cpp:279`), so the item is assigned before
+/// the budget is consulted and a `FOR 0` loop leaves the name holding it.
+/// Measured, three descriptors: `x = 'pre'` then `do x over 'hello' for 0` with
+/// a `SAY` in the body prints only `hello` from after the loop -- the body
+/// never runs and `x` is not `pre`. `corpus/lang/array_do_over.rex` carries
+/// that row against the oracle, and the third assertion below is its in-crate
+/// half.
 #[test]
 fn do_over_for_0_skips_the_single_non_stem_iteration() {
     let mut interp = Interp::new();
@@ -1951,6 +1958,16 @@ fn do_over_for_0_skips_the_single_non_stem_iteration() {
     let mut interp = Interp::new();
     assert_eq!(
         say_output(&mut interp, b"do x over 'hello' for 5\nsay x\nend"),
+        b"hello\n".to_vec()
+    );
+    // The skipped pass still binds, so the name outlives the loop holding the
+    // item rather than whatever it held before.
+    let mut interp = Interp::new();
+    assert_eq!(
+        say_output(
+            &mut interp,
+            b"x = 'pre'\ndo x over 'hello' for 0\nsay 'body'\nend\nsay x"
+        ),
         b"hello\n".to_vec()
     );
 }

@@ -306,6 +306,11 @@ const RAW_STDERR_COMPARISON: &[&str] = &[
     "lang/raise_additional_array.rex",
     "lang/raise_array_spelling.rex",
     "lang/raise_keyword_object_traces.rex",
+    // Fix round 2: a nested array as a substitution item. Its traced element
+    // lines are indented and its report reads the item's own object name, both
+    // of which the normaliser would blur.
+    "lang/raise_array_nested.rex",
+    "lang/raise_additional_nested.rex",
     // Phase 5a Task 7's two traced method activations. The indent a
     // `::METHOD` body's clauses echo at is the thing under test -- 0,
     // whatever the sending clause's own indent was -- and normalisation
