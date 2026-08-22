@@ -1446,8 +1446,8 @@ impl Raised {
         Raised::syntax(97, 1, vec![target.to_vec(), name.to_vec()])
     }
 
-    /// The `NOMETHOD` condition a dispatch miss offers to the activation
-    /// stack, whose untrapped rendering is [`Raised::no_method`]'s own 97.1.
+    /// The `NOMETHOD` condition a dispatch miss raises, whose untrapped
+    /// rendering is [`Raised::no_method`]'s own 97.1.
     ///
     /// Built from that function so the catalogue coordinates are written
     /// once, and differing from it in the three things a trapping handler

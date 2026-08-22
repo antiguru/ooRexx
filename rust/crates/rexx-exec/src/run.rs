@@ -3926,8 +3926,14 @@ impl Interp {
     /// `&mut self` method in the same breath (`remove` the trap, then
     /// `set_sigl`), which a borrow of the running activation held across would
     /// make the `E0502` `run_activation`'s own doc comment writes out.
+    ///
+    /// **`None` where nothing is running**, rather than
+    /// [`Interp::activation`]'s panic: a send asked for outside any
+    /// activation has no trap table to consult and no trap, which is
+    /// [`Interp::nomethod`]'s reading and is what `dispatch.rs`'s own
+    /// `send_message` tests do.
     pub(crate) fn trap_for(&self, condition: &[u8]) -> Option<Trap> {
-        let traps = &self.activation().traps;
+        let traps = &self.running_activation()?.traps;
         traps
             .get(condition)
             .or_else(|| traps.get(b"ANY".as_slice()))
@@ -3936,36 +3942,6 @@ impl Interp {
             // something raising the same condition depends on.
             .filter(|trap| !trap.delayed)
             .cloned()
-    }
-
-    /// Whether **any** live activation, the running one included, has a
-    /// `SIGNAL ON` trap that would take `condition`.
-    ///
-    /// [`Interp::trap_for`] asks the running activation alone, which is the
-    /// right question on the failure path: a failure is offered to each
-    /// activation in turn as it unwinds, so the walk happens there. This is
-    /// for a raiser that has to know the answer for the **whole stack**
-    /// before it can choose what to raise -- `raiseCondition`'s own return
-    /// value, which `reportNomethod` tests before falling back to a syntax
-    /// error (`concurrency/ActivityManager.hpp:509`).
-    ///
-    /// A `CALL ON` trap is excluded for the same reason `offer_to_trap`
-    /// declines one: there is nothing to resume into once a clause has
-    /// failed, and `TrapHandler::canHandle` (`execution/TrapHandler.cpp:118`)
-    /// refuses this whole family to a `CALL ON ANY`. Measured, `call on any
-    /// name h` over `say 'abc'~nosuchmsg` is the untrapped 97.1 at rc 159,
-    /// where `signal on any` traps it with `CONDITION('C')` `NOMETHOD`.
-    pub(crate) fn trapped_anywhere(&self, condition: &[u8]) -> bool {
-        std::iter::once(self.running_activation())
-            .flatten()
-            .chain(self.suspended.iter().rev().map(Box::as_ref))
-            .any(|activation| {
-                activation
-                    .traps
-                    .get(condition)
-                    .or_else(|| activation.traps.get(b"ANY".as_slice()))
-                    .is_some_and(|trap| !trap.delayed && !trap.call)
-            })
     }
 
     /// Turns an uninitialised variable read into a `NOVALUE` condition --

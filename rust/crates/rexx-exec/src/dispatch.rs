@@ -1169,25 +1169,44 @@ impl Interp {
     /// depends on what is armed**.
     ///
     /// `reportNomethod` (`concurrency/ActivityManager.hpp:509`) offers a
-    /// `NOMETHOD` condition to the activation stack first and raises the
-    /// 97.1 syntax error only when nothing took it, so the two are separate
-    /// answers a program can tell apart. Measured, `say 'abc'~nosuchmsg`:
-    /// under `signal on nomethod` it traps with `CONDITION('C')` `NOMETHOD`,
-    /// `CONDITION('D')` `NOSUCHMSG`, `CONDITION('E')` the null string and
-    /// `RC` untouched; under `signal on syntax` alone it traps with `C`
-    /// `SYNTAX`, `D` the null string, `E` `1` and `RC` `97`; with a
-    /// `SIGNAL ON SYNTAX` inside a routine and a `SIGNAL ON NOMETHOD` in its
-    /// caller, the **caller's** `NOMETHOD` handler runs, so the offer really
-    /// does cross activations before the degradation happens.
+    /// `NOMETHOD` condition first and raises the 97.1 syntax error only when
+    /// nothing took it, so the two are separate answers a program can tell
+    /// apart. Measured, `say 'abc'~nosuchmsg`: under `signal on nomethod` it
+    /// traps with `CONDITION('C')` `NOMETHOD`, `CONDITION('D')` `NOSUCHMSG`,
+    /// `CONDITION('E')` the null string and `RC` untouched; under `signal on
+    /// syntax` alone it traps with `C` `SYNTAX`, `D` the null string, `E` `1`
+    /// and `RC` `97`.
     ///
-    /// That is why the choice is made here rather than left to
-    /// [`Interp::offer_to_trap`]: that function sees one activation at a
-    /// time as the failure unwinds, and by the time the outermost one has
-    /// declined, the inner `SYNTAX` traps that the degraded error is owed
-    /// have already been passed.
+    /// **The offer is to the running activation's own table and goes no
+    /// further** -- [`Interp::trap_for`]'s question, not a walk of the
+    /// activation stack. An internal `CALL` inherits its caller's traps by
+    /// copy ([`Activation::traps`]), so a caller's `SIGNAL ON NOMETHOD` does
+    /// take a miss raised inside such a callee, and beats a `SIGNAL ON
+    /// SYNTAX` that callee armed for itself. A `::METHOD` activation inherits
+    /// none, and that is where the two readings part: measured, with both
+    /// `signal on nomethod` and `signal on syntax` armed in the main body and
+    /// the miss inside a `::METHOD` body, the oracle runs the **`SYNTAX`**
+    /// handler, where a version asking the whole stack runs the `NOMETHOD`
+    /// one.
+    ///
+    /// **The choice belongs here and not in [`Interp::offer_to_trap`]**: that
+    /// function sees each activation in turn as the failure unwinds, and a
+    /// `NOMETHOD` condition declined by the activation that raised it must
+    /// become the 97.1 *there*, in time for that same activation's `SYNTAX`
+    /// trap to take it -- measured, a routine whose own `SIGNAL ON SYNTAX` is
+    /// the only trap armed anywhere does take its own missed send.
+    ///
+    /// A `CALL ON` trap does not count. There is nothing to resume into once
+    /// a clause has failed, and `TrapHandler::canHandle`
+    /// (`execution/TrapHandler.cpp:118`) refuses this whole family to a `CALL
+    /// ON ANY`: measured, `call on any name h` over `say 'abc'~nosuchmsg` is
+    /// the untrapped 97.1 at rc 159 where `signal on any` traps it as
+    /// `NOMETHOD`. Excluding it here is what makes the gate the same test
+    /// `offer_to_trap` applies a moment later, which is the shape
+    /// [`Interp::novalue_raised`] describes for its own condition.
     fn nomethod(&mut self, receiver: ObjRef, name: &[u8]) -> Failure {
         let target = self.message_target_text(receiver);
-        if self.trapped_anywhere(b"NOMETHOD") {
+        if self.trap_for(b"NOMETHOD").is_some_and(|trap| !trap.call) {
             Raised::nomethod(&target, name).into()
         } else {
             Raised::no_method(&target, name).into()
