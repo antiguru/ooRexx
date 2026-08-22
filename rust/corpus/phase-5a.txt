@@ -325,3 +325,15 @@ lang/directory_index_refusals.rex
 # pair a list emits and the >K>/>=> pair a DO OVER emits are indented lines
 # and the indents are the point.
 lang/array_trace.rex
+
+# Fix round 1, finding B2: RAISE's two spellings of a substitution list are one
+# list on the oracle, because `requestArray` answers an array unchanged. The
+# pair is what stops a build implementing one spelling and not the other, and
+# each is untrapped because the substituted message is the only channel that
+# shows the list -- `condition('A')` would answer the array itself and this
+# crate refuses that option. All three are compared raw (see corpus.rs's
+# RAW_STDERR_COMPARISON): the traced value lines are indented and the indents
+# and the `an Array` renderings are the subject.
+lang/raise_additional_array.rex
+lang/raise_array_spelling.rex
+lang/raise_keyword_object_traces.rex

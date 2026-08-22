@@ -299,6 +299,13 @@ const RAW_STDERR_COMPARISON: &[&str] = &[
     // the `>>>` for the list itself, and the `>K>` a `DO OVER` header emits
     // against the `>=>` each pass emits two columns further in.
     "lang/array_trace.rex",
+    // Fix round 1, finding B2: RAISE's own keyword value lines. Each renders an
+    // object through `stringValue()` and each is indented, which is what the
+    // three programs exist to pin; the two `ADDITIONAL`/`ARRAY` spellings also
+    // differ from each other only in their traced element lines.
+    "lang/raise_additional_array.rex",
+    "lang/raise_array_spelling.rex",
+    "lang/raise_keyword_object_traces.rex",
     // Phase 5a Task 7's two traced method activations. The indent a
     // `::METHOD` body's clauses echo at is the thing under test -- 0,
     // whatever the sending clause's own indent was -- and normalisation

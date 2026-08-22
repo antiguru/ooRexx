@@ -995,6 +995,9 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/array_index_refusals.rex",
     "lang/directory_index_refusals.rex",
     "lang/array_trace.rex",
+    "lang/raise_additional_array.rex",
+    "lang/raise_array_spelling.rex",
+    "lang/raise_keyword_object_traces.rex",
 ];
 
 #[test]

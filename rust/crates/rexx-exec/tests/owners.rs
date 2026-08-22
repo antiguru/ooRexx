@@ -147,12 +147,14 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     // Whole rather than arm-grained the way `Call` is, both of them. All
     // three `Signal` arms are in scope, so nothing is left inside the
     // variant to split out.
-    // `Raise` is whole, and `RAISE ... ADDITIONAL (a, b)` is the shape that
-    // would once have justified an arm-grained entry: the parenthesised list
-    // is an *expression*, `RAISE ... ARRAY (a, b)` reaches the identical
-    // oracle bytes (measured, the two spellings' reports are byte-identical),
-    // and `ExprKind::List` is in scope. So there is no `RAISE` shape whose gap
-    // belongs to `RAISE`.
+    // `Raise` is whole in the sense `Expose` above is. The shape that would
+    // have forced an arm-grained entry is `ADDITIONAL <array>`, and it answers:
+    // measured on both engines, three descriptors, `raise syntax 40.4
+    // additional (1,,3)` and `... array (1,,3)` are byte-identical to each
+    // other and to the oracle. What has no code is an `ADDITIONAL` value under
+    // a `SYNTAX` condition that is a class object or one of the interpreter's
+    // own, and that is refused through `Loud::object_position` rather than
+    // through this table.
     InstructionKind::Signal(_) => ("Signal", Owner::InScope),
     InstructionKind::Raise(_) => ("Raise", Owner::InScope),
     // Both whole: `queue.rs` stores every line either writes and neither has

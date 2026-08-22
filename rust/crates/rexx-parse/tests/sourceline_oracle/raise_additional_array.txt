@@ -1,0 +1,20 @@
+count 19
+/* RAISE ADDITIONAL given an array. `requestArray` answers an array unchanged,
+ * so the array's own slots are the substitution list and an empty slot holds
+ * its place -- the report below reads `in invocation of R` from slot one and
+ * `maximum expected is .` from the empty slot two, where a build closing the
+ * slots up would read `X` there.
+ *
+ * Untrapped, because the substituted message is the only channel that shows
+ * the list: `condition('A')` would answer the array itself and this crate
+ * refuses that option. rc 216.
+ *
+ * Traced, and compared raw (see corpus.rs's RAW_STDERR_COMPARISON), for the
+ * value lines the keywords owe. Every trace value line renders its object
+ * through stringValue(), so both `DESCRIPTION` and `ADDITIONAL` show
+ * `an Array` here rather than the items joined -- and the list's own elements
+ * show one `>A>` each against the `ARRAY` spelling's two, which
+ * raise_array_spelling.rex is the other half of.
+ */
+trace i
+raise syntax 40.4 description (7,8) additional ('R',,'X')

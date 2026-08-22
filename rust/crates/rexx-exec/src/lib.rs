@@ -806,7 +806,8 @@ impl Loud {
     /// instrument.
     ///
     /// No owner: the construct is implemented and the refusal is not a gap,
-    /// which is the same reason `run.rs`'s two carve-outs print no suffix.
+    /// which is the same reason `Loud::instruction`'s `Do`/`Loop` carve-outs
+    /// print no suffix -- `owned_message`'s own doc names them.
     fn array_index_hole() -> Loud {
         Loud {
             message: owned_message("an array subscript that is an empty slot", None),
@@ -1731,11 +1732,17 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // is a sub-case of a variant and this table is per variant.
         InstructionKind::Procedure { .. } | InstructionKind::Use(_) => None,
         // All three `Signal` arms are implemented, so unlike
-        // `Call` above this one needs no arm-grained match. `RAISE` is
-        // likewise whole: `ADDITIONAL (a, b)` is a parenthesised list, which
-        // is an *expression* and is implemented, and `ARRAY (a, b)` reaches
-        // the identical oracle bytes -- measured, the two spellings' reports
-        // are byte-identical.
+        // `Call` above this one needs no arm-grained match. `RAISE` needs none
+        // either, and the shape that would have forced one is
+        // `ADDITIONAL <array>`: measured on both engines, three descriptors,
+        // `raise syntax 40.4 additional (1,,3)` and `... array (1,,3)` are
+        // byte-identical to each other and to the oracle, because
+        // `requestArray` answers an array unchanged and both spellings
+        // therefore build the same substitution list. `ADDITIONAL`'s one shape
+        // with no code here -- a `SYNTAX` condition whose value is a class
+        // object or one of the interpreter's own -- fails loudly through
+        // `Loud::object_position` rather than through this table, which is
+        // where `Expose`'s own two sub-cases are refused too.
         InstructionKind::Signal(_) | InstructionKind::Raise(_) => None,
         // Both keywords are whole: `queue.rs`
         // stores every line either writes, and neither has a shape this

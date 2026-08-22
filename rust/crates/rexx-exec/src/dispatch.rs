@@ -391,11 +391,11 @@ enum Primitive {
     /// `.local`. Measured, `.environment~class~id` is `Directory`.
     ///
     /// **`.methods`, `.routines`, `.resources` and `.context` are not this**,
-    /// even though a `StringTable` answers the same three method names out of
-    /// the same donated `IdentityTable` rows: this crate populates none of
-    /// those tables (`environment.rs`'s `package_string_table`), so answering
-    /// `~at` on one would answer `.nil` for an index the oracle has an entry
-    /// for. They keep the loud arm.
+    /// even though a `StringTable` answers the names this module's `Directory`
+    /// rows answer, out of the same donated `IdentityTable` rows: this crate
+    /// populates none of those tables (`environment.rs`'s
+    /// `package_string_table`), so answering `~at` on one would answer `.nil`
+    /// for an index the oracle has an entry for. They keep the loud arm.
     Directory,
     /// The receiver **is** a class object, so its messages resolve against
     /// that class's own class behaviour rather than against any class's
@@ -1643,21 +1643,23 @@ fn native_method(
     )))
 }
 
-/// An array receiver's own slots, or the refusal for a receiver that is not
-/// one.
-///
-/// Cloned rather than borrowed, so the caller may go on using `interp`: every
-/// method here renders or converts something after reading the slots.
+/// An array receiver's own slots, borrowed, or the refusal for a receiver that
+/// is not one.
 ///
 /// The refusal is unreachable -- every row that reaches one of these callers
 /// is in `.Array`'s own dictionary, and the only receiver whose behaviour that
 /// dictionary reaches is a `Body::Array`. Loud rather than a panic, this
 /// crate's rule for an internal inconsistency.
-fn array_slots(interp: &Interp, receiver: ObjRef) -> Result<Vec<Option<ObjRef>>, Failure> {
-    match interp.heap.get(receiver).map(|object| &object.body) {
-        Some(Body::Array(items)) => Ok(items.clone()),
-        _ => Err(Loud::receiver_class("a value that is not an array").into()),
-    }
+fn array_slots(interp: &Interp, receiver: ObjRef) -> Result<&[Option<ObjRef>], Failure> {
+    interp
+        .array_slots(receiver)
+        .ok_or_else(|| Loud::receiver_class("a value that is not an array").into())
+}
+
+/// [`array_slots`] as an owned copy, for a caller that renders the slots and
+/// so needs `interp` back.
+fn array_slots_owned(interp: &Interp, receiver: ObjRef) -> Result<Vec<Option<ObjRef>>, Failure> {
+    Ok(array_slots(interp, receiver)?.to_vec())
 }
 
 /// The one subscript `.Array`'s `[]`/`AT` were given, 1-based, or the refusal
@@ -1677,13 +1679,13 @@ fn array_slots(interp: &Interp, receiver: ObjRef) -> Result<Vec<Option<ObjRef>>,
 fn array_index(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<usize, Failure> {
     let spread;
     let subscripts = match args {
-        [Some(only)] => match interp.heap.get(*only).map(|object| &object.body) {
-            Some(Body::Array(slots)) => {
+        [Some(only)] => match interp.array_slots(*only) {
+            Some(slots) => {
                 let items = slots.iter().flatten().count();
                 spread = slots[..items].to_vec();
                 &spread[..]
             }
-            _ => args,
+            None => args,
         },
         _ => args,
     };
@@ -1741,9 +1743,11 @@ fn native_array_at(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let slots = array_slots(interp, receiver)?;
+    // The subscript first, so the slots are borrowed rather than copied: the
+    // conversion needs `&mut interp` and the read does not, and reading one
+    // slot must not cost a copy of the whole array.
     let index = array_index(interp, args)?;
-    Ok(Some(match slots.get(index - 1) {
+    Ok(Some(match array_slots(interp, receiver)?.get(index - 1) {
         Some(Some(item)) => *item,
         Some(None) | None => ObjRef::NIL,
     }))
@@ -1761,8 +1765,8 @@ fn native_array_size(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let slots = array_slots(interp, receiver)?;
-    Ok(Some(interp.counted(slots.len())))
+    let size = array_slots(interp, receiver)?.len();
+    Ok(Some(interp.counted(size)))
 }
 
 /// `Array~items`: how many slots hold an object -- `ArrayClass::itemsRexx`.
@@ -1776,8 +1780,7 @@ fn native_array_items(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let slots = array_slots(interp, receiver)?;
-    let items = slots.iter().flatten().count();
+    let items = array_slots(interp, receiver)?.iter().flatten().count();
     Ok(Some(interp.counted(items)))
 }
 
@@ -1899,7 +1902,7 @@ fn native_array_make_string(
             interp.to_text(argument).to_vec()
         }
     };
-    let slots = array_slots(interp, receiver)?;
+    let slots = array_slots_owned(interp, receiver)?;
     // The join itself is `Interp::array_string` and not a second loop here:
     // `makeString` with no arguments is what a string context asks an array
     // for, so the two must not be able to disagree about an empty slot or

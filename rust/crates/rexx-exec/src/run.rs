@@ -4504,10 +4504,17 @@ impl Interp {
             Some(expr) => {
                 let value = self.eval(code, expr)?;
                 self.roots.push_temp(value);
-                let rendered = self.to_text(value).to_vec();
+                // **The line renders the object and the code is its string
+                // value**, which `Interp::string_value_text`'s own doc has the
+                // split for: `traceKeywordResult(conditionName, rc)`
+                // (`instructions/RaiseInstruction.cpp:182`) is handed the
+                // object and `rc->requestString()` (`:193`) is what becomes the
+                // code. Measured, `trace i` over `raise syntax (1,2)`:
+                // `>K>   "SYNTAX" => "an Array"`.
+                let traced = self.string_value_text(value);
                 let keyword = String::from_utf8_lossy(&raise.condition).into_owned();
-                self.trace_keyword(indent, &keyword, &rendered);
-                Some(rendered)
+                self.trace_keyword(indent, &keyword, &traced);
+                Some(self.to_text(value).to_vec())
             }
             None => None,
         };
@@ -4519,9 +4526,13 @@ impl Interp {
         if let Some(expr) = &raise.description {
             let value = self.eval(code, expr)?;
             self.roots.push_temp(value);
-            let rendered = self.to_text(value).to_vec();
-            self.trace_keyword(indent, "DESCRIPTION", &rendered);
-            description = Some(rendered);
+            // The object on the line and its string value in the condition,
+            // the same split the `rc` keyword above takes. Measured,
+            // `trace i` over `raise syntax 93.900 description (1,2)
+            // additional 'x'`: `>K>   "DESCRIPTION" => "an Array"`.
+            let traced = self.string_value_text(value);
+            self.trace_keyword(indent, "DESCRIPTION", &traced);
+            description = Some(self.to_text(value).to_vec());
         }
         // `ADDITIONAL expr` and `ARRAY (a, b)` produce the identical
         // substitution list -- measured, `additional ('MYROUTINE', 3)` and
@@ -4552,14 +4563,46 @@ impl Interp {
             // `ADDITIONAL` expression is not evaluated at all under one. The
             // divergence that leaves is recorded in `phase-4-exclusions.txt`
             // and predates this refusal.
-            if raise.condition.eq_ignore_ascii_case(b"SYNTAX")
+            //
+            // **An array is what `requestArray` answers unchanged**, so its own
+            // slots are the substitution list -- which is exactly what the
+            // `ARRAY` spelling below builds, and the two are therefore
+            // byte-identical. Measured, three descriptors on each pair:
+            // `raise syntax 40.4 additional (1,,3)` and `... array (1,,3)`
+            // both report `maximum expected is .` at rc 216, the empty slot
+            // substituting empty in each, and `... additional ('R',,'X')`
+            // against `... array ('R',,'X')` the same at `in invocation of R`.
+            // `RexxObject::requestArray` answers `this` for an array rather
+            // than `makeArray()`, so an empty slot holds its place here as it
+            // does there.
+            let converted = raise.condition.eq_ignore_ascii_case(b"SYNTAX");
+            let slots = if converted {
+                self.array_slots_of(value)
+            } else {
+                None
+            };
+            if converted
+                && slots.is_none()
                 && let Some(kind) = self.operator_operand_gap(value)
             {
                 return Err(Loud::object_position("a RAISE ADDITIONAL value", kind).into());
             }
-            let rendered = self.to_text(value).to_vec();
-            self.trace_keyword(indent, "ADDITIONAL", &rendered);
-            additional.push(rendered);
+            // The object on the line, the same split the two keywords above
+            // take. Measured, `trace i` over `raise syntax 93.900 additional
+            // (1,2)`: `>K>   "ADDITIONAL" => "an Array"`.
+            let traced = self.string_value_text(value);
+            self.trace_keyword(indent, "ADDITIONAL", &traced);
+            match slots {
+                Some(slots) => {
+                    for slot in slots {
+                        additional.push(match slot {
+                            Some(item) => self.string_value_text(item),
+                            None => Vec::new(),
+                        });
+                    }
+                }
+                None => additional.push(self.to_text(value).to_vec()),
+            }
         }
         if let Some(items) = &raise.array {
             // **The elements first, then the `>K>` line** -- corrected at

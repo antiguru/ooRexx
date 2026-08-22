@@ -695,6 +695,26 @@ impl Interp {
         self.to_text(value).to_vec()
     }
 
+    /// An array's own slots, borrowed, or `None` for a value that is not an
+    /// array.
+    ///
+    /// Borrowed rather than cloned, so a caller that wants one slot or a count
+    /// pays for one slot or a count. A caller that renders the slots has to
+    /// clone anyway, because rendering needs `&mut self` and this borrow is
+    /// live until it does.
+    pub(crate) fn array_slots(&self, value: ObjRef) -> Option<&[Option<ObjRef>]> {
+        match &self.heap.get(value)?.body {
+            Body::Array(slots) => Some(slots),
+            _ => None,
+        }
+    }
+
+    /// [`Interp::array_slots`] as an owned copy, for a caller that goes on to
+    /// use `interp`.
+    pub(crate) fn array_slots_of(&self, value: ObjRef) -> Option<Vec<Option<ObjRef>>> {
+        Some(self.array_slots(value)?.to_vec())
+    }
+
     /// [`array_string`] for an array named by its handle, whose items it looks
     /// up itself.
     ///
@@ -704,15 +724,11 @@ impl Interp {
     ///
     /// [`array_string`]: Interp::array_string
     fn array_string_of(&mut self, value: ObjRef) -> Vec<u8> {
-        let items = match self.heap.get(value).map(|object| &object.body) {
-            Some(Body::Array(items)) => items.clone(),
-            // Unreachable: every caller has just read `Redirect::Array` off
-            // this handle's own body, or -- `heap_to_number`'s, which does not
-            // go through `Redirect` at all -- has just matched
-            // `Body::Array`. An array of no items renders empty, which is what
-            // this answers.
-            _ => Vec::new(),
-        };
+        // Unreachable as `None`: every caller has just read `Redirect::Array`
+        // off this handle's own body, or -- `heap_to_number`'s, which does not
+        // go through `Redirect` at all -- has just matched `Body::Array`. An
+        // array of no items renders empty, which is what that answers.
+        let items = self.array_slots_of(value).unwrap_or_default();
         self.array_string(&items, b"\n")
     }
 
