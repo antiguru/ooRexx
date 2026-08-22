@@ -50,14 +50,22 @@ pub(crate) struct ProgramId(pub(crate) usize);
 /// Which package something belongs to.
 ///
 /// **A variant for the interpreter's own package rather than an absent
-/// [`ProgramId`].** `Interp::package_objects` and `Interp::class_packages`
-/// key on this, and the class a program installed and the class the crate's
-/// own bootstrap registered are different packages with different `~name`
-/// answers -- measured, `.Array~package~name` is `REXX` and a `::CLASS`'s is
-/// the program's own path. Spelling the first as an absence puts it in the
-/// same type as "there is no package at all", which is a different state that
-/// `Caller::package` (`dispatch.rs`) carries and that the oracle's
-/// `checkPackage` refuses (`classes/ObjectClass.cpp:665`-`:669`).
+/// [`ProgramId`].** `Interp::package_objects` keys on this, and the class a
+/// program installed and the class the crate's own bootstrap registered are
+/// different packages with different `~name` answers -- measured,
+/// `.Array~package~name` is `REXX` and a `::CLASS`'s is the program's own
+/// path. Spelling the first as an absence puts it in the same type as "there
+/// is no package at all", which is a different state that `Caller::package`
+/// (`dispatch.rs`) carries and that the oracle's `checkPackage` refuses
+/// (`classes/ObjectClass.cpp:665`-`:669`).
+///
+/// **`Interp::class_packages` does not key on this and wants no variant.** It
+/// maps a class handle to the [`ProgramId`] whose directives installed that
+/// class, so a class the bootstrap registered is simply absent from it, and
+/// `Interp::package_object_for` is the one reader that turns the absence into
+/// `Package::Rexx`. Putting a `Package` in there would give one state two
+/// spellings -- absent, and present as `Rexx` -- which is the shape this enum
+/// exists to remove.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum Package {
     /// The package the interpreter's own classes belong to. `PackageClass::

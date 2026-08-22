@@ -18,7 +18,7 @@ Long rather than wide: a reduction added later is a new value of `scope`, and no
 
 | column | meaning |
 |---|---|
-| `task` | the task that took the reading |
+| `task` | the task that took the reading, in either of the two spellings below |
 | `commit` | the commit the reading describes; for a multi-build sitting, the build column names which |
 | `axis` | the benchmark program, by its `bench-programs/` stem |
 | `build` | the `--build` label, or `from>to` for an `across_builds` row |
@@ -27,6 +27,27 @@ Long rather than wide: a reduction added later is a new value of `scope`, and no
 | `size` | `small` or `large`, or `-` where the figure spans both |
 | `instrument` | `instructions:u` or `cycles:u` -- every figure is emitted on both |
 | `value_median`, `value_min`, `value_max`, `value_rounds` | the median and the spread of the rounds behind it |
+
+## What the `task` column holds in `phase-5a-arms.tsv`
+
+**Two spellings, and the file carries both.** A task's sittings appear either under its bare number or
+under a `<number>-fixround-N` suffix. **The `commit` column is the reliable discriminator either
+way**: it names the revision a reading describes, where `task` names only who took it.
+
+What is in there is what this lists:
+
+```
+awk -F'\t' 'NR>1 {print $1"\t"$2}' bench-baselines/phase-5a-arms.tsv | sort -u
+```
+
+Run 2026-08-22, that is `6`, `7`, `8` and `9` bare, each against more than one commit -- `6` against
+four -- plus `9-fixround-1`, `10` and `10-fixround-1`, each against one. So **a bare number does not
+mean a single sitting**. What the suffix marks is narrower than that: the reviewer-driven fix round of
+Tasks 9 and 10 took it, and Tasks 6, 7 and 8 recorded theirs under the bare number.
+
+This describes the rows the file holds rather than a rule for a later plan, and the rows are not
+rewritten to match one: they are measurements, and editing them to a spelling decided afterwards
+would be editing data.
 
 ## What a row is and is not
 
