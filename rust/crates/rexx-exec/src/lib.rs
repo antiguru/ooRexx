@@ -2434,13 +2434,16 @@ struct Interp {
     /// `HashMap` keyed on [`rexx_classes::MethodId`] the pass costs 580
     /// instructions more as soon as any method in the file is special, and
     /// the file whose special method neither send resolves to pays the same
-    /// 580 -- the whole of it is the default hasher, four times over. Sorted,
-    /// the same pair of programs is 23 apart.
+    /// 580 -- the whole of it is the default hasher rather than the check it
+    /// guards. Sorted, the same pair of programs is 23 apart.
     ///
     /// The sort is an invariant of the push and not a step:
     /// `ClassRegistry::add_instance_method` and its class-side twin mint from
     /// one counter that only increments, so appending in mint order appends
-    /// in key order. [`Interp::record_access_scope`] asserts it.
+    /// in key order. [`Interp::record_access_scope`] asserts that of the push
+    /// it is making; what catches an order broken some other way is
+    /// `dispatch::Interp::access_scope_of` checking its own answer against a
+    /// scan of the same rows.
     special_methods: Vec<(MethodId, dispatch::AccessScope)>,
     /// The output sink. `SAY` writes here and `Outcome::stdout` is what it
     /// becomes.
