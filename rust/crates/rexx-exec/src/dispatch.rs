@@ -18,7 +18,10 @@
 //! inputs and the invocation's are different, and a construct that has one
 //! already in hand must be able to enter the other on its own.
 //! [`Interp::send_message`] is their composition and not a third step --
-//! `exec_call`'s relation to the call pair exactly.
+//! `exec_call`'s relation to the call pair exactly. What it adds around them
+//! is the search order's tail: a name `resolve` does not find reaches
+//! [`Interp::unknown_or_nomethod`], which forwards to the receiver's own
+//! `UNKNOWN` or raises the condition beneath it.
 //!
 //! **Resolution is dynamic and nothing caches it** (D28). Every send resolves
 //! against the receiver's *current* behaviour; `crate::ir::CallSite` is a
