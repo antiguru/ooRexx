@@ -5461,7 +5461,7 @@ say 1
     /// asserts:
     ///
     /// ```text
-    /// ::class S  MIXINCLASS Class         ~metaClass Class  ~class Class   same
+    /// ::class S  MIXINCLASS Class         ~metaClass Class  ~class Class   same   stated, cannot fail
     /// ::class M1 MIXINCLASS Class         ~metaClass Class  ~class Class   same
     /// ::class T  SUBCLASS S METACLASS M1  ~metaClass S      ~class M1      part   asserted
     /// ::class T2 SUBCLASS S               ~metaClass S      ~class Class   part   asserted
@@ -5519,6 +5519,22 @@ say 1
         // the split is not an artifact of writing METACLASS down.
         assert_eq!(interp.classes().metaclass(t2), s, "T2~metaClass");
         assert_eq!(interp.classes().class_of(t2), class, "T2~class");
+        // Derived from a metaclass and yet the two agree, which is the row
+        // that refutes "the fields part wherever a class derives from a
+        // metaclass": deriving from one is necessary and is not sufficient.
+        //
+        // **This pair cannot fail, and that is a property of the row rather
+        // than an oversight.** `Class` is both this row's superclass and the
+        // metaclass a bare declaration inherits, so both fields take their
+        // value from the same object and no rule written over those two
+        // inputs can separate them. It is here because the code is where the
+        // boundary of the rule gets read, and a reader who reaches for the
+        // stronger sentence needs the counterexample in front of them --
+        // not because it guards anything. What guards the split is the `T`
+        // and `T2` pair above, measured: collapsing `class_of` onto the
+        // `metaclass` field stops at `T~class` and never reaches here.
+        assert_eq!(interp.classes().metaclass(s), class, "S~metaClass");
+        assert_eq!(interp.classes().class_of(s), class, "S~class");
         // Naming one under a superclass that is not a metaclass, and naming
         // none at all: nothing overrides, and the two agree. Without these
         // the test would admit a build that simply answered different things.
