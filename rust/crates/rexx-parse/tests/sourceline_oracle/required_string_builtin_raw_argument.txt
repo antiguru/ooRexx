@@ -1,4 +1,4 @@
-count 53
+count 60
 /* VALUE's new value is the one argument position in the whole builtin set that
  * the oracle fetches raw. `BUILTIN(VALUE)` reads it with `optional_argument`,
  * which is `stack->peek` and converts nothing, where its name and its selector
@@ -10,13 +10,20 @@ count 53
  * and the class shows an object came back out of the variable rather than a
  * string.
  *
- * The last rows are the same position with the protocol armed by a NOSTRING
- * trap instead of by a makeString, which is the arming route that needs no
- * directive at all -- a converted position raises there and this one does not.
- * They read the stored value with ~isA so that nothing on those lines renders
- * an object and raises for an unrelated reason.
+ * The last rows are the same position under a live NOSTRING trap: a converted
+ * position raises there and this one does not. They read the stored value with
+ * ~isA so that nothing on those lines renders an object and raises for an
+ * unrelated reason.
  *
- * Phase 5a Task 14, fix round 1.
+ * **They say nothing about how the latch got armed**, and an earlier version of
+ * this comment claimed they did. The makeString directives below arm it at
+ * install, before the first clause runs, so the SIGNAL ON here changes nothing
+ * about that. Ruled by inverting the interpreter's own trap-arming site: this
+ * program still matches the oracle with it disabled.
+ * required_string_nostring_no_directive.rex declares nothing and is what
+ * witnesses that site.
+ *
+ * Phase 5a Task 14, fix round 1; the arming claim corrected in fix round 2.
  */
 
 say 'before'

@@ -416,6 +416,12 @@ lang/required_string_face.rex
 # conversion -- with the pad as the exception that fixes that last rule.
 # The position the oracle fetches raw is its own program below.
 lang/required_string_builtin_arguments.rex
+# The NOSTRING condition with no directive in the file, so the SIGNAL ON is the
+# only thing that can arm the protocol. required_string_nostring.rex covers the
+# same condition and declares a makeString, which arms it at install and hides
+# the trap's own arming site; this one declares nothing, and is the only corpus
+# program that reddens when that site is disabled.
+lang/required_string_nostring_no_directive.rex
 # The one argument position in the whole builtin set that the oracle fetches
 # raw: VALUE's new value, read with `optional_argument`, so the object is stored
 # and the conversion happens later at whatever renders it. Both halves matter --

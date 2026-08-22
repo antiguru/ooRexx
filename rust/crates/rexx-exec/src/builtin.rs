@@ -810,24 +810,33 @@ pub(crate) fn run(
 ///
 /// `BuiltinFunctions.hpp` gives a `BUILTIN(x)` body a **converting** family of
 /// argument accessor, whose members reach `ExpressionStack`'s own converting
-/// fetches and so run the whole protocol, and a **raw** family, whose members
-/// are `stack->peek` and convert nothing. A position reached only through the
-/// raw family is a position the oracle never converts, and converting it here
-/// is a silent wrong answer.
+/// fetches, and a **raw** family, whose members are `stack->peek` and convert
+/// nothing. A position reached only through the raw family is a position the
+/// oracle never converts, and converting it here is a silent wrong answer.
+///
+/// The converting family is not all one conversion: a string accessor reaches
+/// `requestString` and a numeric one reaches `requestNumber`/`numberValue`.
+/// The string protocol runs underneath either -- measured,
+/// `signal on nostring name h; say substr('abcdef', .array, 2)` traps NOSTRING
+/// on the oracle and on both engines at rc 0 -- so what this table is about is
+/// converting against raw, and not which conversion.
 ///
 /// **Derived by enumerating every `BUILTIN(x)` block rather than by noticing
-/// one case**, which is the only way the shape can be trusted: for each block,
-/// its own `x_<name> = N` position constants against which accessor family
-/// mentions each name. Exactly one position in the whole set is reached only
-/// through the raw family, and it is `VALUE`'s new value. Measured, oracle
-/// rc 0: `r = value('a', .Array)` stores the class object, so `a~class` is
+/// one case**, and re-derived on every test run by
+/// `tests::the_raw_argument_table_re_derives_from_the_oracles_own_source`,
+/// which is where the derivation and its own blind spot are written down.
+/// **Of the positions a block's own `x_<name> = N` constant names, one in the
+/// whole set is reached only through the raw family**, and it is `VALUE`'s new
+/// value; the positions no constant names are that test's `EXTRA_ARGUMENT_BLOCKS`
+/// and were ruled by running. Measured, oracle rc 0:
+/// `r = value('a', .Array)` stores the class object, so `a~class` is
 /// `The Class class` and not `The String class`, and under `signal on any`
 /// with no `makeString` anywhere the same call raises nothing where a
 /// converted position would raise NOSTRING.
 ///
 /// **The regression instrument is
 /// `corpus/lang/required_string_builtin_raw_argument.rex`**, which arms the
-/// latch and stores an object through `VALUE`; nothing else in the tree
+/// latch and stores an object through `VALUE`; nothing else in the corpus
 /// reddens for this, because the value only shows up when something reads the
 /// stored object back.
 pub(crate) fn raw_argument_positions(name: &'static [u8]) -> &'static [usize] {
@@ -841,7 +850,8 @@ pub(crate) fn raw_argument_positions(name: &'static [u8]) -> &'static [usize] {
 /// second builtin joining it is one row rather than a second branch.
 static RAW_ARGUMENT_POSITIONS: &[(&[u8], &[usize])] = &[(b"VALUE", &[2])];
 
-/// One builtin call's arguments, in both readings a builtin needs of them.
+/// One builtin call's arguments, in each of the readings a builtin needs of
+/// them.
 ///
 /// **The required-string protocol splits what a reader uses from what a
 /// message names.** `provide.xml` `reqstr` makes every builtin argument a
@@ -849,8 +859,8 @@ static RAW_ARGUMENT_POSITIONS: &[(&[u8], &[usize])] = &[(b"VALUE", &[2])];
 /// expression produced rather than the string it converted to -- measured, rc
 /// 216: `substr(.A, .B)` where `.B` has a class-side `makeString` answering
 /// `'x'` reports `SUBSTR argument 2 must be a whole number; found "The B
-/// class"`. A single slice cannot carry both readings, and a builtin that
-/// reads the conversion while quoting the object needs both at once.
+/// class"`. A single slice cannot carry the two apart, and a builtin that
+/// reads the conversion while quoting the object needs each at once.
 ///
 /// The two are the same slice whenever the protocol cannot change anything --
 /// `Interp::required_string_arguments` answers `None` for that -- so an
@@ -1340,18 +1350,210 @@ mod tests {
         };
         assert_eq!((raised.number, raised.sub), (40, 4));
     }
-    /// Every row of [`RAW_ARGUMENT_POSITIONS`] names a builtin this crate
-    /// implements, at a position that builtin can be given.
+    /// The oracle's own source is what says which argument positions are
+    /// fetched raw, and this re-derives [`RAW_ARGUMENT_POSITIONS`] from it.
     ///
-    /// **The guard against an orphaned row.** The table is the only thing
-    /// keeping a position the oracle fetches raw out of the required-string
-    /// protocol, and a row whose name no longer matches a `IMPLEMENTED` row --
-    /// a rename, a re-spelling -- would silently stop exempting anything while
-    /// `raw_argument_positions` went on answering the empty slice. The corpus
-    /// program is what catches the exemption being *wrong*; this catches it
-    /// being *absent*.
+    /// **Why a test and not a recorded answer in a comment.** The table is a
+    /// fact about `expression/BuiltinFunctions.cpp` held in this crate, and an
+    /// upstream change from a converting fetch to a raw one, or a builtin this
+    /// crate implements later that already has one, is a silent wrong answer
+    /// with nothing to notice it. Reading the C++ tree at test time is the
+    /// shape `tests/gate_tables/orx.rs`'s `orx_root` already has, for the
+    /// reason its own doc gives, and this panics rather than skipping when the
+    /// tree is absent for the same reason.
+    ///
+    /// **What the derivation covers, stated because it is narrower than
+    /// "every position".** It classifies the positions a block's own
+    /// `const size_t <NAME>_<arg> = N;` constant names. `MAX` and `MIN` hand
+    /// their trailing positions straight to `RexxString::Max`/`Min` as
+    /// `stack->arguments(argcount - 1)` and name no constant for them, so the
+    /// derivation cannot see those; `EXTRA_ARGUMENT_BLOCKS` is the set that
+    /// does that, asserted here so a new member reddens rather than passing
+    /// unseen. Those positions were ruled by running instead: `max('1', .K)`,
+    /// `max(1+0, .K)` and `min('9', .K)` with a saying `makeString` all print
+    /// `K asked` before the answer, and the oracle and both engines agree byte
+    /// for byte at rc 0, so they are converted and correctly absent from the
+    /// table.
+    ///
+    /// **The converting family is collapsed on purpose.** A numeric accessor
+    /// reaches `requestNumber`/`numberValue` rather than `requestString`, but
+    /// the string protocol runs underneath either way -- measured,
+    /// `signal on nostring name h; say substr('abcdef', .array, 2)` traps
+    /// NOSTRING on the oracle and on both engines at rc 0 -- so what matters
+    /// here is converting against raw and not which conversion.
+    ///
+    /// The derived set is restricted to the builtins this crate implements: a
+    /// raw position on a builtin with no `IMPLEMENTED` row cannot be reached
+    /// and would make this test red for a gap another task owns.
+    #[test]
+    fn the_raw_argument_table_re_derives_from_the_oracles_own_source() {
+        /// The blocks that pass positions on without naming a constant for
+        /// them, which the derivation below cannot classify. See this test's
+        /// own doc for what ruled them.
+        const EXTRA_ARGUMENT_BLOCKS: &[&str] = &["MAX", "MIN"];
+        /// The accessors that run the protocol on the position they fetch.
+        const CONVERTING: &[&str] = &[
+            "required_string",
+            "optional_string",
+            "required_integer",
+            "optional_integer",
+            "required_big_integer",
+            "optional_big_integer",
+            "optional_pad",
+        ];
+        /// The accessors that are `stack->peek` and convert nothing.
+        const RAW: &[&str] = &["get_arg", "optional_argument", "arg_exists", "arg_omitted"];
+
+        let path = std::path::PathBuf::from(
+            "/home/moritz/dev/repos/ooRexx/interpreter/expression/BuiltinFunctions.cpp",
+        );
+        let text = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+            panic!(
+                "cannot read {} -- the builtin bodies this table derives from are part of \\
+                 the read-only C++ tree, so a missing one means the tree moved rather than \\
+                 that the fact is gone: {e}",
+                path.display()
+            )
+        });
+
+        let lines: Vec<&str> = text.lines().collect();
+        let mut derived: Vec<(String, Vec<usize>)> = Vec::new();
+        let mut blocks = 0usize;
+        let mut extra_argument_blocks: Vec<String> = Vec::new();
+        let mut at = 0usize;
+        while at < lines.len() {
+            let Some(name) = lines[at]
+                .strip_prefix("BUILTIN(")
+                .and_then(|rest| rest.trim_end().strip_suffix(')'))
+            else {
+                at += 1;
+                continue;
+            };
+            // Brace-matched from the line after the signature, which is the
+            // opening `{`, so a nested block cannot end the body early.
+            let mut depth = 0isize;
+            let mut end = at + 1;
+            while end < lines.len() {
+                depth += isize::try_from(lines[end].matches('{').count()).expect("a short line");
+                depth -= isize::try_from(lines[end].matches('}').count()).expect("a short line");
+                if depth == 0 && lines[end].contains('}') {
+                    break;
+                }
+                end += 1;
+            }
+            let body = lines[at + 1..end.min(lines.len())].join("\n");
+            blocks += 1;
+            if body.contains("stack->arguments(") {
+                extra_argument_blocks.push(name.to_string());
+            }
+
+            // `const size_t <NAME>_<arg> = N;`, the block's own position
+            // constants. `Min` and `Max` are the arity pair and not positions.
+            let mut positions: Vec<(String, usize)> = Vec::new();
+            for line in body.lines() {
+                let Some(rest) = line.trim_start().strip_prefix("const size_t ") else {
+                    continue;
+                };
+                let Some((declared, value)) = rest.split_once('=') else {
+                    continue;
+                };
+                let Some(argument) = declared.trim().strip_prefix(&format!("{name}_")) else {
+                    continue;
+                };
+                if argument == "Min" || argument == "Max" {
+                    continue;
+                }
+                let Ok(value) = value.trim().trim_end_matches(';').trim().parse::<usize>() else {
+                    continue;
+                };
+                positions.push((argument.to_string(), value));
+            }
+
+            let mentions = |family: &[&str], argument: &str| {
+                family.iter().any(|macro_name| {
+                    body.contains(&format!("{macro_name}({name}, {argument})"))
+                        || body.contains(&format!("{macro_name}({name},{argument})"))
+                })
+            };
+            let mut raw_only: Vec<usize> = positions
+                .iter()
+                .filter(|(argument, _)| mentions(RAW, argument) && !mentions(CONVERTING, argument))
+                .map(|(_, value)| *value)
+                .collect();
+            raw_only.sort_unstable();
+            if !raw_only.is_empty() {
+                derived.push((name.to_string(), raw_only));
+            }
+            at = end + 1;
+        }
+
+        assert!(
+            blocks > 0,
+            "no BUILTIN(x) block parsed out of {} -- the file's shape moved",
+            path.display()
+        );
+        extra_argument_blocks.sort();
+        assert_eq!(
+            extra_argument_blocks,
+            EXTRA_ARGUMENT_BLOCKS
+                .iter()
+                .map(|name| (*name).to_string())
+                .collect::<Vec<_>>(),
+            "the set of blocks that pass positions on without a constant has moved, and this \\
+             derivation cannot classify those positions -- run the probes this test's doc names \\
+             against the new member before widening the list"
+        );
+
+        // Restricted to what this crate can reach, for the reason the doc
+        // gives.
+        let mut derived: Vec<(String, Vec<usize>)> = derived
+            .into_iter()
+            .filter(|(name, _)| IMPLEMENTED.iter().any(|row| row.name == name.as_bytes()))
+            .collect();
+        derived.sort();
+        let mut committed: Vec<(String, Vec<usize>)> = RAW_ARGUMENT_POSITIONS
+            .iter()
+            .map(|(name, positions)| {
+                (
+                    String::from_utf8_lossy(name).into_owned(),
+                    positions.to_vec(),
+                )
+            })
+            .collect();
+        committed.sort();
+        assert_eq!(
+            derived,
+            committed,
+            "RAW_ARGUMENT_POSITIONS disagrees with {} -- a position the oracle fetches raw and \\
+             this table does not exempt is a silent wrong answer, and one it exempts and the \\
+             oracle converts is another",
+            path.display()
+        );
+    }
+
+    /// Every row of [`RAW_ARGUMENT_POSITIONS`] names a builtin this crate
+    /// implements, at a position that builtin can be given, and the table is
+    /// not empty.
+    ///
+    /// **What this adds over the corpus, which catches more than an earlier
+    /// version of this comment claimed.** A row orphaned to a name no
+    /// `IMPLEMENTED` row carries stops exempting anything, and
+    /// `corpus/lang/required_string_builtin_raw_argument.rex` does redden for
+    /// that -- measured, rc 1 against the oracle's rc 0 with the row renamed.
+    /// So this is not the only instrument for an orphaned row. What it adds is
+    /// that it runs without the oracle, names the offending row, and refuses
+    /// an **empty** table, which no other check here would: an empty table
+    /// makes every arm below vacuous, and vacuity is the shape a guard is
+    /// supposed to refuse rather than pass.
     #[test]
     fn every_raw_argument_row_names_a_builtin_and_a_position_it_can_take() {
+        assert!(
+            !RAW_ARGUMENT_POSITIONS.is_empty(),
+            "RAW_ARGUMENT_POSITIONS is empty, which passes every arm below \
+             vacuously -- the oracle has at least one raw argument position and \
+             `the_raw_argument_table_re_derives_from_the_oracles_own_source` \
+             is what says which"
+        );
         for (name, positions) in RAW_ARGUMENT_POSITIONS {
             let builtin = IMPLEMENTED
                 .iter()

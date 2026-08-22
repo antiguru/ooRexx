@@ -3070,7 +3070,7 @@ struct Interp {
     ///
     /// **A missed arming is a wrong answer, so what protects a release build
     /// is the arming sites and not a check.** The writes are
-    /// `Interp::arm_reqstr_for`, called from both directive installers, and
+    /// `Interp::arm_reqstr_for`, called from every directive installer, and
     /// `Interp::exec_condition_trap`'s `NOSTRING`/`ANY` arm; the initialiser
     /// is `false` and nothing clears it. `dispatch.rs`'s
     /// `Interp::required_string_latch_holds` runs under `debug_assert` and
@@ -4054,8 +4054,8 @@ impl Interp {
     /// protocol would send, called from every directive install that adds a
     /// name to a class's dictionary.
     ///
-    /// The name is the dictionary key, which is already upcased -- the two
-    /// installers derive it the way `LanguageParser::methodDirective` does.
+    /// The name is the dictionary key, which is already upcased -- every
+    /// installer derives it the way `LanguageParser::methodDirective` does.
     fn arm_reqstr_for(&mut self, installed: &[u8]) {
         if installed == dispatch::MAKESTRING {
             self.reqstr_armed = true;

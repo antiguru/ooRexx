@@ -1011,14 +1011,15 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/method_access_private_attribute.rex",
     // Phase 5a (2026-08-17 plan) Task 14: the required-string protocol -- every
     // context `provide.xml` `reqstr` lists that this phase can reach, with a
-    // `makeString` and without one, the NOSTRING condition, the protocol's own
-    // own messages, and the argument, operator and traceback surfaces the
-    // conversion changes.
+    // `makeString` and without one, the NOSTRING condition, the messages the
+    // protocol answers in its own right, and the argument, operator and
+    // traceback surfaces the conversion changes.
     "lang/required_string_contexts.rex",
     "lang/required_string_default_name.rex",
     "lang/required_string_nostring.rex",
     "lang/required_string_face.rex",
     "lang/required_string_builtin_arguments.rex",
+    "lang/required_string_nostring_no_directive.rex",
     "lang/required_string_builtin_raw_argument.rex",
     "lang/required_string_operator_argument.rex",
     "lang/required_string_method_argument.rex",

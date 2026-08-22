@@ -9,12 +9,12 @@
  * corpus program cannot witness a refusal.
  *
  * Which operand an operator's own error message names differs by family, and
- * the last two clauses are the pair. A logical operator reports the
- * *conversion* -- `andOp` converts and then checks the string's truth value --
- * and its message is the one the trapped row cannot show, so the untrapped
- * clause at the end is the arithmetic one, which reports the *object*:
- * `StringClass::arith` is handed `otherObj` and never the string it converted
- * to.
+ * the pair that shows it is the `&` row inside the SELECT against the
+ * arithmetic clause after `done`. A logical operator reports the *conversion*
+ * -- `andOp` converts and then checks the string's truth value -- and a
+ * trapped row cannot show a message at all, which is why the arithmetic one is
+ * the untrapped clause: it reports the *object*, because `StringClass::arith`
+ * is handed `otherObj` and never the string it converted to.
  *
  * Phase 5a Task 14.
  */

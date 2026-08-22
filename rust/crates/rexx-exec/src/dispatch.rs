@@ -1801,11 +1801,11 @@ impl Interp {
     /// clear -- one test per limb the latch claims cannot fire.
     ///
     /// **A wrongly clear latch is a wrong answer, not a slow one**, and it is
-    /// wrong in two independent ways, so this asks about both. Limb 1 can
-    /// answer a different string than the value renders as, and limb 3 can
-    /// raise where the fast path renders. A check covering only the first is
-    /// silent for a route that arms a trap, which is exactly what the second
-    /// test below is for.
+    /// wrong independently at limb 1 and at limb 3, so this asks about each.
+    /// Limb 1 can answer a different string than the value renders as, and
+    /// limb 3 can raise where the fast path renders. A check covering only the
+    /// first is silent for a route that arms a trap, which is exactly what the
+    /// limb-3 test below is for.
     ///
     /// **This detects; it does not protect.** It runs under `debug_assert`, so
     /// a release build has nothing here: release correctness rests entirely on
