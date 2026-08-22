@@ -2824,9 +2824,24 @@ mod tests {
                 "a ::METHOD with no body of its own",
             ),
             // oracle rc 0, printing `A`: the generated getter reads an
-            // uninitialised class-scope instance variable, which is Task 8's.
+            // uninitialised class-scope instance variable, which this phase
+            // does not build.
             (
                 "say .K~a\n::class K\n::attribute a class\n",
+                "a generated ::ATTRIBUTE accessor",
+            ),
+            // The same accessor behind a `PRIVATE` attribute, sent from a
+            // caller the access check ALLOWS, which is the arm that reaches
+            // the gap rather than the refusal. Oracle rc 0, printing `A`.
+            // The pair matters because the access scope and the missing
+            // instance variable are two refusals over one send: an access
+            // check that refused this caller would report 97.2 instead, and
+            // the corpus row for the callers it does refuse
+            // (`corpus/lang/method_access_private_attribute.rex`) is what
+            // catches that from the other side.
+            (
+                "say .K~poke\n::class K\n::method poke class\n  return self~a\n\
+                 ::attribute a class private\n",
                 "a generated ::ATTRIBUTE accessor",
             ),
             // oracle rc 0, printing `4`: `USE LOCAL` binds its list against

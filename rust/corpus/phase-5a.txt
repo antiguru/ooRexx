@@ -383,3 +383,9 @@ lang/method_access_private_refused.rex
 # nothing installs a manager. Neither row is a new agreement; both are the
 # guard on a send that starts refusing.
 lang/method_access_package_and_protected.rex
+# The same check on a name a ::ATTRIBUTE generates rather than one a ::METHOD
+# declares, over both accessor names: the getter reached through self~a from
+# inside, and the setter reached through the message-assignment form from
+# outside. The refusing side of this one used to be a rc 120 refusal the oracle
+# did not share, so it could not be a row at all.
+lang/method_access_private_attribute.rex

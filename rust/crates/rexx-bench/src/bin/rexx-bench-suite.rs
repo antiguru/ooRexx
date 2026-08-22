@@ -181,6 +181,10 @@ const AXES: &[Axis] = &[
         role: Role::Blocked,
     },
     Axis {
+        name: "dispatchclass",
+        role: Role::Loop,
+    },
+    Axis {
         name: "emptyloop",
         role: Role::Loop,
     },

@@ -1008,6 +1008,7 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/method_access_private.rex",
     "lang/method_access_private_refused.rex",
     "lang/method_access_package_and_protected.rex",
+    "lang/method_access_private_attribute.rex",
 ];
 
 #[test]

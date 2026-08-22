@@ -7,6 +7,7 @@ Global Constraints and D9), each sized to run roughly 0.5-2s under `build/bin/re
 | File | Covers |
 |---|---|
 | `dispatch.rex` | Tight method-send loop: one object, one instance method, 5,000,000 sends |
+| `dispatchclass.rex` | The same dimension reached through a class object instead of an instance: one class-method send per pass, 4,000,000 sends. Runs on this crate, where `dispatch.rex` needs `~new` |
 | `varlookup.rex` | Plain simple-variable read/write, no stems, 19,000,000 iterations |
 | `compound.rex` | Stem/compound-variable access — the workload the compound-variable memo prototype measured at -24% (`[[compound-variable-memo-prototype]]` in project memory); 500 tails is inside its measured 100-10,000 sweet spot |
 | `strings.rex` | `SUBSTR`/`POS`/`CHANGESTR`/concatenation, 3,000,000 iterations |

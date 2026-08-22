@@ -41,6 +41,7 @@ pub const BINARY_VAR: &str = "REXX_BENCH_BINARY";
 pub static PROGRAMS: &[&str] = &[
     "startup",
     "dispatch",
+    "dispatchclass",
     "varlookup",
     "compound",
     "strings",

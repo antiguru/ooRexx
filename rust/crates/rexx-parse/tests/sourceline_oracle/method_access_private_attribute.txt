@@ -1,0 +1,56 @@
+count 55
+/* PRIVATE on a ::ATTRIBUTE, which is the same access check on a name the
+ * directive generates rather than one a ::METHOD declares.
+ *
+ * Both accessor names are here because install_attribute records the scope
+ * once per generated name, and the setter's dictionary key is the attribute's
+ * name with = appended: setter reaches it through the message-assignment form,
+ * where the others send the getter.
+ *
+ * inside is the allowing side, self~a from a method of the declaring class.
+ * bodyless and setter are the refusing side, trapped so this program can
+ * carry them, and the trailing send is the same refusal untrapped for its
+ * traceback bytes. CONDITION('E') is 2 rather than 1, which is what separates
+ * a real access check from a build that dropped the accessor and let the
+ * name-miss report stand.
+ *
+ * A bodyless private attribute read from a caller the check ALLOWS is not
+ * here: the oracle answers the uninitialised instance variable and this crate
+ * refuses that accessor for want of the variable, which is a separate gap.
+ *
+ * rc 159.
+ */
+
+say 'inside' .K~poke
+call bodyless
+call setter
+say .K~a
+exit 0
+
+bodyless:
+  signal on syntax name refused
+  say 'bodyless' .Z~b
+  return
+
+setter:
+  signal on syntax name refused
+  .S~s = 5
+  return
+
+refused:
+  say 'refused rc='rc 'C='condition('C') 'E=['condition('E')']'
+  return
+
+::CLASS K
+::METHOD poke CLASS
+  return self~a
+::ATTRIBUTE a CLASS GET PRIVATE
+  return 'got'
+
+::CLASS Z
+::ATTRIBUTE b CLASS PRIVATE
+
+::CLASS S
+::ATTRIBUTE s CLASS SET PRIVATE
+  expose v
+  return
