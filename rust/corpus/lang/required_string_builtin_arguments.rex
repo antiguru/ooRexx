@@ -18,6 +18,11 @@
  * Phase 5a Task 14.
  */
 
+/* The counter is set before the trap is armed, for the reason
+   required_string_operator_argument.rex gives: a build where one of the
+   answering clauses below raises instead must fail this program rather than
+   loop in it. */
+n = 0
 signal on syntax name trapped
 
 say substr(.subject, .from, .count, .pad)
@@ -26,7 +31,6 @@ say length(.subject)
 say word(.subject, .from)
 say translate(.subject, .pad, 'b')
 
-n = 0
 next:
 n = n + 1
 select

@@ -1738,11 +1738,12 @@ enum RequiredString {
 pub(crate) const MAKESTRING: &[u8] = b"MAKESTRING";
 
 /// What a value's own string value is, before the protocol's fallbacks: the
-/// value itself, the object a `makeString` answered, or nothing.
+/// value itself, the object a `makeString` answered, bytes no object holds, or
+/// nothing.
 ///
 /// The `Array` arm is why this is a value rather than a `bool`: an array's
-/// string value is its items joined, which is built and stored nowhere, so a
-/// caller that wants it has to be handed the built object.
+/// string value is its items joined, which no object holds, so a caller that
+/// wants one has to build it.
 enum StringConversion {
     /// The object that *is* the string value: the value itself, or a stem's
     /// own default value, or what a `makeString` answered.

@@ -19,6 +19,11 @@
  * Phase 5a Task 14.
  */
 
+/* The counter is set before the trap is armed, so a build where one of the
+   answering clauses below raises instead reaches the handler with a number
+   rather than an uninitialised name -- which is the difference between that
+   build failing this program and looping in it. */
+n = 0
 signal on syntax name trapped
 
 say 'concat' 'x' || .three
@@ -50,7 +55,6 @@ say 'array right empty' ('' == empty)
 say 'array right concat' ('x' || empty)
 say 'default name right' ('The Environment Directory' == .environment)
 
-n = 0
 next:
 n = n + 1
 select
