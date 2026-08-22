@@ -916,17 +916,40 @@ impl Interp {
     /// The access scope and protection of a resolved method, for the methods
     /// that have one.
     ///
-    /// **The emptiness test is what keeps an ordinary send off the hash.**
+    /// **The emptiness test is what keeps an ordinary send off the search.**
     /// The oracle reads `isSpecial()` off a flag word on the method object,
     /// and this crate has no method object to hang one on, so the question
-    /// costs a map probe wherever it is asked at all. A program that declares
-    /// no `PRIVATE`, `PACKAGE` or `PROTECTED` method has no row here and pays
-    /// one load and one branch per send instead.
+    /// costs a lookup wherever it is asked at all. A program that declares no
+    /// `PRIVATE`, `PACKAGE` or `PROTECTED` method has no row and pays one
+    /// load and one branch per send instead.
+    ///
+    /// [`Interp::special_methods`] carries why the rows are searched rather
+    /// than hashed, with the measurement.
     fn access_scope_of(&self, method: MethodId) -> Option<AccessScope> {
         if self.special_methods.is_empty() {
             return None;
         }
-        self.special_methods.get(&method).copied()
+        // Ordered on the identity's own `u32`, which `MethodId` does not
+        // itself expose an `Ord` for: the ordering is this crate's internal
+        // use of a mint counter and not a property `rexx-classes` publishes.
+        let found = self
+            .special_methods
+            .binary_search_by_key(&method.0, |&(key, _)| key.0)
+            .ok()
+            .map(|at| self.special_methods[at].1);
+        // **Checked against a scan of the same rows**, because the failure
+        // mode of a broken order is silence: a search that misses reports a
+        // `PRIVATE` method as an ordinary one, and the send it should have
+        // refused is answered instead.
+        debug_assert_eq!(
+            found,
+            self.special_methods
+                .iter()
+                .find(|&&(key, _)| key == method)
+                .map(|&(_, scope)| scope),
+            "the search over the access scopes disagrees with a scan of the same rows"
+        );
+        found
     }
 
     /// `MethodClass::isProtected` (`classes/MethodClass.hpp:116`), asked by

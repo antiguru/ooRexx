@@ -2424,15 +2424,24 @@ struct Interp {
     /// consults before it runs anything.
     ///
     /// **A row only for a method that is special**, which is what lets an
-    /// ordinary send skip the probe: `dispatch::Interp::access_scope_of` tests
-    /// the map for emptiness first, so a program declaring no `PRIVATE`,
-    /// `PACKAGE` or `PROTECTED` method costs a load and a branch per send
-    /// rather than a hash.
+    /// ordinary send skip the search: `dispatch::Interp::access_scope_of`
+    /// tests for emptiness first, so a program declaring no `PRIVATE`,
+    /// `PACKAGE` or `PROTECTED` method costs a load and a branch per send.
     ///
-    /// Keyed the same way [`Interp::method_bodies`] is, and populated beside
-    /// it: [`Interp::record_access_scope`] runs immediately after each mint a
-    /// directive makes.
-    special_methods: HashMap<MethodId, dispatch::AccessScope>,
+    /// **Sorted, and searched rather than hashed, because the send path pays
+    /// for it twice.** Measured, `instructions:u`, one build, a program whose
+    /// loop is `.K~outer` over a body doing `self~m`: with the rows in a
+    /// `HashMap` keyed on [`rexx_classes::MethodId`] the pass costs 580
+    /// instructions more as soon as any method in the file is special, and
+    /// the file whose special method neither send resolves to pays the same
+    /// 580 -- the whole of it is the default hasher, four times over. Sorted,
+    /// the same pair of programs is 23 apart.
+    ///
+    /// The sort is an invariant of the push and not a step:
+    /// `ClassRegistry::add_instance_method` and its class-side twin mint from
+    /// one counter that only increments, so appending in mint order appends
+    /// in key order. [`Interp::record_access_scope`] asserts it.
+    special_methods: Vec<(MethodId, dispatch::AccessScope)>,
     /// The output sink. `SAY` writes here and `Outcome::stdout` is what it
     /// becomes.
     out: Vec<u8>,
@@ -3251,7 +3260,7 @@ impl Interp {
             class_packages: HashMap::new(),
             package_objects: HashMap::new(),
             method_bodies: HashMap::new(),
-            special_methods: HashMap::new(),
+            special_methods: Vec::new(),
             out: Vec::new(),
             trace: Vec::new(),
             clause_state: ClauseState::new(),
@@ -4045,18 +4054,21 @@ impl Interp {
         if !protected && !scoped {
             return;
         }
-        let previous = self.special_methods.insert(
+        debug_assert!(
+            self.special_methods
+                .last()
+                .is_none_or(|&(last, _)| last.0 < method.0),
+            "the access scopes are appended in mint order and searched in key order, \
+             so a push that is not past the last key loses a row"
+        );
+        self.special_methods.push((
             method,
             dispatch::AccessScope {
                 access,
                 protected,
                 package: Package::Program(program),
             },
-        );
-        debug_assert!(
-            previous.is_none(),
-            "a MethodId was recorded twice, so one of the two access scopes is lost"
-        );
+        ));
     }
 
     /// Evaluates a `::CONSTANT` directive's parenthesised expression at
