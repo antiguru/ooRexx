@@ -1919,7 +1919,7 @@ impl Interp {
     /// [`Interp::string_conversion`]'s own body with the materialisation left
     /// to the caller.
     ///
-    /// **Two callers want different things from it.**
+    /// **Its callers want different things from it.**
     /// [`Interp::required_string_dispatch`] wants an object, because its own
     /// caller renders one; the debug check behind
     /// [`Interp::required_string_value`]'s latch wants only the bytes, and
@@ -1981,14 +1981,14 @@ impl Interp {
     /// Which limb of the protocol answers for `value`.
     ///
     /// **`primitiveMakeString` is asked first, where the oracle asks
-    /// `isBaseClass()` first**, and the two split the same set for every
-    /// value this phase builds: the receivers whose `MAKESTRING` is a
-    /// [`NativeMethod`] are exactly the primitives whose
-    /// `primitiveMakeString` answers the same bytes -- a string, a number and
-    /// an array -- so taking the primitive answer is the oracle's own
-    /// shortcut and reaches the same string without a send. The only
-    /// `MAKESTRING` a program can install is a Rexx one, and it can only be
-    /// installed on a receiver no arm below answers for.
+    /// `isBaseClass()` first**, and the two split the same set for every value
+    /// this phase builds: a receiver whose `MAKESTRING` is a
+    /// [`NativeMethod`] is one of the primitives the arms below answer for,
+    /// and its `primitiveMakeString` answers the same bytes that method would,
+    /// so taking the primitive answer is the oracle's own shortcut and reaches
+    /// the same string without a send. The only `MAKESTRING` a program can
+    /// install is a Rexx one, and it can only be installed on a receiver no
+    /// arm below answers for.
     fn classify_string_conversion(&mut self, value: ObjRef) -> StringConversion {
         let redirect = match value.decode() {
             Decoded::Nil => return self.make_string_or_none(value),
@@ -2065,7 +2065,7 @@ impl Interp {
     /// send: a caller that is itself `Object~request` already gets that line
     /// from `Interp::invoke`, and one that reaches the protocol from a
     /// language context has no native activation and owes it --
-    /// [`Interp::blame_request`] is the two internal callers' own call.
+    /// [`Interp::blame_request`] is that caller's own call.
     fn send_make_string(&mut self, receiver: ObjRef) -> Result<Option<ObjRef>, Failure> {
         // The sending side is the frame the conversion happens in, not the
         // conversion itself: `checkPrivate` asks

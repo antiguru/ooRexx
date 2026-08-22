@@ -1801,13 +1801,13 @@ impl Interp {
             InstructionKind::Interpret { expression } => {
                 let value = self.eval(code, expression)?;
                 self.roots.push_temp(value);
-                // `evaluateStringExpression` (`instructions/RexxInstruction
-                // .cpp:257`), which is the one `requestString` `SAY`, `PUSH`,
-                // `QUEUE`, `INTERPRET` and `OPTIONS` share -- so the `>>>`
-                // below traces the conversion, measured: `trace r` over
-                // `interpret .K` with a class-side `makeString` returning
-                // `'nop'` prints `>>>   "nop"` and then the fragment's own
-                // `*-* nop`.
+                // `RexxInstructionExpression::evaluateStringExpression`
+                // (`instructions/RexxInstruction.cpp:257`), the one
+                // `requestString` every instruction that evaluates a single
+                // string expression shares -- so the `>>>` below traces the
+                // conversion, measured: `trace r` over `interpret .K` with a
+                // class-side `makeString` returning `'nop'` prints
+                // `>>>   "nop"` and then the fragment's own `*-* nop`.
                 let value = self.required_string_value(value)?;
                 let text = self.to_text(value).to_vec();
                 // `>>>` on the interpreted text itself, before the fragment
