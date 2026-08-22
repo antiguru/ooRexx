@@ -667,7 +667,7 @@ impl Interp {
     /// own above, and that is a measurement.** The match above is the
     /// tree-walker's whole expression dispatch, so every node evaluated pays
     /// for its shape: giving `ExprKind::List` an arm there costs the `strings`
-    /// axis 38 instructions per pass on the tree-walker arm and the
+    /// axis 39 instructions per pass on the tree-walker arm and the
     /// `varlookup` axis 4, on programs with no list in them.
     ///
     /// **Both are marginal readings and the two causes are not additive.**
