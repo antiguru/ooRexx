@@ -268,6 +268,13 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
 /// instance of `.Array` itself: `native_superclasses` is the one constructor.
 pub(crate) const ARRAY_DEFAULT_NAME: &[u8] = b"an Array";
 
+/// The message the search order's last step sends -- `GlobalNames::UNKNOWN`.
+///
+/// Upper case because every name a dictionary is keyed by is: the parser
+/// upcases the name in a send, and `::METHOD unknown` is installed upcased,
+/// so a lookup spelled any other way finds nothing.
+const UNKNOWN: &[u8] = b"UNKNOWN";
+
 /// The class model this crate dispatches against, and the implementations
 /// its `MethodId`s name.
 ///
@@ -1056,8 +1063,9 @@ impl Interp {
         }
     }
 
-    /// [`Interp::resolve`] then [`Interp::invoke`], with the oracle's 97.1
-    /// for a name the receiver's behaviour does not answer.
+    /// [`Interp::resolve`] then [`Interp::invoke`], with
+    /// [`Interp::unknown_or_nomethod`] behind them for a name the receiver's
+    /// behaviour does not answer.
     ///
     /// Not a third step and not a fusion of the two: it is the composition
     /// every caller wants, in the shape `Interp::exec_call` already gives the
@@ -1083,40 +1091,106 @@ impl Interp {
         }
         match self.resolve(receiver, name, start_scope, caller) {
             Some(resolution) => self.invoke(resolution, receiver, name, args),
-            // **A receiver whose behaviour answers `UNKNOWN` never reaches
-            // 97.1 on the oracle**, so a name that resolves to nothing here is
-            // a gap and not that condition. `RexxObject::messageSend` sends
-            // `UNKNOWN` with the name and an array of the arguments when the
-            // lookup misses (`classes/ObjectClass.cpp`), and this crate
-            // implements no such forward -- measured, `.environment~nosuch` is
-            // `The NIL object` at rc 0 on the oracle, because `Directory`'s
-            // donated `UNKNOWN` (`memory/Setup.cpp:883`, donated at `:933`)
-            // reads it as an entry. 97.1 there is a wrong answer a program can
-            // trap, which is the argument [`Loud::receiver_class`] makes for a
-            // stem.
-            None if self.answers_unknown(receiver) => Err(Loud::unknown_forward(name).into()),
-            None => {
-                let target = self.message_target_text(receiver);
-                Err(Raised::no_method(&target, name).into())
-            }
+            None => self.unknown_or_nomethod(receiver, name, args, caller),
         }
     }
 
-    /// Whether `receiver`'s behaviour answers `UNKNOWN`, which is what decides
-    /// that a missed lookup is not 97.1.
+    /// **The last two steps of the documented search order**: `UNKNOWN` on the
+    /// receiver's own behaviour, and the `NOMETHOD` condition beneath it when
+    /// the behaviour answers no `UNKNOWN` either -- `RexxObject::processUnknown`
+    /// (`classes/ObjectClass.cpp:1002`), reached from `messageSend` at `:904`.
     ///
-    /// Asked of the behaviour rather than listed per class, so a class whose
-    /// dictionary gains the name -- by donation, by `~inherit`, or by a
-    /// `::METHOD UNKNOWN` -- is covered without a second table to keep in
-    /// step.
-    fn answers_unknown(&mut self, receiver: ObjRef) -> bool {
-        let Ok(behaviour) = self.receiver_behaviour(receiver) else {
-            return false;
+    /// **The forward's two arguments are the missed message name and an
+    /// `Array` of the send's own arguments**, in that order (`:1013`, then
+    /// `:1018`-`:1019`).
+    /// The array is the argument list as the send holds it, omissions
+    /// included: measured, `.k~zork(1,,3)` reaches an `UNKNOWN` whose
+    /// `arguments~items` is `2` and whose `~size` is `3`, while `.k~zork()`
+    /// answers `0` for both.
+    ///
+    /// **The `UNKNOWN` lookup is the ordinary one and carries no start
+    /// scope**, whatever the missed send's own scope override was:
+    /// `processUnknown` asks `behaviour->methodLookup(GlobalNames::UNKNOWN)`
+    /// on both of `messageSend`'s paths.
+    ///
+    /// Off every hot path by construction -- a send that resolves never
+    /// arrives here -- so the body is out of line rather than folded into
+    /// [`Interp::send_message`]'s `match`.
+    #[cold]
+    #[inline(never)]
+    fn unknown_or_nomethod(
+        &mut self,
+        receiver: ObjRef,
+        name: &[u8],
+        args: &[Option<ObjRef>],
+        caller: Caller,
+    ) -> Result<Option<ObjRef>, Failure> {
+        let Some(resolution) = self.resolve(receiver, UNKNOWN, None, caller) else {
+            return Err(self.nomethod(receiver, name));
         };
-        let classes = &self.object_model().classes;
-        match behaviour {
-            Behaviour::Instance(class) => classes.has_method(class, "UNKNOWN"),
-            Behaviour::ClassSide(class) => classes.class_has_method(class, "UNKNOWN"),
+        // **Both of the forward's arguments are rooted, and only one of the
+        // two roots has a witness.** `alloc_with` collects *before* it
+        // allocates, so the array's own root is what carries it across the
+        // `text` below -- a message name too long for a handle allocates
+        // there, and `corpus/lang/message_send_unknown_forward.rex`'s last
+        // row is that name. Measured with `collect_stress.rs`'s
+        // collect-on-every-allocation and this root removed: that row panics
+        // in `to_text` and a name of seven bytes or fewer does not, because
+        // then nothing allocates between the two.
+        //
+        // `missed`'s root has no such witness and stays because it is the
+        // only root the value has: the slice handed to `invoke` is not one,
+        // nothing else holds the name, and `invoke` runs a whole method body.
+        // Measured, its removal reddens nothing today, which says `invoke`
+        // reaches its argument binding without allocating and not that the
+        // value is safe unrooted.
+        //
+        // `args` themselves need nothing here: the send site evaluated them
+        // and rooted each one as it went (`Interp::eval_traced_argument`),
+        // which is the same rooting every other allocation reached from a
+        // send already relies on.
+        let frame = self.roots.push_frame();
+        let arguments = self.alloc_with(BehaviourId::ARRAY, Body::Array(args.to_vec()));
+        self.roots.push_temp(arguments);
+        let missed = self.text(name);
+        self.roots.push_temp(missed);
+        let forwarded = self.invoke(
+            resolution,
+            receiver,
+            UNKNOWN,
+            &[Some(missed), Some(arguments)],
+        );
+        self.roots.pop_frame(frame);
+        forwarded
+    }
+
+    /// The condition a send raises when the receiver's behaviour answers
+    /// neither the message nor `UNKNOWN`, and **which of two conditions it is
+    /// depends on what is armed**.
+    ///
+    /// `reportNomethod` (`concurrency/ActivityManager.hpp:509`) offers a
+    /// `NOMETHOD` condition to the activation stack first and raises the
+    /// 97.1 syntax error only when nothing took it, so the two are separate
+    /// answers a program can tell apart. Measured, `say 'abc'~nosuchmsg`:
+    /// under `signal on nomethod` it traps with `CONDITION('C')` `NOMETHOD`,
+    /// `CONDITION('D')` `NOSUCHMSG`, `CONDITION('E')` the null string and
+    /// `RC` untouched; under `signal on syntax` alone it traps with `C`
+    /// `SYNTAX`, `D` the null string, `E` `1` and `RC` `97`; with a
+    /// `SIGNAL ON SYNTAX` inside a routine and a `SIGNAL ON NOMETHOD` in its
+    /// caller, the **caller's** `NOMETHOD` handler runs, so the offer really
+    /// does cross activations before the degradation happens.
+    ///
+    /// That is why the choice is made here rather than left to
+    /// [`Interp::offer_to_trap`]: that function sees one activation at a
+    /// time as the failure unwinds, and by the time the outermost one has
+    /// declined, the inner `SYNTAX` traps that the degraded error is owed
+    /// have already been passed.
+    fn nomethod(&mut self, receiver: ObjRef, name: &[u8]) -> Failure {
+        let target = self.message_target_text(receiver);
+        if self.trapped_anywhere(b"NOMETHOD") {
+            Raised::nomethod(&target, name).into()
+        } else {
+            Raised::no_method(&target, name).into()
         }
     }
 
@@ -2658,20 +2732,27 @@ mod tests {
         assert!(stderr.contains("Error 93.901:"), "{stderr:?}");
     }
 
-    /// A name a directory's behaviour does not answer is **not** 97.1, because
-    /// the oracle forwards it to `UNKNOWN` and answers an entry read instead.
+    /// A name a directory's behaviour does not answer is **not** 97.1: the
+    /// forward reaches `Directory`'s own `UNKNOWN`, whose body reads the name
+    /// as an entry and which this phase does not implement -- so the refusal
+    /// names that method rather than the search step.
     ///
-    /// The pair is what pins the rule to the receiver's own behaviour rather
-    /// than to a class name: a `String` receiver answers no `UNKNOWN`, so the
-    /// same missing name raises there.
+    /// **The only instrument for these bytes**, and it has to be an in-crate
+    /// one: a refusal the oracle does not share is not expressible as a
+    /// corpus row, and no corpus program sends a missing name to a directory.
+    /// Measured, `.environment~nosuch` is `The NIL object` at rc 0 on the
+    /// oracle, so answering 97.1 here would be a wrong answer a program could
+    /// trap -- which is what the `String` row below is paired against: that
+    /// receiver's behaviour answers no `UNKNOWN`, so the same missing name
+    /// really is the condition there.
     #[test]
-    fn an_unresolved_name_on_a_receiver_that_answers_unknown_is_loud() {
+    fn a_directory_forwards_a_missing_name_to_an_unknown_this_phase_lacks() {
         for source in ["say .environment~nosuch\n", "say .local~nosuch\n"] {
             let (code, stdout, stderr) = both_engines(source);
             assert_eq!((code, stdout.as_str()), (120, ""), "{source:?}");
             assert_eq!(
                 stderr,
-                "rexx-exec: the UNKNOWN forward for message \"NOSUCH\" is not implemented \
+                "rexx-exec: method \"UNKNOWN\" of class \"Directory\" is not implemented \
                  (Phase 5)\n",
                 "{source:?}"
             );

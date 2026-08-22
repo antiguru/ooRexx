@@ -346,3 +346,19 @@ lang/raise_keyword_object_traces.rex
 # two programs.
 lang/raise_array_nested.rex
 lang/raise_additional_nested.rex
+
+# Phase 5a (2026-08-17 plan) Task 12: the search order's last two steps.
+#
+# The UNKNOWN forward and its argument pair -- the missed name and an array of
+# the send's own arguments -- as the branch of the miss arm that answers, with
+# message_send_unknown_method.rex the branch that raises. One class returns
+# from UNKNOWN and one only says, because SAY over a forward that returned
+# nothing is 91.999 rather than the forward's own answer.
+lang/message_send_unknown_forward.rex
+# The NOMETHOD condition beneath it, trapped by name, trapped by ANY, and
+# degraded to the 97.1 syntax error a SIGNAL ON SYNTAX takes. The offer walks
+# the whole activation stack before it degrades, so a caller's NOMETHOD handler
+# beats a callee's SYNTAX handler -- the pair of routines that show both
+# outcomes for the same callee is what a build degrading too early answers
+# identically.
+lang/condition_nomethod.rex

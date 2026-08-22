@@ -1446,6 +1446,38 @@ impl Raised {
         Raised::syntax(97, 1, vec![target.to_vec(), name.to_vec()])
     }
 
+    /// The `NOMETHOD` condition a dispatch miss offers to the activation
+    /// stack, whose untrapped rendering is [`Raised::no_method`]'s own 97.1.
+    ///
+    /// Built from that function so the catalogue coordinates are written
+    /// once, and differing from it in the three things a trapping handler
+    /// reads back. Measured, `say 'abc'~nosuchmsg` under `signal on
+    /// nomethod` against the same send under `signal on syntax`:
+    ///
+    /// ```text
+    ///                C           D            E    RC
+    /// nomethod trap  NOMETHOD    NOSUCHMSG    ''   untouched
+    /// syntax   trap  SYNTAX      ''           1    97
+    /// ```
+    ///
+    /// `RC` is left alone by the non-`SYNTAX` rule [`Raised::rc`] states,
+    /// the description is the message name, and `E` needs nothing here: the
+    /// `CODE` item is a `SYNTAX` condition's alone, so `offer_to_trap` fills
+    /// it in from the condition's name rather than from the numbering this
+    /// one keeps for its report.
+    ///
+    /// **`Interp::nomethod` decides which of the two to raise**, and it
+    /// raises this one only when something can take it, so the report path
+    /// below is a fallback rather than the answer this shape is for.
+    pub(crate) fn nomethod(target: &[u8], name: &[u8]) -> Raised {
+        Raised {
+            condition: Cow::Borrowed("NOMETHOD"),
+            rc: None,
+            description: Some(name.to_vec()),
+            ..Raised::no_method(target, name)
+        }
+    }
+
     /// 91.999: a message used where a value was wanted returned none.
     /// `name` is the message as the send spells it, already upcased.
     ///

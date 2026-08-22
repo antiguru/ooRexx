@@ -1000,6 +1000,11 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/raise_keyword_object_traces.rex",
     "lang/raise_array_nested.rex",
     "lang/raise_additional_nested.rex",
+    // Phase 5a (2026-08-17 plan) Task 12: the UNKNOWN forward and the
+    // NOMETHOD condition beneath it, which are the search order's last two
+    // steps.
+    "lang/message_send_unknown_forward.rex",
+    "lang/condition_nomethod.rex",
 ];
 
 #[test]

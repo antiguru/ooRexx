@@ -814,23 +814,6 @@ impl Loud {
         }
     }
 
-    /// A message that resolved to nothing on a receiver whose behaviour
-    /// answers `UNKNOWN`.
-    ///
-    /// Loud rather than 97.1, for the reason [`Loud::receiver_class`] gives
-    /// about a stem: the oracle forwards the send to `UNKNOWN` instead of
-    /// raising, so 97.1 is a wrong answer a program could trap. Measured,
-    /// `.environment~nosuch` is `The NIL object` at rc 0.
-    fn unknown_forward(name: &[u8]) -> Loud {
-        let shown = String::from_utf8_lossy(name);
-        Loud {
-            message: owned_message(
-                &format!("the UNKNOWN forward for message \"{shown}\""),
-                Some("Phase 5"),
-            ),
-        }
-    }
-
     /// A message that resolved to a `::METHOD` or `::ATTRIBUTE` directive
     /// whose body this crate cannot run -- see [`method_body_gap`], which
     /// enumerates the cases and supplies `what`.

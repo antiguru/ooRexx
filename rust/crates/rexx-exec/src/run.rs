@@ -3938,6 +3938,36 @@ impl Interp {
             .cloned()
     }
 
+    /// Whether **any** live activation, the running one included, has a
+    /// `SIGNAL ON` trap that would take `condition`.
+    ///
+    /// [`Interp::trap_for`] asks the running activation alone, which is the
+    /// right question on the failure path: a failure is offered to each
+    /// activation in turn as it unwinds, so the walk happens there. This is
+    /// for a raiser that has to know the answer for the **whole stack**
+    /// before it can choose what to raise -- `raiseCondition`'s own return
+    /// value, which `reportNomethod` tests before falling back to a syntax
+    /// error (`concurrency/ActivityManager.hpp:509`).
+    ///
+    /// A `CALL ON` trap is excluded for the same reason `offer_to_trap`
+    /// declines one: there is nothing to resume into once a clause has
+    /// failed, and `TrapHandler::canHandle` (`execution/TrapHandler.cpp:118`)
+    /// refuses this whole family to a `CALL ON ANY`. Measured, `call on any
+    /// name h` over `say 'abc'~nosuchmsg` is the untrapped 97.1 at rc 159,
+    /// where `signal on any` traps it with `CONDITION('C')` `NOMETHOD`.
+    pub(crate) fn trapped_anywhere(&self, condition: &[u8]) -> bool {
+        std::iter::once(self.running_activation())
+            .flatten()
+            .chain(self.suspended.iter().rev().map(Box::as_ref))
+            .any(|activation| {
+                activation
+                    .traps
+                    .get(condition)
+                    .or_else(|| activation.traps.get(b"ANY".as_slice()))
+                    .is_some_and(|trap| !trap.delayed && !trap.call)
+            })
+    }
+
     /// Turns an uninitialised variable read into a `NOVALUE` condition --
     /// but only when this activation has a `NOVALUE` trap that could take
     /// it.
