@@ -675,7 +675,16 @@ impl Interp {
     /// `3>` on two lines, and a nested array renders `an Array` inside its
     /// parent's join (`say '<'||((1,2),3)||'>'` is `<an Array` and `3>`).
     ///
+    /// **Out of line, and that is a measurement.** Every caller is a trace
+    /// site behind a `TRACE` gate, so nothing here runs on an untraced pass --
+    /// but inlined into [`Interp::intermediate_text`] and
+    /// [`Interp::result_text`], both `#[inline(always)]`, it cost the
+    /// `strings` axis 29 instructions per pass on the tree-walker arm and the
+    /// `varlookup` axis 7, on programs that trace nothing. This is the same
+    /// gate-then-outline shape `Interp::echo_symbol_read` already has.
+    ///
     /// [`to_text`]: Interp::to_text
+    #[inline(never)]
     pub(crate) fn string_value_text(&mut self, value: ObjRef) -> Vec<u8> {
         if matches!(
             self.heap.get(value).map(|object| &object.body),

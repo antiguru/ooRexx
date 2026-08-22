@@ -656,11 +656,27 @@ impl Interp {
                 )?
                 .ok_or_else(|| Raised::no_result(name).into()),
 
-            // `(a, b, ...)` -- `RexxExpressionList::evaluate`
-            // (`expression/ExpressionList.cpp:83`), which builds an array of
-            // the list's own length and fills the positions that were written.
-            ExprKind::List(items) => self.eval_list(code, items),
+            _ => self.eval_cold(code, expr),
+        }
+    }
 
+    /// Every expression form the match above does not name: `(a, b, ...)`, and
+    /// the ones that fail loudly.
+    ///
+    /// **A parenthesised list is answered here rather than given an arm of its
+    /// own above, and that is a measurement.** The match above is the
+    /// tree-walker's whole expression dispatch, so every node evaluated pays
+    /// for its shape: an arm of its own for `ExprKind::List` cost the `strings`
+    /// axis 43 instructions per pass on the tree-walker arm and the
+    /// `varlookup` axis 4, on programs with no list in them, where answering
+    /// it from behind the existing catch-all costs both nothing.
+    #[inline(never)]
+    fn eval_cold(&mut self, code: &Code<'_>, expr: &Expr) -> Result<ObjRef, Failure> {
+        match &expr.kind {
+            // `RexxExpressionList::evaluate` (`expression/ExpressionList.cpp:83`),
+            // which builds an array of the list's own length and fills the
+            // positions that were written.
+            ExprKind::List(items) => self.eval_list(code, items),
             other => Err(Loud::expression(other).into()),
         }
     }
@@ -687,6 +703,7 @@ impl Interp {
     ///
     /// Every element is rooted while the later ones are evaluated, and they
     /// are still rooted when the array is allocated -- which can collect.
+    #[inline(never)]
     fn eval_list(&mut self, code: &Code<'_>, items: &[Option<Expr>]) -> Result<ObjRef, Failure> {
         let frame = self.roots.push_frame();
         let indent = self.clause_state.current_value_indent;
