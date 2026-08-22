@@ -678,10 +678,16 @@ impl Interp {
     /// **Out of line, and that is a measurement.** Every caller is a trace
     /// site behind a `TRACE` gate, so nothing here runs on an untraced pass --
     /// but inlined into [`Interp::intermediate_text`] and
-    /// [`Interp::result_text`], both `#[inline(always)]`, it cost the
+    /// [`Interp::result_text`], both `#[inline(always)]`, it costs the
     /// `strings` axis 29 instructions per pass on the tree-walker arm and the
-    /// `varlookup` axis 7, on programs that trace nothing. This is the same
+    /// `varlookup` axis 11, on programs that trace nothing. This is the same
     /// gate-then-outline shape `Interp::echo_symbol_read` already has.
+    ///
+    /// **Both are marginal readings and the two causes are not additive.**
+    /// Each is `b-committed-f4b21eadb` minus `d-no-trace-gates` in
+    /// `bench-baselines/phase-5a-arms.tsv`'s `11-bisection` rows, where every
+    /// build is named for the single change it carries; `Interp::eval_cold`'s
+    /// doc carries the other cause and the residual neither places.
     ///
     /// [`to_text`]: Interp::to_text
     #[inline(never)]

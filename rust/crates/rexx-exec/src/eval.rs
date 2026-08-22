@@ -666,10 +666,22 @@ impl Interp {
     /// **A parenthesised list is answered here rather than given an arm of its
     /// own above, and that is a measurement.** The match above is the
     /// tree-walker's whole expression dispatch, so every node evaluated pays
-    /// for its shape: an arm of its own for `ExprKind::List` cost the `strings`
-    /// axis 43 instructions per pass on the tree-walker arm and the
-    /// `varlookup` axis 4, on programs with no list in them, where answering
-    /// it from behind the existing catch-all costs both nothing.
+    /// for its shape: giving `ExprKind::List` an arm there costs the `strings`
+    /// axis 38 instructions per pass on the tree-walker arm and the
+    /// `varlookup` axis 4, on programs with no list in them.
+    ///
+    /// **Both are marginal readings and the two causes are not additive.**
+    /// Each is `b-committed-f4b21eadb` minus `c-no-list-arm` in
+    /// `bench-baselines/phase-5a-arms.tsv`'s `11-bisection` rows, where every
+    /// build is named for the single change it carries, so a reader subtracts
+    /// them rather than trusting this sentence. Added to
+    /// [`Interp::string_value_text`]'s own figure they come to less than the
+    /// whole movement those same rows measure.
+    ///
+    /// **This shape is not free either**, and asserting it were would be
+    /// asserting a zero the same rows read as nonzero:
+    /// `e-outlined-6f3434e88` still sits 33 and 12 instructions per pass above
+    /// `a-base-21cde29af` on those two axes, and nothing here places that.
     #[inline(never)]
     fn eval_cold(&mut self, code: &Code<'_>, expr: &Expr) -> Result<ObjRef, Failure> {
         match &expr.kind {
