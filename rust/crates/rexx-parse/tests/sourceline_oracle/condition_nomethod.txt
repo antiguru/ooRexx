@@ -1,10 +1,10 @@
-count 118
+count 119
 /* The step beneath UNKNOWN: a receiver whose behaviour answers neither the
  * message nor UNKNOWN raises the NOMETHOD condition, and only a miss that
  * nothing traps becomes the 97.1 syntax error.
  *
- * The two are different answers a program can tell apart, which is what the
- * first three routines are for. A trapped NOMETHOD reports CONDITION('C') as
+ * They are different answers a program can tell apart, which is what byname,
+ * byany and bysyntax are for. A trapped NOMETHOD reports CONDITION('C') as
  * NOMETHOD, CONDITION('D') as the message name, CONDITION('E') as the null
  * string and leaves RC untouched; the same send under a SIGNAL ON SYNTAX
  * alone reports SYNTAX, no description, E as 1, and RC as 97.
@@ -14,16 +14,17 @@ count 118
  * through to the degraded syntax error and its caller's SYNTAX handler takes
  * it.
  *
- * Whose trap table decides is the running activation's, and the last three
- * routines are the three answers that follow from it. An internal CALL
- * inherits its caller's traps, so outerwins' NOMETHOD handler takes a miss
- * raised inside innerraise even though innerraise armed a SYNTAX handler of
- * its own, and innersyntax calls the same routine with no NOMETHOD armed
+ * Whose trap table decides is the running activation's, and outerwins,
+ * innersyntax and methodmiss are the answers that follow from it. An internal
+ * CALL inherits its caller's traps, so outerwins' NOMETHOD handler takes a
+ * miss raised inside innerraise even though innerraise armed a SYNTAX handler
+ * of its own, and innersyntax calls the same routine with no NOMETHOD armed
  * anywhere and gets that SYNTAX handler instead. A method activation inherits
- * no traps at all, so methodmiss arms both and gets the SYNTAX one: the
- * NOMETHOD condition is never raised, because nothing the running activation
- * can see would take it. A build that asked the whole activation stack
- * instead answers the NOMETHOD handler for that last row.
+ * no traps at all, so methodmiss arms NOMETHOD and SYNTAX alike and gets the
+ * SYNTAX handler: the NOMETHOD condition is never raised there, because
+ * nothing the running activation can see would take it. A build that asked
+ * the whole activation stack instead answers methodmiss with the NOMETHOD
+ * handler.
  *
  * Measured, rc 0.
  */

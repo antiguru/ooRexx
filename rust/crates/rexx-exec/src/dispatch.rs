@@ -1098,23 +1098,24 @@ impl Interp {
         }
     }
 
-    /// **The last two steps of the documented search order**: `UNKNOWN` on the
-    /// receiver's own behaviour, and the `NOMETHOD` condition beneath it when
-    /// the behaviour answers no `UNKNOWN` either -- `RexxObject::processUnknown`
-    /// (`classes/ObjectClass.cpp:1002`), reached from `messageSend` at `:904`.
+    /// **What the documented search order has left after the class chain**:
+    /// `UNKNOWN` on the receiver's own behaviour, and the `NOMETHOD`
+    /// condition beneath it when the behaviour answers no `UNKNOWN` either --
+    /// `RexxObject::processUnknown` (`classes/ObjectClass.cpp:1002`), reached
+    /// from `messageSend` at `:904`.
     ///
-    /// **The forward's two arguments are the missed message name and an
+    /// **The forward's arguments are the missed message name and then an
     /// `Array` of the send's own arguments**, in that order (`:1013`, then
     /// `:1018`-`:1019`).
     /// The array is the argument list as the send holds it, omissions
     /// included: measured, `.k~zork(1,,3)` reaches an `UNKNOWN` whose
     /// `arguments~items` is `2` and whose `~size` is `3`, while `.k~zork()`
-    /// answers `0` for both.
+    /// answers `0` for each.
     ///
     /// **The `UNKNOWN` lookup is the ordinary one and carries no start
     /// scope**, whatever the missed send's own scope override was:
     /// `processUnknown` asks `behaviour->methodLookup(GlobalNames::UNKNOWN)`
-    /// on both of `messageSend`'s paths.
+    /// wherever `messageSend` reaches it.
     ///
     /// Off every hot path by construction -- a send that resolves never
     /// arrives here -- so the body is out of line rather than folded into
@@ -1131,15 +1132,19 @@ impl Interp {
         let Some(resolution) = self.resolve(receiver, UNKNOWN, None, caller) else {
             return Err(self.nomethod(receiver, name));
         };
-        // **Both of the forward's arguments are rooted, and only one of the
-        // two roots has a witness.** `alloc_with` collects *before* it
-        // allocates, so the array's own root is what carries it across the
-        // `text` below -- a message name too long for a handle allocates
-        // there, and `corpus/lang/message_send_unknown_forward.rex`'s last
-        // row is that name. Measured with `collect_stress.rs`'s
-        // collect-on-every-allocation and this root removed: that row panics
-        // in `to_text` and a name of seven bytes or fewer does not, because
-        // then nothing allocates between the two.
+        // **Each of the forward's arguments is rooted, and only the array's
+        // root has a witness.** `alloc_with` collects *before* it allocates,
+        // so the array's root is what carries it across the `text` below -- a
+        // message name too long for a handle allocates there, and
+        // `corpus/lang/message_send_unknown_forward.rex`'s last row is that
+        // name. Measured with `collect_stress.rs`'s
+        // collect-on-every-allocation and this root removed: that row's own
+        // `a~items` then sends to a collected array and
+        // `Interp::receiver_kind` refuses it, so the stress run exits 120
+        // with `a message send to a value whose object is no longer live`
+        // where the plain run prints the row. A message name of seven bytes
+        // or fewer leaves the subset green, because `Interp::text` inlines it
+        // and nothing allocates between the array and the send.
         //
         // `missed`'s root has no such witness and stays because it is the
         // only root the value has: the slice handed to `invoke` is not one,
@@ -1168,12 +1173,12 @@ impl Interp {
     }
 
     /// The condition a send raises when the receiver's behaviour answers
-    /// neither the message nor `UNKNOWN`, and **which of two conditions it is
+    /// neither the message nor `UNKNOWN`, and **which condition that is
     /// depends on what is armed**.
     ///
     /// `reportNomethod` (`concurrency/ActivityManager.hpp:509`) offers a
     /// `NOMETHOD` condition first and raises the 97.1 syntax error only when
-    /// nothing took it, so the two are separate answers a program can tell
+    /// nothing took it, so they are separate answers a program can tell
     /// apart. Measured, `say 'abc'~nosuchmsg`: under `signal on nomethod` it
     /// traps with `CONDITION('C')` `NOMETHOD`, `CONDITION('D')` `NOSUCHMSG`,
     /// `CONDITION('E')` the null string and `RC` untouched; under `signal on
@@ -1186,9 +1191,9 @@ impl Interp {
     /// copy ([`Activation::traps`]), so a caller's `SIGNAL ON NOMETHOD` does
     /// take a miss raised inside such a callee, and beats a `SIGNAL ON
     /// SYNTAX` that callee armed for itself. A `::METHOD` activation inherits
-    /// none, and that is where the two readings part: measured, with both
-    /// `signal on nomethod` and `signal on syntax` armed in the main body and
-    /// the miss inside a `::METHOD` body, the oracle runs the **`SYNTAX`**
+    /// none, and that is where the readings part: measured, with `signal on
+    /// nomethod` and `signal on syntax` both armed in the main body and the
+    /// miss inside a `::METHOD` body, the oracle runs the **`SYNTAX`**
     /// handler, where a version asking the whole stack runs the `NOMETHOD`
     /// one.
     ///

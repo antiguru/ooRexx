@@ -18,7 +18,7 @@ Long rather than wide: a reduction added later is a new value of `scope`, and no
 
 | column | meaning |
 |---|---|
-| `task` | the task that took the reading, in either of the two spellings below |
+| `task` | the task that took the reading, and which of its sittings -- see below |
 | `commit` | the commit the reading describes; for a multi-build sitting, the build column names which |
 | `axis` | the benchmark program, by its `bench-programs/` stem |
 | `build` | the `--build` label, or `from>to` for an `across_builds` row |
@@ -30,24 +30,39 @@ Long rather than wide: a reduction added later is a new value of `scope`, and no
 
 ## What the `task` column holds in `phase-5a-arms.tsv`
 
-**Two spellings, and the file carries both.** A task's sittings appear either under its bare number or
-under a `<number>-fixround-N` suffix. **The `commit` column is the reliable discriminator either
-way**: it names the revision a reading describes, where `task` names only who took it.
+**A task's number, optionally suffixed**, where the suffix names one particular sitting of that task
+rather than the task: `<number>-fixround-N` for a reviewer-driven fix round, and other suffixes where
+a task took more than one sitting of the same revision (`11-bisection`, `12-prev`).
 
-What is in there is what this lists:
+Which labels the file actually holds, and against which commits, is what this lists rather than
+anything written here:
 
 ```
 awk -F'\t' 'NR>1 {print $1"\t"$2}' bench-baselines/phase-5a-arms.tsv | sort -u
 ```
 
-Run 2026-08-22, that is `6`, `7`, `8` and `9` bare, each against more than one commit -- `6` against
-four -- plus `9-fixround-1`, `10` and `10-fixround-1`, each against one. So **a bare number does not
-mean a single sitting**. What the suffix marks is narrower than that: the reviewer-driven fix round of
-Tasks 9 and 10 took it, and Tasks 6, 7 and 8 recorded theirs under the bare number.
+**A bare number does not mean a single sitting**, and neither does a `(task, commit)` pair: several
+tasks re-measured the same axes against more than one revision under one label. The transcription
+that used to stand here in place of that command was wrong within a day of being written, which is
+why the command is what the section offers.
 
-This describes the rows the file holds rather than a rule for a later plan, and the rows are not
-rewritten to match one: they are measurements, and editing them to a spelling decided afterwards
-would be editing data.
+**Together, `task` and `commit` distinguish every sitting in the file**, and that is a property to
+keep rather than an observation:
+
+```
+awk -F'\t' 'NR>1 {k=$1"|"$2"|"$3"|"$4"|"$5"|"$6"|"$7"|"$8; c[k]++; if(c[k]>1) d++} END {print d+0}' \
+    bench-baselines/phase-5a-arms.tsv
+```
+
+prints `0`. It printed `312` between Task 12's two sittings of `ee6ebbf64` and the relabelling of the
+second to `12-prev`, and a run that leaves it non-zero has produced a table whose rows cannot be told
+apart by anything but their position in the file.
+
+**The `task` column is a label and the columns after `commit` are measurements**, and the two are not
+edited under the same rule. A measured value is never rewritten -- editing one to match a conclusion
+drawn afterwards would be editing data. A label may be corrected, and the correction above is the
+case that arises: when one task takes two sittings of one revision, one of them is relabelled so the
+key stays distinct, rather than a sitting being dropped.
 
 ## What a row is and is not
 

@@ -347,18 +347,20 @@ lang/raise_keyword_object_traces.rex
 lang/raise_array_nested.rex
 lang/raise_additional_nested.rex
 
-# Phase 5a (2026-08-17 plan) Task 12: the search order's last two steps.
+# Phase 5a (2026-08-17 plan) Task 12: what the documented search order has
+# after the class chain.
 #
-# The UNKNOWN forward and its argument pair -- the missed name and an array of
+# The UNKNOWN forward and its arguments -- the missed name, then an array of
 # the send's own arguments -- as the branch of the miss arm that answers, with
-# message_send_unknown_method.rex the branch that raises. One class returns
-# from UNKNOWN and one only says, because SAY over a forward that returned
-# nothing is 91.999 rather than the forward's own answer.
+# message_send_unknown_method.rex the branch that raises. Class J's UNKNOWN
+# only says where the others return, so its rows are whole clauses: SAY over a
+# forward that returned nothing is 91.999 rather than the forward's own answer.
 lang/message_send_unknown_forward.rex
 # The NOMETHOD condition beneath it, trapped by name, trapped by ANY, and
-# degraded to the 97.1 syntax error a SIGNAL ON SYNTAX takes. The offer walks
-# the whole activation stack before it degrades, so a caller's NOMETHOD handler
-# beats a callee's SYNTAX handler -- the pair of routines that show both
-# outcomes for the same callee is what a build degrading too early answers
-# identically.
+# degraded to the 97.1 syntax error a SIGNAL ON SYNTAX takes. Whose trap table
+# decides is the running activation's: an internal CALL inherits its caller's
+# traps by copy, so a caller's NOMETHOD handler does beat a callee's SYNTAX
+# handler, while a ::METHOD activation inherits none and the same main-body
+# NOMETHOD handler is never reached. A build that asked the whole activation
+# stack instead answers that method-body row with the NOMETHOD handler.
 lang/condition_nomethod.rex

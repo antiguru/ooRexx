@@ -1450,9 +1450,10 @@ impl Raised {
     /// rendering is [`Raised::no_method`]'s own 97.1.
     ///
     /// Built from that function so the catalogue coordinates are written
-    /// once, and differing from it in the three things a trapping handler
-    /// reads back. Measured, `say 'abc'~nosuchmsg` under `signal on
-    /// nomethod` against the same send under `signal on syntax`:
+    /// once, and differing from it in what a trapping handler reads back --
+    /// the table below is that difference. Measured, `say 'abc'~nosuchmsg`
+    /// under `signal on nomethod` against the same send under `signal on
+    /// syntax`:
     ///
     /// ```text
     ///                C           D            E    RC
@@ -1466,7 +1467,7 @@ impl Raised {
     /// it in from the condition's name rather than from the numbering this
     /// one keeps for its report.
     ///
-    /// **`Interp::nomethod` decides which of the two to raise**, and it
+    /// **`Interp::nomethod` decides which of them to raise**, and it
     /// raises this one only when something can take it, so the report path
     /// below is a fallback rather than the answer this shape is for.
     pub(crate) fn nomethod(target: &[u8], name: &[u8]) -> Raised {
