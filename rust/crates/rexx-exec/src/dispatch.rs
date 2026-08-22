@@ -1791,26 +1791,33 @@ impl Interp {
         }
         debug_assert!(
             self.required_string_latch_holds(value),
-            "the required-string latch is off where the protocol would render differently"
+            "the required-string latch is off where the protocol would answer differently \
+             or raise"
         );
         Ok(value)
     }
 
-    /// Whether running the protocol in full renders `value` exactly as the
-    /// fast path's own rendering of it does -- the check that makes
-    /// [`Interp::reqstr_armed`]'s latch sound rather than merely asserted, and
-    /// the reason an arming route added without latching reddens the debug
-    /// gate.
+    /// Whether the fast path is the right answer for `value` with the latch
+    /// clear -- one test per limb the latch claims cannot fire.
     ///
-    /// **The bytes and not the identity.** The protocol's last limb builds a
-    /// fresh string out of `stringValue()`, so an object never comes back as
-    /// itself even when nothing has changed; what the latch claims is that
-    /// rendering the value the caller already holds gives the same answer, and
-    /// that is what this compares.
+    /// **A wrongly clear latch is a wrong answer, not a slow one**, and it is
+    /// wrong in two independent ways, so this asks about both. Limb 1 can
+    /// answer a different string than the value renders as, and limb 3 can
+    /// raise where the fast path renders. A check covering only the first is
+    /// silent for a route that arms a trap, which is exactly what the second
+    /// test below is for.
     ///
-    /// Running the walk here cannot itself run Rexx code or raise: with the
-    /// latch off there is no `makeString` to send and no NOSTRING trap to
-    /// take, which is exactly what the latch records.
+    /// **This detects; it does not protect.** It runs under `debug_assert`, so
+    /// a release build has nothing here: release correctness rests entirely on
+    /// [`Interp::reqstr_armed`]'s arming sites being complete, and this is the
+    /// instrument that says whether they are when a debug build runs the same
+    /// program.
+    ///
+    /// **The bytes and not the identity**, for limb 1. The protocol's last
+    /// limb builds a fresh string out of `stringValue()`, so an object never
+    /// comes back as itself even when nothing has changed; what the latch
+    /// claims is that rendering the value the caller already holds gives the
+    /// same answer, and that is what this compares.
     ///
     /// **Not `#[cfg(debug_assertions)]`**: `debug_assert!` type-checks its
     /// expression in every profile, so the function has to exist in a release
@@ -1818,6 +1825,17 @@ impl Interp {
     ///
     /// [`Interp::reqstr_armed`]: crate::Interp::reqstr_armed
     fn required_string_latch_holds(&mut self, value: ObjRef) -> bool {
+        // Limb 3's route, and it is not about `value` at all: a trap that
+        // could take NOSTRING while the latch is clear is wrong for every
+        // rendered object, because `Interp::exec_condition_trap` is what arms
+        // both and a clear latch here means it did not. The gate is the same
+        // one `required_string_dispatch` applies, so this fires exactly where
+        // that would have raised.
+        if self.trap_for(b"NOSTRING").is_some_and(|trap| !trap.call) {
+            return false;
+        }
+        // Limb 1's route: the conversion limbs, run in full, against the
+        // rendering the fast path hands back instead.
         let expected = self.to_text(value).into_owned();
         let answered = match self.required_string_answer(value) {
             Ok(answered) => answered,
@@ -1826,8 +1844,8 @@ impl Interp {
         let bytes = match answered {
             Some(RequiredString::Object(text)) => self.to_text(text).into_owned(),
             Some(RequiredString::Bytes(bytes)) => bytes,
-            // The last two limbs: `stringValue()`, and the NOSTRING condition
-            // that cannot fire while the latch is off.
+            // `stringValue()`, which is what the fast path's own rendering of
+            // an object with no string value comes to.
             None => self.string_value_text(value),
         };
         bytes == expected
@@ -1877,19 +1895,35 @@ impl Interp {
         Ok(readable)
     }
 
-    /// Every supplied argument of one builtin call, in position order,
-    /// through the required-string protocol -- `None` when the protocol
-    /// cannot change any of them, so the caller passes its own list on.
+    /// Every supplied argument of one builtin call **except the positions
+    /// `crate::builtin::raw_argument_positions` exempts for `name`**, in
+    /// position order, through the required-string protocol -- `None` when the
+    /// protocol cannot change any of them, so the caller passes its own list
+    /// on.
     ///
     /// **`provide.xml` `reqstr` names "arguments to built-in functions"
-    /// wholesale, and the oracle converts each as the builtin fetches it**
-    /// (`ExpressionStack::requiredStringArgument`,
-    /// `expression/ExpressionStack.cpp:152`). Converting them all up front
-    /// reproduces the order every fetch that follows position order sees, and
-    /// it reaches an argument the builtin never uses -- which the oracle also
-    /// converts, measured: `substr('abc', 1, 2, .P)` with a class-side
-    /// `makeString` on `.P` prints `pad asked` even though the pad is not
-    /// needed, at rc 0.
+    /// wholesale, and the oracle converts a position when the builtin fetches
+    /// it through a converting accessor** -- `ExpressionStack::requiredStringArg`
+    /// (`expression/ExpressionStack.cpp:142`) and
+    /// `ExpressionStack::optionalStringArg` (`:167`), each of which calls
+    /// `argument->requestString()`. A position it fetches with `stack->peek`
+    /// instead is never converted, and
+    /// `crate::builtin::raw_argument_positions` is the enumeration of those.
+    ///
+    /// Converting the rest up front reproduces the order every fetch that
+    /// follows position order sees, and it reaches an argument the builtin
+    /// does not go on to use -- measured on `SUBSTR`'s pad, which the oracle
+    /// fetches through `optional_pad` whether or not the length reaches past
+    /// the subject: `substr('abc', 1, 2, .P)` with a class-side `makeString`
+    /// on `.P` prints `pad asked` at rc 0.
+    ///
+    /// **Converting a position at most once is the oracle's own property, not
+    /// an economy here**: both of those write the converted string back with
+    /// `replace(position, newStr)` (`:154`, `:186`), so a builtin that fetches
+    /// one position twice converts it once. Measured on
+    /// `XRANGE`, whose loop passes over its arguments twice:
+    /// `xrange('a', .K, 'x', 'z')` prints `K asked` exactly once on both
+    /// sides at rc 0.
     ///
     /// **After the 40.x count checks and before the builtin's own argument
     /// validation**, measured on both sides of that line: `date('S', , .Z)`
@@ -1900,15 +1934,23 @@ impl Interp {
     /// the conversion.
     pub(crate) fn required_string_arguments(
         &mut self,
+        name: &'static [u8],
         args: &[Option<ObjRef>],
     ) -> Result<Option<Vec<Option<ObjRef>>>, Failure> {
         if !self.reqstr_armed {
             return Ok(None);
         }
+        // Looked up behind the latch, not in front of it: an ordinary call
+        // pays one bool test here and nothing else, where a lookup at the call
+        // site would scan the exemption table on every builtin call in every
+        // program.
+        let raw = crate::builtin::raw_argument_positions(name);
         let mut converted = Vec::with_capacity(args.len());
-        for argument in args {
+        for (index, argument) in args.iter().enumerate() {
+            let position = index + 1;
             converted.push(match argument {
                 None => None,
+                Some(value) if raw.contains(&position) => Some(*value),
                 Some(value) => Some(self.required_string_value(*value)?),
             });
         }
@@ -3946,7 +3988,7 @@ mod tests {
     ///
     /// The corpus gate cannot see a clean refusal becoming a wrong answer: a
     /// refusal this crate does not share with the oracle is not expressible as
-    /// a differential row at all. So the two shapes of `~request` and
+    /// a differential row at all. So the shapes of `~request` and
     /// `~objectName=` this task deliberately left loud are asserted by their
     /// message here, and the neighbouring answering shapes sit beside them --
     /// which is what stops "refuse every argument" passing.

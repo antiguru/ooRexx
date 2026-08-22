@@ -405,16 +405,24 @@ lang/required_string_default_name.rex
 # raising for the same receiver -- and a makeString receiver as the control that
 # the trap is not consulted when the first limb answers.
 lang/required_string_nostring.rex
-# The protocol's own four messages. ~string and ~objectName part on a string,
+# The messages the protocol answers in its own right. ~string and ~objectName
+# part on a string,
 # ~request answers through the MAKE method and through the class-id match, and
 # ~objectName= moves stringValue() without touching the conversion.
 lang/required_string_face.rex
-# The three properties of a builtin's argument list that follow from where the
-# conversion happens: position order whatever order the builtin reads in, an
-# unread argument converted anyway, and a bad argument named by the object
-# rather than by its conversion -- with the pad as the exception that fixes
-# that rule.
+# What follows from where a builtin's argument conversion happens: position
+# order whatever order the builtin reads in, SUBSTR's pad converted whether or
+# not it is used, and a bad argument named by the object rather than by its
+# conversion -- with the pad as the exception that fixes that last rule.
+# The position the oracle fetches raw is its own program below.
 lang/required_string_builtin_arguments.rex
+# The one argument position in the whole builtin set that the oracle fetches
+# raw: VALUE's new value, read with `optional_argument`, so the object is stored
+# and the conversion happens later at whatever renders it. Both halves matter --
+# the ordering shows the conversion is not at the call, and the class shows an
+# object came back out of the variable -- and the NOSTRING rows reach the same
+# position with the protocol armed by a trap and no directive at all.
+lang/required_string_builtin_raw_argument.rex
 # The dyadic-operator context, which is the operand on the *right*. Every
 # operator family, and the two error messages that disagree about which operand
 # they name.

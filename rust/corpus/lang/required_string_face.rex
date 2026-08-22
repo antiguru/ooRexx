@@ -1,5 +1,5 @@
-/* The required-string protocol's own four messages: ~request, ~string,
- * ~objectName and ~objectName=.
+/* The messages the required-string protocol answers in its own right, as
+ * opposed to the contexts that reach it implicitly.
  *
  * ~string and ~objectName part on a string, which is why they are separate
  * methods and not one: a string's readable representation is itself where its

@@ -3055,12 +3055,12 @@ struct Interp {
     /// Whether the required-string protocol can answer anything other than
     /// the value it was handed -- `Interp::required_string_value`'s gate.
     ///
-    /// **The protocol has two arming routes and this latches on either.** A
-    /// `makeString` installed by a directive is the limb that can answer a
-    /// different string; a NOSTRING trap is the limb that can refuse. With
-    /// neither, every context `provide.xml` `reqstr` lists renders exactly
-    /// what it rendered before the protocol existed, and the gate is one
-    /// load and a branch where the walk is a decode and a heap lookup.
+    /// **This latches on every route that can make the protocol answer or
+    /// refuse.** A `makeString` installed by a directive is what lets limb 1
+    /// answer a different string; a NOSTRING trap is what lets limb 3 refuse.
+    /// With neither, every context `provide.xml` `reqstr` lists renders
+    /// exactly what it rendered before the protocol existed, and the gate is
+    /// one load and a branch where the walk is a decode and a heap lookup.
     ///
     /// **Monotonic, and that is the point rather than an economy.** `SIGNAL
     /// OFF NOSTRING` and a class whose `makeString` is never sent both leave
@@ -3068,10 +3068,20 @@ struct Interp {
     /// clearing it would have to be right at every unwind, and a missed
     /// clear would be a wrong answer instead of a slow one.
     ///
-    /// `Interp::required_string_value` re-runs the walk under
-    /// `debug_assert` while this is unset and insists the value stands, so a
-    /// third arming route added without setting this reddens the debug gate
-    /// rather than answering the old string.
+    /// **A missed arming is a wrong answer, so what protects a release build
+    /// is the arming sites and not a check.** The writes are
+    /// `Interp::arm_reqstr_for`, called from both directive installers, and
+    /// `Interp::exec_condition_trap`'s `NOSTRING`/`ANY` arm; the initialiser
+    /// is `false` and nothing clears it. `dispatch.rs`'s
+    /// `Interp::required_string_latch_holds` runs under `debug_assert` and
+    /// tests both limbs' routes, so an arming route added without setting
+    /// this reddens the **debug** gate -- both halves proved live by
+    /// inverting each write in turn, which the task report records.
+    ///
+    /// One route is latent rather than covered: a user class that inherited a
+    /// native `MAKESTRING` would install no `MAKESTRING` name of its own, and
+    /// `arm_reqstr_for` reads the installed name. `~new` is refused in this
+    /// phase, so no such receiver exists yet.
     reqstr_armed: bool,
     /// The running program's own location, as `PARSE SOURCE`'s third word.
     ///

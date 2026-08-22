@@ -616,8 +616,8 @@ impl Interp {
         evaluated: Option<ObjRef>,
     ) -> Result<ParseStrings, Failure> {
         // Which of the two the source produces is what decides whether the
-        // required-string protocol runs at all: the four sources that build
-        // their own bytes never had an object to convert.
+        // required-string protocol runs at all: a source that builds its own
+        // bytes never had an object to convert.
         enum Subject {
             Bytes(Vec<u8>),
             Value(ObjRef),

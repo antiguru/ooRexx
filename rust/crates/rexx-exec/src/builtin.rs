@@ -779,11 +779,13 @@ pub(crate) fn run(
     };
     let builtin = &IMPLEMENTED[row as usize];
     check_arity(builtin, args)?;
-    // **The required-string protocol runs here, once, over the whole
-    // argument list** -- after the 40.x count checks and before the builtin
-    // body, which is where the measurements in
-    // `Interp::required_string_arguments` put it.
-    match interp.required_string_arguments(args)? {
+    // **The required-string protocol runs here, once, over the argument
+    // list** -- after the 40.x count checks and before the builtin body,
+    // which is where the measurements in
+    // `Interp::required_string_arguments` put it. The row's own name goes
+    // with it, because which positions are exempt is a fact about the
+    // builtin.
+    match interp.required_string_arguments(builtin.name, args)? {
         Some(converted) => (builtin.run)(
             interp,
             builtin.name,
@@ -803,7 +805,43 @@ pub(crate) fn run(
     }
 }
 
-/// One builtin call's arguments, in the two readings a builtin needs of them.
+/// The 1-based argument positions `name` fetches **raw**, which the
+/// required-string protocol must leave alone, or an empty slice.
+///
+/// `BuiltinFunctions.hpp` gives a `BUILTIN(x)` body a **converting** family of
+/// argument accessor, whose members reach `ExpressionStack`'s own converting
+/// fetches and so run the whole protocol, and a **raw** family, whose members
+/// are `stack->peek` and convert nothing. A position reached only through the
+/// raw family is a position the oracle never converts, and converting it here
+/// is a silent wrong answer.
+///
+/// **Derived by enumerating every `BUILTIN(x)` block rather than by noticing
+/// one case**, which is the only way the shape can be trusted: for each block,
+/// its own `x_<name> = N` position constants against which accessor family
+/// mentions each name. Exactly one position in the whole set is reached only
+/// through the raw family, and it is `VALUE`'s new value. Measured, oracle
+/// rc 0: `r = value('a', .Array)` stores the class object, so `a~class` is
+/// `The Class class` and not `The String class`, and under `signal on any`
+/// with no `makeString` anywhere the same call raises nothing where a
+/// converted position would raise NOSTRING.
+///
+/// **The regression instrument is
+/// `corpus/lang/required_string_builtin_raw_argument.rex`**, which arms the
+/// latch and stores an object through `VALUE`; nothing else in the tree
+/// reddens for this, because the value only shows up when something reads the
+/// stored object back.
+pub(crate) fn raw_argument_positions(name: &'static [u8]) -> &'static [usize] {
+    match RAW_ARGUMENT_POSITIONS.iter().find(|(row, _)| *row == name) {
+        Some((_, positions)) => positions,
+        None => &[],
+    }
+}
+
+/// The whole of what [`raw_argument_positions`] answers, as a table, so a
+/// second builtin joining it is one row rather than a second branch.
+static RAW_ARGUMENT_POSITIONS: &[(&[u8], &[usize])] = &[(b"VALUE", &[2])];
+
+/// One builtin call's arguments, in both readings a builtin needs of them.
 ///
 /// **The required-string protocol splits what a reader uses from what a
 /// message names.** `provide.xml` `reqstr` makes every builtin argument a
@@ -1301,5 +1339,41 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (40, 4));
+    }
+    /// Every row of [`RAW_ARGUMENT_POSITIONS`] names a builtin this crate
+    /// implements, at a position that builtin can be given.
+    ///
+    /// **The guard against an orphaned row.** The table is the only thing
+    /// keeping a position the oracle fetches raw out of the required-string
+    /// protocol, and a row whose name no longer matches a `IMPLEMENTED` row --
+    /// a rename, a re-spelling -- would silently stop exempting anything while
+    /// `raw_argument_positions` went on answering the empty slice. The corpus
+    /// program is what catches the exemption being *wrong*; this catches it
+    /// being *absent*.
+    #[test]
+    fn every_raw_argument_row_names_a_builtin_and_a_position_it_can_take() {
+        for (name, positions) in RAW_ARGUMENT_POSITIONS {
+            let builtin = IMPLEMENTED
+                .iter()
+                .find(|row| row.name == *name)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "RAW_ARGUMENT_POSITIONS names {}, which is not an implemented builtin",
+                        String::from_utf8_lossy(name)
+                    )
+                });
+            assert!(
+                !positions.is_empty(),
+                "{} has an empty raw-position list, which is what omitting the row means",
+                String::from_utf8_lossy(name)
+            );
+            for position in *positions {
+                assert!(
+                    builtin.max.is_none_or(|max| *position <= max),
+                    "{} declares a raw position {position} past its own maximum",
+                    String::from_utf8_lossy(name)
+                );
+            }
+        }
     }
 }

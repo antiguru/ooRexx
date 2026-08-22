@@ -1,19 +1,24 @@
 /* provide.xml `reqstr` names "arguments to built-in functions" wholesale, and
- * three properties of that follow from where the oracle converts.
+ * what follows from where the oracle converts is witnessed here.
  *
  * The order is position order, whatever order the builtin reads its arguments
  * in: SUBSTR reads its length and its pad before its subject, and the say
- * lines from the three makeStrings still come out 1, 2, 3.
+ * lines from its makeStrings still come out 1, 2, 3.
  *
- * An argument the builtin does not use is converted anyway -- SUBSTR asks for
- * its pad whether or not the length reaches past the subject -- so the pad's
- * own line prints twice below and only the second call pads with it.
+ * SUBSTR fetches its pad through `optional_pad` unconditionally, so the pad is
+ * converted whether or not the length reaches past the subject -- the pad's
+ * own line prints for both calls below and only the second one pads with it.
+ * **That is a property of this fetch and not of builtin arguments in
+ * general**: a position the oracle fetches with `stack->peek` is never
+ * converted, and `required_string_builtin_raw_argument.rex` is the one such
+ * position in the whole set.
  *
  * A bad argument names the *object* and not the conversion, because the
- * oracle's error path is handed the value the expression produced. The three
- * raises below are one per message shape: a whole number, a pad, and a number.
- * The pad is the exception that fixes the rule: padArgument converts first and
- * quotes the conversion, so its own line reads the makeString answer.
+ * oracle's error path is handed the value the expression produced. The
+ * message shapes the raises below cover are a whole number, a pad and a
+ * number. The pad is the exception that fixes the rule: padArgument converts
+ * first and quotes the conversion, so its own line reads the makeString
+ * answer.
  *
  * Phase 5a Task 14.
  */
