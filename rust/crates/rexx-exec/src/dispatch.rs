@@ -126,14 +126,20 @@ use seam::Cleared;
 ///
 /// The [`Cleared`] parameter is the seam's own enforcement and is never read
 /// by an implementation -- see this module's doc comment.
-type NativeMethod = fn(&mut Interp, Cleared, ObjRef, &[Option<ObjRef>]) -> Result<ObjRef, Failure>;
+///
+/// **`None` is a method that produced no value**, which is `OREF_NULL` off a
+/// C++ method body: measured, `.environment~put('v','q')` is rc 0 as a whole
+/// clause and 91.999 at rc 165 under `say`, exactly as a `::METHOD` body
+/// ending in a bare `return` is.
+type NativeMethod =
+    fn(&mut Interp, Cleared, ObjRef, &[Option<ObjRef>]) -> Result<Option<ObjRef>, Failure>;
 
 /// What a resolved [`MethodId`] runs.
 ///
 /// The kinds are not interchangeable and are kept apart rather than
-/// hidden behind one closure: only a Rexx body can produce a send with no
-/// value, only a native method has a declared arity to check, and only a
-/// native method contributes a `Compiled method` traceback line.
+/// hidden behind one closure: only a native method has a declared argument
+/// count for the send to check, and only a native method contributes a
+/// `Compiled method` traceback line.
 enum Invocable {
     Native(NativeEntry),
     Rexx(crate::InstalledMethodBody),
@@ -142,11 +148,26 @@ enum Invocable {
 /// What [`Interp::invoke`] needs about one primitive method beyond its code.
 #[derive(Copy, Clone)]
 struct NativeEntry {
-    /// The number of parameters the method declares, which is the number the
-    /// oracle's own 93.902 names -- measured, `'abc'~length(1)` is `0
-    /// expected` and `'abc'~hasMethod('a','b')` is `1 expected`.
-    arity: usize,
+    arity: Arity,
     run: NativeMethod,
+}
+
+/// How many arguments a primitive method's own entry admits, which is the
+/// second half of every `AddMethod` row in `memory/Setup.cpp`.
+#[derive(Copy, Clone)]
+enum Arity {
+    /// A numeric count. `CPPCode::run` refuses more than this with 93.902
+    /// before the body is entered (`execution/CPPCode.cpp:151`-`:154`) and
+    /// pads a shorter list out with nulls -- measured, `'abc'~length(1)` is
+    /// `0 expected` and `'abc'~hasMethod('a','b')` is `1 expected`.
+    Fixed(usize),
+    /// `A_COUNT` (`execution/CPPCode.hpp:48`), which hands the body the whole
+    /// argument list and count and refuses nothing here
+    /// (`execution/CPPCode.cpp:144`-`:148`). The body's own check is what
+    /// reports, and its error is not always 93.902 -- measured,
+    /// `(1,2)~at(1,2)` is 93.926 `Too many subscripts for array; 1 expected.`
+    /// where `.environment~at(1,2)`, whose row is a count, is 93.902.
+    Counted,
 }
 
 /// The primitive methods this phase implements, as (class id, method name,
@@ -158,8 +179,22 @@ struct NativeEntry {
 /// entry a `String` receiver reaches too, because the flattened cascade
 /// copies `Object`'s entry (its `MethodId` included) into `String`'s
 /// behaviour.
-static NATIVE_METHODS: &[(&str, &str, usize, NativeMethod)] = &[
-    ("Array", "MAKESTRING", 2, native_array_make_string),
+static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
+    // `ArrayClass::getRexx` under both of its names, `memory/Setup.cpp:713`
+    // and `:715`, at `A_COUNT` in each row -- the same both-names-one-function
+    // shape `MAKESTRING`/`TOSTRING` below have, and for the same reason: a
+    // second function is where the two could come to disagree. Measured, the
+    // two agree on every shape `array_index.rex` and
+    // `array_index_refusals.rex` ask.
+    ("Array", "[]", Arity::Counted, native_array_at),
+    ("Array", "AT", Arity::Counted, native_array_at),
+    ("Array", "ITEMS", Arity::Fixed(0), native_array_items),
+    (
+        "Array",
+        "MAKESTRING",
+        Arity::Fixed(2),
+        native_array_make_string,
+    ),
     // The same C++ function under a second name, `Setup.cpp:733`-`:734`
     // binding `ArrayClass::toString` twice with the same arity. Measured, the
     // two agree on every shape `array_make_string.rex` and
@@ -170,23 +205,54 @@ static NATIVE_METHODS: &[(&str, &str, usize, NativeMethod)] = &[
     // implementation, so `~toString` reads `Compiled method "TOSTRING" with
     // scope "Array".` A second row here rather than a second function,
     // because a second function is where the two could come to disagree.
-    ("Array", "TOSTRING", 2, native_array_make_string),
-    ("Class", "BASECLASS", 0, native_base_class),
-    ("Class", "ID", 0, native_id),
-    ("Class", "ISSUBCLASSOF", 1, native_is_subclass_of),
-    ("Class", "METACLASS", 0, native_metaclass),
-    ("Class", "METHOD", 1, native_method),
-    ("Class", "PACKAGE", 0, native_package),
-    ("Class", "SUPERCLASS", 0, native_superclass),
-    ("Class", "SUPERCLASSES", 0, native_superclasses),
-    ("Object", "CLASS", 0, native_class),
-    ("Object", "HASMETHOD", 1, native_has_method),
-    ("Object", "IDENTITYHASH", 0, native_identity_hash),
-    ("Object", "ISA", 1, native_is_a),
-    ("Object", "ISNIL", 0, native_is_nil),
-    ("Package", "NAME", 0, native_package_name),
-    ("String", "LENGTH", 0, native_length),
-    ("String", "REVERSE", 0, native_reverse),
+    (
+        "Array",
+        "TOSTRING",
+        Arity::Fixed(2),
+        native_array_make_string,
+    ),
+    ("Array", "SIZE", Arity::Fixed(0), native_array_size),
+    ("Class", "BASECLASS", Arity::Fixed(0), native_base_class),
+    ("Class", "ID", Arity::Fixed(0), native_id),
+    (
+        "Class",
+        "ISSUBCLASSOF",
+        Arity::Fixed(1),
+        native_is_subclass_of,
+    ),
+    ("Class", "METACLASS", Arity::Fixed(0), native_metaclass),
+    ("Class", "METHOD", Arity::Fixed(1), native_method),
+    ("Class", "PACKAGE", Arity::Fixed(0), native_package),
+    ("Class", "SUPERCLASS", Arity::Fixed(0), native_superclass),
+    (
+        "Class",
+        "SUPERCLASSES",
+        Arity::Fixed(0),
+        native_superclasses,
+    ),
+    // `HashCollection::getRexx` under both of its names and
+    // `HashCollection::putRexx`, donated to `Directory` by
+    // `InheritInstanceMethods(StringTable)` (`memory/Setup.cpp:933`) out of
+    // `IdentityTable`'s own rows (`:825`, `:828`, `:831`). The donation puts
+    // them in `Directory`'s **own** dictionary, which is what the scope in the
+    // traceback says: measured, `.environment~at()` reports `Compiled method
+    // "AT" with scope "Directory".`, not `IdentityTable`.
+    ("Directory", "[]", Arity::Fixed(1), native_directory_at),
+    ("Directory", "AT", Arity::Fixed(1), native_directory_at),
+    ("Directory", "PUT", Arity::Fixed(2), native_directory_put),
+    ("Object", "CLASS", Arity::Fixed(0), native_class),
+    ("Object", "HASMETHOD", Arity::Fixed(1), native_has_method),
+    (
+        "Object",
+        "IDENTITYHASH",
+        Arity::Fixed(0),
+        native_identity_hash,
+    ),
+    ("Object", "ISA", Arity::Fixed(1), native_is_a),
+    ("Object", "ISNIL", Arity::Fixed(0), native_is_nil),
+    ("Package", "NAME", Arity::Fixed(0), native_package_name),
+    ("String", "LENGTH", Arity::Fixed(0), native_length),
+    ("String", "REVERSE", Arity::Fixed(0), native_reverse),
 ];
 
 /// `~defaultName` for an array -- `RexxObject::defaultName`'s article rule
@@ -200,7 +266,7 @@ static NATIVE_METHODS: &[(&str, &str, usize, NativeMethod)] = &[
 ///
 /// A constant rather than a lookup because every array this crate builds is an
 /// instance of `.Array` itself: `native_superclasses` is the one constructor.
-const ARRAY_DEFAULT_NAME: &[u8] = b"an Array";
+pub(crate) const ARRAY_DEFAULT_NAME: &[u8] = b"an Array";
 
 /// The class model this crate dispatches against, and the implementations
 /// its `MethodId`s name.
@@ -224,6 +290,7 @@ pub(crate) struct ObjectModel {
     array: ObjRef,
     package: ObjRef,
     method: ObjRef,
+    directory: ObjRef,
 }
 
 impl ObjectModel {
@@ -264,6 +331,9 @@ impl ObjectModel {
             .lookup("Package")
             .expect("Package is a native class");
         let method = classes.lookup("Method").expect("Method is a native class");
+        let directory = classes
+            .lookup("Directory")
+            .expect("Directory is a native class");
         ObjectModel {
             classes,
             natives,
@@ -273,6 +343,7 @@ impl ObjectModel {
             array,
             package,
             method,
+            directory,
         }
     }
 }
@@ -316,6 +387,16 @@ enum Primitive {
     /// A `Body::Native` whose class is `.Package` -- what `~package` answers.
     /// Measured, `.Array~package~class~id` is `Package`.
     Package,
+    /// A `Body::Native` whose class is `.Directory` -- `.environment` and
+    /// `.local`. Measured, `.environment~class~id` is `Directory`.
+    ///
+    /// **`.methods`, `.routines`, `.resources` and `.context` are not this**,
+    /// even though a `StringTable` answers the same three method names out of
+    /// the same donated `IdentityTable` rows: this crate populates none of
+    /// those tables (`environment.rs`'s `package_string_table`), so answering
+    /// `~at` on one would answer `.nil` for an index the oracle has an entry
+    /// for. They keep the loud arm.
+    Directory,
     /// The receiver **is** a class object, so its messages resolve against
     /// that class's own class behaviour rather than against any class's
     /// instance behaviour. Measured, `::class K` plus `::method m class`:
@@ -630,13 +711,19 @@ impl Interp {
                     {
                         Ok(Primitive::Package)
                     }
-                    // `.environment`, `.local`, `.methods` and `.context`.
+                    Body::Native(native)
+                        if self.object_model.as_ref().map(|model| model.directory)
+                            == Some(native.class()) =>
+                    {
+                        Ok(Primitive::Directory)
+                    }
+                    // `.methods`, `.routines`, `.resources` and `.context`.
                     // Their classes are in the registry, so there is a
                     // behaviour to resolve against -- what is missing is a
-                    // `NATIVE_METHODS` row for anything a `Directory`, a
-                    // `StringTable` or a `RexxContext` answers, and answering
-                    // 97.1 for a name the oracle implements is the wrong
-                    // failure. Loud until a task implements those methods.
+                    // `NATIVE_METHODS` row for anything a `StringTable` or a
+                    // `RexxContext` answers, and answering 97.1 for a name the
+                    // oracle implements is the wrong failure. Loud until a
+                    // task implements those methods.
                     Body::Native(_) => Err("one of the interpreter's own objects"),
                 },
             },
@@ -660,6 +747,7 @@ impl Interp {
             Primitive::Object => Behaviour::Instance(model.object),
             Primitive::Array => Behaviour::Instance(model.array),
             Primitive::Package => Behaviour::Instance(model.package),
+            Primitive::Directory => Behaviour::Instance(model.directory),
             Primitive::Class(class) => Behaviour::ClassSide(class),
         })
     }
@@ -756,11 +844,11 @@ impl Interp {
     /// before `method->run`, and the count check is part of the method's own
     /// entry (`NativeActivation::run`), not of the send.
     ///
-    /// **`None` is a send that produced no value**, which only a Rexx body
-    /// can do -- a [`NativeMethod`] returns an `ObjRef` by its own signature.
+    /// **`None` is a send that produced no value**, and either kind can do it.
     /// Measured, `::method m class` ending in a bare `return`: as a whole
     /// clause it drops `RESULT` at rc 0, and in an expression it is 91.999 at
-    /// rc 165.
+    /// rc 165. `.environment~put('v','q')` answers the identical pair from a
+    /// [`NativeMethod`].
     pub(crate) fn invoke(
         &mut self,
         resolution: Resolution,
@@ -772,16 +860,17 @@ impl Interp {
         let cleared = seam::clear(self, receiver, name, args)?;
         match invocable {
             Invocable::Native(entry) => {
-                let outcome = if args.len() > entry.arity {
-                    Err(Raised::too_many_method_arguments(entry.arity).into())
-                } else {
-                    (entry.run)(self, cleared, receiver, args)
+                let outcome = match entry.arity {
+                    Arity::Fixed(arity) if args.len() > arity => {
+                        Err(Raised::too_many_method_arguments(arity).into())
+                    }
+                    Arity::Fixed(_) | Arity::Counted => (entry.run)(self, cleared, receiver, args),
                 };
                 if outcome.is_err() {
                     let scope = self.classes().id_string(resolution.scope).to_string();
                     self.blame_native_method(name, &scope);
                 }
-                outcome.map(Some)
+                outcome
             }
             // **No `blame_native_method`**, measured: an untrapped `1/0`
             // inside a `::METHOD` body reports the method's own failing
@@ -994,10 +1083,40 @@ impl Interp {
         }
         match self.resolve(receiver, name, start_scope, caller) {
             Some(resolution) => self.invoke(resolution, receiver, name, args),
+            // **A receiver whose behaviour answers `UNKNOWN` never reaches
+            // 97.1 on the oracle**, so a name that resolves to nothing here is
+            // a gap and not that condition. `RexxObject::messageSend` sends
+            // `UNKNOWN` with the name and an array of the arguments when the
+            // lookup misses (`classes/ObjectClass.cpp`), and this crate
+            // implements no such forward -- measured, `.environment~nosuch` is
+            // `The NIL object` at rc 0 on the oracle, because `Directory`'s
+            // donated `UNKNOWN` (`memory/Setup.cpp:883`, donated at `:933`)
+            // reads it as an entry. 97.1 there is a wrong answer a program can
+            // trap, which is the argument [`Loud::receiver_class`] makes for a
+            // stem.
+            None if self.answers_unknown(receiver) => Err(Loud::unknown_forward(name).into()),
             None => {
                 let target = self.message_target_text(receiver);
                 Err(Raised::no_method(&target, name).into())
             }
+        }
+    }
+
+    /// Whether `receiver`'s behaviour answers `UNKNOWN`, which is what decides
+    /// that a missed lookup is not 97.1.
+    ///
+    /// Asked of the behaviour rather than listed per class, so a class whose
+    /// dictionary gains the name -- by donation, by `~inherit`, or by a
+    /// `::METHOD UNKNOWN` -- is covered without a second table to keep in
+    /// step.
+    fn answers_unknown(&mut self, receiver: ObjRef) -> bool {
+        let Ok(behaviour) = self.receiver_behaviour(receiver) else {
+            return false;
+        };
+        let classes = &self.object_model().classes;
+        match behaviour {
+            Behaviour::Instance(class) => classes.has_method(class, "UNKNOWN"),
+            Behaviour::ClassSide(class) => classes.class_has_method(class, "UNKNOWN"),
         }
     }
 
@@ -1010,11 +1129,11 @@ impl Interp {
     /// (`classes/ArrayClass.cpp:1841`). Measured, `a = .Array~superClasses`:
     /// `say a + 1` reports `Object "an Array" does not understand message
     /// "+".` where `say 'x'a` prints the two class names on two lines.
+    ///
+    /// [`Interp::string_value_text`] is the whole of it, and this name is what
+    /// says which question the 97.1 site is asking.
     fn message_target_text(&mut self, receiver: ObjRef) -> Vec<u8> {
-        if matches!(self.receiver_kind(receiver), Ok(Primitive::Array)) {
-            return ARRAY_DEFAULT_NAME.to_vec();
-        }
-        self.to_text(receiver).to_vec()
+        self.string_value_text(receiver)
     }
 
     /// One whole `target~name(...)` term: the receiver, the scope override,
@@ -1229,7 +1348,7 @@ fn native_has_method(
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+) -> Result<Option<ObjRef>, Failure> {
     let Some(Some(argument)) = args.first().copied() else {
         return Err(Raised::missing_method_argument(1).into());
     };
@@ -1255,7 +1374,7 @@ fn native_has_method(
         Behaviour::Instance(class) => classes.has_method(class, &name),
         Behaviour::ClassSide(class) => classes.class_has_method(class, &name),
     };
-    Ok(interp.counted(usize::from(answers)))
+    Ok(Some(interp.counted(usize::from(answers))))
 }
 
 /// `Class~baseClass`: `RexxClass::getBaseClass`, bound as a method of
@@ -1273,9 +1392,9 @@ fn native_base_class(
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+) -> Result<Option<ObjRef>, Failure> {
     let class = class_receiver(interp, receiver)?;
-    Ok(interp.classes().base_class(class))
+    Ok(Some(interp.classes().base_class(class)))
 }
 
 /// The class object a receiver whose messages resolve against a class's
@@ -1321,10 +1440,10 @@ fn native_id(
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+) -> Result<Option<ObjRef>, Failure> {
     let class = class_receiver(interp, receiver)?;
     let id = interp.class_id_text(class).as_bytes().to_vec();
-    Ok(interp.text_built(id))
+    Ok(Some(interp.text_built(id)))
 }
 
 /// `Class~metaClass`: `RexxClass::getMetaClass` (`classes/ClassClass.cpp:419`).
@@ -1337,9 +1456,9 @@ fn native_metaclass(
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+) -> Result<Option<ObjRef>, Failure> {
     let class = class_receiver(interp, receiver)?;
-    Ok(interp.classes().metaclass(class))
+    Ok(Some(interp.classes().metaclass(class)))
 }
 
 /// `Class~superClass`: the class's own direct superclass, or `.nil` for
@@ -1356,9 +1475,11 @@ fn native_superclass(
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+) -> Result<Option<ObjRef>, Failure> {
     let class = class_receiver(interp, receiver)?;
-    Ok(interp.classes().superclass(class).unwrap_or(ObjRef::NIL))
+    Ok(Some(
+        interp.classes().superclass(class).unwrap_or(ObjRef::NIL),
+    ))
 }
 
 /// `Class~superClasses`: a **fresh** array of the class's own direct
@@ -1373,13 +1494,20 @@ fn native_superclasses(
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+) -> Result<Option<ObjRef>, Failure> {
     let class = class_receiver(interp, receiver)?;
-    let items = interp.classes().superclasses(class).to_vec();
+    let items: Vec<Option<ObjRef>> = interp
+        .classes()
+        .superclasses(class)
+        .iter()
+        .map(|class| Some(*class))
+        .collect();
     // Every item is a class identity, which lives outside the arena
     // (`rexx_core::CLASS_SLOT_BASE`), so the allocation below cannot collect
     // one of them out from under this array.
-    Ok(interp.alloc_with(BehaviourId::ARRAY, Body::Array(items)))
+    Ok(Some(
+        interp.alloc_with(BehaviourId::ARRAY, Body::Array(items)),
+    ))
 }
 
 /// `Object~class`: the class whose behaviour answers this receiver's
@@ -1398,19 +1526,20 @@ fn native_class(
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+) -> Result<Option<ObjRef>, Failure> {
     let kind = match interp.receiver_kind(receiver) {
         Ok(kind) => kind,
         Err(gap) => return Err(Loud::receiver_class(gap).into()),
     };
     let model = interp.object_model();
-    Ok(match kind {
+    Ok(Some(match kind {
         Primitive::String | Primitive::SmallInt => model.string,
         Primitive::Object => model.object,
         Primitive::Array => model.array,
         Primitive::Package => model.package,
+        Primitive::Directory => model.directory,
         Primitive::Class(class) => model.classes.class_of(class),
-    })
+    }))
 }
 
 /// `Object~isA(class)`: whether the receiver's **class** is `class` or a
@@ -1427,11 +1556,17 @@ fn native_is_a(
     cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+) -> Result<Option<ObjRef>, Failure> {
     let other = class_argument(args)?;
-    let own = native_class(interp, cleared, receiver, &[])?;
+    // `native_class` answers a class object for every receiver kind, so the
+    // `None` a `NativeMethod` may now answer is not one of its outcomes -- and
+    // a refusal rather than an `expect`, this crate's rule for an internal
+    // inconsistency.
+    let Some(own) = native_class(interp, cleared, receiver, &[])? else {
+        return Err(Loud::receiver_class("a value with no class of its own").into());
+    };
     let answer = interp.classes().is_a(own, other);
-    Ok(interp.counted(usize::from(answer)))
+    Ok(Some(interp.counted(usize::from(answer))))
 }
 
 /// `Class~isSubclassOf(class)`: whether the receiver **is** `class` or derives
@@ -1442,11 +1577,11 @@ fn native_is_subclass_of(
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+) -> Result<Option<ObjRef>, Failure> {
     let other = class_argument(args)?;
     let class = class_receiver(interp, receiver)?;
     let answer = interp.classes().is_a(class, other);
-    Ok(interp.counted(usize::from(answer)))
+    Ok(Some(interp.counted(usize::from(answer))))
 }
 
 /// `Object~identityHash`.
@@ -1461,9 +1596,9 @@ fn native_identity_hash(
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+) -> Result<Option<ObjRef>, Failure> {
     let bits = receiver.bits().to_string().into_bytes();
-    Ok(interp.text_built(bits))
+    Ok(Some(interp.text_built(bits)))
 }
 
 /// `Class~method(name)`: the method object `name` names **in this class's own
@@ -1481,7 +1616,7 @@ fn native_method(
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+) -> Result<Option<ObjRef>, Failure> {
     let Some(Some(argument)) = args.first().copied() else {
         return Err(Raised::missing_named_argument("method name").into());
     };
@@ -1499,13 +1634,221 @@ fn native_method(
     }
     let method_class = interp.object_model().method;
     let rendered = crate::environment::default_object_name(interp.class_id_text(method_class));
-    Ok(interp.alloc_with(
+    Ok(Some(interp.alloc_with(
         BehaviourId::OBJECT,
         Body::Native(Box::new(NativeObject::new(
             method_class,
             rendered.as_bytes(),
         ))),
-    ))
+    )))
+}
+
+/// An array receiver's own slots, or the refusal for a receiver that is not
+/// one.
+///
+/// Cloned rather than borrowed, so the caller may go on using `interp`: every
+/// method here renders or converts something after reading the slots.
+///
+/// The refusal is unreachable -- every row that reaches one of these callers
+/// is in `.Array`'s own dictionary, and the only receiver whose behaviour that
+/// dictionary reaches is a `Body::Array`. Loud rather than a panic, this
+/// crate's rule for an internal inconsistency.
+fn array_slots(interp: &Interp, receiver: ObjRef) -> Result<Vec<Option<ObjRef>>, Failure> {
+    match interp.heap.get(receiver).map(|object| &object.body) {
+        Some(Body::Array(items)) => Ok(items.clone()),
+        _ => Err(Loud::receiver_class("a value that is not an array").into()),
+    }
+}
+
+/// The one subscript `.Array`'s `[]`/`AT` were given, 1-based, or the refusal
+/// for a subscript list that does not name one.
+///
+/// `ArrayClass::validateIndex` (`classes/ArrayClass.cpp:1211`) then
+/// `validateSingleDimensionIndex` (`:1258`), under `IndexAccess`, which is
+/// `RaiseBoundsTooMany` alone (`classes/ArrayClass.hpp:62`). So a subscript
+/// past the end of the array is **not** an error -- measured,
+/// `(1,2)~at(100000000000000001)` answers `The NIL object` even though that is
+/// past `MaxFixedArraySize` -- and only the count and the conversion raise.
+///
+/// **A lone array argument is the subscript list**, spread by taking its item
+/// count alongside its slot array (`:1219`-`:1226`). Measured, that is item
+/// count and not size: `(1,2)~at((1,))` answers `1` where `(1,2)~at((1,2))` is
+/// 93.926 and `(1,2)~at((,))` is 93.901.
+fn array_index(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<usize, Failure> {
+    let spread;
+    let subscripts = match args {
+        [Some(only)] => match interp.heap.get(*only).map(|object| &object.body) {
+            Some(Body::Array(slots)) => {
+                let items = slots.iter().flatten().count();
+                spread = slots[..items].to_vec();
+                &spread[..]
+            }
+            _ => args,
+        },
+        _ => args,
+    };
+    match subscripts {
+        [] => Err(Raised::not_enough_method_arguments(1).into()),
+        [Some(only)] => positive_index(interp, *only),
+        // Only the spread above can produce this: an argument list of its own
+        // drops a trailing omission, so `~at(,)` arrives as no argument at all
+        // and is 93.901 above.
+        [None] => Err(Loud::array_index_hole().into()),
+        _ => Err(Raised::too_many_subscripts(1).into()),
+    }
+}
+
+/// One subscript as `RexxInternalObject::requiredPositive`
+/// (`classes/ObjectClass.cpp:1564`) reads it: a whole number of at least 1,
+/// converted under `Numerics::ARGUMENT_DIGITS` rather than under the
+/// activation's own `NUMERIC DIGITS`.
+///
+/// The fixed precision is measured rather than read off the default argument:
+/// `numeric digits 3; say (1,2)~at(1000000)` answers `The NIL object` where a
+/// conversion at 3 digits would have rounded the subscript.
+fn positive_index(interp: &mut Interp, value: ObjRef) -> Result<usize, Failure> {
+    // A tagged integer already is the answer when it is narrow enough that
+    // the rounding rule would change nothing, the same shortcut
+    // `builtin::whole_number` takes against the same width.
+    if let Decoded::SmallInt(small) = value.decode()
+        && let Some(whole) = rexx_num::whole_i64(small, rexx_num::ARGUMENT_DIGITS)
+        && let Ok(index) = usize::try_from(whole)
+        && index > 0
+    {
+        return Ok(index);
+    }
+    if let Ok(number) = interp.to_number(value)
+        && let Some(whole) = number.whole_value(rexx_num::ARGUMENT_DIGITS)
+        && let Ok(index) = usize::try_from(whole)
+        && index > 0
+    {
+        return Ok(index);
+    }
+    let found = interp.string_value_text(value);
+    Err(Raised::method_argument_not_positive(1, &found).into())
+}
+
+/// `Array~at(index)` and `Array~[index]`: the item at `index`, or `.nil` for
+/// an empty slot and for a subscript past the end -- `ArrayClass::getRexx`
+/// (`classes/ArrayClass.cpp:979`), whose out-of-bounds answer is
+/// `TheNilObject` and whose in-bounds answer is `resultOrNil(get(position))`.
+///
+/// Measured, `a = (1,,3)`: `a[1]` is `1`, `a[2]` is `The NIL object`, `a[3]` is
+/// `3` and `a[4]` is `The NIL object`.
+fn native_array_at(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let slots = array_slots(interp, receiver)?;
+    let index = array_index(interp, args)?;
+    Ok(Some(match slots.get(index - 1) {
+        Some(Some(item)) => *item,
+        Some(None) | None => ObjRef::NIL,
+    }))
+}
+
+/// `Array~size`: how many slots the array has, empty ones included --
+/// `ArrayClass::sizeRexx`.
+///
+/// Measured, `(1,)~size` is `2`, `(,)~size` is `2` and `(1,,3)~size` is `3`:
+/// the list expression's own array is `new_array(expressionCount)`
+/// (`expression/ExpressionList.cpp:93`), so a trailing omission is a slot.
+fn native_array_size(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let slots = array_slots(interp, receiver)?;
+    Ok(Some(interp.counted(slots.len())))
+}
+
+/// `Array~items`: how many slots hold an object -- `ArrayClass::itemsRexx`.
+///
+/// **Not `~size`, and an explicit `.nil` is an item.** Measured,
+/// `(1,,3)~items` is `2` while `(1,.nil,3)~items` is `3`, and both are
+/// `~size` `3`.
+fn native_array_items(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let slots = array_slots(interp, receiver)?;
+    let items = slots.iter().flatten().count();
+    Ok(Some(interp.counted(items)))
+}
+
+/// The index argument a directory method was given, as the bytes it is stored
+/// and looked up under.
+///
+/// `stringArgument(index, "index")` (`runtime/MethodArguments.hpp:161`), which
+/// raises 88.901 for an omitted argument and 88.909 for a value with no string
+/// value. Measured at rc 168: `.environment~at()` reports `Missing argument;
+/// argument index is required.` and `.environment~at(.nil)` reports `Argument
+/// index must have a string value.`
+///
+/// **The bytes are not upcased.** A directory index is stored and matched
+/// verbatim -- measured, `d~put('v','kk')` leaves `d['kk']` `v` and `d['KK']`
+/// `The NIL object`, and `.environment['array']` is `The NIL object` where
+/// `.environment['ARRAY']` is `The Array class`. The entries `Setup.cpp`
+/// registers are uppercase because `completeSystemClass` upcases the *name it
+/// registers*, not because a lookup folds case.
+fn directory_index(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    position: usize,
+) -> Result<Vec<u8>, Failure> {
+    let Some(Some(argument)) = args.get(position - 1).copied() else {
+        return Err(Raised::missing_named_argument("index").into());
+    };
+    if lacks_a_string_value(interp, argument) {
+        return Err(Raised::named_argument_needs_a_string_value("index").into());
+    }
+    Ok(interp.to_text(argument).to_vec())
+}
+
+/// `Directory~at(index)` and `Directory~[index]`: the entry stored under
+/// `index`, or `.nil` -- `HashCollection::getRexx`, donated to `.Directory`
+/// by `InheritInstanceMethods(StringTable)`.
+///
+/// Measured, `.environment['ARRAY']` is `The Array class` and
+/// `.environment['x']` is `The NIL object`.
+fn native_directory_at(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let index = directory_index(interp, args, 1)?;
+    Ok(Some(interp.directory_entry_read(receiver, &index)?))
+}
+
+/// `Directory~put(item, index)`: stores `item` under `index`, replacing
+/// whatever was there -- `HashCollection::putRexx`.
+///
+/// **The item is argument one and the index argument two**, which is the order
+/// `CoreClasses.orx:66` writes (`.environment~put(class, name)`). Measured at
+/// rc 168, the two refusals in the order the C++ checks them:
+/// `.environment~put()` reports `Missing argument; argument item is required.`
+/// and `.environment~put('a')` reports `... argument index is required.`
+///
+/// **Answers no value**, measured: `.environment~put('v','q')` is rc 0 as a
+/// whole clause and 91.999 at rc 165 under `say`.
+fn native_directory_put(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(Some(item)) = args.first().copied() else {
+        return Err(Raised::missing_named_argument("item").into());
+    };
+    let index = directory_index(interp, args, 2)?;
+    interp.directory_entry_write(receiver, &index, item)?;
+    Ok(None)
 }
 
 /// `Array~makeString(format, separator)` and `Array~toString(format,
@@ -1526,7 +1869,7 @@ fn native_array_make_string(
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+) -> Result<Option<ObjRef>, Failure> {
     // `optionalOptionArgument(format, 'L', ARG_ONE)`: the option's first
     // character, upcased, with the whole argument omitted meaning `L`.
     let form = match args.first().copied().flatten() {
@@ -1556,23 +1899,13 @@ fn native_array_make_string(
             interp.to_text(argument).to_vec()
         }
     };
-    let items = match interp.heap.get(receiver).map(|object| &object.body) {
-        Some(Body::Array(items)) => items.clone(),
-        // Unreachable: `MAKESTRING` is in `.Array`'s own dictionary, and the
-        // only receiver whose behaviour that dictionary reaches is a
-        // `Body::Array`. Loud rather than a panic, this crate's rule for an
-        // internal inconsistency.
-        _ => return Err(Loud::receiver_class("a value that is not an array").into()),
-    };
-    let mut out = Vec::new();
-    for (at, item) in items.iter().enumerate() {
-        if at > 0 {
-            out.extend_from_slice(&separator);
-        }
-        let bytes = interp.to_text(*item).to_vec();
-        out.extend_from_slice(&bytes);
-    }
-    Ok(interp.text_built(out))
+    let slots = array_slots(interp, receiver)?;
+    // The join itself is `Interp::array_string` and not a second loop here:
+    // `makeString` with no arguments is what a string context asks an array
+    // for, so the two must not be able to disagree about an empty slot or
+    // about a nested array's rendering.
+    let out = interp.array_string(&slots, &separator);
+    Ok(Some(interp.text_built(out)))
 }
 
 /// `Class~package`: the package the class was defined in --
@@ -1588,9 +1921,9 @@ fn native_package(
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+) -> Result<Option<ObjRef>, Failure> {
     let class = class_receiver(interp, receiver)?;
-    Ok(interp.package_object_for(class))
+    Ok(Some(interp.package_object_for(class)))
 }
 
 /// `Package~name`: the package's own name -- `PackageClass::getProgramName`
@@ -1603,13 +1936,13 @@ fn native_package_name(
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+) -> Result<Option<ObjRef>, Failure> {
     // Loud rather than a panic where the receiver is a package handle this
     // crate did not build, which is `Interp::package_name`'s own `None`.
     let Some(name) = interp.package_name(receiver) else {
         return Err(Loud::receiver_class("a package object this crate did not build").into());
     };
-    Ok(interp.text_built(name))
+    Ok(Some(interp.text_built(name)))
 }
 
 /// `Object~isNil`: `1` for `.nil` and `0` for everything else.
@@ -1618,8 +1951,8 @@ fn native_is_nil(
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
-    Ok(interp.counted(usize::from(receiver == ObjRef::NIL)))
+) -> Result<Option<ObjRef>, Failure> {
+    Ok(Some(interp.counted(usize::from(receiver == ObjRef::NIL))))
 }
 
 /// `String~length`: the receiver's own byte count.
@@ -1628,9 +1961,9 @@ fn native_length(
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+) -> Result<Option<ObjRef>, Failure> {
     let length = interp.text_len(receiver);
-    Ok(interp.counted(length))
+    Ok(Some(interp.counted(length)))
 }
 
 /// `String~reverse`: the receiver's own bytes, last to first.
@@ -1639,10 +1972,10 @@ fn native_reverse(
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+) -> Result<Option<ObjRef>, Failure> {
     let mut bytes = interp.to_text(receiver).to_vec();
     bytes.reverse();
-    Ok(interp.text_built(bytes))
+    Ok(Some(interp.text_built(bytes)))
 }
 
 #[cfg(test)]
@@ -2275,5 +2608,117 @@ mod tests {
                 "{source:?} answered or refused instead of raising: {stderr:?}"
             );
         }
+    }
+    /// **The one shape of `~at` that has no oracle behaviour to match**, and
+    /// the instrument [`Loud::array_index_hole`]'s own doc names.
+    ///
+    /// A lone array argument is spread into the subscript list by item count
+    /// with slot array, so an array whose leading slot is empty and whose item
+    /// count is one hands the C++ a null subscript and it dies. The program is
+    /// in `corpus/oracle-crashes.txt` and must never be run against the
+    /// oracle, so a differential row cannot cover this and this test is the
+    /// whole of it.
+    ///
+    /// **The adjacent answers are the point.** Each row beside the refusal is
+    /// a shape the spread does answer, and a build that refused the whole
+    /// spread -- or that read the item count as the size -- reddens one of
+    /// them rather than passing.
+    #[test]
+    fn an_expanded_index_of_one_empty_slot_is_loud() {
+        for source in [
+            "a = (1,2)\nsay a~at((,2))\n",
+            "a = (1,2)\nsay a~at((,,3))\n",
+            "a = (1,2)\nsay a[(,2)]\n",
+        ] {
+            let (code, stdout, stderr) = both_engines(source);
+            assert_eq!((code, stdout.as_str()), (120, ""), "{source:?}");
+            assert_eq!(
+                stderr, "rexx-exec: an array subscript that is an empty slot is not implemented\n",
+                "{source:?}"
+            );
+        }
+        // The neighbouring successes: one item spread from a two-slot array,
+        // two items spread from a three-slot one, and an empty spread.
+        assert_eq!(
+            both_engines(
+                "a = (1,2)\n\
+                 say a~at((1,))\n\
+                 say a[(2,)]\n"
+            ),
+            (0, "1\n2\n".to_string(), String::new())
+        );
+        let (code, stdout, stderr) = both_engines("a = (1,2)\nsay a~at((1,,3))\n");
+        assert_eq!((code, stdout.as_str()), (163, ""));
+        assert!(stderr.contains("Error 93.926:"), "{stderr:?}");
+        let (code, stdout, stderr) = both_engines("a = (1,2)\nsay a~at((,))\n");
+        assert_eq!((code, stdout.as_str()), (163, ""));
+        assert!(stderr.contains("Error 93.901:"), "{stderr:?}");
+    }
+
+    /// A name a directory's behaviour does not answer is **not** 97.1, because
+    /// the oracle forwards it to `UNKNOWN` and answers an entry read instead.
+    ///
+    /// The pair is what pins the rule to the receiver's own behaviour rather
+    /// than to a class name: a `String` receiver answers no `UNKNOWN`, so the
+    /// same missing name raises there.
+    #[test]
+    fn an_unresolved_name_on_a_receiver_that_answers_unknown_is_loud() {
+        for source in ["say .environment~nosuch\n", "say .local~nosuch\n"] {
+            let (code, stdout, stderr) = both_engines(source);
+            assert_eq!((code, stdout.as_str()), (120, ""), "{source:?}");
+            assert_eq!(
+                stderr,
+                "rexx-exec: the UNKNOWN forward for message \"NOSUCH\" is not implemented \
+                 (Phase 5)\n",
+                "{source:?}"
+            );
+        }
+        let (code, stdout, stderr) = both_engines("say 'abc'~nosuch\n");
+        assert_eq!((code, stdout.as_str()), (159, ""));
+        assert!(stderr.contains("Error 97.1:"), "{stderr:?}");
+    }
+
+    /// An entry the oracle's own directory holds and this crate does not build
+    /// is a refusal, not `.nil` -- and the refusal is per directory, because
+    /// the oracle answers `.nil` for a `.local` name asked of `.environment`.
+    ///
+    /// The three answering rows are what stops a build that refuses every miss
+    /// from passing, and the `~put` row is what stops one that refuses by name
+    /// alone: an entry a program stored answers even under a name the unbuilt
+    /// table holds.
+    #[test]
+    fn a_directory_entry_the_oracle_has_and_this_crate_does_not_is_loud() {
+        for (source, owner) in [
+            ("say .environment['ALARM']\n", "Phase 5"),
+            ("say .local['STDOUT']\n", "Phase 7"),
+        ] {
+            let (code, stdout, stderr) = both_engines(source);
+            assert_eq!((code, stdout.as_str()), (120, ""), "{source:?}");
+            assert!(
+                stderr.starts_with("rexx-exec: directory entry ")
+                    && stderr.ends_with(&format!("is not implemented ({owner})\n")),
+                "{source:?} refused with {stderr:?}"
+            );
+        }
+        assert_eq!(
+            both_engines(
+                "say .environment['STDOUT']\n\
+                 say .local['ALARM']\n\
+                 say .environment['ARRAY']~id\n"
+            ),
+            (
+                0,
+                "The NIL object\nThe NIL object\nArray\n".to_string(),
+                String::new()
+            )
+        );
+        assert_eq!(
+            both_engines(
+                "d = .local\n\
+                 d~put('mine', 'STDOUT')\n\
+                 say d['STDOUT']\n"
+            ),
+            (0, "mine\n".to_string(), String::new())
+        );
     }
 }

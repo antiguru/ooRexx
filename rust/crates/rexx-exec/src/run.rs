@@ -789,7 +789,7 @@ pub(crate) enum FlatStep {
 /// except `Simple` (a block, never repeats, and `run_loop_with_header`'s own
 /// `Simple` arm never builds one of these at all) and `With` (the loud path).
 ///
-/// `Count`, `OverOnce` and `Controlled` all decrement whatever budget the
+/// `Count`, `OverItems` and `Controlled` all decrement whatever budget the
 /// oracle is measured to decrement once per candidate iteration, including
 /// one an `ITERATE` cuts short (measured: a `FOR 3` loop with an `ITERATE`
 /// on its first pass still stops after exactly three iterations, not four).
@@ -801,16 +801,27 @@ enum LoopState {
     },
     /// `DO name OVER expr`, a **non-stem** target only (Deviation 1: a stem
     /// target takes the loud path in `run_loop_with_header` before one of
-    /// these is ever built): iterates exactly once, binding `control` to
-    /// `value` itself (measured, the brief's own framing: "a string and a
-    /// number each iterate once, yielding themselves"). `remaining` is
-    /// `FOR`'s own budget, already validated, independent of `done`.
-    OverOnce {
+    /// these is ever built): binds `control` to each of `items` in turn.
+    ///
+    /// `items` is `requestArray`'s answer, which [`Interp::over_items`]
+    /// computes: an array's own non-empty slots, and otherwise the target
+    /// itself as a list of one -- measured, `do e over 'abc'` iterates once
+    /// yielding `abc`.
+    ///
+    /// **Rooted by the header, not by this state.** `eval_loop_header`
+    /// `push_temp`s the target and the loop runs inside that clause, so the
+    /// array outlives every pass; each handle here is one of its own slots and
+    /// is reachable through it. Nothing in this phase can put a slot of a live
+    /// array out of reach, because `.Array` answers no method that writes one.
+    ///
+    /// `remaining` is `FOR`'s own budget, already validated, independent of
+    /// how many items are left.
+    OverItems {
         control: SymbolId,
         /// [`control_slot`], taken once when this loop was entered.
         at: Option<usize>,
-        value: ObjRef,
-        done: bool,
+        items: Vec<ObjRef>,
+        next: usize,
         remaining: Option<u64>,
     },
     /// `DO i = initial TO to BY by FOR for_count`. `to`/`for_remaining` are
@@ -7186,8 +7197,9 @@ impl Interp {
     /// the validation both sit inside this loop rather than after it.
     ///
     /// `push_temp` roots each value for the whole of the `DO` clause, which is
-    /// what a `DO OVER`'s target needs: `LoopState::OverOnce` keeps it for the
-    /// loop's own lifetime, and the loop runs inside this clause.
+    /// what a `DO OVER`'s target needs: `LoopState::OverItems` holds handles
+    /// into that target for the loop's own lifetime, and the loop runs inside
+    /// this clause.
     fn eval_loop_header(
         &mut self,
         code: &Code<'_>,
@@ -7235,7 +7247,7 @@ impl Interp {
         if !self.trace_mode().results {
             return;
         }
-        let text = self.to_text(value).to_vec();
+        let text = self.string_value_text(value);
         self.trace_keyword(self.clause_state.current_value_indent, keyword, &text);
     }
 
@@ -7292,14 +7304,18 @@ impl Interp {
             HeaderRole::For | HeaderRole::OverFor => {
                 values.for_remaining = Some(match self.whole_nonneg(value) {
                     Some(count) => count,
-                    None => return Err(raised_for_count_not_whole(&self.to_text(value)).into()),
+                    None => {
+                        let found = self.string_value_text(value);
+                        return Err(raised_for_count_not_whole(&found).into());
+                    }
                 });
             }
             HeaderRole::Count => {
                 values.count = Some(match self.whole_nonneg(value) {
                     Some(count) => count,
                     None => {
-                        return Err(raised_repetition_count_not_whole(&self.to_text(value)).into());
+                        let found = self.string_value_text(value);
+                        return Err(raised_repetition_count_not_whole(&found).into());
                     }
                 });
             }
@@ -7307,18 +7323,52 @@ impl Interp {
             // is why R12's other sites do not cover it: the oracle hands the
             // target to `requestArray`. Measured, `do e over .array` is
             // 98.913 at rc 158 and `do e over .environment` iterates the
-            // directory's own entries, where `LoopState::OverOnce` binds the
-            // target once and yields the object's rendering. A string still
-            // iterates once yielding itself, which is that state's own rule
-            // and stays true.
+            // directory's own entries, neither of which this crate answers.
+            // An array and a string both do -- see [`Interp::over_items`].
             HeaderRole::Over => {
-                if let Some(kind) = self.operator_operand_gap(value) {
+                if let Some(kind) = self.over_target_gap(value) {
                     return Err(Loud::object_position(role.value_name(), kind).into());
                 }
                 values.over = Some(value);
             }
         }
         Ok(())
+    }
+
+    /// A `DO OVER` target this crate cannot hand to `requestArray`, naming its
+    /// own shape, or `None` for one it can.
+    ///
+    /// [`Interp::operator_operand_gap`]'s set minus the arrays, which are the
+    /// one shape in it `requestArray` answers without a message send at all:
+    /// `OverLoop::setup` tests `isArray(result)` and calls `makeArray()`
+    /// directly (`instructions/DoBlockComponents.cpp:233`-`:236`). Everything
+    /// else in that set reaches `result->requestArray()` and either iterates
+    /// entries this crate does not build or raises 98.913, which is what the
+    /// refusal covers.
+    fn over_target_gap(&self, value: ObjRef) -> Option<&'static str> {
+        let kind = self.operator_operand_gap(value)?;
+        match self.heap.get(value).map(|object| &object.body) {
+            Some(Body::Array(_)) => None,
+            _ => Some(kind),
+        }
+    }
+
+    /// `requestArray`'s answer for a `DO OVER` target, as the list of values
+    /// the loop binds its control variable to in turn.
+    ///
+    /// An array answers its own **non-empty** slots: `OverLoop::setup` takes
+    /// `makeArray()`, which is the non-sparse copy, and `DoBlock::checkOver`
+    /// then walks it to `lastIndex()`. Measured, `do e over (1,,3)` yields `1`
+    /// and `3` where `do e over (1,.nil,3)` yields `1`, `The NIL object` and
+    /// `3` -- an explicit `.nil` is an item and an empty slot is not.
+    ///
+    /// Everything else answers itself, as a list of one. Measured,
+    /// `do i over 'abc'` prints `abc` once.
+    fn over_items(&self, value: ObjRef) -> Vec<ObjRef> {
+        match self.heap.get(value).map(|object| &object.body) {
+            Some(Body::Array(slots)) => slots.iter().flatten().copied().collect(),
+            _ => vec![value],
+        }
     }
 
     /// One controlled-loop header value as the `Number` the loop runs on:
@@ -7581,13 +7631,15 @@ impl Interp {
                 shape: shape_of(code.symbols.name(ctrl.control).as_bytes()),
                 stepped: false,
             },
-            LoopKind::Over { control, .. } => LoopState::OverOnce {
+            LoopKind::Over { control, .. } => LoopState::OverItems {
                 control: *control,
                 at: control_slot(code, *control),
-                value: values
-                    .over
-                    .expect("a DO OVER's plan always names its target"),
-                done: false,
+                items: self.over_items(
+                    values
+                        .over
+                        .expect("a DO OVER's plan always names its target"),
+                ),
+                next: 0,
                 remaining: values.for_remaining,
             },
             LoopKind::With { .. } => unreachable!("DO WITH takes the loud path above"),
@@ -8132,13 +8184,15 @@ impl Interp {
                 shape: shape_of(code.symbols.name(ctrl.control).as_bytes()),
                 stepped: false,
             },
-            LoopKind::Over { control, .. } => LoopState::OverOnce {
+            LoopKind::Over { control, .. } => LoopState::OverItems {
                 control: *control,
                 at: control_slot(code, *control),
-                value: values
-                    .over
-                    .expect("a DO OVER's plan always names its target"),
-                done: false,
+                items: self.over_items(
+                    values
+                        .over
+                        .expect("a DO OVER's plan always names its target"),
+                ),
+                next: 0,
                 remaining: values.for_remaining,
             },
             // A block, not a loop: one pass, its own trace shape, and
@@ -8570,32 +8624,41 @@ impl Interp {
                 *remaining -= 1;
                 Ok(true)
             }
-            LoopState::OverOnce {
+            LoopState::OverItems {
                 control,
                 at,
-                value,
-                done,
+                items,
+                next,
                 remaining,
             } => {
-                if *done {
+                // **The item is bound before `FOR`'s budget is consulted**,
+                // which is `RexxInstructionDoOverFor::iterate`'s own
+                // `doblock->checkOver(context, stack) && doblock->checkFor()`
+                // (`instructions/DoOverInstruction.cpp:279`): `checkOver`
+                // assigns the control variable, and the `&&` reaches
+                // `checkFor` afterwards. Measured, three descriptors: `a =
+                // (10,20,30,40)` with `do e over a for 2` leaves `e` at `30`,
+                // and `do e over 'abc' for 0` leaves it at `abc` with the body
+                // never entered. Under `trace i` the terminating pass still
+                // shows its own `>=>` line.
+                let Some(value) = items.get(*next).copied() else {
                     return Ok(false);
-                }
-                if let Some(r) = remaining {
-                    if *r == 0 {
-                        *done = true;
-                        return Ok(false);
-                    }
-                    *r -= 1;
-                }
-                *done = true;
+                };
+                *next += 1;
                 self.bind_control(
                     code,
                     *control,
                     loop_indent,
-                    *value,
+                    value,
                     *at,
                     shape_of(code.symbols.name(*control).as_bytes()),
                 )?;
+                if let Some(r) = remaining {
+                    if *r == 0 {
+                        return Ok(false);
+                    }
+                    *r -= 1;
+                }
                 Ok(true)
             }
             LoopState::Controlled {
@@ -9188,7 +9251,7 @@ impl Interp {
                 // try to.
                 if self.tracing_intermediates() {
                     let name = code.symbols.name(control).as_bytes().to_vec();
-                    let rendered = self.to_text(value).to_vec();
+                    let rendered = self.string_value_text(value);
                     self.trace_assignment(indent, &name, &rendered);
                 }
                 Ok(())

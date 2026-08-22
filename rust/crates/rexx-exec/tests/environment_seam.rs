@@ -213,7 +213,7 @@ fn seam_module_body() -> String {
     );
 }
 
-/// **The producer bound: the seam module holds the two structs and the three
+/// **The producer bound: the seam module holds exactly the structs and
 /// functions it is designed around, and no other item at all.**
 ///
 /// The private fields mean every producer of the clearance and every reader of
@@ -223,9 +223,14 @@ fn seam_module_body() -> String {
 ///
 /// Had a second producer been added -- `fn admit_also(..) -> Admitted { let ok
 /// = (); Admitted(ok) }`, the exact shape the needle tallies miss -- the `fn`
-/// count below is 4 and this fails.
+/// count below is one higher and this fails.
+///
+/// **`which` is admitted and is not a producer**: it takes no clearance and
+/// hands back no handle, so it cannot be the route by which a caller obtains a
+/// directory it does not already hold. A reader checking this count has to
+/// read each `fn` to see that, which is exactly what the count is for.
 #[test]
-fn the_seam_module_holds_two_structs_and_three_functions() {
+fn the_seam_module_holds_only_the_items_it_is_designed_around() {
     let body = seam_module_body();
     // Comments and doc comments are stripped first, so a keyword inside the
     // module's own prose is not counted as an item.
@@ -237,7 +242,7 @@ fn the_seam_module_holds_two_structs_and_three_functions() {
         .join("\n");
     for (keyword, expected) in [
         ("struct ", 2usize),
-        ("fn ", 3),
+        ("fn ", 4),
         ("impl ", 0),
         ("const ", 0),
         ("static ", 0),

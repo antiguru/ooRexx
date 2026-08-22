@@ -106,7 +106,17 @@ pub enum Body {
         default: Option<ObjRef>,
         tails: crate::NameMap<Vec<u8>, Option<ObjRef>>,
     },
-    Array(Vec<ObjRef>),
+    /// An array's slots, in index order, `None` for a slot that holds no
+    /// object at all.
+    ///
+    /// **An empty slot and a slot holding `.nil` are different values**, and
+    /// every method that walks the slots has to tell them apart: measured,
+    /// `(1,,3)~items` is `2` while `(1,.nil,3)~items` is `3`, and both have
+    /// `~size` `3`. `ArrayClass::getRexx` answers `.nil` for an empty slot,
+    /// so the two are indistinguishable through `~at` alone, which is why
+    /// the distinction has to live in the body rather than be reconstructed
+    /// from what a read answers.
+    Array(Vec<Option<ObjRef>>),
     /// A user-defined object: its instance variables, one pool per scope
     /// (D40).
     Instance(ScopePools),
@@ -310,7 +320,9 @@ impl Body {
                 // reference clearing to `.nil` -- it is present but dead.
                 out.extend(tails.values().filter_map(|t| *t));
             }
-            Body::Array(items) => out.extend_from_slice(items),
+            // An empty slot reaches nothing, the same as a stem's tombstone
+            // above.
+            Body::Array(items) => out.extend(items.iter().filter_map(|item| *item)),
             // Every scope's pool, walked by the storage's own type -- see
             // [`ScopePools::trace`] for why the walk lives there.
             Body::Instance(pools) => pools.trace(out),

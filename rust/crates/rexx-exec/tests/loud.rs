@@ -251,11 +251,6 @@ const EXPR_WITNESSES: &[Witness] = &[
         source: "say ns:Bar\n",
         category: Category::Expr,
     },
-    Witness {
-        tag: "List",
-        source: "say (1, 2)\n",
-        category: Category::Expr,
-    },
 ];
 
 /// Confirms `path`'s program actually constructs `witness.tag` in the
@@ -391,7 +386,7 @@ fn assert_witness_set_is_complete() {
         "EXPR_WITNESSES must have exactly one entry per out-of-scope ExprKind \
          variant, no more and no fewer"
     );
-    assert_eq!(expected_exprs.len(), 3);
+    assert_eq!(expected_exprs.len(), 2);
 }
 
 #[test]
@@ -413,7 +408,7 @@ fn in_scope_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        12
+        13
     );
 }
 

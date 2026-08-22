@@ -623,36 +623,67 @@ impl Interp {
         }
     }
 
-    /// An array's own string value: each item's string value, joined by the
-    /// platform line ending -- `ArrayClass::toString(OREF_NULL, OREF_NULL)`,
-    /// which `ArrayClass::makeString` forwards to
-    /// (`classes/ArrayClass.cpp:1841`), and which is therefore what a string
-    /// context asks an array for.
+    /// An array's items, each rendered as [`string_value_text`] renders it and
+    /// joined by `separator` -- `ArrayClass::toString`
+    /// (`classes/ArrayClass.cpp:1856`), which `ArrayClass::makeString`
+    /// forwards to with no arguments (`classes/ArrayClass.cpp:1841`) and which
+    /// is therefore also what a string context asks an array for, at the
+    /// platform line ending.
+    ///
+    /// **An empty slot contributes neither a rendering nor a separator.** The
+    /// C++ compacts through `makeArray()` before the join and then skips a
+    /// null anyway, so the separator sits between rendered items and not
+    /// between slots -- measured, `say '<'||(1,,3)||'>'` is `<1` and `3>` on
+    /// two lines, `(1,,3)~makeString('C')` is `13`, and
+    /// `(1,,3)~makeString('L','-')` is `1-3`.
     ///
     /// The oracle asks each item for `stringValue()` at that loop rather than
     /// `requestString()`, and its own comment there says what the difference
     /// is: an array held inside an array renders as its default name instead
-    /// of being joined in turn. The items of every array this crate builds
-    /// are class objects (`dispatch.rs`'s `native_superclasses` is the one
-    /// constructor), and a class object's `stringValue()` is its default
-    /// name, which is what [`to_text`] answers for one.
+    /// of being joined in turn. Measured, `say '<'||((1,2),3)||'>'` is
+    /// `<an Array` and `3>`.
     ///
-    /// Measured, three descriptors: `a = .Array~superClasses; say 'A['a']B'`
+    /// Measured too, three descriptors: `a = .Array~superClasses; say 'A['a']B'`
     /// renders `A[The Object class` and `The OrderedCollection class]B` on two
     /// lines, and `.Object~superClasses` -- which holds nothing -- renders
     /// empty.
     ///
-    /// [`to_text`]: Interp::to_text
-    fn array_string(&mut self, items: &[ObjRef]) -> Vec<u8> {
+    /// [`string_value_text`]: Interp::string_value_text
+    pub(crate) fn array_string(&mut self, items: &[Option<ObjRef>], separator: &[u8]) -> Vec<u8> {
         let mut out = Vec::new();
-        for (at, item) in items.iter().enumerate() {
-            if at > 0 {
-                out.push(b'\n');
+        let mut first = true;
+        for item in items.iter().filter_map(|item| *item) {
+            if !first {
+                out.extend_from_slice(separator);
             }
-            let bytes = self.to_text(*item).into_owned();
+            let bytes = self.string_value_text(item);
             out.extend_from_slice(&bytes);
+            first = false;
         }
         out
+    }
+
+    /// `RexxInternalObject::stringValue()`: the rendering of a value as an
+    /// object rather than as text, which is what every `TRACE` value line
+    /// prints and what an array's own items are joined out of.
+    ///
+    /// **An array is the one value kind where this and [`to_text`] part.** A
+    /// string context asks an array for `makeString` and gets its items
+    /// joined; `stringValue` answers the default name. Measured, three
+    /// descriptors: `trace i` over `a = (1,,3)` prints `>>>   "an Array"` and
+    /// `>=>   A <= "an Array"` where `say '<'||(1,,3)||'>'` prints `<1` and
+    /// `3>` on two lines, and a nested array renders `an Array` inside its
+    /// parent's join (`say '<'||((1,2),3)||'>'` is `<an Array` and `3>`).
+    ///
+    /// [`to_text`]: Interp::to_text
+    pub(crate) fn string_value_text(&mut self, value: ObjRef) -> Vec<u8> {
+        if matches!(
+            self.heap.get(value).map(|object| &object.body),
+            Some(Body::Array(_))
+        ) {
+            return crate::dispatch::ARRAY_DEFAULT_NAME.to_vec();
+        }
+        self.to_text(value).to_vec()
     }
 
     /// [`array_string`] for an array named by its handle, whose items it looks
@@ -673,7 +704,7 @@ impl Interp {
             // this answers.
             _ => Vec::new(),
         };
-        self.array_string(&items)
+        self.array_string(&items, b"\n")
     }
 
     #[allow(

@@ -746,6 +746,21 @@ impl Loud {
         }
     }
 
+    /// A directory index the oracle's own `.environment` or `.local` has an
+    /// entry for and this crate builds nothing for.
+    ///
+    /// [`Loud::environment_symbol`]'s counterpart for the message-send route.
+    /// The two are separate constructors because the name they quote is
+    /// spelled differently -- a `.NAME` carries its leading period and an
+    /// index does not -- and so a reader tracing one refusal is pointed at the
+    /// route it came through.
+    fn environment_entry(index: &[u8], owner: &'static str) -> Loud {
+        let shown = String::from_utf8_lossy(index);
+        Loud {
+            message: owned_message(&format!("directory entry \"{shown}\""), Some(owner)),
+        }
+    }
+
     /// A message that **resolved** to a primitive method this crate has no
     /// code for.
     ///
@@ -766,6 +781,50 @@ impl Loud {
         Loud {
             message: owned_message(
                 &format!("method \"{shown}\" of class \"{scope}\""),
+                Some("Phase 5"),
+            ),
+        }
+    }
+
+    /// An array subscript list whose only element is an empty slot, which the
+    /// oracle answers by dying.
+    ///
+    /// `ArrayClass::validateIndex` expands a lone array argument into the
+    /// subscript list by taking its **item count** with its **slot array**
+    /// (`classes/ArrayClass.cpp:1219`-`:1226`), so an array whose leading slot
+    /// is empty and whose item count is one hands
+    /// `validateSingleDimensionIndex` a null `index[0]` and it dereferences
+    /// it (`:1264`). Measured, 3 runs of 3: `(1,2)~at((,2))` and
+    /// `(1,2)~at((,,3))` are SIGSEGV at rc 139, where `(1,2)~at((1,))` answers
+    /// `1` and `(1,2)~at((1,,3))` is a clean 93.926 -- the two subscripts are
+    /// counted before either is read.
+    ///
+    /// **There is no oracle behaviour to match here**, so this is a refusal
+    /// rather than an answer, and no differential row can cover it: the
+    /// program is in `corpus/oracle-crashes.txt` and must not be run.
+    /// `dispatch.rs`'s `an_expanded_index_of_one_empty_slot_is_loud` is the
+    /// instrument.
+    ///
+    /// No owner: the construct is implemented and the refusal is not a gap,
+    /// which is the same reason `run.rs`'s two carve-outs print no suffix.
+    fn array_index_hole() -> Loud {
+        Loud {
+            message: owned_message("an array subscript that is an empty slot", None),
+        }
+    }
+
+    /// A message that resolved to nothing on a receiver whose behaviour
+    /// answers `UNKNOWN`.
+    ///
+    /// Loud rather than 97.1, for the reason [`Loud::receiver_class`] gives
+    /// about a stem: the oracle forwards the send to `UNKNOWN` instead of
+    /// raising, so 97.1 is a wrong answer a program could trap. Measured,
+    /// `.environment~nosuch` is `The NIL object` at rc 0.
+    fn unknown_forward(name: &[u8]) -> Loud {
+        let shown = String::from_utf8_lossy(name);
+        Loud {
+            message: owned_message(
+                &format!("the UNKNOWN forward for message \"{shown}\""),
                 Some("Phase 5"),
             ),
         }
@@ -1673,10 +1732,10 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         InstructionKind::Procedure { .. } | InstructionKind::Use(_) => None,
         // All three `Signal` arms are implemented, so unlike
         // `Call` above this one needs no arm-grained match. `RAISE` is
-        // likewise whole: its one shape that still fails loudly, `ADDITIONAL
-        // (a, b)`, does so through `ExprKind::List`'s own `Phase 5` owner --
-        // a sub-case of an *expression*, reported where that expression is,
-        // not a residual claim on the `RAISE` keyword.
+        // likewise whole: `ADDITIONAL (a, b)` is a parenthesised list, which
+        // is an *expression* and is implemented, and `ARRAY (a, b)` reaches
+        // the identical oracle bytes -- measured, the two spellings' reports
+        // are byte-identical.
         InstructionKind::Signal(_) | InstructionKind::Raise(_) => None,
         // Both keywords are whole: `queue.rs`
         // stores every line either writes, and neither has a shape this
@@ -1761,10 +1820,16 @@ fn expr_owner(kind: &ExprKind) -> Option<&'static str> {
         // **`ExprKind::Message` is `None` too**, for the reason its
         // `InstructionKind` twin above is: `dispatch.rs` resolves and invokes
         // the send, and what it has no code for is loud.
-        ExprKind::Call { .. } | ExprKind::VariableReference(_) | ExprKind::Message { .. } => None,
-        ExprKind::QualifiedCall { .. } | ExprKind::ClassResolver { .. } | ExprKind::List(_) => {
-            Some("Phase 5")
-        }
+        //
+        // **`ExprKind::List` is `None` too**: `eval.rs`'s `eval_list` builds
+        // the array every position of the list is a slot of, and every
+        // position is an ordinary expression with nothing later-phase hiding
+        // inside it.
+        ExprKind::Call { .. }
+        | ExprKind::VariableReference(_)
+        | ExprKind::Message { .. }
+        | ExprKind::List(_) => None,
+        ExprKind::QualifiedCall { .. } | ExprKind::ClassResolver { .. } => Some("Phase 5"),
     }
 }
 

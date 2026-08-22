@@ -137,6 +137,22 @@ mod env_seam {
         Ok(Admitted(()))
     }
 
+    /// Which of the two `handle` is, or `None` for any other object.
+    ///
+    /// **Takes no clearance and yields no handle**, which is why it may sit
+    /// beside [`directory`] without weakening it: a caller that already holds
+    /// an object can learn which directory it is and still has no way to
+    /// obtain one it does not hold.
+    pub(super) fn which(held: &Directories, handle: ObjRef) -> Option<EnvScope> {
+        if handle == held.environment {
+            Some(EnvScope::Environment)
+        } else if handle == held.local {
+            Some(EnvScope::Local)
+        } else {
+            None
+        }
+    }
+
     /// The directory `scope` names, in exchange for a clearance.
     pub(super) fn directory(held: &Directories, admitted: Admitted, scope: EnvScope) -> ObjRef {
         let _ = admitted;
@@ -262,13 +278,27 @@ static ORACLE_LOCAL: &[&str] = &[
 /// built from, and what a name that resolves to none of them owes.
 pub(crate) struct EnvironmentModel {
     directories: env_seam::Directories,
-    /// A name [`ORACLE_ENVIRONMENT`] or [`ORACLE_LOCAL`] holds that neither
-    /// directory here answers, with the phase that owes it.
-    unbuilt: HashMap<Box<[u8]>, &'static str>,
+    /// A name [`ORACLE_ENVIRONMENT`] or [`ORACLE_LOCAL`] holds that the
+    /// directory holding it here does not answer.
+    unbuilt: HashMap<Box<[u8]>, Unbuilt>,
     /// `.methods`, `.routines` and `.resources` all answer one of these.
     string_table: ObjRef,
     /// What `.context` answers to.
     context: ObjRef,
+}
+
+/// One name the oracle's own directory answers and this crate builds nothing
+/// for.
+#[derive(Copy, Clone)]
+struct Unbuilt {
+    /// The phase owing it.
+    owner: &'static str,
+    /// Which directory holds it, which a message send to one directory has to
+    /// know and a `.NAME` lookup -- searching both -- does not. The two lists
+    /// are disjoint, so one entry per name is enough: measured, no name in
+    /// [`ORACLE_LOCAL`] appears in [`ORACLE_ENVIRONMENT`], which
+    /// `the_two_oracle_directories_share_no_name` asserts.
+    scope: EnvScope,
 }
 
 /// Which directive list a reflection name reports on.
@@ -386,15 +416,27 @@ impl Interp {
         // installing those files is this phase's exit. `.local`'s are Phase
         // 7's: every one of them is a stream, the external queue or the
         // command line, none of which this interpreter has.
-        let unbuilt: HashMap<Box<[u8]>, &'static str> = ORACLE_ENVIRONMENT
+        let unbuilt: HashMap<Box<[u8]>, Unbuilt> = ORACLE_ENVIRONMENT
             .iter()
             .filter(|name| !answered.contains(*name))
-            .map(|name| (name.as_bytes().into(), "Phase 5"))
-            .chain(
-                ORACLE_LOCAL
-                    .iter()
-                    .map(|name| (name.as_bytes().into(), "Phase 7")),
-            )
+            .map(|name| {
+                (
+                    name.as_bytes().into(),
+                    Unbuilt {
+                        owner: "Phase 5",
+                        scope: EnvScope::Environment,
+                    },
+                )
+            })
+            .chain(ORACLE_LOCAL.iter().map(|name| {
+                (
+                    name.as_bytes().into(),
+                    Unbuilt {
+                        owner: "Phase 7",
+                        scope: EnvScope::Local,
+                    },
+                )
+            }))
             .collect();
 
         EnvironmentModel {
@@ -577,10 +619,84 @@ impl Interp {
         object
     }
 
+    /// `Directory~at(index)`'s answer for a directory this model built, or the
+    /// refusal for an index whose entry the oracle has and this crate does
+    /// not.
+    ///
+    /// **`.nil` is the answer for an absent entry and a wrong answer for an
+    /// unbuilt one**, which is the same split [`Interp::dot_variable`] makes
+    /// one step further down: measured, `.local['STDOUT']` is `STDOUT` on the
+    /// oracle and `.environment['STDOUT']` is `The NIL object`, so the refusal
+    /// has to be per directory rather than over the union of the two names.
+    /// [`Unbuilt::scope`] is what carries that.
+    ///
+    /// **Not through the seam.** `env_seam::admit` is what a `.NAME` lookup
+    /// passes to *find* a directory it was not handed; a send already holds the
+    /// receiver, and the oracle asks its manager per `getLocal`/`getEnvironment`
+    /// call (`PackageClass.cpp:1137`, `:1154`) and not per `~at`.
+    pub(crate) fn directory_entry_read(
+        &mut self,
+        directory: ObjRef,
+        index: &[u8],
+    ) -> Result<ObjRef, Failure> {
+        if let Some(found) = self.native_entry(directory, index) {
+            return Ok(found);
+        }
+        if let Some(scope) = self.directory_scope(directory)
+            && let Some(unbuilt) = self.environment_model().unbuilt.get(index).copied()
+            && unbuilt.scope == scope
+        {
+            return Err(Loud::environment_entry(index, unbuilt.owner).into());
+        }
+        Ok(ObjRef::NIL)
+    }
+
+    /// `Directory~put(item, index)`: stores `item` under `index`.
+    ///
+    /// The entry replaces whatever the bootstrap put there, which is what makes
+    /// a stored name answer where the unbuilt refusal above would otherwise
+    /// fire: `directory_entry_read` asks the map first, exactly as
+    /// [`Interp::dot_variable`] does.
+    pub(crate) fn directory_entry_write(
+        &mut self,
+        directory: ObjRef,
+        index: &[u8],
+        item: ObjRef,
+    ) -> Result<(), Failure> {
+        let Some(object) = self.heap.get_mut(directory) else {
+            return Err(Loud::receiver_class("a value whose object is no longer live").into());
+        };
+        let Body::Native(native) = &mut object.body else {
+            return Err(Loud::receiver_class("a value that is not a directory").into());
+        };
+        native.set_entry(index, item);
+        Ok(())
+    }
+
+    /// One entry of a `Body::Native`'s own map, by the key the caller holds.
+    fn native_entry(&self, object: ObjRef, index: &[u8]) -> Option<ObjRef> {
+        match &self.heap.get(object)?.body {
+            Body::Native(native) => native.entry(index),
+            _ => None,
+        }
+    }
+
+    /// Which of the two directories this model built `directory` is, or `None`
+    /// for any other object.
+    ///
+    /// Reads the handles without a clearance, which is what
+    /// [`env_seam::Directories`]'s privacy allows and its doc intends: the
+    /// question is "is this handle one of those two", not "give me one of
+    /// those two", and answering it hands out neither.
+    fn directory_scope(&mut self, directory: ObjRef) -> Option<EnvScope> {
+        let model = self.environment_model();
+        env_seam::which(&model.directories, directory)
+    }
+
     /// The phase owing a name the oracle answers and this crate does not
     /// build, or `None` for a name the oracle does not answer either.
     fn unbuilt_owner(&mut self, bare: &[u8]) -> Option<&'static str> {
-        self.environment_model().unbuilt.get(bare).copied()
+        Some(self.environment_model().unbuilt.get(bare)?.owner)
     }
 
     /// The program whose directives and installed classes a `.NAME` resolves
@@ -797,5 +913,29 @@ mod tests {
             environment
         );
         assert_ne!(environment, local);
+    }
+    /// **The premise [`Unbuilt`] rests on**: one entry per name is enough,
+    /// because a name cannot be in both directories at once.
+    ///
+    /// A shared name would make the `scope` field pick a side, and the wrong
+    /// side turns a refusal into `.nil` for the directory the oracle answers
+    /// from. Asserted rather than written in prose because both lists are in
+    /// this file and either can gain a row.
+    #[test]
+    fn the_two_oracle_directories_share_no_name() {
+        let environment: HashSet<&str> = ORACLE_ENVIRONMENT.iter().copied().collect();
+        let shared: Vec<&str> = ORACLE_LOCAL
+            .iter()
+            .copied()
+            .filter(|name| environment.contains(name))
+            .collect();
+        assert!(
+            shared.is_empty(),
+            "these names are in both oracle directory listings, so an `Unbuilt` row for one \
+             of them would refuse a lookup in the other: {shared:?}"
+        );
+        // Neither list is empty, so the filter above ran against something.
+        assert!(!ORACLE_ENVIRONMENT.is_empty());
+        assert!(!ORACLE_LOCAL.is_empty());
     }
 }

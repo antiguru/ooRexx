@@ -1,0 +1,56 @@
+/* The parenthesised list expression, and the Array methods 5a's own
+   mechanisms send to it. A list is one slot per written position, so a
+   trailing omission is a slot; an omitted position is an empty slot, which
+   ~size counts and ~items does not, and which ~at answers .nil for
+   indistinguishably from a slot holding .nil. */
+one = (1,)
+say one~size
+say one~items
+say (1,2,3)~items
+say (,)~size
+say (,)~items
+
+sparse = (1,,3)
+say sparse~size
+say sparse~items
+say sparse[1]
+say sparse~at(2)
+say sparse[2]~isNil
+say sparse[3]
+say sparse[4]
+say sparse~at(4)~isNil
+
+/* An explicit .nil is an item where an empty slot is not. */
+explicit = (1,.nil,3)
+say explicit~size
+say explicit~items
+
+/* The class, and the identity of two evaluations of the same expression. */
+say sparse~class~id
+say sparse~isA(.Array)
+say sparse~hasMethod('AT')
+
+/* A string context joins the items and skips the empty slots; a nested array
+   renders as its own default name rather than being joined in turn. */
+say '<'||sparse||'>'
+say '<'||sparse~makeString('C')||'>'
+say '<'||sparse~makeString('L','-')||'>'
+say '<'||((1,2),3)||'>'
+say '<'||(.array,1)||'>'
+
+/* An index converts through ARGUMENT_DIGITS rather than the digits in
+   force, and a subscript past the end is .nil rather than an error. */
+pair = (1,2)
+say pair~at(1.0)
+say pair~at('  2  ')
+say pair~at('+2')
+say pair~at(999999999999999999)
+say pair~at(2147483648)
+numeric digits 3
+say pair~at(1000000)
+numeric digits 9
+
+/* A lone array argument is the subscript list, counted by items and read
+   from the slots. */
+say pair~at((1,))
+say pair[(2,)]

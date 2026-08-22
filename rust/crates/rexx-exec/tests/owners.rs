@@ -147,14 +147,12 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     // Whole rather than arm-grained the way `Call` is, both of them. All
     // three `Signal` arms are in scope, so nothing is left inside the
     // variant to split out.
-    // `Raise` is whole for a subtler reason worth stating, since it is the
-    // shape that would justify an arm-grained entry: `RAISE ... ADDITIONAL
-    // (a, b)` does still fail loudly, but through `ExprKind::List`'s own
-    // `Phase 5` owner -- the parenthesised list is an *expression* this
-    // crate cannot evaluate, reported against that expression, and `RAISE
-    // ... ARRAY (a, b)` reaches the identical oracle bytes with no gap at
-    // all (measured, the two spellings' reports are byte-identical). So
-    // there is no `RAISE` shape whose gap belongs to `RAISE`.
+    // `Raise` is whole, and `RAISE ... ADDITIONAL (a, b)` is the shape that
+    // would once have justified an arm-grained entry: the parenthesised list
+    // is an *expression*, `RAISE ... ARRAY (a, b)` reaches the identical
+    // oracle bytes (measured, the two spellings' reports are byte-identical),
+    // and `ExprKind::List` is in scope. So there is no `RAISE` shape whose gap
+    // belongs to `RAISE`.
     InstructionKind::Signal(_) => ("Signal", Owner::InScope),
     InstructionKind::Raise(_) => ("Raise", Owner::InScope),
     // Both whole: `queue.rs` stores every line either writes and neither has
@@ -245,10 +243,11 @@ tags!(expr_tag, EXPR_TAGS, ExprKind, {
     // and invoked through `dispatch.rs`. See `InstructionKind::Message`
     // above for what "in scope" claims and what it does not.
     ExprKind::Message { .. } => ("Message", Owner::InScope),
+    // `(a, b, ...)`, which builds an `.Array` -- `eval.rs`'s `eval_list`.
+    ExprKind::List(_) => ("List", Owner::InScope),
     // ---- the ones that still fail loudly; see coverage.rs's module doc's ownership section ----
     ExprKind::QualifiedCall { .. } => ("QualifiedCall", Owner::Phase("Phase 5")),
     ExprKind::ClassResolver { .. } => ("ClassResolver", Owner::Phase("Phase 5")),
-    ExprKind::List(_) => ("List", Owner::Phase("Phase 5")),
 });
 
 tags!(loop_tag, LOOP_TAGS, LoopKind, {
@@ -386,7 +385,6 @@ pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     ("InstructionKind", "Forward", "Phase 5"),
     ("ExprKind", "QualifiedCall", "Phase 5"),
     ("ExprKind", "ClassResolver", "Phase 5"),
-    ("ExprKind", "List", "Phase 5"),
     ("LoopKind", "With", "Phase 5"),
 ];
 
@@ -542,14 +540,14 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        12
+        13
     );
     assert_eq!(
         EXPR_TAGS
             .iter()
             .filter(|(_, o)| matches!(o, Owner::Phase(_)))
             .count(),
-        3
+        2
     );
 
     assert_eq!(LOOP_TAGS.len(), 6);

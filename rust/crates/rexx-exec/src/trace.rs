@@ -1055,11 +1055,18 @@ impl Interp {
     /// are the two this returns, and each names the same field its own
     /// formatters check. Use [`Interp::result_text`] for `>>>`/`>K>`/`>R>`
     /// and this for every other value-bearing prefix.
+    ///
+    /// **The rendering is `stringValue()` and not the string value a string
+    /// context asks for**, which is [`Interp::string_value_text`]'s own
+    /// distinction: `RexxActivation::traceValue` renders through
+    /// `stringValue()`, so an array traces as `an Array` where `SAY` prints
+    /// its items joined. Measured under `trace i`, `a = .Array~superClasses`
+    /// prints `>M>   "SUPERCLASSES" => "an Array"`.
     #[inline(always)]
     pub(crate) fn intermediate_text(&mut self, value: ObjRef) -> Option<Vec<u8>> {
         self.trace_mode()
             .intermediates
-            .then(|| self.to_text(value).to_vec())
+            .then(|| self.string_value_text(value))
     }
 
     /// `value`'s rendered bytes, or `None` when no **result-level** trace line
@@ -1076,7 +1083,7 @@ impl Interp {
     pub(crate) fn result_text(&mut self, value: ObjRef) -> Option<Vec<u8>> {
         self.trace_mode()
             .results
-            .then(|| self.to_text(value).to_vec())
+            .then(|| self.string_value_text(value))
     }
 
     /// `>I>`/`<I<` (`TRACE_PREFIX_INVOCATION`/`_INVOCATION_EXIT`): a routine

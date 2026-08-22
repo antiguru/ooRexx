@@ -1317,6 +1317,49 @@ impl Raised {
         Raised::syntax(93, 902, vec![arity.to_string().into_bytes()])
     }
 
+    /// 93.901: a method was given fewer arguments than it needs.
+    /// `expected` is the count the oracle names.
+    ///
+    /// `Error_Incorrect_method_minarg`, which
+    /// `ArrayClass::validateSingleDimensionIndex` raises for zero subscripts
+    /// (`classes/ArrayClass.cpp:1334`-`:1335`). Measured at rc 163:
+    /// `(1,2)~at()` and `(1,2)[]` both report `Not enough arguments for
+    /// method; 1 expected.`, and so does `(1,2)~at(,)`, whose trailing
+    /// omission the argument list's own count drops.
+    pub(crate) fn not_enough_method_arguments(expected: usize) -> Raised {
+        Raised::syntax(93, 901, vec![expected.to_string().into_bytes()])
+    }
+
+    /// 93.926: an array subscript list is longer than the array's dimension.
+    ///
+    /// `Error_Incorrect_method_maxsub`, raised by the same function's
+    /// `indexCount > 1` branch for a fixed-dimension array
+    /// (`classes/ArrayClass.cpp:1320`-`:1322`). **Not 93.902**, and that is
+    /// what `Arity::Counted` exists for: measured at rc 163, `(1,2)~at(1,2)`
+    /// reports `Too many subscripts for array; 1 expected.` where
+    /// `.environment~at(1,2)`, whose row carries a count, reports 93.902.
+    pub(crate) fn too_many_subscripts(expected: usize) -> Raised {
+        Raised::syntax(93, 926, vec![expected.to_string().into_bytes()])
+    }
+
+    /// 93.907: a method argument is not a positive whole number.
+    /// `position` is 1-based and `found` the argument's own rendered bytes.
+    ///
+    /// `RexxInternalObject::requiredPositive` (`classes/ObjectClass.cpp:1564`)
+    /// converts under `Numerics::ARGUMENT_DIGITS` and rejects zero, so the
+    /// admitted set is the whole numbers from 1 to 18 digits wide. Measured at
+    /// rc 163: `(1,2)~at(0)`, `(1,2)~at(-1)`, `(1,2)~at(1.5)`, `(1,2)~at('x')`
+    /// and `(1,2)~at(1000000000000000000)` each report `Method argument 1 must
+    /// be a positive whole number; found "<value>".`, while `(1,2)~at(1.0)`,
+    /// `(1,2)~at('  3  ')` and `(1,2)~at(999999999999999999)` are answers.
+    pub(crate) fn method_argument_not_positive(position: usize, found: &[u8]) -> Raised {
+        Raised::syntax(
+            93,
+            907,
+            vec![position.to_string().into_bytes(), found.to_vec()],
+        )
+    }
+
     /// 88.914: a `target~name:scope` override whose scope expression did not
     /// evaluate to a class object.
     ///

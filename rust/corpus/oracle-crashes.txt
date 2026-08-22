@@ -125,3 +125,35 @@ Consequence for this crate: a boundary that drains has to decide what to
 do with a repeated name, and there is **no oracle behaviour to match**.
 Whatever it does is unconstrained here, and must not be described as
 agreeing with the oracle. Not filed upstream.
+
+## 6. An array with a leading empty slot as the sole subscript of `~at`
+
+    a = (1,2)
+    say a~at((,2))
+
+Effect: **SIGSEGV, rc 139**, deterministic (measured 3 runs of 3, and the
+same for `a~at((,,3))`).
+
+Cause: `ArrayClass::validateIndex` spreads a lone array argument into the
+subscript list by taking its **item count** alongside its **slot array**
+(`classes/ArrayClass.cpp:1219`-`:1226`): `indexCount = indirect->items()`
+and `index = indirect->data()`. `items()` counts the non-empty slots and
+`data()` is the raw slot array, so an array whose leading slot is empty and
+whose item count is one hands `validateSingleDimensionIndex` an
+`indexCount` of 1 with `index[0] == OREF_NULL`, and `:1264` calls
+`index[0]->requiredPositive(argPosition)` on it.
+
+The neighbours bound it and are all clean: `a~at((1,))` answers `1` (one
+item, leading slot filled), `a~at((1,,3))` is 93.926 (two items, so the
+count is rejected before either subscript is read), and `a~at((,))` is
+93.901 (no items at all). Any array whose first filled slot is not slot one
+and which holds exactly one item is the crashing shape.
+
+Consequence for this crate: **there is no oracle behaviour to match**, so
+`rexx-exec` refuses the shape rather than answering it -- `Loud::
+array_index_hole`, whose own doc names
+`dispatch.rs`'s `an_expanded_index_of_one_empty_slot_is_loud` as the
+instrument. No differential row can cover it.
+
+Found 2026-08-22 while building this crate's own `~at`; not filed upstream
+(filing is Moritz's call, not this project's).

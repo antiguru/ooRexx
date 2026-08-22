@@ -302,3 +302,26 @@ lang/array_make_string_refusals.rex
 # The array's own name in a 97.1, which is stringValue() and not the string
 # value a string context asks for.
 lang/array_unknown_method.rex
+
+# Phase 5a (2026-08-17 plan) Task 11: the Array and the Directory 5a's own
+# mechanisms send to.
+#
+# The list expression and the Array method set this task implements, the two
+# DO OVER shapes -- a variable holding an array, and the comma-separated
+# expression list over a line continuation the prologue writes -- and a
+# Directory's ~put/[]/~at over both directories this interpreter builds.
+lang/array_list_expression.rex
+lang/array_do_over.rex
+lang/directory_at_and_put.rex
+# The refusal ladders, one per receiver class, because the same three message
+# names carry different errors on each: an Array's `[]`/`At` are A_COUNT and
+# refuse a second subscript from their own body with 93.926, where a
+# Directory's declare a count and refuse it from the send with 93.902.
+lang/array_index_refusals.rex
+lang/directory_index_refusals.rex
+# Every trace value line renders through stringValue(), so an array traces as
+# `an Array` where the same array in a string context is its items joined.
+# Compared raw (see corpus.rs's RAW_STDERR_COMPARISON), because the >A>/>>>
+# pair a list emits and the >K>/>=> pair a DO OVER emits are indented lines
+# and the indents are the point.
+lang/array_trace.rex

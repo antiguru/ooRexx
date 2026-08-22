@@ -293,6 +293,12 @@ fn excerpt(bytes: &[u8]) -> String {
 /// DEVIATION 0's normalisation. See the module doc's "Opting a program out
 /// of DEVIATION 0".
 const RAW_STDERR_COMPARISON: &[&str] = &[
+    // Phase 5a (2026-08-17 plan) Task 11: what a list expression and a
+    // `DO OVER` trace. Every value line here is indented, and the indents are
+    // what the program is for -- the `>A>` per written list position against
+    // the `>>>` for the list itself, and the `>K>` a `DO OVER` header emits
+    // against the `>=>` each pass emits two columns further in.
+    "lang/array_trace.rex",
     // Phase 5a Task 7's two traced method activations. The indent a
     // `::METHOD` body's clauses echo at is the thing under test -- 0,
     // whatever the sending clause's own indent was -- and normalisation

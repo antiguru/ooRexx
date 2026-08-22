@@ -1,0 +1,19 @@
+/* What a list expression and a DO OVER trace. Every trace value line renders
+ * through stringValue(), so an array is `an Array` there while the same array
+ * in a string context is its items joined -- the two are different answers
+ * and this program shows both.
+ *
+ * A written list position traces >A> and an omitted one traces nothing; the
+ * list itself traces >>>, which is why an assignment of a list shows two.
+ *
+ * DO OVER's own >K> shows the target as `an Array` and each pass's >=> shows
+ * the item, including the terminating pass a FOR budget cuts off.
+ */
+trace i
+a = (1,,3)
+say '<'||a||'>'
+b = .Array~superClasses
+do e over (7,8) for 1
+  nop
+end
+trace off

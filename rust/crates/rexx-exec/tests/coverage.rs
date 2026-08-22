@@ -989,6 +989,12 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/array_make_string.rex",
     "lang/array_make_string_refusals.rex",
     "lang/array_unknown_method.rex",
+    "lang/array_list_expression.rex",
+    "lang/array_do_over.rex",
+    "lang/directory_at_and_put.rex",
+    "lang/array_index_refusals.rex",
+    "lang/directory_index_refusals.rex",
+    "lang/array_trace.rex",
 ];
 
 #[test]

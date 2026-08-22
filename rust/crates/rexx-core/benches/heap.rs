@@ -27,20 +27,20 @@ fn build_graph() -> (Heap, RootSet) {
             // A distinct string per slot, as in the Rexx side. A shared
             // constant would collapse the graph to ~1,001 objects and make
             // the pause meaningless.
-            elems.push(heap.alloc(Body::Text {
+            elems.push(Some(heap.alloc(Body::Text {
                 bytes: Bytes::from_vec(format!("e{j}").into_bytes()),
                 num: None,
-            }));
+            })));
         }
-        outer.push(heap.alloc(Body::Array(elems)));
+        outer.push(Some(heap.alloc(Body::Array(elems))));
     }
 
     for i in 0..(OUTER / 10) {
-        let target = outer[OUTER - 1 - i];
-        if let Some(obj) = heap.get_mut(outer[i])
+        let target = outer[OUTER - 1 - i].expect("every slot was filled above");
+        if let Some(obj) = heap.get_mut(outer[i].expect("every slot was filled above"))
             && let Body::Array(items) = &mut obj.body
         {
-            items[0] = target;
+            items[0] = Some(target);
         }
     }
 
@@ -58,12 +58,12 @@ fn build_graph() -> (Heap, RootSet) {
     // gap is not closed here; see `d1-decision.md`.
     let mut root_keys = Vec::with_capacity(OUTER);
     for i in 0..OUTER {
-        root_keys.push(heap.alloc(Body::Text {
+        root_keys.push(Some(heap.alloc(Body::Text {
             bytes: Bytes::from_vec(format!("K{}", i + 1).into_bytes()),
             num: None,
-        }));
+        })));
     }
-    outer.push(heap.alloc(Body::Array(root_keys)));
+    outer.push(Some(heap.alloc(Body::Array(root_keys))));
 
     let root = heap.alloc(Body::Array(outer));
     roots.add_global(".ROOT", root);
@@ -91,7 +91,7 @@ fn allocation(c: &mut Criterion) {
         b.iter(|| {
             let mut heap = Heap::new();
             for _ in 0..1_000_000usize {
-                heap.alloc(Body::Array(vec![ObjRef::NIL; 4]));
+                heap.alloc(Body::Array(vec![Some(ObjRef::NIL); 4]));
             }
             black_box(heap.live_count())
         })

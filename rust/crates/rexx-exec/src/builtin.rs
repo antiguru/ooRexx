@@ -920,7 +920,14 @@ fn whole_number(
     {
         return Ok(Some(whole));
     }
-    let found = interp.to_text(value).into_owned();
+    // **`stringValue()` and not the string value the conversion above asked
+    // for**, which is the rule for every object substitution in an error
+    // message: `reportException` is handed the object and the catalogue
+    // renders it. Measured, three descriptors: `substr('abcdef',(1,2))` is
+    // 40.12 `found "an Array"` where `substr('abcdef',(2,))` answers `bcdef`,
+    // so the same argument converts through one rendering and is quoted
+    // through the other.
+    let found = interp.string_value_text(value);
     Err(Raised::argument_not_whole(name, position, &found).into())
 }
 
@@ -935,6 +942,12 @@ fn pad_byte(
     let Some(value) = arg(args, position) else {
         return Ok(None);
     };
+    // **The string value, and quoted as the string value too** -- the
+    // opposite of [`whole_number`] above, because `padArgument` converts with
+    // `stringArgument` and then quotes the *converted string* rather than the
+    // object. Measured, `translate('abc','x','y',(1,2))` is 40.23 `found "1`
+    // and `2"` on two lines, where `substr('abcdef',(1,2))` quotes
+    // `"an Array"`.
     let found = interp.to_text(value).into_owned();
     match found.as_slice() {
         [byte] => Ok(Some(*byte)),

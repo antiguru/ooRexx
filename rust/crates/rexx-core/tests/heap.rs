@@ -45,15 +45,20 @@ fn arrays_hold_handles_to_other_objects() {
         num: None,
     });
     let arr = heap.alloc(Body::Array(vec![
-        a,
-        ObjRef::small_int(1).unwrap(),
-        ObjRef::NIL,
+        Some(a),
+        Some(ObjRef::small_int(1).unwrap()),
+        None,
+        Some(ObjRef::NIL),
     ]));
     let Some(Body::Array(items)) = heap.get(arr).map(|o| &o.body) else {
         panic!("expected an array")
     };
-    assert_eq!(items.len(), 3);
-    assert_eq!(items[0], a);
+    assert_eq!(items.len(), 4);
+    assert_eq!(items[0], Some(a));
+    // An empty slot and a slot holding `.nil` are different values, which is
+    // the distinction `~items` reads and `~at` does not expose.
+    assert_eq!(items[2], None);
+    assert_eq!(items[3], Some(ObjRef::NIL));
 }
 
 /// **A class identity and an arena handle can never be the same handle.**

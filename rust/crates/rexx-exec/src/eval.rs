@@ -294,7 +294,7 @@ impl Interp {
             // exhaustive over what can arrive.
             ExprKind::DotVariable(id) => {
                 let tag = code.symbols.name(*id).as_bytes().to_vec();
-                let text = self.to_text(value).to_vec();
+                let text = self.string_value_text(value);
                 self.trace_dotvar(indent, &tag, &text);
             }
             // `>P>`, not `>O>` -- a prefix operator's line is its own, which
@@ -357,7 +357,7 @@ impl Interp {
                     CallTarget::Symbol(id) => code.symbols.name(*id).as_bytes().to_vec(),
                     CallTarget::Literal(bytes) => bytes.to_vec(),
                 };
-                let text = self.to_text(value).to_vec();
+                let text = self.string_value_text(value);
                 self.trace_function(indent, &name, &text);
             }
             // **`>M>` is not here**, and that is the one value prefix this
@@ -508,7 +508,7 @@ impl Interp {
             resolved.extend_from_slice(&self.tail_key(code, id));
             self.trace_compound_name(indent, &tag, &resolved);
         }
-        let text = self.to_text(value).to_vec();
+        let text = self.string_value_text(value);
         self.trace_variable(indent, &tag, &text);
     }
 
@@ -656,8 +656,59 @@ impl Interp {
                 )?
                 .ok_or_else(|| Raised::no_result(name).into()),
 
+            // `(a, b, ...)` -- `RexxExpressionList::evaluate`
+            // (`expression/ExpressionList.cpp:83`), which builds an array of
+            // the list's own length and fills the positions that were written.
+            ExprKind::List(items) => self.eval_list(code, items),
+
             other => Err(Loud::expression(other).into()),
         }
+    }
+
+    /// `ExprKind::List`: a fresh `.Array` whose slots are the list's
+    /// positions.
+    ///
+    /// **A slot per written position, omitted ones included** --
+    /// `new_array(expressionCount)` (`expression/ExpressionList.cpp:93`), and
+    /// `parseFullSubExpression` counts `total` where `parseArgList` counts
+    /// `realcount` (`parser/LanguageParser.cpp:3145`), so a trailing omission
+    /// is a slot where a call's own trailing omission is nothing. Measured,
+    /// `(1,)~size` is `2` and `(1,)~items` is `1`.
+    ///
+    /// **Each written position traces `>A>`, an omitted one traces nothing,
+    /// and the list itself traces `>>>`** -- the `traceArgument` inside the
+    /// loop and the `traceResult` after it (`:105`, `:118`). Measured under
+    /// `trace i`, `a = (1,,3)` prints `>L> "1"`, `>A> "1"`, `>L> "3"`,
+    /// `>A> "3"`, then `>>> "an Array"` for the list and a second one for the
+    /// assignment. The `>A>` line is emitted here rather than through `eval`'s
+    /// own `trace_intermediate` hook for the reason a call's arguments are:
+    /// the line belongs to the site that evaluated the element, not to the
+    /// element's own node.
+    ///
+    /// Every element is rooted while the later ones are evaluated, and they
+    /// are still rooted when the array is allocated -- which can collect.
+    fn eval_list(&mut self, code: &Code<'_>, items: &[Option<Expr>]) -> Result<ObjRef, Failure> {
+        let frame = self.roots.push_frame();
+        let indent = self.clause_state.current_value_indent;
+        let mut slots = Vec::with_capacity(items.len());
+        for item in items {
+            let Some(expr) = item else {
+                slots.push(None);
+                continue;
+            };
+            let value = self.eval(code, expr)?;
+            self.roots.push_temp(value);
+            if let Some(rendered) = self.intermediate_text(value) {
+                self.trace_argument(indent, &rendered);
+            }
+            slots.push(Some(value));
+        }
+        let array = self.alloc_with(rexx_core::BehaviourId::ARRAY, Body::Array(slots));
+        if let Some(rendered) = self.result_text(array) {
+            self.trace_result(indent, &rendered);
+        }
+        self.roots.pop_frame(frame);
+        Ok(array)
     }
 
     /// `ExprKind::Call`: the internal-function form, evaluated for its
@@ -1005,7 +1056,7 @@ impl Interp {
             let exponent = match self.to_number(right_value) {
                 Ok(number) => number,
                 Err(NotNumeric) => {
-                    let text = self.to_text(right_value).to_vec();
+                    let text = self.string_value_text(right_value);
                     return Err(Raised::power_exponent_not_whole(&text).into());
                 }
             };
@@ -1041,7 +1092,7 @@ impl Interp {
         match self.to_number(value) {
             Ok(number) => Ok(number),
             Err(NotNumeric) => {
-                let text = self.to_text(value).to_vec();
+                let text = self.string_value_text(value);
                 Err(Raised::nonnumeric(&text).into())
             }
         }
@@ -1094,7 +1145,7 @@ impl Interp {
                 if let Some(kind) = self.operator_operand_gap(value) {
                     return Err(Loud::operator_operand(op, kind).into());
                 }
-                let text = self.to_text(value).to_vec();
+                let text = self.string_value_text(value);
                 Err(Raised::nonnumeric(&text).into())
             }
         }
@@ -3479,10 +3530,9 @@ mod object_operand_tests {
     ///
     /// Measured: `do e over .array` is 98.913 at rc 158, and a directory or a
     /// string table iterates its own entries -- `do e over .environment`
-    /// prints `INPUTOUTPUTSTREAM` first. `LoopState::OverOnce` bound the
-    /// target once and yielded the object's rendering, so each of these was a
-    /// single wrong line at rc 0 where the pre-Phase-5 build refused the
-    /// program.
+    /// prints `INPUTOUTPUTSTREAM` first. Binding the target once and yielding
+    /// the object's rendering would be a single wrong line at rc 0 for each,
+    /// which is why the refusal is here and not in `Interp::over_items`.
     #[test]
     fn an_object_as_a_do_over_target_is_loud() {
         let cases: &[(&[u8], &str)] = &[
@@ -3697,7 +3747,8 @@ mod object_operand_tests {
             (b"say value('.LOCAL')\n", "The Local Directory\n"),
             (b"x = .array; say x\n", "The Array class\n"),
             // `DO OVER` on a string still iterates once yielding itself,
-            // which is `LoopState::OverOnce`'s own rule and stays true.
+            // which is `Interp::over_items`' own rule for a target that is
+            // not an array.
             (b"do e over 'abc'\nsay e\nend\n", "abc\n"),
             // A stem whose default is an ordinary value is untouched by the
             // redirect the check now follows.

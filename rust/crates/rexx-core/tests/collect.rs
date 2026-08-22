@@ -40,7 +40,7 @@ fn transitively_reachable_objects_survive() {
         bytes: Bytes::from_slice(b"leaf"),
         num: None,
     });
-    let holder = heap.alloc(Body::Array(vec![leaf]));
+    let holder = heap.alloc(Body::Array(vec![Some(leaf)]));
     roots.add_global(".HOLDER", holder);
     heap.collect(&roots);
     assert!(heap.get(leaf).is_some());
@@ -51,11 +51,11 @@ fn reference_cycles_are_collected() {
     let mut heap = Heap::new();
     let roots = RootSet::new();
     let a = heap.alloc(Body::Array(vec![]));
-    let b = heap.alloc(Body::Array(vec![a]));
+    let b = heap.alloc(Body::Array(vec![Some(a)]));
     let Some(obj) = heap.get_mut(a) else {
         panic!("a exists")
     };
-    obj.body = Body::Array(vec![b]);
+    obj.body = Body::Array(vec![Some(b)]);
     let stats = heap.collect(&roots);
     assert_eq!(stats.swept, 2, "a cycle with no root must not survive");
 }

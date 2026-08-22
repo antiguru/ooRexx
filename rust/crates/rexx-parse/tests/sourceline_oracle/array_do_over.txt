@@ -1,0 +1,72 @@
+count 71
+/* DO OVER an Array, and the two shapes 5a's own mechanisms write.
+ *
+ * The target is handed to requestArray, so an array iterates its own
+ * non-empty slots -- an omitted position is skipped where an explicit .nil is
+ * yielded -- and a value that is not an array iterates once yielding itself.
+ *
+ * The comma-separated expression list over a line continuation is the second
+ * shape and is a different construct from a variable holding an array: it
+ * folds into a plain Array at the OVER position. CoreClasses.orx:70 writes it.
+ *
+ * FOR is checked after the item is bound, not before, so the control variable
+ * outlives the loop holding the item the terminating pass bound.
+ */
+a = (10,20,30)
+do e over a
+  say '[' || e || ']'
+end
+say 'after' e
+
+do e over (1,,3)
+  say '<' || e || '>'
+end
+
+do e over (1,.nil,3)
+  say '{' || e || '}'
+end
+
+/* One item, and one that is not an array at all. */
+do e over (7,)
+  say 'one' e
+end
+do e over 'abc'
+  say 'string' e
+end
+do e over 42
+  say 'number' e
+end
+
+/* The comma-separated list over a continuation, which is what the prologue
+   writes. */
+do name over "nl", "cr", "tab", -
+ "null"
+  say 'name' name
+end
+
+/* FOR stops the loop after the item is bound. */
+b = (10,20,30,40)
+do f over b for 2
+  say 'for' f
+end
+say 'after for' f
+
+f = 'pre'
+do f over b for 0
+  say 'never'
+end
+say 'after zero' f
+
+/* LEAVE and ITERATE reach an array target like any other loop, and ITERATE
+   still spends the FOR budget. */
+do g over b for 3
+  if g = 20 then iterate
+  if g = 40 then leave
+  say 'g' g
+end
+say 'after g' g
+
+/* A nested array is an item, and renders as its own default name. */
+do h over ((1,2),3)
+  say 'h' h
+end
