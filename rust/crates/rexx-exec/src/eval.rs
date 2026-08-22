@@ -73,6 +73,7 @@
 
 use crate::activation::CallType;
 use crate::error::Raised;
+use crate::run::CallEntry;
 use crate::run::{Ended, Resolved};
 use crate::value::{canonical_small_int, exact_small_int, within_digits};
 use crate::{Code, Failure, Interp, Loud, StackSpan};
@@ -746,7 +747,14 @@ impl Interp {
         // `::ROUTINE` reached this way answers `FUNCTION` as `PARSE SOURCE`'s
         // second word where the same body reached by `CALL` answers
         // `SUBROUTINE`. Measured in one program, the same routine both ways.
-        match self.invoke_call(code, resolved, name, args, CallType::Function)? {
+        match self.invoke_call(
+            code,
+            resolved,
+            name,
+            args,
+            CallType::Function,
+            CallEntry::Written,
+        )? {
             // `EXIT` inside the routine, or the routine falling off its own
             // end, ends the whole program exactly as it does when the same
             // routine is reached through `CALL` (`Interp::invoke_call`'s

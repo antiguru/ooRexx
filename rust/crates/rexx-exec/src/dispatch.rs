@@ -78,7 +78,7 @@ use rexx_parse::Expr;
 
 use crate::activation::{Activation, MethodIdentity, body_of};
 use crate::error::{FailureSite, Raised};
-use crate::plan::BodyKey;
+use crate::plan::{BodyKey, Package};
 use crate::run::MAX_ACTIVATION_DEPTH;
 use crate::{Failure, Interp, Loud};
 
@@ -290,18 +290,24 @@ enum Primitive {
     /// A receiver whose whole value is in the handle's integer tag
     /// ([`Decoded::SmallInt`]) -- **D24's `SmallInt` behaviour arm**.
     ///
-    /// A kind of its own rather than folded into [`Primitive::String`], and
-    /// the reason is the route rather than the answer: the tag alone decides
-    /// this receiver's behaviour, without reaching the arena or testing the
-    /// class-identity range, and a receiver whose behaviour is decided that
-    /// cheaply is the one a send has to keep cheap. The answer it maps to is
-    /// `String`'s instance behaviour -- `CLASS_CREATE_SPECIAL(Integer,
-    /// "String", RexxIntegerClass)` (`classes/IntegerClass.cpp:2066`) -- and
-    /// measured, `12345~class~id` is `String` and `12345~length` is 5.
+    /// **It changes nothing today, and it is not a cheaper route either.**
+    /// The arm that answers [`Primitive::String`] for the handle's inline
+    /// text decides from the tag too, so the split buys no arena read and no
+    /// class-range test that was being paid before it; and every consumer
+    /// folds this variant straight back into `String`'s answer
+    /// ([`Interp::receiver_behaviour`], [`native_class`]). Measured against
+    /// the oracle, a small integer and the same digits as a string are
+    /// indistinguishable: `12345~class~id` is `String` for both
+    /// (`CLASS_CREATE_SPECIAL(Integer, "String", RexxIntegerClass)`,
+    /// `classes/IntegerClass.cpp:2066`), and so are `~length`, `~isA`,
+    /// `~hasMethod` and `~reverse`.
     ///
-    /// [`Interp::receiver_behaviour`] is where the mapping is, and
-    /// `a_small_integer_receiver_takes_the_small_int_arm` is what holds the
-    /// two halves apart -- a distinct kind, one shared behaviour.
+    /// **What it is, then, is the named place** D24 asks for: a phase that
+    /// gives a tagged integer behaviour of its own changes this arm's mapping
+    /// and touches neither the inline-text receiver nor the arena's.
+    /// `a_small_integer_receiver_takes_the_small_int_arm` is what keeps the
+    /// two halves from collapsing back together -- a distinct kind, one
+    /// shared behaviour.
     SmallInt,
     /// `.nil`, measured: `.nil~class~id` is `Object`.
     Object,
@@ -392,19 +398,50 @@ pub(crate) struct Caller {
     /// The package the sending code was translated in, which is the running
     /// activation's program.
     ///
-    /// `None` where no activation is running, which is `checkPackage`'s own
-    /// `activation == OREF_NULL` (`classes/ObjectClass.cpp:665`-`:669`).
-    package: Option<crate::plan::ProgramId>,
+    /// **A variant for "no activation" rather than an absent package**, which
+    /// is the state `checkPackage` refuses before it reads anything
+    /// (`classes/ObjectClass.cpp:665`-`:669`). [`crate::plan::Package`] has
+    /// the other side of the same rule: an absent [`crate::plan::ProgramId`]
+    /// there would mean the interpreter's own package, so the two absences
+    /// would be one type with opposite meanings and a `PACKAGE` check
+    /// comparing them directly would call `.Array`'s package "no package".
+    package: CallerPackage,
+}
+
+/// The package a send is written in, as `RexxObject::checkPackage` reads it.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) enum CallerPackage {
+    /// No activation is running. `checkPackage` refuses outright for it
+    /// (`classes/ObjectClass.cpp:665`-`:669`), and a resolution asked for
+    /// from outside any running program is in it.
+    NoActivation,
+    /// The running activation's own package, which is the package its clauses
+    /// were translated in.
+    Package(Package),
 }
 
 impl Caller {
     /// The receiver of the call the send is written in.
+    ///
+    /// Read by the access-scope checks, which are Task 13's: `PRIVATE`
+    /// compares this against the receiver of the send. Kept out of
+    /// `dead_code` by the `allow` below rather than by an assertion that
+    /// cannot fail -- the accessor has no caller in the non-test build, and
+    /// pretending otherwise with a `debug_assert` no in-tree path can
+    /// falsify would put a check where a reader expects one and find nothing.
+    /// `cargo clippy --all-targets` compiles this crate once with `cfg(test)`
+    /// off, which is the compilation the lint fires in; an `expect` would be
+    /// unfulfilled in the library-as-test one, which is a warning of its own
+    /// (`rexx-parse/src/lib.rs`'s own note on the same choice).
+    #[allow(dead_code, reason = "read by Task 13's PRIVATE check")]
     pub(crate) fn receiver(self) -> Option<ObjRef> {
         self.receiver
     }
 
-    /// The package the send is written in.
-    pub(crate) fn package(self) -> Option<crate::plan::ProgramId> {
+    /// The package the send is written in -- `PACKAGE`'s input, Task 13's to
+    /// read, and alive for the reason [`Caller::receiver`] gives.
+    #[allow(dead_code, reason = "read by Task 13's PACKAGE check")]
+    pub(crate) fn package(self) -> CallerPackage {
         self.package
     }
 }
@@ -439,7 +476,10 @@ impl Interp {
     pub(crate) fn caller(&self) -> Caller {
         Caller {
             receiver: self.call_context.receiver,
-            package: self.running_program(),
+            package: match self.running_program() {
+                None => CallerPackage::NoActivation,
+                Some(program) => CallerPackage::Package(Package::Program(program)),
+            },
         }
     }
 
@@ -610,11 +650,12 @@ impl Interp {
         let model = self.object_model();
         Ok(match kind {
             // Both arms answer one behaviour, which is what makes
-            // `Primitive::SmallInt` a route and not a divergence: the oracle
-            // gives `RexxInteger` the id `String`
+            // `Primitive::SmallInt` a distinction without a divergence: the
+            // oracle gives `RexxInteger` the id `String`
             // (`classes/IntegerClass.cpp:2066`), so a small integer's messages
             // resolve against `String`'s instance behaviour exactly as a
-            // literal's do.
+            // literal's do. This fold is one of the two sites that would
+            // change if that ever stopped being true.
             Primitive::String | Primitive::SmallInt => Behaviour::Instance(model.string),
             Primitive::Object => Behaviour::Instance(model.object),
             Primitive::Array => Behaviour::Instance(model.array),
@@ -645,14 +686,12 @@ impl Interp {
         start_scope: Option<ObjRef>,
         caller: Caller,
     ) -> Option<Resolution> {
-        // A receiver reaches the calling convention only through a send from
-        // running code, and running code has a package: `Interp::caller`
-        // fills both halves together, so a receiver with no package beside it
-        // is a caller assembled somewhere else.
-        debug_assert!(
-            caller.receiver().is_none() || caller.package().is_some(),
-            "a caller with a receiver and no package"
-        );
+        // Nothing reads `caller` here: the access scopes are what read it and
+        // none is implemented in this crate, which
+        // `rexx-classes/src/registry.rs:414`-`:416` records for the native
+        // side. It is a parameter now so that the sites that will pass it are
+        // already passing it.
+        let _ = caller;
         let behaviour = self.receiver_behaviour(receiver).ok()?;
         // Borrowed rather than owned wherever the name is UTF-8, which every
         // name a program can write is: `from_utf8_lossy` allocates only for
@@ -820,9 +859,8 @@ impl Interp {
         // **The calling convention, entered before anything reads it.** The
         // receiver goes in here and is read back out below, so the identity
         // the activation carries, the `SELF` the body reads and the caller a
-        // send inside the body resolves as all name the same value by
-        // construction rather than by each taking its own copy of this
-        // function's argument.
+        // send inside the body resolves as all name one field rather than
+        // each taking its own copy of this function's argument.
         //
         // Saved and restored with the level state further down -- which is
         // where `Interp::invoke_call` does all of it -- and replaced ahead of
@@ -838,7 +876,11 @@ impl Interp {
                 receiver: Some(receiver),
             },
         );
-        let addressed = self
+        // **Shadows the parameter**, which is what makes the routing a
+        // property of scope rather than of a comment: past this line the name
+        // `receiver` is the convention's own field, so the bindings below
+        // cannot read the argument even by accident.
+        let receiver = self
             .call_context
             .receiver
             .expect("the calling convention replaced directly above carries the receiver");
@@ -852,7 +894,7 @@ impl Interp {
             MethodIdentity {
                 name: name.into(),
                 scope: resolution.scope,
-                receiver: addressed,
+                receiver,
             },
         ));
 
@@ -876,7 +918,7 @@ impl Interp {
         // the resolution's scope is `K`. Reading it out of the calling
         // convention is what makes that the receiver by construction.
         let self_slot = self.slot_of(b"SELF");
-        self.set_variable(frame, self_slot, addressed);
+        self.set_variable(frame, self_slot, receiver);
         let super_slot = self.slot_of(b"SUPER");
         // `.nil` for the topmost scope, which is what `superScope` answers
         // there.
@@ -1614,7 +1656,7 @@ mod tests {
     fn no_caller() -> Caller {
         Caller {
             receiver: None,
-            package: None,
+            package: CallerPackage::NoActivation,
         }
     }
 
@@ -1845,7 +1887,8 @@ mod tests {
     ///   into `Primitive::String` reddens the first assertion;
     /// * they answer the **same** behaviour, so an arm that pointed the tag
     ///   at another class reddens the second -- and that half is why no
-    ///   differential row moves: `RexxInteger`'s own id is `String`
+    ///   differential row moves and why the split is structural rather than
+    ///   an optimisation: `RexxInteger`'s own id is `String`
     ///   (`classes/IntegerClass.cpp:2066`), and measured, `12345~class~id` is
     ///   `String` and `12345~length` is 5 on the oracle.
     #[test]

@@ -380,17 +380,65 @@ pub(crate) enum Resolved {
 }
 
 /// Which of the two activation-pushing outcomes a resolved call took, kept
-/// past the push so the three decisions that follow it can read it.
+/// past the push so the decisions that follow it can read it.
 ///
 /// [`Resolved`] cannot serve here: `Resolved::Builtin` returns before any
 /// activation exists, and a type that still admits it would need a dead arm
-/// at each of those three reads. The three, each measured and each different
-/// between the two variants: whether `SIGL` is set, which constructor and
-/// pool the callee gets, and what `activation_indent` the callee starts at.
+/// at each of those reads. Each is measured and each differs between the
+/// variants: whether `SIGL` is set, which constructor and pool the callee
+/// gets, what `activation_indent` the callee starts at, and the receiver its
+/// calling convention carries ([`entered_receiver`]).
 #[derive(Copy, Clone)]
 enum Entered {
     Label(usize),
     Routine(InstalledRoutine),
+}
+
+/// How the callee was reached: written in the program, or delivered to it.
+///
+/// **The distinction is the receiver's and nothing else's.** The oracle runs
+/// both through one function, `RexxActivation::run`, and the callers differ
+/// in the receiver they hand it: `RexxActivation::internalCall` passes its
+/// own (`execution/RexxActivation.cpp:3313`) and
+/// `RexxActivation::internalCallTrap` passes `OREF_NULL` (`:3343`), where
+/// `run` assigns it at `:474`.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) enum CallEntry {
+    /// A `CALL`, an internal function call, or either form reaching a
+    /// `::ROUTINE` -- a call the program's own text asked for.
+    Written,
+    /// A `CALL ON` handler, run because a condition was delivered.
+    Trap,
+}
+
+/// The receiver the callee's calling convention carries (D24), given the
+/// caller's own.
+///
+/// Measured on the oracle, all three arms, with a `::method priv class
+/// private` as the probe and `self~priv` as the send -- a private send is
+/// allowed exactly when the sending activation's receiver is the object being
+/// sent to (`RexxObject::checkPrivate`, `classes/ObjectClass.cpp:616`-`:620`):
+///
+/// * `CALL inner` inside a class method, `inner` sending `self~priv`: **rc 0**,
+///   `private-reached`. So a label call inherits.
+/// * the same send from that method's `CALL ON ERROR` handler: **rc 159**,
+///   `97.2 Object "The K class" cannot accept private message "PRIV" from this
+///   context.` So a trap does not.
+/// * the same send from a `::ROUTINE` the method called with `self` as its
+///   argument: **rc 159**, the same 97.2. So a routine does not.
+///
+/// The control for all three, `.K~priv` at the top level, is that same rc 159
+/// and 97.2 -- which is what says the two refusals above are the receiver's
+/// absence and not something about where the send was written.
+///
+/// **Latent in this crate today**, because no access scope is implemented
+/// here; what reads it is `Interp::caller`, and `Interp::resolve`'s callers
+/// are where the checks go.
+fn entered_receiver(entered: Entered, entry: CallEntry, caller: Option<ObjRef>) -> Option<ObjRef> {
+    match (entered, entry) {
+        (Entered::Label(_), CallEntry::Written) => caller,
+        (Entered::Label(_), CallEntry::Trap) | (Entered::Routine(_), _) => None,
+    }
 }
 
 /// How many activations may be live at once before `CALL` raises 11.1
@@ -4231,7 +4279,19 @@ impl Interp {
         // condition whose handler is a `::routine` running `parse source`
         // answers `SUBROUTINE`, where the same handler written as a label
         // answers whatever the trapping activation answers.
-        let ended = self.resolve_and_run_call(code, &trap.label, true, &[], CallType::Subroutine);
+        // **`CallEntry::Trap`, which is the one thing about a handler's own
+        // activation that differs from an internal `CALL`'s**: the oracle's
+        // `internalCallTrap` passes `OREF_NULL` where `internalCall` passes
+        // the caller's receiver, so the handler's calling convention carries
+        // none -- `entered_receiver` has the measurement for both.
+        let ended = self.resolve_and_run_call(
+            code,
+            &trap.label,
+            true,
+            &[],
+            CallType::Subroutine,
+            CallEntry::Trap,
+        );
         // A trap queued by the handler that just ran is not one the
         // interrupted clause owes, and `in_clause`'s tripwire has to be able
         // to tell the two apart -- see the field's own doc comment.
@@ -5042,6 +5102,7 @@ impl Interp {
         name: &[u8],
         args: &[Option<Expr>],
         call_type: CallType,
+        entry: CallEntry,
     ) -> Result<Ended, Failure> {
         // **Evaluated in the caller, before anything is pushed**, which is
         // where the argument expressions' own variables live. Observable
@@ -5097,7 +5158,7 @@ impl Interp {
                 Some(expr) => arguments.push(Some(self.eval_traced_argument(code, expr)?)),
             }
         }
-        self.invoke_call_over(resolved, name, arguments, call_type)
+        self.invoke_call_over(resolved, name, arguments, call_type, entry)
     }
 
     /// One compiled call over the arguments its own ops already evaluated.
@@ -5161,7 +5222,13 @@ impl Interp {
             .iter()
             .map(|value| value.map(Argument::Value))
             .collect();
-        match self.invoke_call_over(resolved, name, arguments, CallType::Function)? {
+        match self.invoke_call_over(
+            resolved,
+            name,
+            arguments,
+            CallType::Function,
+            CallEntry::Written,
+        )? {
             Ended::Exited(value) => Err(Failure::Exited(value)),
             Ended::Returned(Some(value)) => Ok(value),
             Ended::Returned(None) => Err(Raised::no_data_returned(name).into()),
@@ -5183,6 +5250,7 @@ impl Interp {
         name: &[u8],
         arguments: Vec<Option<Argument>>,
         call_type: CallType,
+        entry: CallEntry,
     ) -> Result<Ended, Failure> {
         // **The builtin outcome ends here**, before `SIGL`, before the depth
         // guard and before any activation is pushed -- each of those three is
@@ -5433,17 +5501,17 @@ impl Interp {
         let saved_base = std::mem::replace(&mut self.activation_indent, callee_indent);
         let saved_offset = std::mem::take(&mut self.indent_offset);
         let saved_line = std::mem::take(&mut self.clause_line_override);
+        let inherited = entered_receiver(entered, entry, self.call_context.receiver);
         let saved_context = std::mem::replace(
             &mut self.call_context,
             CallContext {
                 name: name.to_vec(),
                 arguments,
-                // Nothing this function enters was reached by a message
-                // send, so there is no receiver to carry --
-                // `RexxActivation::getReceiver`'s `OREF_NULL` for a frame
-                // that is not a method's
-                // (`execution/RexxActivation.cpp:2348`).
-                receiver: None,
+                // Read out of the caller's own convention before this
+                // replaces it, which is the only place it can be read from:
+                // `entered_receiver` carries the rule and the measurement
+                // for each of its arms.
+                receiver: inherited,
             },
         );
 
@@ -5550,9 +5618,10 @@ impl Interp {
         search_labels: bool,
         args: &[Option<Expr>],
         call_type: CallType,
+        entry: CallEntry,
     ) -> Result<Ended, Failure> {
         let resolved = self.resolve_call(name, search_labels)?;
-        self.invoke_call(code, resolved, name, args, call_type)
+        self.invoke_call(code, resolved, name, args, call_type, entry)
     }
 
     /// Evaluates one call argument, keeping the caller's slot when the
@@ -5801,7 +5870,14 @@ impl Interp {
         // clause's own printed indent, needed below for the caller-side
         // `RESULT` trace.
         let base_indent = self.clause_state.current_value_indent;
-        let ended = self.invoke_call(code, resolved, name, args, CallType::Subroutine)?;
+        let ended = self.invoke_call(
+            code,
+            resolved,
+            name,
+            args,
+            CallType::Subroutine,
+            CallEntry::Written,
+        )?;
         self.settle_call_result(ended, base_indent)
     }
 
@@ -5896,7 +5972,13 @@ impl Interp {
                     .iter()
                     .map(|value| value.map(Argument::Value))
                     .collect();
-                self.invoke_call_over(resolved, name, arguments, CallType::Subroutine)
+                self.invoke_call_over(
+                    resolved,
+                    name,
+                    arguments,
+                    CallType::Subroutine,
+                    CallEntry::Written,
+                )
             }
         };
         values.truncate(mark);

@@ -71,7 +71,7 @@ use std::collections::{HashMap, HashSet};
 
 use rexx_core::{BehaviourId, Body, NativeObject, ObjRef};
 
-use crate::plan::ProgramId;
+use crate::plan::{Package, ProgramId};
 use crate::{Failure, Interp, Loud};
 
 /// Which directory a lookup is reading.
@@ -623,8 +623,14 @@ impl Interp {
     /// package; one a `::CLASS` installed belongs to its program's. Measured,
     /// `(.K~package == .Array~package)` is `0` for a `::class K`.
     pub(crate) fn package_object_for(&mut self, class: ObjRef) -> ObjRef {
-        let program = self.class_packages.get(&class).copied();
-        if let Some(found) = self.package_objects.get(&program).copied() {
+        // A class this crate's own bootstrap registered is in no program's
+        // table, and that absence is what `Package::Rexx` names -- the
+        // distinction the enum exists to keep out of an `Option`.
+        let package = match self.class_packages.get(&class).copied() {
+            None => Package::Rexx,
+            Some(program) => Package::Program(program),
+        };
+        if let Some(found) = self.package_objects.get(&package).copied() {
             return found;
         }
         let package_class = self.package_class();
@@ -633,9 +639,9 @@ impl Interp {
         // and `.local` were, and a package a program installed into
         // carries no name of its own -- measured, `.Array~package` renders
         // `The REXX Package` and a `::CLASS`'s renders `a Package`.
-        let rendered = match program {
-            None => b"The REXX Package".to_vec(),
-            Some(_) => default_object_name(self.class_id_text(package_class))
+        let rendered = match package {
+            Package::Rexx => b"The REXX Package".to_vec(),
+            Package::Program(_) => default_object_name(self.class_id_text(package_class))
                 .as_bytes()
                 .to_vec(),
         };
@@ -646,8 +652,8 @@ impl Interp {
         // A package object outlives every send that can reach it and is
         // reachable from no other object, so the root is a global rather than
         // a temp -- the position `.environment` and `.local` are in.
-        self.roots.add_global(&package_root_key(program), object);
-        self.package_objects.insert(program, object);
+        self.roots.add_global(&package_root_key(package), object);
+        self.package_objects.insert(package, object);
         object
     }
 
@@ -664,16 +670,16 @@ impl Interp {
     /// this crate builds one only above. Answered rather than panicked, so the
     /// caller can refuse loudly.
     pub(crate) fn package_name(&self, package: ObjRef) -> Option<Vec<u8>> {
-        let program = self
+        let which = self
             .package_objects
             .iter()
             .find(|(_, object)| **object == package)
-            .map(|(program, _)| *program)?;
-        Some(match program {
-            None => b"REXX".to_vec(),
+            .map(|(which, _)| *which)?;
+        Some(match which {
+            Package::Rexx => b"REXX".to_vec(),
             // A program's own package. This phase loads one program, so its
             // path is the running program's.
-            Some(_) => self.program_path.clone().into_bytes(),
+            Package::Program(_) => self.program_path.clone().into_bytes(),
         })
     }
 }
@@ -683,10 +689,10 @@ impl Interp {
 ///
 /// Keyed by string, so each package needs a distinct one; the `REXX` package
 /// and each program's are different objects and must not displace each other.
-fn package_root_key(program: Option<ProgramId>) -> String {
-    match program {
-        None => "the REXX package".to_string(),
-        Some(ProgramId(id)) => format!("the package of program {id}"),
+fn package_root_key(package: Package) -> String {
+    match package {
+        Package::Rexx => "the REXX package".to_string(),
+        Package::Program(ProgramId(id)) => format!("the package of program {id}"),
     }
 }
 

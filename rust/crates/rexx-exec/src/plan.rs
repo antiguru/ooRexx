@@ -47,6 +47,26 @@ use std::rc::Rc;
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub(crate) struct ProgramId(pub(crate) usize);
 
+/// Which package something belongs to.
+///
+/// **A variant for the interpreter's own package rather than an absent
+/// [`ProgramId`].** `Interp::package_objects` and `Interp::class_packages`
+/// key on this, and the class a program installed and the class the crate's
+/// own bootstrap registered are different packages with different `~name`
+/// answers -- measured, `.Array~package~name` is `REXX` and a `::CLASS`'s is
+/// the program's own path. Spelling the first as an absence puts it in the
+/// same type as "there is no package at all", which is a different state that
+/// `Caller::package` (`dispatch.rs`) carries and that the oracle's
+/// `checkPackage` refuses (`classes/ObjectClass.cpp:665`-`:669`).
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+pub(crate) enum Package {
+    /// The package the interpreter's own classes belong to. `PackageClass::
+    /// getProgramName` answers `REXX` for it (`classes/PackageClass.hpp:147`).
+    Rexx,
+    /// The package a loaded program's own directives install into.
+    Program(ProgramId),
+}
+
 /// Which code body of which loaded program a cached plan belongs to (D16).
 ///
 /// There is deliberately **no fragment arm**, and that is a finding rather

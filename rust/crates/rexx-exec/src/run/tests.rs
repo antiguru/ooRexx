@@ -8471,3 +8471,56 @@ fn a_condition_inside_a_method_body_echoes_the_body_and_then_the_send() {
         ),
     );
 }
+
+/// **The receiver a callee's calling convention carries** (D24), for each
+/// route into a callee that this crate has.
+///
+/// The rows are the oracle's, measured with a `::method priv class private`
+/// and `self~priv` as the send -- [`entered_receiver`]'s own doc has each
+/// transcript. What this test holds is that the three routes do not collapse
+/// into each other: a build that gave a trap handler the same receiver as an
+/// internal `CALL` would let a private send through from a context the oracle
+/// refuses at 97.2, and a build that gave an internal `CALL` none would
+/// refuse one the oracle allows at rc 0.
+///
+/// **Latent, and that is why it is a unit test over the decision rather than
+/// a differential row.** No access scope is implemented here, so no program
+/// this crate can run tells the three apart; the differential cannot see this
+/// field at all, in either direction.
+#[test]
+fn a_trap_handler_and_an_internal_call_do_not_carry_the_same_receiver() {
+    let caller = ObjRef::small_int(7).expect("7 fits the tag");
+    let label = Entered::Label(0);
+    let routine = Entered::Routine(crate::InstalledRoutine {
+        program: ProgramId(0),
+        directive: 0,
+    });
+
+    assert_eq!(
+        entered_receiver(label, CallEntry::Written, Some(caller)),
+        Some(caller),
+        "an internal CALL did not inherit its caller's receiver"
+    );
+    assert_eq!(
+        entered_receiver(label, CallEntry::Trap, Some(caller)),
+        None,
+        "a CALL ON handler was given the receiver internalCallTrap withholds"
+    );
+    assert_eq!(
+        entered_receiver(routine, CallEntry::Written, Some(caller)),
+        None,
+        "a ::ROUTINE inherited a receiver"
+    );
+    assert_eq!(
+        entered_receiver(routine, CallEntry::Trap, Some(caller)),
+        None
+    );
+
+    // A caller with no receiver of its own has none to pass on, whichever
+    // route is taken: the top-level control's own state.
+    for entered in [label, routine] {
+        for entry in [CallEntry::Written, CallEntry::Trap] {
+            assert_eq!(entered_receiver(entered, entry, None), None);
+        }
+    }
+}

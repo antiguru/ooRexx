@@ -75,7 +75,7 @@ use input::Input;
 // plan cache, and the full name-resolution order (plan, then `extra`, then
 // growth).
 mod plan;
-use plan::{BodyKey, CompoundName, Plan, ProgramId};
+use plan::{BodyKey, CompoundName, Package, Plan, ProgramId};
 
 // One activation: everything about the frame currently executing (D16).
 mod activation;
@@ -2345,13 +2345,13 @@ struct Interp {
     ///
     /// [`package_classes`]: Interp::package_classes
     class_packages: HashMap<ObjRef, ProgramId>,
-    /// The package objects `~package` answers, keyed by the program whose
-    /// directives installed the class -- `None` being the `REXX` package the
-    /// primitive classes belong to.
+    /// The package objects `~package` answers, keyed by the package itself
+    /// -- see [`crate::plan::Package`] for why the interpreter's own is a
+    /// variant rather than an absent program id.
     ///
     /// Cached rather than built per send, because the oracle answers one
     /// object: measured, `(.Array~package == .String~package)` is `1`.
-    package_objects: HashMap<Option<ProgramId>, ObjRef>,
+    package_objects: HashMap<Package, ObjRef>,
     /// Which `(program, directive)` a [`rexx_classes::MethodId`] `install_directives`
     /// minted names -- the "bodies are stored" half of R9, addressed by the
     /// same identity `ClassRegistry::add_instance_method`/`add_class_method`
