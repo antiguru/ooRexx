@@ -282,8 +282,23 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     ("Object", "ISA", Arity::Fixed(1), native_is_a),
     ("Object", "ISNIL", Arity::Fixed(0), native_is_nil),
+    ("Object", "OBJECTNAME", Arity::Fixed(0), native_object_name),
+    (
+        "Object",
+        "OBJECTNAME=",
+        Arity::Fixed(1),
+        native_object_name_set,
+    ),
+    ("Object", "REQUEST", Arity::Fixed(1), native_request),
+    ("Object", "STRING", Arity::Fixed(0), native_string),
     ("Package", "NAME", Arity::Fixed(0), native_package_name),
     ("String", "LENGTH", Arity::Fixed(0), native_length),
+    (
+        "String",
+        "MAKESTRING",
+        Arity::Fixed(0),
+        native_string_make_string,
+    ),
     ("String", "REVERSE", Arity::Fixed(0), native_reverse),
 ];
 
@@ -707,6 +722,23 @@ impl Interp {
             .classes
             .default_name(class)
             .as_bytes()
+    }
+
+    /// `behaviour->getOwningClass()->getId()` for any receiver: the id of the
+    /// class whose behaviour answers this object's messages.
+    ///
+    /// `None` where this phase builds no behaviour for the receiver, which is
+    /// [`Interp::receiver_kind`]'s own refusal.
+    fn receiver_class_id(&mut self, receiver: ObjRef) -> Option<String> {
+        let owner = match self.receiver_behaviour(receiver).ok()? {
+            Behaviour::Instance(class) => class,
+            // A class object's messages resolve against its class behaviour,
+            // whose owning class is the metaclass in play -- which is what
+            // `ClassRegistry::class_of` answers, and what makes
+            // `.Array~request("CLASS")` the receiver itself.
+            Behaviour::ClassSide(class) => self.classes().class_of(class),
+        };
+        Some(self.classes().id_string(owner).to_string())
     }
 
     /// `~id` for a class object -- the name it was declared with, case
@@ -1753,9 +1785,16 @@ impl Interp {
     #[cold]
     #[inline(never)]
     fn required_string_dispatch(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
-        if let Some(text) = self.string_conversion(value)? {
-            self.roots.push_temp(text);
-            return Ok(text);
+        match self.string_conversion(value) {
+            Ok(Some(text)) => {
+                self.roots.push_temp(text);
+                return Ok(text);
+            }
+            Ok(None) => {}
+            Err(failure) => {
+                self.blame_request();
+                return Err(failure);
+            }
         }
         // `sendMessage(STRING)`, which for every value this phase builds is
         // `stringValue()` -- `Interp::string_value_text`'s own doc says which
@@ -1846,6 +1885,17 @@ impl Interp {
         }
     }
 
+    /// [`Interp::string_conversion`] with the `REQUEST` traceback line on it,
+    /// for a caller inside a native method's own activation -- see
+    /// [`Interp::blame_request`] for why the two frames stack there.
+    fn blamed_string_conversion(&mut self, value: ObjRef) -> Result<Option<ObjRef>, Failure> {
+        let converted = self.string_conversion(value);
+        if converted.is_err() {
+            self.blame_request();
+        }
+        converted
+    }
+
     /// Which limb of the protocol answers for `value`.
     ///
     /// **`primitiveMakeString` is asked first, where the oracle asks
@@ -1929,8 +1979,25 @@ impl Interp {
         }
     }
 
-    /// Sends `makeString` on the receiver's behalf, under the traceback frame
-    /// the oracle's own `REQUEST` activation contributes.
+    /// Sends `makeString` on the receiver's behalf.
+    ///
+    /// **No traceback frame of its own**, because the frame belongs to the
+    /// `REQUEST` activation the oracle runs *around* this send and not to the
+    /// send: a caller that is itself `Object~request` already gets that line
+    /// from `Interp::invoke`, and one that reaches the protocol from a
+    /// language context has no native activation and owes it --
+    /// [`Interp::blame_request`] is the two internal callers' own call.
+    fn send_make_string(&mut self, receiver: ObjRef) -> Result<Option<ObjRef>, Failure> {
+        // The sending side is the frame the conversion happens in, not the
+        // conversion itself: `checkPrivate` asks
+        // `getTopStackFrame()->getReceiver()`, and `requestString` runs no
+        // frame of its own that could answer that question differently.
+        let caller = self.caller();
+        self.send_message(receiver, MAKESTRING, None, &[], caller)
+    }
+
+    /// The traceback line the oracle's own `REQUEST` activation contributes
+    /// when a `makeString` reached through the protocol fails.
     ///
     /// **The frame is `REQUEST`'s and not `MAKESTRING`'s**, measured: with a
     /// class-side `makeString` whose body is `return 1/0`, `say .K~makeString`
@@ -1938,19 +2005,16 @@ impl Interp {
     /// `say .K` and `say length(.K)` put
     /// `*-* Compiled method "REQUEST" with scope "Object".` between them.
     /// `requestString` reaches `makeString` through
-    /// `sendMessage(GlobalNames::REQUEST, GlobalNames::STRING)` (`:1256`),
-    /// and that native activation is what owns the line.
-    fn send_make_string(&mut self, receiver: ObjRef) -> Result<Option<ObjRef>, Failure> {
-        // The sending side is the frame the conversion happens in, not the
-        // conversion itself: `checkPrivate` asks
-        // `getTopStackFrame()->getReceiver()`, and `requestString` runs no
-        // frame of its own that could answer that question differently.
-        let caller = self.caller();
-        let sent = self.send_message(receiver, MAKESTRING, None, &[], caller);
-        if sent.is_err() {
-            self.blame_native_method(b"REQUEST", "Object");
-        }
-        sent
+    /// `sendMessage(GlobalNames::REQUEST, GlobalNames::STRING)`
+    /// (`classes/ObjectClass.cpp:1256`), and that native activation is what
+    /// owns the line.
+    ///
+    /// A method argument's conversion gets this line **and** the method's own
+    /// on top of it, measured: `'abc'~hasMethod(.K)` reports the failing
+    /// clause, then `REQUEST` with scope `Object`, then `HASMETHOD` with
+    /// scope `Object`, then the sending clause.
+    fn blame_request(&mut self) {
+        self.blame_native_method(b"REQUEST", "Object");
     }
 }
 
@@ -1994,7 +2058,7 @@ fn required_string_argument(
     value: ObjRef,
     position: usize,
 ) -> Result<ObjRef, Failure> {
-    match interp.string_conversion(value)? {
+    match interp.blamed_string_conversion(value)? {
         Some(text) => Ok(text),
         None => Err(Raised::argument_needs_a_string_value(position).into()),
     }
@@ -2007,7 +2071,7 @@ fn required_string_named_argument(
     value: ObjRef,
     argument: &'static str,
 ) -> Result<ObjRef, Failure> {
-    match interp.string_conversion(value)? {
+    match interp.blamed_string_conversion(value)? {
         Some(text) => Ok(text),
         None => Err(Raised::named_argument_needs_a_string_value(argument).into()),
     }
@@ -2612,6 +2676,184 @@ fn native_package_name(
         return Err(Loud::receiver_class("a package object this crate did not build").into());
     };
     Ok(Some(interp.text_built(name)))
+}
+
+/// `Object~string`: the receiver's readable string representation --
+/// `RexxObject::stringValue` (`classes/ObjectClass.cpp:1157`), which is an
+/// `OBJECTNAME` send, except for a `String`, whose own override answers
+/// itself.
+///
+/// **Not the required-string protocol's answer, and that is what this method
+/// is for.** Measured, oracle rc 0, with a class-side `makeString` returning
+/// `'K says hello'`: `say .K` prints `K says hello` where `say .K~string`
+/// prints `The K class`. The documented example in `provide.xml` `reqstr` is
+/// exactly that gap -- `substr(d~string,3,6)` reads the readable form where
+/// `substr(d,5,7)` reads the converted one.
+fn native_string(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let text = interp.string_value_text(receiver);
+    Ok(Some(interp.text_built(text)))
+}
+
+/// `Object~objectName`: the name something gave this object, or
+/// `RexxObject::defaultName` for one nothing has named
+/// (`classes/ObjectClass.cpp:1696`, `:1760`).
+///
+/// **`~string` and this part on a string**, which is the whole reason this is
+/// not [`native_string`]: `RexxString::stringValue` answers the string itself
+/// where its `defaultName` is the article rule applied to `String`. Measured,
+/// oracle rc 0: `'abc'~string` is `abc` and `'abc'~objectName` is `a String`.
+/// The receivers whose name is not derived carry it -- measured,
+/// `.local~objectName` is `The Local Directory` and `.Array~package
+/// ~objectName` is `The REXX Package`, both of which `CoreClasses.orx`
+/// assigns -- and for every one of those `stringValue()` is already the
+/// answer.
+fn native_object_name(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let kind = interp
+        .receiver_kind(receiver)
+        .map_err(|kind| Failure::from(Loud::receiver_class(kind)))?;
+    let name = match kind {
+        // `defaultName` from `.String`'s own id, which no object of this kind
+        // carries a stored name for -- there is nowhere on a string to put
+        // one, which is also why `native_object_name_set` refuses it.
+        Primitive::String | Primitive::SmallInt => b"a String".to_vec(),
+        Primitive::Object
+        | Primitive::Array
+        | Primitive::Class(_)
+        | Primitive::Package
+        | Primitive::Directory => interp.string_value_text(receiver),
+    };
+    Ok(Some(interp.text_built(name)))
+}
+
+/// `Object~objectName=`: replaces what `~objectName` answers, and with it
+/// every rendering of the object -- `RexxObject::objectNameEquals`
+/// (`classes/ObjectClass.cpp:1733`), whose own return is `OREF_NULL`.
+///
+/// Measured, oracle rc 0: after `.K~objectName = "renamed"`, `say .K`,
+/// `say .K~objectName` and `say .K~string` all print `renamed`, while
+/// `.K~request("STRING")` still answers `The NIL object` -- the rename moves
+/// `stringValue()` and not the conversion.
+///
+/// **A receiver with nowhere to keep a name is loud rather than silent.** The
+/// oracle stores this in the object's own variable pool at `Object` scope, and
+/// a string, a number and a stem have no pool in this crate; answering rc 0
+/// and forgetting the name would be a wrong answer where the oracle
+/// remembers it.
+fn native_object_name_set(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(Some(argument)) = args.first().copied() else {
+        return Err(Raised::missing_method_argument(1).into());
+    };
+    let argument = required_string_argument(interp, argument, 1)?;
+    let name = interp.to_text(argument).into_owned();
+    let kind = interp
+        .receiver_kind(receiver)
+        .map_err(|kind| Failure::from(Loud::receiver_class(kind)))?;
+    match kind {
+        Primitive::Class(class) => {
+            let name = String::from_utf8_lossy(&name).into_owned();
+            interp.classes().set_object_name(class, &name);
+        }
+        Primitive::Package | Primitive::Directory => {
+            let Some(object) = interp.heap.get_mut(receiver) else {
+                return Err(Loud::receiver_class("a value whose object is no longer live").into());
+            };
+            match &mut object.body {
+                Body::Native(native) => native.set_rendered(&name),
+                other => {
+                    unreachable!("a package or directory receiver is Body::Native, got {other:?}")
+                }
+            }
+        }
+        Primitive::String | Primitive::SmallInt | Primitive::Object | Primitive::Array => {
+            return Err(Loud::native_method(b"OBJECTNAME=", "Object").into());
+        }
+    }
+    Ok(None)
+}
+
+/// `Object~request(class)`: the receiver converted to `class`, or `.nil` --
+/// `RexxObject::requestRexx` (`classes/ObjectClass.cpp:1912`).
+///
+/// The rule is `MAKE` + the upcased class name looked up in the receiver's own
+/// behaviour and sent if it is there; failing that, the receiver itself when
+/// the name matches its own class's id; failing that, `.nil`. Bug #1904's own
+/// comment fixes that order -- the `MAKE` method comes first because it can do
+/// more than hand back the same object.
+///
+/// Measured, oracle rc 0: `.K~request("STRING")` is `The NIL object` without a
+/// `makeString` and `K says hello` with one; `'abc'~request("STRING")` is
+/// `abc`; `5~request("STRING")` is `5`; `.environment~request("STRING")` is
+/// `The NIL object`; `.Array~request("CLASS")` is `The Array class`, which is
+/// the id-match limb; `.K~request("K")` and `.K~request(5)` are both
+/// `The NIL object`; and the argument is case-insensitive, so
+/// `.K~request("string")` answers what `.K~request("STRING")` does.
+///
+/// **A `MAKE` method the class dictionaries declare and this crate has no code
+/// for is a loud refusal rather than `.nil`**, which is what keeps the
+/// unimplemented conversions from becoming wrong answers: `.environment
+/// ~request("ARRAY")` is an array on the oracle, and `Directory`'s behaviour
+/// really does answer `MAKEARRAY` -- measured,
+/// `.environment~hasMethod("MAKEARRAY")` is `1` where `.K~hasMethod
+/// ("MAKEARRAY")` is `0`, so the lookup below tells the two apart and only the
+/// second reaches the `.nil`.
+fn native_request(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(Some(argument)) = args.first().copied() else {
+        return Err(Raised::missing_method_argument(1).into());
+    };
+    // `stringArgument(name, ARG_ONE)->upper()`, which is `requestRexx`'s own
+    // first line -- so a class name with no string value is 88.909 here and
+    // not `.nil`.
+    let argument = required_string_argument(interp, argument, 1)?;
+    let wanted = interp.to_text(argument).to_ascii_uppercase();
+    let mut make = b"MAKE".to_vec();
+    make.extend_from_slice(&wanted);
+    if interp.lookup(receiver, &make, None).is_some() {
+        let caller = interp.caller();
+        // `resultOrNil`: a `MAKE` method that returns nothing answers `.nil`
+        // rather than leaving the send with no value.
+        let sent = interp.send_message(receiver, &make, None, &[], caller)?;
+        return Ok(Some(sent.unwrap_or(ObjRef::NIL)));
+    }
+    Ok(Some(match interp.receiver_class_id(receiver) {
+        Some(id) if id.as_bytes().to_ascii_uppercase() == wanted => receiver,
+        Some(_) | None => ObjRef::NIL,
+    }))
+}
+
+/// `String~makeString`: a string is its own string value --
+/// `RexxString::makeString` (`classes/StringClass.hpp`), which
+/// `Object~request("STRING")` is what finds.
+///
+/// Measured, oracle rc 0: `'abc'~makeString` is `abc` and
+/// `'abc'~hasMethod("MAKESTRING")` is `1`, where
+/// `.environment~hasMethod("MAKESTRING")` is `0`.
+fn native_string_make_string(
+    _interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    Ok(Some(receiver))
 }
 
 /// `Object~isNil`: `1` for `.nil` and `0` for everything else.

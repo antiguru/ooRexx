@@ -1703,7 +1703,9 @@ impl Interp {
                                         );
                                         self.roots.temp_at(registers, register as usize)
                                     });
-                                        self.say_evaluated(value)?;
+                                        if let Err(failure) = self.say_evaluated(value) {
+                                            break 'cold Err(failure);
+                                        }
                                     }
                                     // The end of the activation, through
                                     // `Interp::returned_value`, for the same
@@ -1808,7 +1810,10 @@ impl Interp {
                                         );
                                         self.roots.temp_at(registers, register as usize)
                                     });
-                                        self.queue_evaluated(value, *keyword)?;
+                                        if let Err(failure) = self.queue_evaluated(value, *keyword)
+                                        {
+                                            break 'cold Err(failure);
+                                        }
                                     }
                                     // The call, through the same
                                     // `Interp::resolve_call` and
