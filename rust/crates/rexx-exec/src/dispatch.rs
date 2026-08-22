@@ -1724,6 +1724,15 @@ impl Interp {
     }
 }
 
+/// What the protocol's conversion limbs answered, before anything is built.
+///
+/// The [`StringConversion::Bytes`] split, one layer up: the caller that only
+/// reads the bytes must not allocate an object to read them out of.
+enum RequiredString {
+    Object(ObjRef),
+    Bytes(Vec<u8>),
+}
+
 /// The message `Object~request("STRING")` looks for, and the one limb of the
 /// required-string protocol a program can write.
 pub(crate) const MAKESTRING: &[u8] = b"MAKESTRING";
@@ -1735,11 +1744,21 @@ pub(crate) const MAKESTRING: &[u8] = b"MAKESTRING";
 /// string value is its items joined, which is built and stored nowhere, so a
 /// caller that wants it has to be handed the built object.
 enum StringConversion {
-    /// `primitiveMakeString` answered, and this is what it answered.
-    Primitive(ObjRef),
+    /// The object that *is* the string value: the value itself, or a stem's
+    /// own default value, or what a `makeString` answered.
+    Object(ObjRef),
+    /// The string value as bytes no object holds -- an array's items joined.
+    ///
+    /// **Separate from the arm above rather than built into a string here**,
+    /// so that a caller which only wants to read the bytes does not allocate
+    /// an object to read them out of again. `Interp::required_string_value`'s
+    /// own debug check is that caller, and a heap allocation there would
+    /// change what `tests/collect_stress.rs` observes between a debug build
+    /// and a release one.
+    Bytes(Vec<u8>),
     /// The receiver's behaviour has a `makeString` to send.
     MakeString,
-    /// Neither, which is `.nil` from `requestString`'s point of view.
+    /// None of those, which is `.nil` from `requestString`'s point of view.
     None,
 }
 
@@ -1770,10 +1789,47 @@ impl Interp {
             return self.required_string_dispatch(value);
         }
         debug_assert!(
-            matches!(self.required_string_dispatch(value), Ok(same) if same == value),
-            "the required-string latch is off where the protocol would change the value"
+            self.required_string_latch_holds(value),
+            "the required-string latch is off where the protocol would render differently"
         );
         Ok(value)
+    }
+
+    /// Whether running the protocol in full renders `value` exactly as the
+    /// fast path's own rendering of it does -- the check that makes
+    /// [`Interp::reqstr_armed`]'s latch sound rather than merely asserted, and
+    /// the reason an arming route added without latching reddens the debug
+    /// gate.
+    ///
+    /// **The bytes and not the identity.** The protocol's last limb builds a
+    /// fresh string out of `stringValue()`, so an object never comes back as
+    /// itself even when nothing has changed; what the latch claims is that
+    /// rendering the value the caller already holds gives the same answer, and
+    /// that is what this compares.
+    ///
+    /// Running the walk here cannot itself run Rexx code or raise: with the
+    /// latch off there is no `makeString` to send and no NOSTRING trap to
+    /// take, which is exactly what the latch records.
+    ///
+    /// **Not `#[cfg(debug_assertions)]`**: `debug_assert!` type-checks its
+    /// expression in every profile, so the function has to exist in a release
+    /// build even though nothing there calls it.
+    ///
+    /// [`Interp::reqstr_armed`]: crate::Interp::reqstr_armed
+    fn required_string_latch_holds(&mut self, value: ObjRef) -> bool {
+        let expected = self.to_text(value).into_owned();
+        let answered = match self.required_string_answer(value) {
+            Ok(answered) => answered,
+            Err(_) => return false,
+        };
+        let bytes = match answered {
+            Some(RequiredString::Object(text)) => self.to_text(text).into_owned(),
+            Some(RequiredString::Bytes(bytes)) => bytes,
+            // The last two limbs: `stringValue()`, and the NOSTRING condition
+            // that cannot fire while the latch is off.
+            None => self.string_value_text(value),
+        };
+        bytes == expected
     }
 
     /// **The answer is rooted here and not at the call sites.** A `makeString`
@@ -1785,8 +1841,13 @@ impl Interp {
     #[cold]
     #[inline(never)]
     fn required_string_dispatch(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
-        match self.string_conversion(value) {
-            Ok(Some(text)) => {
+        match self.required_string_answer(value) {
+            Ok(Some(RequiredString::Object(text))) => {
+                self.roots.push_temp(text);
+                return Ok(text);
+            }
+            Ok(Some(RequiredString::Bytes(bytes))) => {
+                let text = self.text_built(bytes);
                 self.roots.push_temp(text);
                 return Ok(text);
             }
@@ -1853,19 +1914,23 @@ impl Interp {
         Ok(Some(converted))
     }
 
-    /// `RexxInternalObject::requiredString()` (`classes/ObjectClass.cpp:1341`):
-    /// the protocol's conversion limbs alone, with **no** `~string` fallback
-    /// and **no** NOSTRING condition. `None` is the oracle's `.nil`.
+    /// The protocol's conversion limbs, answered without building anything --
+    /// [`Interp::string_conversion`]'s own body with the materialisation left
+    /// to the caller.
     ///
-    /// This is what a method argument that must be text gets
-    /// ([`required_string_argument`]) and what `Object~request("STRING")`
-    /// answers.
-    pub(crate) fn string_conversion(&mut self, value: ObjRef) -> Result<Option<ObjRef>, Failure> {
-        match self.classify_string_conversion(value) {
-            StringConversion::Primitive(text) => Ok(Some(text)),
-            StringConversion::None => Ok(None),
+    /// **Two callers want different things from it.**
+    /// [`Interp::required_string_dispatch`] wants an object, because its own
+    /// caller renders one; the debug check behind
+    /// [`Interp::required_string_value`]'s latch wants only the bytes, and
+    /// allocating an object there would make a debug build collect where a
+    /// release build does not -- which `tests/collect_stress.rs` compares
+    /// against a committed list.
+    fn required_string_answer(&mut self, value: ObjRef) -> Result<Option<RequiredString>, Failure> {
+        Ok(match self.classify_string_conversion(value) {
+            StringConversion::Object(text) => Some(RequiredString::Object(text)),
+            StringConversion::Bytes(bytes) => Some(RequiredString::Bytes(bytes)),
+            StringConversion::None => None,
             StringConversion::MakeString => {
-                let answered = self.send_make_string(value)?;
                 // `string_value = string_value->primitiveMakeString()`
                 // (`:1257`, `:1353`): what `makeString` answered has to be a
                 // real string, and an object that is not one converts here or
@@ -1874,15 +1939,31 @@ impl Interp {
                 // `5`, `return .Object~superClasses` prints the empty line
                 // an empty array joins to, and `return .array` prints
                 // `The K class` -- the third fell back.
-                Ok(match answered {
+                match self.send_make_string(value)? {
                     Some(answered) => match self.classify_string_conversion(answered) {
-                        StringConversion::Primitive(text) => Some(text),
+                        StringConversion::Object(text) => Some(RequiredString::Object(text)),
+                        StringConversion::Bytes(bytes) => Some(RequiredString::Bytes(bytes)),
                         StringConversion::MakeString | StringConversion::None => None,
                     },
                     None => None,
-                })
+                }
             }
-        }
+        })
+    }
+
+    /// `RexxInternalObject::requiredString()` (`classes/ObjectClass.cpp:1341`):
+    /// the protocol's conversion limbs alone, with **no** `~string` fallback
+    /// and **no** NOSTRING condition. `None` is the oracle's `.nil`.
+    ///
+    /// This is what a method argument that must be text gets
+    /// ([`required_string_argument`]) and what `Object~request("STRING")`
+    /// answers.
+    pub(crate) fn string_conversion(&mut self, value: ObjRef) -> Result<Option<ObjRef>, Failure> {
+        Ok(match self.required_string_answer(value)? {
+            Some(RequiredString::Object(text)) => Some(text),
+            Some(RequiredString::Bytes(bytes)) => Some(self.text_built(bytes)),
+            None => None,
+        })
     }
 
     /// [`Interp::string_conversion`] with the `REQUEST` traceback line on it,
@@ -1914,7 +1995,7 @@ impl Interp {
             // `RexxInteger::primitiveMakeString`: a string and a number are
             // their own string value.
             Decoded::SmallInt(_) | Decoded::Text(_) => {
-                return StringConversion::Primitive(value);
+                return StringConversion::Object(value);
             }
             // Asked before the arena is, for the reason `receiver_kind`
             // gives: a class identity is heap-tagged and names no slot.
@@ -1925,16 +2006,16 @@ impl Interp {
                 // A handle whose slot is gone, which `Interp::to_text` turns
                 // into its own tripwire. Answering the value keeps that the
                 // one report rather than adding a second.
-                None => return StringConversion::Primitive(value),
+                None => return StringConversion::Object(value),
                 Some(object) => match &object.body {
                     Body::Text { .. } | Body::Num { .. } => {
-                        return StringConversion::Primitive(value);
+                        return StringConversion::Object(value);
                     }
                     // `StemClass::makeString` forwards to the default value,
                     // and a stem holding none is its own derived name, which
                     // is what `to_text` renders for it.
                     Body::Stem { default: None, .. } => {
-                        return StringConversion::Primitive(value);
+                        return StringConversion::Object(value);
                     }
                     Body::Stem {
                         default: Some(default),
@@ -1950,10 +2031,7 @@ impl Interp {
         };
         match redirect {
             Some(default) => self.classify_string_conversion(default),
-            None => {
-                let joined = self.string_conversion_array_text(value);
-                StringConversion::Primitive(self.text_built(joined))
-            }
+            None => StringConversion::Bytes(self.string_conversion_array_text(value)),
         }
     }
 
@@ -3861,5 +3939,103 @@ mod tests {
             ),
             (0, "mine\n".to_string(), String::new())
         );
+    }
+    /// **The required-string protocol answers where it can and refuses where
+    /// it cannot, and the refusals are only visible here.**
+    ///
+    /// The corpus gate cannot see a clean refusal becoming a wrong answer: a
+    /// refusal this crate does not share with the oracle is not expressible as
+    /// a differential row at all. So the two shapes of `~request` and
+    /// `~objectName=` this task deliberately left loud are asserted by their
+    /// message here, and the neighbouring answering shapes sit beside them --
+    /// which is what stops "refuse every argument" passing.
+    #[test]
+    fn a_conversion_this_phase_does_not_model_is_loud_where_the_ones_it_models_answer() {
+        for (source, message) in [
+            // `MAKEARRAY` is in these behaviours' dictionaries and this crate
+            // has no code for it. Answering `.nil` here would contradict the
+            // oracle, which converts: measured, oracle rc 0,
+            // `.environment~request("ARRAY")` is an array and
+            // `'abc'~request("ARRAY")` is an Array of one line.
+            (
+                "say .environment~request('ARRAY')\n",
+                "rexx-exec: method \"MAKEARRAY\" of class \"Directory\" is not implemented \
+                 (Phase 5)\n",
+            ),
+            (
+                "say 'abc'~request('ARRAY')\n",
+                "rexx-exec: method \"MAKEARRAY\" of class \"String\" is not implemented \
+                 (Phase 5)\n",
+            ),
+            // A receiver with no variable pool to keep a name in. The oracle
+            // stores one and remembers it; answering rc 0 and forgetting it
+            // would be a wrong answer.
+            (
+                "'abc'~objectName = 'x'\n",
+                "rexx-exec: method \"OBJECTNAME=\" of class \"Object\" is not implemented \
+                 (Phase 5)\n",
+            ),
+            (
+                "5~objectName = 'x'\n",
+                "rexx-exec: method \"OBJECTNAME=\" of class \"Object\" is not implemented \
+                 (Phase 5)\n",
+            ),
+        ] {
+            assert_eq!(
+                both_engines(source),
+                (120, String::new(), message.to_string()),
+                "{source:?}"
+            );
+        }
+        // The neighbours, each measured on the oracle: a `MAKE` method the
+        // behaviour does not have falls through to the id match and then to
+        // `.nil`, and a receiver that does have somewhere to keep a name keeps
+        // it.
+        for (source, expected) in [
+            ("say .K~request('ARRAY')\n::class K\n", "The NIL object\n"),
+            ("say .Array~request('CLASS')\n", "The Array class\n"),
+            (".K~objectName = 'named'\nsay .K\n::class K\n", "named\n"),
+            (
+                ".environment~objectName = 'named'\nsay .environment\n",
+                "named\n",
+            ),
+        ] {
+            assert_eq!(
+                both_engines(source),
+                (0, expected.to_string(), String::new()),
+                "{source:?}"
+            );
+        }
+    }
+
+    /// **A `reqstr` context whose instruction this phase refuses stays
+    /// refused**, which is the honest reading of the section's own list: it
+    /// bounds the row set, and a row whose instruction is another phase's is
+    /// outside it.
+    ///
+    /// A refusal cannot be a corpus row, so this is the only instrument. Each
+    /// message names the owning phase the section's own context is waiting on.
+    #[test]
+    fn a_reqstr_context_whose_instruction_is_another_phases_is_still_loud() {
+        for (source, message) in [
+            (
+                "options .K\n::class K\n::method makeString class\n  return 'NOVALUE'\n",
+                "rexx-exec: OPTIONS is not implemented (Phase 5)\n",
+            ),
+            (
+                ".K\n::class K\n::method makeString class\n  return 'true'\n",
+                "rexx-exec: a command is not implemented (Phase 7)\n",
+            ),
+            (
+                "address 'SYSTEM' .K\n::class K\n::method makeString class\n  return 'true'\n",
+                "rexx-exec: ADDRESS is not implemented (Phase 7)\n",
+            ),
+        ] {
+            assert_eq!(
+                both_engines(source),
+                (120, String::new(), message.to_string()),
+                "{source:?}"
+            );
+        }
     }
 }

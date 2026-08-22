@@ -1,0 +1,145 @@
+/* provide.xml `reqstr`: every context the section lists, with a receiver whose
+ * makeString answers a value that context can use. One class per answer, so a
+ * build that converted in the wrong context prints the class's default name
+ * where its own line expects the conversion.
+ *
+ * The contexts the section lists and this program does not reach are the ones
+ * whose instruction is refused in this phase: a command to an external
+ * environment and a command on an ADDRESS instruction (Phase 7), and the
+ * OPTIONS instruction (5c). The environment *name* on ADDRESS is here.
+ *
+ * Phase 5a Task 14.
+ */
+
+say .said
+do .two
+  say 'repeat'
+end
+do i = 1 to 9 for .two
+  say 'for' i
+end
+
+a.MS = 'tail hit'
+i = .ms
+say 'tail' a.i
+
+address (.cmd)
+say 'address' address()
+
+parse value .words with w1 w2
+say 'parse value' w1 w2
+held = .words
+parse var held w3 w4
+say 'parse var' w3 w4
+call sub .words
+
+zz = 'kept'
+list = .zz
+drop (list)
+say 'drop' symbol('ZZ')
+zz = 'kept again'
+call exposer
+
+interpret .code
+
+numeric digits .twelve
+say 'digits' digits()
+numeric fuzz .three
+say 'fuzz' fuzz()
+numeric form value .engineering
+say 'form' form()
+numeric digits 9
+numeric fuzz 0
+numeric form scientific
+
+push .queued
+pull q
+say 'pull' q
+
+say 'length' length(.words)
+say 'concat' 'x' || .three
+say 'compare' ('3' = .three)
+say 'strict' ('3' == .three)
+say 'add' ('2' + .three)
+
+trace value .traceoff
+say 'trace' 'still running'
+
+call (.called)
+
+signal value .label
+say 'not reached'
+
+label:
+say 'signal reached'
+exit 0
+
+sub:
+parse arg s
+say 'parse arg' s
+return
+
+exposer:
+procedure expose (list)
+say 'expose' zz
+return
+
+called:
+say 'call target'
+return
+
+::class said
+::method makeString class
+  return 'said it'
+
+::class two
+::method makeString class
+  return 2
+
+::class ms
+::method makeString class
+  return 'MS'
+
+::class cmd
+::method makeString class
+  return 'CMD'
+
+::class words
+::method makeString class
+  return 'one two'
+
+::class zz
+::method makeString class
+  return 'zz'
+
+::class code
+::method makeString class
+  return "say 'interpreted'"
+
+::class twelve
+::method makeString class
+  return 12
+
+::class three
+::method makeString class
+  return 3
+
+::class engineering
+::method makeString class
+  return 'ENGINEERING'
+
+::class queued
+::method makeString class
+  return 'queued line'
+
+::class traceoff
+::method makeString class
+  return 'N'
+
+::class called
+::method makeString class
+  return 'CALLED'
+
+::class label
+::method makeString class
+  return 'LABEL'

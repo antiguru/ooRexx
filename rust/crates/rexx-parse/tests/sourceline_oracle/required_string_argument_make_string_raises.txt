@@ -1,0 +1,22 @@
+count 21
+/* The same frame reached through a primitive method's argument, where the
+ * method's own frame stacks on top of it: stringArgument converts with
+ * requestString, so a failing makeString reports REQUEST and then the method
+ * that asked for the argument.
+ *
+ * The pair with required_string_make_string_raises.rex is what says the
+ * REQUEST frame belongs to the conversion rather than to whatever asked for
+ * it: one frame from a language context, two from a method argument.
+ *
+ * Compared raw (see corpus.rs's RAW_STDERR_COMPARISON), for that program's
+ * reason.
+ *
+ * Phase 5a Task 14.
+ */
+
+say 'before'
+say 'abc'~hasMethod(.k)
+
+::class k
+::method makeString class
+  return 1/0

@@ -1,0 +1,20 @@
+/* A condition raised inside a makeString the required-string protocol reached
+ * carries the traceback frame of the REQUEST activation the oracle runs around
+ * the send -- not the frame of makeString itself, which is a Rexx body and
+ * contributes none. Measured, the same makeString sent directly (`say
+ * .k~makeString`) reports the failing clause and then the sending clause with
+ * nothing between them.
+ *
+ * Compared raw (see corpus.rs's RAW_STDERR_COMPARISON): the frame line carries
+ * its own `*-*` marker, a blank line-number field and the run of spaces in
+ * front of it, and that is what this program witnesses.
+ *
+ * Phase 5a Task 14.
+ */
+
+say 'before'
+say .k
+
+::class k
+::method makeString class
+  return 1/0

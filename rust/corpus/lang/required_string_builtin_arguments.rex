@@ -1,0 +1,77 @@
+/* provide.xml `reqstr` names "arguments to built-in functions" wholesale, and
+ * three properties of that follow from where the oracle converts.
+ *
+ * The order is position order, whatever order the builtin reads its arguments
+ * in: SUBSTR reads its length and its pad before its subject, and the say
+ * lines from the three makeStrings still come out 1, 2, 3.
+ *
+ * An argument the builtin does not use is converted anyway -- SUBSTR asks for
+ * its pad whether or not the length reaches past the subject -- so the pad's
+ * own line prints twice below and only the second call pads with it.
+ *
+ * A bad argument names the *object* and not the conversion, because the
+ * oracle's error path is handed the value the expression produced. The three
+ * raises below are one per message shape: a whole number, a pad, and a number.
+ * The pad is the exception that fixes the rule: padArgument converts first and
+ * quotes the conversion, so its own line reads the makeString answer.
+ *
+ * Phase 5a Task 14.
+ */
+
+signal on syntax name trapped
+
+say substr(.subject, .from, .count, .pad)
+say substr('abc', 1, 9, .pad)
+say length(.subject)
+say word(.subject, .from)
+say translate(.subject, .pad, 'b')
+
+n = 0
+next:
+n = n + 1
+select
+  when n = 1 then say substr(.subject, .notanumber)
+  when n = 2 then say substr('abc', 1, 9, .notapad)
+  when n = 3 then say max(1, .notanumber)
+  when n = 4 then say copies(.subject, .notanumber)
+  otherwise signal done
+end
+say n 'answered'
+signal next
+
+trapped:
+say n 'raised' rc'.'condition('E')
+signal on syntax name trapped
+signal next
+
+done:
+say 'done'
+exit 0
+
+::class subject
+::method makeString class
+  say '1 subject'
+  return 'abcdefgh'
+
+::class from
+::method makeString class
+  say '2 from'
+  return 2
+
+::class count
+::method makeString class
+  say '3 count'
+  return 3
+
+::class pad
+::method makeString class
+  say '4 pad'
+  return '-'
+
+::class notanumber
+::method makeString class
+  return 'not a number'
+
+::class notapad
+::method makeString class
+  return 'two'

@@ -238,6 +238,13 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/no_trailing_newline.rex",
     "lang/prefix_dotvar_logical_over_label.rex",
     "lang/raise_array_substitution.rex",
+    // Phase 5a (2026-08-17 plan) Task 14: the two programs whose whole purpose
+    // is a condition raised inside a `makeString` reached through the
+    // required-string protocol. Each ends on its second clause, before
+    // anything wide enough to allocate, so neither collects at all -- the same
+    // reason the refusal programs above are here.
+    "lang/required_string_argument_make_string_raises.rex",
+    "lang/required_string_make_string_raises.rex",
     "lang/select_when.rex",
     "lang/select_when_absorption.rex",
     "lang/select_when_bodies.rex",

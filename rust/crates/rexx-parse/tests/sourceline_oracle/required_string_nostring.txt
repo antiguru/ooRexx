@@ -1,0 +1,61 @@
+count 60
+/* provide.xml `reqstr`: an object with no makeString gets the NOSTRING
+ * condition raised when the condition is being trapped, and the object's
+ * readable string representation when it is not. Which of the two happens is
+ * decided by the trap and by nothing else, so the same clause is here twice.
+ *
+ * The documented example is the third and fourth lines: substr(d,5,7) answers
+ * for a directory and raises for the same directory once nostring is armed.
+ * Every raise is a SIGNAL trap, because CALL ON NOSTRING is a parse error --
+ * measured, 25.1 naming NOSTRING as the subkeyword it will not take.
+ *
+ * The items a handler reads are the condition's own: C is the name, D is the
+ * string the protocol was about to use, E is the null string and RC is
+ * untouched. A does not appear: it would be the object itself, and this crate
+ * refuses that CONDITION option for every condition.
+ *
+ * Phase 5a Task 14.
+ */
+
+d = .environment
+say 'untrapped' substr(d, 5, 7)
+say 'untrapped' .p
+say 'untrapped' 'x' || .p
+say 'untrapped' length(.p)
+
+rc = 'untouched'
+signal on nostring name noStr
+say 'not reached' substr(d, 5, 7)
+
+noStr:
+say 'trapped' condition('C') '|' condition('D') '|' condition('E') '|' rc
+signal on nostring name onAny
+say 'not reached' .p
+
+onAny:
+say 'trapped again' condition('C') '|' condition('D')
+signal on any name anyTrap
+say 'not reached' .p
+
+anyTrap:
+say 'any' condition('C') '|' condition('D')
+signal off nostring
+signal off any
+say 'rearmed off' .p
+
+/* A makeString on the receiver takes the first limb, so the trap never fires
+   however it is armed -- the control for every line above. */
+signal on nostring name unreached
+say 'answered' .k
+say 'answered' substr(.k, 3, 4)
+exit 0
+
+unreached:
+say 'the makeString limb was skipped'
+exit 1
+
+::class p
+
+::class k
+::method makeString class
+  return 'K says hello'

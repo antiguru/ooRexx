@@ -389,3 +389,44 @@ lang/method_access_package_and_protected.rex
 # outside. The refusing side of this one used to be a rc 120 refusal the oracle
 # did not share, so it could not be a row at all.
 lang/method_access_private_attribute.rex
+
+# Phase 5a (2026-08-17 plan) Task 14: the required-string protocol.
+#
+# Every context provide.xml `reqstr` lists and this phase can reach, with a
+# receiver whose makeString answers a value that context can use, against the
+# same contexts with a receiver that has none -- where the protocol's last limb
+# supplies the object's default name and the contexts needing a number, a label
+# or a variable symbol raise from that name. The pair is what stops a build
+# skipping the conversion: it would pass the second program and fail the first.
+lang/required_string_contexts.rex
+lang/required_string_default_name.rex
+# The NOSTRING condition, trapped by name, trapped by ANY and untrapped, with
+# the documented example's own two clauses -- substr(d,5,7) answering and then
+# raising for the same receiver -- and a makeString receiver as the control that
+# the trap is not consulted when the first limb answers.
+lang/required_string_nostring.rex
+# The protocol's own four messages. ~string and ~objectName part on a string,
+# ~request answers through the MAKE method and through the class-id match, and
+# ~objectName= moves stringValue() without touching the conversion.
+lang/required_string_face.rex
+# The three properties of a builtin's argument list that follow from where the
+# conversion happens: position order whatever order the builtin reads in, an
+# unread argument converted anyway, and a bad argument named by the object
+# rather than by its conversion -- with the pad as the exception that fixes
+# that rule.
+lang/required_string_builtin_arguments.rex
+# The dyadic-operator context, which is the operand on the *right*. Every
+# operator family, and the two error messages that disagree about which operand
+# they name.
+lang/required_string_operator_argument.rex
+# The section's "for all other methods" rule, re-derived: a makeString puts an
+# object on the answering side of the 88.909 line
+# message_send_argument_object_not_a_string.rex draws from the shape of the
+# value instead.
+lang/required_string_method_argument.rex
+# A condition raised inside a makeString the protocol reached, which carries the
+# REQUEST activation's own traceback frame -- one frame from a language context,
+# two from a method argument. Both compared raw (see corpus.rs's
+# RAW_STDERR_COMPARISON).
+lang/required_string_make_string_raises.rex
+lang/required_string_argument_make_string_raises.rex

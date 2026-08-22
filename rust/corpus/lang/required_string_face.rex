@@ -1,0 +1,75 @@
+/* The required-string protocol's own four messages: ~request, ~string,
+ * ~objectName and ~objectName=.
+ *
+ * ~string and ~objectName part on a string, which is why they are separate
+ * methods and not one: a string's readable representation is itself where its
+ * default name is the article rule applied to its class's id. The protocol and
+ * ~string part on a class with a makeString, which is the documented example's
+ * own point -- substr(d~string,3,6) reads the readable form where substr(d,5,7)
+ * reads the converted one.
+ *
+ * ~request answers through the MAKE method when the receiver's behaviour has
+ * one, and through the class-id match when it does not. The class names whose
+ * MAKE method this crate has no code for are refused rather than answered
+ * .nil, so they are not rows here.
+ *
+ * Phase 5a Task 14.
+ */
+
+say 'request k' .k~request('STRING')
+say 'request lower' .k~request('string')
+say 'request p' .p~request('STRING')
+say 'request literal' 'abc'~request('STRING')
+say 'request number' 5~request('STRING')
+say 'request directory' .environment~request('STRING')
+say 'request nil' .nil~request('STRING')
+say 'request array' .Array~request('CLASS')
+say 'request self-name' .k~request('K')
+say 'request nonstring-name' .k~request(5)
+
+say 'string k' .k~string
+say 'string p' .p~string
+say 'string literal' 'abc'~string
+say 'string number' 5~string
+say 'string array' .Object~superClasses~string
+say 'string nil' .nil~string
+say 'string directory' .environment~string
+
+say 'name k' .k~objectName
+say 'name literal' 'abc'~objectName
+say 'name number' 5~objectName
+say 'name array' .Object~superClasses~objectName
+say 'name nil' .nil~objectName
+say 'name directory' .environment~objectName
+say 'name local' .local~objectName
+
+/* The rename moves stringValue() and everything that reads it, and leaves the
+   protocol alone: the class still has no makeString. */
+.p~objectName = 'renamed'
+say 'renamed name' .p~objectName
+say 'renamed string' .p~string
+say 'renamed say' .p
+say 'renamed request' .p~request('STRING')
+say 'renamed concat' 'x' || .p
+.p~objectName = 5
+say 'renamed number' .p
+
+/* A rename on a class with a makeString does not displace the conversion. */
+.k~objectName = 'k renamed'
+say 'k renamed name' .k~objectName
+say 'k renamed say' .k
+say 'k renamed string' .k~string
+
+/* The argument goes through the protocol like any other method argument. */
+.p~objectName = .k
+say 'renamed through makeString' .p
+
+say 'has makeString' 'abc'~hasMethod('MAKESTRING') .environment~hasMethod('MAKESTRING')
+say 'makeString literal' 'abc'~makeString
+exit 0
+
+::class p
+
+::class k
+::method makeString class
+  return 'K says hello'

@@ -1,0 +1,87 @@
+count 86
+/* provide.xml `reqstr`'s dyadic-operator context is the operand on the *right*:
+ * the section names "Rexx dyadic operators when the receiving object (the
+ * object to the left of the operator) is a string", and it is the receiver's
+ * own method that converts its argument.
+ *
+ * So the left operand is never converted -- it is the receiver, and a class
+ * object there is 97.1 rather than a conversion, which `eval.rs`'s
+ * `object_operand_tests` covers because this crate refuses those loudly and a
+ * corpus program cannot witness a refusal.
+ *
+ * Which operand an operator's own error message names differs by family, and
+ * the last two clauses are the pair. A logical operator reports the
+ * *conversion* -- `andOp` converts and then checks the string's truth value --
+ * and its message is the one the trapped row cannot show, so the untrapped
+ * clause at the end is the arithmetic one, which reports the *object*:
+ * `StringClass::arith` is handed `otherObj` and never the string it converted
+ * to.
+ *
+ * Phase 5a Task 14.
+ */
+
+signal on syntax name trapped
+
+say 'concat' 'x' || .three
+say 'abuttal' 'x'.three
+say 'blank' 'x' .three
+say 'add' ('2' + .three)
+say 'subtract' ('2' - .three)
+say 'multiply' ('2' * .three)
+say 'divide' ('6' / .three)
+say 'intdiv' ('7' % .three)
+say 'remainder' ('7' // .three)
+say 'power' ('2' ** .three)
+say 'equal' ('3' = .three)
+say 'strict equal' ('3' == .three)
+say 'not equal' ('3' \== .three)
+say 'greater' ('4' > .three)
+say 'strict greater' ('4' >> .three)
+say 'and' ('1' & .one)
+say 'or' ('0' | .one)
+say 'xor' ('1' && .one)
+
+/* The same operand with no makeString, so the protocol's last two limbs
+   supply it: an array's own makeString joins its items, where an object
+   without one gets its default name. The empty superclass list joins to the
+   null string, which is what the second row reads. */
+empty = .Object~superClasses
+say 'array right' ('x' == empty)
+say 'array right empty' ('' == empty)
+say 'array right concat' ('x' || empty)
+say 'default name right' ('The Environment Directory' == .environment)
+
+n = 0
+next:
+n = n + 1
+select
+  when n = 1 then say ('2' + .three~class)
+  when n = 2 then say ('1' & .three)
+  otherwise signal done
+end
+say n 'answered'
+signal next
+
+trapped:
+say n 'raised' rc'.'condition('E')
+signal on syntax name trapped
+signal next
+
+done:
+signal off syntax
+say 'done'
+say ('2' + .notanumber)
+say 'not reached'
+exit 0
+
+::class three
+::method makeString class
+  return 3
+
+::class one
+::method makeString class
+  return 1
+
+::class notanumber
+::method makeString class
+  return 'nope'

@@ -3380,6 +3380,34 @@ mod tests {
 /// A separate module because every case here runs a whole program through
 /// both engines rather than driving `eval` against a hand-built activation,
 /// which is what the module above is for.
+///
+/// # Why the left operand and not the right
+///
+/// These cases were first derived from a coercion audit -- which value
+/// *shapes* this crate renders where the oracle does something else -- and
+/// they are re-derived here from `provide.xml` `reqstr`, which is the
+/// section that owns the question. The section's dyadic-operator context is
+/// "Rexx dyadic operators when the receiving object (the object to the left
+/// of the operator) is a string", so the operand it converts is the one on
+/// the **right**: the receiver's own method is what asks its argument for a
+/// string value. Every case in this module is the *other* operand, and the
+/// section names it nowhere -- because an object on the left is not converted
+/// at all, it is sent a message.
+///
+/// **So none of these is a `reqstr` row, and every one of them stays.**
+/// Measured, and the asymmetry is what says so: `.array + 1` is 97.1 where
+/// `1 + .array` is 41.1, and `say (.array == 'The Array class')` is `0` --
+/// `Object`'s own identity comparison -- where `say ('x' == .array)` compares
+/// `x` against the array's items joined. The right operand's own rows are
+/// `corpus/lang/required_string_operator_argument.rex`, which can be corpus
+/// programs because both implementations answer them; these cannot, because
+/// this crate refuses them.
+///
+/// The audit's non-operator cases are unaffected for the same reason. A `DO`
+/// header's `initial`/`TO`/`BY` reach `callOperatorMethod(OPERATOR_PLUS)` and
+/// are receivers of that unary operator, while `exprr` and `exprf` reach
+/// `requestString` and are `reqstr` rows -- `Interp::accept_header_value`
+/// carries that split at the code.
 #[cfg(test)]
 mod object_operand_tests {
     use crate::{Engine, Invocation, run_program};

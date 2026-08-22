@@ -361,6 +361,13 @@ const RAW_STDERR_COMPARISON: &[&str] = &[
     // whose need for a number -- not whether it is arithmetic -- is what
     // decides whether it reaches this frame at all.
     "lang/operator_frame_stem_compare_overflow.rex",
+    // Phase 5a (2026-08-17 plan) Task 14: the frame the required-string
+    // protocol's own `REQUEST` activation contributes when a `makeString`
+    // reached through it raises. The pair is one frame from a language context
+    // against two from a method argument, and the frame lines are indented and
+    // carry no line number, which is what raw mode asserts.
+    "lang/required_string_make_string_raises.rex",
+    "lang/required_string_argument_make_string_raises.rex",
 ];
 
 /// Every entry in [`RAW_STDERR_COMPARISON`] is a line some phase subset file
