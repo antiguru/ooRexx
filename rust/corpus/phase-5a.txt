@@ -364,3 +364,22 @@ lang/message_send_unknown_forward.rex
 # NOMETHOD handler is never reached. A build that asked the whole activation
 # stack instead answers that method-body row with the NOMETHOD handler.
 lang/condition_nomethod.rex
+
+# Phase 5a (2026-08-17 plan) Task 13: the three access scopes.
+#
+# PRIVATE is decided by who is sending, and the input is the caller's own
+# receiver: self~m is allowed from inside the declaring class and from a
+# subclass's own class method alike, and the refusals are a program or routine
+# frame, which carries no receiver, and a sibling class the defining scope's
+# hierarchy does not contain. A refused send drops the method and enters the
+# receiver's own UNKNOWN rather than raising, and becomes a report only for a
+# receiver that answers none.
+lang/method_access_private.rex
+# The same refusal untrapped, for its traceback bytes: two frames, and 97.2
+# where a build treating the refusal as a name miss would print 97.1.
+lang/method_access_private_refused.rex
+# PACKAGE's allowing side, which is every sending position one package can
+# offer, and PROTECTED, whose security-manager question has one answer while
+# nothing installs a manager. Neither row is a new agreement; both are the
+# guard on a send that starts refusing.
+lang/method_access_package_and_protected.rex

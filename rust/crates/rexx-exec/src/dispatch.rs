@@ -38,6 +38,27 @@
 //! one; what this module owes is the **place** one would hook, and the
 //! guarantee that there is exactly one of them.
 //!
+//! `PROTECTED` is what routes through it. [`seam::clear`] asks
+//! [`Interp::method_is_protected`] and, for a method that is, puts the
+//! manager's question at [`Interp::check_protected_method`] -- so the seam is
+//! where the one access scope the oracle asks a manager about is decided,
+//! rather than a place nothing reaches. With no manager the answer is
+//! permission, so no program can tell the branch from its absence:
+//! `tests/dispatch_seam.rs` pins the placement lexically and says so.
+//!
+//! # The access scopes
+//!
+//! `PRIVATE` and `PACKAGE` are decided in [`Interp::resolve`] and not at the
+//! seam, because the oracle refuses the **lookup** rather than the
+//! invocation: `messageSend` drops the method it found and enters
+//! `processUnknown` with the refusal's own error code
+//! (`ObjectClass.cpp:876`-`:889`, `:904`), so a refused private send reaches
+//! the receiver's own `UNKNOWN` if it has one. Measured, oracle rc 0: a class
+//! whose `m` is `PRIVATE` and which also answers `UNKNOWN` prints
+//! `unknown saw M` for `.K~m` from outside. [`Miss`] is that error code and
+//! [`Interp::check_private`] and [`Interp::check_package`] are the two
+//! checks.
+//!
 //! **What the type system carries**: [`seam::Cleared`] has a private field
 //! and is neither `Copy` nor `Clone`, and both invocable kinds take one by
 //! value -- a [`NativeMethod`] by its signature and
@@ -77,7 +98,7 @@ use std::rc::Rc;
 
 use rexx_classes::{ClassRegistry, MethodId};
 use rexx_core::{BehaviourId, Body, Decoded, NativeObject, ObjRef};
-use rexx_parse::Expr;
+use rexx_parse::{Access, Expr};
 
 use crate::activation::{Activation, MethodIdentity, body_of};
 use crate::error::{FailureSite, Raised};
@@ -91,7 +112,7 @@ use crate::{Failure, Interp, Loud};
 /// possible scope: nothing outside these few lines can build one, whatever
 /// else `dispatch.rs` grows.
 mod seam {
-    use super::{Failure, Interp, ObjRef};
+    use super::{Failure, Interp, MethodId, ObjRef};
 
     /// Evidence that a message send passed the dispatch security seam.
     ///
@@ -105,20 +126,28 @@ mod seam {
     /// passes here, native or Rexx-bodied, and a manager installed in a later
     /// phase gets its hook in this function's body.
     ///
-    /// The oracle asks its manager only for a *protected* method
-    /// (`RexxObject::messageSend`'s `isSpecial`/`isProtected` branch), and
-    /// this phase models no method visibility at all -- `Setup.cpp`'s
-    /// `AddProtectedMethod`/`AddPrivateMethod` distinctions are not carried
-    /// into `rexx-classes`. So the seam is passed unconditionally and
-    /// refuses nothing; what a later phase adds here is the visibility test
-    /// and the manager call, not a second seam.
+    /// The oracle asks its manager only for a *protected* method:
+    /// `RexxObject::messageSend` routes one through
+    /// `processProtectedMethod` (`classes/ObjectClass.cpp:886`-`:889`), and
+    /// every other method reaches `method->run` with nothing asked
+    /// (`:896`-`:899`). So the question is asked here, which is the one place
+    /// both invocable kinds pass, and [`Interp::check_protected_method`] is
+    /// the manager's own half of it.
+    ///
+    /// `PRIVATE` and `PACKAGE` are **not** asked here, and that is measured
+    /// rather than chosen: they refuse the *lookup* and fall through to the
+    /// receiver's own `UNKNOWN`, so [`Interp::resolve`] is where they belong.
+    /// [`super::Miss`] carries the reading behind that.
     pub(super) fn clear(
         interp: &mut Interp,
         receiver: ObjRef,
         name: &[u8],
         args: &[Option<ObjRef>],
+        method: MethodId,
     ) -> Result<Cleared, Failure> {
-        let _ = (interp, receiver, name, args);
+        if interp.method_is_protected(method) {
+            interp.check_protected_method(receiver, name, args)?;
+        }
         Ok(Cleared(()))
     }
 }
@@ -514,27 +543,68 @@ pub(crate) enum CallerPackage {
 impl Caller {
     /// The receiver of the call the send is written in.
     ///
-    /// Read by the access-scope checks, which are Task 13's: `PRIVATE`
-    /// compares this against the receiver of the send. Kept out of
-    /// `dead_code` by the `allow` below rather than by an assertion that
-    /// cannot fail -- the accessor has no caller in the non-test build, and
-    /// pretending otherwise with a `debug_assert` no in-tree path can
-    /// falsify would put a check where a reader expects one and find nothing.
-    /// `cargo clippy --all-targets` compiles this crate once with `cfg(test)`
-    /// off, which is the compilation the lint fires in; an `expect` would be
-    /// unfulfilled in the library-as-test one, which is a warning of its own
-    /// (`rexx-parse/src/lib.rs`'s own note on the same choice).
-    #[allow(dead_code, reason = "read by Task 13's PRIVATE check")]
+    /// Read by [`Interp::check_private`], which compares it against the
+    /// receiver of the send.
     pub(crate) fn receiver(self) -> Option<ObjRef> {
         self.receiver
     }
 
-    /// The package the send is written in -- `PACKAGE`'s input, Task 13's to
-    /// read, and alive for the reason [`Caller::receiver`] gives.
-    #[allow(dead_code, reason = "read by Task 13's PACKAGE check")]
+    /// The package the send is written in -- [`Interp::check_package`]'s
+    /// input.
     pub(crate) fn package(self) -> CallerPackage {
         self.package
     }
+}
+
+/// One method's access scope and protection, as `MethodClass`'s own flags
+/// carry them (`classes/MethodClass.hpp:115`-`:118`).
+///
+/// **Only a method the oracle calls *special* has one of these.**
+/// `messageSend` reads the flags at all only inside
+/// `if (method_save->isSpecial())` (`classes/ObjectClass.cpp:876`), which is
+/// `protected || private || package`, so a method with neither an access
+/// keyword nor `PROTECTED` is dispatched without any of this being consulted.
+/// `Interp::special_methods` holds a row for exactly the special ones and
+/// [`Interp::access_scope_of`] answers `None` for every other method.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) struct AccessScope {
+    /// `PRIVATE` or `PACKAGE`. `Access::Default` or `Access::Public` for a
+    /// method whose row exists for `PROTECTED` alone.
+    pub(crate) access: Access,
+    /// `MethodClass::isProtected`, which is what the security-manager seam
+    /// asks about.
+    pub(crate) protected: bool,
+    /// The package the method's own directive was translated in.
+    ///
+    /// `PACKAGE`'s other input: `MethodClass::isSamePackage` asks the
+    /// method's code object, not its scope class
+    /// (`classes/MethodClass.hpp:147`), so it is the package of the file the
+    /// `::METHOD` was written in.
+    pub(crate) package: Package,
+}
+
+/// Why a send's own lookup produced no method to run.
+///
+/// The oracle's `error` local in both `messageSend` overloads
+/// (`classes/ObjectClass.cpp:872`, `:930`). An access check that refuses does
+/// not raise: it replaces the found method with nothing and sets this, and
+/// `processUnknown` carries it to `reportNomethod` only for a receiver whose
+/// behaviour answers no `UNKNOWN` (`:904`, `:1009`).
+///
+/// **So a refusal here is not a failure the caller reports**, and the
+/// difference is observable. Measured, oracle rc 0: `.K~m` where `m` is
+/// `::METHOD m CLASS PRIVATE` and the class also declares
+/// `::METHOD unknown CLASS` prints `unknown saw M with 0`, and the same
+/// program with the `UNKNOWN` removed is the 97.2 report at rc 159.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) enum Miss {
+    /// The receiver's behaviour answers no method of that name -- 97.1.
+    NoMethod,
+    /// The method is `PRIVATE` and `checkPrivate` refused this caller --
+    /// 97.2.
+    Private,
+    /// The method is `PACKAGE` and the caller is in another package -- 97.3.
+    PackageScope,
 }
 
 /// What a resolved message send names: the method, and the class its
@@ -763,33 +833,64 @@ impl Interp {
     }
 
     /// **Step one of a send** (D24): which method a name reaches on this
-    /// receiver, and from which scope.
+    /// receiver and from which scope, or why the send has none to run.
     ///
-    /// `start_scope` is the `target~name:scope` override. `None` is the
-    /// ordinary lookup, `RexxBehaviour::methodLookup`; `Some` is
-    /// `RexxObject::superMethod(msgname, startscope)`, which searches only
-    /// the starting scope itself and the scopes folded in ahead of it.
+    /// This is the whole of what `RexxObject::messageSend` does before
+    /// `method->run`: [`Interp::lookup`], then the access check its
+    /// `isSpecial()` branch performs (`classes/ObjectClass.cpp:874`-`:894`).
+    /// A method the check refuses is not an error raised here -- see
+    /// [`Miss`], which is the oracle's own `error` local.
+    ///
+    /// `caller` is the sending side, which the access scopes read and the
+    /// receiver does not carry -- [`Caller`] has each one's C++ site.
     ///
     /// Nothing here is cached, per D28. The answer depends on the receiver's
     /// behaviour as it stands at this instant, and a `~define` between two
     /// sends of the same name at the same call site must change the second
     /// one's answer.
-    ///
-    /// `caller` is the sending side, which the access scopes read and the
-    /// receiver does not carry -- [`Caller`] has each one's C++ site.
     pub(crate) fn resolve(
         &mut self,
         receiver: ObjRef,
         name: &[u8],
         start_scope: Option<ObjRef>,
         caller: Caller,
+    ) -> Result<Resolution, Miss> {
+        let Some(resolution) = self.lookup(receiver, name, start_scope) else {
+            return Err(Miss::NoMethod);
+        };
+        match self.access_scope_of(resolution.method) {
+            None => Ok(resolution),
+            Some(scope) => match scope.access {
+                // A method whose row exists for `PROTECTED` alone. The seam
+                // asks about that one, not this.
+                Access::Default | Access::Public => Ok(resolution),
+                // `isPrivate()` and `isPackageScope()` are the two arms of
+                // one `else if` in the C++, and the parser makes a second
+                // access keyword 25.902, so no method is in both.
+                Access::Private => self
+                    .check_private(resolution, receiver, caller)
+                    .map(|()| resolution),
+                Access::Package => Self::check_package(scope.package, caller).map(|()| resolution),
+            },
+        }
+    }
+
+    /// `RexxBehaviour::methodLookup`, or `RexxObject::superMethod(msgname,
+    /// startscope)` for a `target~name:scope` override, which searches only
+    /// the starting scope itself and the scopes folded in ahead of it.
+    ///
+    /// **The lookup with no access check on it**, which is the shape
+    /// `processUnknown` uses for its own `UNKNOWN` lookup
+    /// (`classes/ObjectClass.cpp:1004`). Measured, oracle rc 0: a class whose
+    /// only method is `::METHOD unknown CLASS PRIVATE` answers `.K~zork` from
+    /// outside the class, where the same directive under any other name is
+    /// refused.
+    fn lookup(
+        &mut self,
+        receiver: ObjRef,
+        name: &[u8],
+        start_scope: Option<ObjRef>,
     ) -> Option<Resolution> {
-        // Nothing reads `caller` here: the access scopes are what read it and
-        // none is implemented in this crate, which
-        // `rexx-classes/src/registry.rs:414`-`:416` records for the native
-        // side. It is a parameter now so that the sites that will pass it are
-        // already passing it.
-        let _ = caller;
         let behaviour = self.receiver_behaviour(receiver).ok()?;
         // Borrowed rather than owned wherever the name is UTF-8, which every
         // name a program can write is: `from_utf8_lossy` allocates only for
@@ -810,6 +911,149 @@ impl Interp {
                 .lookup_class_method_from_scope(class, &name, start)?,
         };
         Some(Resolution { scope, method })
+    }
+
+    /// The access scope and protection of a resolved method, for the methods
+    /// that have one.
+    ///
+    /// **The emptiness test is what keeps an ordinary send off the hash.**
+    /// The oracle reads `isSpecial()` off a flag word on the method object,
+    /// and this crate has no method object to hang one on, so the question
+    /// costs a map probe wherever it is asked at all. A program that declares
+    /// no `PRIVATE`, `PACKAGE` or `PROTECTED` method has no row here and pays
+    /// one load and one branch per send instead.
+    fn access_scope_of(&self, method: MethodId) -> Option<AccessScope> {
+        if self.special_methods.is_empty() {
+            return None;
+        }
+        self.special_methods.get(&method).copied()
+    }
+
+    /// `MethodClass::isProtected` (`classes/MethodClass.hpp:116`), asked by
+    /// the security-manager seam and by nothing else.
+    fn method_is_protected(&self, method: MethodId) -> bool {
+        self.access_scope_of(method)
+            .is_some_and(|scope| scope.protected)
+    }
+
+    /// The security manager's `checkProtectedMethod`, asked for a method the
+    /// send has found to be `PROTECTED`.
+    ///
+    /// **Nothing installs a manager in this phase and the answer is
+    /// permission.** `SecurityManager::checkProtectedMethod` returns `false`
+    /// -- "not handled, run the method" -- from its first statement when
+    /// there is no manager object (`execution/SecurityManager.cpp:175`), and
+    /// `processProtectedMethod` then runs the method
+    /// (`classes/ObjectClass.cpp:989`). Measured, both engines and the
+    /// oracle: `::METHOD m CLASS PROTECTED` sent from outside its class is
+    /// rc 0 with identical stdout.
+    ///
+    /// So this cannot refuse, and no program can distinguish it from its own
+    /// absence. What it is for is the *place*: a manager arrives by
+    /// `~setSecurityManager` on a Package, Method or Routine object, every
+    /// route to one of which is a loud refusal in this phase, and the task
+    /// that lands the first route has one function to fill in rather than a
+    /// dispatch path to find.
+    fn check_protected_method(
+        &mut self,
+        receiver: ObjRef,
+        name: &[u8],
+        args: &[Option<ObjRef>],
+    ) -> Result<(), Failure> {
+        let _ = (self, receiver, name, args);
+        Ok(())
+    }
+
+    /// `RexxObject::checkPrivate` (`classes/ObjectClass.cpp:608`-`:646`).
+    ///
+    /// **The input is the caller's own receiver, not the caller's scope.**
+    /// The C++ reads `activation->getReceiver()` (`:616`) and compares it
+    /// against the receiving object, which is why `self~m` is allowed from
+    /// inside the defining class *and* from a subclass's own method: both
+    /// send to the same object the caller was entered on. Measured, oracle
+    /// rc 0 `inner` for each, where a rule written over the defining scope
+    /// alone would refuse the subclass.
+    ///
+    /// **Every measurement behind this is on a class method**, because
+    /// reaching an instance method needs `~new`. The `isInstanceOf` limb
+    /// below therefore has no differential witness in this phase: a class
+    /// object's own class is the metaclass, never a user class, so the limb
+    /// that answers for a second instance of the defining class is written
+    /// from the C++ and covered by an in-crate test alone.
+    fn check_private(
+        &mut self,
+        resolution: Resolution,
+        receiver: ObjRef,
+        caller: Caller,
+    ) -> Result<(), Miss> {
+        // No calling activation, or one whose frame carries no receiver: a
+        // routine or program context, which is `OREF_NULL` at `:622`-`:626`
+        // and the same refusal as `activation == OREF_NULL` at `:611`.
+        let Some(sender) = caller.receiver() else {
+            return Err(Miss::Private);
+        };
+        // The sending and receiving object being the same is allowed
+        // outright (`:617`-`:620`).
+        if sender == receiver {
+            return Ok(());
+        }
+        // Another instance of the class that defined the method (`:628`-
+        // `:633`), which is `classObject()->isCompatibleWith(scope)`.
+        if let Some(class) = self.class_of_value(sender)
+            && self.classes().is_a(class, resolution.scope)
+        {
+            return Ok(());
+        }
+        // A class object anywhere in the defining scope's own hierarchy
+        // (`:635`-`:643`). `isOfClassType(Class, sender)` first, because
+        // `isCompatibleWith` is a method on a class and not on a value.
+        if self.is_class_object(sender) && self.classes().is_a(sender, resolution.scope) {
+            return Ok(());
+        }
+        Err(Miss::Private)
+    }
+
+    /// `RexxObject::checkPackage` (`classes/ObjectClass.cpp:658`-`:685`).
+    ///
+    /// `method_package` is the package the `::METHOD` directive was
+    /// translated in, which is what `MethodClass::isSamePackage` compares
+    /// against the caller's.
+    ///
+    /// **The refusing arm needs a second package and so is not reachable in
+    /// this phase**: a caller in another package needs `::REQUIRES`, which is
+    /// refused here. The same-package arm is what a program can run, and an
+    /// in-crate test is the whole instrument for the other.
+    fn check_package(method_package: Package, caller: Caller) -> Result<(), Miss> {
+        match caller.package() {
+            // No calling activation at all (`:665`-`:669`).
+            CallerPackage::NoActivation => Err(Miss::PackageScope),
+            CallerPackage::Package(package) if package == method_package => Ok(()),
+            CallerPackage::Package(_) => Err(Miss::PackageScope),
+        }
+    }
+
+    /// `RexxObject::classObject()`, the class an arbitrary value is an
+    /// instance of, or `None` for a value this phase builds no class for.
+    ///
+    /// A **class object** answers its own class rather than itself:
+    /// `receiver_behaviour` reports the class-side behaviour for one, and the
+    /// class of a class object is what `~class` answers, which is the
+    /// metaclass. `RexxInternalObject::isInstanceOf` is unconditionally false
+    /// (`classes/ObjectClass.cpp:258`-`:261`), which is the `None` arm.
+    fn class_of_value(&mut self, value: ObjRef) -> Option<ObjRef> {
+        match self.receiver_behaviour(value).ok()? {
+            Behaviour::Instance(class) => Some(class),
+            Behaviour::ClassSide(class) => Some(self.classes().class_of(class)),
+        }
+    }
+
+    /// `isOfClassType(Class, value)`: whether the value is a class object.
+    ///
+    /// Asked through `receiver_kind` rather than off the handle's own tag,
+    /// because a heap-tagged handle with a class id is the one shape that
+    /// names no arena slot and that distinction is that function's.
+    fn is_class_object(&self, value: ObjRef) -> bool {
+        matches!(self.receiver_kind(value), Ok(Primitive::Class(_)))
     }
 
     /// The scope a method found at `resolution` sees as `SUPER`, or `None`
@@ -867,7 +1111,7 @@ impl Interp {
         args: &[Option<ObjRef>],
     ) -> Result<Option<ObjRef>, Failure> {
         let invocable = self.invocable(resolution, name)?;
-        let cleared = seam::clear(self, receiver, name, args)?;
+        let cleared = seam::clear(self, receiver, name, args, resolution.method)?;
         match invocable {
             Invocable::Native(entry) => {
                 let outcome = match entry.arity {
@@ -1093,8 +1337,8 @@ impl Interp {
             return Err(Loud::receiver_class(kind).into());
         }
         match self.resolve(receiver, name, start_scope, caller) {
-            Some(resolution) => self.invoke(resolution, receiver, name, args),
-            None => self.unknown_or_nomethod(receiver, name, args, caller),
+            Ok(resolution) => self.invoke(resolution, receiver, name, args),
+            Err(miss) => self.unknown_or_nomethod(receiver, name, args, miss),
         }
     }
 
@@ -1112,10 +1356,17 @@ impl Interp {
     /// `arguments~items` is `2` and whose `~size` is `3`, while `.k~zork()`
     /// answers `0` for each.
     ///
-    /// **The `UNKNOWN` lookup is the ordinary one and carries no start
-    /// scope**, whatever the missed send's own scope override was:
-    /// `processUnknown` asks `behaviour->methodLookup(GlobalNames::UNKNOWN)`
-    /// wherever `messageSend` reaches it.
+    /// **The `UNKNOWN` lookup is the ordinary one, carries no start scope and
+    /// is not access-checked**, whatever the missed send's own scope override
+    /// or access refusal was: `processUnknown` asks
+    /// `behaviour->methodLookup(GlobalNames::UNKNOWN)` directly wherever
+    /// `messageSend` reaches it, so [`Interp::lookup`] is the call and not
+    /// [`Interp::resolve`]. Measured, oracle rc 0: a class whose only method
+    /// is `::METHOD unknown CLASS PRIVATE` answers `.K~zork` sent from
+    /// outside the class.
+    ///
+    /// `miss` is why the send had no method, which decides the report the
+    /// receiver with no `UNKNOWN` gets.
     ///
     /// Off every hot path by construction -- a send that resolves never
     /// arrives here -- so the body is out of line rather than folded into
@@ -1127,10 +1378,10 @@ impl Interp {
         receiver: ObjRef,
         name: &[u8],
         args: &[Option<ObjRef>],
-        caller: Caller,
+        miss: Miss,
     ) -> Result<Option<ObjRef>, Failure> {
-        let Some(resolution) = self.resolve(receiver, UNKNOWN, None, caller) else {
-            return Err(self.nomethod(receiver, name));
+        let Some(resolution) = self.lookup(receiver, UNKNOWN, None) else {
+            return Err(self.nomethod(receiver, name, miss));
         };
         // **Each of the forward's arguments is rooted, and only the array's
         // root has a witness.** `alloc_with` collects *before* it allocates,
@@ -1176,6 +1427,16 @@ impl Interp {
     /// neither the message nor `UNKNOWN`, and **which condition that is
     /// depends on what is armed**.
     ///
+    /// **`miss` decides the syntax error and not the condition.**
+    /// `reportNomethod` takes the error code `messageSend` set and offers the
+    /// same `NOMETHOD` condition whichever it is (`:904`, `:1009`), so an
+    /// access refusal that nothing traps is 97.2 or 97.3 in place of 97.1
+    /// while a trapping handler reads the identical items. Measured, oracle
+    /// rc 0 on a `PRIVATE` class method sent from the program body under
+    /// `signal on nomethod`: `CONDITION('C')` `NOMETHOD`, `CONDITION('D')`
+    /// `M`, `CONDITION('E')` the null string and `RC` untouched, which is
+    /// 97.1's own row.
+    ///
     /// `reportNomethod` (`concurrency/ActivityManager.hpp:509`) offers a
     /// `NOMETHOD` condition first and raises the 97.1 syntax error only when
     /// nothing took it, so they are separate answers a program can tell
@@ -1212,12 +1473,17 @@ impl Interp {
     /// `NOMETHOD`. Excluding it here is what makes the gate the same test
     /// `offer_to_trap` applies a moment later, which is the shape
     /// [`Interp::novalue_raised`] describes for its own condition.
-    fn nomethod(&mut self, receiver: ObjRef, name: &[u8]) -> Failure {
+    fn nomethod(&mut self, receiver: ObjRef, name: &[u8], miss: Miss) -> Failure {
         let target = self.message_target_text(receiver);
+        let report = match miss {
+            Miss::NoMethod => Raised::no_method(&target, name),
+            Miss::Private => Raised::private_method(&target, name),
+            Miss::PackageScope => Raised::package_scope_method(&target, name),
+        };
         if self.trap_for(b"NOMETHOD").is_some_and(|trap| !trap.call) {
-            Raised::nomethod(&target, name).into()
+            Raised::nomethod(report, name).into()
         } else {
-            Raised::no_method(&target, name).into()
+            report.into()
         }
     }
 
@@ -2142,10 +2408,11 @@ mod tests {
             .resolve(receiver, b"ISNIL", None, no_caller())
             .expect("Object's ISNIL reaches a String receiver");
         assert_eq!(inherited.scope, object);
-        assert!(
+        assert_eq!(
             interp
                 .resolve(receiver, b"NOSUCHMETHOD", None, no_caller())
-                .is_none()
+                .err(),
+            Some(Miss::NoMethod)
         );
     }
 
@@ -2177,22 +2444,22 @@ mod tests {
         assert!(
             interp
                 .resolve(receiver, b"ISNIL", Some(object), no_caller())
-                .is_some()
+                .is_ok()
         );
         assert!(
             interp
                 .resolve(receiver, b"LENGTH", Some(object), no_caller())
-                .is_none()
+                .is_err()
         );
         assert!(
             interp
                 .resolve(receiver, b"ISNIL", Some(string), no_caller())
-                .is_some()
+                .is_ok()
         );
         assert!(
             interp
                 .resolve(receiver, b"LENGTH", Some(string), no_caller())
-                .is_some()
+                .is_ok()
         );
     }
 
@@ -2505,22 +2772,22 @@ mod tests {
     /// The refusals cannot be corpus programs, which have to match the
     /// oracle; each row's comment carries what the oracle answers instead.
     /// The successes below them are what stops "refuse every directive
-    /// option" from passing: `PROTECTED` and `UNGUARDED` run on the oracle
-    /// and must run here, and a `::ATTRIBUTE GET` with a body of its own is
-    /// the one attribute form that is a written method rather than a
+    /// option" from passing: `PROTECTED`, `PACKAGE` and `UNGUARDED` run on the
+    /// oracle and must run here, and a `::ATTRIBUTE GET` with a body of its
+    /// own is the one attribute form that is a written method rather than a
     /// generated accessor.
+    ///
+    /// `PRIVATE` is not a row in either list, because it is neither: the
+    /// oracle answers it or refuses it depending on who is sending, and
+    /// [`Interp::private_sends_are_refused_by_who_is_sending`] is the test
+    /// that separates the two.
+    ///
+    /// [`Interp::private_sends_are_refused_by_who_is_sending`]:
+    ///     private_sends_are_refused_by_who_is_sending
     #[test]
     fn a_method_body_this_crate_cannot_run_is_loud_and_its_neighbours_still_run() {
         // (source, the phrase the refusal must name)
         let refused: &[(&str, &str)] = &[
-            // oracle 97.2 at rc 159, `cannot accept private message "M" from
-            // this context` -- which caller's scope may send it is not
-            // modelled here at all, so raising 97.2 for every private send
-            // would refuse the ones the oracle allows.
-            (
-                "say .K~m\n::class K\n::method m class private\n  return 7\n",
-                "a PRIVATE ::METHOD",
-            ),
             // oracle 93.965 at rc 163, `Method M is ABSTRACT and cannot be
             // directly invoked.`
             (
@@ -2569,6 +2836,10 @@ mod tests {
                 "7\n",
             ),
             (
+                "say .K~m\n::class K\n::method m class package\n  return 7\n",
+                "7\n",
+            ),
+            (
                 "say .K~a\n::class K\n::attribute a class get\n  return 11\n",
                 "11\n",
             ),
@@ -2579,6 +2850,209 @@ mod tests {
                 "{source:?}"
             );
         }
+    }
+
+    /// **A private send is refused by who is sending, and the refusal names
+    /// the scope that refused it.**
+    ///
+    /// This is the instrument the corpus gate cannot be, and the reason is
+    /// the shape of the gate rather than a gap in the programs: a refusal
+    /// this crate shares with the oracle is a corpus row, but the failure
+    /// this task risks is a refusal quietly becoming an *answer*, and the
+    /// moment that happens the row's exit status stops being a refusal's at
+    /// all. So the refusals are asserted here by their catalogue coordinates,
+    /// against the sends that must keep answering.
+    ///
+    /// Each refusing row is a distinct limb of `checkPrivate`: a program
+    /// frame carries no receiver, a routine frame carries none either, and a
+    /// sibling class is a class object whose hierarchy does not contain the
+    /// declaring scope. Each answering row is a distinct allowing limb.
+    ///
+    /// `97.2` rather than `97.1` is what separates a real access check from a
+    /// build that dropped the method and let the name-miss report stand:
+    /// measured on the oracle, `CONDITION('E')` under a `SIGNAL ON SYNTAX` is
+    /// `2` for a refused private send and `1` for a name the behaviour does
+    /// not answer.
+    ///
+    /// **Every row is a class method**, because reaching an instance method
+    /// needs `~new`. The instance reading of each is untested rather than
+    /// confirmed.
+    #[test]
+    fn private_sends_are_refused_by_who_is_sending() {
+        let class = "\n::CLASS K\n::METHOD m CLASS PRIVATE\n  return 'inner'\n";
+        for source in [
+            // The program's own frame, which has no receiver.
+            &format!("say .K~m{class}"),
+            // A routine's frame, which has none either.
+            &format!("say r(){class}::ROUTINE r\n  return .K~m\n"),
+            // A sibling class in the same package.
+            &format!("say .S~poke{class}::CLASS S\n::METHOD poke CLASS\n  return .K~m\n"),
+        ] {
+            let (code, stdout, stderr) = both_engines(source);
+            assert_eq!((code, stdout.as_str()), (159, ""), "{source:?}");
+            assert!(
+                stderr.contains(
+                    "Error 97.2:  Object \"The K class\" cannot accept private message \
+                     \"M\" from this context."
+                ),
+                "a refused private send must report 97.2 naming the receiver and the \
+                 message, got {stderr:?} for {source:?}"
+            );
+        }
+        for source in [
+            // The declaring class's own class method, sending to itself.
+            &format!("say .K~outer{class}::METHOD outer CLASS\n  return self~m\n"),
+            // A subclass's own class method, sending to itself: the same
+            // object, and the limb a rule written over the defining scope
+            // alone would refuse.
+            "say .Sub~poke\n::CLASS Base\n::METHOD m CLASS PRIVATE\n  return 'inner'\n\
+             ::CLASS Sub SUBCLASS Base\n::METHOD poke CLASS\n  return self~m\n",
+            // A class object whose hierarchy contains the declaring scope,
+            // sending to a different object.
+            "say .Sub~poke\n::CLASS Base\n::METHOD m CLASS PRIVATE\n  return 'inner'\n\
+             ::CLASS Sub SUBCLASS Base\n::METHOD poke CLASS\n  return .Base~m\n",
+        ] {
+            assert_eq!(
+                both_engines(source),
+                (0, "inner\n".to_string(), String::new()),
+                "{source:?}"
+            );
+        }
+    }
+
+    /// **The refusal is not raised at the send**: it drops the method and
+    /// enters the receiver's own `UNKNOWN`, and the `UNKNOWN` lookup is not
+    /// itself access-checked.
+    ///
+    /// The pair is what makes each half mean something. A build that raised
+    /// at the send answers neither row; a build that checked the `UNKNOWN`
+    /// lookup too answers the first and refuses the second.
+    #[test]
+    fn a_refused_send_reaches_unknown_and_the_unknown_lookup_is_not_checked() {
+        assert_eq!(
+            both_engines(
+                "say .K~m\n::CLASS K\n::METHOD m CLASS PRIVATE\n  return 'never'\n\
+                 ::METHOD unknown CLASS\n  use arg name\n  return 'unknown saw' name\n"
+            ),
+            (0, "unknown saw M\n".to_string(), String::new())
+        );
+        assert_eq!(
+            both_engines(
+                "say .K~zork\n::CLASS K\n::METHOD unknown CLASS PRIVATE\n\
+                 \x20 use arg name\n  return 'private unknown saw' name\n"
+            ),
+            (0, "private unknown saw ZORK\n".to_string(), String::new())
+        );
+    }
+
+    /// **`PACKAGE`'s refusing arm, which no program in this phase can
+    /// reach.**
+    ///
+    /// A caller in a second package needs `::REQUIRES`, so the check is
+    /// called directly with the callers the oracle refuses: one with no
+    /// activation at all, and one whose package is not the method's. The
+    /// allowing arm has a corpus program
+    /// (`corpus/lang/method_access_package_and_protected.rex`) and is
+    /// asserted here too, so a check that refused everything fails rather
+    /// than passing both refusals.
+    #[test]
+    fn package_scope_refuses_a_caller_from_another_package() {
+        let method_package = Package::Program(crate::ProgramId(0));
+        assert_eq!(
+            Interp::check_package(method_package, no_caller()),
+            Err(Miss::PackageScope),
+            "a caller with no activation is `checkPackage`'s first refusal"
+        );
+        assert_eq!(
+            Interp::check_package(
+                method_package,
+                Caller {
+                    receiver: None,
+                    package: CallerPackage::Package(Package::Program(crate::ProgramId(1))),
+                },
+            ),
+            Err(Miss::PackageScope),
+            "a caller in another program's package must be refused"
+        );
+        assert_eq!(
+            Interp::check_package(
+                method_package,
+                Caller {
+                    receiver: None,
+                    package: CallerPackage::Package(method_package),
+                },
+            ),
+            Ok(()),
+            "the same package must be allowed"
+        );
+        assert_eq!(
+            Interp::check_package(
+                Package::Rexx,
+                Caller {
+                    receiver: None,
+                    package: CallerPackage::Package(Package::Program(crate::ProgramId(0))),
+                },
+            ),
+            Err(Miss::PackageScope),
+            "the interpreter's own package is not a program's"
+        );
+    }
+
+    /// **`checkPrivate`'s `isInstanceOf` limb, which no program in this phase
+    /// can reach either.**
+    ///
+    /// The limb allows a send from another *instance* of the class that
+    /// declared the method, and an instance needs `~new`. A class object
+    /// cannot stand in for one: its own class is the metaclass, never the
+    /// user class a `::METHOD ... PRIVATE` is declared in. So the check is
+    /// called directly, with a string as the sender and `.String` as the
+    /// declaring scope -- the one value kind this phase has whose class is a
+    /// class the registry holds.
+    ///
+    /// The second half is the refusal that makes the first mean something:
+    /// the same sender against a scope its class is not compatible with.
+    #[test]
+    fn a_private_send_from_another_instance_of_the_declaring_class_is_allowed() {
+        let mut interp = Interp::new();
+        let sender = interp.text(b"abc");
+        let receiver = interp.classes().lookup("Array").expect("Array is native");
+        let string = interp.string_class();
+        let caller = Caller {
+            receiver: Some(sender),
+            package: CallerPackage::NoActivation,
+        };
+        // `MethodId` is not read by the check at all -- the scope is -- so
+        // the resolution below names a method that exists for the receiver
+        // and nothing rests on which one it is.
+        let resolution = interp
+            .resolve(sender, b"LENGTH", None, no_caller())
+            .expect("String answers LENGTH");
+        assert_ne!(sender, receiver, "the two must not be the same object");
+        assert_eq!(
+            interp.check_private(
+                Resolution {
+                    scope: string,
+                    method: resolution.method
+                },
+                receiver,
+                caller,
+            ),
+            Ok(()),
+            "a sender whose class is the declaring scope must be allowed"
+        );
+        let object = interp.classes().lookup("Array").expect("Array is native");
+        assert_eq!(
+            interp.check_private(
+                Resolution {
+                    scope: object,
+                    method: resolution.method
+                },
+                receiver,
+                caller,
+            ),
+            Err(Miss::Private),
+            "a sender whose class is not compatible with the declaring scope must be refused"
+        );
     }
 
     /// A `target~name:scope` override is **loud when the scope really is a

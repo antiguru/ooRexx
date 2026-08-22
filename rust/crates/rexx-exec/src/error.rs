@@ -1446,12 +1446,40 @@ impl Raised {
         Raised::syntax(97, 1, vec![target.to_vec(), name.to_vec()])
     }
 
+    /// 97.2: the method is `PRIVATE` and `RexxObject::checkPrivate` refused
+    /// the caller. The substitutions are [`Raised::no_method`]'s.
+    ///
+    /// Measured at rc 159, on `::class K` with `::method m class private`:
+    /// `say .K~m` reports `Object "The K class" cannot accept private
+    /// message "M" from this context.`
+    pub(crate) fn private_method(target: &[u8], name: &[u8]) -> Raised {
+        Raised::syntax(97, 2, vec![target.to_vec(), name.to_vec()])
+    }
+
+    /// 97.3: the method is `PACKAGE` and the caller is in another package.
+    /// The substitutions are [`Raised::no_method`]'s.
+    ///
+    /// **Not measured on the oracle as a whole program**, because a caller in
+    /// another package needs `::REQUIRES`. The catalogue's own text is
+    /// `Object "&1" cannot accept package scope message "&2" from a different
+    /// package caller.`
+    pub(crate) fn package_scope_method(target: &[u8], name: &[u8]) -> Raised {
+        Raised::syntax(97, 3, vec![target.to_vec(), name.to_vec()])
+    }
+
     /// The `NOMETHOD` condition a dispatch miss raises, whose untrapped
     /// rendering is [`Raised::no_method`]'s own 97.1.
     ///
-    /// Built from that function so the catalogue coordinates are written
-    /// once, and differing from it in what a trapping handler reads back --
-    /// the table below is that difference. Measured, `say 'abc'~nosuchmsg`
+    /// **`report` is the syntax error this condition degrades to** -- 97.1
+    /// for a name the behaviour does not answer, and 97.2 or 97.3 for an
+    /// access scope that refused the caller. `reportNomethod` takes that
+    /// error code as its first argument and offers the same condition
+    /// whichever it is (`classes/ObjectClass.cpp:1009`), so the items below
+    /// are read off the send rather than off the code.
+    ///
+    /// Built from a caller's `Raised` so the catalogue coordinates are
+    /// written once each, and differing from it in what a trapping handler
+    /// reads back -- the table below is that difference. Measured, `say 'abc'~nosuchmsg`
     /// under `signal on nomethod` against the same send under `signal on
     /// syntax`:
     ///
@@ -1470,12 +1498,12 @@ impl Raised {
     /// **`Interp::nomethod` decides which of them to raise**, and it
     /// raises this one only when something can take it, so the report path
     /// below is a fallback rather than the answer this shape is for.
-    pub(crate) fn nomethod(target: &[u8], name: &[u8]) -> Raised {
+    pub(crate) fn nomethod(report: Raised, name: &[u8]) -> Raised {
         Raised {
             condition: Cow::Borrowed("NOMETHOD"),
             rc: None,
             description: Some(name.to_vec()),
-            ..Raised::no_method(target, name)
+            ..report
         }
     }
 

@@ -1005,6 +1005,9 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     // order has after the class chain.
     "lang/message_send_unknown_forward.rex",
     "lang/condition_nomethod.rex",
+    "lang/method_access_private.rex",
+    "lang/method_access_private_refused.rex",
+    "lang/method_access_package_and_protected.rex",
 ];
 
 #[test]

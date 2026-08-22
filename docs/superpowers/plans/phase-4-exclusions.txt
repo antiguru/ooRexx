@@ -3301,14 +3301,19 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   compare, which is D41's territory and 5c's by R3. No owner is assigned here.
   It is written down so it is not rediscovered as a Phase 5 regression.
 
-  KNOWN GAP: `PRIVATE`, `GUARD` AND `PROTECTED` ON A ::METHOD ARE NOT
-  MODELLED, AND WHAT MAKES EACH ONE SAFE TODAY WILL NOT LAST. A ::METHOD body
-  runs now, so its directive options are reachable, and these do not do what
-  the oracle's do. What matters to a later task is not that they are open but
-  WHAT MAKES EACH ONE CURRENTLY SAFE, since that is the thing that stops being
-  true, so each limb below says it. This entry is about those three by name
-  and does not claim to enumerate the ::METHOD options this crate leaves
-  unmodelled.
+  KNOWN GAP: `GUARD` ON A ::METHOD IS NOT MODELLED, AND WHAT MAKES IT SAFE
+  TODAY WILL NOT LAST. A ::METHOD body runs now, so its directive options are
+  reachable, and this one does not do what the oracle's does. What matters to a
+  later task is not that it is open but WHAT MAKES IT CURRENTLY SAFE, since
+  that is the thing that stops being true, so the limb below says it. This
+  entry is about `GUARD` by name and does not claim to enumerate the ::METHOD
+  options this crate leaves unmodelled.
+
+  `PRIVATE` AND `PROTECTED` WERE THE OTHER TWO LIMBS OF THIS ENTRY AND ARE
+  CLOSED. Their limbs are kept below, as the measurements that superseded them
+  rather than as the sentences they replaced, because a limb deleted outright
+  leaves a later reader with `Access` and `Protection` set by a parser and no
+  statement of whether anything reads them.
 
   EVERY MEASUREMENT BELOW IS ON A CLASS METHOD, and that restriction is not a
   choice of program. Reaching an INSTANCE method needs an instance, an
@@ -3317,29 +3322,50 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   a route that is loud on a class method is not thereby known to be loud on
   an instance one. Whichever task lands `~new` inherits re-measuring these.
 
-  `PRIVATE` IS MODELLED AS A REFUSAL, WHICH IS AN OVER-REFUSAL. The oracle
-  refuses the send only from outside the defining scope; from inside one of
-  the class's own methods it ALLOWS it. Measured, both engines:
+  `PRIVATE` IS IMPLEMENTED, AND THE OVER-REFUSAL THIS LIMB RECORDED IS GONE.
+  The sentence it replaces read that the option was modelled as a refusal from
+  every caller, and that WHAT MADE IT SAFE was only that no corpus program sent
+  a private message. Both halves have stopped being true: a send is now
+  decided by who is sending, and `corpus/phase-5a.txt` names the programs that
+  send private messages.
 
-    say .K~m                 with `::method m class private`
-                             oracle 97.2 rc 159 (`Object "The K class" cannot
-                             accept private message "M" from this context.`)
-                             crate rc 120, `a PRIVATE ::METHOD is not
-                             implemented (Phase 5)`
-    say .K~pub  where `pub`  oracle rc 0, prints `private ran`
-    is a public class method crate rc 120, the same refusal
-    doing `return self~m`
+  The rule is `RexxObject::checkPrivate` (`classes/ObjectClass.cpp:608`-`:646`)
+  and its input is THE CALLER'S OWN RECEIVER, not the caller's scope. Measured,
+  both engines against the oracle, byte for byte on all three descriptors:
 
-  So the refusal is in the safe direction and is LOUD in both rows: nothing
-  here is a wrong answer, and no gate reading rc or stderr can mistake it for
-  agreement. WHAT MAKES IT SAFE TODAY is only that no corpus program sends a
-  private message -- `corpus/errors/parse-errors.tsv` has the directive as a
-  parse case and never runs a send. The second row above is the shape that
-  ends it, and it
-  is in Phase 5's own acceptance test -- `interpreter/RexxClasses/
-  CoreClasses.orx:193` declares `::method getArrays private` and lines 179
-  and 188 send `self~getArrays` from inside the same class. The moment that
-  file is loaded, the over-refusal is a stop rather than a caveat.
+    say .K~m                 97.2 rc 159 (`Object "The K class" cannot accept
+    from the program body     private message "M" from this context.`)
+    say r() where a           the same 97.2 at rc 159: a routine frame carries
+    ::ROUTINE does `.K~m`     no receiver either
+    say .S~poke where a       the same 97.2 at rc 159, and its traceback is two
+    sibling class does        frames, the inner `return .K~m` before the outer
+    `return .K~m`             `say .S~poke`
+    say .K~outer where a      rc 0, prints the private method's answer
+    public class method
+    does `return self~m`
+    say .Sub~poke where       rc 0: the same object is sending and receiving, so
+    ::CLASS Sub SUBCLASS      a rule written as "only the defining scope may
+    Base does `self~m`        send" would refuse this one
+    say .Sub~poke where       rc 0: a class object whose own hierarchy contains
+    it does `.Base~m`         the scope that declared the method
+
+  A REFUSED SEND IS NOT AN ERROR RAISED AT THE SEND. `messageSend` drops the
+  method it found and enters `processUnknown` with the refusal's own error code
+  (`:876`-`:889`, `:904`), so the receiver's own `UNKNOWN` answers first and the
+  97.2 is what a receiver with no `UNKNOWN` gets. Measured, oracle rc 0: a class
+  whose `m` is `PRIVATE` and which also declares `::METHOD unknown CLASS` prints
+  `unknown saw M with 0` for `.K~m` from outside. The `UNKNOWN` lookup is not
+  itself access-checked, measured too: a class whose only method is
+  `::METHOD unknown CLASS PRIVATE` answers `.K~zork` from outside at rc 0.
+
+  EVERY ROW ABOVE IS A CLASS METHOD, per this entry's own restriction, and the
+  instance reading of each is untested rather than confirmed.
+
+  WHAT IS STILL OPEN is the `isInstanceOf` limb of the C++ rule, which allows a
+  send from another INSTANCE of the class that declared the method. An instance
+  needs `~new`, so no program here can reach it and an in-crate test calling
+  the check directly is its whole instrument. Whichever task lands `~new` owns
+  the differential.
 
   `GUARD` IS MODELLED AS NOTHING. `rexx-parse` records the option on the
   directive (`GuardOption`, `ast.rs`) and nothing in `rexx-exec` reads it, so
@@ -3367,51 +3393,61 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   class library nobody has looked for -- owns making the guard real rather
   than inheriting a silent no-op.
 
-  `PROTECTED` IS MODELLED AS NOTHING, THE SAME WAY `GUARD` IS. `rexx-parse`
-  records the option on the directive (`Protection`, `ast.rs`) and nothing in
-  `rexx-exec` reads it, so `PROTECTED`, `UNPROTECTED` and the default all run
-  the same body the same way. Measured, a class with a `protected` method and
-  an `unprotected` one: both engines and the oracle print `protected ran` and
-  `unprotected ran` at rc 0, which is agreement by the table's own rule and
-  says nothing about the protection.
+  `PROTECTED` IS ROUTED THROUGH THE SECURITY-MANAGER SEAM, AND WHAT MADE IT
+  UNOBSERVABLE STILL DOES. The sentence this replaces read that nothing in
+  `rexx-exec` read the option, so `PROTECTED`, `UNPROTECTED` and the default
+  all ran the same body the same way. The first half has stopped being true and
+  the second has not: `dispatch.rs`'s `seam::clear` asks whether the resolved
+  method is protected and, for one that is, asks
+  `Interp::check_protected_method`, which is the oracle's
+  `SecurityManager::checkProtectedMethod` (`execution/SecurityManager.cpp:175`)
+  and returns permission because there is no manager object.
 
-  WHAT MAKES IT UNOBSERVABLE is that the option is read at one place in the
-  oracle and only when a SECURITY MANAGER OBJECT EXISTS.
-  `RexxObject::messageSend` sends a protected method through
-  `processProtectedMethod` (`classes/ObjectClass.cpp:976`), which asks
-  `SecurityManager::checkProtectedMethod` (`execution/SecurityManager.cpp:
-  175`) -- and that returns `false` from its first statement when `manager ==
-  OREF_NULL`, so with no manager installed the method simply runs. Both
-  `messageSend` overloads reach it the same way (`classes/ObjectClass.cpp:891`
-  and `:948`). This is the same seam `dispatch.rs`'s `mod seam` documents as
-  D45 site one.
+  So the option is now READ at the place the oracle reads it, and the answer is
+  still the same one for every method. Measured, both engines against the
+  oracle: a class with a `protected` method and an `unprotected` one prints
+  `protected ran` and `unprotected ran` at rc 0, and `corpus/lang/
+  method_access_package_and_protected.rex` carries the same agreement as a
+  differential row.
 
-  A REXX PROGRAM INSTALLS ONE ONLY BY SENDING `~setSecurityManager` to a
-  Package, a Method or a Routine object, and every route to one of those is
-  LOUD here. Measured on this crate, both engines: `.context~package` is rc
-  120 (`a message send to one of the interpreter's own objects is not
-  implemented`) where the oracle answers `a Package`; `.methods['M']` and
-  `.routines['R']` are the same refusal where the oracle answers `a Method`
-  and `a Routine`; `.Method~new('x', 'return 1')` is rc 120 (`method "NEW" of
-  class "Method" is not implemented`); and `.K~method('M')` is rc 120 (`method
-  "METHOD" of class "Class" is not implemented`). The two call sites in
-  `package/PackageManager.cpp` (`:806` and `:832`) are not a route: they
-  PROPAGATE a manager that already exists into a `::REQUIRES` package rather
-  than creating one, and both are guarded by `securityManager != OREF_NULL`.
+  WHAT MAKES IT UNOBSERVABLE is the same fact the earlier version of this limb
+  recorded, reached now by a different route:
+  `SecurityManager::checkProtectedMethod` returns `false` from its first
+  statement when `manager == OREF_NULL`, and a Rexx program installs a manager
+  only by sending `~setSecurityManager` to a Package, a Method or a Routine
+  object -- `Setup.cpp` adds that method to those three classes and to no
+  other (`memory/Setup.cpp:1108`, `:1134`, `:1161`).
 
-  THAT IS A LIST OF ROUTES CHECKED HERE TOO, and this half of it is checked
-  from the oracle's side rather than from this crate's: `Setup.cpp` adds the
-  `SetSecurityManager` method to the Method, Routine and Package classes
-  (`memory/Setup.cpp:1108`, `:1134`, `:1161`) and to no other class, so those
-  object shapes are what a program has to reach. What is not enumerated is
-  the routes to those OBJECTS -- the class library was not walked looking for
-  another, exactly as for `GUARD`.
+  WHAT MOVED IS WHICH STEP IS LOUD, and it was re-measured rather than carried
+  over. The earlier version said every route to one of those OBJECTS was loud
+  and listed `.K~method('M')` at rc 120 among them. That row is stale: measured
+  now, both engines, `.K~method('M')` on an INSTANCE method answers `a Method`
+  at rc 0, matching the oracle, so the object is reachable. The refusal has
+  moved one send later: `.K~method('M')~setSecurityManager(.nil)` is rc 120 here
+  (`a message send to one of the interpreter's own objects is not implemented`)
+  where the oracle answers `1`. `.context~package`, `.methods['M']` and
+  `.routines['R']` are the same refusal, measured now, where the oracle answers
+  `a Package`, `a Method` and `a Routine`; `.Method~new('x', 'return 1')` is rc
+  120 naming the method. The two `package/PackageManager.cpp` call sites
+  (`:806`, `:832`) are still not a route: they PROPAGATE a manager that already
+  exists into a `::REQUIRES` package and are both guarded by
+  `securityManager != OREF_NULL`.
 
-  NO LIMB HAS AN OWNER ASSIGNED. All three are recorded here rather than in a
-  task report because a report is not in the repository, so a later task
-  reading the tree would find `GuardOption` and `Protection` set by a parser
-  and read by nobody, with nothing saying whether that was decided or
-  overlooked.
+  So no program can tell the branch from its absence, and the instrument for
+  its placement is lexical:
+  `crates/rexx-exec/tests/dispatch_seam.rs`'s
+  `the_protected_question_is_asked_only_inside_the_seam`.
+
+  THAT IS A LIST OF ROUTES CHECKED, NOT AN ENUMERATION OF ROUTES, exactly as
+  `GUARD`'s limb says of its own list. The class library was not walked looking
+  for another route to a Package, Method or Routine object, and the moved row
+  above is what that warning looks like when it comes true.
+
+  `GUARD` HAS NO OWNER ASSIGNED. It is recorded here rather than in a task
+  report because a report is not in the repository, so a later task reading the
+  tree would find `GuardOption` set by a parser and read by nobody, with nothing
+  saying whether that was decided or overlooked. `Protection` is read now, and
+  the two closed limbs above say where.
 
   KNOWN GAP: VALUE'S EXTERNAL-SELECTOR FORM MIXES TWO OWNERS BEHIND ONE
   ARGUMENT. A *present* third argument to VALUE selects the pool this

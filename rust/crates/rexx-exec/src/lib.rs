@@ -41,7 +41,8 @@ use rexx_core::{Body, Heap, NameMap, ObjRef, RootSet, SlotFrame, SlotRef};
 use rexx_parse::{
     Access, AnnotationTarget, AttributeDirective, AttributeStyle, ClassDirective, ClassRef,
     CodeBody, ConstantValue, Directive, DirectiveKind, Expr, ExprKind, InstructionKind,
-    MethodDirective, Operator, Program, SymbolId, SymbolTable, compound_parts, parse_program,
+    MethodDirective, Operator, Program, Protection, SymbolId, SymbolTable, compound_parts,
+    parse_program,
 };
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
@@ -1571,35 +1572,34 @@ fn class_install_order(
 /// named directive and a `.K~m` send:
 ///
 /// ```text
-/// ::method m class private        97.2, rc 159   cannot accept private message
 /// ::method m class abstract       93.965, rc 163 is ABSTRACT and cannot be invoked
 /// ::method m class protected      runs, rc 0
 /// ::method m class unguarded      runs, rc 0
 /// ::attribute a class             reads and writes an instance variable, rc 0
 /// ```
 ///
-/// The first two are conditions a program could trap, and answering them
-/// would be the wrong kind of right: `PRIVATE` needs the caller's own scope
-/// to decide, which nothing here tracks, so a build that raised 97.2 for
-/// every private send would also refuse the ones the oracle allows. The last
-/// needs Task 8's instance variables.
+/// `ABSTRACT` is a condition a program could trap, and answering it would be
+/// the wrong kind of right. A generated `::ATTRIBUTE` accessor needs the
+/// instance variable it reads, which this phase does not build.
+///
+/// **An access scope is not a reason to refuse a body**, and that is the one
+/// row this table lost. `PRIVATE` is decided at the send, by
+/// `Interp::check_private`, which reads the caller's own receiver: it refuses
+/// the outside caller the oracle refuses and answers the `self~m` the oracle
+/// answers. A gap here could only do the first.
 ///
 /// [`Loud::instruction`]: Loud::instruction
 fn method_body_gap(kind: &DirectiveKind) -> Option<Loud> {
     match kind {
         DirectiveKind::Method(method) => {
-            if method.access == Access::Private {
-                Some(Loud::method_body("a PRIVATE ::METHOD"))
-            } else if method.body.is_none() {
+            if method.body.is_none() {
                 Some(Loud::method_body("a ::METHOD with no body of its own"))
             } else {
                 None
             }
         }
         DirectiveKind::Attribute(attribute) => {
-            if attribute.access == Access::Private {
-                Some(Loud::method_body("a PRIVATE ::ATTRIBUTE"))
-            } else if attribute.body.is_none() {
+            if attribute.body.is_none() {
                 Some(Loud::method_body("a generated ::ATTRIBUTE accessor"))
             } else {
                 None
@@ -2419,6 +2419,20 @@ struct Interp {
     /// immediately after each mint a directive makes, and asserts the key is
     /// fresh.
     method_bodies: HashMap<MethodId, InstalledMethodBody>,
+    /// The access scope and protection of every method that has one -- the
+    /// oracle's `isSpecial()` set, which is what `RexxObject::messageSend`
+    /// consults before it runs anything.
+    ///
+    /// **A row only for a method that is special**, which is what lets an
+    /// ordinary send skip the probe: `dispatch::Interp::access_scope_of` tests
+    /// the map for emptiness first, so a program declaring no `PRIVATE`,
+    /// `PACKAGE` or `PROTECTED` method costs a load and a branch per send
+    /// rather than a hash.
+    ///
+    /// Keyed the same way [`Interp::method_bodies`] is, and populated beside
+    /// it: [`Interp::record_access_scope`] runs immediately after each mint a
+    /// directive makes.
+    special_methods: HashMap<MethodId, dispatch::AccessScope>,
     /// The output sink. `SAY` writes here and `Outcome::stdout` is what it
     /// becomes.
     out: Vec<u8>,
@@ -3237,6 +3251,7 @@ impl Interp {
             class_packages: HashMap::new(),
             package_objects: HashMap::new(),
             method_bodies: HashMap::new(),
+            special_methods: HashMap::new(),
             out: Vec::new(),
             trace: Vec::new(),
             clause_state: ClauseState::new(),
@@ -3930,6 +3945,7 @@ impl Interp {
             self.classes().add_instance_method(class, &name)
         };
         self.record_method_body(method_id, program, directive);
+        self.record_access_scope(method_id, program, method.access, method.protection);
     }
 
     /// `::ATTRIBUTE`'s own R9 install: one or two accessor names, per
@@ -3979,6 +3995,12 @@ impl Interp {
                 self.classes().add_instance_method(class, &name)
             };
             self.record_method_body(method_id, program, directive);
+            // Both accessors of a `Both`-style attribute carry the
+            // directive's own access scope, which is the oracle's own shape:
+            // `attributeDirective` builds the getter and the setter and calls
+            // `setAttributes(accessFlag, protectedFlag, guardFlag)` on each
+            // (`parser/DirectiveParser.cpp:1683`, `:1690`).
+            self.record_access_scope(method_id, program, attribute.access, attribute.protection);
         }
     }
 
@@ -3993,6 +4015,47 @@ impl Interp {
         debug_assert!(
             previous.is_none(),
             "a MethodId was recorded twice, so one of the two bodies is lost"
+        );
+    }
+
+    /// Records a just-minted method's access scope and protection, for the
+    /// methods the oracle calls *special*.
+    ///
+    /// `MethodClass::isSpecial()` is `protected || private || package`
+    /// (`classes/MethodClass.hpp:118`), and the membership rule here is that
+    /// disjunction: a method with neither an access keyword nor `PROTECTED`
+    /// gets no row, which is what [`Interp::special_methods`] rests on.
+    ///
+    /// `UNPROTECTED` is `Protection::Unprotected` and is not a row either.
+    /// The oracle's flag word has one `PROTECTED_FLAG` and no unprotected
+    /// bit, so the keyword's whole effect is to make a second protection
+    /// keyword 25.902, which `rexx-parse` already owns.
+    ///
+    /// `program` is the package the directive was translated in, which is the
+    /// method's own package for `PACKAGE`'s comparison.
+    fn record_access_scope(
+        &mut self,
+        method: MethodId,
+        program: ProgramId,
+        access: Access,
+        protection: Protection,
+    ) {
+        let protected = protection == Protection::Protected;
+        let scoped = matches!(access, Access::Private | Access::Package);
+        if !protected && !scoped {
+            return;
+        }
+        let previous = self.special_methods.insert(
+            method,
+            dispatch::AccessScope {
+                access,
+                protected,
+                package: Package::Program(program),
+            },
+        );
+        debug_assert!(
+            previous.is_none(),
+            "a MethodId was recorded twice, so one of the two access scopes is lost"
         );
     }
 

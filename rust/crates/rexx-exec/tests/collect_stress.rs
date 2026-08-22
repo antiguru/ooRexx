@@ -227,6 +227,7 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     // main line do, exactly as for any other program, and the ones absent
     // from this list are absent for a concatenation or a wide string rather
     // than for the activation.
+    "lang/method_access_private_refused.rex",
     "lang/method_attribute_body.rex",
     "lang/method_body_raises.rex",
     "lang/method_class_side_lookup.rex",

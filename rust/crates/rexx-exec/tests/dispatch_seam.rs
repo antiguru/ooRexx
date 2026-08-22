@@ -91,6 +91,23 @@
 //!
 //! The scan reads `src/` and never this file, so nothing here can satisfy its
 //! own assertion.
+//!
+//! # What passes through the seam, and what does not
+//!
+//! `PROTECTED` is the one access scope the oracle asks a security manager
+//! about, so it is the one the seam decides:
+//! [`the_protected_question_is_asked_only_inside_the_seam`] pins that the
+//! function answering "is this method `PROTECTED`" is called from the seam
+//! and from nowhere else. With no manager installed the answer is always
+//! permission, so **no program can tell that branch from its absence** and
+//! the lexical assertion is the whole instrument.
+//!
+//! `PRIVATE` and `PACKAGE` are decided one step earlier, in
+//! `Interp::resolve`, and that is measured rather than chosen: the oracle
+//! refuses the *lookup* and falls through to the receiver's own `UNKNOWN`, so
+//! a check at the seam would refuse sends the oracle answers. Nothing here
+//! bounds where those two are asked; `dispatch.rs`'s own tests are what pin
+//! their behaviour.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -192,6 +209,42 @@ fn dispatch_passes_through_exactly_one_chokepoint() {
         "the seam's token must have exactly one construction site beside its \
          one declaration, or counting calls to the seam stops bounding the \
          paths that reach a native method; {construct} appears at {mentions:?}"
+    );
+}
+
+/// **The `PROTECTED` question is asked inside the seam and nowhere else.**
+///
+/// The oracle routes a protected method through `processProtectedMethod`
+/// (`classes/ObjectClass.cpp:886`-`:889`) and every other method straight to
+/// `method->run`, so the manager is asked at one point in the send. This
+/// asserts the same of this crate: one code mention of the predicate besides
+/// its own definition, and both in the file holding the seam.
+///
+/// **What it cannot see**, since with no manager the branch cannot refuse and
+/// no program can observe it at all: that the call is inside `seam::clear`
+/// rather than merely inside `dispatch.rs`, that the manager's own function
+/// is reached only from there, or that a later invocation path added without
+/// a `Cleared` skips it -- the module doc's list already owns that last one.
+/// Had the predicate been called from `Interp::invoke` beside the seam
+/// instead of inside it, this test would pass.
+#[test]
+fn the_protected_question_is_asked_only_inside_the_seam() {
+    let predicate = format!("{}_is_{}(", "method", "protected");
+    let sites = code_occurrences(&predicate);
+    assert_eq!(
+        sites.len(),
+        2,
+        "the protected predicate must have exactly one caller beside its own \
+         definition; {predicate} appears at {sites:?}"
+    );
+    let elsewhere: Vec<&String> = sites
+        .iter()
+        .filter(|site| !site.contains("dispatch.rs"))
+        .collect();
+    assert!(
+        elsewhere.is_empty(),
+        "the protected predicate is named outside `dispatch.rs`, at {elsewhere:?}, \
+         so the seam is no longer the only place the manager is asked"
     );
 }
 
