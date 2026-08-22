@@ -471,14 +471,20 @@ impl Interp {
     /// A trigger operand that calls a routine replaces `call_context` and puts
     /// it back, so the arguments a later template reads are still this
     /// activation's own.
-    fn argument_text(&mut self, at: usize) -> Vec<u8> {
+    fn argument_text(&mut self, at: usize) -> Result<Vec<u8>, Failure> {
         let argument = match self.call_context.arguments.get(at) {
             Some(Some(argument)) => Some(argument.value()),
             Some(None) | None => None,
         };
         match argument {
-            Some(value) => self.rendered_into_parse_buffer(value),
-            None => self.take_parse_buffer(),
+            // `PARSE ARG` converts each argument through the same
+            // `ParseTarget::init` the other sources reach, and traces no
+            // `>K>` of its own to disagree with.
+            Some(value) => {
+                let value = self.required_string_value(value)?;
+                Ok(self.rendered_into_parse_buffer(value))
+            }
+            None => Ok(self.take_parse_buffer()),
         }
     }
 
@@ -530,7 +536,7 @@ impl Interp {
     ) -> Result<(), Failure> {
         let indent = self.clause_state.current_value_indent;
         let mut strings = self.parse_strings(code, parse, indent, evaluated)?;
-        let mut cursor = self.next_template(&mut strings, parse, indent);
+        let mut cursor = self.next_template(&mut strings, parse, indent)?;
 
         for entry in &parse.template {
             let Some(trigger) = entry else {
@@ -538,7 +544,7 @@ impl Interp {
                 // it advances to the next parse string, which for `PARSE ARG`
                 // is the next argument and for every other source is the null
                 // string (`RexxTarget::next`'s own `next_argument != 1` arm).
-                let next = self.next_template(&mut strings, parse, indent);
+                let next = self.next_template(&mut strings, parse, indent)?;
                 let spent = std::mem::replace(&mut cursor, next);
                 self.give_parse_buffer(spent.into_string());
                 continue;
@@ -566,7 +572,7 @@ impl Interp {
         strings: &mut ParseStrings,
         parse: &Parse,
         indent: usize,
-    ) -> Cursor {
+    ) -> Result<Cursor, Failure> {
         let mut string = match strings {
             // A template past the single string parses the null string, and
             // an empty `Vec` is that with nothing taken from the pool -- one
@@ -576,7 +582,7 @@ impl Interp {
             ParseStrings::Arg(index) => {
                 let at = *index;
                 *index += 1;
-                self.argument_text(at)
+                self.argument_text(at)?
             }
         };
         if parse.upper {
@@ -586,7 +592,7 @@ impl Interp {
         }
         let cursor = Cursor::new(string);
         self.trace_result(indent, cursor.string());
-        cursor
+        Ok(cursor)
     }
 
     /// The strings this `PARSE` will consume, in template order, and the
@@ -609,6 +615,13 @@ impl Interp {
         indent: usize,
         evaluated: Option<ObjRef>,
     ) -> Result<ParseStrings, Failure> {
+        // Which of the two the source produces is what decides whether the
+        // required-string protocol runs at all: the four sources that build
+        // their own bytes never had an object to convert.
+        enum Subject {
+            Bytes(Vec<u8>),
+            Value(ObjRef),
+        }
         let (keyword, value) = match &parse.source {
             // `PARSE VALUE WITH template`, with no expression at all, is
             // legal and parses the null string.
@@ -625,7 +638,7 @@ impl Interp {
             // ""`, in that order.
             ParseSource::Value(None) => {
                 self.trace_literal(indent, b"");
-                ("VALUE", Vec::new())
+                ("VALUE", Subject::Bytes(Vec::new()))
             }
             // **Rooted by whichever side produced it.** A value handed in is
             // already held by the register the compiled stream evaluated it
@@ -641,7 +654,7 @@ impl Interp {
                         value
                     }
                 };
-                ("VALUE", self.rendered_into_parse_buffer(value))
+                ("VALUE", Subject::Value(value))
             }
             // An ordinary variable read, with everything that implies: `>C>`
             // and `>V>` for a compound, and `NOVALUE` for an unset name --
@@ -649,7 +662,7 @@ impl Interp {
             ParseSource::Var(id) => {
                 let value = self.read_parse_var(code, *id, indent)?;
                 self.roots.push_temp(value);
-                ("VAR", self.rendered_into_parse_buffer(value))
+                ("VAR", Subject::Value(value))
             }
             // The second word is the *calling context* rather than the call
             // depth, and it is the running activation's rather than this
@@ -662,12 +675,12 @@ impl Interp {
                 source.extend_from_slice(self.activation().call_type.token());
                 source.push(b' ');
                 source.extend_from_slice(self.program_path.as_bytes());
-                ("SOURCE", source)
+                ("SOURCE", Subject::Bytes(source))
             }
             ParseSource::Version => {
                 let mut version = self.take_parse_buffer();
                 version.extend_from_slice(VERSION);
-                ("VERSION", version)
+                ("VERSION", Subject::Bytes(version))
             }
             // No `>K>` line of any kind, and the one source with more than
             // one string (`RexxInstructionParse::execute`'s own `SUBKEY_ARG`
@@ -686,10 +699,33 @@ impl Interp {
             // reading `skipped three`: `>K> "PULL" => "skipped three"` and
             // then `>>> "SKIPPED THREE"`, the two lines disagreeing on the
             // same instruction.
-            ParseSource::Pull => ("PULL", self.pull_line()),
-            ParseSource::LineIn => ("LINEIN", self.linein_line()),
+            ParseSource::Pull => ("PULL", Subject::Bytes(self.pull_line())),
+            ParseSource::LineIn => ("LINEIN", Subject::Bytes(self.linein_line())),
         };
-        self.trace_keyword(indent, keyword, &value);
+        let value = match value {
+            Subject::Bytes(bytes) => {
+                self.trace_keyword(indent, keyword, &bytes);
+                bytes
+            }
+            // **`>K>` names the object and the template walks the
+            // conversion.** `RexxInstructionParse::execute` traces `value`
+            // and hands the same object to the target, whose own `init` calls
+            // `string->requestString()` (`instructions/ParseTarget.cpp:113`).
+            // Measured, `trace r` over `parse value .K with a b` with a
+            // class-side `makeString` returning `'p q'`:
+            // `>K>   "VALUE" => "The K class"` and then `>>>   "p q"`.
+            Subject::Value(value) => {
+                let traced = self.rendered_into_parse_buffer(value);
+                self.trace_keyword(indent, keyword, &traced);
+                let converted = self.required_string_value(value)?;
+                if converted == value {
+                    traced
+                } else {
+                    self.give_parse_buffer(traced);
+                    self.rendered_into_parse_buffer(converted)
+                }
+            }
+        };
         Ok(ParseStrings::One(Some(value)))
     }
 
@@ -738,7 +774,10 @@ impl Interp {
             crate::run::NameShape::Compound => {
                 let (stem_name, stem_at) = code.stem(id);
                 let mut key = self.take_key_buffer();
-                self.tail_key_into(code, id, &mut key);
+                if let Err(failure) = self.tail_key_into(code, id, &mut key) {
+                    self.give_key_buffer(key);
+                    return Err(failure);
+                }
                 if self.tracing_intermediates() {
                     let mut resolved = stem_name.to_vec();
                     resolved.extend_from_slice(&key);

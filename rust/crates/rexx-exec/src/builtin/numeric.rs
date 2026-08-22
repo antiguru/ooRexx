@@ -80,7 +80,7 @@ use std::cmp::Ordering;
 use rexx_core::ObjRef;
 use rexx_num::{CompareOp, Form, Number, compare_decoded};
 
-use super::{arg, fresh_buffer, required_string, whole_number};
+use super::{Args, arg, fresh_buffer, required_string, whole_number};
 use crate::Interp;
 use crate::error::{Failure, Raised};
 
@@ -113,7 +113,7 @@ fn current(interp: &Interp) -> Numeric {
 fn target_number(
     interp: &mut Interp,
     name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<Number, Failure> {
     let value = arg(args, 1).expect("check_arity admitted the required first argument");
     match interp.to_number(value) {
@@ -169,7 +169,7 @@ fn padding_width(value: i64) -> Result<u32, Failure> {
 pub(crate) fn abs(
     interp: &mut Interp,
     name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let Numeric { digits, form, .. } = current(interp);
     let value = target_number(interp, name, args)?;
@@ -183,7 +183,7 @@ pub(crate) fn abs(
 pub(crate) fn sign(
     interp: &mut Interp,
     name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let Numeric { digits, form, .. } = current(interp);
     let value = target_number(interp, name, args)?;
@@ -216,7 +216,7 @@ pub(crate) fn sign(
 pub(crate) fn trunc(
     interp: &mut Interp,
     name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let Numeric { digits, .. } = current(interp);
     let places = whole_number(interp, name, args, 2)?;
@@ -240,7 +240,7 @@ pub(crate) fn trunc(
 pub(crate) fn format(
     interp: &mut Interp,
     name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let Numeric { digits, form, .. } = current(interp);
     let before = whole_number(interp, name, args, 2)?;
@@ -404,7 +404,7 @@ fn valid_under(value: i64, digits: u64) -> bool {
 pub(crate) fn max(
     interp: &mut Interp,
     name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     max_min(interp, name, args, Extreme::Max)
 }
@@ -413,7 +413,7 @@ pub(crate) fn max(
 pub(crate) fn min(
     interp: &mut Interp,
     name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     max_min(interp, name, args, Extreme::Min)
 }
@@ -438,12 +438,12 @@ pub(crate) fn min(
 fn max_min(
     interp: &mut Interp,
     name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
     want: Extreme,
 ) -> Result<ObjRef, Failure> {
     let Numeric { digits, fuzz, form } = current(interp);
     let target = arg(args, 1).expect("check_arity admitted the required first argument");
-    let rest = &args[1..];
+    let rest = args.values_from(2);
 
     if let Some(answer) = integer_path(interp, target, rest, digits, want)? {
         return Ok(answer);
@@ -457,7 +457,14 @@ fn max_min(
         };
         let found = interp.to_text(*candidate).into_owned();
         let Ok(number) = interp.to_number(*candidate) else {
-            return Err(Raised::method_argument_not_a_number(index + 1, &found).into());
+            // The object rather than the conversion, which is every
+            // argument message's rule -- `whole_number`'s own doc has the
+            // measurement behind it.
+            let named = match args.object(index + 2) {
+                Some(object) => interp.string_value_text(object),
+                None => found,
+            };
+            return Err(Raised::method_argument_not_a_number(index + 1, &named).into());
         };
         let number = number.into_round(digits);
         // Both sides are already parsed, so the byte slices are never read
@@ -581,7 +588,7 @@ fn randomize(seed: u64) -> u64 {
 pub(crate) fn random(
     interp: &mut Interp,
     name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let minimum = whole_number(interp, name, args, 1)?;
     let maximum = whole_number(interp, name, args, 2)?;

@@ -280,11 +280,10 @@ impl Interp {
             // reason `echo_literal` above is one function: a compiled read
             // emits nothing of its own, so the line has to come from an op,
             // and the two emissions must not be able to disagree.
-            // `echo_symbol_read`'s own doc comment has what each kind owes.
-            ExprKind::Variable(id) => self.echo_symbol_read(code, SymbolRead::Simple, *id, value),
-            ExprKind::Stem(id) => self.echo_symbol_read(code, SymbolRead::Stem, *id, value),
-            ExprKind::Compound(id) => {
-                self.echo_symbol_read(code, SymbolRead::Compound, *id, value);
+            // `echo_symbol_read`'s own doc comment has what a compound owes
+            // that this does not emit.
+            ExprKind::Variable(id) | ExprKind::Stem(id) | ExprKind::Compound(id) => {
+                self.echo_symbol_read(code, *id, value);
             }
             // `.NIL`/`.TRUE`/`.FALSE` -- `>E>`, measured (this task's
             // report): **not** in the design spec's own "measured reachable
@@ -437,7 +436,20 @@ impl Interp {
                 // is placed before it: an early exit there would lose the
                 // buffer, which is safe but forfeits the reuse.
                 let mut key = self.take_key_buffer();
-                self.tail_key_into(code, id, &mut key);
+                if let Err(failure) = self.tail_key_into(code, id, &mut key) {
+                    self.give_key_buffer(key);
+                    return Err(failure);
+                }
+                // `>C>`, here rather than in `echo_symbol_read_line`, so that
+                // the tail is resolved once per reference -- that function's
+                // own doc comment has the reason.
+                if self.tracing_intermediates() {
+                    let tag = code.symbols.name(id).as_bytes().to_vec();
+                    let mut printed = stem_name.to_vec();
+                    printed.extend_from_slice(&key);
+                    let indent = self.clause_state.current_value_indent;
+                    self.trace_compound_name(indent, &tag, &printed);
+                }
                 let (value, novalue) = self.stem_get_at(stem_name, stem_at, &key);
                 self.give_key_buffer(key);
                 self.novalue_check(novalue)?;
@@ -446,8 +458,16 @@ impl Interp {
         }
     }
 
-    /// The `>V>` line one bare-symbol read owes, and the `>C>` line a compound
-    /// owes in front of it.
+    /// The `>V>` line one bare-symbol read owes.
+    ///
+    /// **The `>C>` a compound owes in front of it is not here**, and that is
+    /// not tidying: a substituted tail is a required-string context, so
+    /// building the resolved name a second time would send a second
+    /// `makeString` for one reference. [`Interp::read_symbol`]'s `Compound`
+    /// arm emits it, where the key the lookup used is still in hand, and it
+    /// runs before this line on either engine -- the compiled stream loads
+    /// through the same `read_symbol` and only then reaches
+    /// `crate::ir::Op::TraceRead`.
     ///
     /// **The one implementation both engines enter**, for the reason
     /// [`Interp::echo_literal`] is one: `eval.rs` emits these as a side effect
@@ -475,39 +495,19 @@ impl Interp {
     /// `Interp::echo_literal` asks it there: rendering allocates a copy of a
     /// value of any size, and an untraced run must not pay for it.
     #[inline(always)]
-    pub(crate) fn echo_symbol_read(
-        &mut self,
-        code: &Code<'_>,
-        read: SymbolRead,
-        id: SymbolId,
-        value: ObjRef,
-    ) {
+    pub(crate) fn echo_symbol_read(&mut self, code: &Code<'_>, id: SymbolId, value: ObjRef) {
         if !self.tracing_intermediates() {
             return;
         }
-        self.echo_symbol_read_line(code, read, id, value);
+        self.echo_symbol_read_line(code, id, value);
     }
 
     /// The name-building and the lines, out of line behind
     /// [`Interp::echo_symbol_read`]'s gate.
     #[inline(never)]
-    fn echo_symbol_read_line(
-        &mut self,
-        code: &Code<'_>,
-        read: SymbolRead,
-        id: SymbolId,
-        value: ObjRef,
-    ) {
+    fn echo_symbol_read_line(&mut self, code: &Code<'_>, id: SymbolId, value: ObjRef) {
         let indent = self.clause_state.current_value_indent;
         let tag = code.symbols.name(id).as_bytes().to_vec();
-        if read == SymbolRead::Compound {
-            // The slot is not wanted here: this builds the printed name
-            // and reads nothing.
-            let (stem_name, _) = code.stem(id);
-            let mut resolved = stem_name.to_vec();
-            resolved.extend_from_slice(&self.tail_key(code, id));
-            self.trace_compound_name(indent, &tag, &resolved);
-        }
         let text = self.string_value_text(value);
         self.trace_variable(indent, &tag, &text);
     }
@@ -1081,8 +1081,17 @@ impl Interp {
 
         let left_number = self.arith_left_operand(op.spelling(), left_value)?;
 
+        // The argument of the operator method the receiver answers, converted
+        // after the receiver itself is accepted -- `apply_binary`'s own doc
+        // has the citations, and `StringClass::arith` reports **`otherObj`**
+        // rather than the conversion when the converted string is not
+        // numeric. Measured, rc 215: `'2' + .K` with a class-side
+        // `makeString` returning `'xx'` is 41.1 `Nonnumeric value ("The K
+        // class")`.
+        let converted = self.required_string_value(right_value)?;
+
         let result = if op == Operator::Power {
-            let exponent = match self.to_number(right_value) {
+            let exponent = match self.to_number(converted) {
                 Ok(number) => number,
                 Err(NotNumeric) => {
                     let text = self.string_value_text(right_value);
@@ -1091,7 +1100,13 @@ impl Interp {
             };
             left_number.pow(&exponent, digits)
         } else {
-            let right_number = self.arith_operand(right_value)?;
+            let right_number = match self.to_number(converted) {
+                Ok(number) => number,
+                Err(NotNumeric) => {
+                    let text = self.string_value_text(right_value);
+                    return Err(Raised::nonnumeric(&text).into());
+                }
+            };
             match op {
                 Operator::Plus => left_number.add(&right_number, digits),
                 Operator::Subtract => left_number.sub(&right_number, digits),
@@ -1674,6 +1689,16 @@ impl Interp {
         left: ObjRef,
         right: ObjRef,
     ) -> Result<ObjRef, Failure> {
+        // **`reqstr`'s dyadic-operator context is the operand on the
+        // *right*.** The section names "Rexx dyadic operators when the
+        // receiving object (the object to the left of the operator) is a
+        // string", and the receiver's own method is what converts its
+        // argument -- `StringClass::concatRexx`, `stringComp` and `andOp` all
+        // open with `otherObj->requestString()` (`classes/StringClass.cpp:653`,
+        // `:774`, `:925`). The left operand is the receiver and is not
+        // converted at all: measured, `.array + 1` is 97.1 where `1 + .array`
+        // is 41.1, and `eval.rs`'s `object_operand_tests` is that half.
+        let right = self.required_string_value(right)?;
         match op {
             Operator::Concatenate | Operator::Abuttal => self.concat_values(left, right, None),
             Operator::Blank => self.concat_values(left, right, Some(b' ')),

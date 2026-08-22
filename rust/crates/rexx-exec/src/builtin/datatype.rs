@@ -65,7 +65,7 @@
 use rexx_core::ObjRef;
 use rexx_num::Number;
 
-use super::{arg, optional_string, required_string};
+use super::{Args, arg, optional_string, required_string};
 use crate::error::{Failure, Raised};
 use crate::{Interp, Loud, Novalue};
 
@@ -267,7 +267,7 @@ const DATATYPE_OPTIONS: &str = "ABILMNOSUVWX9";
 pub(crate) fn datatype(
     interp: &mut Interp,
     _name: &[u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let text = required_string(interp, args, 1);
     let Some(option) = optional_string(interp, args, 2) else {
@@ -406,11 +406,7 @@ fn compound_tail_exists(interp: &mut Interp, name: &[u8]) -> bool {
 /// (`expression/ExpressionBaseVariable.hpp:61`), so a dot name reaches `LIT`
 /// by the other route and no dot-variable subsystem is needed to answer it.
 /// Only `Name`/`Stem`/`CompoundName` ever ask the variable pool at all.
-pub(crate) fn symbol(
-    interp: &mut Interp,
-    _name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn symbol(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let text = required_string(interp, args, 1);
     let upper = text.to_ascii_uppercase();
     let result: &[u8] = match classify(&upper) {
@@ -441,11 +437,7 @@ pub(crate) fn symbol(
 /// constant shape is unconditionally false for the identical reason
 /// `symbol`'s own doc gives (`BUILTIN(VAR)`'s `isString` check is the same
 /// short-circuit).
-pub(crate) fn var(
-    interp: &mut Interp,
-    _name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn var(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let text = required_string(interp, args, 1);
     let upper = text.to_ascii_uppercase();
     let exists = match classify(&upper) {
@@ -485,11 +477,7 @@ fn literal_value(interp: &mut Interp, upper: &[u8]) -> Result<ObjRef, Failure> {
 /// unconditionally, before `name` is even classified: the oracle's own
 /// `BUILTIN(VALUE)` reads all three arguments before doing anything else
 /// with any of them (`expression/BuiltinFunctions.cpp:1818`-`1822`).
-pub(crate) fn value(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn value(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     if arg(args, 3).is_some() {
         return Err(Loud::value_selector().into());
     }

@@ -2007,9 +2007,12 @@ fn assert_literal_echoes_follow_their_load(ops: &[Op]) {
 /// [`assert_literal_echoes_follow_their_load`]'s two failures, plus one a
 /// literal's echo cannot have: the tag. `>V>` names the symbol that was read,
 /// so an echo carrying another op's symbol prints the right value under the
-/// wrong name, and a compound's `>C>` line resolves *that* symbol's tail --
-/// which means a `read` that disagreed with the load's would emit a line the
-/// oracle prints nowhere, or drop one it prints.
+/// wrong name.
+///
+/// **Adjacency is what keeps a compound's two lines together**, and it is
+/// load-bearing rather than tidy: the `>C>` in front of the `>V>` is emitted
+/// by the load, where the tail it resolved is still in hand
+/// (`Interp::read_symbol`), so an op between the two would print them apart.
 ///
 /// An unconditional `assert!` for [`assert_clause_regions_hold_no_generic_op`]'s
 /// reason, and it is the same linear scan's worth of work.

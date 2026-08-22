@@ -61,7 +61,7 @@
 
 use rexx_core::ObjRef;
 
-use super::{optional_string, whole_number};
+use super::{Args, optional_string, whole_number};
 use crate::Interp;
 use crate::Loud;
 use crate::activation::TrappedCondition;
@@ -107,7 +107,7 @@ const DEFAULT_ENVIRONMENT: &[u8] = b"CMD";
 fn option_letter(
     interp: &mut Interp,
     name: &[u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
     position: usize,
     valid: &str,
 ) -> Result<Option<u8>, Failure> {
@@ -141,7 +141,7 @@ fn option_letter(
 pub(crate) fn address(
     interp: &mut Interp,
     _name: &[u8],
-    _args: &[Option<ObjRef>],
+    _args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let current = interp.activation().address.current.clone();
     let bytes = match &current {
@@ -155,18 +155,14 @@ pub(crate) fn address(
 pub(crate) fn digits(
     interp: &mut Interp,
     _name: &[u8],
-    _args: &[Option<ObjRef>],
+    _args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let digits = interp.activation().settings.digits();
     Ok(interp.text(digits.to_string().as_bytes()))
 }
 
 /// `FUZZ()`: the running activation's own `NUMERIC FUZZ`.
-pub(crate) fn fuzz(
-    interp: &mut Interp,
-    _name: &[u8],
-    _args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn fuzz(interp: &mut Interp, _name: &[u8], _args: Args<'_>) -> Result<ObjRef, Failure> {
     let fuzz = interp.activation().settings.fuzz();
     Ok(interp.text(fuzz.to_string().as_bytes()))
 }
@@ -176,11 +172,7 @@ pub(crate) fn fuzz(
 /// The oracle returns one of two `GlobalNames` constants rather than
 /// formatting anything, so there is no third answer -- measured, `numeric
 /// form` with no expression resets to `SCIENTIFIC`.
-pub(crate) fn form(
-    interp: &mut Interp,
-    _name: &[u8],
-    _args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn form(interp: &mut Interp, _name: &[u8], _args: Args<'_>) -> Result<ObjRef, Failure> {
     let text: &[u8] = match interp.activation().settings.form() {
         rexx_num::Form::Scientific => b"SCIENTIFIC",
         rexx_num::Form::Engineering => b"ENGINEERING",
@@ -198,7 +190,7 @@ pub(crate) fn form(
 pub(crate) fn queued(
     interp: &mut Interp,
     _name: &[u8],
-    _args: &[Option<ObjRef>],
+    _args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let count = interp.queue.len();
     Ok(interp.text(count.to_string().as_bytes()))
@@ -213,11 +205,7 @@ pub(crate) fn queued(
 /// `gc('fnord')` is `1` and `gc('x')` is 40.904 naming the four spellings
 /// **with their own quotes inside the message** -- `GC argument 1 must be
 /// one of "force", "Force", "f", "F"; found "x".`
-pub(crate) fn gc(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn gc(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     const VALID: &str = "\"force\", \"Force\", \"f\", \"F\"";
     let Some(text) = optional_string(interp, args, 1) else {
         return Ok(interp.text(b"0"));
@@ -247,7 +235,7 @@ pub(crate) fn gc(
 pub(crate) fn errortext(
     interp: &mut Interp,
     name: &[u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let number = whole_number(interp, name, args, 1)?.expect("check_arity admitted argument 1");
     if !(0..=99).contains(&number) {
@@ -275,7 +263,7 @@ pub(crate) fn errortext(
 pub(crate) fn sourceline(
     interp: &mut Interp,
     name: &[u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let source = &interp.activation().program.source;
     let lines = source.line_count();
@@ -326,11 +314,7 @@ pub(crate) fn sourceline(
 ///
 /// The rejected byte is the first one, not the whole string: `trace('-3')`
 /// reports `found "-"`.
-pub(crate) fn trace(
-    interp: &mut Interp,
-    _name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn trace(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let previous = interp.trace_mode().letter;
     if let Some(text) = optional_string(interp, args, 1) {
         let mode = crate::trace::mode_from_setting(&text)
@@ -375,11 +359,7 @@ pub(crate) fn trace(
 /// All four measured, rc 216. The third and fourth are the pair that places
 /// the emptiness check: it belongs to the option *switch*, which a bad
 /// position never reaches.
-pub(crate) fn arg(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn arg(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     const VALID: &str = "AENO";
     let position = whole_number(interp, name, args, 1)?;
     // Read but not validated here: `optional_string` is all the C++ does
@@ -469,7 +449,7 @@ pub(crate) fn arg(
 pub(crate) fn condition(
     interp: &mut Interp,
     name: &[u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     const VALID: &str = "ACDEIORS";
     let style = option_letter(interp, name, args, 1, VALID)?.unwrap_or(b'I');

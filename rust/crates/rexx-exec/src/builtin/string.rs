@@ -61,8 +61,8 @@
 use rexx_core::ObjRef;
 
 use super::{
-    buffer, count_of, length_of, optional_string, pad_byte, position_of, required_render,
-    required_string, whole_number,
+    Args, arg, buffer, count_of, length_of, optional_string, pad_byte, position_of,
+    required_render, required_string, whole_number,
 };
 use crate::Interp;
 use crate::error::{Failure, Raised};
@@ -91,12 +91,8 @@ const DEFAULT_STRIP_SET: &[u8] = b" \t";
 /// length('')` is 0. `to_text` is what the oracle's own `REQUIRED_STRING`
 /// conversion corresponds to, so a number argument is measured by its
 /// rendering -- `say length(1.50)` is 4, not 3.
-pub(crate) fn length(
-    interp: &mut Interp,
-    _name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
-    let value = args[0].expect("check_arity admitted LENGTH's one required argument");
+pub(crate) fn length(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
+    let value = arg(args, 1).expect("check_arity admitted LENGTH's one required argument");
     // The borrow of `interp` ends with this statement, which is what lets the
     // allocation below happen at all.
     let bytes = interp.text_len(value);
@@ -383,11 +379,7 @@ fn in_set(byte: u8, set: &[u8]) -> bool {
 /// `center('abcdef',5)` is `abcde`, nothing dropped from the left and one
 /// byte from the right. A wider truncation drops from both --
 /// `center('abcdef',3)` is `bcd`.
-pub(crate) fn center(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn center(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let width = whole_number(interp, name, args, 2)?.expect("check_arity admitted the width");
     let pad = pad_byte(interp, name, args, 3)?.unwrap_or(b' ');
@@ -415,11 +407,7 @@ pub(crate) fn center(
 
 /// `LEFT(string, length [,pad])`: the leading `length` bytes, padded on the
 /// right.
-pub(crate) fn left(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn left(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let size = whole_number(interp, name, args, 2)?.expect("check_arity admitted the length");
     let pad = pad_byte(interp, name, args, 3)?.unwrap_or(b' ');
@@ -437,11 +425,7 @@ pub(crate) fn left(
 
 /// `RIGHT(string, length [,pad])`: the trailing `length` bytes, padded on the
 /// left.
-pub(crate) fn right(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn right(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let size = whole_number(interp, name, args, 2)?.expect("check_arity admitted the length");
     let pad = pad_byte(interp, name, args, 3)?.unwrap_or(b' ');
@@ -462,11 +446,7 @@ pub(crate) fn right(
 /// **A start past the end is not an error**, unlike a start of zero:
 /// measured, `substr('abcdef',7)` is the null string and
 /// `substr('abcdef',7,3,'.')` is `...`, where `substr('abc',0)` is 93.924.
-pub(crate) fn substr(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn substr(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let start = whole_number(interp, name, args, 2)?.expect("check_arity admitted the position");
     let requested = whole_number(interp, name, args, 3)?;
     let pad = pad_byte(interp, name, args, 4)?.unwrap_or(b' ');
@@ -496,11 +476,7 @@ pub(crate) fn substr(
 /// one-argument call deletes the whole string: measured,
 /// `delstr('abcdef')` is the null string and `delstr('abcdef',,2)` is
 /// `cdef`.
-pub(crate) fn delstr(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn delstr(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let start = whole_number(interp, name, args, 2)?;
     let requested = whole_number(interp, name, args, 3)?;
@@ -538,11 +514,7 @@ pub(crate) fn delstr(
 /// zero is legal here and an error in `OVERLAY`: measured,
 /// `insert('-','abc',0)` is `-abc` while `overlay('XY','abcdef',0)` is
 /// 93.924. A negative `n` is 93.906, not 93.924.
-pub(crate) fn insert(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn insert(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let new = required_string(interp, args, 1);
     let target = required_string(interp, args, 2);
     let start = whole_number(interp, name, args, 3)?;
@@ -588,11 +560,7 @@ pub(crate) fn insert(
 /// `abc` followed by one blank and `overlay('','abc',6,1)` is `abc` followed
 /// by three, while `overlay('XY','abc',3,0)` and `overlay('XY','abc',4,0)`
 /// are both `abc` unchanged, since neither reaches past the end.
-pub(crate) fn overlay(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn overlay(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let new = required_string(interp, args, 1);
     let target = required_string(interp, args, 2);
     let start = whole_number(interp, name, args, 3)?;
@@ -651,11 +619,7 @@ pub(crate) fn overlay(
 /// `pos('an','banana',1,3)` is 2 and `pos('an','banana',1,2)` is 0. Only
 /// roughly: [`find_forward`] carries the one position the oracle searches
 /// beyond that, and why.
-pub(crate) fn pos(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn pos(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     // The numeric arguments are converted first so that the two strings can
     // be read through shared borrows afterwards; `required_render`'s own doc
     // carries why moving them is not observable.
@@ -688,11 +652,7 @@ pub(crate) fn pos(
 /// defaulting to `len - start + 1` would have searched only the two bytes
 /// before position 5 and answered 0 -- which is what
 /// `lastpos('b','banana',5,2)` does answer.
-pub(crate) fn lastpos(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn lastpos(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let needle = required_string(interp, args, 1);
     let haystack = required_string(interp, args, 2);
     let start = whole_number(interp, name, args, 3)?;
@@ -714,7 +674,7 @@ pub(crate) fn lastpos(
 pub(crate) fn reverse(
     interp: &mut Interp,
     _name: &[u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let mut string = required_string(interp, args, 1);
     string.reverse();
@@ -727,11 +687,7 @@ pub(crate) fn reverse(
 /// an empty one strips nothing at all: measured,
 /// `strip('+-+-a-+b-+-+',,'-+')` is `a-+b` and `strip('abc','B','')` is
 /// `abc`.
-pub(crate) fn strip(
-    interp: &mut Interp,
-    _name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn strip(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let option = optional_string(interp, args, 2);
     let set = optional_string(interp, args, 3);
@@ -755,11 +711,7 @@ pub(crate) fn strip(
 
 /// `SPACE(string [,n] [,pad])`: the words of `string` rejoined with `n`
 /// copies of `pad`.
-pub(crate) fn space(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn space(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let requested = whole_number(interp, name, args, 2)?;
     let pad = pad_byte(interp, name, args, 3)?.unwrap_or(b' ');
@@ -790,11 +742,7 @@ pub(crate) fn space(
 }
 
 /// `COPIES(string, n)`.
-pub(crate) fn copies(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn copies(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let count = whole_number(interp, name, args, 2)?.expect("check_arity admitted the count");
     let count = count_of(count, 1)?;
@@ -819,11 +767,7 @@ pub(crate) fn copies(
 /// Case-sensitive, measured: `abbrev('Print','PRI')` is 0. The result is the
 /// text `1` or `0` rather than a boolean object -- measured,
 /// `datatype(abbrev('a','a'))` is `NUM` and `abbrev('a','a') + 1` is 2.
-pub(crate) fn abbrev(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn abbrev(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let information = required_string(interp, args, 1);
     let info = required_string(interp, args, 2);
     let requested = whole_number(interp, name, args, 3)?;
@@ -847,11 +791,7 @@ pub(crate) fn abbrev(
 
 /// `COMPARE(string1, string2 [,pad])`: the 1-based offset of the first byte
 /// at which the two differ once the shorter is padded out, or 0.
-pub(crate) fn compare(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn compare(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let first = required_string(interp, args, 1);
     let second = required_string(interp, args, 2);
     let pad = pad_byte(interp, name, args, 3)?.unwrap_or(b' ');
@@ -883,7 +823,7 @@ pub(crate) fn compare(
 pub(crate) fn countstr(
     interp: &mut Interp,
     _name: &[u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let needle = required_string(interp, args, 1);
     let haystack = required_string(interp, args, 2);
@@ -895,7 +835,7 @@ pub(crate) fn countstr(
 pub(crate) fn changestr(
     interp: &mut Interp,
     name: &[u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let requested = whole_number(interp, name, args, 4)?;
     let needle = required_render(interp, args, 1);
@@ -994,7 +934,7 @@ pub(crate) fn changestr(
 pub(crate) fn translate(
     interp: &mut Interp,
     name: &[u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let out_table = optional_string(interp, args, 2);
@@ -1052,11 +992,7 @@ pub(crate) fn translate(
 /// the *second* arm of both. Measured, and this pair is what separates them:
 /// `verify('abcde','','00'x)` is 1, the answer `'N'` gives, while
 /// `verify('abcde','abc','00'x)` is 1, the answer `'M'` gives.
-pub(crate) fn verify(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn verify(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let reference = required_string(interp, args, 2);
     let option = optional_string(interp, args, 3);
@@ -1092,11 +1028,7 @@ pub(crate) fn verify(
 }
 
 /// `LOWER(string [,n] [,length])`.
-pub(crate) fn lower(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn lower(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let start = whole_number(interp, name, args, 2)?;
     let range = whole_number(interp, name, args, 3)?;
@@ -1104,11 +1036,7 @@ pub(crate) fn lower(
 }
 
 /// `UPPER(string [,n] [,length])`.
-pub(crate) fn upper(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn upper(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let start = whole_number(interp, name, args, 2)?;
     let range = whole_number(interp, name, args, 3)?;

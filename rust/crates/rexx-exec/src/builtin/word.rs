@@ -69,7 +69,7 @@ use std::ops::Range;
 
 use rexx_core::ObjRef;
 
-use super::{buffer, length_of, position_of, required_render, required_string, whole_number};
+use super::{Args, buffer, length_of, position_of, required_render, required_string, whole_number};
 use crate::Interp;
 use crate::error::Failure;
 
@@ -178,11 +178,7 @@ pub(super) fn word_slices(text: &[u8]) -> Vec<&[u8]> {
 /// Measured: `words('')`, `words('   ')` and `words('09090909'x)` are all 0,
 /// and leading, trailing and repeated separators change nothing --
 /// `words('  a b  ')` and `words('a    b')` are both 2.
-pub(crate) fn words(
-    interp: &mut Interp,
-    _name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn words(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let mut scan = Words::new(&string);
     let mut count = 0usize;
@@ -203,7 +199,7 @@ pub(crate) fn words(
 fn converted_position(
     interp: &mut Interp,
     name: &[u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
     position: usize,
 ) -> Result<i64, Failure> {
     Ok(whole_number(interp, name, args, position)?
@@ -212,11 +208,7 @@ fn converted_position(
 
 /// `WORD(string, n)`: the `n`th word, or the null string if there is no such
 /// word.
-pub(crate) fn word(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn word(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     // The position is converted first so that the string can be read through
     // `required_render`, which borrows the bytes where they are instead of
     // copying them out; that function's own doc comment carries the ordering
@@ -248,7 +240,7 @@ pub(crate) fn word(
 pub(crate) fn word_index(
     interp: &mut Interp,
     name: &[u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let position = position_of(converted_position(interp, name, args, 2)?)?;
@@ -266,7 +258,7 @@ pub(crate) fn word_index(
 pub(crate) fn word_length(
     interp: &mut Interp,
     name: &[u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let position = position_of(converted_position(interp, name, args, 2)?)?;
@@ -299,11 +291,7 @@ pub(crate) fn word_length(
 /// only a call supplying both can separate: measured,
 /// `subword('SUBWORD','30'x,'30'x)` -- a zero position and a zero length
 /// together -- is 93.924 at rc 163, not the null string at rc 0.
-pub(crate) fn subword(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn subword(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let n = converted_position(interp, name, args, 2)?;
     let requested = whole_number(interp, name, args, 3)?;
@@ -342,11 +330,7 @@ pub(crate) fn subword(
 /// answers its three blanks back. The zero-length answer is still behind the
 /// position check, the same way `SUBWORD`'s is: measured,
 /// `delword('delWord','30'x,'30'x)` is 93.924 at rc 163.
-pub(crate) fn delword(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-) -> Result<ObjRef, Failure> {
+pub(crate) fn delword(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let n = converted_position(interp, name, args, 2)?;
     let requested = whole_number(interp, name, args, 3)?;
@@ -392,7 +376,7 @@ pub(crate) fn delword(
 pub(crate) fn word_pos(
     interp: &mut Interp,
     name: &[u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let phrase = required_string(interp, args, 1);
     let string = required_string(interp, args, 2);

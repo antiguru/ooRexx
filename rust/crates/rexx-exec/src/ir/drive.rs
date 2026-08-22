@@ -1300,7 +1300,7 @@ impl Interp {
                                     // side effect of evaluating -- so a promoted
                                     // clause with no such op drops them while every
                                     // line after them still matches.
-                                    Op::TraceRead { symbol, read, src } => {
+                                    Op::TraceRead { symbol, src, .. } => {
                                         debug_assert!(
                                             chunk.holds_register(*src),
                                             "op reads register {src} outside the region the chunk \
@@ -1312,7 +1312,7 @@ impl Interp {
                                             continue;
                                         }
                                         let value = self.roots.temp_at(registers, *src as usize);
-                                        self.echo_symbol_read(code, *read, *symbol, value);
+                                        self.echo_symbol_read(code, *symbol, value);
                                     }
                                     // **A native expression op**: one arithmetic
                                     // operator applied to two registers, through
@@ -1703,7 +1703,7 @@ impl Interp {
                                         );
                                         self.roots.temp_at(registers, register as usize)
                                     });
-                                        self.say_evaluated(value);
+                                        self.say_evaluated(value)?;
                                     }
                                     // The end of the activation, through
                                     // `Interp::returned_value`, for the same
@@ -1808,7 +1808,7 @@ impl Interp {
                                         );
                                         self.roots.temp_at(registers, register as usize)
                                     });
-                                        self.queue_evaluated(value, *keyword);
+                                        self.queue_evaluated(value, *keyword)?;
                                     }
                                     // The call, through the same
                                     // `Interp::resolve_call` and

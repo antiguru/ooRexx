@@ -95,7 +95,7 @@ mod word;
 /// spelled in three places -- [`Builtin::run`], every implementation in
 /// `string.rs`, and the tests' own stand-in -- and those three cannot drift
 /// while they name this.
-type Run = fn(&mut Interp, &'static [u8], &[Option<ObjRef>]) -> Result<ObjRef, Failure>;
+type Run = fn(&mut Interp, &'static [u8], Args<'_>) -> Result<ObjRef, Failure>;
 
 /// One builtin this crate runs: its name, its arity, and the code.
 struct Builtin {
@@ -779,7 +779,71 @@ pub(crate) fn run(
     };
     let builtin = &IMPLEMENTED[row as usize];
     check_arity(builtin, args)?;
-    (builtin.run)(interp, builtin.name, args)
+    // **The required-string protocol runs here, once, over the whole
+    // argument list** -- after the 40.x count checks and before the builtin
+    // body, which is where the measurements in
+    // `Interp::required_string_arguments` put it.
+    match interp.required_string_arguments(args)? {
+        Some(converted) => (builtin.run)(
+            interp,
+            builtin.name,
+            Args {
+                values: &converted,
+                objects: args,
+            },
+        ),
+        None => (builtin.run)(
+            interp,
+            builtin.name,
+            Args {
+                values: args,
+                objects: args,
+            },
+        ),
+    }
+}
+
+/// One builtin call's arguments, in the two readings a builtin needs of them.
+///
+/// **The required-string protocol splits what a reader uses from what a
+/// message names.** `provide.xml` `reqstr` makes every builtin argument a
+/// conversion site, and the oracle's error path is handed the *object* the
+/// expression produced rather than the string it converted to -- measured, rc
+/// 216: `substr(.A, .B)` where `.B` has a class-side `makeString` answering
+/// `'x'` reports `SUBSTR argument 2 must be a whole number; found "The B
+/// class"`. A single slice cannot carry both readings, and a builtin that
+/// reads the conversion while quoting the object needs both at once.
+///
+/// The two are the same slice whenever the protocol cannot change anything --
+/// `Interp::required_string_arguments` answers `None` for that -- so an
+/// ordinary call allocates nothing here.
+#[derive(Copy, Clone)]
+pub(crate) struct Args<'a> {
+    /// Each supplied argument through the protocol, converted in position
+    /// order before the body ran.
+    values: &'a [Option<ObjRef>],
+    /// The objects the argument expressions produced.
+    objects: &'a [Option<ObjRef>],
+}
+
+impl<'a> Args<'a> {
+    /// How many argument positions the call wrote, omissions included --
+    /// the oracle's `argcount`.
+    fn len(self) -> usize {
+        self.objects.len()
+    }
+
+    /// The object at 1-based `position`, unconverted, which is what a 40.x
+    /// message names.
+    fn object(self, position: usize) -> Option<ObjRef> {
+        self.objects.get(position - 1).copied().flatten()
+    }
+
+    /// Every position from 1-based `from` onwards, converted -- what a
+    /// variadic builtin walks.
+    fn values_from(self, from: usize) -> &'a [Option<ObjRef>] {
+        &self.values[from - 1..]
+    }
 }
 
 /// The 40.x incorrect-call checks every builtin shares, in the order the
@@ -845,13 +909,13 @@ const ARGUMENT_DIGITS: usize = 18;
 /// [`check_arity`] guarantees positions `1..=min` are all `Some`, having
 /// turned any omission there into 40.5, so those are the positions the
 /// `expect`ing helpers below may be asked about -- and only those.
-fn arg(args: &[Option<ObjRef>], position: usize) -> Option<ObjRef> {
-    args.get(position - 1).copied().flatten()
+fn arg(args: Args<'_>, position: usize) -> Option<ObjRef> {
+    args.values.get(position - 1).copied().flatten()
 }
 
 /// The rendered bytes of the argument at 1-based `position`, which the
 /// caller knows is present.
-fn required_string(interp: &mut Interp, args: &[Option<ObjRef>], position: usize) -> Vec<u8> {
+fn required_string(interp: &mut Interp, args: Args<'_>, position: usize) -> Vec<u8> {
     let value = arg(args, position).expect("check_arity admitted this required argument");
     interp.to_text(value).into_owned()
 }
@@ -869,20 +933,19 @@ fn required_string(interp: &mut Interp, args: &[Option<ObjRef>], position: usize
 /// **Every `&mut` call the builtin makes has to happen before this one.**
 /// That is a real constraint on the call sites and it reorders them: the
 /// numeric and pad arguments are converted first, then the strings are read.
-/// The reordering is not observable, because reading a string cannot fail --
-/// [`Interp::to_text`] is total -- so no error can change place, and the two
-/// lazy caches it fills are pure.
-fn required_render(interp: &mut Interp, args: &[Option<ObjRef>], position: usize) -> Rendered {
+/// The reordering changes no answer, because reading a string here cannot
+/// fail and cannot run Rexx code -- the required-string protocol has already
+/// converted every argument, in position order, before the body was entered
+/// (`Interp::required_string_arguments`), so what is left is
+/// [`Interp::to_text`], which is total, and the two lazy caches it fills are
+/// pure.
+fn required_render(interp: &mut Interp, args: Args<'_>, position: usize) -> Rendered {
     let value = arg(args, position).expect("check_arity admitted this required argument");
     interp.render(value)
 }
 
 /// The rendered bytes of an optional argument.
-fn optional_string(
-    interp: &mut Interp,
-    args: &[Option<ObjRef>],
-    position: usize,
-) -> Option<Vec<u8>> {
+fn optional_string(interp: &mut Interp, args: Args<'_>, position: usize) -> Option<Vec<u8>> {
     let value = arg(args, position)?;
     Some(interp.to_text(value).into_owned())
 }
@@ -897,7 +960,7 @@ fn optional_string(
 fn whole_number(
     interp: &mut Interp,
     name: &[u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
     position: usize,
 ) -> Result<Option<i64>, Failure> {
     let Some(value) = arg(args, position) else {
@@ -920,14 +983,17 @@ fn whole_number(
     {
         return Ok(Some(whole));
     }
-    // **`stringValue()` and not the string value the conversion above asked
-    // for**, which is the rule for every object substitution in an error
-    // message: `reportException` is handed the object and the catalogue
+    // **`stringValue()` on the *object*, not on the value the conversion
+    // above read**, which is the rule for every object substitution in an
+    // error message: `reportException` is handed the object and the catalogue
     // renders it. Measured, three descriptors: `substr('abcdef',(1,2))` is
     // 40.12 `found "an Array"` where `substr('abcdef',(2,))` answers `bcdef`,
     // so the same argument converts through one rendering and is quoted
-    // through the other.
-    let found = interp.string_value_text(value);
+    // through the other -- and, with the required-string protocol in front,
+    // `substr(.A, .B)` where `.B`'s class-side `makeString` answers `'x'` is
+    // 40.12 `found "The B class"` and not `found "x"`.
+    let named = args.object(position).unwrap_or(value);
+    let found = interp.string_value_text(named);
     Err(Raised::argument_not_whole(name, position, &found).into())
 }
 
@@ -936,7 +1002,7 @@ fn whole_number(
 fn pad_byte(
     interp: &mut Interp,
     name: &[u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
     position: usize,
 ) -> Result<Option<u8>, Failure> {
     let Some(value) = arg(args, position) else {
@@ -1157,11 +1223,7 @@ mod tests {
         );
     }
 
-    fn never_run(
-        _: &mut Interp,
-        _: &'static [u8],
-        _: &[Option<ObjRef>],
-    ) -> Result<ObjRef, Failure> {
+    fn never_run(_: &mut Interp, _: &'static [u8], _: Args<'_>) -> Result<ObjRef, Failure> {
         unreachable!("check_arity never runs the builtin")
     }
 

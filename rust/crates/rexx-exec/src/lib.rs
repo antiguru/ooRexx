@@ -3052,6 +3052,27 @@ struct Interp {
     ///
     /// [`elapsed_anchor`]: Interp::elapsed_anchor
     pending_elapsed_reset: bool,
+    /// Whether the required-string protocol can answer anything other than
+    /// the value it was handed -- `Interp::required_string_value`'s gate.
+    ///
+    /// **The protocol has two arming routes and this latches on either.** A
+    /// `makeString` installed by a directive is the limb that can answer a
+    /// different string; a NOSTRING trap is the limb that can refuse. With
+    /// neither, every context `provide.xml` `reqstr` lists renders exactly
+    /// what it rendered before the protocol existed, and the gate is one
+    /// load and a branch where the walk is a decode and a heap lookup.
+    ///
+    /// **Monotonic, and that is the point rather than an economy.** `SIGNAL
+    /// OFF NOSTRING` and a class whose `makeString` is never sent both leave
+    /// it set, which costs the walk and cannot change an answer -- where
+    /// clearing it would have to be right at every unwind, and a missed
+    /// clear would be a wrong answer instead of a slow one.
+    ///
+    /// `Interp::required_string_value` re-runs the walk under
+    /// `debug_assert` while this is unset and insists the value stands, so a
+    /// third arming route added without setting this reddens the debug gate
+    /// rather than answering the old string.
+    reqstr_armed: bool,
     /// The running program's own location, as `PARSE SOURCE`'s third word.
     ///
     /// The same string `run_program` was handed and `Raised::report`'s
@@ -3298,6 +3319,7 @@ impl Interp {
             random_seed: None,
             elapsed_anchor: None,
             pending_elapsed_reset: false,
+            reqstr_armed: false,
             program_path: String::new(),
             trace_cache: crate::trace::TraceMode::OFF,
         }
@@ -3951,6 +3973,7 @@ impl Interp {
         method: &MethodDirective,
     ) {
         let name = String::from_utf8_lossy(&method.name.to_ascii_uppercase()).into_owned();
+        self.arm_reqstr_for(name.as_bytes());
         let method_id = if method.class_method {
             self.classes().add_class_method(class, &name)
         } else {
@@ -4000,6 +4023,7 @@ impl Interp {
             }
         };
         for name in names {
+            self.arm_reqstr_for(&name);
             let name = String::from_utf8_lossy(&name).into_owned();
             let method_id = if attribute.class_method {
                 self.classes().add_class_method(class, &name)
@@ -4013,6 +4037,18 @@ impl Interp {
             // `setAttributes(accessFlag, protectedFlag, guardFlag)` on each
             // (`parser/DirectiveParser.cpp:1683`, `:1690`).
             self.record_access_scope(method_id, program, attribute.access, attribute.protection);
+        }
+    }
+
+    /// Arms `Interp::reqstr_armed` for a method name the required-string
+    /// protocol would send, called from every directive install that adds a
+    /// name to a class's dictionary.
+    ///
+    /// The name is the dictionary key, which is already upcased -- the two
+    /// installers derive it the way `LanguageParser::methodDirective` does.
+    fn arm_reqstr_for(&mut self, installed: &[u8]) {
+        if installed == dispatch::MAKESTRING {
+            self.reqstr_armed = true;
         }
     }
 

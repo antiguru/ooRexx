@@ -128,7 +128,7 @@
 use rexx_core::ObjRef;
 use rexx_num::Number;
 
-use super::optional_string;
+use super::{Args, optional_string};
 use crate::Interp;
 use crate::error::{Failure, Raised};
 
@@ -1003,7 +1003,7 @@ const TIME_OPTIONS2: &str = "CFHLMNOST";
 /// early check for that case.
 fn style_byte(
     interp: &mut Interp,
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
     position: usize,
     name: &[u8],
     valid: &str,
@@ -1081,7 +1081,7 @@ fn check_separator(name: &[u8], position: usize, sep: &[u8]) -> Result<(), Failu
 pub(crate) fn date(
     interp: &mut Interp,
     name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let style = style_byte(interp, args, 1, name, DATE_OPTIONS1, b'N')?;
     let indate = optional_string(interp, args, 2);
@@ -1189,7 +1189,7 @@ pub(crate) fn date(
 pub(crate) fn time(
     interp: &mut Interp,
     name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let style = style_byte(interp, args, 1, name, TIME_OPTIONS1, b'N')?;
     let intime = optional_string(interp, args, 2);

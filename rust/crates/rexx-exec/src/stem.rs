@@ -65,7 +65,7 @@
 //! program.
 
 use crate::plan::{CompoundName, TailPiece};
-use crate::{Code, Interp, Novalue};
+use crate::{Code, Failure, Interp, Novalue};
 use rexx_core::{BehaviourId, Body, Decoded, ObjRef};
 use rexx_parse::SymbolId;
 
@@ -133,20 +133,30 @@ impl Interp {
     /// [`Interp::tail_key`], building into a caller's buffer rather than a
     /// fresh one. The buffer is cleared first, so a caller may pass one that
     /// still holds an earlier key.
-    pub(crate) fn tail_key_into(&mut self, code: &Code<'_>, id: SymbolId, out: &mut Vec<u8>) {
+    pub(crate) fn tail_key_into(
+        &mut self,
+        code: &Code<'_>,
+        id: SymbolId,
+        out: &mut Vec<u8>,
+    ) -> Result<(), Failure> {
         out.clear();
-        self.append_tail_key(code, id, out);
+        self.append_tail_key(code, id, out)
     }
 
     /// [`Interp::tail_key`]'s body, appending to a caller's buffer.
-    fn append_tail_key(&mut self, code: &Code<'_>, id: SymbolId, out: &mut Vec<u8>) {
+    fn append_tail_key(
+        &mut self,
+        code: &Code<'_>,
+        id: SymbolId,
+        out: &mut Vec<u8>,
+    ) -> Result<(), Failure> {
         match code.compound(id) {
             Some(entry) => self.append_tails(&entry.tails, out),
             None => self.append_tails(&CompoundName::split(code.symbols.name(id)).tails, out),
         }
     }
 
-    pub(crate) fn tail_key(&mut self, code: &Code<'_>, id: SymbolId) -> Vec<u8> {
+    pub(crate) fn tail_key(&mut self, code: &Code<'_>, id: SymbolId) -> Result<Vec<u8>, Failure> {
         match code.compound(id) {
             Some(entry) => self.join_tails(&entry.tails),
             None => self.join_tails(&CompoundName::split(code.symbols.name(id)).tails),
@@ -164,10 +174,10 @@ impl Interp {
     /// **A piece's slot is used when it has one and its name is resolved when
     /// it does not**, and both go through `read_by_name_at`, so what a piece
     /// reads and what it derives when unset are one implementation either way.
-    fn join_tails(&mut self, tails: &[TailPiece]) -> Vec<u8> {
+    fn join_tails(&mut self, tails: &[TailPiece]) -> Result<Vec<u8>, Failure> {
         let mut key = Vec::new();
-        self.append_tails(tails, &mut key);
-        key
+        self.append_tails(tails, &mut key)?;
+        Ok(key)
     }
 
     /// [`Interp::join_tails`], appending to a caller's buffer.
@@ -175,7 +185,7 @@ impl Interp {
     /// The loop is here and the owning form above delegates to it, so the two
     /// cannot drift into building different keys -- which for this function
     /// would not be a slow path but a wrong variable.
-    fn append_tails(&mut self, tails: &[TailPiece], key: &mut Vec<u8>) {
+    fn append_tails(&mut self, tails: &[TailPiece], key: &mut Vec<u8>) -> Result<(), Failure> {
         for (index, piece) in tails.iter().enumerate() {
             if index > 0 {
                 key.push(b'.');
@@ -199,10 +209,18 @@ impl Interp {
                          give its name"
                     );
                     let value = self.read_by_name_at(name, *at);
+                    // **A substituted tail is a `reqstr` context**, and its
+                    // own one: `RexxInternalObject::copyIntoTail` converts
+                    // with `requestString()` (`classes/ObjectClass.cpp:1204`)
+                    // rather than rendering. Measured, oracle rc 0:
+                    // `a.MS = 'hit'; i = .K; say a.i` with a class-side
+                    // `makeString` returning `'MS'` prints `hit`.
+                    let value = self.required_string_value(value)?;
                     self.write_text(value, key);
                 }
             }
         }
+        Ok(())
     }
 
     /// Reads a variable by name alone, the same slot machinery `read` uses
@@ -1019,7 +1037,9 @@ mod tests {
 
         let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
         let code = crate::planned_code(&program, &plan);
-        let key = interp.tail_key(&code, id);
+        let key = interp
+            .tail_key(&code, id)
+            .expect("the tail pieces are strings");
         assert_eq!(key, b"I");
 
         let x = interp.text(b"x");
@@ -1047,7 +1067,9 @@ mod tests {
 
         let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
         let code = crate::planned_code(&program, &plan);
-        let key = interp.tail_key(&code, id);
+        let key = interp
+            .tail_key(&code, id)
+            .expect("the tail pieces are strings");
         assert_eq!(key, b"abc");
 
         let val = interp.text(b"val");
@@ -1078,7 +1100,9 @@ mod tests {
 
         let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
         let code = crate::planned_code(&program, &plan);
-        let key = interp.tail_key(&code, id);
+        let key = interp
+            .tail_key(&code, id)
+            .expect("the tail pieces are strings");
         assert_eq!(key, b"1.2");
 
         let deep = interp.text(b"deep");
@@ -1092,7 +1116,9 @@ mod tests {
         let (program2, id2) = parse_compound(b"say a.1.2");
         let plan2 = Plan::build(&program2.main, &program2.symbols, Some(&program2.source));
         let code2 = crate::planned_code(&program2, &plan2);
-        let key2 = interp.tail_key(&code2, id2);
+        let key2 = interp
+            .tail_key(&code2, id2)
+            .expect("the tail pieces are strings");
         assert_eq!(key2, key);
 
         let value = interp.stem_get(b"A.", &key2).0;

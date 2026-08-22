@@ -41,6 +41,14 @@ pub struct ClassRegistry {
     names: HashMap<ObjRef, String>,
     /// `~defaultName`, keyed by identity -- see [`ClassRegistry::default_name`].
     default_names: HashMap<ObjRef, String>,
+    /// `~objectName=`'s store for a class object, keyed by identity, holding
+    /// only the classes something has renamed.
+    ///
+    /// Separate from `default_names` because `~defaultName` keeps answering
+    /// the declared form after a rename, and because a class identity is the
+    /// one handle the arena does not hold, so there is no object to put the
+    /// name in -- every other renameable object carries its own.
+    object_names: HashMap<ObjRef, String>,
     /// Uppercased name -> identity, the registry's own lookup direction --
     /// oracle's `TheEnvironment->put(classObj, getUpperGlobalName(name))`.
     by_name: HashMap<String, ObjRef>,
@@ -60,6 +68,7 @@ impl ClassRegistry {
             next_method: 0,
             names: HashMap::new(),
             default_names: HashMap::new(),
+            object_names: HashMap::new(),
             by_name: HashMap::new(),
         }
     }
@@ -166,6 +175,24 @@ impl ClassRegistry {
     /// a freshly built string.
     pub fn default_name(&self, class: ObjRef) -> &str {
         &self.default_names[&class]
+    }
+
+    /// `~objectName` for a class object: what `~objectName=` last stored, or
+    /// [`Self::default_name`] for a class nothing has renamed.
+    ///
+    /// This is `RexxObject::stringValue`'s answer and so the bytes `SAY`
+    /// prints, which is why the rename is visible through every rendering of
+    /// the class object and not only through the `~objectName` message.
+    pub fn object_name(&self, class: ObjRef) -> &str {
+        match self.object_names.get(&class) {
+            Some(name) => name,
+            None => self.default_name(class),
+        }
+    }
+
+    /// `~objectName=` for a class object.
+    pub fn set_object_name(&mut self, class: ObjRef, name: &str) {
+        self.object_names.insert(class, name.to_string());
     }
 
     /// Every class this registry answers [`Self::lookup`] for, as

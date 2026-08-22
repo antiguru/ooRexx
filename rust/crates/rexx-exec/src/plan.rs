@@ -1819,7 +1819,9 @@ mod tests {
         let code = planned_code(&program, &plan);
         // Unset, so the piece derives its own spelling -- the ordinary
         // uninitialised read, reached here through `extra` and growth.
-        let key = interp.tail_key(&code, id);
+        let key = interp
+            .tail_key(&code, id)
+            .expect("the tail pieces are strings");
         assert_eq!(key, b"ZI");
         assert!(
             interp.activation().extra.contains_key(b"ZI".as_slice()),
@@ -1882,7 +1884,9 @@ mod tests {
         // Nothing has been written, so the tail derives its own name from the
         // read site's spelling -- the ordinary uninitialised compound read,
         // reached here through `extra` and growth.
-        let key = interp.tail_key(&code, id);
+        let key = interp
+            .tail_key(&code, id)
+            .expect("the tail pieces are strings");
         let (value, novalue) = interp.stem_get_at(stem_name, stem_at, &key);
         assert_eq!(novalue, Novalue::Unset);
         assert_eq!(&*interp.to_text(value), b"ZA.ZI");
@@ -1973,7 +1977,9 @@ mod tests {
 
         let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
         let code = planned_code(&program, &plan);
-        let key = interp.tail_key(&code, id);
+        let key = interp
+            .tail_key(&code, id)
+            .expect("the tail pieces are strings");
         assert_eq!(key, b"2");
         // `A.` shares its "2" slot with the plain variable `B`'s value,
         // through `a.2`'s own key, which is exactly what `key` resolved to.
@@ -2072,7 +2078,9 @@ mod tests {
 
         let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
         let code = planned_code(&program, &plan);
-        let key = interp.tail_key(&code, id);
+        let key = interp
+            .tail_key(&code, id)
+            .expect("the tail pieces are strings");
         // The tail VALUE "abc" survives verbatim, lowercase and all -- not
         // upcased to "ABC", which is the distinct rule D15a states.
         assert_eq!(key, b"abc");

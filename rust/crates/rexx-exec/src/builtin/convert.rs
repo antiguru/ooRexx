@@ -110,7 +110,8 @@
 use rexx_core::ObjRef;
 
 use super::{
-    arg, buffer, fresh_buffer, length_of, optional_string, pad_byte, required_string, whole_number,
+    Args, arg, buffer, fresh_buffer, length_of, optional_string, pad_byte, required_string,
+    whole_number,
 };
 use crate::Interp;
 use crate::error::{Failure, Notation, Raised};
@@ -256,7 +257,7 @@ fn pack_hex(text: &[u8]) -> Result<Vec<u8>, Failure> {
 fn bit_operation(
     interp: &mut Interp,
     name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
     operation: fn(u8, u8) -> u8,
     default_pad: u8,
 ) -> Result<ObjRef, Failure> {
@@ -287,7 +288,7 @@ fn bit_operation(
 pub(crate) fn bitand(
     interp: &mut Interp,
     name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     bit_operation(interp, name, args, |a, b| a & b, 0xff)
 }
@@ -296,7 +297,7 @@ pub(crate) fn bitand(
 pub(crate) fn bitor(
     interp: &mut Interp,
     name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     bit_operation(interp, name, args, |a, b| a | b, 0x00)
 }
@@ -305,7 +306,7 @@ pub(crate) fn bitor(
 pub(crate) fn bitxor(
     interp: &mut Interp,
     name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     bit_operation(interp, name, args, |a, b| a ^ b, 0x00)
 }
@@ -316,7 +317,7 @@ pub(crate) fn bitxor(
 pub(crate) fn c2x(
     interp: &mut Interp,
     _name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     // Saturating rather than checked: a length that doubles past `usize` can
@@ -333,7 +334,7 @@ pub(crate) fn c2x(
 pub(crate) fn x2c(
     interp: &mut Interp,
     _name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let packed = pack_hex(&string)?;
@@ -344,7 +345,7 @@ pub(crate) fn x2c(
 pub(crate) fn x2b(
     interp: &mut Interp,
     _name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     if string.is_empty() {
@@ -365,7 +366,7 @@ pub(crate) fn x2b(
 pub(crate) fn b2x(
     interp: &mut Interp,
     _name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     if string.is_empty() {
@@ -458,7 +459,7 @@ fn render_decimal(accumulator: &[u8], negative: bool) -> Vec<u8> {
 fn x2d_c2d(
     interp: &mut Interp,
     name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
     character: bool,
 ) -> Result<ObjRef, Failure> {
     let digits = current_digits(interp);
@@ -566,7 +567,7 @@ fn x2d_c2d(
 pub(crate) fn c2d(
     interp: &mut Interp,
     name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     x2d_c2d(interp, name, args, true)
 }
@@ -575,7 +576,7 @@ pub(crate) fn c2d(
 pub(crate) fn x2d(
     interp: &mut Interp,
     name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     x2d_c2d(interp, name, args, false)
 }
@@ -742,7 +743,7 @@ fn has_significant_decimals(value: &Decimal, digits: u64) -> bool {
 fn d2x_d2c(
     interp: &mut Interp,
     name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
     character: bool,
 ) -> Result<ObjRef, Failure> {
     let digits = current_digits(interp);
@@ -863,7 +864,7 @@ fn d2x_d2c(
 pub(crate) fn d2x(
     interp: &mut Interp,
     name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     d2x_d2c(interp, name, args, false)
 }
@@ -872,7 +873,7 @@ pub(crate) fn d2x(
 pub(crate) fn d2c(
     interp: &mut Interp,
     name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     d2x_d2c(interp, name, args, true)
 }
@@ -961,7 +962,7 @@ impl Piece {
 pub(crate) fn xrange(
     interp: &mut Interp,
     name: &'static [u8],
-    args: &[Option<ObjRef>],
+    args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let count = args.len();
     let mut pieces: Vec<Piece> = Vec::new();

@@ -1712,7 +1712,7 @@ impl Interp {
                     Some(expression) => Some(self.eval(code, expression)?),
                     None => None,
                 };
-                self.say_evaluated(value);
+                self.say_evaluated(value)?;
                 Ok(Flow::Next)
             }
 
@@ -1801,6 +1801,14 @@ impl Interp {
             InstructionKind::Interpret { expression } => {
                 let value = self.eval(code, expression)?;
                 self.roots.push_temp(value);
+                // `evaluateStringExpression` (`instructions/RexxInstruction
+                // .cpp:257`), which is the one `requestString` `SAY`, `PUSH`,
+                // `QUEUE`, `INTERPRET` and `OPTIONS` share -- so the `>>>`
+                // below traces the conversion, measured: `trace r` over
+                // `interpret .K` with a class-side `makeString` returning
+                // `'nop'` prints `>>>   "nop"` and then the fragment's own
+                // `*-* nop`.
+                let value = self.required_string_value(value)?;
                 let text = self.to_text(value).to_vec();
                 // `>>>` on the interpreted text itself, before the fragment
                 // runs -- the same `trace_result` every other value-producing
@@ -2454,6 +2462,12 @@ impl Interp {
                 rexx_parse::Call::Dynamic { target, args } => {
                     let value = self.eval(code, target)?;
                     self.roots.push_temp(value);
+                    // `targetName = evaluatedTarget->requestString()`
+                    // (`instructions/CallInstruction.cpp:296`), before the
+                    // `>>>` below: measured, `trace r` over `call (.K)` with a
+                    // class-side `makeString` returning `'MS'` traces
+                    // `>>>   "MS"` and runs `MS:`.
+                    let value = self.required_string_value(value)?;
                     let name = self.to_text(value).to_vec();
                     // Its own `>>>`, at the `CALL` clause's own indent, which
                     // `Call::Named` has no equivalent of -- measured, `call
@@ -2578,7 +2592,7 @@ impl Interp {
                 } else {
                     QueueKeyword::Queue
                 };
-                self.queue_evaluated(value, keyword);
+                self.queue_evaluated(value, keyword)?;
                 Ok(Flow::Next)
             }
 
@@ -2972,6 +2986,14 @@ impl Interp {
                     let name = code.symbols.name(*id).as_bytes().into();
                     self.bind_exposed(owner, scope, name)?;
                     let (value, _novalue) = self.read(code, *id);
+                    // `IndirectVariableReference::evaluate`'s own
+                    // `value->requestString()`
+                    // (`expression/IndirectVariableReference.cpp:132`), so a
+                    // selector holding an object spells its list from the
+                    // conversion. Measured, oracle rc 0: `zz = 1; x = .K;
+                    // drop (x)` with a class-side `makeString` returning
+                    // `'zz'` leaves `SYMBOL('ZZ')` at `LIT`.
+                    let value = self.required_string_value(value)?;
                     let text = self.to_text(value).into_owned();
                     for word in split_indirect_words(&text) {
                         let word = validate_indirect_word(word)?;
@@ -3079,6 +3101,7 @@ impl Interp {
                     // The selector itself, then the names its value spells.
                     names.push(code.symbols.name(*id).as_bytes().into());
                     let (value, _novalue) = self.read(code, *id);
+                    let value = self.required_string_value(value)?;
                     let text = self.to_text(value).into_owned();
                     for word in split_indirect_words(&text) {
                         names.push(validate_indirect_word(word)?.into());
@@ -3453,11 +3476,21 @@ impl Interp {
     /// the two annotations were measured together.
     ///
     /// [`Interp::assign_evaluated`]: Interp::assign_evaluated
+    /// **Fallible since the required-string protocol reaches it**, which is
+    /// what makes `SAY` a `reqstr` dispatch site: an object with no string
+    /// value under a NOSTRING trap leaves through the `?` below, printing
+    /// nothing. Measured, oracle rc 0 under `signal on nostring`: `say
+    /// .environment` runs the handler and prints no line.
+    ///
+    /// **The `>>>` traces the converted string**, which is why the conversion
+    /// is above it: measured, `trace r` over `say .K` with a class-side
+    /// `makeString` returning `2` prints `>>>   "2"`.
     #[inline]
-    pub(crate) fn say_evaluated(&mut self, value: Option<ObjRef>) {
+    pub(crate) fn say_evaluated(&mut self, value: Option<ObjRef>) -> Result<(), Failure> {
         let line = match value {
             Some(value) => {
                 self.roots.push_temp(value);
+                let value = self.required_string_value(value)?;
                 self.to_text(value).to_vec()
             }
             None => Vec::new(),
@@ -3465,6 +3498,7 @@ impl Interp {
         self.trace_result(self.clause_state.current_value_indent, &line);
         self.out.extend_from_slice(&line);
         self.out.push(b'\n');
+        Ok(())
     }
 
     /// Everything a `RETURN` or an `EXIT` does once its expression has been
@@ -3534,10 +3568,19 @@ impl Interp {
     /// and `None` queues a null string traced as one rather than being a
     /// skipped clause. Reading a line back is `Interp::pull_line`'s
     /// (`input.rs`), not this function's.
-    pub(crate) fn queue_evaluated(&mut self, value: Option<ObjRef>, keyword: QueueKeyword) {
+    pub(crate) fn queue_evaluated(
+        &mut self,
+        value: Option<ObjRef>,
+        keyword: QueueKeyword,
+    ) -> Result<(), Failure> {
         let line = match value {
             Some(value) => {
                 self.roots.push_temp(value);
+                // `evaluateStringExpression` again, so the `>>>` below traces
+                // the conversion: measured, `trace r` over `push .K` with a
+                // class-side `makeString` returning `'pv'` prints
+                // `>>>   "pv"` and `pull` reads `PV`.
+                let value = self.required_string_value(value)?;
                 self.to_text(value).to_vec()
             }
             None => Vec::new(),
@@ -3547,6 +3590,7 @@ impl Interp {
             QueueKeyword::Push => self.queue.push(line),
             QueueKeyword::Queue => self.queue.queue(line),
         }
+        Ok(())
     }
 
     /// Everything one assignment does once its value has been evaluated:
@@ -3769,7 +3813,10 @@ impl Interp {
                 let tag = code.symbols.name(*id).as_bytes();
                 let (stem_name, stem_at) = code.stem(*id);
                 let mut key = self.take_key_buffer();
-                self.tail_key_into(code, *id, &mut key);
+                if let Err(failure) = self.tail_key_into(code, *id, &mut key) {
+                    self.give_key_buffer(key);
+                    return Err(failure);
+                }
                 self.stem_set_at(stem_name, stem_at, &key, value);
                 // **The resolved name is built only when a line will print
                 // it.** `trace_compound_name` returns at once unless
@@ -3897,6 +3944,15 @@ impl Interp {
     ) -> Result<Flow, Failure> {
         match &trap.label {
             Some(label) => {
+                // The required-string protocol's other arming route: a
+                // NOSTRING trap is what turns an object with no string value
+                // from a rendering into a raise. `ANY` counts, measured --
+                // `signal on any` over `say .environment` runs the handler
+                // with `CONDITION('C')` `NOSTRING`. See
+                // `Interp::reqstr_armed` for why this only ever sets.
+                if matches!(&trap.condition[..], b"NOSTRING" | b"ANY") {
+                    self.reqstr_armed = true;
+                }
                 let entry = Trap {
                     call,
                     label: std::rc::Rc::from(label.as_ref()),
@@ -4901,7 +4957,20 @@ impl Interp {
     /// below can collect.
     pub(crate) fn signal_to_value(&mut self, value: ObjRef) -> Result<Flow, Failure> {
         let text = self.to_text(value).to_vec();
+        // `>K>` names the object and the search reads the conversion, which
+        // is `RexxInstructionDynamicSignal::execute`'s own order:
+        // `traceKeywordResult(VALUE, result)` and then
+        // `result->requestString()` (`instructions/SignalInstruction.cpp:217`
+        // -`:219`). Measured, oracle rc 240: `signal value .K` with a
+        // class-side `makeString` returning `'NOSUCH'` reports `Label
+        // "NOSUCH" not found.`, so 16.1 names the conversion where NUMERIC's
+        // own errors name the object.
         self.trace_keyword(self.clause_state.current_value_indent, "VALUE", &text);
+        let converted = self.required_string_value(value)?;
+        if converted == value {
+            return self.signal_to_label(&text);
+        }
+        let text = self.to_text(converted).to_vec();
         self.signal_to_label(&text)
     }
 
@@ -7365,8 +7434,23 @@ impl Interp {
             // count is nearly always whole and the copy only ever reaches the
             // message: hoisting it renders and frees a string per loop header
             // to serve a branch that is not taken.
+            // **`exprf` and `exprr` are the two `reqstr` contexts in a `DO`
+            // header, and the three numeric positions above are not.**
+            // `ForLoop::setup` and `DoWhile::setup` convert with
+            // `result->requestString()->numberString()`
+            // (`instructions/DoBlockComponents.cpp:88`) where
+            // `ControlledLoop::setup` sends `callOperatorMethod(OPERATOR_PLUS)`
+            // to the value instead (`:127`), which is a message to the object
+            // and is 97.1 rather than a conversion -- `eval.rs`'s
+            // `object_operand_tests` is that half.
+            //
+            // 26.2 and 26.3 name the **object**, not the conversion:
+            // `reportException` is passed `result` (`:99`, `:106`), measured,
+            // oracle rc 230 with a class-side `makeString` returning `'xx'` --
+            // `do .K` reports `found "The K class"`.
             HeaderRole::For | HeaderRole::OverFor => {
-                values.for_remaining = Some(match self.whole_nonneg(value) {
+                let converted = self.required_string_value(value)?;
+                values.for_remaining = Some(match self.whole_nonneg(converted) {
                     Some(count) => count,
                     None => {
                         let found = self.string_value_text(value);
@@ -7375,7 +7459,8 @@ impl Interp {
                 });
             }
             HeaderRole::Count => {
-                values.count = Some(match self.whole_nonneg(value) {
+                let converted = self.required_string_value(value)?;
+                values.count = Some(match self.whole_nonneg(converted) {
                     Some(count) => count,
                     None => {
                         let found = self.string_value_text(value);
@@ -8989,7 +9074,7 @@ impl Interp {
                         }
                         NameShape::Compound => {
                             let (stem_name, stem_at) = code.stem(*control);
-                            let key = self.tail_key(code, *control);
+                            let key = self.tail_key(code, *control)?;
                             let (value, novalue) = self.stem_get_at(stem_name, stem_at, &key);
                             let mut resolved = stem_name.to_vec();
                             resolved.extend_from_slice(&key);
@@ -10103,7 +10188,7 @@ impl Interp {
                 let name = code.symbols.name(*id);
                 if shape_of(name.as_bytes()) == NameShape::Compound {
                     let (stem_name, stem_at) = code.stem(*id);
-                    let key = self.tail_key(code, *id);
+                    let key = self.tail_key(code, *id)?;
                     self.stem_drop_tail_at(stem_name, stem_at, &key);
                 } else {
                     self.drop_by_name(name.as_bytes());
@@ -10111,6 +10196,7 @@ impl Interp {
             }
             VariableRef::Indirect(id) => {
                 let (value, _novalue) = self.read(code, *id);
+                let value = self.required_string_value(value)?;
                 let text = self.to_text(value).into_owned();
                 let mut names = Vec::new();
                 for word in split_indirect_words(&text) {
@@ -10225,6 +10311,11 @@ impl Interp {
             Trace::Value(expression) => {
                 let value = self.eval(code, expression)?;
                 self.roots.push_temp(value);
+                // `result->requestString()` (`instructions/TraceInstruction
+                // .cpp:172`), and 24.1 names the conversion: measured, oracle
+                // rc 232, `trace value .K` with a class-side `makeString`
+                // returning `'ZZ'` reports `found "Z"`.
+                let value = self.required_string_value(value)?;
                 let text = self.to_text(value).to_vec();
                 if is_whole_number(&text) {
                     return Err(raised_numeric_trace_interactive_only().into());
@@ -10454,6 +10545,12 @@ impl Interp {
             (None, Some(expression)) => {
                 let value = self.eval(code, expression)?;
                 self.roots.push_temp(value);
+                // `_address = result->requestString()` before the `>>>`
+                // (`instructions/AddressInstruction.cpp:182`), so the trace
+                // names the conversion: measured, `trace r` over
+                // `address (.K)` with a class-side `makeString` returning
+                // `'CMD'` prints `>>>   "CMD"` and `ADDRESS()` answers `CMD`.
+                let value = self.required_string_value(value)?;
                 // Built in the lent buffer: the rendering exists only to be
                 // traced and then copied into the `Rc`, so an owned `Vec` of
                 // its own would be an allocation and a free per `ADDRESS
@@ -10482,11 +10579,14 @@ impl Interp {
         match setting {
             NumericSetting::Digits => {
                 match self.numeric_operand(code, expression, "DIGITS")? {
-                    Some(text) => {
+                    Some((operand, text)) => {
                         let parsed = String::from_utf8_lossy(&text);
                         let outcome = self.activation_mut().settings.set_digits_str(&parsed);
                         self.give_result_buffer(text);
-                        outcome.map_err(raised_from_settings)?;
+                        if let Err(error) = outcome {
+                            let named = self.to_text(operand).to_vec();
+                            return Err(raised_naming_the_operand(error, &named).into());
+                        }
                     }
                     // The reset stores the default and makes the operand
                     // form's FUZZ check against it, which is the arm the
@@ -10500,11 +10600,14 @@ impl Interp {
                 }
             }
             NumericSetting::Fuzz => match self.numeric_operand(code, expression, "FUZZ")? {
-                Some(text) => {
+                Some((operand, text)) => {
                     let parsed = String::from_utf8_lossy(&text);
                     let outcome = self.activation_mut().settings.set_fuzz_str(&parsed);
                     self.give_result_buffer(text);
-                    outcome.map_err(raised_from_settings)?;
+                    if let Err(error) = outcome {
+                        let named = self.to_text(operand).to_vec();
+                        return Err(raised_naming_the_operand(error, &named).into());
+                    }
                 }
                 None => self.activation_mut().settings.reset_fuzz(),
             },
@@ -10553,11 +10656,14 @@ impl Interp {
                 // rule for this one path, unlike the two keyword spellings
                 // above.
                 self.trace_keyword(self.clause_state.current_value_indent, "FORM", &text);
-                let text = String::from_utf8_lossy(&text).into_owned();
-                self.activation_mut()
-                    .settings
-                    .set_form_str(&text)
-                    .map_err(raised_from_settings)?;
+                // The required-string protocol between the `>K>` and the
+                // validation, which is where `requestString` sits
+                // (`instructions/NumericInstruction.cpp:175`).
+                let converted = self.required_string_value(value)?;
+                let parsed = String::from_utf8_lossy(&self.to_text(converted)).into_owned();
+                if let Err(error) = self.activation_mut().settings.set_form_str(&parsed) {
+                    return Err(raised_naming_the_operand(error, &text).into());
+                }
             }
         }
         Ok(())
@@ -10599,7 +10705,7 @@ impl Interp {
         code: &Code<'_>,
         expression: &Option<Expr>,
         keyword: &str,
-    ) -> Result<Option<Vec<u8>>, Failure> {
+    ) -> Result<Option<(ObjRef, Vec<u8>)>, Failure> {
         let Some(expression) = expression else {
             return Ok(None);
         };
@@ -10608,7 +10714,19 @@ impl Interp {
         let mut text = self.take_result_buffer();
         text.extend_from_slice(&self.to_text(value));
         self.trace_keyword(self.clause_state.current_value_indent, keyword, &text);
-        Ok(Some(text))
+        // **The required-string protocol runs after the `>K>` and its answer
+        // replaces the bytes**, which is `requestUnsignedNumber`'s own
+        // `requestString()` (`classes/ObjectClass.cpp:1077`). The trace above
+        // names the object and the parse below reads the conversion --
+        // measured, `numeric digits .K` with a class-side `makeString`
+        // returning `12` traces `>K>   "DIGITS" => "The K class"` and then
+        // answers `12` to `DIGITS()`.
+        let converted = self.required_string_value(value)?;
+        if converted != value {
+            text.clear();
+            text.extend_from_slice(&self.to_text(converted));
+        }
+        Ok(Some((value, text)))
     }
 
     /// `instruction`'s own clause text and the 1-based line to print it against,
@@ -11733,6 +11851,33 @@ fn raise_syntax_condition(text: &[u8], additional: Vec<Vec<u8>>) -> Raised {
 /// stays on the borrowed side.
 fn condition_name(name: &[u8]) -> Cow<'static, str> {
     Cow::Owned(String::from_utf8_lossy(name).into_owned())
+}
+
+/// [`raised_from_settings`] with the operand's own rendering in place of the
+/// string the required-string protocol converted it to.
+///
+/// `RexxInstructionNumeric::execute` reports **`result`** -- the value the
+/// expression produced -- at each of `Error_Invalid_whole_number_digits`,
+/// `Error_Invalid_whole_number_fuzz` and `Error_Invalid_subkeyword_form`
+/// (`instructions/NumericInstruction.cpp:105`, `:141`, `:189`), so a
+/// `makeString` answering something unusable is reported by the object rather
+/// than by its answer. Measured, oracle rc 230: `numeric digits .K` with a
+/// class-side `makeString` returning `'xx'` reports `found "The K class"`.
+///
+/// `FuzzNotBelowDigits` names two settings and no operand, so it keeps its
+/// own substitutions.
+fn raised_naming_the_operand(error: SettingsError, operand: &[u8]) -> Raised {
+    let names_the_operand = matches!(
+        error,
+        SettingsError::InvalidForm { .. }
+            | SettingsError::DigitsNotWhole { .. }
+            | SettingsError::FuzzNotWhole { .. }
+    );
+    let mut raised = raised_from_settings(error);
+    if names_the_operand {
+        raised.additional = vec![operand.to_vec()];
+    }
+    raised
 }
 
 fn raised_from_settings(error: SettingsError) -> Raised {

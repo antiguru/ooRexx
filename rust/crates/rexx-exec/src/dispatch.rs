@@ -672,9 +672,26 @@ impl Interp {
     /// keeps a class object off their hot path. A guard testing every heap
     /// operand instead measured 73 instructions per pass of the `strings`
     /// benchmark axis, on a program that names no class at all.
+    ///
+    /// **`~objectName` and not `~defaultName`**, which is what
+    /// `RexxObject::stringValue` sends (`classes/ObjectClass.cpp:1157`): a
+    /// class object something has renamed renders under the new name.
+    /// Measured, oracle rc 0: after `.K~objectName = "renamed"`, `say .K`
+    /// prints `renamed`.
     pub(crate) fn not_in_arena(&self, value: ObjRef) -> &[u8] {
         assert!(value.class_id().is_some(), "a live value");
-        self.class_default_name(value)
+        self.class_object_name(value)
+    }
+
+    /// `~objectName` for a class object, which is [`Interp::class_default_name`]
+    /// until `~objectName=` stores one.
+    pub(crate) fn class_object_name(&self, class: ObjRef) -> &[u8] {
+        self.object_model
+            .as_ref()
+            .expect("a class handle can only have come from the object model")
+            .classes
+            .object_name(class)
+            .as_bytes()
     }
 
     /// `~defaultName` for a class object -- `The <id> class` -- borrowed out
@@ -1675,16 +1692,281 @@ impl Interp {
     }
 }
 
-/// Whether a value has **no** string value, which is what the oracle raises
-/// 88.909 for at an argument that must be text.
+/// The message `Object~request("STRING")` looks for, and the one limb of the
+/// required-string protocol a program can write.
+pub(crate) const MAKESTRING: &[u8] = b"MAKESTRING";
+
+/// What a value's own string value is, before the protocol's fallbacks: the
+/// value itself, the object a `makeString` answered, or nothing.
 ///
-/// `stringArgument` (`runtime/MethodArguments.hpp:136`) reaches
-/// `RexxInternalObject::requiredString` (`classes/ObjectClass.cpp:1373`),
-/// which asks the argument for `makeString()` and raises when that answers
-/// `.nil`. Only the string-valued primitives answer it, so every value shape
-/// a program can put in this argument position is 88.909 there except a
-/// string, a number, and a stem standing for one. Measured, three descriptors
-/// against the oracle:
+/// The `Array` arm is why this is a value rather than a `bool`: an array's
+/// string value is its items joined, which is built and stored nowhere, so a
+/// caller that wants it has to be handed the built object.
+enum StringConversion {
+    /// `primitiveMakeString` answered, and this is what it answered.
+    Primitive(ObjRef),
+    /// The receiver's behaviour has a `makeString` to send.
+    MakeString,
+    /// Neither, which is `.nil` from `requestString`'s point of view.
+    None,
+}
+
+impl Interp {
+    /// The required-string protocol, D52: `request("STRING")`, then the
+    /// receiver's `makeString`, then the NOSTRING condition if trapped, else
+    /// `defaultName`. **This is the value every context `provide.xml`
+    /// `reqstr` lists renders, and rendering it without coming through here
+    /// is the silent wrong answer the protocol exists to prevent.**
+    ///
+    /// `RexxInternalObject::requestString` (`classes/ObjectClass.cpp:1235`).
+    /// The answer is a *value*, not bytes, so the caller renders it with the
+    /// same [`Interp::to_text`] it always did and nothing on the rendering
+    /// path becomes fallible.
+    ///
+    /// **The latch is what keeps this off the hot path.** With no
+    /// `makeString` installed anywhere and no NOSTRING trap ever armed, the
+    /// protocol's first limb cannot answer differently from the value itself
+    /// and its third cannot fire, so the value stands and the whole of the
+    /// walk below is skipped. A debug build runs the walk anyway and insists
+    /// it agrees, which is the check that would catch a latch that misses an
+    /// arming route -- see [`Interp::reqstr_armed`].
+    ///
+    /// [`Interp::reqstr_armed`]: crate::Interp::reqstr_armed
+    #[inline]
+    pub(crate) fn required_string_value(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
+        if self.reqstr_armed {
+            return self.required_string_dispatch(value);
+        }
+        debug_assert!(
+            matches!(self.required_string_dispatch(value), Ok(same) if same == value),
+            "the required-string latch is off where the protocol would change the value"
+        );
+        Ok(value)
+    }
+
+    /// **The answer is rooted here and not at the call sites.** A `makeString`
+    /// can allocate and can collect, and both fallbacks below build a string
+    /// of their own, so every value this returns is one the caller did not
+    /// have a root for. Rooting once, on the arm that can produce a fresh
+    /// object, is what keeps the gate above free of a temp push per rendered
+    /// value.
+    #[cold]
+    #[inline(never)]
+    fn required_string_dispatch(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
+        if let Some(text) = self.string_conversion(value)? {
+            self.roots.push_temp(text);
+            return Ok(text);
+        }
+        // `sendMessage(STRING)`, which for every value this phase builds is
+        // `stringValue()` -- `Interp::string_value_text`'s own doc says which
+        // question that is.
+        let readable = self.string_value_text(value);
+        // Gated on the trap rather than raised unconditionally, the shape
+        // `Interp::novalue_raised` describes: an untrapped NOSTRING resumes
+        // with the readable rendering, so a raise nothing can take would
+        // build a condition per rendered object and then throw it away. A
+        // `CALL ON` trap is excluded because `CALL ON NOSTRING` is a parse
+        // error and `CALL ON ANY` is measured not to catch a condition with
+        // no resumption point.
+        if self.trap_for(b"NOSTRING").is_some_and(|trap| !trap.call) {
+            return Err(Raised::nostring(&readable).into());
+        }
+        let readable = self.text_built(readable);
+        self.roots.push_temp(readable);
+        Ok(readable)
+    }
+
+    /// Every supplied argument of one builtin call, in position order,
+    /// through the required-string protocol -- `None` when the protocol
+    /// cannot change any of them, so the caller passes its own list on.
+    ///
+    /// **`provide.xml` `reqstr` names "arguments to built-in functions"
+    /// wholesale, and the oracle converts each as the builtin fetches it**
+    /// (`ExpressionStack::requiredStringArgument`,
+    /// `expression/ExpressionStack.cpp:152`). Converting them all up front
+    /// reproduces the order every fetch that follows position order sees, and
+    /// it reaches an argument the builtin never uses -- which the oracle also
+    /// converts, measured: `substr('abc', 1, 2, .P)` with a class-side
+    /// `makeString` on `.P` prints `pad asked` even though the pad is not
+    /// needed, at rc 0.
+    ///
+    /// **After the 40.x count checks and before the builtin's own argument
+    /// validation**, measured on both sides of that line: `date('S', , .Z)`
+    /// prints `Z asked` and *then* raises 40.5, while
+    /// `substr(.A, .B)` with `.B` answering `'x'` converts both and then
+    /// raises 40.12 naming `The B class` -- an argument's own error names the
+    /// object, because the oracle's error path has the object in hand and not
+    /// the conversion.
+    pub(crate) fn required_string_arguments(
+        &mut self,
+        args: &[Option<ObjRef>],
+    ) -> Result<Option<Vec<Option<ObjRef>>>, Failure> {
+        if !self.reqstr_armed {
+            return Ok(None);
+        }
+        let mut converted = Vec::with_capacity(args.len());
+        for argument in args {
+            converted.push(match argument {
+                None => None,
+                Some(value) => Some(self.required_string_value(*value)?),
+            });
+        }
+        Ok(Some(converted))
+    }
+
+    /// `RexxInternalObject::requiredString()` (`classes/ObjectClass.cpp:1341`):
+    /// the protocol's conversion limbs alone, with **no** `~string` fallback
+    /// and **no** NOSTRING condition. `None` is the oracle's `.nil`.
+    ///
+    /// This is what a method argument that must be text gets
+    /// ([`required_string_argument`]) and what `Object~request("STRING")`
+    /// answers.
+    pub(crate) fn string_conversion(&mut self, value: ObjRef) -> Result<Option<ObjRef>, Failure> {
+        match self.classify_string_conversion(value) {
+            StringConversion::Primitive(text) => Ok(Some(text)),
+            StringConversion::None => Ok(None),
+            StringConversion::MakeString => {
+                let answered = self.send_make_string(value)?;
+                // `string_value = string_value->primitiveMakeString()`
+                // (`:1257`, `:1353`): what `makeString` answered has to be a
+                // real string, and an object that is not one converts here or
+                // counts as no answer at all. Measured, oracle rc 0 on
+                // `say .K` with a class-side `makeString`: `return 5` prints
+                // `5`, `return .Object~superClasses` prints the empty line
+                // an empty array joins to, and `return .array` prints
+                // `The K class` -- the third fell back.
+                Ok(match answered {
+                    Some(answered) => match self.classify_string_conversion(answered) {
+                        StringConversion::Primitive(text) => Some(text),
+                        StringConversion::MakeString | StringConversion::None => None,
+                    },
+                    None => None,
+                })
+            }
+        }
+    }
+
+    /// Which limb of the protocol answers for `value`.
+    ///
+    /// **`primitiveMakeString` is asked first, where the oracle asks
+    /// `isBaseClass()` first**, and the two split the same set for every
+    /// value this phase builds: the receivers whose `MAKESTRING` is a
+    /// [`NativeMethod`] are exactly the primitives whose
+    /// `primitiveMakeString` answers the same bytes -- a string, a number and
+    /// an array -- so taking the primitive answer is the oracle's own
+    /// shortcut and reaches the same string without a send. The only
+    /// `MAKESTRING` a program can install is a Rexx one, and it can only be
+    /// installed on a receiver no arm below answers for.
+    fn classify_string_conversion(&mut self, value: ObjRef) -> StringConversion {
+        let redirect = match value.decode() {
+            Decoded::Nil => return self.make_string_or_none(value),
+            // `RexxString::primitiveMakeString` and
+            // `RexxInteger::primitiveMakeString`: a string and a number are
+            // their own string value.
+            Decoded::SmallInt(_) | Decoded::Text(_) => {
+                return StringConversion::Primitive(value);
+            }
+            // Asked before the arena is, for the reason `receiver_kind`
+            // gives: a class identity is heap-tagged and names no slot.
+            Decoded::Heap { .. } if value.class_id().is_some() => {
+                return self.make_string_or_none(value);
+            }
+            Decoded::Heap { .. } => match self.heap.get(value) {
+                // A handle whose slot is gone, which `Interp::to_text` turns
+                // into its own tripwire. Answering the value keeps that the
+                // one report rather than adding a second.
+                None => return StringConversion::Primitive(value),
+                Some(object) => match &object.body {
+                    Body::Text { .. } | Body::Num { .. } => {
+                        return StringConversion::Primitive(value);
+                    }
+                    // `StemClass::makeString` forwards to the default value,
+                    // and a stem holding none is its own derived name, which
+                    // is what `to_text` renders for it.
+                    Body::Stem { default: None, .. } => {
+                        return StringConversion::Primitive(value);
+                    }
+                    Body::Stem {
+                        default: Some(default),
+                        ..
+                    } => Some(*default),
+                    // `ArrayClass::makeString` (`classes/ArrayClass.cpp:1841`),
+                    // the items joined by a newline -- **not**
+                    // `stringValue()`, which is `an Array`.
+                    Body::Array(_) => None,
+                    _ => return self.make_string_or_none(value),
+                },
+            },
+        };
+        match redirect {
+            Some(default) => self.classify_string_conversion(default),
+            None => {
+                let joined = self.string_conversion_array_text(value);
+                StringConversion::Primitive(self.text_built(joined))
+            }
+        }
+    }
+
+    /// [`Interp::classify_string_conversion`]'s array arm, split out so the
+    /// borrow of the heap object above ends before the join runs.
+    fn string_conversion_array_text(&mut self, value: ObjRef) -> Vec<u8> {
+        let items = self.array_slots_of(value).unwrap_or_default();
+        self.array_string(&items, b"\n")
+    }
+
+    /// Whether the receiver's own behaviour answers `MAKESTRING`.
+    ///
+    /// `RexxObject::requestRexx` (`classes/ObjectClass.cpp:1912`) forms
+    /// `MAKE` + the class name and asks `behaviour->methodLookup` for it --
+    /// the unchecked lookup, so a `PRIVATE makeString` is found here and
+    /// refused by the send, which is that function's own order. A receiver
+    /// this phase builds no behaviour for has none to ask and answers
+    /// nothing.
+    fn make_string_or_none(&mut self, value: ObjRef) -> StringConversion {
+        match self.lookup(value, MAKESTRING, None) {
+            Some(_) => StringConversion::MakeString,
+            None => StringConversion::None,
+        }
+    }
+
+    /// Sends `makeString` on the receiver's behalf, under the traceback frame
+    /// the oracle's own `REQUEST` activation contributes.
+    ///
+    /// **The frame is `REQUEST`'s and not `MAKESTRING`'s**, measured: with a
+    /// class-side `makeString` whose body is `return 1/0`, `say .K~makeString`
+    /// reports the failing clause and then the sending clause, while
+    /// `say .K` and `say length(.K)` put
+    /// `*-* Compiled method "REQUEST" with scope "Object".` between them.
+    /// `requestString` reaches `makeString` through
+    /// `sendMessage(GlobalNames::REQUEST, GlobalNames::STRING)` (`:1256`),
+    /// and that native activation is what owns the line.
+    fn send_make_string(&mut self, receiver: ObjRef) -> Result<Option<ObjRef>, Failure> {
+        // The sending side is the frame the conversion happens in, not the
+        // conversion itself: `checkPrivate` asks
+        // `getTopStackFrame()->getReceiver()`, and `requestString` runs no
+        // frame of its own that could answer that question differently.
+        let caller = self.caller();
+        let sent = self.send_message(receiver, MAKESTRING, None, &[], caller);
+        if sent.is_err() {
+            self.blame_native_method(b"REQUEST", "Object");
+        }
+        sent
+    }
+}
+
+/// `RexxInternalObject::requiredString(position)`
+/// (`classes/ObjectClass.cpp:1373`): a method argument the method needs as
+/// text, converted through the required-string protocol, or 88.909 for a
+/// value that has no string value at all.
+///
+/// This is `stringArgument` (`runtime/MethodArguments.hpp:136`), which is
+/// `provide.xml` `reqstr`'s "for all other methods" rule: `request("STRING")`
+/// and an error when it answers `.nil`. **`~string` and the NOSTRING
+/// condition are `requestString`'s limbs and not this one's** --
+/// `requiredString` stops where the conversion fails, which is why an object
+/// with no string value is an error here and a readable rendering in a `SAY`.
+///
+/// Measured, three descriptors against the oracle:
 ///
 /// ```text
 /// 'abc'~hasMethod(5)                oracle `0` rc 0    a number has one
@@ -1696,34 +1978,38 @@ impl Interp {
 /// a. = .nil;   'abc'~hasMethod(a.)  oracle 88.909 rc 168
 /// ```
 ///
+/// and the row a `makeString` puts on the other side of that line: with
+/// `::CLASS K` plus `::METHOD makeString CLASS` returning `'LENGTH'`,
+/// `'abc'~hasMethod(.K)` is `1` at rc 0.
+///
 /// **Not [`Interp::operator_operand_gap`], and the difference is `.nil`.**
 /// That predicate passes `.nil` through as text on purpose, because an
-/// operator here compares its rendering; `requiredString` refuses it. The
-/// stem redirect is the same in both and for the same reason -- `to_text`
-/// answers a stem *as* its default, so a test stopping at the stem handle
-/// would let the last two rows above through.
+/// operator there compares its rendering; `requiredString` refuses it.
 ///
 /// **Scoped to this argument rather than to native arguments in general**:
 /// the surface where each native checks its own is owned by the phase named
 /// against the argument row in `docs/superpowers/plans/phase-4-exclusions.txt`.
-fn lacks_a_string_value(interp: &Interp, value: ObjRef) -> bool {
-    match value.decode() {
-        Decoded::Nil => true,
-        Decoded::SmallInt(_) | Decoded::Text(_) => false,
-        // Asked before the arena is, for the reason `receiver_kind` gives:
-        // a class identity is heap-tagged and names no slot.
-        Decoded::Heap { .. } if value.class_id().is_some() => true,
-        Decoded::Heap { .. } => match interp.heap.get(value) {
-            None => false,
-            Some(object) => match &object.body {
-                Body::Native(_) => true,
-                Body::Stem {
-                    default: Some(default),
-                    ..
-                } => lacks_a_string_value(interp, *default),
-                _ => false,
-            },
-        },
+fn required_string_argument(
+    interp: &mut Interp,
+    value: ObjRef,
+    position: usize,
+) -> Result<ObjRef, Failure> {
+    match interp.string_conversion(value)? {
+        Some(text) => Ok(text),
+        None => Err(Raised::argument_needs_a_string_value(position).into()),
+    }
+}
+
+/// [`required_string_argument`] for an argument the oracle's 88.909 names
+/// rather than numbers.
+fn required_string_named_argument(
+    interp: &mut Interp,
+    value: ObjRef,
+    argument: &'static str,
+) -> Result<ObjRef, Failure> {
+    match interp.string_conversion(value)? {
+        Some(text) => Ok(text),
+        None => Err(Raised::named_argument_needs_a_string_value(argument).into()),
     }
 }
 
@@ -1732,7 +2018,7 @@ fn lacks_a_string_value(interp: &Interp, value: ObjRef) -> bool {
 /// The argument is upcased before the lookup, measured:
 /// `'abc'~hasMethod('length')` is `1`. An argument with no string value is
 /// 88.909 rather than an answer of `0`, measured -- see
-/// [`lacks_a_string_value`] for which shapes those are.
+/// [`required_string_argument`] for which shapes those are.
 fn native_has_method(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1742,9 +2028,7 @@ fn native_has_method(
     let Some(Some(argument)) = args.first().copied() else {
         return Err(Raised::missing_method_argument(1).into());
     };
-    if lacks_a_string_value(interp, argument) {
-        return Err(Raised::argument_needs_a_string_value(1).into());
-    }
+    let argument = required_string_argument(interp, argument, 1)?;
     let name = String::from_utf8_lossy(&interp.to_text(argument).to_ascii_uppercase()).into_owned();
     // **A receiver with no class here is loud, not `0`.** `send_message`
     // screens for it before any method runs, so this arm is unreachable
@@ -2010,9 +2294,7 @@ fn native_method(
     let Some(Some(argument)) = args.first().copied() else {
         return Err(Raised::missing_named_argument("method name").into());
     };
-    if lacks_a_string_value(interp, argument) {
-        return Err(Raised::named_argument_needs_a_string_value("method name").into());
-    }
+    let argument = required_string_named_argument(interp, argument, "method name")?;
     let name = interp.to_text(argument).to_ascii_uppercase();
     let class = class_receiver(interp, receiver)?;
     let found = interp
@@ -2197,9 +2479,7 @@ fn directory_index(
     let Some(Some(argument)) = args.get(position - 1).copied() else {
         return Err(Raised::missing_named_argument("index").into());
     };
-    if lacks_a_string_value(interp, argument) {
-        return Err(Raised::named_argument_needs_a_string_value("index").into());
-    }
+    let argument = required_string_named_argument(interp, argument, "index")?;
     Ok(interp.to_text(argument).to_vec())
 }
 
@@ -2268,9 +2548,7 @@ fn native_array_make_string(
     let form = match args.first().copied().flatten() {
         None => b'L',
         Some(argument) => {
-            if lacks_a_string_value(interp, argument) {
-                return Err(Raised::argument_needs_a_string_value(1).into());
-            }
+            let argument = required_string_argument(interp, argument, 1)?;
             let text = interp.to_text(argument).to_vec();
             match text.first().copied().map(|byte| byte.to_ascii_uppercase()) {
                 Some(byte @ (b'L' | b'C')) => byte,
@@ -2286,9 +2564,7 @@ fn native_array_make_string(
         None if form == b'L' => b"\n".to_vec(),
         None => Vec::new(),
         Some(argument) => {
-            if lacks_a_string_value(interp, argument) {
-                return Err(Raised::argument_needs_a_string_value(2).into());
-            }
+            let argument = required_string_argument(interp, argument, 2)?;
             interp.to_text(argument).to_vec()
         }
     };

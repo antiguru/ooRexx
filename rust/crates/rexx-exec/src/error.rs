@@ -1507,6 +1507,32 @@ impl Raised {
         }
     }
 
+    /// The `NOSTRING` condition the required-string protocol raises when the
+    /// receiver has no string value and something is armed to take it.
+    ///
+    /// `readable` is the rendering the protocol was about to use, which is
+    /// `stringValue()`, and it is the condition's description. Measured,
+    /// oracle rc 0 under `signal on nostring` over `say .array`:
+    /// `CONDITION('C')` `NOSTRING`, `CONDITION('D')` `The Array class`,
+    /// `CONDITION('E')` the null string and `RC` untouched.
+    ///
+    /// **There is no catalogue entry beneath this one**, unlike `NOMETHOD`'s:
+    /// an untrapped NOSTRING is not an error at all --
+    /// `Activity::raiseCondition` returns and the rendering is used
+    /// (`classes/ObjectClass.cpp:1249`, `:1284`) -- which is why
+    /// `Interp::required_string_dispatch` raises this only when a trap can
+    /// take it.
+    ///
+    /// `CONDITION('A')` would be the object itself, and this carries no place
+    /// to put one; that option is already the loud refusal
+    /// `Loud::builtin_option_object` makes for every condition.
+    pub(crate) fn nostring(readable: &[u8]) -> Raised {
+        Raised {
+            description: Some(readable.to_vec()),
+            ..Raised::condition(Cow::Borrowed("NOSTRING"))
+        }
+    }
+
     /// 91.999: a message used where a value was wanted returned none.
     /// `name` is the message as the send spells it, already upcased.
     ///

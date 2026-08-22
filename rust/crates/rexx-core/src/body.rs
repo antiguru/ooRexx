@@ -271,6 +271,13 @@ impl NativeObject {
         &self.rendered
     }
 
+    /// `~objectName=`: replaces the answer to `~objectName`, and with it
+    /// every rendering of this object, since `RexxObject::stringValue` is a
+    /// `~objectName` send.
+    pub fn set_rendered(&mut self, rendered: &[u8]) {
+        self.rendered = rendered.into();
+    }
+
     /// The value stored under `key`, which callers hold already uppercased --
     /// the oracle stores every environment entry under
     /// `getUpperGlobalName(name)` and looks one up by `className->upper()`, so
