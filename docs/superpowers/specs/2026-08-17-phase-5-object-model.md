@@ -32,6 +32,13 @@ say .k               with  ::METHOD makeString CLASS returning "K says hello"
 The second is the worse one: **matching exit status, empty stderr on both sides, different stdout.**
 No refusal names an owner, no harness reddens, and nothing in the old gate looks at it.
 
+**The crate column of both rows has since moved, and this document is not rewritten to follow it.**
+The measurement above is dated evidence for why this spec exists; editing it would falsify the record
+of what the argument was made from. What a reader needs instead is where each row stands. The
+`UNKNOWN` row went to a loud rc 120 refusal when Phase 5a's Task 11 made a parenthesised list
+evaluate, and to **rc 0 matching the oracle byte for byte** in Task 12, which is the row's owner. The
+`makeString` row is unchanged and is **Task 14's**, still the silent shape this section describes.
+
 That is the whole argument for this document. A derivation from the design produced a plan whose
 gate could not see the things the design had not thought of; a derivation from the *specification*
 produces an enumeration that does not depend on having thought of them. So the enumeration below is
