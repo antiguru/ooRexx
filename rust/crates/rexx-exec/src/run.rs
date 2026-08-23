@@ -3540,7 +3540,7 @@ impl Interp {
     /// `>K>` is the ordinary keyword-result line at this clause's own value
     /// indent -- measured under `trace r`, `guard on when v = 1` echoes
     /// `>K>   "WHEN" => "1"` and nothing else. The truth test is `WHEN`'s own
-    /// (`truthValue(Error_Logical_value_guard)`, `:168`), which is 34.902 and
+    /// (`truthValue(Error_Logical_value_guard)`, `:167`), which is 34.902 and
     /// not `IF`'s 34.1.
     fn exec_guard(&mut self, code: &Code<'_>, guard: &Guard) -> Result<Flow, Failure> {
         if self.activation().method_identity.is_none() {
@@ -11908,7 +11908,7 @@ pub(crate) fn raised_if_not_logical(found: &[u8]) -> Raised {
 /// `Error_Logical_value_guard`, catalogue text "Value of expression following
 /// GUARD keyword must be exactly \"0\" or \"1\"; found \"...\"", one
 /// substitution, the operand's own rendered text. `truthValue(Error_Logical_
-/// value_guard)` at `instructions/GuardInstruction.cpp:168` is what selects
+/// value_guard)` at `instructions/GuardInstruction.cpp:167` is what selects
 /// this sub-number over `IF`'s and `WHEN`'s.
 ///
 /// **LEGALITY, and Phase 6 keeps it.** The expression is evaluated and its
