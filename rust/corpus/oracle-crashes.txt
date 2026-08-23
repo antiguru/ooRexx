@@ -192,8 +192,10 @@ is false, loops on `context->guardWait()`
 scope and waits to be woken by another activity changing one of the exposed
 variables the expression names. A program with one activity has nothing that
 can change it, so the wait has no end. `GUARD OFF WHEN` blocks identically:
-the `WHEN` form waits whichever way the `ON`/`OFF` flag is set, and the flag
-decides only what the wait holds while it sleeps.
+the `WHEN` form waits whichever way the `ON`/`OFF` flag is set, and
+`guardWait` releases the object's scope in both cases. The flag decides the
+state the activity returns to when it is awake, not what the wait holds
+(`instructions/GuardInstruction.cpp:147`-`:150`).
 
 The neighbours bound it and are clean, all rc 0 and all agreeing with this
 crate on both engines: the same method with `v = 1` answers, so it is the
@@ -203,11 +205,20 @@ expression's *value* and not the `WHEN` form that blocks; and `guard on` and
 **The `expose v` line is load-bearing in the repro and dropping it does not
 block.** Measured: the same method without it, `guard on when 1 = 0`, is a
 clean `Error 99.913 GUARD instruction did not include references to exposed
-variables.` at rc 157 in 0.00 s, three runs of three. So the oracle refuses at
-translation time a `WHEN` expression that names no exposed variable, and only
-an expression that *can* in principle be satisfied by another activity reaches
-the wait. A reader shortening this program to the `WHEN` clause alone measures
-the translation check instead of the block.
+variables.` at rc 157 in 0.00 s, three runs of three. What that check tests is
+which names the expression mentions, and nothing about whether the expression
+can ever change: `LanguageParser::captureGuardVariable` records a variable only
+when `isExposed(varname)` holds (`parser/LanguageParser.cpp:2024`), and the
+raise fires when that list comes back empty
+(`parser/InstructionParser.cpp:2640`-`:2646`). The maintainers state their
+reason for it there -- "if using GUARD WHEN, we will never wake up if there are
+not at least one object variable accessed." -- which is the check's motivation
+and not its reach. Measured at the neighbours, three runs each: `guard on when
+w = 0`, with `w` local and the expression already true, is the same 99.913 at
+rc 157 even in a method that exposes something else, and `guard on when v = v`,
+which no other activity's change could ever falsify, answers rc 0. So a reader
+shortening this program to the `WHEN` clause alone measures the translation
+check instead of the block.
 
 Consequence for this crate: **there is no oracle behaviour to match**, so
 `rexx-exec` refuses the shape rather than answering it -- `Loud::
