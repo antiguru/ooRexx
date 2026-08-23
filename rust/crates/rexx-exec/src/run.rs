@@ -65,8 +65,8 @@
 //! at both.
 
 use crate::activation::{
-    Activation, CallType, Entry, Inherited, InstanceVar, TraceEntry, Trap, TrappedCondition,
-    body_of,
+    Activation, CallType, Entry, Inherited, InstanceVar, ReplyState, TraceEntry, Trap,
+    TrappedCondition, body_of,
 };
 use crate::builtin;
 use crate::clause::{ClauseEntry, ClauseOutcome, ClauseValue, HandlerExit};
@@ -86,9 +86,9 @@ use crate::{
 use rexx_core::{BehaviourId, Body, Decoded, FrameId, ObjRef, ScopePools, SlotFrame};
 use rexx_num::{ArithError, CompareOp, Number, SettingsError, compare_decoded};
 use rexx_parse::{
-    ConditionTrap, ControlExpr, DirectiveKind, EndStyle, Expr, ExprKind, Fragment, Instruction,
-    InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting, ProgramSource, Raise,
-    SymbolId, Trace, Use, UseTarget, VariableRef, parse_interpret,
+    CodeBody, ConditionTrap, ControlExpr, DirectiveKind, EndStyle, Expr, ExprKind, Fragment, Guard,
+    Instruction, InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting, ProgramSource,
+    Raise, SymbolId, Trace, Use, UseTarget, VariableRef, parse_interpret,
 };
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -1773,7 +1773,7 @@ impl Interp {
                     Some(expression) => Some(self.eval(code, expression)?),
                     None => None,
                 };
-                Ok(self.returned_value(value, ReturnKeyword::Exit))
+                self.returned_value(value, ReturnKeyword::Exit)
             }
 
             // A label is a traced no-op: the C++'s own `execute` on a label
@@ -2502,7 +2502,7 @@ impl Interp {
                     Some(expression) => Some(self.eval(code, expression)?),
                     None => None,
                 };
-                Ok(self.returned_value(value, ReturnKeyword::Return))
+                self.returned_value(value, ReturnKeyword::Return)
             }
 
             // `SIGNAL label` and `SIGNAL VALUE`. `Signal::Trap` (`SIGNAL
@@ -2650,6 +2650,15 @@ impl Interp {
             // `exec_message`.
             InstructionKind::Message { term, value } => {
                 self.exec_message(code, term, value.as_ref())
+            }
+
+            // `GUARD ON`/`GUARD OFF`, with or without a `WHEN`. See
+            // `exec_guard`.
+            InstructionKind::Guard(guard) => self.exec_guard(code, guard),
+
+            // `REPLY`, bare or with a value. See `exec_reply`.
+            InstructionKind::Reply { expression } => {
+                self.exec_reply(code, index, expression.as_ref())
             }
 
             other => Err(Loud::instruction(other).into()),
@@ -3501,6 +3510,119 @@ impl Interp {
         Ok(())
     }
 
+    /// `GUARD ON`/`GUARD OFF`, with or without a `WHEN` expression
+    /// (`RexxInstructionGuard::execute`, `instructions/GuardInstruction.cpp`).
+    ///
+    /// **SCHEDULING, and Phase 6 owns it.** The instruction reserves and
+    /// releases the receiver's scope against other activities. This
+    /// interpreter runs one, so nothing can hold the scope when the
+    /// reservation is asked for and nothing can be waiting on it when it is
+    /// given up: `guardOn` and `guardOff` are the two halves this arm has no
+    /// state to model, and a no-op is what an uncontended reservation does.
+    /// Measured, oracle rc 0: a class method whose body is `guard off` then
+    /// `guard on` then `guard off` answers its `return` value.
+    ///
+    /// **The method check is legality and stays.** `inMethod` is asked before
+    /// anything else and answers 99.911 -- measured rc 157, both as a
+    /// program's own clause and as a `::ROUTINE`'s: `GUARD can only be issued
+    /// in an object method invocation.` The clause echo is the ordinary one,
+    /// so `::ROUTINE`'s shape carries the sending clause under it.
+    ///
+    /// **A `WHEN` that does not hold blocks, and this refuses instead.** The
+    /// C++ evaluates the expression, and while it is false waits for another
+    /// activity to change one of the exposed variables the expression names
+    /// (`:167`-`:185`). With one activity nothing can, so the oracle itself
+    /// never leaves that loop: measured, `guard on when v = 1` with `v` at
+    /// `0` was killed at a 6-second timeout with no output, and `guard off
+    /// when v = 1` likewise. A wait that cannot end has no transcript to
+    /// match, so it is loud.
+    ///
+    /// The `WHEN` that *does* hold is a no-op like the bare form, and its
+    /// `>K>` is the ordinary keyword-result line at this clause's own value
+    /// indent -- measured under `trace r`, `guard on when v = 1` echoes
+    /// `>K>   "WHEN" => "1"` and nothing else. The truth test is `WHEN`'s own
+    /// (`truthValue(Error_Logical_value_guard)`, `:168`), which is 34.902 and
+    /// not `IF`'s 34.1.
+    fn exec_guard(&mut self, code: &Code<'_>, guard: &Guard) -> Result<Flow, Failure> {
+        if self.activation().method_identity.is_none() {
+            return Err(Raised::guard_outside_method().into());
+        }
+        let Some(condition) = &guard.condition else {
+            return Ok(Flow::Next);
+        };
+        let holds = self.eval_condition(
+            code,
+            condition,
+            ConditionTrace::Keyword(self.clause_state.current_value_indent, "WHEN"),
+            raised_guard_not_logical,
+        )?;
+        if holds {
+            Ok(Flow::Next)
+        } else {
+            Err(Loud::guard_when_false().into())
+        }
+    }
+
+    /// `REPLY`, bare or with a value (`RexxInstructionReply::execute`,
+    /// `instructions/ReplyInstruction.cpp:66`).
+    ///
+    /// The value goes to the sender at once and the rest of this method's
+    /// body is owed. `Flow::Return` is what hands the value over -- the
+    /// sending clause cannot tell a reply from a return, which is the whole
+    /// of the value half -- and [`ReplyState::Owed`] plus a `pc` on the
+    /// next clause is what says the body has not finished.
+    /// [`Interp::enter_method_body`] reads both.
+    ///
+    /// **LEGALITY, in the order the C++ takes it.** `inMethod` is asked
+    /// before the expression is evaluated and answers 99.919 -- measured rc
+    /// 157 as a program's own clause and as a `::ROUTINE`'s. The
+    /// one-per-invocation rule is asked *after*, inside `RexxActivation::
+    /// reply` (`execution/RexxActivation.cpp:1053`), so a second `REPLY`'s
+    /// own expression is evaluated and traced before 98.935 -- measured rc 0
+    /// with the first reply's value delivered, since the raise happens in the
+    /// resumed body and the sender has already been answered.
+    ///
+    /// **SCHEDULING, and Phase 6 owns it: the body must be a clause of the
+    /// method's own top level.** The oracle continues the remainder on
+    /// another activity, with every enclosing `DO`, `SELECT` and `IF` intact.
+    /// Resuming here means re-entering the body at an instruction index, and
+    /// an index alone cannot restore a loop's iteration state or an `IF`'s
+    /// branch -- so a `REPLY` under any of them would silently drop the
+    /// construct. [`top_level_clause`] is the test and this refusal is loud.
+    fn exec_reply(
+        &mut self,
+        code: &Code<'_>,
+        index: usize,
+        expression: Option<&Expr>,
+    ) -> Result<Flow, Failure> {
+        if self.activation().method_identity.is_none() {
+            return Err(Raised::reply_outside_method().into());
+        }
+        if !top_level_clause(code.body, index) {
+            return Err(Loud::reply_inside_construct().into());
+        }
+        let value = match expression {
+            Some(expression) => Some(self.eval(code, expression)?),
+            None => None,
+        };
+        // The rooting and the `>>>` line are `RETURN`'s, for the same reason
+        // and at the same indent: `evaluateExpression` is the shared call in
+        // the C++ and this is the shared call here.
+        if let Some(value) = value {
+            self.roots.push_temp(value);
+            if let Some(rendered) = self.result_text(value) {
+                self.trace_result(self.clause_state.current_value_indent, &rendered);
+            }
+        }
+        if self.activation().reply != ReplyState::None {
+            return Err(Raised::reply_twice().into());
+        }
+        let activation = self.activation_mut();
+        activation.reply = ReplyState::Owed;
+        activation.pc = index + 1;
+        Ok(Flow::Return(value))
+    }
+
     /// Everything a `RETURN` or an `EXIT` does once its expression has been
     /// evaluated: its `>>>`, and the `Flow` that leaves the activation.
     ///
@@ -3540,17 +3662,43 @@ impl Interp {
     /// than theoretical. The compiled engine's own register is a second root
     /// for the same value while its region runs, so this push is redundant
     /// there and harmless.
-    pub(crate) fn returned_value(&mut self, value: Option<ObjRef>, keyword: ReturnKeyword) -> Flow {
+    pub(crate) fn returned_value(
+        &mut self,
+        value: Option<ObjRef>,
+        keyword: ReturnKeyword,
+    ) -> Result<Flow, Failure> {
         if let Some(value) = value {
             self.roots.push_temp(value);
             if let Some(rendered) = self.result_text(value) {
                 self.trace_result(self.clause_state.current_value_indent, &rendered);
             }
         }
-        match keyword {
+        // A `REPLY` has already answered the sender, so a value here has
+        // nobody to go to: 98.936 for `RETURN`, 98.937 for `EXIT`. Both are
+        // asked **after** the trace line above, which is the order the C++
+        // takes them in -- `RexxInstructionReturn::execute` evaluates through
+        // `evaluateExpression` and only then calls `returnFrom`
+        // (`instructions/ReturnInstruction.cpp:72`), whose check is at
+        // `execution/RexxActivation.cpp:1074`; `exitFrom`'s own is at
+        // `:1413`. The bare form of either is legal after a reply and is
+        // measured: `reply 'v'` then `say 'tail'` then `return` is rc 0 with
+        // both lines printed and an empty stderr.
+        //
+        // `EXIT`'s C++ check is guarded by `isTopLevelCall()`, which a method
+        // activation is and an internal `CALL` inside one is not. The state
+        // read here is this activation's own and a `CALL` gets a fresh one,
+        // so the guard needs no counterpart.
+        if value.is_some() && self.activation().reply != ReplyState::None {
+            return Err(match keyword {
+                ReturnKeyword::Return => Raised::return_after_reply(),
+                ReturnKeyword::Exit => Raised::exit_after_reply(),
+            }
+            .into());
+        }
+        Ok(match keyword {
             ReturnKeyword::Return => Flow::Return(value),
             ReturnKeyword::Exit => Flow::Exit(value),
-        }
+        })
     }
 
     /// Everything a `PUSH` or a `QUEUE` does once its expression has been
@@ -10377,7 +10525,7 @@ impl Interp {
     /// with identical bytes. `::OPTIONS` is a declared Phase 5 gap
     /// (`directive_gap`, `lib.rs`), so such a program is refused here rather
     /// than running without the lines.
-    fn trace_invocation_entry(&mut self) {
+    pub(crate) fn trace_invocation_entry(&mut self) {
         if !self.activation().trace_entry.may_announce() {
             return;
         }
@@ -11691,6 +11839,45 @@ fn skip_else(instructions: &[Instruction], target: usize) -> usize {
     }
 }
 
+/// Whether `index` is a clause of `body`'s own top level -- reached by
+/// falling from the instruction before it, with no `DO`, `LOOP`, `SELECT` or
+/// `IF` construct enclosing it.
+///
+/// Walks the fall-through chain from the body's first instruction, stepping
+/// over each construct as a unit: a `DO`/`LOOP`/`SELECT` ends at the `END`
+/// that closes it, and an `IF` ends where its false branch resumes, past an
+/// `ELSE`'s own branch when there is one ([`skip_else`], which is the same
+/// resolution the `If` arm makes at run time). Every index the walk lands on
+/// is top level and every index it steps over is not, so this answers for any
+/// index in the body.
+///
+/// A construct whose closing index is missing -- `None` on a `Loop::end`, a
+/// `Select::end` -- can only be a body still being assembled, which nothing
+/// runs; the walk treats it as reaching the body's end, so the answer for
+/// anything after it is `false` rather than a panic.
+fn top_level_clause(body: &CodeBody, index: usize) -> bool {
+    let instructions = &body.instructions;
+    let len = instructions.len();
+    let mut at = 0;
+    while at < len {
+        if at == index {
+            return true;
+        }
+        at = match &instructions[at].kind {
+            InstructionKind::Do(body) | InstructionKind::Loop(body) => {
+                body.end.map_or(len, |end| end + 1)
+            }
+            InstructionKind::Select { end, .. } => end.map_or(len, |end| end + 1),
+            InstructionKind::If { false_target, .. } => match false_target {
+                Some(target) => skip_else(instructions, *target),
+                None => len,
+            },
+            _ => at + 1,
+        };
+    }
+    false
+}
+
 /// 20.928: a subsidiary-list word is not a legal symbol at all (contains a
 /// byte outside `is_symbol_byte`'s set, which is also what a parenthesised
 /// entry like `"(w)"` fails on).
@@ -11714,6 +11901,16 @@ fn raised_dot_led(found: &[u8]) -> Raised {
 /// substitution, the operand's own rendered text.
 pub(crate) fn raised_if_not_logical(found: &[u8]) -> Raised {
     Raised::syntax(34, 1, vec![found.to_vec()])
+}
+
+/// 34.902: a `GUARD ... WHEN` condition is not exactly `0` or `1`.
+/// `Error_Logical_value_guard`, catalogue text "Value of expression following
+/// GUARD keyword must be exactly \"0\" or \"1\"; found \"...\"", one
+/// substitution, the operand's own rendered text. `truthValue(Error_Logical_
+/// value_guard)` at `instructions/GuardInstruction.cpp:168` is what selects
+/// this sub-number over `IF`'s and `WHEN`'s.
+fn raised_guard_not_logical(found: &[u8]) -> Raised {
+    Raised::syntax(34, 902, vec![found.to_vec()])
 }
 
 /// 34.2: a single (non-list) `WHEN` condition is not exactly `0` or `1`.

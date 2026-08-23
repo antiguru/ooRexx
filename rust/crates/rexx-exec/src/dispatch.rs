@@ -100,7 +100,9 @@ use rexx_classes::{ClassRegistry, MethodId};
 use rexx_core::{BehaviourId, Body, Decoded, NativeObject, ObjRef};
 use rexx_parse::{Access, Expr};
 
-use crate::activation::{Activation, MethodIdentity, body_of};
+use crate::activation::{
+    Activation, DeferredReply, MethodIdentity, ReplyState, TraceEntry, body_of,
+};
 use crate::error::{FailureSite, Raised};
 use crate::plan::{BodyKey, Package};
 use crate::run::MAX_ACTIVATION_DEPTH;
@@ -1483,12 +1485,24 @@ impl Interp {
         // change that under it, because the one instruction that swaps a
         // frame in is `PROCEDURE` and `Entry::Method` is 17.1 for it.
         debug_assert!(callee.owns_frame, "a method activation owns its frame");
-        self.roots.pop_slots(callee.frame);
+        // **The callee's own convention comes out as the caller's goes back
+        // in**, because a parked body still owns it: `ARG()` and a send's
+        // caller resolution inside the resumed half read the same convention
+        // the first half did. A body that is not parked drops it here.
+        let callee_context = std::mem::replace(&mut self.call_context, saved_context);
+        // The frame is released either way; what a `REPLY` changes is where
+        // its contents go first. `park_reply` reads them out and hands them to
+        // the collector's parked set, so the values survive with no frame open
+        // above the caller's own.
+        if callee.reply == ReplyState::Owed {
+            self.park_reply(callee, callee_context);
+        } else {
+            self.roots.pop_slots(callee.frame);
+        }
         self.activation_indent = saved_base;
         self.indent_offset = saved_offset;
         self.clause_line_override = saved_line;
         self.restore_clause_state(saved_clause_state);
-        self.call_context = saved_context;
 
         match ended {
             Ok(ended) => Ok(ended.value()),
@@ -1500,6 +1514,191 @@ impl Interp {
                 // sending clause is never echoed. Measured, `say 1/0` in a
                 // class method reports the method's clause and then the
                 // send's.
+                self.seal_site_level();
+                Err(failure)
+            }
+        }
+    }
+
+    /// Takes a method activation whose `REPLY` has just handed a value out,
+    /// releases its frame, and queues the rest of its body.
+    ///
+    /// **SCHEDULING.** The oracle continues the body on another activity from
+    /// here; `Interp::run_deferred_replies` continues it after the main
+    /// program has finished. `Interp::deferred`'s own doc has the measured
+    /// interleaving that separates the two.
+    ///
+    /// The order below is the whole of the rooting: the values come out of the
+    /// frame, everything they and the convention name goes to
+    /// `RootSet::park`, and only then is the frame released. Nothing between
+    /// the read and the park can allocate, so there is no window in which a
+    /// value is named by neither.
+    fn park_reply(&mut self, mut activation: Box<Activation>, context: crate::CallContext) {
+        let frame = activation.frame;
+        let len = self.roots.frame_len(frame);
+        // The values are copied out, so an alias in this frame would come back
+        // as the resumed body's own storage and stop sharing. Both routes to
+        // one are refused inside a method body -- measured, `PROCEDURE` there
+        // is 17.1 at rc 239 and `USE ARG >q` is 88.928 at rc 168, both
+        // matching the oracle -- and this is that stated as a check rather
+        // than as a sentence, because what makes it true is elsewhere.
+        debug_assert_eq!(
+            self.roots.frame_aliases(frame),
+            0,
+            "a parked method frame holds an alias, whose sharing a copy loses"
+        );
+        let slots: Vec<Option<ObjRef>> = (0..len)
+            .map(|index| self.roots.frame_slot(frame, index))
+            .collect();
+        // A `VarHome::Slot` in a parked convention would name a position in a
+        // frame that is about to be released, and would address some later
+        // activation's storage on resume. `Interp::enter_method_body` builds
+        // every argument as `Argument::Value`, so none can be here.
+        debug_assert!(
+            context
+                .arguments
+                .iter()
+                .flatten()
+                .all(|argument| matches!(argument, crate::Argument::Value(_))),
+            "a parked method's arguments name a caller's storage"
+        );
+        let mut anchor = Vec::new();
+        activation.object_roots(&mut anchor);
+        context.object_roots(&mut anchor);
+        anchor.extend(slots.iter().flatten().copied());
+        let parked = self.roots.park(anchor);
+        self.roots.pop_slots(frame);
+        activation.reply = ReplyState::Issued;
+        self.deferred.push_back(DeferredReply {
+            activation,
+            context,
+            slots,
+            parked,
+        });
+    }
+
+    /// Runs every method body a `REPLY` has left owed, oldest first, and
+    /// answers what each of them raised.
+    ///
+    /// **A body queued by a body already in this loop is run too**, which is
+    /// what the queue is drained rather than iterated for: a resumed
+    /// remainder can send a message whose method replies in its turn.
+    ///
+    /// The failures come back rather than being reported here, because what a
+    /// report needs -- the program's path -- belongs to `execute` and so does
+    /// the decision about the exit status. Measured, oracle rc **7**: a
+    /// program ending `exit 7` whose replied method then raises 98.936 prints
+    /// the traceback and exits 7, so a raise here settles nothing.
+    ///
+    /// Each failure carries its **own** echo stack, drained at the resume that
+    /// produced it: the sites accumulate on `self` and a second resumed body
+    /// would otherwise report the first one's clauses under its own error.
+    pub(crate) fn run_deferred_replies(&mut self) -> Vec<(Failure, Vec<FailureSite>)> {
+        let mut failures = Vec::new();
+        while let Some(deferred) = self.deferred.pop_front() {
+            if let Err(failure) = self.resume_reply(deferred) {
+                let mut sites = std::mem::take(&mut self.failure_sites);
+                sites.extend(self.failure_site.take());
+                failures.push((failure, sites));
+            }
+        }
+        // Every park is matched by the release its resume does, and this is
+        // where the pairing can be seen: the queue is empty, so a parked entry
+        // still rooting anything is a set of values kept alive for the rest of
+        // the process. Cheap and once per run, unlike `RootSet::live_frames`'
+        // own callers.
+        debug_assert_eq!(
+            self.roots.live_parked(),
+            0,
+            "a replied method body's values are still parked with nothing owing them"
+        );
+        failures
+    }
+
+    /// Puts one parked method body back and runs the rest of it.
+    ///
+    /// **The level state is entered at nothing rather than restored**, and
+    /// that is the resumed body's own shape rather than an omission: it has no
+    /// sending clause left to be indented under, so the clause echoes start at
+    /// indent 0 exactly as they do on the first half
+    /// ([`Interp::enter_method_body`]'s own comment carries that
+    /// measurement).
+    ///
+    /// **The resumed body announces a second `>I>` exactly when the first
+    /// half announced one**, which is `RexxActivation::run`'s own reply arm:
+    /// `traceEntryAllowed = traceEntryDone; traceEntryDone = false`
+    /// (`execution/RexxActivation.cpp:562`-`:563`), and then the unconditional
+    /// `traceEntry()` at `:600`. So [`TraceEntry::Done`] becomes
+    /// [`TraceEntry::Allowed`] and anything else becomes
+    /// [`TraceEntry::Spent`], and the announcement is asked for here rather
+    /// than waiting for a `TRACE` instruction the remainder need not contain.
+    /// Measured under `trace r`: a class method whose body is `trace r` /
+    /// `guard on` / `reply "v"` / `say "tail"` / `return` produces `>I>`, the
+    /// clauses, `<I<`, then `>I>` again before `say "tail"` and a final
+    /// `<I<`.
+    ///
+    /// **`first_instruction_pending` does not go back with it.** A resumed
+    /// clause is not the first instruction executed, so a `PROCEDURE` or a
+    /// `USE LOCAL` there is the ordinary refusal.
+    fn resume_reply(&mut self, deferred: DeferredReply) -> Result<(), Failure> {
+        let DeferredReply {
+            mut activation,
+            context,
+            slots,
+            parked,
+        } = deferred;
+        let frame = self.roots.push_slots(slots.len());
+        for (index, value) in slots.iter().enumerate() {
+            if let Some(value) = value {
+                self.roots.set_frame_slot(frame, index, *value);
+            }
+        }
+        // Released only once the arena holds the values again.
+        self.roots.release(parked);
+        activation.frame = frame;
+        activation.trace_entry = if activation.trace_entry == TraceEntry::Done {
+            TraceEntry::Allowed
+        } else {
+            TraceEntry::Spent
+        };
+        activation.first_instruction_pending = false;
+        let saved_context = std::mem::replace(&mut self.call_context, context);
+        let saved_clause_state = self.save_clause_state();
+        let saved_base = std::mem::replace(&mut self.activation_indent, 0);
+        let saved_offset = std::mem::take(&mut self.indent_offset);
+        let saved_line = std::mem::take(&mut self.clause_line_override);
+        self.push_activation(*activation);
+        // After the push, because the announcement reads the running
+        // activation's own trace mode and subject.
+        self.trace_invocation_entry();
+
+        let ended = self.run_activation();
+
+        self.trace_invocation_exit();
+        let callee = self.pop_activation().expect("the activation just pushed");
+        self.activation_indent = saved_base;
+        self.indent_offset = saved_offset;
+        self.clause_line_override = saved_line;
+        self.restore_clause_state(saved_clause_state);
+        self.call_context = saved_context;
+        // A resumed body cannot park again: `Interp::exec_reply` raises 98.935
+        // on a second `REPLY` before it can set the state, so the frame is
+        // released here unconditionally. The assertion is what makes a state
+        // that stopped being unreachable announce itself rather than silently
+        // dropping the body this branch has no queue entry for.
+        debug_assert_ne!(
+            callee.reply,
+            ReplyState::Owed,
+            "a resumed method body asked to be parked a second time"
+        );
+        self.roots.pop_slots(callee.frame);
+        match ended {
+            // Every ending is the same ending here: nothing is waiting for a
+            // value, and a resumed body's `EXIT` does not set the process's
+            // status. Measured, oracle rc 0: `reply 'v'` then `say 'tail'`
+            // then `exit "boom"` is 98.937 with the main body's own rc kept.
+            Ok(_) | Err(crate::Failure::Exited(_)) => Ok(()),
+            Err(failure) => {
                 self.seal_site_level();
                 Err(failure)
             }

@@ -1193,6 +1193,31 @@ impl Loud {
         }
     }
 
+    /// A `GUARD ... WHEN` whose expression is false.
+    ///
+    /// The oracle waits for another activity to make it true and this
+    /// interpreter has none, so the wait cannot end: measured, the oracle
+    /// itself produced no output and was killed at a 6-second timeout.
+    /// `Interp::exec_guard`'s own doc has the pair of probes.
+    fn guard_when_false() -> Loud {
+        Loud {
+            message: "a GUARD that has to wait for another activity to make its WHEN \
+                      expression true is not implemented (Phase 6)"
+                .to_string(),
+        }
+    }
+
+    /// A `REPLY` that is not a clause of its method body's own top level.
+    ///
+    /// Continuing the body needs the enclosing `DO`/`SELECT`/`IF` state that
+    /// an instruction index cannot carry. `Interp::exec_reply`'s own doc has
+    /// the argument.
+    fn reply_inside_construct() -> Loud {
+        Loud {
+            message: "a REPLY inside a DO, SELECT or IF is not implemented (Phase 6)".to_string(),
+        }
+    }
+
     // **There is no `Loud::parse`, and its absence is the fix.** A fragment
     // that does not parse raises the oracle's own 27.901 at rc 229, through
     // `impl From<&ParseError> for Raised` (`error.rs`), which `run_fragment`
@@ -1832,10 +1857,15 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // `Loud::compound_expose`/`Loud::expose_receiver` rather than
         // answering.
         InstructionKind::Expose { .. } => None,
-        InstructionKind::Options { .. }
-        | InstructionKind::Guard(_)
-        | InstructionKind::Reply { .. }
-        | InstructionKind::Forward(_) => Some("Phase 5"),
+        // `GUARD` reserves and releases the receiver's scope and `REPLY`
+        // hands its value to the sender and leaves the rest of the body
+        // owed. `None` in the same sense `Expose` above is: both variants
+        // execute, and the sub-cases with no code here -- a `GUARD ... WHEN`
+        // that is false and so has to wait, a `REPLY` under a construct --
+        // fail loudly through `Loud::guard_when_false`/
+        // `Loud::reply_inside_construct` rather than answering.
+        InstructionKind::Guard(_) | InstructionKind::Reply { .. } => None,
+        InstructionKind::Options { .. } | InstructionKind::Forward(_) => Some("Phase 5"),
         InstructionKind::Command { .. } => Some("Phase 7"),
     }
 }
@@ -2397,6 +2427,22 @@ struct Interp {
     /// entry. `Interp::chunk_for`'s own doc says what stops this being a
     /// silent fallback to the tree-walker.
     chunks_refused: usize,
+    /// Method bodies a `REPLY` has left owed, oldest first.
+    ///
+    /// **SCHEDULING, and Phase 6 owns the whole of it.** The oracle continues
+    /// such a body on another activity, concurrently with the sender; here it
+    /// is run after the main program has finished, in the order the replies
+    /// were issued. That reproduces the oracle wherever the oracle is
+    /// deterministic and is a different interleaving wherever it is not --
+    /// measured, two objects each replying printed `A-replied`, `B-after`,
+    /// `B-replied`, `main-end`, `A-after`, an order no single-threaded
+    /// scheduling produces. See [`Interp::run_deferred_replies`].
+    ///
+    /// **`execute` is the only thing that drains it.** A caller that drives
+    /// `Interp::run` directly -- which is most of this crate's unit tests --
+    /// leaves whatever a `REPLY` queued unrun, so a test about an owed body
+    /// has to go through `run_program`.
+    deferred: std::collections::VecDeque<crate::activation::DeferredReply>,
     /// Every `::ROUTINE` the running program installs, keyed by its
     /// **upcased** name and holding its index in `Program::directives`.
     ///
@@ -3397,6 +3443,60 @@ impl Argument {
             Argument::Value(value) | Argument::Reference { value, .. } => *value,
         }
     }
+
+    /// Appends every `ObjRef` this argument holds to `out`.
+    ///
+    /// [`CallContext::object_roots`]'s helper, and exhaustive for the same
+    /// reason [`Activation::object_roots`] is: a variant or a field added
+    /// here is a compile error rather than a value that stops being rooted.
+    ///
+    /// [`Activation::object_roots`]: crate::activation::Activation::object_roots
+    fn object_roots(&self, out: &mut Vec<ObjRef>) {
+        match self {
+            Argument::Value(value) => out.push(*value),
+            Argument::Reference {
+                target,
+                value,
+                name: _,
+            } => {
+                out.push(*value);
+                match target {
+                    // An absolute position in the slot arena, which is a root
+                    // already while the frame holding it is open and is not an
+                    // object handle at all.
+                    VarHome::Slot(_) => {}
+                    VarHome::Instance(var) => {
+                        let InstanceVar {
+                            owner,
+                            scope,
+                            name: _,
+                        } = &**var;
+                        out.push(*owner);
+                        out.push(*scope);
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl CallContext {
+    /// Appends every `ObjRef` this convention holds to `out`.
+    ///
+    /// What `Interp::park_reply` hands to `RootSet::park` alongside the
+    /// activation's own: a parked method still owns its arguments and its
+    /// receiver, and nothing else roots them once its frame is released.
+    fn object_roots(&self, out: &mut Vec<ObjRef>) {
+        let CallContext {
+            name: _,
+            arguments,
+            receiver,
+        } = self;
+        for argument in arguments.iter().flatten() {
+            argument.object_roots(out);
+        }
+        out.extend(*receiver);
+    }
 }
 
 impl Interp {
@@ -3431,6 +3531,7 @@ impl Interp {
             engine: Engine::TreeWalker,
             chunks: NameMap::default(),
             chunks_refused: 0,
+            deferred: std::collections::VecDeque::new(),
             routines: HashMap::new(),
             object_model: None,
             class_variables: HashMap::new(),
@@ -5186,9 +5287,6 @@ fn execute(
         interp.call_context.arguments = vec![Some(Argument::Value(value))];
     }
     let result = interp.run(program);
-    let stack = interp.stack_span();
-    let collections = interp.heap.collections_performed();
-    let chunks_refused = interp.chunks_refused;
     // The whole echo stack, innermost first: the levels `seal_site_level`
     // already closed, then the level that was still unwinding when the
     // condition reached the top. See `Interp::failure_sites` for why the two
@@ -5200,7 +5298,7 @@ fn execute(
     // `interp` below -- a partial move of one field ends `interp`'s usability
     // as a whole value, and every other call above this one only reads or
     // takes a single field, never the whole struct.
-    let exit_code = match result {
+    let mut exit_code = match result {
         // `Failure::Exited` is not a failure -- it is `EXIT` (or falling off
         // the routine's own end) reached through `ExprKind::Call`'s
         // expression form, tunnelled here through `Err`/`?` only because
@@ -5237,6 +5335,53 @@ fn execute(
             raised.exit_code()
         }
     };
+
+    // **After the main body's own report and after its exit status is
+    // settled**, which is the order the oracle produces: the main activity
+    // writes its traceback when it fails and the replied remainder runs on
+    // afterwards. Measured, oracle rc 7 on a program ending `exit 7` whose
+    // replied method then raises 98.936 -- the traceback is on stderr and the
+    // status is the main body's, so a raise here only writes.
+    //
+    // A **loud** refusal is the exception and does move the status. It says
+    // this interpreter does not know the answer, and a message with an
+    // unchanged exit code is exactly the silent gap the loud rule exists to
+    // exclude.
+    for (failure, mut sites) in interp.run_deferred_replies() {
+        match failure {
+            // `Interp::resume_reply` answers `Ok` for this variant, exactly as
+            // `Interp::enter_method_body` does; the arm is what makes this
+            // match exhaustive and nothing else.
+            Failure::Exited(_) => {}
+            Failure::Loud(loud) => {
+                interp
+                    .trace
+                    .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());
+                exit_code = NOT_IMPLEMENTED_EXIT;
+            }
+            Failure::Raised(raised) => {
+                if sites.is_empty() {
+                    sites.push(FailureSite::Clause {
+                        line: 0,
+                        text: b"<no failing clause recorded>".to_vec(),
+                        indent: 0,
+                    });
+                }
+                let site = ClauseSite {
+                    path,
+                    sites: &sites,
+                };
+                interp.trace.extend_from_slice(&raised.report(&site));
+            }
+        }
+    }
+
+    // Read after the deferred bodies above, so a collection or a refused chunk
+    // inside one is counted: `run_program_collect_every_alloc` decides that its
+    // mode ran from `collections`, and a resumed body allocates like any other.
+    let stack = interp.stack_span();
+    let collections = interp.heap.collections_performed();
+    let chunks_refused = interp.chunks_refused;
 
     Outcome {
         exit_code,

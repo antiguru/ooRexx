@@ -1764,7 +1764,20 @@ impl Interp {
                                         );
                                         self.roots.temp_at(registers, register as usize)
                                     });
-                                        let flow = self.returned_value(value, *keyword);
+                                        // `break 'cold Err` rather than `?`,
+                                        // which is what puts this failure
+                                        // through `leave_stepped_clause` below
+                                        // and so gets the clause echoed. A
+                                        // `RETURN`/`EXIT` carrying a value
+                                        // after a `REPLY` is the failure this
+                                        // op can produce; measured, `?` here
+                                        // reported `0 *-* <no failing clause
+                                        // recorded>` where the tree-walker
+                                        // echoed the `return` clause.
+                                        let flow = match self.returned_value(value, *keyword) {
+                                            Ok(flow) => flow,
+                                            Err(failure) => break 'cold Err(failure),
+                                        };
                                         break 'cold Ok(RegionEnd::Flowed(flow));
                                     }
                                     // The queue write and its `>>>`, through

@@ -1724,6 +1724,63 @@ impl Raised {
         Raised::syntax(98, 992, Vec::new())
     }
 
+    /// 99.911: `GUARD` outside a method invocation. No substitutions.
+    ///
+    /// Measured, rc 157, in two shapes: as a program's own clause, and as a
+    /// `::ROUTINE`'s. Both give `GUARD can only be issued in an object method
+    /// invocation.` under an `Error 99 ... Translation error.` major line,
+    /// which is the catalogue's own family for the number rather than a
+    /// statement about when it is raised -- the check runs at
+    /// `RexxInstructionGuard::execute`, not at translation.
+    pub(crate) fn guard_outside_method() -> Raised {
+        Raised::syntax(99, 911, Vec::new())
+    }
+
+    /// 99.919: `REPLY` outside a method invocation. No substitutions.
+    ///
+    /// [`guard_outside_method`]'s twin, measured at the same two shapes and
+    /// the same rc 157: `REPLY can only be issued in an object method
+    /// invocation.`
+    ///
+    /// [`guard_outside_method`]: Raised::guard_outside_method
+    pub(crate) fn reply_outside_method() -> Raised {
+        Raised::syntax(99, 919, Vec::new())
+    }
+
+    /// 98.935: a second `REPLY` in one method invocation. No substitutions.
+    ///
+    /// Measured, oracle **rc 0**: a class method replying `one` and then
+    /// `two` delivers `one` to the sender, and the raise is reported on
+    /// stderr from the resumed body, where nothing is left to carry an exit
+    /// status. `REPLY can be issued only once per method invocation.`
+    pub(crate) fn reply_twice() -> Raised {
+        Raised::syntax(98, 935, Vec::new())
+    }
+
+    /// 98.936: `RETURN` with a value after a `REPLY`. No substitutions.
+    ///
+    /// Measured, oracle **rc 0**, `RETURN cannot return a value after a
+    /// REPLY.` -- the same rc-0-with-a-traceback shape [`reply_twice`]
+    /// carries, and for the same reason. A bare `RETURN` there is rc 0 with
+    /// an empty stderr.
+    ///
+    /// [`reply_twice`]: Raised::reply_twice
+    pub(crate) fn return_after_reply() -> Raised {
+        Raised::syntax(98, 936, Vec::new())
+    }
+
+    /// 98.937: `EXIT` with a value after a `REPLY`. No substitutions.
+    ///
+    /// [`return_after_reply`]'s twin: `EXIT cannot return a value after a
+    /// REPLY.` Measured on a program whose main body ends `exit 7` after the
+    /// send: rc **7**, so the resumed body's raise leaves the exit status the
+    /// main body settled.
+    ///
+    /// [`return_after_reply`]: Raised::return_after_reply
+    pub(crate) fn exit_after_reply() -> Raised {
+        Raised::syntax(98, 937, Vec::new())
+    }
+
     /// 98.993: `USE LOCAL` as the first instruction executed of a top-level
     /// program. No substitutions.
     ///

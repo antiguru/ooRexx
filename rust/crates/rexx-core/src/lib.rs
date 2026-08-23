@@ -34,7 +34,7 @@ pub use handle::{
     SMALL_INT_MIN, is_class_slot,
 };
 pub use heap::{CollectStats, Heap};
-pub use roots::{FrameId, RootSet, SlotFrame, SlotRef};
+pub use roots::{FrameId, Parked, RootSet, SlotFrame, SlotRef};
 
 /// The hasher behind [`NameMap`].
 ///

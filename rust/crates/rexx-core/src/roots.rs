@@ -102,7 +102,29 @@ pub struct RootSet {
     /// Its length is also every live frame's `depth` plus one, which is how
     /// `grow_slots` and `pop_slots` recognise the top frame.
     frame_starts: Vec<usize>,
+    /// Values an activation that is **not** on any stack still owns.
+    ///
+    /// A slot frame nests: `pop_slots` asserts that the frame it closes is the
+    /// top one, and the arena behind it is one contiguous `Vec`. So an
+    /// activation whose body is to continue later cannot keep its frame open
+    /// while the activations above it close -- its values are copied out, the
+    /// frame is released, and this is where they stay reachable in the
+    /// meantime. Each entry is one parked activation's whole set; `None` is an
+    /// entry whose owner has resumed, and [`RootSet::park`] reuses it.
+    parked: Vec<Option<Vec<ObjRef>>>,
+    /// Indices of `parked` that are `None`, so a park after a release reuses
+    /// an entry instead of extending the vector for the life of the process.
+    parked_free: Vec<usize>,
 }
+
+/// A handle to one parked set of values, issued by [`RootSet::park`] and spent
+/// by [`RootSet::release`].
+///
+/// A newtype rather than a bare `usize` for [`SlotRef`]'s reason: every other
+/// index in this file addresses a slot, and one passed where a slot index
+/// belongs would read a real slot rather than failing.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct Parked(usize);
 
 impl RootSet {
     pub fn new() -> Self {
@@ -113,7 +135,50 @@ impl RootSet {
             aliases: Vec::new(),
             alias_count: 0,
             frame_starts: Vec::new(),
+            parked: Vec::new(),
+            parked_free: Vec::new(),
         }
+    }
+
+    /// Roots `values` until the handle is spent, independently of every stack
+    /// in this type.
+    ///
+    /// The caller keeps its own copy of whatever it needs to restore; this is
+    /// reachability and nothing else, which is why it takes a flat vector
+    /// rather than a shape. A caller with values in several places hands over
+    /// the union of them.
+    pub fn park(&mut self, values: Vec<ObjRef>) -> Parked {
+        match self.parked_free.pop() {
+            Some(index) => {
+                self.parked[index] = Some(values);
+                Parked(index)
+            }
+            None => {
+                self.parked.push(Some(values));
+                Parked(self.parked.len() - 1)
+            }
+        }
+    }
+
+    /// Drops what `parked` was rooting.
+    ///
+    /// Panics on a handle already spent: a double release would put one index
+    /// on the free list twice, and the second park to draw it would hand two
+    /// owners the same entry.
+    pub fn release(&mut self, parked: Parked) {
+        assert!(
+            self.parked[parked.0].take().is_some(),
+            "release on a parked entry that was already released"
+        );
+        self.parked_free.push(parked.0);
+    }
+
+    /// How many parked entries are currently rooting anything.
+    ///
+    /// For asserting that a park is matched by a release, exactly as
+    /// [`RootSet::live_frames`] is for a frame. Not a capacity or a budget.
+    pub fn live_parked(&self) -> usize {
+        self.parked.iter().flatten().count()
     }
 
     pub fn add_global(&mut self, name: &str, value: ObjRef) {
@@ -258,6 +323,19 @@ impl RootSet {
             .copied()
             .unwrap_or(self.slots.len());
         end - frame.start
+    }
+
+    /// How many of `frame`'s slots are aliases for storage somewhere else.
+    ///
+    /// For asserting that a frame's contents can be *copied* -- which is what
+    /// `rexx-exec` parks a suspended activation's variables with. Copying an
+    /// alias's value out and writing it back as a plain slot would silently
+    /// break the sharing, so a caller that copies has to know there is none.
+    ///
+    /// Not a capacity or a budget, like [`RootSet::live_frames`] beside it.
+    pub fn frame_aliases(&self, frame: SlotFrame) -> usize {
+        let end = frame.start + self.frame_len(frame);
+        self.aliases[frame.start..end].iter().flatten().count()
     }
 
     /// Closes `frame`, releasing its slots. Frames nest like any stack, so
@@ -508,6 +586,7 @@ impl RootSet {
             .map(|(_, v)| *v)
             .chain(self.temps.iter().copied())
             .chain(self.slots.iter().filter_map(|s| *s))
+            .chain(self.parked.iter().flatten().flatten().copied())
     }
 }
 

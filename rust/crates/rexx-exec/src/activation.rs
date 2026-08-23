@@ -373,6 +373,29 @@ impl TraceEntry {
     }
 }
 
+/// How far one activation is through a `REPLY` ([`Activation::reply`]).
+///
+/// **Three states rather than two flags**, because `Owed` implies
+/// `Issued` and a pair admits a state that means nothing: a body cannot be
+/// waiting to continue past a `REPLY` that never ran.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) enum ReplyState {
+    /// No `REPLY` has run here. The ordinary state of every activation.
+    None,
+    /// A `REPLY` ran and this activation's body has since continued past it.
+    /// A second `REPLY` is 98.935, and a `RETURN`/`EXIT` carrying a value is
+    /// 98.936/98.937.
+    Issued,
+    /// A `REPLY` has just handed its value out and the rest of the body is
+    /// owed. `Interp::enter_method_body` reads this to park the activation
+    /// instead of releasing it, and moves it to `Issued` as it does.
+    ///
+    /// Named for the debt rather than for the activation's position, because
+    /// `Interp::suspended` is the activation stack below the running one and
+    /// this is not that.
+    Owed,
+}
+
 /// One activation: everything about the frame currently executing.
 pub(crate) struct Activation {
     /// This activation's own identity, unique for the life of the `Interp`.
@@ -521,6 +544,16 @@ pub(crate) struct Activation {
     /// changed. A `PROCEDURE` callee starts from an empty list and
     /// `exec_procedure` puts back only what its own `EXPOSE` list names.
     pub(crate) exposed: Vec<(usize, InstanceVar)>,
+    /// How far this activation is through a `REPLY`, which is
+    /// `ActivationSettings::isReplyIssued` plus the `REPLIED` execution state
+    /// as one value.
+    ///
+    /// [`ReplyState`] has the transitions. Three readers: `REPLY` itself, for
+    /// the one-per-invocation rule; `RETURN`/`EXIT` carrying a value, which
+    /// has nowhere to go once a reply has been handed to the sender; and
+    /// `Interp::enter_method_body`, which parks this activation rather than
+    /// releasing it when the body is to continue.
+    pub(crate) reply: ReplyState,
     /// Whether no instruction has yet been executed in this activation --
     /// where a label does not count as an instruction.
     ///
@@ -832,6 +865,29 @@ pub(crate) struct MethodIdentity {
     pub(crate) receiver: ObjRef,
 }
 
+/// One method body a `REPLY` left owed, off every stack until it is resumed.
+///
+/// **The slots are copied out rather than left where they were.** A
+/// `SlotFrame` nests -- `RootSet::pop_slots` asserts that the frame it closes
+/// is the top one -- so an activation cannot keep its frame open while the
+/// activations above it close. `slots` is that frame's contents in frame
+/// order, and `Interp::resume_reply` pushes a frame of the same length and
+/// writes them back.
+///
+/// `parked` is what keeps every `ObjRef` in all three of the other fields
+/// reachable while this sits in the queue; [`Activation::object_roots`] has
+/// what goes into it and what it cannot see.
+pub(crate) struct DeferredReply {
+    pub(crate) activation: Box<Activation>,
+    /// The calling convention the method was entered under: what `ARG()`,
+    /// `USE ARG` and a send's own caller resolution read. Restored around the
+    /// resumed body exactly as `Interp::enter_method_body` restores it around
+    /// the first half.
+    pub(crate) context: crate::CallContext,
+    pub(crate) slots: Vec<Option<ObjRef>>,
+    pub(crate) parked: rexx_core::Parked,
+}
+
 /// One variable an `EXPOSE` bound: which object's pools hold it, which of that
 /// object's pools, and under what name.
 ///
@@ -888,6 +944,7 @@ impl Activation {
             call_type: CallType::Command,
             method_identity: None,
             exposed: Vec::new(),
+            reply: ReplyState::None,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc: 0,
@@ -997,6 +1054,7 @@ impl Activation {
             call_type: inherited.call_type,
             method_identity: None,
             exposed: Vec::new(),
+            reply: ReplyState::None,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc,
@@ -1059,6 +1117,7 @@ impl Activation {
             call_type,
             method_identity: None,
             exposed: Vec::new(),
+            reply: ReplyState::None,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc: 0,
@@ -1113,6 +1172,7 @@ impl Activation {
             call_type: CallType::Method,
             method_identity: Some(identity),
             exposed: Vec::new(),
+            reply: ReplyState::None,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc: 0,
@@ -1140,6 +1200,70 @@ impl Activation {
         BodyKey {
             program: self.program_id,
             directive: self.body,
+        }
+    }
+
+    /// Appends every `ObjRef` this activation holds to `out`.
+    ///
+    /// **For an activation that is off every stack**, which is what a `REPLY`
+    /// leaves behind: while it is on the stack, `SELF` in its own frame and
+    /// `Interp::class_variables` root the same objects, and this type is not
+    /// walked by the collector at all. Parked, neither holds, so the values
+    /// have to be handed to `RootSet::park`.
+    ///
+    /// **The destructuring is exhaustive and has no `..`**, so a field added
+    /// to any of the three types below is a compile error here rather than a
+    /// value that silently stops being rooted. It cannot see an `ObjRef`
+    /// appearing inside `Settings`, `TrapMap`, `AddressState` or
+    /// `TrappedCondition`, none of which holds one; the instrument for that is
+    /// `run_program_collect_every_alloc`, which collects at every allocation
+    /// and so reaches a missed root as a wrong answer rather than as luck.
+    pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
+        let Activation {
+            id: _,
+            program: _,
+            program_id: _,
+            body: _,
+            plan: _,
+            extra: _,
+            frame: _,
+            owns_frame: _,
+            entry: _,
+            call_type: _,
+            method_identity,
+            exposed,
+            reply: _,
+            first_instruction_pending: _,
+            trace_entry: _,
+            pc: _,
+            settings: _,
+            trace_mode: _,
+            address: _,
+            traps: _,
+            condition: _,
+            cached_clock: _,
+            clock_stale: _,
+        } = self;
+        if let Some(MethodIdentity {
+            name: _,
+            scope,
+            receiver,
+        }) = method_identity
+        {
+            out.push(*scope);
+            out.push(*receiver);
+        }
+        for (
+            _,
+            InstanceVar {
+                owner,
+                scope,
+                name: _,
+            },
+        ) in exposed
+        {
+            out.push(*owner);
+            out.push(*scope);
         }
     }
 }

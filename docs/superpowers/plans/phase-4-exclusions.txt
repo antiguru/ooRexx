@@ -3301,15 +3301,17 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   compare, which is D41's territory and 5c's by R3. No owner is assigned here.
   It is written down so it is not rediscovered as a Phase 5 regression.
 
-  KNOWN GAP: `GUARD` ON A ::METHOD IS NOT MODELLED, AND WHAT MAKES IT SAFE
-  TODAY WILL NOT LAST. A ::METHOD body runs now, so its directive options are
-  reachable, and this one does not do what the oracle's does. What matters to a
-  later task is not that it is open but WHAT MAKES IT CURRENTLY SAFE, since
-  that is the thing that stops being true, so the limb below says it. This
-  entry is about `GUARD` by name and does not claim to enumerate the ::METHOD
-  options this crate leaves unmodelled.
+  KNOWN GAP: THE ::METHOD DIRECTIVE'S `GUARDED` OPTION IS NOT MODELLED, AND
+  WHAT MAKES IT SAFE TODAY WILL NOT LAST. A ::METHOD body runs now, so its
+  directive options are reachable, and this one does not do what the oracle's
+  does. What matters to a later task is not that it is open but WHAT MAKES IT
+  CURRENTLY SAFE, since that is the thing that stops being true, so the limb
+  below says it. This entry is about the `GUARDED`/`UNGUARDED` option by name
+  and does not claim to enumerate the ::METHOD options this crate leaves
+  unmodelled.
 
-  `PRIVATE` AND `PROTECTED` WERE THE OTHER TWO LIMBS OF THIS ENTRY AND ARE
+  THE `GUARD` INSTRUCTION WAS THE OTHER HALF OF THIS ENTRY'S GUARD LIMB AND IS
+  CLOSED, and `PRIVATE` AND `PROTECTED` WERE THE OTHER TWO LIMBS AND ARE
   CLOSED. Their limbs are kept below, as the measurements that superseded them
   rather than as the sentences they replaced, because a limb deleted outright
   leaves a later reader with `Access` and `Protection` set by a parser and no
@@ -3367,31 +3369,46 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   the check directly is its whole instrument. Whichever task lands `~new` owns
   the differential.
 
-  `GUARD` IS MODELLED AS NOTHING. `rexx-parse` records the option on the
-  directive (`GuardOption`, `ast.rs`) and nothing in `rexx-exec` reads it, so
-  `GUARDED` and `UNGUARDED` and the default all run the same body the same
-  way. Measured, a class with one method of each option: both engines and the
-  oracle print the same lines at rc 0, which is agreement by the table's own
-  rule and says nothing about the guard.
+  THE `GUARD` INSTRUCTION RUNS, AND ITS LOUD ROW HERE IS RETIRED. `GUARD ON`
+  and `GUARD OFF` are no-ops and a `GUARD ... WHEN` whose expression holds is
+  one too; the method-invocation check is the oracle's own 99.911, and a `WHEN`
+  that does not hold is loud because the oracle blocks there for ever.
+  `Interp::exec_guard` (`run.rs`) carries the measurements, and
+  `corpus/lang/method_guard_instruction.rex` and
+  `corpus/lang/method_guard_outside_method.rex` are the differential rows.
+  `REPLY` runs too, and `corpus/lang/method_reply.rex` is its row.
 
-  WHAT MAKES IT UNOBSERVABLE is that `GUARD ON` reserves the object's scope,
+  THE DIRECTIVE OPTION IS STILL MODELLED AS NOTHING. `rexx-parse` records it
+  on the directive (`GuardOption`, `ast.rs`) and nothing in `rexx-exec` reads
+  it, so `GUARDED` and `UNGUARDED` and the default all run the same body the
+  same way. Measured, a class with one method of each option: both engines and
+  the oracle print the same lines at rc 0, which is agreement by the table's
+  own rule and says nothing about the guard.
+
+  WHAT MAKES IT UNOBSERVABLE is that `GUARDED` reserves the object's scope,
   and a reservation is only observable when a SECOND ACTIVITY can contend for
-  it. The routes to one that have been checked are loud. Measured on this
-  crate, both engines: `REPLY` inside a method body is rc 120; `.K~start('m')`
-  is rc 120 (`method "START" of class "Object" is not implemented`); the
-  `GUARD` INSTRUCTION is rc 120. Re-entry on a single activity is not a route
-  either: a `guarded` class method recursing into itself through `self~m`
-  answers at rc 0 on the oracle and identically here, so there is no
-  self-deadlock to reproduce.
+  it. THIS ARGUMENT REPLACES ONE THAT RESTED ON THE ROUTES BEING LOUD, and it
+  had to: two of the three routes that limb listed are `REPLY` and the `GUARD`
+  instruction, and both run now. What is left is that neither of them creates
+  an activity. `REPLY` here does not spawn one -- the body it leaves owed is
+  run after the main program finishes, on the same activity, and
+  `Interp::deferred` (`lib.rs`) says so -- and re-entry on one activity is not
+  a route either: measured, a `guarded` class method recursing into itself
+  through `self~m` answers `level 2 level 1 bottom` at rc 0 on the oracle and
+  identically here on both engines, so there is no self-deadlock to reproduce.
+  The third route is still loud: `.K~start('m')` is rc 120 here (`method
+  "START" of class "Object" is not implemented`) where the oracle answers `a
+  Message`, both re-measured.
 
   THAT IS A LIST OF ROUTES CHECKED, NOT AN ENUMERATION OF ROUTES, and the
   difference is load-bearing: nothing enumerates the ways a second activity
   can come into existence, and the class library was not walked looking for
   one. So the honest statement is that no route found so far can observe the
   missing guard, not that none exists. Whichever task lands the first route
-  that can -- `REPLY`, `~start`, the `GUARD` instruction, or something in the
-  class library nobody has looked for -- owns making the guard real rather
-  than inheriting a silent no-op.
+  that can -- `~start`, a `REPLY` that really does run concurrently, or
+  something in the class library nobody has looked for -- owns making the
+  guard real rather than inheriting a silent no-op. That is Phase 6's, which
+  owns the scheduling `REPLY` and `GUARD` are written against here.
 
   `PROTECTED` IS ROUTED THROUGH THE SECURITY-MANAGER SEAM, AND WHAT MADE IT
   UNOBSERVABLE STILL DOES. The sentence this replaces read that nothing in
@@ -3439,15 +3456,15 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   `the_protected_question_is_asked_only_inside_the_seam`.
 
   THAT IS A LIST OF ROUTES CHECKED, NOT AN ENUMERATION OF ROUTES, exactly as
-  `GUARD`'s limb says of its own list. The class library was not walked looking
+  the `GUARDED` limb says of its own list. The class library was not walked looking
   for another route to a Package, Method or Routine object, and the moved row
   above is what that warning looks like when it comes true.
 
-  `GUARD` HAS NO OWNER ASSIGNED. It is recorded here rather than in a task
-  report because a report is not in the repository, so a later task reading the
-  tree would find `GuardOption` set by a parser and read by nobody, with nothing
-  saying whether that was decided or overlooked. `Protection` is read now, and
-  the two closed limbs above say where.
+  `GuardOption` HAS NO OWNER ASSIGNED. It is recorded here rather than in a
+  task report because a report is not in the repository, so a later task
+  reading the tree would find `GuardOption` set by a parser and read by nobody,
+  with nothing saying whether that was decided or overlooked. `Protection` is
+  read now, and the two closed limbs above say where.
 
   KNOWN GAP: VALUE'S EXTERNAL-SELECTOR FORM MIXES TWO OWNERS BEHIND ONE
   ARGUMENT. A *present* third argument to VALUE selects the pool this
