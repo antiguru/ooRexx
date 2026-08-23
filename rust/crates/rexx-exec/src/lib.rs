@@ -4130,22 +4130,36 @@ impl Interp {
         // options (`parser/DirectiveParser.cpp:826`-`:915`): `DELEGATE`
         // first, then `ATTRIBUTE`, then `ABSTRACT`.
         //
-        // **The `DELEGATE` arm installs the plain name alone here and the
-        // pair on the oracle**, which is a disclosed divergence and not a
-        // reading of the C++. `methodDirective`'s comment there is "A
-        // delegate method can also be an attribute, which really just means
-        // we produce two delegate methods", and it calls
-        // `createDelegateMethod` for the setter name as well as the plain
-        // one. Measured, `::method a class delegate p attribute` beside
-        // `::attribute p class`: oracle `.K~a = 5` is 97.1 at rc 159 naming
-        // `Object "P"`, and this crate is 97.1 at rc 159 naming
-        // `Object "The K class"` -- the same status and the same catalogue
-        // row over a receiver the oracle does not name, because the setter's
-        // key was never added. `DELEGATE` is 5b's, and the task that builds
-        // it owns closing this; the getter half already reaches
-        // `method_body_gap`'s refusal.
+        // **`DELEGATE` under `ATTRIBUTE` installs the pair**, which is what
+        // the C++ does: `methodDirective`'s comment there is "A delegate
+        // method can also be an attribute, which really just means we produce
+        // two delegate methods", and it calls `createDelegateMethod` for the
+        // setter name as well as the plain one. Both keys land on the body
+        // path, where `method_body_gap` refuses them, because forwarding a
+        // message to a delegate property's value is `FORWARD`'s job and 5b's.
+        //
+        // **The refusal is a divergence from the oracle and is the one this
+        // crate chooses.** Measured, `::method a class delegate p attribute`
+        // beside `::attribute p class`: the oracle answers `.K~a = 5` with
+        // 97.1 at rc 159 naming `Object "P"`, and `say .K~a` with 97.1 at rc
+        // 159 naming the same receiver, because both messages reach the
+        // delegate. This crate refuses both at rc 120, so it differs from the
+        // oracle on the status where a name miss would have matched it.
+        //
+        // **The setter's key is installed for the refusal and for nothing
+        // else**, which is why it is here rather than under `ATTRIBUTE`'s arm
+        // below: a key the dictionary does not hold makes `.K~a = 5` a name
+        // miss on the class, reporting the oracle's own status and the
+        // oracle's own catalogue row over a receiver the oracle does not name
+        // -- a difference no comparison of exit status or error number can
+        // see. The refusal spends a matching status on a difference a reader
+        // can find.
         let installed: Vec<(Vec<u8>, Option<GeneratedKind>)> = if method.delegate.is_some() {
-            vec![(upper, None)]
+            if method.attribute {
+                vec![(accessor_setter_name(&upper), None), (upper, None)]
+            } else {
+                vec![(upper, None)]
+            }
         } else if method.attribute {
             let setter = accessor_setter_name(&upper);
             let (get, set) = if method.abstract_ {

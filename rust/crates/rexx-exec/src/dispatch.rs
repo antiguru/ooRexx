@@ -3589,6 +3589,28 @@ mod tests {
                 "say .K~a\n::class K\n::attribute a class delegate p\n",
                 "a ::ATTRIBUTE with no body of its own is not implemented (Phase 5)",
             ),
+            // **`DELEGATE` with `ATTRIBUTE`, both halves of the pair, and the
+            // setter is the row with no other instrument at all.** The oracle
+            // installs a delegate method under each key and forwards both, so
+            // it answers 97.1 at rc 159 naming `Object "P"` for either. Until
+            // this crate installed the setter's key that message was a name
+            // miss on the class: 97.1 at rc 159 naming `Object "The K class"`,
+            // which is the oracle's status and the oracle's catalogue row over
+            // a receiver the oracle does not name. No corpus program covers
+            // the combination in either direction and table D's row identity
+            // is one keyword, so **these two rows are the whole instrument**,
+            // and the second is what stops the silent-receiver shape coming
+            // back.
+            (
+                "say .K~a\n::class K\n::method a class delegate p attribute\n\
+                 ::attribute p class\n",
+                "a ::METHOD with no body of its own is not implemented (Phase 5)",
+            ),
+            (
+                ".K~a = 5\nsay 'stored'\n::class K\n\
+                 ::method a class delegate p attribute\n::attribute p class\n",
+                "a ::METHOD with no body of its own is not implemented (Phase 5)",
+            ),
             // A generated accessor over a variable that is not a simple name.
             // Oracle rc 0 both: the stem answers `5` for the round trip and
             // the compound answers its own derived name `a.b`.
