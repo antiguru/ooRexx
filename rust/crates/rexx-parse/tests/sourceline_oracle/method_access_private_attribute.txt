@@ -1,4 +1,4 @@
-count 55
+count 65
 /* PRIVATE on a ::ATTRIBUTE, which is the same access check on a name the
  * directive generates rather than one a ::METHOD declares.
  *
@@ -14,14 +14,18 @@ count 55
  * a real access check from a build that dropped the accessor and let the
  * name-miss report stand.
  *
- * A bodyless private attribute read from a caller the check ALLOWS is not
- * here: the oracle answers the uninitialised instance variable and this crate
- * refuses that accessor for want of the variable, which is a separate gap.
+ * allowed is the same allowing side over a BODYLESS private attribute, where
+ * the pair the directive generates reads and writes the receiver's own pool
+ * instead of running a written body. It is here because the access check and
+ * the accessor are two separate things over one send: inside witnesses the
+ * check allowing a written body, allowed witnesses it allowing a generated
+ * one, and bodyless witnesses it refusing a generated one.
  *
  * rc 159.
  */
 
 say 'inside' .K~poke
+say 'allowed' .P~poke
 call bodyless
 call setter
 say .K~a
@@ -46,6 +50,12 @@ refused:
   return self~a
 ::ATTRIBUTE a CLASS GET PRIVATE
   return 'got'
+
+::CLASS P
+::METHOD poke CLASS
+  self~p = 'stored'
+  return self~p
+::ATTRIBUTE p CLASS PRIVATE
 
 ::CLASS Z
 ::ATTRIBUTE b CLASS PRIVATE

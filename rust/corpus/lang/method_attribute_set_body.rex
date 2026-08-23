@@ -19,10 +19,12 @@
    cross into a method activation -- measured, a traced sending clause echoes
    its own >E>/>L>/>A> lines and no >I> at all.
 
-   Neither accessor stores anything: a method activation's frame is its own,
-   so a name assigned in the setter is not the name the getter reads, and a
-   program that printed a stored value here would be witnessing instance
-   variables, which this phase has none of.
+   Neither accessor stores anything, and that is a property of these bodies
+   rather than of the phase: a method activation's frame is its own, so a name
+   assigned in the setter is not the name the getter reads. Neither body
+   exposes anything, which is the whole difference from the generated pair
+   corpus/lang/method_attribute_generated.rex runs -- that pair reaches the
+   receiver's pool and this one reaches two frames.
 
    No abuttal anywhere: a symbol abutting a preceding string literal can be
    read as its hex or binary suffix, so every join below is an explicit ||. */

@@ -1,0 +1,12 @@
+count 11
+/* A generated getter takes no arguments, and the refusal carries no frame of
+   its own: the report is the sending clause and the two catalogue lines, with
+   no `Compiled method` line above them, because `AttributeGetterCode::run`
+   raises directly where a primitive method raises from inside a
+   `NativeActivation`. Phase 5a Task 15. */
+
+say .K~a(1)
+
+::class K
+
+::attribute a class

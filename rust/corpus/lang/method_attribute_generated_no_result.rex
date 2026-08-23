@@ -1,0 +1,12 @@
+/* A generated setter answers nothing, which a program can read: the
+   assignment form discards the absence, and the explicit message form in an
+   expression is 91.999 naming the setter's own message. Phase 5a Task 15. */
+
+.K~a = 'stored by the assignment form'
+say .K~a
+r = .K~'A='('stored by the message form')
+say 'unreachable' r
+
+::class K
+
+::attribute a class

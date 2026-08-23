@@ -1,0 +1,9 @@
+count 8
+/* A generated setter takes one argument, and names one in the refusal where
+   the getter names none. Phase 5a Task 15. */
+
+say .K~'A='(1, 2)
+
+::class K
+
+::attribute a class
