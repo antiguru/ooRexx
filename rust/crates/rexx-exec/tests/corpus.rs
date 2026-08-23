@@ -368,6 +368,15 @@ const RAW_STDERR_COMPARISON: &[&str] = &[
     // carry no line number, which is what raw mode asserts.
     "lang/required_string_make_string_raises.rex",
     "lang/required_string_argument_make_string_raises.rex",
+    // Phase 5a (2026-08-17 plan) Task 16: what a `REPLY` leaves on stderr.
+    // Both programs are traceback-only, and both carry the two-space-and-more
+    // gap of a `*-*` clause line at the indent an owed body reports at -- the
+    // run of spaces normalisation collapses. `method_reply`'s 98.936 is
+    // reported from the resumed half of the body and `method_reply_twice`'s
+    // 98.935 from a clause the first half never reached, so the indent is the
+    // only thing separating either report from one raised in the sender.
+    "lang/method_reply.rex",
+    "lang/method_reply_twice.rex",
 ];
 
 /// Every entry in [`RAW_STDERR_COMPARISON`] is a line some phase subset file

@@ -1034,6 +1034,19 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/method_attribute_generated_setter_arguments.rex",
     "lang/method_attribute_generated_setter_omitted.rex",
     "lang/method_abstract_send.rex",
+    // Task 16: the GUARD instruction, and REPLY inside a method. The guard's
+    // spellings in one program; REPLY's own transcript, whose whole point is
+    // exit status 0 with a traceback; the four legality refusals, one fatal
+    // each; what an owed body's raise does to the exit status; and a reply
+    // chained out of an owed body.
+    "lang/method_guard_instruction.rex",
+    "lang/method_reply.rex",
+    "lang/method_guard_outside_method.rex",
+    "lang/method_reply_outside_method.rex",
+    "lang/method_reply_twice.rex",
+    "lang/method_reply_no_result.rex",
+    "lang/method_reply_exit_status.rex",
+    "lang/method_reply_chain.rex",
 ];
 
 #[test]

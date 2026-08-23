@@ -1,0 +1,17 @@
+count 16
+/* One REPLY per method invocation. The first one answers the sender, which is
+   why `one` reaches stdout at all; the second raises 98.935 from the resumed
+   body, where nothing is left to carry a status, so this is rc 0 with a
+   traceback and `tail` is never reached. The second reply's own expression is
+   evaluated before the check, which is the order the C++ takes -- the raise is
+   in `RexxActivation::reply`, past `evaluateExpression`. Phase 5a Task 16. */
+
+say .K~m
+
+::class K
+
+::method m class
+  reply 'one'
+  reply 'two'
+  say 'tail'
+  return

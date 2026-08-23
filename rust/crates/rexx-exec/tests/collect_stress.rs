@@ -239,7 +239,19 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/method_attribute_generated_setter_omitted.rex",
     "lang/method_body_raises.rex",
     "lang/method_class_side_lookup.rex",
+    // Task 16. Both instructions' legality refusals reach their raise before
+    // anything is built, and the two `REPLY` programs beside them hand out
+    // values short enough to ride in the handle. Task 16's other three
+    // programs are absent because they do allocate, which is what puts a
+    // collection between a `REPLY`'s park and its resume;
+    // `a_parked_reply_keeps_its_variables_across_a_collection` below is the
+    // narrow test of that window.
+    "lang/method_guard_outside_method.rex",
     "lang/method_no_result_is_an_error.rex",
+    "lang/method_reply_exit_status.rex",
+    "lang/method_reply_no_result.rex",
+    "lang/method_reply_outside_method.rex",
+    "lang/method_reply_twice.rex",
     "lang/method_trace_invocation.rex",
     "lang/method_trace_nested.rex",
     "lang/mutation_controlled_order.rex",
@@ -673,5 +685,70 @@ fn a_loops_per_pass_roots_outlive_the_pass_and_not_the_loop() {
                 row.allocates
             );
         }
+    }
+}
+
+/// A method body a `REPLY` left owed still reads its own variables when it
+/// resumes, with a collection at every allocation in between.
+///
+/// **The window this is about exists nowhere else.** Every other activation's
+/// variables are in an open slot frame for the whole of its life, and
+/// `RootSet::iter` walks that frame. A parked one has no frame: its values are
+/// copied out and handed to `RootSet::park`, its arguments and receiver with
+/// them, and the sender then runs on and allocates. So a value the park
+/// forgot is swept between the two halves rather than merely retained.
+///
+/// The program is built so that every value the resumed half prints is wide
+/// enough to need a heap slot -- a short one rides in the handle and would
+/// survive a missing root by not being an object -- and so that the sender
+/// allocates after the reply, which is what makes the collection happen inside
+/// the window rather than before it.
+///
+/// **Checked by taking its subject away**, one mutation at a time: removing
+/// `RootSet::iter`'s `self.parked` chain, and removing `park_reply`'s
+/// `context.object_roots(&mut anchor)`. Each panics here on `a live value` on
+/// both engines, and under each the plain (non-stress) run of this same
+/// program still prints all five lines correctly on both engines -- so nothing
+/// but the collector sees either one.
+#[test]
+fn a_parked_reply_keeps_its_variables_across_a_collection() {
+    let program = concat!(
+        "say .K~m('aaaaaaaaaaaaaaaa')\n",
+        "sender = 'bbbbbbbbbbbbbbbb' || 'cccccccccccccccc'\n",
+        "say sender\n",
+        "::class K\n",
+        "::method m class\n",
+        "  expose held\n",
+        "  local = 'dddddddddddddddd' || 'eeeeeeeeeeeeeeee'\n",
+        "  held = 'ffffffffffffffff' || 'gggggggggggggggg'\n",
+        "  reply 'replied'\n",
+        "  say local\n",
+        "  say held\n",
+        "  say arg(1)\n",
+        "  return\n",
+    );
+    let expected = concat!(
+        "replied\n",
+        "bbbbbbbbbbbbbbbbcccccccccccccccc\n",
+        "ddddddddddddddddeeeeeeeeeeeeeeee\n",
+        "ffffffffffffffffgggggggggggggggg\n",
+        "aaaaaaaaaaaaaaaa\n",
+    );
+    for engine in [rexx_exec::Engine::TreeWalker, rexx_exec::Engine::Ir] {
+        let stress = run_program_collect_every_alloc(
+            "<parked-reply-rooting>",
+            program.as_bytes().to_vec(),
+            rexx_exec::Invocation::none().with_engine(engine),
+        );
+        assert_eq!(stress.exit_code, 0, "{:?}", engine);
+        assert_eq!(
+            String::from_utf8_lossy(&stress.stdout),
+            expected,
+            "a parked REPLY lost a value under collect-on-every-allocation, {engine:?}"
+        );
+        assert!(
+            stress.collections > 0,
+            "the stress mode did not collect, so this proves nothing, {engine:?}"
+        );
     }
 }

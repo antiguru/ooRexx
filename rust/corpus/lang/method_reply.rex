@@ -1,0 +1,15 @@
+/* REPLY hands its value to the sender and the rest of the method body still
+   runs, so `after` reaches stdout after the sender has already printed the
+   reply. The RETURN below it carries a value that now has nobody to go to,
+   which is 98.936 -- and the whole program is EXIT STATUS 0 WITH A TRACEBACK,
+   because by the time the raise happens the main program has finished and
+   there is nothing left to carry a status. Phase 5a Task 16. */
+
+say .K~m
+
+::class K
+
+::method m class
+  reply 'replied'
+  say 'after'
+  return 'returned'

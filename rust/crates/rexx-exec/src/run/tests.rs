@@ -8541,3 +8541,182 @@ fn a_trap_handler_and_an_internal_call_do_not_carry_the_same_receiver() {
         }
     }
 }
+
+/// **What a `REPLY` leaves on stderr, in every `cargo test` rather than only
+/// under the corpus gate.**
+///
+/// `tests/corpus.rs` compares the first two programs' stderr raw, and that is
+/// the stronger comparison -- but it needs the C++ oracle on the machine and
+/// `REXX_CORPUS_GATE` switched on. Measured with the raise deleted from
+/// `Interp::returned_value`: the gated corpus goes from 185 of 185 to 183 of
+/// 185 and is the only red thing in the workspace, while the *ungated* run
+/// reports the same two mismatches and still exits 0. So without this test the
+/// legality check has no instrument in gates 1 through 3.
+///
+/// **The shape is exit status 0 (or the main body's own) with a traceback**,
+/// which is what makes a status-only assertion useless here: with the raise
+/// gone, both programs keep their exit code and their whole stdout and lose
+/// only these bytes.
+///
+/// Every byte is the oracle's, captured from the corpus program named beside
+/// it and run from a scratch directory; the one substitution is the package
+/// path, which is the file's own absolute location.
+///
+/// The third program is the adjacent success: a `RETURN` with no value after a
+/// `REPLY` is legal, so an implementation that raised on the *reply* rather
+/// than on the value carried by the return would redden here.
+#[test]
+fn a_value_returned_after_a_reply_reports_the_oracles_own_98_936() {
+    assert_stderr_on_both_engines(
+        "/abs/method_reply.rex",
+        corpus_source!("lang/method_reply.rex"),
+        concat!(
+            "    15 *-* return 'returned'\n",
+            "Error 98 running /abs/method_reply.rex line 15:  Execution error.\n",
+            "Error 98.936:  RETURN cannot return a value after a REPLY.\n",
+        ),
+    );
+
+    // The same raise from a program whose main body chose its own exit status,
+    // which is where a raise that settled the status would show.
+    assert_stderr_on_both_engines(
+        "/abs/method_reply_exit_status.rex",
+        corpus_source!("lang/method_reply_exit_status.rex"),
+        concat!(
+            "    13 *-* return 'boom'\n",
+            "Error 98 running /abs/method_reply_exit_status.rex line 13:  Execution error.\n",
+            "Error 98.936:  RETURN cannot return a value after a REPLY.\n",
+        ),
+    );
+    for engine in [crate::Engine::Ir, crate::Engine::TreeWalker] {
+        let outcome = crate::run_program(
+            "/abs/method_reply_exit_status.rex",
+            corpus_source!("lang/method_reply_exit_status.rex")
+                .as_bytes()
+                .to_vec(),
+            crate::Invocation::none().with_engine(engine),
+        );
+        assert_eq!(outcome.exit_code, 7, "{engine:?} arm");
+    }
+
+    // The adjacent success: a bare `RETURN` after a `REPLY` is legal, and the
+    // owed body's own `SAY` still reaches stdout.
+    for engine in [crate::Engine::Ir, crate::Engine::TreeWalker] {
+        let outcome = crate::run_program(
+            "/abs/bare-return-after-reply.rex",
+            b"say .K~m\n::class K\n::method m class\n  reply 'replied'\n  say 'tail'\n  return\n"
+                .to_vec(),
+            crate::Invocation::none().with_engine(engine),
+        );
+        assert_eq!(outcome.stderr, b"", "{engine:?} arm");
+        assert_eq!(outcome.stdout, b"replied\ntail\n", "{engine:?} arm");
+        assert_eq!(outcome.exit_code, 0, "{engine:?} arm");
+    }
+}
+
+/// **A second `REPLY` reports the oracle's own 98.935**, on the terms the test
+/// above states for 98.936: a `cargo test` instrument for a refusal whose
+/// whole difference is on stderr.
+///
+/// The reply that raises is the *second* one, and its own expression is
+/// evaluated before the check -- so an implementation that asked the
+/// one-per-invocation question before evaluating would still print this, and
+/// what separates the two is the clause the report names.
+#[test]
+fn a_second_reply_reports_the_oracles_own_98_935() {
+    assert_stderr_on_both_engines(
+        "/abs/method_reply_twice.rex",
+        corpus_source!("lang/method_reply_twice.rex"),
+        concat!(
+            "    14 *-* reply 'two'\n",
+            "Error 98 running /abs/method_reply_twice.rex line 14:  Execution error.\n",
+            "Error 98.935:  REPLY can be issued only once per method invocation.\n",
+        ),
+    );
+}
+
+/// **The `GUARD` instruction's whole surface, in every `cargo test`.**
+///
+/// Each row is the oracle's own answer, measured on `build/bin/rexx`. The
+/// first is `corpus/lang/method_guard_instruction.rex`, whose stdout is the
+/// only thing a no-op can be read from -- so a `GUARD` that started refusing,
+/// or that started raising, changes this line and nothing else about the
+/// program. The gated corpus is the stronger comparison and needs the C++
+/// oracle; this runs without it.
+///
+/// The last two rows are the loud refusals, and they are here so that a
+/// refusal turning into an answer is visible: a `WHEN` that does not hold
+/// blocks for ever on the oracle, so there is no transcript for the
+/// differential to compare and a silent no-op there would be a wrong answer
+/// nothing else could see.
+#[test]
+fn the_guard_instructions_answers_are_the_oracles_own() {
+    struct Row {
+        name: &'static str,
+        source: &'static str,
+        stdout: &'static [u8],
+        exit_code: i32,
+        stderr_contains: &'static str,
+    }
+    let rows = [
+        Row {
+            name: "every spelling in a class method, each a no-op",
+            source: corpus_source!("lang/method_guard_instruction.rex"),
+            stdout: b"guarded\n",
+            exit_code: 0,
+            stderr_contains: "",
+        },
+        Row {
+            name: "GUARD outside a method invocation, 99.911",
+            source: "say 'before'\nguard on\n",
+            stdout: b"before\n",
+            exit_code: 157,
+            stderr_contains: "GUARD can only be issued in an object method invocation.",
+        },
+        Row {
+            name: "a WHEN whose value is neither 0 nor 1, GUARD's own 34.902",
+            source: "say .K~m\n::class K\n::method m class\n  expose v\n  v = 'x'\n  \
+                     guard on when v\n  return 'no'\n",
+            stdout: b"",
+            exit_code: 222,
+            stderr_contains: "Value of expression following GUARD keyword must be exactly",
+        },
+        Row {
+            name: "a WHEN that does not hold, where the oracle blocks for ever",
+            source: "say .K~m\n::class K\n::method m class\n  expose v\n  v = 0\n  \
+                     guard on when v = 1\n  return 'no'\n",
+            stdout: b"",
+            exit_code: crate::NOT_IMPLEMENTED_EXIT,
+            stderr_contains: "wait for another activity",
+        },
+        Row {
+            name: "a REPLY under a construct, whose state an index cannot restore",
+            source: "say .K~m\n::class K\n::method m class\n  do 1\n    reply 'in-do'\n  \
+                     end\n  return 'no'\n",
+            stdout: b"",
+            exit_code: crate::NOT_IMPLEMENTED_EXIT,
+            stderr_contains: "a REPLY inside a DO, SELECT or IF",
+        },
+    ];
+    for row in rows {
+        for engine in [crate::Engine::Ir, crate::Engine::TreeWalker] {
+            let outcome = crate::run_program(
+                "/abs/guard-surface.rex",
+                row.source.as_bytes().to_vec(),
+                crate::Invocation::none().with_engine(engine),
+            );
+            let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
+            assert_eq!(outcome.stdout, row.stdout, "{}, {engine:?}", row.name);
+            assert_eq!(outcome.exit_code, row.exit_code, "{}, {engine:?}", row.name);
+            if row.stderr_contains.is_empty() {
+                assert_eq!(stderr, "", "{}, {engine:?}", row.name);
+            } else {
+                assert!(
+                    stderr.contains(row.stderr_contains),
+                    "{}, {engine:?}: stderr was {stderr:?}",
+                    row.name
+                );
+            }
+        }
+    }
+}

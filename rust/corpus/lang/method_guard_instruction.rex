@@ -1,0 +1,20 @@
+/* GUARD ON and GUARD OFF reserve and release the receiver's scope. With one
+   activity nothing can contend for the reservation, so every spelling is a
+   no-op and the method answers -- including the WHEN form, whose expression
+   is evaluated and, when it holds, waits for nothing. WHEN also carries the
+   99.913 rule the parser enforces: it must name an exposed variable, which is
+   why `v` is exposed here. Phase 5a Task 16. */
+
+say .K~m
+
+::class K
+
+::method m class
+  expose v
+  v = 1
+  guard off
+  guard on
+  guard off
+  guard on when v = 1
+  guard off when v = 1
+  return 'guarded'

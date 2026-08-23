@@ -1,0 +1,9 @@
+/* REPLY is legal only in a method invocation, and 99.919 is GUARD's own
+   99.911 one number over. A ::ROUTINE is not a method invocation whatever it
+   was called from. Phase 5a Task 16. */
+
+call sub
+
+::routine sub
+  reply 5
+  return
