@@ -8,8 +8,9 @@
  * the only thing that can turn an object with no string value from a rendering
  * into a raise is the SIGNAL ON itself. Verified by inverting: with the
  * interpreter's own trap-arming site disabled, this program diverges from the
- * oracle on stdout and on exit status while every other trap-armed program in
- * the corpus still matches.
+ * oracle **on stdout alone** -- rc 0 and empty stderr on both sides, the two
+ * raises replaced by the rendering they would have interrupted -- while every
+ * other program in the corpus that arms a NOSTRING-taking trap still matches.
  *
  * Both spellings are here because a trap table answers NOSTRING through its own
  * name and through ANY, and the fallback between them is a separate lookup.
