@@ -834,11 +834,14 @@ pub(crate) fn run(
 /// with no `makeString` anywhere the same call raises nothing where a
 /// converted position would raise NOSTRING.
 ///
-/// **The regression instrument is
-/// `corpus/lang/required_string_builtin_raw_argument.rex`**, which arms the
-/// latch and stores an object through `VALUE`; nothing else in the corpus
-/// reddens for this, because the value only shows up when something reads the
-/// stored object back.
+/// **The regression instruments are the corpus programs that carry a raw
+/// argument position under an armed latch**, of which
+/// `corpus/lang/required_string_builtin_raw_argument.rex` is the one that
+/// stores an object through `VALUE` directly. Removing the exemption reddens
+/// those and nothing else in the corpus, measured by removing it and reading
+/// the failures off a `--no-fail-fast` run: a program that arms the latch
+/// without reading a stored object back stays green, because the value only
+/// shows up when something reads it.
 pub(crate) fn raw_argument_positions(name: &'static [u8]) -> &'static [usize] {
     match RAW_ARGUMENT_POSITIONS.iter().find(|(row, _)| *row == name) {
         Some((_, positions)) => positions,
@@ -1409,8 +1412,8 @@ mod tests {
         );
         let text = std::fs::read_to_string(&path).unwrap_or_else(|e| {
             panic!(
-                "cannot read {} -- the builtin bodies this table derives from are part of \\
-                 the read-only C++ tree, so a missing one means the tree moved rather than \\
+                "cannot read {} -- the builtin bodies this table derives from are part of \
+                 the read-only C++ tree, so a missing one means the tree moved rather than \
                  that the fact is gone: {e}",
                 path.display()
             )
@@ -1499,8 +1502,8 @@ mod tests {
                 .iter()
                 .map(|name| (*name).to_string())
                 .collect::<Vec<_>>(),
-            "the set of blocks that pass positions on without a constant has moved, and this \\
-             derivation cannot classify those positions -- run the probes this test's doc names \\
+            "the set of blocks that pass positions on without a constant has moved, and this \
+             derivation cannot classify those positions -- run the probes this test's doc names \
              against the new member before widening the list"
         );
 
@@ -1524,8 +1527,8 @@ mod tests {
         assert_eq!(
             derived,
             committed,
-            "RAW_ARGUMENT_POSITIONS disagrees with {} -- a position the oracle fetches raw and \\
-             this table does not exempt is a silent wrong answer, and one it exempts and the \\
+            "RAW_ARGUMENT_POSITIONS disagrees with {} -- a position the oracle fetches raw and \
+             this table does not exempt is a silent wrong answer, and one it exempts and the \
              oracle converts is another",
             path.display()
         );
