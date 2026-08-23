@@ -563,7 +563,7 @@ pub(crate) struct Activation {
     ///
     /// **Named rather than counted.** The readers are a set the tree can
     /// enumerate, so a number here is a fact that goes stale with nothing to
-    /// notice; a name that stops existing is a compile error at its own site.
+    /// notice.
     ///
     /// **LEGALITY where `exec_reply` and `returned_value` read it,
     /// SCHEDULING where `enter_method_body` and `resume_reply` do.** 98.935

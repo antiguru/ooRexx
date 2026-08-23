@@ -2465,11 +2465,14 @@ struct Interp {
     /// **What is measured is that the oracle has no single answer, not any
     /// particular distribution.** Two class methods each replying, 30 runs
     /// under the standard bounded wrapper: two distinct stdout orders, 18 and
-    /// 12. A second measurement, of a differently written two-object shape,
-    /// gave five orders over its own 30 runs -- so the count of orders is not
-    /// stable between sittings and no figure here is *the* distribution. What
-    /// they establish together is that such a program cannot be a
-    /// differential row, which is all the exclusion resting on this needs.
+    /// 12, in the sitting the report records it from. A differently written
+    /// two-object shape gave five orders over its own 30 runs, and a third,
+    /// independent sitting of that same shape reproduced five again, three
+    /// of the same rows -- so the distribution depends on how the shape is
+    /// written, not on which sitting ran it, and no figure here is *the*
+    /// distribution. What the two shapes establish together is that such a
+    /// program cannot be a differential row, which is all the exclusion
+    /// resting on this needs.
     ///
     /// **The claim stops there deliberately.** A scheduler that yielded at the
     /// `REPLY` and returned to the sender would produce some of those orders,

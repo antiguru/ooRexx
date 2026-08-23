@@ -3532,10 +3532,9 @@ impl Interp {
     /// C++ evaluates the expression, and while it is false waits for another
     /// activity to change one of the exposed variables the expression names
     /// (`:167`-`:185`). With one activity nothing can, so the oracle itself
-    /// never leaves that loop: measured, `guard on when v = 1` with `v` at
-    /// `0` was killed at a 6-second timeout with no output, and `guard off
-    /// when v = 1` likewise. A wait that cannot end has no transcript to
-    /// match, so it is loud.
+    /// never leaves that loop: the program and its measured effect are
+    /// `corpus/oracle-crashes.txt` entry 7, which must not be run. A wait
+    /// that cannot end has no transcript to match, so it is loud.
     ///
     /// The `WHEN` that *does* hold is a no-op like the bare form, and its
     /// `>K>` is the ordinary keyword-result line at this clause's own value
@@ -11906,15 +11905,15 @@ pub(crate) fn raised_if_not_logical(found: &[u8]) -> Raised {
 }
 
 /// 34.902: a `GUARD ... WHEN` condition is not exactly `0` or `1`.
-///
-/// **LEGALITY, and Phase 6 keeps it.** The expression is evaluated and its
-/// value checked before anything waits on it, so the raise is the oracle's
-/// answer whatever a scheduler then does with a `false`.
 /// `Error_Logical_value_guard`, catalogue text "Value of expression following
 /// GUARD keyword must be exactly \"0\" or \"1\"; found \"...\"", one
 /// substitution, the operand's own rendered text. `truthValue(Error_Logical_
 /// value_guard)` at `instructions/GuardInstruction.cpp:168` is what selects
 /// this sub-number over `IF`'s and `WHEN`'s.
+///
+/// **LEGALITY, and Phase 6 keeps it.** The expression is evaluated and its
+/// value checked before anything waits on it, so the raise is the oracle's
+/// answer whatever a scheduler then does with a `false`.
 fn raised_guard_not_logical(found: &[u8]) -> Raised {
     Raised::syntax(34, 902, vec![found.to_vec()])
 }
