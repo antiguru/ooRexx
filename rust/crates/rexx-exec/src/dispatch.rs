@@ -1320,7 +1320,7 @@ impl Interp {
     fn accessor_variable(&self, generated: crate::GeneratedMethod) -> Result<Box<[u8]>, Failure> {
         let program = &self.programs[generated.program.0];
         // `get` rather than an index, and `None` rather than a panic, for the
-        // reason `Interp::enter_method_body`'s own two reads carry.
+        // reason `Interp::enter_method_body`'s own reads carry.
         let Some(directive) = program.directives.get(generated.directive) else {
             return Err(Loud::missing_body().into());
         };
@@ -3718,9 +3718,9 @@ mod tests {
                 "through EXPOSE\n",
             ),
             // **Keyed on the declaring scope and on the receiver**, which is
-            // one property with two halves. `.J~a` and `.K~a` are two
-            // receivers and so two pools: measured, the second answers its
-            // derived name after the first was assigned.
+            // one property from both sides. `.J~a` and `.K~a` name different
+            // receivers and so different pools: measured, the second answers
+            // its derived name after the first was assigned.
             (
                 ".J~a = 5\nsay .J~a .K~a\n::class K\n::attribute a class\n\
                  ::class J subclass K\n",

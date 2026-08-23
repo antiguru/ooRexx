@@ -451,9 +451,9 @@ lang/required_string_argument_make_string_raises.rex
 # The accessor pair a `::ATTRIBUTE` and a `::METHOD ... ATTRIBUTE` generate.
 # The value program carries the round trip, the as-written variable spelling
 # against the upcased message name, the pool entry EXPOSE reaches from both
-# sides, and one declaration over two receivers; the programs beside it are
-# the refusals a program can read out of the pair, and they are separate
-# programs because a program can only fail once.
+# sides, and one declaration read back through a second receiver; the programs
+# beside it are the refusals a program can read out of the pair, and they are
+# separate programs because a program can only fail once.
 lang/method_attribute_generated.rex
 lang/method_attribute_generated_no_result.rex
 lang/method_attribute_generated_getter_arguments.rex

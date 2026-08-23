@@ -3205,7 +3205,7 @@ struct InstalledMethodBody {
 /// these out of [`Interp::method_bodies`], and a field added here costs that
 /// path -- measured, `bench-programs/dispatchclass.rex` at +1.88% and 121
 /// `instructions:u` per send when a [`GeneratedKind`] discriminant sat
-/// beside the two fields (see [`GeneratedMethod`]).
+/// beside `program` and `directive` (see [`GeneratedMethod`]).
 ///
 /// **This catches the change and does not guard the mechanism**, which is
 /// worth saying beside it rather than letting the assertion read as a proof.
@@ -3222,23 +3222,26 @@ const _: () = assert!(size_of::<InstalledMethodBody>() == 16);
 /// **A table of its own rather than a discriminant on
 /// [`InstalledMethodBody`], and that is measured.** Every send to a
 /// `::METHOD` body copies an `InstalledMethodBody` out of
-/// [`Interp::method_bodies`] and enters it; putting a kind beside the two
-/// fields there costs `bench-programs/dispatchclass.rex` -- 4,000,000 sends
-/// to a body, none of them to a generated method -- **121 more
+/// [`Interp::method_bodies`] and enters it; putting a kind beside `program`
+/// and `directive` there costs `bench-programs/dispatchclass.rex` --
+/// 4,000,000 sends to a body, none of them to a generated method -- **121 more
 /// `instructions:u` per send**, 25,723,898,929 against 26,207,891,553 for
 /// the whole run. Narrower shapes were measured and none recovered it:
 /// making `directive` a `u32` so the widened struct was 16 bytes again was
 /// worse (26,243,886,462), an out-of-line arm behind one comparison left
 /// 26,191,934,770, and forcing the accessors out of line while pulling
 /// `Activation::method` and `Interp::super_scope_for` back in recovered a
-/// fraction. Two tables recover all of it, because a body send reads the
-/// table it always read and never reaches this one. The sitting behind those
-/// figures is `bench-baselines/phase-5a-arms.tsv`, `task=15-breach`.
+/// fraction. Separating them recovers all of it, because a body send reads the
+/// table it always read and never reaches this one. The totals above come from
+/// `perf stat -e instructions:u` run directly on the axis while the shapes
+/// were being chosen; `bench-baselines/phase-5a-arms.tsv`, `task=15-breach`,
+/// is the committed re-measurement of the same comparison, and it reproduces
+/// the 121 per send and the ordering rather than these totals.
 ///
-/// **Recorded rather than derived, because one directive mints two ids and
-/// only the installer knows which is which.** A `::ATTRIBUTE a` with neither
-/// `GET` nor `SET`, and a `::METHOD a ATTRIBUTE`, each add two names to one
-/// dictionary from a single directive; the directive says an accessor pair
+/// **Recorded rather than derived, because one directive mints an id per key
+/// and only the installer knows which is which.** A `::ATTRIBUTE a` with
+/// neither `GET` nor `SET`, and a `::METHOD a ATTRIBUTE`, each add a getter's
+/// key and a setter's key to one dictionary from a single directive; the directive says an accessor pair
 /// was generated and the dictionary key says which half, but reading the key
 /// back means deciding a getter from a setter by a trailing `=` on a name
 /// that a `::METHOD "a="` could also carry.
@@ -4197,9 +4200,9 @@ impl Interp {
     ///
     /// **A generated accessor is a [`GeneratedMethod`] and not a row of
     /// [`Interp::method_bodies`]**, and each half carries its own
-    /// [`GeneratedKind`]: the `Both` style's two names come from a single
-    /// directive and are a getter and a setter, which the directive alone
-    /// does not say. A `GET` or `SET` that carries a body of its own is a
+    /// [`GeneratedKind`]: the `Both` style's keys come from a single directive
+    /// and are a getter and a setter, which the directive alone does not
+    /// say. A `GET` or `SET` that carries a body of its own is a
     /// written method and goes on the body path with every other one.
     ///
     /// The names are upcased for the same reason
@@ -4217,9 +4220,14 @@ impl Interp {
         let setter_name = accessor_setter_name(&upper);
         // `attributeDirective` asks the same questions in the same order for
         // each style (`parser/DirectiveParser.cpp:1671`-`:1855`) -- external,
-        // then abstract, then delegate -- and only where none of them
-        // answers does the presence of a body decide: `hasBody()` there,
-        // `attribute.body` here.
+        // then abstract, then delegate -- and where none of them answers, the
+        // `GET` and `SET` styles let the presence of a body decide:
+        // `hasBody()` there (`:1773`, `:1836`), `attribute.body` here. The
+        // `BOTH` style admits no body at all, `checkDirective` refusing one at
+        // `:1670`: measured, `::attribute a class` with a following clause is
+        // `Error 99.937: Attribute methods without a SET or GET designation
+        // cannot have a method body.` So `attribute.body` is `None` on every
+        // directive that reaches this arm through that style.
         let generated = if attribute.abstract_ {
             Some(GeneratedKind::Abstract)
         } else if attribute.external.is_some()
@@ -6179,7 +6187,7 @@ say 1
     /// and each half is recorded as the half it is.
     ///
     /// **What a send reads is the kind**, so asserting the names alone would
-    /// leave a pair recorded as two getters looking correct here: the
+    /// leave a pair recorded as a getter twice looking correct here: the
     /// setter's message would then read the variable and answer it instead of
     /// assigning, which is a value where the oracle has no result.
     #[test]
@@ -6228,7 +6236,7 @@ say 1
 
     /// Every generated method `install_directives` recorded, as its `Debug`
     /// spelling, in sorted order. A `Vec` rather than a set so a pair
-    /// recorded as two halves of the same kind reads differently from one of
+    /// recorded as halves of the same kind reads differently from one of
     /// each.
     fn generated_kinds(interp: &Interp) -> Vec<String> {
         let mut kinds: Vec<String> = interp
