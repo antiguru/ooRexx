@@ -1052,6 +1052,17 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     // GUARD's own value check: a WHEN expression naming an exposed variable
     // whose value is not exactly `0` or `1` is 34.902, not IF's or WHEN's.
     "lang/method_guard_when_not_logical.rex",
+    // Task 17: the two steps of the environment search order this phase can
+    // observe, the Directory entry-method mechanism on the shipped entry and
+    // on one a program stores, and the two package tables a corpus program can
+    // carry -- `.RESOURCES` is `dispatch.rs`'s own test, because a
+    // `::RESOURCE` body is source lines that no clause span covers and
+    // `rexx-parse`'s `every_corpus_program_tiles` requires every byte of a
+    // corpus program to be tiled by one.
+    "lang/environment_local_shadows_the_environment.rex",
+    "lang/environment_directory_entry_method.rex",
+    "lang/environment_methods_join.rex",
+    "lang/environment_routines_table.rex",
 ];
 
 #[test]

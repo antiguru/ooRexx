@@ -1,0 +1,31 @@
+count 30
+/* The Directory entry-method mechanism: an entry answers a message of its own
+ * name without being in the behaviour at all. Phase 5a Task 17.
+ *
+ * StringHashCollection::unknown reads the message name as an entry, and a
+ * name ending in `=` stores instead. .environment~local is the shipped case
+ * -- the interpreter's own startup gives that entry a method -- and
+ * hasMethod("LOCAL") answering 0 beside it is what says the behaviour is not
+ * where it comes from.
+ *
+ * The entry route folds case where ~at and ~put do not, which is the pair of
+ * lines reading the same entry under both spellings.
+ *
+ * Measured, rc 0.
+ */
+
+say .environment~local~class
+say .environment~hasMethod("LOCAL")
+say .environment~"local"~class
+say .environment~ARRAY
+
+/* A name no entry holds is .nil rather than the 97.1 a receiver with no
+ * UNKNOWN would raise. */
+say .environment~nosuch
+
+d = .local
+d~mything = 'stored by the entry method'
+say d~mything
+say d["MYTHING"]
+say d["mything"]
+say .MYTHING

@@ -1,0 +1,40 @@
+/* .METHODS holds the methods a floating directive declares, reachable both by
+ * index and as a message. Phase 5a Task 17.
+ *
+ * A StringTable answers an entry name sent as a message exactly as a Directory
+ * does, out of the same donated UNKNOWN. What CoreClasses.orx needs is the
+ * index form, .methods[name], whose value it hands to ~defineClassMethod.
+ *
+ * Which names a directive files is the rest of it: ::ATTRIBUTE's style decides
+ * whether the getter, the setter or both are there, ::METHOD ... ATTRIBUTE
+ * files the pair, ::CONSTANT files one getter, and every key is upcased even
+ * where the directive quoted a mixed-case name.
+ *
+ * Measured, rc 0.
+ */
+
+say .methods~class
+say .methods~z
+say .methods["Z"]
+say .methods~q
+say .methods~hasMethod("Z")
+
+say .methods["ZZ"] .methods["ZZ="]
+say .methods["A"] .methods["A="]
+say .methods["B"] .methods["B="]
+say .methods["W"] .methods["W="]
+say .methods["C"]
+say .methods["MIXED"] .methods["MiXeD"]
+
+/* One object per package, not one per evaluation. */
+say (.methods~identityHash = .methods~identityHash)
+
+::method z
+  return 1
+
+::attribute zz
+::attribute a get
+::attribute b set
+::method w attribute
+::constant c
+::method "MiXeD"
