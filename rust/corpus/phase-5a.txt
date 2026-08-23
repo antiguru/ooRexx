@@ -491,3 +491,6 @@ lang/method_reply_exit_status.rex
 # An owed body that sends a message whose method replies in its turn, so the
 # queue is added to while it is being drained.
 lang/method_reply_chain.rex
+# GUARD's own value check: a WHEN expression that names an exposed variable
+# but is not exactly `0` or `1` is 34.902, not IF's 34.1 or WHEN's 34.2.
+lang/method_guard_when_not_logical.rex

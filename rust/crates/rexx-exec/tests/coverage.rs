@@ -1049,6 +1049,9 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/method_reply_no_result.rex",
     "lang/method_reply_exit_status.rex",
     "lang/method_reply_chain.rex",
+    // GUARD's own value check: a WHEN expression naming an exposed variable
+    // whose value is not exactly `0` or `1` is 34.902, not IF's or WHEN's.
+    "lang/method_guard_when_not_logical.rex",
 ];
 
 #[test]
