@@ -56,7 +56,7 @@ hold `0` on this build and so return stable, wrong-looking-but-harmless
 numbers instead of crashing -- `'M'` is the one that dies because it is
 the one whose out-of-bounds read is dereferenced as a pointer rather than
 used as an integer. Found 2026-08-07 building this project's differential
-corpus; not filed upstream (filing is Moritz's call, not this project's).
+corpus; filed upstream 2026-08-22 as **SF #2082**.
 
 ## 3. `changestr('a'||'00'x,'aa','ZZZ')`
 
@@ -77,7 +77,9 @@ that position and survive; `CHANGESTR` copies the haystack up to and
 including the matched needle, and copying "through" a match that runs
 past the buffer's own bytes is what walks off the end of the allocation
 and crashes. Found 2026-08-14 while fixing the Rust port's own `POS`;
-not filed upstream.
+filed upstream 2026-08-22 as **SF #2083**, which carries this crash and
+the in-string wrong answer as one ticket because one off-by-one causes
+both.
 
 ## 4. `NUMERIC DIGITS` above 1000, used in an arithmetic operation
 
@@ -124,7 +126,7 @@ shape in that family it cannot answer for.
 Consequence for this crate: a boundary that drains has to decide what to
 do with a repeated name, and there is **no oracle behaviour to match**.
 Whatever it does is unconstrained here, and must not be described as
-agreeing with the oracle. Not filed upstream.
+agreeing with the oracle. Filed upstream 2026-08-22 as **SF #2084**.
 
 ## 6. An array with a leading empty slot as the sole subscript of `~at`
 
@@ -155,5 +157,5 @@ array_index_hole`, whose own doc names
 `dispatch.rs`'s `an_expanded_index_of_one_empty_slot_is_loud` as the
 instrument. No differential row can cover it.
 
-Found 2026-08-22 while building this crate's own `~at`; not filed upstream
-(filing is Moritz's call, not this project's).
+Found 2026-08-22 while building this crate's own `~at`; filed upstream the
+same day as **SF #2085**.
