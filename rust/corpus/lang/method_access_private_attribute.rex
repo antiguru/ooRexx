@@ -16,7 +16,7 @@
  * allowed is the same allowing side over a BODYLESS private attribute, where
  * the pair the directive generates reads and writes the receiver's own pool
  * instead of running a written body. It is here because the access check and
- * the accessor are two separate things over one send: inside witnesses the
+ * the accessor are separate things over one send: inside witnesses the
  * check allowing a written body, allowed witnesses it allowing a generated
  * one, and bodyless witnesses it refusing a generated one.
  *

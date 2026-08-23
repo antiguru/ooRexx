@@ -1586,14 +1586,15 @@ fn class_install_order(
     Ok(order)
 }
 
-/// Why a resolved [`MethodRole::Body`] method's directive cannot be entered,
-/// or `None` when it can -- the gate `Interp::enter_method_body`
-/// (`dispatch.rs`) takes before it pushes anything.
+/// Why a resolved method's directive cannot be entered, or `None` when it
+/// can -- the gate `Interp::enter_method_body` (`dispatch.rs`) takes before
+/// it pushes anything.
 ///
-/// **Only the `Body` role reaches here**, so the question is narrower than
-/// "which directive forms run": a generated accessor and an `ABSTRACT`
-/// method have roles of their own and are answered by `Interp::invoke`
-/// without a body at all.
+/// **Only a directive whose method is a body reaches here**, so the question
+/// is narrower than "which directive forms run": `Interp::invocable` answers
+/// with [`InstalledMethodBody`] only where [`Interp::generated_methods`] has
+/// no row for the resolved id, so a generated accessor and an `ABSTRACT`
+/// declaration never arrive.
 ///
 /// **Exhaustive over the directive kinds a `MethodId` can name**, which are
 /// the ones `Interp::install_method` and `Interp::install_attribute` mint ids
@@ -1665,8 +1666,8 @@ fn accessor_setter_name(upper: &[u8]) -> Vec<u8> {
 /// rather than a stem name any scanner produced.
 ///
 /// `None` for a directive kind that generates no accessor, which is an
-/// internal inconsistency where a [`MethodRole::Getter`] or
-/// [`MethodRole::Setter`] reached it.
+/// internal inconsistency where a [`GeneratedKind::Getter`] or
+/// [`GeneratedKind::Setter`] reached it.
 fn accessor_variable(kind: &DirectiveKind) -> Option<&[u8]> {
     match kind {
         DirectiveKind::Attribute(attribute) => Some(&attribute.name),
@@ -3199,6 +3200,22 @@ struct InstalledMethodBody {
     directive: usize,
 }
 
+/// An equality rather than a bound, for the reason `crate::ir::Op`'s own
+/// width assertion is one: every send to a `::METHOD` body copies one of
+/// these out of [`Interp::method_bodies`], and a field added here costs that
+/// path -- measured, `bench-programs/dispatchclass.rex` at +1.88% and 121
+/// `instructions:u` per send when a [`GeneratedKind`] discriminant sat
+/// beside the two fields (see [`GeneratedMethod`]).
+///
+/// **This catches the change and does not guard the mechanism**, which is
+/// worth saying beside it rather than letting the assertion read as a proof.
+/// The same measurement narrowed the widened struct to 16 bytes by making
+/// `directive` a `u32` and the axis got *worse* (26,243,886,462 against
+/// 26,207,891,553), so the width is not what the send path was paying for.
+/// What this fails on is precisely the edit the measurement was taken
+/// against.
+const _: () = assert!(size_of::<InstalledMethodBody>() == 16);
+
 /// One installed method that the *directive* implements rather than a body:
 /// a generated accessor, or an `ABSTRACT` declaration.
 ///
@@ -3209,13 +3226,14 @@ struct InstalledMethodBody {
 /// fields there costs `bench-programs/dispatchclass.rex` -- 4,000,000 sends
 /// to a body, none of them to a generated method -- **121 more
 /// `instructions:u` per send**, 25,723,898,929 against 26,207,891,553 for
-/// the whole run. Three narrower shapes were measured and none of them
-/// recovered it: narrowing the struct back to 16 bytes was worse
-/// (26,243,886,462), an out-of-line arm behind one comparison left
+/// the whole run. Narrower shapes were measured and none recovered it:
+/// making `directive` a `u32` so the widened struct was 16 bytes again was
+/// worse (26,243,886,462), an out-of-line arm behind one comparison left
 /// 26,191,934,770, and forcing the accessors out of line while pulling
 /// `Activation::method` and `Interp::super_scope_for` back in recovered a
-/// fifth. Two tables recover all of it, because a body send reads the table
-/// it always read and never reaches this one.
+/// fraction. Two tables recover all of it, because a body send reads the
+/// table it always read and never reaches this one. The sitting behind those
+/// figures is `bench-baselines/phase-5a-arms.tsv`, `task=15-breach`.
 ///
 /// **Recorded rather than derived, because one directive mints two ids and
 /// only the installer knows which is which.** A `::ATTRIBUTE a` with neither
@@ -4109,10 +4127,23 @@ impl Interp {
     ) {
         let upper = method.name.to_ascii_uppercase();
         // `methodDirective`'s own order of precedence over the generating
-        // options (`parser/DirectiveParser.cpp:831`-`:915`): `DELEGATE`
-        // first, and it installs the plain name **alone** even under
-        // `ATTRIBUTE`; then `ATTRIBUTE`, which installs the pair; then
-        // `ABSTRACT` on its own.
+        // options (`parser/DirectiveParser.cpp:826`-`:915`): `DELEGATE`
+        // first, then `ATTRIBUTE`, then `ABSTRACT`.
+        //
+        // **The `DELEGATE` arm installs the plain name alone here and the
+        // pair on the oracle**, which is a disclosed divergence and not a
+        // reading of the C++. `methodDirective`'s comment there is "A
+        // delegate method can also be an attribute, which really just means
+        // we produce two delegate methods", and it calls
+        // `createDelegateMethod` for the setter name as well as the plain
+        // one. Measured, `::method a class delegate p attribute` beside
+        // `::attribute p class`: oracle `.K~a = 5` is 97.1 at rc 159 naming
+        // `Object "P"`, and this crate is 97.1 at rc 159 naming
+        // `Object "The K class"` -- the same status and the same catalogue
+        // row over a receiver the oracle does not name, because the setter's
+        // key was never added. `DELEGATE` is 5b's, and the task that builds
+        // it owns closing this; the getter half already reaches
+        // `method_body_gap`'s refusal.
         let installed: Vec<(Vec<u8>, Option<GeneratedKind>)> = if method.delegate.is_some() {
             vec![(upper, None)]
         } else if method.attribute {
@@ -4150,10 +4181,12 @@ impl Interp {
     /// style -- landing in `class`'s instance or class dictionary the same
     /// way [`Interp::install_method`] does.
     ///
-    /// One [`InstalledMethodBody`] per accessor, each carrying its own
-    /// [`MethodRole`]: the `Both` style's two names come from a single
+    /// **A generated accessor is a [`GeneratedMethod`] and not a row of
+    /// [`Interp::method_bodies`]**, and each half carries its own
+    /// [`GeneratedKind`]: the `Both` style's two names come from a single
     /// directive and are a getter and a setter, which the directive alone
-    /// does not say.
+    /// does not say. A `GET` or `SET` that carries a body of its own is a
+    /// written method and goes on the body path with every other one.
     ///
     /// The names are upcased for the same reason
     /// [`Interp::install_method`]'s is: `attributeDirective` derives both
@@ -4168,10 +4201,11 @@ impl Interp {
     ) {
         let upper = attribute.name.to_ascii_uppercase();
         let setter_name = accessor_setter_name(&upper);
-        // `attributeDirective` asks the same three questions in the same
-        // order for each style (`parser/DirectiveParser.cpp:1671`-`:1855`),
-        // and only when all three are `None` does the presence of a body
-        // decide: `hasBody()` there, `attribute.body` here.
+        // `attributeDirective` asks the same questions in the same order for
+        // each style (`parser/DirectiveParser.cpp:1671`-`:1855`) -- external,
+        // then abstract, then delegate -- and only where none of them
+        // answers does the presence of a body decide: `hasBody()` there,
+        // `attribute.body` here.
         let generated = if attribute.abstract_ {
             Some(GeneratedKind::Abstract)
         } else if attribute.external.is_some()

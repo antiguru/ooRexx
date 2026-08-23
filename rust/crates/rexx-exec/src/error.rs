@@ -1328,11 +1328,9 @@ impl Raised {
     /// `Method A=` -- the setter's own key, `=` included.
     ///
     /// **Raised at the send with no frame of its own**, which is what
-    /// separates it from every 93.9xx a [`NativeMethod`] raises: measured,
+    /// separates it from every 93.9xx a primitive method raises: measured,
     /// the report is the sending clause and the two catalogue lines, with no
     /// `Compiled method` line above them.
-    ///
-    /// [`NativeMethod`]: crate::dispatch::NativeMethod
     pub(crate) fn abstract_method(name: &[u8]) -> Raised {
         Raised::syntax(93, 965, vec![name.to_vec()])
     }

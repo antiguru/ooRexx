@@ -229,9 +229,9 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     // than for the activation.
     "lang/method_access_private_refused.rex",
     "lang/method_attribute_body.rex",
-    // The three refusals a generated accessor's argument bounds produce are
+    // A refusal that a generated accessor's argument bounds produce is
     // reached before the accessor touches a pool, so nothing is allocated on
-    // the way to them. The rest of Task 15's programs are absent: the value
+    // the way to it. The rest of Task 15's programs are absent: the value
     // program builds strings and stores one of them, and the `no_result` and
     // `abstract_send` programs each print before they fail.
     "lang/method_attribute_generated_getter_arguments.rex",

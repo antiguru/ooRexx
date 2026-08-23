@@ -3653,8 +3653,8 @@ mod tests {
     /// **What catches a regression here**, stated because this replaces a
     /// loud refusal and the corpus gate cannot see a refusal becoming a wrong
     /// answer: this test,
-    /// `corpus/lang/method_attribute_generated.rex` and the four programs
-    /// beside it, and the table D rows
+    /// `corpus/lang/method_attribute_generated.rex` and the
+    /// `method_attribute_generated_*` programs beside it, and the table D rows
     /// `corpus/gate-tables/directives/attribute__class__subkeyword.rex` and
     /// `method__attribute__subkeyword.rex`. The instance reading of every row
     /// below is out of reach until something builds instances, so a wrong
@@ -3805,7 +3805,7 @@ mod tests {
     /// naming the message rather than the directive.
     ///
     /// The instrument, stated because this replaces a loud refusal: **this
-    /// test and the two table D rows**, `method__abstract__subkeyword.rex`
+    /// test and the table D rows** `method__abstract__subkeyword.rex`
     /// and `attribute__abstract__subkeyword.rex`, plus
     /// `corpus/lang/method_abstract_send.rex`. Gate table C cannot see it --
     /// its `abscla` row records that the abstract-*method* half has no arm of

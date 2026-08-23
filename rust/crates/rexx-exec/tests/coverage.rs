@@ -1026,8 +1026,8 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/required_string_make_string_raises.rex",
     "lang/required_string_argument_make_string_raises.rex",
     // Task 15: the generated accessor pair, and ABSTRACT's send-time refusal.
-    // The value program and the four refusals a program can read out of the
-    // pair, one fatal each.
+    // The value program, and the refusals a program can read out of the pair,
+    // which are separate programs because a program can only fail once.
     "lang/method_attribute_generated.rex",
     "lang/method_attribute_generated_no_result.rex",
     "lang/method_attribute_generated_getter_arguments.rex",
