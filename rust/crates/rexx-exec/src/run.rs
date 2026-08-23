@@ -3673,8 +3673,10 @@ impl Interp {
                 self.trace_result(self.clause_state.current_value_indent, &rendered);
             }
         }
-        // A `REPLY` has already answered the sender, so a value here has
-        // nobody to go to: 98.936 for `RETURN`, 98.937 for `EXIT`. Both are
+        // **LEGALITY, and Phase 6 keeps it.** A `REPLY` has already answered
+        // the sender, so a value here has nobody to go to whatever activity
+        // the rest of the body runs on: 98.936 for `RETURN`, 98.937 for
+        // `EXIT`. Both are
         // asked **after** the trace line above, which is the order the C++
         // takes them in -- `RexxInstructionReturn::execute` evaluates through
         // `evaluateExpression` and only then calls `returnFrom`
@@ -11904,6 +11906,10 @@ pub(crate) fn raised_if_not_logical(found: &[u8]) -> Raised {
 }
 
 /// 34.902: a `GUARD ... WHEN` condition is not exactly `0` or `1`.
+///
+/// **LEGALITY, and Phase 6 keeps it.** The expression is evaluated and its
+/// value checked before anything waits on it, so the raise is the oracle's
+/// answer whatever a scheduler then does with a `false`.
 /// `Error_Logical_value_guard`, catalogue text "Value of expression following
 /// GUARD keyword must be exactly \"0\" or \"1\"; found \"...\"", one
 /// substitution, the operand's own rendered text. `truthValue(Error_Logical_

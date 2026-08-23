@@ -393,6 +393,10 @@ pub(crate) enum ReplyState {
     /// Named for the debt rather than for the activation's position, because
     /// `Interp::suspended` is the activation stack below the running one and
     /// this is not that.
+    ///
+    /// **SCHEDULING.** The states beside it are what the oracle's own
+    /// numbered checks read; this one exists only because the body has to be
+    /// put down and picked up again.
     Owed,
 }
 
@@ -548,11 +552,24 @@ pub(crate) struct Activation {
     /// `ActivationSettings::isReplyIssued` plus the `REPLIED` execution state
     /// as one value.
     ///
-    /// [`ReplyState`] has the transitions. Three readers: `REPLY` itself, for
-    /// the one-per-invocation rule; `RETURN`/`EXIT` carrying a value, which
-    /// has nowhere to go once a reply has been handed to the sender; and
+    /// [`ReplyState`] has the transitions. The readers are
+    /// `Interp::exec_reply`, for the one-per-invocation rule;
+    /// `Interp::returned_value`, where a `RETURN`/`EXIT` carrying a value has
+    /// nowhere to send it once a reply has been handed over;
     /// `Interp::enter_method_body`, which parks this activation rather than
-    /// releasing it when the body is to continue.
+    /// releasing it when the body is to continue; and
+    /// `Interp::resume_reply`'s assertion that a resumed body did not ask to
+    /// be parked a second time.
+    ///
+    /// **Named rather than counted.** The readers are a set the tree can
+    /// enumerate, so a number here is a fact that goes stale with nothing to
+    /// notice; a name that stops existing is a compile error at its own site.
+    ///
+    /// **LEGALITY where `exec_reply` and `returned_value` read it,
+    /// SCHEDULING where `enter_method_body` and `resume_reply` do.** 98.935
+    /// and 98.936/98.937 are the oracle's own numbers and Phase 6 keeps them,
+    /// so the `None`/`Issued` distinction survives whatever replaces the
+    /// scheduling; [`ReplyState::Owed`] and its readers do not.
     pub(crate) reply: ReplyState,
     /// Whether no instruction has yet been executed in this activation --
     /// where a label does not count as an instruction.
@@ -1210,6 +1227,11 @@ impl Activation {
     /// `Interp::class_variables` root the same objects, and this type is not
     /// walked by the collector at all. Parked, neither holds, so the values
     /// have to be handed to `RootSet::park`.
+    ///
+    /// **SCHEDULING**, with `Interp::park_reply` and the rest of the parked
+    /// group (`rexx_core::RootSet::park` names it): a running activation's
+    /// objects are rooted by its frame and by `Interp::class_variables`, and
+    /// only a parked one needs them handed over.
     ///
     /// **The destructuring is exhaustive and has no `..`**, so a field added
     /// to any of the three types below is a compile error here rather than a

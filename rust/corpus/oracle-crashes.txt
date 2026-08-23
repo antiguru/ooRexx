@@ -12,10 +12,18 @@
 # run from a fresh empty directory (the scratchpad root is on the oracle's
 # own external-routine search path and must never be the run directory).
 #
-# The failure modes are not folded into one label: an entry is either a
-# deterministic memory-safety defect in the C++ (SIGSEGV, rc 139) or a
-# resource-exhaustion hazard (unbounded allocation, OOM-killed), which is not
-# a crash in that sense, and each entry below says which it is.
+# The failure modes are not folded into one label. An entry is a deterministic
+# memory-safety defect in the C++ (SIGSEGV, rc 139); or a resource-exhaustion
+# hazard (unbounded allocation, OOM-killed), which is not a crash in that
+# sense; or an INDEFINITE BLOCK -- the process alive and healthy, consuming no
+# CPU, parked on a wait that nothing in the program can ever satisfy. Each
+# entry below says which it is.
+#
+# The third mode was added on 2026-08-23 for entry 7 and needs the wrapper
+# above to grow a deadline: a block produces no bytes and no status of its
+# own, so it is the one mode whose entry can only be characterised by killing
+# it. Every such entry states the deadline it was killed at, and rc 137 there
+# is the kill and not the oracle's answer.
 
 ## 1. `select; when 1 = 0 then; when 2 = 2 then nop; end`
 
@@ -159,3 +167,50 @@ instrument. No differential row can cover it.
 
 Found 2026-08-22 while building this crate's own `~at`; filed upstream the
 same day as **SF #2085**.
+
+## 7. `GUARD ... WHEN` in a method, with an expression that is false
+
+    say .K~m
+    ::class K
+    ::method m class
+      expose v
+      v = 0
+      guard on when v = 1
+      return 'no'
+
+Effect: **neither a SIGSEGV nor an exhaustion -- an indefinite block**, the
+third mode this file's header names. Measured twice under the standard wrapper
+with `timeout -s KILL 10` added: rc 137 (the kill, not an answer), nothing on
+stdout, nothing on stderr. A third bounded run under `/usr/bin/time -v`
+reports **0.00 s user and 0.00 s system over 5.00 s elapsed**, so the process
+is parked on a wait rather than spinning -- which is what makes "for ever" the
+right reading of it and "slow" the wrong one.
+
+Cause: `RexxInstructionGuard::execute` evaluates the expression and, while it
+is false, loops on `context->guardWait()`
+(`instructions/GuardInstruction.cpp:167`-`:185`). That releases the object's
+scope and waits to be woken by another activity changing one of the exposed
+variables the expression names. A program with one activity has nothing that
+can change it, so the wait has no end. `GUARD OFF WHEN` blocks identically:
+the `WHEN` form waits whichever way the `ON`/`OFF` flag is set, and the flag
+decides only what the wait holds while it sleeps.
+
+The neighbours bound it and are clean, all rc 0 and all agreeing with this
+crate on both engines: the same method with `v = 1` answers, so it is the
+expression's *value* and not the `WHEN` form that blocks; and `guard on` and
+`guard off` with no `WHEN` at all are no-ops.
+
+Consequence for this crate: **there is no oracle behaviour to match**, so
+`rexx-exec` refuses the shape rather than answering it -- `Loud::
+guard_when_false`, whose own doc names `run/tests.rs`'s
+`the_guard_instructions_answers_and_the_phase_6_refusals` as the instrument. No
+differential row can cover it, and there is not even an exit status to compare
+against: the rc 137 above is the deadline killing the process, not an answer.
+Entry 4 shares that much -- its rc is the OOM kill -- and differs in having a
+cause that consumes something; this one consumes nothing at all.
+
+Found 2026-08-23 while building this crate's `GUARD`; the CPU-time reading is
+that task's review round. **No upstream ticket.** The block is what
+`GUARD ... WHEN` is specified to do, and whether an interpreter should detect
+that no other activity can ever satisfy a particular wait is a design question
+this project has not put to the maintainers.

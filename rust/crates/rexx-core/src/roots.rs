@@ -143,6 +143,15 @@ impl RootSet {
     /// Roots `values` until the handle is spent, independently of every stack
     /// in this type.
     ///
+    /// **SCHEDULING, and a Phase 6 reader of this file may delete the whole
+    /// parked group** -- this, [`RootSet::release`], [`RootSet::live_parked`]
+    /// and [`RootSet::frame_aliases`], with `parked` and `parked_free`. Its
+    /// only caller is `rexx-exec`'s `Interp::park_reply`, which exists because
+    /// a `REPLY` in a single-activity interpreter has to suspend the body it
+    /// left owed and a suspended activation cannot hold a slot frame open. A
+    /// design where the body continues on another activity, with its frame
+    /// still open, needs none of it.
+    ///
     /// The caller keeps its own copy of whatever it needs to restore; this is
     /// reachability and nothing else, which is why it takes a flat vector
     /// rather than a shape. A caller with values in several places hands over
@@ -328,7 +337,9 @@ impl RootSet {
     /// How many of `frame`'s slots are aliases for storage somewhere else.
     ///
     /// For asserting that a frame's contents can be *copied* -- which is what
-    /// `rexx-exec` parks a suspended activation's variables with. Copying an
+    /// `rexx-exec` parks a suspended activation's variables with, so this is
+    /// SCHEDULING with the rest of the parked group ([`RootSet::park`] names
+    /// it). Copying an
     /// alias's value out and writing it back as a plain slot would silently
     /// break the sharing, so a caller that copies has to know there is none.
     ///

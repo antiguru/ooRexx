@@ -8635,22 +8635,35 @@ fn a_second_reply_reports_the_oracles_own_98_935() {
     );
 }
 
-/// **The `GUARD` instruction's whole surface, in every `cargo test`.**
+/// **What `GUARD` answers, and the Phase 6 refusals beside it, in every
+/// `cargo test`.**
 ///
-/// Each row is the oracle's own answer, measured on `build/bin/rexx`. The
-/// first is `corpus/lang/method_guard_instruction.rex`, whose stdout is the
-/// only thing a no-op can be read from -- so a `GUARD` that started refusing,
-/// or that started raising, changes this line and nothing else about the
-/// program. The gated corpus is the stronger comparison and needs the C++
-/// oracle; this runs without it.
+/// **The rows are not all of one kind**, and which kind a row is decides what
+/// it can prove. The rows carrying an oracle answer are
+/// `corpus/lang/method_guard_instruction.rex`, whose stdout is the only thing
+/// a no-op can be read from, and the 99.911 and 34.902 raises; each was
+/// measured on `build/bin/rexx`. The gated corpus is the stronger comparison
+/// for those and needs the C++ oracle, where this runs without it.
 ///
-/// The last two rows are the loud refusals, and they are here so that a
-/// refusal turning into an answer is visible: a `WHEN` that does not hold
-/// blocks for ever on the oracle, so there is no transcript for the
-/// differential to compare and a silent no-op there would be a wrong answer
-/// nothing else could see.
+/// The rows carrying a `NOT_IMPLEMENTED_EXIT` are **this crate's own
+/// refusals, which the oracle does not produce**, and they are here so that a
+/// refusal turning into a silent answer is visible. Each is also its
+/// refusal's sole instrument, which is why they share this table rather than
+/// having tests named for each:
+///
+/// * [`Loud::guard_when_false`] -- the oracle blocks for ever, so there is no
+///   transcript to compare and a no-op here would be a wrong answer nothing
+///   else could see. The program is `corpus/oracle-crashes.txt` entry 7 and
+///   must not be run.
+/// * [`Loud::reply_inside_construct`] -- the oracle *does* answer this, so the
+///   row pins a gap rather than an absence, and a corpus row would have to be
+///   a divergence. **This is the only place that refusal is checked**; a task
+///   splitting or renaming this test has to carry the row with it.
+///
+/// [`Loud::guard_when_false`]: crate::Loud
+/// [`Loud::reply_inside_construct`]: crate::Loud
 #[test]
-fn the_guard_instructions_answers_are_the_oracles_own() {
+fn the_guard_instructions_answers_and_the_phase_6_refusals() {
     struct Row {
         name: &'static str,
         source: &'static str,

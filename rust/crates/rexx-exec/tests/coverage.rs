@@ -1036,9 +1036,11 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/method_abstract_send.rex",
     // Task 16: the GUARD instruction, and REPLY inside a method. The guard's
     // spellings in one program; REPLY's own transcript, whose whole point is
-    // exit status 0 with a traceback; the four legality refusals, one fatal
-    // each; what an owed body's raise does to the exit status; and a reply
-    // chained out of an owed body.
+    // exit status 0 with a traceback; the legality refusals, one program each
+    // because a program can only fail once -- which is not the same as each
+    // being fatal, since a second REPLY raises from the body the first one
+    // left owed and so is itself rc 0; what an owed body's raise does to the
+    // exit status; and a reply chained out of an owed body.
     "lang/method_guard_instruction.rex",
     "lang/method_reply.rex",
     "lang/method_guard_outside_method.rex",

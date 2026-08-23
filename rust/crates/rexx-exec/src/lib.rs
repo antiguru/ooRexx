@@ -1195,10 +1195,25 @@ impl Loud {
 
     /// A `GUARD ... WHEN` whose expression is false.
     ///
-    /// The oracle waits for another activity to make it true and this
-    /// interpreter has none, so the wait cannot end: measured, the oracle
-    /// itself produced no output and was killed at a 6-second timeout.
-    /// `Interp::exec_guard`'s own doc has the pair of probes.
+    /// `RexxInstructionGuard::execute` loops on `context->guardWait()` while
+    /// the expression is false (`instructions/GuardInstruction.cpp:167`-
+    /// `:185`), waiting to be woken by another activity changing one of the
+    /// exposed variables it names. One activity has nothing that can wake it.
+    /// Measured twice under a 10-second kill: rc 137, no bytes on any
+    /// descriptor, and 0.00 s of CPU over 5.00 s elapsed -- a block, not a
+    /// spin.
+    ///
+    /// **There is no oracle behaviour to match here**, so this is a refusal
+    /// rather than an answer, and no differential row can cover it: the
+    /// program is in `corpus/oracle-crashes.txt` as entry 7 and must not be
+    /// run. `run/tests.rs`'s
+    /// `the_guard_instructions_answers_and_the_phase_6_refusals` is the
+    /// instrument, whose refusal rows are this one and
+    /// [`Loud::reply_inside_construct`]'s.
+    ///
+    /// **SCHEDULING.** Phase 6 may delete this outright: an interpreter with
+    /// a second activity has an answer to give here and does not need a
+    /// refusal.
     fn guard_when_false() -> Loud {
         Loud {
             message: "a GUARD that has to wait for another activity to make its WHEN \
@@ -1210,8 +1225,20 @@ impl Loud {
     /// A `REPLY` that is not a clause of its method body's own top level.
     ///
     /// Continuing the body needs the enclosing `DO`/`SELECT`/`IF` state that
-    /// an instruction index cannot carry. `Interp::exec_reply`'s own doc has
-    /// the argument.
+    /// an instruction index cannot carry -- that state is a Rust local of
+    /// `run_bounded` and of the driver's own frame stack, and unwinding to
+    /// hand the sender its value destroys it. `Interp::exec_reply`'s own doc
+    /// has the argument.
+    ///
+    /// Unlike [`Loud::guard_when_false`] the oracle **does** answer this
+    /// shape, so the refusal is a gap rather than an absence of behaviour to
+    /// match, and a differential row would have to be a divergence.
+    /// `run/tests.rs`'s `the_guard_instructions_answers_and_the_phase_6_refusals`
+    /// is the sole instrument, and it is filed there rather than in a test of
+    /// its own because the Phase 6 refusals share one table.
+    ///
+    /// **SCHEDULING.** Phase 6 may delete this outright, for
+    /// [`Loud::guard_when_false`]'s reason.
     fn reply_inside_construct() -> Loud {
         Loud {
             message: "a REPLY inside a DO, SELECT or IF is not implemented (Phase 6)".to_string(),
@@ -2433,10 +2460,22 @@ struct Interp {
     /// such a body on another activity, concurrently with the sender; here it
     /// is run after the main program has finished, in the order the replies
     /// were issued. That reproduces the oracle wherever the oracle is
-    /// deterministic and is a different interleaving wherever it is not --
-    /// measured, two objects each replying printed `A-replied`, `B-after`,
-    /// `B-replied`, `main-end`, `A-after`, an order no single-threaded
-    /// scheduling produces. See [`Interp::run_deferred_replies`].
+    /// deterministic and is a different interleaving wherever it is not.
+    ///
+    /// **What is measured is that the oracle has no single answer, not any
+    /// particular distribution.** Two class methods each replying, 30 runs
+    /// under the standard bounded wrapper: two distinct stdout orders, 18 and
+    /// 12. A second measurement, of a differently written two-object shape,
+    /// gave five orders over its own 30 runs -- so the count of orders is not
+    /// stable between sittings and no figure here is *the* distribution. What
+    /// they establish together is that such a program cannot be a
+    /// differential row, which is all the exclusion resting on this needs.
+    ///
+    /// **The claim stops there deliberately.** A scheduler that yielded at the
+    /// `REPLY` and returned to the sender would produce some of those orders,
+    /// so "an order no sequential schedule produces" is false of any single
+    /// one of them; what no single schedule produces is all of them.
+    /// See [`Interp::run_deferred_replies`].
     ///
     /// **`execute` is the only thing that drains it.** A caller that drives
     /// `Interp::run` directly -- which is most of this crate's unit tests --
@@ -3450,6 +3489,9 @@ impl Argument {
     /// reason [`Activation::object_roots`] is: a variant or a field added
     /// here is a compile error rather than a value that stops being rooted.
     ///
+    /// **SCHEDULING**, with its caller: it exists for a parked activation and
+    /// nothing else.
+    ///
     /// [`Activation::object_roots`]: crate::activation::Activation::object_roots
     fn object_roots(&self, out: &mut Vec<ObjRef>) {
         match self {
@@ -3486,6 +3528,11 @@ impl CallContext {
     /// What `Interp::park_reply` hands to `RootSet::park` alongside the
     /// activation's own: a parked method still owns its arguments and its
     /// receiver, and nothing else roots them once its frame is released.
+    ///
+    /// **SCHEDULING**, and Phase 6 may delete it. Nothing but a parked
+    /// activation needs this: a running one's arguments are rooted by the
+    /// temps its caller pushed, and a design that keeps the frame open while
+    /// the body continues has no parked activations at all.
     fn object_roots(&self, out: &mut Vec<ObjRef>) {
         let CallContext {
             name: _,

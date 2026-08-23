@@ -1580,6 +1580,12 @@ impl Interp {
     /// Runs every method body a `REPLY` has left owed, oldest first, and
     /// answers what each of them raised.
     ///
+    /// **SCHEDULING, and Phase 6 owns the whole function.** There is nothing
+    /// of the language in it: draining a queue after the main program has
+    /// finished is this interpreter's stand-in for the activity the oracle
+    /// spawns, and `Interp::deferred`'s own doc has what that does and does
+    /// not reproduce.
+    ///
     /// **A body queued by a body already in this loop is run too**, which is
     /// what the queue is drained rather than iterated for: a resumed
     /// remainder can send a message whose method replies in its turn.
@@ -1616,6 +1622,12 @@ impl Interp {
     }
 
     /// Puts one parked method body back and runs the rest of it.
+    ///
+    /// **SCHEDULING, and Phase 6 owns the whole function**, for
+    /// [`Interp::run_deferred_replies`]'s reason. Only the `>I>`/`<I<`
+    /// handling below is measured against the C++, and the C++ line it
+    /// follows is itself on the reply-resume path, so it moves with whatever
+    /// replaces this.
     ///
     /// **The level state is entered at nothing rather than restored**, and
     /// that is the resumed body's own shape rather than an omission: it has no
