@@ -1206,8 +1206,8 @@ impl Interp {
                 }
                 outcome
             }
-            // **No `blame_native_method` on any of these four**, measured
-            // twice over. An untrapped `1/0` inside a `::METHOD` body reports
+            // **No `blame_native_method` below this arm**, measured twice
+            // over. An untrapped `1/0` inside a `::METHOD` body reports
             // the method's own failing clause and then the sending clause,
             // with no `Compiled method` line between them, and
             // [`Interp::enter_method_body`] seals its own level for that,
@@ -1251,9 +1251,10 @@ impl Interp {
     /// **`GUARDED` has no reachable effect here.** The C++ splits on
     /// `method->isGuarded()` only to reserve the variable dictionary against
     /// other activities before reading it, and this crate runs one activity,
-    /// so the two arms of that `if` are the same read. `GUARDED` and
-    /// `UNGUARDED` are still separate table D rows, both of which run this
-    /// code.
+    /// so the two arms of that `if` are the same read. `::ATTRIBUTE`'s
+    /// `GUARDED` and `UNGUARDED` are separate table D rows and both reach
+    /// this function, which is why neither can be read as evidence about the
+    /// keyword.
     ///
     /// The argument bound is the C++'s own and is checked before the pool is
     /// touched: measured, `.K~a(1)` is `93.902` naming `0 expected`.
