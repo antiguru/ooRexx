@@ -1317,6 +1317,26 @@ impl Raised {
         Raised::syntax(93, 902, vec![arity.to_string().into_bytes()])
     }
 
+    /// 93.965: a message resolved to an `ABSTRACT` method.
+    ///
+    /// `name` is the **message** as the send spelled it after upcasing, not
+    /// the directive's own name and not the declaring class: `AbstractCode::run`
+    /// substitutes its `messageName` argument (`execution/CPPCode.cpp:526`).
+    /// Measured at rc 163, one program each: `::method "MiXeD" class abstract`
+    /// sent as `.K~"MiXeD"` reports `Method MIXED`, and
+    /// `::attribute a class abstract` assigned as `.K~a = 3` reports
+    /// `Method A=` -- the setter's own key, `=` included.
+    ///
+    /// **Raised at the send with no frame of its own**, which is what
+    /// separates it from every 93.9xx a [`NativeMethod`] raises: measured,
+    /// the report is the sending clause and the two catalogue lines, with no
+    /// `Compiled method` line above them.
+    ///
+    /// [`NativeMethod`]: crate::dispatch::NativeMethod
+    pub(crate) fn abstract_method(name: &[u8]) -> Raised {
+        Raised::syntax(93, 965, vec![name.to_vec()])
+    }
+
     /// 93.901: a method was given fewer arguments than it needs.
     /// `expected` is the count the oracle names.
     ///

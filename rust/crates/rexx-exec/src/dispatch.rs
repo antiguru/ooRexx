@@ -1198,15 +1198,133 @@ impl Interp {
                 }
                 outcome
             }
-            // **No `blame_native_method`**, measured: an untrapped `1/0`
-            // inside a `::METHOD` body reports the method's own failing
-            // clause and then the sending clause, with no `Compiled method`
-            // line between them. [`Interp::enter_method_body`] seals its own
-            // level for that, exactly as `Interp::invoke_call` does.
-            Invocable::Rexx(installed) => {
-                self.enter_method_body(cleared, installed, resolution, receiver, name, args)
-            }
+            // **No `blame_native_method` on any of these four**, measured
+            // twice over. An untrapped `1/0` inside a `::METHOD` body reports
+            // the method's own failing clause and then the sending clause,
+            // with no `Compiled method` line between them, and
+            // [`Interp::enter_method_body`] seals its own level for that,
+            // exactly as `Interp::invoke_call` does. A generated accessor and
+            // an `ABSTRACT` send report the *sending* clause and nothing
+            // above it: measured, `.K~a(1)` on `::attribute a class` is
+            // `93.902` with the sending clause alone on `stderr`, where
+            // `'abc'~length(1)` -- a [`NativeMethod`] taking the same
+            // refusal -- carries a `Compiled method "LENGTH"` line. The two
+            // differ in the C++ because `AttributeGetterCode::run` and
+            // `AbstractCode::run` raise directly where `CPPCode::run` raises
+            // from inside a `NativeActivation` of its own
+            // (`execution/CPPCode.cpp:280`, `:526`).
+            Invocable::Rexx(installed) => match installed.role {
+                crate::MethodRole::Body => {
+                    self.enter_method_body(cleared, installed, resolution, receiver, name, args)
+                }
+                crate::MethodRole::Getter => {
+                    self.read_attribute(cleared, installed, resolution, receiver, args)
+                }
+                crate::MethodRole::Setter => {
+                    self.write_attribute(cleared, installed, resolution, receiver, args)
+                }
+                crate::MethodRole::Abstract => Err(Raised::abstract_method(name).into()),
+            },
         }
+    }
+
+    /// A generated getter: the value the attribute's variable holds in the
+    /// declaring scope's pool on the receiver, or -- for a variable nothing
+    /// has assigned -- the derived name, which is that variable's own
+    /// spelling.
+    ///
+    /// **No activation and no frame**, which is what the oracle's own shape
+    /// makes it: `AttributeGetterCode::run` reads the pool and returns
+    /// (`execution/CPPCode.cpp:280`-`:302`). A traced send therefore shows
+    /// the ordinary `>M>` result line and nothing from inside the accessor --
+    /// measured, `trace i` with `say .K~a` on a stored `5` echoes
+    /// `>M>   "A" => "5"` and no `>I>`/`<I<` pair.
+    ///
+    /// **`GUARDED` has no reachable effect here.** The C++ splits on
+    /// `method->isGuarded()` only to reserve the variable dictionary against
+    /// other activities before reading it, and this crate runs one activity,
+    /// so the two arms of that `if` are the same read. `GUARDED` and
+    /// `UNGUARDED` are still separate table D rows, both of which run this
+    /// code.
+    ///
+    /// The argument bound is the C++'s own and is checked before the pool is
+    /// touched: measured, `.K~a(1)` is `93.902` naming `0 expected`.
+    fn read_attribute(
+        &mut self,
+        _cleared: Cleared,
+        installed: crate::InstalledMethodBody,
+        resolution: Resolution,
+        receiver: ObjRef,
+        args: &[Option<ObjRef>],
+    ) -> Result<Option<ObjRef>, Failure> {
+        if !args.is_empty() {
+            return Err(Raised::too_many_method_arguments(0).into());
+        }
+        let variable = self.accessor_variable(installed)?;
+        let owner = self.pool_owner(receiver)?;
+        let stored = self
+            .pools_of(owner)
+            .and_then(|pools| pools.get(resolution.scope, &variable));
+        Ok(Some(match stored {
+            Some(value) => value,
+            None => self.text(&variable),
+        }))
+    }
+
+    /// A generated setter: assigns the attribute's variable in the declaring
+    /// scope's pool on the receiver, and answers nothing.
+    ///
+    /// **Answering nothing is observable**, and it is the same absence a
+    /// `::METHOD` body ending in a bare `return` produces: measured,
+    /// `r = .K~'A='(9)` is `91.999` at rc 165, `Message "A=" did not return
+    /// a result.`
+    ///
+    /// Both argument bounds are the C++'s own and both are checked before the
+    /// pool is touched (`execution/CPPCode.cpp:330`-`:342`). Measured:
+    /// `.K~'A='(1,2)` is `93.902` naming `1 expected`, and `.K~'A='()` is
+    /// `93.903` naming `argument 1`.
+    fn write_attribute(
+        &mut self,
+        _cleared: Cleared,
+        installed: crate::InstalledMethodBody,
+        resolution: Resolution,
+        receiver: ObjRef,
+        args: &[Option<ObjRef>],
+    ) -> Result<Option<ObjRef>, Failure> {
+        if args.len() > 1 {
+            return Err(Raised::too_many_method_arguments(1).into());
+        }
+        let Some(Some(value)) = args.first().copied() else {
+            return Err(Raised::missing_method_argument(1).into());
+        };
+        let variable = self.accessor_variable(installed)?;
+        let owner = self.pool_owner(receiver)?;
+        self.set_pool_variable(owner, resolution.scope, &variable, value);
+        Ok(None)
+    }
+
+    /// The variable a generated accessor addresses, refusing the name shapes
+    /// whose storage this crate has no representation for -- see
+    /// [`Loud::accessor_variable`].
+    ///
+    /// [`Loud::accessor_variable`]: crate::Loud::accessor_variable
+    fn accessor_variable(
+        &self,
+        installed: crate::InstalledMethodBody,
+    ) -> Result<Box<[u8]>, Failure> {
+        let program = &self.programs[installed.program.0];
+        // `get` rather than an index, and `None` rather than a panic, for the
+        // reason `Interp::enter_method_body`'s own two reads carry.
+        let Some(directive) = program.directives.get(installed.directive) else {
+            return Err(Loud::missing_body().into());
+        };
+        let Some(variable) = crate::accessor_variable(&directive.kind) else {
+            return Err(Loud::missing_body().into());
+        };
+        if crate::run::shape_of(variable) != crate::run::NameShape::Simple {
+            return Err(Loud::accessor_variable(variable).into());
+        }
+        Ok(variable.into())
     }
 
     /// Runs one `::METHOD` body in an activation of its own, and answers what
@@ -3448,56 +3566,49 @@ mod tests {
     ///     private_sends_are_refused_by_who_is_sending
     #[test]
     fn a_method_body_this_crate_cannot_run_is_loud_and_its_neighbours_still_run() {
-        // (source, the phrase the refusal must name)
+        // (source, the refusal's own text after `rexx-exec: `). The tail
+        // differs by row and is not a shared suffix: `Loud::method_body`
+        // names Phase 5 as the owner and `Loud::accessor_variable` names
+        // none, on the reasoning that constructor's doc gives.
         let refused: &[(&str, &str)] = &[
-            // oracle 93.965 at rc 163, `Method M is ABSTRACT and cannot be
-            // directly invoked.`
-            (
-                "say .K~m\n::class K\n::method m class abstract\n",
-                "a ::METHOD with no body of its own",
-            ),
             // oracle 97.1 at rc 159 naming `"P"`: the message is forwarded to
             // the delegate property's value.
             (
                 "say .K~m\n::class K\n::method m class delegate p\n",
-                "a ::METHOD with no body of its own",
+                "a ::METHOD with no body of its own is not implemented (Phase 5)",
             ),
-            // oracle rc 0, printing `A`: the generated getter reads an
-            // uninitialised class-scope instance variable, which this phase
-            // does not build.
+            // The same forwarding through the other directive. Oracle 97.1 at
+            // rc 159, also naming `"P"`.
             (
-                "say .K~a\n::class K\n::attribute a class\n",
-                "a generated ::ATTRIBUTE accessor",
+                "say .K~a\n::class K\n::attribute a class delegate p\n",
+                "a ::ATTRIBUTE with no body of its own is not implemented (Phase 5)",
             ),
-            // The same accessor behind a `PRIVATE` attribute, sent from a
-            // caller the access check ALLOWS, which is the arm that reaches
-            // the gap rather than the refusal. Oracle rc 0, printing `A`.
-            // The pair matters because the access scope and the missing
-            // instance variable are two refusals over one send: an access
-            // check that refused this caller would report 97.2 instead, and
-            // the corpus row for the callers it does refuse
-            // (`corpus/lang/method_access_private_attribute.rex`) is what
-            // catches that from the other side.
+            // A generated accessor over a variable that is not a simple name.
+            // Oracle rc 0 both: the stem answers `5` for the round trip and
+            // the compound answers its own derived name `a.b`.
             (
-                "say .K~poke\n::class K\n::method poke class\n  return self~a\n\
-                 ::attribute a class private\n",
-                "a generated ::ATTRIBUTE accessor",
+                ".K~'A.' = 5\nsay .K~'A.'\n::class K\n::attribute \"a.\" class\n",
+                "a generated accessor for the attribute \"a.\" is not implemented",
+            ),
+            (
+                "say .K~'A.B'\n::class K\n::attribute \"a.b\" class\n",
+                "a generated accessor for the attribute \"a.b\" is not implemented",
             ),
             // oracle rc 0, printing `4`: `USE LOCAL` binds its list against
             // the method's own scope pool.
             (
                 "say .K~m\n::class K\n::method m class\n  use local zz\n  zz = 4\n  return zz\n",
-                "USE LOCAL in a ::METHOD body",
+                "USE LOCAL in a ::METHOD body is not implemented (Phase 5)",
             ),
         ];
-        for (source, phrase) in refused {
+        for (source, refusal) in refused {
             let (code, stdout, stderr) = both_engines(source);
             assert_eq!(
                 (code, stdout.as_str(), stderr.as_str()),
                 (
                     crate::NOT_IMPLEMENTED_EXIT,
                     "",
-                    format!("rexx-exec: {phrase} is not implemented (Phase 5)\n").as_str()
+                    format!("rexx-exec: {refusal}\n").as_str()
                 ),
                 "{source:?}"
             );
@@ -3527,6 +3638,214 @@ mod tests {
                 "{source:?}"
             );
         }
+    }
+
+    /// **A generated accessor pair reads and writes one variable in the
+    /// declaring scope's pool on the receiver**, and every row is measured on
+    /// the oracle.
+    ///
+    /// **What catches a regression here**, stated because this replaces a
+    /// loud refusal and the corpus gate cannot see a refusal becoming a wrong
+    /// answer: this test,
+    /// `corpus/lang/method_attribute_generated.rex` and the four programs
+    /// beside it, and the table D rows
+    /// `corpus/gate-tables/directives/attribute__class__subkeyword.rex` and
+    /// `method__attribute__subkeyword.rex`. The instance reading of every row
+    /// below is out of reach until something builds instances, so a wrong
+    /// answer to a send whose receiver is not a class object is caught by
+    /// nothing here.
+    ///
+    /// Both directives generate the pair, which is why the first group has a
+    /// `::ATTRIBUTE` row and a `::METHOD ... ATTRIBUTE` row.
+    #[test]
+    fn a_generated_accessor_pair_reads_and_writes_the_declaring_scopes_pool() {
+        for (source, expected) in [
+            // The round trip, through each directive.
+            (
+                ".K~a = 5\nsay .K~a\n::class K\n::attribute a class\n",
+                "5\n",
+            ),
+            (
+                ".K~a = 5\nsay .K~a\n::class K\n::method a class attribute\n",
+                "5\n",
+            ),
+            // An unassigned variable reads as its derived name, which is the
+            // directive's name **as written** and not the accessor's upcased
+            // dictionary key: `getRetriever(name)` against
+            // `addMethod(internalname)`. The quoted row is what tells the two
+            // apart -- an accessor keyed on the message name would answer
+            // `AB` here.
+            ("say .K~a\n::class K\n::attribute a class\n", "A\n"),
+            ("say .K~ab\n::class K\n::attribute \"aB\" class\n", "aB\n"),
+            // And it is the same pool entry `EXPOSE` reaches, in both
+            // directions.
+            (
+                ".K~a = 'through the setter'\nsay .K~read\n::class K\n::attribute a class\n\
+                 ::method read class\n  expose a\n  return a\n",
+                "through the setter\n",
+            ),
+            (
+                "x = .K~write\nsay .K~a\n::class K\n::attribute a class\n\
+                 ::method write class\n  expose a\n  a = 'through EXPOSE'\n  return 1\n",
+                "through EXPOSE\n",
+            ),
+            // **Keyed on the declaring scope and on the receiver**, which is
+            // one property with two halves. `.J~a` and `.K~a` are two
+            // receivers and so two pools: measured, the second answers its
+            // derived name after the first was assigned.
+            (
+                ".J~a = 5\nsay .J~a .K~a\n::class K\n::attribute a class\n\
+                 ::class J subclass K\n",
+                "5 A\n",
+            ),
+            // A value is stored, not a rendering of one: the receiver goes in
+            // and comes back out.
+            (
+                ".K~a = .K\nsay .K~a\n::class K\n::attribute a class\n",
+                "The K class\n",
+            ),
+            // `GET` and `SET` each generate one half, and the generated half
+            // reads the same pool a generated pair does.
+            ("say .K~a\n::class K\n::attribute a class get\n", "A\n"),
+            // A trailing omission leaves the getter's own bound satisfied.
+            ("say .K~a(,)\n::class K\n::attribute a class\n", "A\n"),
+            (
+                ".K~a = 5\nsay 'stored'\n::class K\n::attribute a class set\n",
+                "stored\n",
+            ),
+        ] {
+            assert_eq!(
+                both_engines(source),
+                (0, expected.to_string(), String::new()),
+                "{source:?}"
+            );
+        }
+
+        // **Neither `GET` nor `SET` installs the other half**, so the
+        // message the directive did not generate is a name miss. Measured at
+        // rc 159, one program each.
+        for (source, missing) in [
+            (
+                ".K~a = 5\nsay 'x'\n::class K\n::attribute a class get\n",
+                "A=",
+            ),
+            ("say .K~a\n::class K\n::attribute a class set\n", "A"),
+        ] {
+            let (code, stdout, stderr) = both_engines(source);
+            assert_eq!((code, stdout.as_str()), (159, ""), "{source:?}");
+            assert!(
+                stderr.contains(&format!(
+                    "Error 97.1:  Object \"The K class\" does not understand message \
+                     \"{missing}\"."
+                )),
+                "{source:?} reported {stderr:?}"
+            );
+        }
+
+        // The setter answers nothing, which a program can read: measured,
+        // `91.999` at rc 165 rather than a value the assignment produced.
+        let (code, stdout, stderr) =
+            both_engines("r = .K~'A='(9)\nsay r\n::class K\n::attribute a class\n");
+        assert_eq!((code, stdout.as_str()), (165, ""));
+        assert!(
+            stderr.contains("Error 91.999:  Message \"A=\" did not return a result."),
+            "the setter answered a value: {stderr:?}"
+        );
+
+        // The argument bounds, which are the accessor pair's own and are the
+        // C++'s (`execution/CPPCode.cpp:284`, `:334`, `:339`). Each row is
+        // measured at rc 163.
+        for (source, catalogue) in [
+            (
+                "say .K~a(1)\n::class K\n::attribute a class\n",
+                "Error 93.902:  Too many arguments in invocation of method; 0 expected.",
+            ),
+            (
+                "say .K~'A='(1,2)\n::class K\n::attribute a class\n",
+                "Error 93.902:  Too many arguments in invocation of method; 1 expected.",
+            ),
+            (
+                "say .K~'A='()\n::class K\n::attribute a class\n",
+                "Error 93.903:  Missing argument in method; argument 1 is required.",
+            ),
+            // **A trailing omission is not an argument that arrived, and a
+            // leading one is.** Measured, both at rc 163: `(,)` reaches the
+            // setter as no arguments at all, and `(,5)` as two. The getter's
+            // side of the same rule is the `(,)` row below, which answers.
+            (
+                "say .K~'A='(,)\n::class K\n::attribute a class\n",
+                "Error 93.903:  Missing argument in method; argument 1 is required.",
+            ),
+            (
+                "say .K~'A='(,5)\n::class K\n::attribute a class\n",
+                "Error 93.902:  Too many arguments in invocation of method; 1 expected.",
+            ),
+        ] {
+            let (code, stdout, stderr) = both_engines(source);
+            assert_eq!((code, stdout.as_str()), (163, ""), "{source:?}");
+            assert!(stderr.contains(catalogue), "{source:?} reported {stderr:?}");
+            // **No frame of its own**, which is what separates an accessor
+            // from a `NativeMethod` taking the same refusal: measured,
+            // `'abc'~length(1)` carries a `Compiled method "LENGTH"` line
+            // above the sending clause and none of these do.
+            assert!(
+                !stderr.contains("Compiled method"),
+                "{source:?} grew a traceback frame the oracle does not write: {stderr:?}"
+            );
+        }
+    }
+
+    /// **An `ABSTRACT` method installs and is refused when it is sent**,
+    /// naming the message rather than the directive.
+    ///
+    /// The instrument, stated because this replaces a loud refusal: **this
+    /// test and the two table D rows**, `method__abstract__subkeyword.rex`
+    /// and `attribute__abstract__subkeyword.rex`, plus
+    /// `corpus/lang/method_abstract_send.rex`. Gate table C cannot see it --
+    /// its `abscla` row records that the abstract-*method* half has no arm of
+    /// that section's probe -- so nothing derived covers this.
+    ///
+    /// Every row is measured on the oracle at rc 163. Between them they
+    /// cover each directive that can install an `ABSTRACT` method, the
+    /// as-written and upcased spellings of a name, and both halves of an
+    /// abstract accessor pair -- the setter's message carrying the appended
+    /// `=` is what shows the pair is installed rather than a single name.
+    #[test]
+    fn an_abstract_send_is_refused_at_the_send_naming_the_message() {
+        for (source, named) in [
+            ("say .K~m\n::class K\n::method m class abstract\n", "M"),
+            (
+                "say .K~\"MiXeD\"\n::class K\n::method \"MiXeD\" class abstract\n",
+                "MIXED",
+            ),
+            (
+                "say .K~m\n::class K\n::method m class abstract attribute\n",
+                "M",
+            ),
+            ("say .K~a\n::class K\n::attribute a class abstract\n", "A"),
+            (".K~a = 3\n::class K\n::attribute a class abstract\n", "A="),
+        ] {
+            let (code, stdout, stderr) = both_engines(source);
+            assert_eq!((code, stdout.as_str()), (163, ""), "{source:?}");
+            assert!(
+                stderr.contains(&format!(
+                    "Error 93.965:  Method {named} is ABSTRACT and cannot be directly invoked."
+                )),
+                "{source:?} reported {stderr:?}"
+            );
+            assert!(
+                !stderr.contains("Compiled method"),
+                "{source:?} grew a traceback frame the oracle does not write: {stderr:?}"
+            );
+        }
+
+        // **Installing one is not sending one**: the directive is rc 0 with
+        // the program's own output, which is what makes the row above a send
+        // refusal rather than an install refusal. Measured on the oracle.
+        assert_eq!(
+            both_engines("say 'installed'\n::class K\n::method m class abstract\n"),
+            (0, "installed\n".to_string(), String::new())
+        );
     }
 
     /// **A private send is refused by who is sending, and the refusal names

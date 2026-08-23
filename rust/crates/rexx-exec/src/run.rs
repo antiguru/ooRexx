@@ -3054,7 +3054,7 @@ impl Interp {
     /// The task that creates instances (`~new`) is the one that can settle
     /// that, and no send in this phase reaches a `::METHOD` body with a
     /// non-class receiver.
-    fn pool_owner(&mut self, receiver: ObjRef) -> Result<ObjRef, Failure> {
+    pub(crate) fn pool_owner(&mut self, receiver: ObjRef) -> Result<ObjRef, Failure> {
         let Some(class) = receiver.class_id() else {
             return Err(Loud::expose_receiver().into());
         };

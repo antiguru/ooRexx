@@ -918,6 +918,34 @@ impl Loud {
         }
     }
 
+    /// A generated `::METHOD ATTRIBUTE`/`::ATTRIBUTE` accessor whose
+    /// variable is a stem or a single compound tail.
+    ///
+    /// **A disclosed gap inside an otherwise delivered accessor pair**, the
+    /// shape [`Loud::compound_expose`] established, and loud for the same
+    /// reason. Measured on the oracle, both rc 0: `::attribute "a." class`
+    /// with `.K~'A.' = 5` then `say .K~'A.'` answers `5`, and
+    /// `::attribute "a.b" class` answers `a.b` for an uninitialised read. So
+    /// the first needs a stem object in the scope pool with a default this
+    /// crate never assigns there, and the second needs aliasing at one tail
+    /// inside such an object -- the same thing `Loud::compound_expose`
+    /// refuses, reached from the other direction.
+    ///
+    /// A simple name is the whole of what a generated accessor here answers,
+    /// and that is not the same restriction the *directive* has: both
+    /// spellings above install and both are 99.925 only for a name that is no
+    /// variable name at all.
+    ///
+    /// No owner string, for the reason [`Loud::compound_expose`] gives.
+    fn accessor_variable(name: &[u8]) -> Loud {
+        Loud {
+            message: format!(
+                "a generated accessor for the attribute \"{}\" is not implemented",
+                String::from_utf8_lossy(name)
+            ),
+        }
+    }
+
     /// A builtin's option letter whose answer this crate cannot produce.
     ///
     /// **A disclosed gap inside an otherwise delivered builtin**, the shape
@@ -1558,9 +1586,14 @@ fn class_install_order(
     Ok(order)
 }
 
-/// Why a resolved method's directive cannot be entered, or `None` when it
-/// can -- the gate `Interp::enter_method_body` (`dispatch.rs`) takes before
-/// it pushes anything.
+/// Why a resolved [`MethodRole::Body`] method's directive cannot be entered,
+/// or `None` when it can -- the gate `Interp::enter_method_body`
+/// (`dispatch.rs`) takes before it pushes anything.
+///
+/// **Only the `Body` role reaches here**, so the question is narrower than
+/// "which directive forms run": a generated accessor and an `ABSTRACT`
+/// method have roles of their own and are answered by `Interp::invoke`
+/// without a body at all.
 ///
 /// **Exhaustive over the directive kinds a `MethodId` can name**, which are
 /// the ones `Interp::install_method` and `Interp::install_attribute` mint ids
@@ -1568,19 +1601,12 @@ fn class_install_order(
 /// a refusal of its own rather than a panic, on the reasoning
 /// [`Loud::instruction`]'s doc gives.
 ///
-/// Each row is measured on the oracle, one program each, `::class K` with the
-/// named directive and a `.K~m` send:
-///
-/// ```text
-/// ::method m class abstract       93.965, rc 163 is ABSTRACT and cannot be invoked
-/// ::method m class protected      runs, rc 0
-/// ::method m class unguarded      runs, rc 0
-/// ::attribute a class             reads and writes an instance variable, rc 0
-/// ```
-///
-/// `ABSTRACT` is a condition a program could trap, and answering it would be
-/// the wrong kind of right. A generated `::ATTRIBUTE` accessor needs the
-/// instance variable it reads, which this phase does not build.
+/// `DELEGATE` is what is left: measured, `.K~m` on
+/// `::method m class delegate p` is 97.1 at rc 159 naming `"P"`, because the
+/// message is forwarded to the delegate property's value, and `FORWARD` is
+/// 5b's. `EXTERNAL` never reaches a send -- [`directive_gap`] refuses it
+/// while the package is still installing -- so the third arm below is what
+/// covers it rather than an arm of its own.
 ///
 /// **An access scope is not a reason to refuse a body**, and that is the one
 /// row this table lost. `PRIVATE` is decided at the send, by
@@ -1600,7 +1626,7 @@ fn method_body_gap(kind: &DirectiveKind) -> Option<Loud> {
         }
         DirectiveKind::Attribute(attribute) => {
             if attribute.body.is_none() {
-                Some(Loud::method_body("a generated ::ATTRIBUTE accessor"))
+                Some(Loud::method_body("a ::ATTRIBUTE with no body of its own"))
             } else {
                 None
             }
@@ -1609,6 +1635,43 @@ fn method_body_gap(kind: &DirectiveKind) -> Option<Loud> {
             "a method installed by ::{}",
             other.keyword()
         ))),
+    }
+}
+
+/// The dictionary key of a generated setter: the getter's key with `=`
+/// appended.
+///
+/// `attributeDirective` and `methodDirective` both build it as
+/// `internalname->concatWithCstring("=")` over the already-upcased name
+/// (`parser/DirectiveParser.cpp:853`, `:1665`), so the argument is the
+/// upcased spelling and not the directive's own.
+fn accessor_setter_name(upper: &[u8]) -> Vec<u8> {
+    let mut setter = upper.to_vec();
+    setter.push(b'=');
+    setter
+}
+
+/// The variable a generated accessor reads and writes: the directive's name
+/// **as written**, which is not the accessor's own dictionary key.
+///
+/// The two differ, and the difference is observable on both spellings.
+/// `getRetriever(name)` is handed the as-written `name` where `addMethod`
+/// receives the upcased `internalname`
+/// (`parser/DirectiveParser.cpp:1656`, `:1716`). Measured, oracle rc 0:
+/// `::attribute "aB" class` with `.K~aB = 5` leaves a class method's
+/// `expose ab` reading the derived name `AB`, so the pool entry is not
+/// keyed on `AB`; and `::attribute "a." class` answers `a.` for an
+/// uninitialised read, which is the as-written spelling of the variable
+/// rather than a stem name any scanner produced.
+///
+/// `None` for a directive kind that generates no accessor, which is an
+/// internal inconsistency where a [`MethodRole::Getter`] or
+/// [`MethodRole::Setter`] reached it.
+fn accessor_variable(kind: &DirectiveKind) -> Option<&[u8]> {
+    match kind {
+        DirectiveKind::Attribute(attribute) => Some(&attribute.name),
+        DirectiveKind::Method(method) => Some(&method.name),
+        _ => None,
     }
 }
 
@@ -3117,14 +3180,44 @@ struct InstalledRoutine {
 /// (or its absence, for a generated accessor or an `ABSTRACT`/`DELEGATE`
 /// method) later.
 ///
-/// `Interp::enter_method_body` (`dispatch.rs`) is the reader: it turns the
-/// pair into the `Rc<Program>` an activation holds and the `BodyKey` its plan
-/// is cached under, which is why both halves are needed and why they travel
-/// together.
+/// `Interp::invoke` (`dispatch.rs`) is the reader: for a
+/// [`MethodRole::Body`] it turns the pair into the `Rc<Program>` an
+/// activation holds and the `BodyKey` its plan is cached under, which is why
+/// both halves are needed and why they travel together; for the other roles
+/// it reads the directive for the attribute name the accessor addresses.
 #[derive(Copy, Clone)]
 struct InstalledMethodBody {
     program: ProgramId,
     directive: usize,
+    role: MethodRole,
+}
+
+/// What one installed method *is*, decided where the directive installs it.
+///
+/// **Recorded rather than derived, because one directive mints two ids and
+/// only the installer knows which is which.** A `::ATTRIBUTE a` with neither
+/// `GET` nor `SET`, and a `::METHOD a ATTRIBUTE`, each add two names to one
+/// dictionary from a single directive; the directive says an accessor pair
+/// was generated and the dictionary key says which half, but reading the key
+/// back means deciding a getter from a setter by a trailing `=` on a name
+/// that a `::METHOD "a="` could also carry.
+///
+/// `Body` covers every method whose code is the directive's own clauses, and
+/// also every directive form this crate still refuses -- `DELEGATE` and
+/// `EXTERNAL` -- because what refuses those is [`method_body_gap`], reading
+/// the directive.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+enum MethodRole {
+    /// The directive's own Rexx clauses, when it has them.
+    Body,
+    /// A generated getter: it answers the attribute's variable in the
+    /// declaring scope's pool on the receiver.
+    Getter,
+    /// A generated setter: it assigns that variable and answers nothing.
+    Setter,
+    /// `ABSTRACT`, on either directive and on either half of a generated
+    /// accessor pair: the send is 93.965 whatever the arguments are.
+    Abstract,
 }
 
 /// The name, arguments and receiver of one call in progress.
@@ -3983,15 +4076,41 @@ impl Interp {
         class: ObjRef,
         method: &MethodDirective,
     ) {
-        let name = String::from_utf8_lossy(&method.name.to_ascii_uppercase()).into_owned();
-        self.arm_reqstr_for(name.as_bytes());
-        let method_id = if method.class_method {
-            self.classes().add_class_method(class, &name)
+        let upper = method.name.to_ascii_uppercase();
+        // `methodDirective`'s own order of precedence over the generating
+        // options (`parser/DirectiveParser.cpp:831`-`:915`): `DELEGATE`
+        // first, and it installs the plain name **alone** even under
+        // `ATTRIBUTE`; then `ATTRIBUTE`, which installs the pair; then
+        // `ABSTRACT` on its own.
+        let installed: Vec<(Vec<u8>, MethodRole)> = if method.delegate.is_some() {
+            vec![(upper, MethodRole::Body)]
+        } else if method.attribute {
+            let setter = accessor_setter_name(&upper);
+            let (get, set) = if method.abstract_ {
+                (MethodRole::Abstract, MethodRole::Abstract)
+            } else if method.external.is_some() {
+                (MethodRole::Body, MethodRole::Body)
+            } else {
+                (MethodRole::Getter, MethodRole::Setter)
+            };
+            vec![(upper, get), (setter, set)]
+        } else if method.abstract_ {
+            vec![(upper, MethodRole::Abstract)]
         } else {
-            self.classes().add_instance_method(class, &name)
+            vec![(upper, MethodRole::Body)]
         };
-        self.record_method_body(method_id, program, directive);
-        self.record_access_scope(method_id, program, method.access, method.protection);
+        for (name, role) in installed {
+            self.install_one_method(
+                program,
+                directive,
+                class,
+                &name,
+                role,
+                method.class_method,
+                method.access,
+                method.protection,
+            );
+        }
     }
 
     /// `::ATTRIBUTE`'s own R9 install: one or two accessor names, per
@@ -4000,13 +4119,10 @@ impl Interp {
     /// style -- landing in `class`'s instance or class dictionary the same
     /// way [`Interp::install_method`] does.
     ///
-    /// One [`InstalledMethodBody`] per accessor, even for the `Both` style's
-    /// two generated names sharing one directive: a later reader asking
-    /// "does this method have a written Rexx body" reads
-    /// `attribute.body`, which is `None` for both in that style and `Some`
-    /// for the one style ([`AttributeStyle::Get`]/[`AttributeStyle::Set`])
-    /// that admits a body at all -- [`Interp::record_method_body`] does not
-    /// need to know which.
+    /// One [`InstalledMethodBody`] per accessor, each carrying its own
+    /// [`MethodRole`]: the `Both` style's two names come from a single
+    /// directive and are a getter and a setter, which the directive alone
+    /// does not say.
     ///
     /// The names are upcased for the same reason
     /// [`Interp::install_method`]'s is: `attributeDirective` derives both
@@ -4020,35 +4136,84 @@ impl Interp {
         attribute: &AttributeDirective,
     ) {
         let upper = attribute.name.to_ascii_uppercase();
-        let names: Vec<Vec<u8>> = match attribute.style {
+        let setter_name = accessor_setter_name(&upper);
+        // `attributeDirective` asks the same three questions in the same
+        // order for each style (`parser/DirectiveParser.cpp:1671`-`:1855`),
+        // and only when all three are `None` does the presence of a body
+        // decide: `hasBody()` there, `attribute.body` here.
+        let generated = if attribute.abstract_ {
+            MethodRole::Abstract
+        } else if attribute.external.is_some()
+            || attribute.delegate.is_some()
+            || attribute.body.is_some()
+        {
+            MethodRole::Body
+        } else {
+            // The one place the role of an accessor depends on which half of
+            // the pair it is.
+            MethodRole::Getter
+        };
+        let installed: Vec<(Vec<u8>, MethodRole)> = match attribute.style {
             AttributeStyle::Both => {
-                let mut setter = upper.clone();
-                setter.push(b'=');
-                vec![upper, setter]
+                let setter = match generated {
+                    MethodRole::Getter => MethodRole::Setter,
+                    other => other,
+                };
+                vec![(upper, generated), (setter_name, setter)]
             }
-            AttributeStyle::Get => vec![upper],
+            AttributeStyle::Get => vec![(upper, generated)],
             AttributeStyle::Set => {
-                let mut setter = upper;
-                setter.push(b'=');
-                vec![setter]
+                let setter = match generated {
+                    MethodRole::Getter => MethodRole::Setter,
+                    other => other,
+                };
+                vec![(setter_name, setter)]
             }
         };
-        for name in names {
-            self.arm_reqstr_for(&name);
-            let name = String::from_utf8_lossy(&name).into_owned();
-            let method_id = if attribute.class_method {
-                self.classes().add_class_method(class, &name)
-            } else {
-                self.classes().add_instance_method(class, &name)
-            };
-            self.record_method_body(method_id, program, directive);
+        for (name, role) in installed {
             // Both accessors of a `Both`-style attribute carry the
             // directive's own access scope, which is the oracle's own shape:
             // `attributeDirective` builds the getter and the setter and calls
             // `setAttributes(accessFlag, protectedFlag, guardFlag)` on each
             // (`parser/DirectiveParser.cpp:1683`, `:1690`).
-            self.record_access_scope(method_id, program, attribute.access, attribute.protection);
+            self.install_one_method(
+                program,
+                directive,
+                class,
+                &name,
+                role,
+                attribute.class_method,
+                attribute.access,
+                attribute.protection,
+            );
         }
+    }
+
+    /// Adds one name to `class`'s instance or class dictionary and records
+    /// what the name resolves to -- the tail every `::METHOD` and
+    /// `::ATTRIBUTE` install shares, once per dictionary key rather than once
+    /// per directive.
+    #[allow(clippy::too_many_arguments)]
+    fn install_one_method(
+        &mut self,
+        program: ProgramId,
+        directive: usize,
+        class: ObjRef,
+        name: &[u8],
+        role: MethodRole,
+        class_method: bool,
+        access: Access,
+        protection: Protection,
+    ) {
+        self.arm_reqstr_for(name);
+        let name = String::from_utf8_lossy(name).into_owned();
+        let method_id = if class_method {
+            self.classes().add_class_method(class, &name)
+        } else {
+            self.classes().add_instance_method(class, &name)
+        };
+        self.record_method_body(method_id, program, directive, role);
+        self.record_access_scope(method_id, program, access, protection);
     }
 
     /// Arms `Interp::reqstr_armed` for a method name the required-string
@@ -4067,10 +4232,21 @@ impl Interp {
     /// [`rexx_classes::MethodId`] names, immediately after the call that
     /// minted it -- see [`Interp::method_bodies`]'s own doc for what the key
     /// is.
-    fn record_method_body(&mut self, method: MethodId, program: ProgramId, directive: usize) {
-        let previous = self
-            .method_bodies
-            .insert(method, InstalledMethodBody { program, directive });
+    fn record_method_body(
+        &mut self,
+        method: MethodId,
+        program: ProgramId,
+        directive: usize,
+        role: MethodRole,
+    ) {
+        let previous = self.method_bodies.insert(
+            method,
+            InstalledMethodBody {
+                program,
+                directive,
+                role,
+            },
+        );
         debug_assert!(
             previous.is_none(),
             "a MethodId was recorded twice, so one of the two bodies is lost"
@@ -4338,6 +4514,30 @@ impl Interp {
         pools.clear(var.scope, &var.name);
     }
 
+    /// Assigns one name in one scope's pool on `owner`, outside any
+    /// activation's exposure list -- what a generated `::ATTRIBUTE` setter
+    /// writes through.
+    ///
+    /// **Not [`Interp::set_exposed_variable`]**, and the difference is the
+    /// frame rather than the storage: that function reaches a pool by way of
+    /// an `EXPOSE` that bound a running activation's slot to it, and a
+    /// generated accessor has no activation and no slot. The pool entry the
+    /// two reach is the same one -- measured, oracle rc 0: a class method
+    /// exposing `a` and assigning it leaves `say .K~a` reading what it
+    /// assigned.
+    fn set_pool_variable(&mut self, owner: ObjRef, scope: ObjRef, name: &[u8], value: ObjRef) {
+        let pools = self
+            .heap
+            .get_mut(owner)
+            .map(|object| &mut object.body)
+            .and_then(|body| match body {
+                Body::Instance(pools) => Some(pools),
+                _ => None,
+            })
+            .expect("Interp::pool_owner answers a rooted Body::Instance");
+        pools.set(scope, name, value);
+    }
+
     /// What an `EXPOSE` bound slot `slot` of `frame` to, if anything.
     fn exposure(&self, frame: SlotFrame, slot: usize) -> Option<&InstanceVar> {
         Interp::exposure_in(self.activation(), frame, slot)
@@ -4357,7 +4557,7 @@ impl Interp {
     }
 
     /// The scope pools `owner` holds, for a reader.
-    fn pools_of(&self, owner: ObjRef) -> Option<&rexx_core::ScopePools> {
+    pub(crate) fn pools_of(&self, owner: ObjRef) -> Option<&rexx_core::ScopePools> {
         match self.heap.get(owner).map(|object| &object.body) {
             Some(Body::Instance(pools)) => Some(pools),
             _ => None,
