@@ -8548,10 +8548,11 @@ fn a_trap_handler_and_an_internal_call_do_not_carry_the_same_receiver() {
 /// `tests/corpus.rs` compares the first two programs' stderr raw, and that is
 /// the stronger comparison -- but it needs the C++ oracle on the machine and
 /// `REXX_CORPUS_GATE` switched on. Measured with the raise deleted from
-/// `Interp::returned_value`: the gated corpus goes from 185 of 185 to 183 of
-/// 185 and is the only red thing in the workspace, while the *ungated* run
-/// reports the same two mismatches and still exits 0. So without this test the
-/// legality check has no instrument in gates 1 through 3.
+/// `Interp::returned_value`: `corpus_differential` reddens, mismatching on
+/// `lang/method_reply.rex` and `lang/method_reply_exit_status.rex`, this test
+/// reddens beside it, and the *ungated* run reports the same two mismatches
+/// and still exits 0. So without this test the legality check has no
+/// instrument in gates 1 through 3.
 ///
 /// **The shape is exit status 0 (or the main body's own) with a traceback**,
 /// which is what makes a status-only assertion useless here: with the raise
