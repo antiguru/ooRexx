@@ -200,6 +200,15 @@ crate on both engines: the same method with `v = 1` answers, so it is the
 expression's *value* and not the `WHEN` form that blocks; and `guard on` and
 `guard off` with no `WHEN` at all are no-ops.
 
+**The `expose v` line is load-bearing in the repro and dropping it does not
+block.** Measured: the same method without it, `guard on when 1 = 0`, is a
+clean `Error 99.913 GUARD instruction did not include references to exposed
+variables.` at rc 157 in 0.00 s, three runs of three. So the oracle refuses at
+translation time a `WHEN` expression that names no exposed variable, and only
+an expression that *can* in principle be satisfied by another activity reaches
+the wait. A reader shortening this program to the `WHEN` clause alone measures
+the translation check instead of the block.
+
 Consequence for this crate: **there is no oracle behaviour to match**, so
 `rexx-exec` refuses the shape rather than answering it -- `Loud::
 guard_when_false`, whose own doc names `run/tests.rs`'s
