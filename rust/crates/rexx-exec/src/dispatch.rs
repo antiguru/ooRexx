@@ -175,6 +175,7 @@ type NativeMethod =
 enum Invocable {
     Native(NativeEntry),
     Rexx(crate::InstalledMethodBody),
+    Generated(crate::GeneratedMethod),
 }
 
 /// What [`Interp::invoke`] needs about one primitive method beyond its code.
@@ -1156,6 +1157,13 @@ impl Interp {
         if let Some(installed) = self.method_bodies.get(&resolution.method).copied() {
             return Ok(Invocable::Rexx(installed));
         }
+        // **After the body table and never before it**, so a send to a
+        // written body reads exactly the one table it read before generated
+        // methods existed -- see `crate::GeneratedMethod`'s own doc for what
+        // that ordering is worth on `dispatchclass`.
+        if let Some(generated) = self.generated_methods.get(&resolution.method).copied() {
+            return Ok(Invocable::Generated(generated));
+        }
         // The scope's `~id` is rendered only where it is printed -- a
         // successful send has no use for it, and every send would otherwise
         // pay for the copy.
@@ -1213,17 +1221,17 @@ impl Interp {
             // `AbstractCode::run` raise directly where `CPPCode::run` raises
             // from inside a `NativeActivation` of its own
             // (`execution/CPPCode.cpp:280`, `:526`).
-            Invocable::Rexx(installed) => match installed.role {
-                crate::MethodRole::Body => {
-                    self.enter_method_body(cleared, installed, resolution, receiver, name, args)
+            Invocable::Rexx(installed) => {
+                self.enter_method_body(cleared, installed, resolution, receiver, name, args)
+            }
+            Invocable::Generated(generated) => match generated.kind {
+                crate::GeneratedKind::Getter => {
+                    self.read_attribute(cleared, generated, resolution, receiver, args)
                 }
-                crate::MethodRole::Getter => {
-                    self.read_attribute(cleared, installed, resolution, receiver, args)
+                crate::GeneratedKind::Setter => {
+                    self.write_attribute(cleared, generated, resolution, receiver, args)
                 }
-                crate::MethodRole::Setter => {
-                    self.write_attribute(cleared, installed, resolution, receiver, args)
-                }
-                crate::MethodRole::Abstract => Err(Raised::abstract_method(name).into()),
+                crate::GeneratedKind::Abstract => Err(Raised::abstract_method(name).into()),
             },
         }
     }
@@ -1252,7 +1260,7 @@ impl Interp {
     fn read_attribute(
         &mut self,
         _cleared: Cleared,
-        installed: crate::InstalledMethodBody,
+        generated: crate::GeneratedMethod,
         resolution: Resolution,
         receiver: ObjRef,
         args: &[Option<ObjRef>],
@@ -1260,7 +1268,7 @@ impl Interp {
         if !args.is_empty() {
             return Err(Raised::too_many_method_arguments(0).into());
         }
-        let variable = self.accessor_variable(installed)?;
+        let variable = self.accessor_variable(generated)?;
         let owner = self.pool_owner(receiver)?;
         let stored = self
             .pools_of(owner)
@@ -1286,7 +1294,7 @@ impl Interp {
     fn write_attribute(
         &mut self,
         _cleared: Cleared,
-        installed: crate::InstalledMethodBody,
+        generated: crate::GeneratedMethod,
         resolution: Resolution,
         receiver: ObjRef,
         args: &[Option<ObjRef>],
@@ -1297,7 +1305,7 @@ impl Interp {
         let Some(Some(value)) = args.first().copied() else {
             return Err(Raised::missing_method_argument(1).into());
         };
-        let variable = self.accessor_variable(installed)?;
+        let variable = self.accessor_variable(generated)?;
         let owner = self.pool_owner(receiver)?;
         self.set_pool_variable(owner, resolution.scope, &variable, value);
         Ok(None)
@@ -1308,14 +1316,11 @@ impl Interp {
     /// [`Loud::accessor_variable`].
     ///
     /// [`Loud::accessor_variable`]: crate::Loud::accessor_variable
-    fn accessor_variable(
-        &self,
-        installed: crate::InstalledMethodBody,
-    ) -> Result<Box<[u8]>, Failure> {
-        let program = &self.programs[installed.program.0];
+    fn accessor_variable(&self, generated: crate::GeneratedMethod) -> Result<Box<[u8]>, Failure> {
+        let program = &self.programs[generated.program.0];
         // `get` rather than an index, and `None` rather than a panic, for the
         // reason `Interp::enter_method_body`'s own two reads carry.
-        let Some(directive) = program.directives.get(installed.directive) else {
+        let Some(directive) = program.directives.get(generated.directive) else {
             return Err(Loud::missing_body().into());
         };
         let Some(variable) = crate::accessor_variable(&directive.kind) else {

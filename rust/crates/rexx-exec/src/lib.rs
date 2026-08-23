@@ -2482,6 +2482,15 @@ struct Interp {
     /// immediately after each mint a directive makes, and asserts the key is
     /// fresh.
     method_bodies: HashMap<MethodId, InstalledMethodBody>,
+    /// The methods a directive implements itself -- see [`GeneratedMethod`]
+    /// for why these are not rows of [`method_bodies`], which is a
+    /// measurement rather than a taxonomy.
+    ///
+    /// Consulted only where `method_bodies` misses, so a send to a written
+    /// body reads one table exactly as it did before this table existed.
+    ///
+    /// [`method_bodies`]: Interp::method_bodies
+    generated_methods: HashMap<MethodId, GeneratedMethod>,
     /// The access scope and protection of every method that has one -- the
     /// oracle's `isSpecial()` set, which is what `RexxObject::messageSend`
     /// consults before it runs anything.
@@ -3180,19 +3189,33 @@ struct InstalledRoutine {
 /// (or its absence, for a generated accessor or an `ABSTRACT`/`DELEGATE`
 /// method) later.
 ///
-/// `Interp::invoke` (`dispatch.rs`) is the reader: for a
-/// [`MethodRole::Body`] it turns the pair into the `Rc<Program>` an
-/// activation holds and the `BodyKey` its plan is cached under, which is why
-/// both halves are needed and why they travel together; for the other roles
-/// it reads the directive for the attribute name the accessor addresses.
+/// `Interp::enter_method_body` (`dispatch.rs`) is the reader: it turns the
+/// pair into the `Rc<Program>` an activation holds and the `BodyKey` its plan
+/// is cached under, which is why both halves are needed and why they travel
+/// together.
 #[derive(Copy, Clone)]
 struct InstalledMethodBody {
     program: ProgramId,
     directive: usize,
-    role: MethodRole,
 }
 
-/// What one installed method *is*, decided where the directive installs it.
+/// One installed method that the *directive* implements rather than a body:
+/// a generated accessor, or an `ABSTRACT` declaration.
+///
+/// **A table of its own rather than a discriminant on
+/// [`InstalledMethodBody`], and that is measured.** Every send to a
+/// `::METHOD` body copies an `InstalledMethodBody` out of
+/// [`Interp::method_bodies`] and enters it; putting a kind beside the two
+/// fields there costs `bench-programs/dispatchclass.rex` -- 4,000,000 sends
+/// to a body, none of them to a generated method -- **121 more
+/// `instructions:u` per send**, 25,723,898,929 against 26,207,891,553 for
+/// the whole run. Three narrower shapes were measured and none of them
+/// recovered it: narrowing the struct back to 16 bytes was worse
+/// (26,243,886,462), an out-of-line arm behind one comparison left
+/// 26,191,934,770, and forcing the accessors out of line while pulling
+/// `Activation::method` and `Interp::super_scope_for` back in recovered a
+/// fifth. Two tables recover all of it, because a body send reads the table
+/// it always read and never reaches this one.
 ///
 /// **Recorded rather than derived, because one directive mints two ids and
 /// only the installer knows which is which.** A `::ATTRIBUTE a` with neither
@@ -3201,15 +3224,22 @@ struct InstalledMethodBody {
 /// was generated and the dictionary key says which half, but reading the key
 /// back means deciding a getter from a setter by a trailing `=` on a name
 /// that a `::METHOD "a="` could also carry.
+#[derive(Copy, Clone)]
+struct GeneratedMethod {
+    program: ProgramId,
+    directive: usize,
+    kind: GeneratedKind,
+}
+
+/// Which method a directive generated.
 ///
-/// `Body` covers every method whose code is the directive's own clauses, and
-/// also every directive form this crate still refuses -- `DELEGATE` and
-/// `EXTERNAL` -- because what refuses those is [`method_body_gap`], reading
-/// the directive.
+/// **`DELEGATE` and `EXTERNAL` are not here.** Those have no body either,
+/// but this crate refuses them, and what refuses them is
+/// [`method_body_gap`] reading the directive behind an
+/// [`InstalledMethodBody`] -- so they stay on the body path and this enum
+/// covers only what a send actually runs.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-enum MethodRole {
-    /// The directive's own Rexx clauses, when it has them.
-    Body,
+enum GeneratedKind {
     /// A generated getter: it answers the attribute's variable in the
     /// declaring scope's pool on the receiver.
     Getter,
@@ -3388,6 +3418,7 @@ impl Interp {
             class_packages: HashMap::new(),
             package_objects: HashMap::new(),
             method_bodies: HashMap::new(),
+            generated_methods: HashMap::new(),
             special_methods: Vec::new(),
             out: Vec::new(),
             trace: Vec::new(),
@@ -4082,30 +4113,30 @@ impl Interp {
         // first, and it installs the plain name **alone** even under
         // `ATTRIBUTE`; then `ATTRIBUTE`, which installs the pair; then
         // `ABSTRACT` on its own.
-        let installed: Vec<(Vec<u8>, MethodRole)> = if method.delegate.is_some() {
-            vec![(upper, MethodRole::Body)]
+        let installed: Vec<(Vec<u8>, Option<GeneratedKind>)> = if method.delegate.is_some() {
+            vec![(upper, None)]
         } else if method.attribute {
             let setter = accessor_setter_name(&upper);
             let (get, set) = if method.abstract_ {
-                (MethodRole::Abstract, MethodRole::Abstract)
+                (Some(GeneratedKind::Abstract), Some(GeneratedKind::Abstract))
             } else if method.external.is_some() {
-                (MethodRole::Body, MethodRole::Body)
+                (None, None)
             } else {
-                (MethodRole::Getter, MethodRole::Setter)
+                (Some(GeneratedKind::Getter), Some(GeneratedKind::Setter))
             };
             vec![(upper, get), (setter, set)]
         } else if method.abstract_ {
-            vec![(upper, MethodRole::Abstract)]
+            vec![(upper, Some(GeneratedKind::Abstract))]
         } else {
-            vec![(upper, MethodRole::Body)]
+            vec![(upper, None)]
         };
-        for (name, role) in installed {
+        for (name, generated) in installed {
             self.install_one_method(
                 program,
                 directive,
                 class,
                 &name,
-                role,
+                generated,
                 method.class_method,
                 method.access,
                 method.protection,
@@ -4142,35 +4173,28 @@ impl Interp {
         // and only when all three are `None` does the presence of a body
         // decide: `hasBody()` there, `attribute.body` here.
         let generated = if attribute.abstract_ {
-            MethodRole::Abstract
+            Some(GeneratedKind::Abstract)
         } else if attribute.external.is_some()
             || attribute.delegate.is_some()
             || attribute.body.is_some()
         {
-            MethodRole::Body
+            None
         } else {
-            // The one place the role of an accessor depends on which half of
-            // the pair it is.
-            MethodRole::Getter
+            // The one place what an accessor is depends on which half of the
+            // pair it is.
+            Some(GeneratedKind::Getter)
         };
-        let installed: Vec<(Vec<u8>, MethodRole)> = match attribute.style {
-            AttributeStyle::Both => {
-                let setter = match generated {
-                    MethodRole::Getter => MethodRole::Setter,
-                    other => other,
-                };
-                vec![(upper, generated), (setter_name, setter)]
-            }
+        // The setter's half of that one place.
+        let setter = match generated {
+            Some(GeneratedKind::Getter) => Some(GeneratedKind::Setter),
+            other => other,
+        };
+        let installed: Vec<(Vec<u8>, Option<GeneratedKind>)> = match attribute.style {
+            AttributeStyle::Both => vec![(upper, generated), (setter_name, setter)],
             AttributeStyle::Get => vec![(upper, generated)],
-            AttributeStyle::Set => {
-                let setter = match generated {
-                    MethodRole::Getter => MethodRole::Setter,
-                    other => other,
-                };
-                vec![(setter_name, setter)]
-            }
+            AttributeStyle::Set => vec![(setter_name, setter)],
         };
-        for (name, role) in installed {
+        for (name, generated) in installed {
             // Both accessors of a `Both`-style attribute carry the
             // directive's own access scope, which is the oracle's own shape:
             // `attributeDirective` builds the getter and the setter and calls
@@ -4181,7 +4205,7 @@ impl Interp {
                 directive,
                 class,
                 &name,
-                role,
+                generated,
                 attribute.class_method,
                 attribute.access,
                 attribute.protection,
@@ -4200,7 +4224,7 @@ impl Interp {
         directive: usize,
         class: ObjRef,
         name: &[u8],
-        role: MethodRole,
+        generated: Option<GeneratedKind>,
         class_method: bool,
         access: Access,
         protection: Protection,
@@ -4212,7 +4236,7 @@ impl Interp {
         } else {
             self.classes().add_instance_method(class, &name)
         };
-        self.record_method_body(method_id, program, directive, role);
+        self.record_method_body(method_id, program, directive, generated);
         self.record_access_scope(method_id, program, access, protection);
     }
 
@@ -4237,18 +4261,27 @@ impl Interp {
         method: MethodId,
         program: ProgramId,
         directive: usize,
-        role: MethodRole,
+        generated: Option<GeneratedKind>,
     ) {
-        let previous = self.method_bodies.insert(
-            method,
-            InstalledMethodBody {
-                program,
-                directive,
-                role,
-            },
-        );
+        let previous = match generated {
+            None => self
+                .method_bodies
+                .insert(method, InstalledMethodBody { program, directive })
+                .is_some(),
+            Some(kind) => self
+                .generated_methods
+                .insert(
+                    method,
+                    GeneratedMethod {
+                        program,
+                        directive,
+                        kind,
+                    },
+                )
+                .is_some(),
+        };
         debug_assert!(
-            previous.is_none(),
+            !previous,
             "a MethodId was recorded twice, so one of the two bodies is lost"
         );
     }
@@ -6092,6 +6125,71 @@ say 1
         let names = interp.classes().own_instance_method_names(id);
         assert!(names.contains("BAZ"));
         assert!(!names.contains("BAZ="));
+    }
+
+    /// `::METHOD ... ATTRIBUTE` generates the same pair `::ATTRIBUTE` does,
+    /// and each half is recorded as the half it is.
+    ///
+    /// **What a send reads is the kind**, so asserting the names alone would
+    /// leave a pair recorded as two getters looking correct here: the
+    /// setter's message would then read the variable and answer it instead of
+    /// assigning, which is a value where the oracle has no result.
+    #[test]
+    fn a_method_attribute_installs_a_getter_and_a_setter() {
+        let (mut interp, _program) =
+            installed(b"say 'main ran'\n::class Foo\n::method baz attribute\n");
+        let id = installed_class(&interp, "FOO");
+        let names = interp.classes().own_instance_method_names(id);
+        assert!(names.contains("BAZ"));
+        assert!(names.contains("BAZ="));
+        assert_eq!(generated_kinds(&interp), vec!["Getter", "Setter"]);
+        assert!(
+            interp.method_bodies.is_empty(),
+            "a generated accessor is not a row of the body table"
+        );
+    }
+
+    /// `ABSTRACT` under `ATTRIBUTE` replaces both halves rather than one, on
+    /// either directive.
+    #[test]
+    fn an_abstract_accessor_pair_is_abstract_on_both_halves() {
+        for source in [
+            b"say 'main ran'\n::class Foo\n::method baz class abstract attribute\n".to_vec(),
+            b"say 'main ran'\n::class Foo\n::attribute baz class abstract\n".to_vec(),
+        ] {
+            let (interp, _program) = installed(&source);
+            assert_eq!(
+                generated_kinds(&interp),
+                vec!["Abstract", "Abstract"],
+                "{:?}",
+                String::from_utf8_lossy(&source)
+            );
+        }
+    }
+
+    /// A `DELEGATE` method is a row of the body table and not of the
+    /// generated one, which is what keeps `method_body_gap` the thing that
+    /// refuses it.
+    #[test]
+    fn a_delegate_method_stays_on_the_body_path() {
+        let (interp, _program) =
+            installed(b"say 'main ran'\n::class Foo\n::method baz class delegate p\n");
+        assert!(generated_kinds(&interp).is_empty());
+        assert_eq!(interp.method_bodies.len(), 1);
+    }
+
+    /// Every generated method `install_directives` recorded, as its `Debug`
+    /// spelling, in sorted order. A `Vec` rather than a set so a pair
+    /// recorded as two halves of the same kind reads differently from one of
+    /// each.
+    fn generated_kinds(interp: &Interp) -> Vec<String> {
+        let mut kinds: Vec<String> = interp
+            .generated_methods
+            .values()
+            .map(|generated| format!("{:?}", generated.kind))
+            .collect();
+        kinds.sort();
+        kinds
     }
 
     /// A loose `::METHOD` with no preceding `::CLASS` installs on the oracle

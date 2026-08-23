@@ -14,9 +14,11 @@
    well as on the scope: `.J~e` and `.K~e` are one declaration and two pools,
    so the second reads the derived name `E` after the first was assigned.
 
-   `GET` and `SET` each generate their own half and neither generates the
-   other; the halves that are missing here are `corpus/lang/`'s own 97.1
-   witnesses, not this program's.
+   `GET` and `SET` each generate their own half, and the half each one does
+   generate reads the same pool a generated pair does. The half neither
+   generates is a name miss, which is asserted in
+   `a_generated_accessor_pair_reads_and_writes_the_declaring_scopes_pool`
+   (`dispatch.rs`) rather than here, one fatal per program being the limit.
 
    A value goes in and comes out, rather than a rendering of one: the last
    line stores a class object and reads it back. */
