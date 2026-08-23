@@ -815,6 +815,33 @@ impl Loud {
         }
     }
 
+    /// A `receiver~NAME=` entry-method send that carried no value argument.
+    ///
+    /// **There is no oracle behaviour to match**, so this is a refusal rather
+    /// than an answer, the position [`Loud::array_index_hole`] is in.
+    /// `StringHashCollection::unknown` reads `arguments[0]` without consulting
+    /// the argument count (`classes/support/HashCollection.cpp:1026`), so a
+    /// send supplying none reads uninitialised memory: measured,
+    /// `d~mything = 'v'` then `say 'a' d["MYTHING"]` then `d~"MYTHING="()`
+    /// leaves the entry holding `a v`, the string the `SAY` had just built,
+    /// and the hole spellings `(,)` and `(,,)` answer the same.
+    ///
+    /// No differential row can cover it and the corpus gate cannot see it;
+    /// `dispatch.rs`'s `an_entry_method_send_with_no_value_is_loud` is the
+    /// whole instrument.
+    ///
+    /// No owner, because the construct is implemented and the refusal is not
+    /// a gap -- [`Loud::array_index_hole`]'s own position.
+    fn entry_method_without_a_value(index: &[u8]) -> Loud {
+        let shown = String::from_utf8_lossy(index);
+        Loud {
+            message: owned_message(
+                &format!("an entry-method assignment to \"{shown}\" with no value"),
+                None,
+            ),
+        }
+    }
+
     /// A message that resolved to a `::METHOD` or `::ATTRIBUTE` directive
     /// whose body this crate cannot run -- see [`method_body_gap`], which
     /// enumerates the cases and supplies `what`.
@@ -1698,7 +1725,7 @@ fn method_body_gap(kind: &DirectiveKind) -> Option<Loud> {
 /// `internalname->concatWithCstring("=")` over the already-upcased name
 /// (`parser/DirectiveParser.cpp:853`, `:1665`), so the argument is the
 /// upcased spelling and not the directive's own.
-fn accessor_setter_name(upper: &[u8]) -> Vec<u8> {
+pub(crate) fn accessor_setter_name(upper: &[u8]) -> Vec<u8> {
     let mut setter = upper.to_vec();
     setter.push(b'=');
     setter
@@ -2558,6 +2585,16 @@ struct Interp {
     /// Cached rather than built per send, because the oracle answers one
     /// object: measured, `(.Array~package == .String~package)` is `1`.
     package_objects: HashMap<Package, ObjRef>,
+    /// The `.METHODS`/`.ROUTINES`/`.RESOURCES` tables, keyed by the program
+    /// whose directives fill them and by which of those names it answers.
+    ///
+    /// Cached rather than built per evaluation, because the oracle answers one
+    /// object: measured, `.methods~identityHash` is the same number twice.
+    /// Each is rooted through [`rexx_core::RootSet::add_global`], the position
+    /// [`Interp::package_objects`]'s entries are in.
+    ///
+    /// [`Interp::package_objects`]: Interp::package_objects
+    package_tables: HashMap<(ProgramId, environment::PackageTable), ObjRef>,
     /// Which `(program, directive)` a [`rexx_classes::MethodId`] `install_directives`
     /// minted names -- the "bodies are stored" half of R9, addressed by the
     /// same identity `ClassRegistry::add_instance_method`/`add_class_method`
@@ -3588,6 +3625,7 @@ impl Interp {
             package_classes: HashMap::new(),
             class_packages: HashMap::new(),
             package_objects: HashMap::new(),
+            package_tables: HashMap::new(),
             method_bodies: HashMap::new(),
             generated_methods: HashMap::new(),
             special_methods: Vec::new(),

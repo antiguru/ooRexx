@@ -302,8 +302,8 @@ struct Unbuilt {
 }
 
 /// Which directive list a reflection name reports on.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-enum PackageTable {
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+pub(crate) enum PackageTable {
     /// `.METHODS` -- the methods attached to no class. `LanguageParser::
     /// addMethod` (`parser/DirectiveParser.cpp:610`) files a method under the
     /// package rather than a class exactly while `activeClass` is still unset,
@@ -316,6 +316,25 @@ enum PackageTable {
     Routines,
     /// `.RESOURCES`.
     Resources,
+}
+
+/// What one entry of a package table holds.
+///
+/// The value's own kind is fixed by which table it is in, and each is a value
+/// a program can reach: measured with one directive of each kind in a file,
+/// `.methods~z` and `.routines~r` render `a Method` and `a Routine`, and
+/// `.resources~x~class` is `The Array class`.
+enum TableValue {
+    /// A `Method` or a `Routine`. Everything about one that this phase can
+    /// observe is the class it answers to, so the class is the whole of it:
+    /// nothing here dispatches a `::METHOD` body through `.METHODS`, and a
+    /// message a `Method` does not answer is 97.1 on either side.
+    Instance(&'static str),
+    /// A `::RESOURCE`'s own body lines, which is what `.RESOURCES` holds --
+    /// `resources->put(resource, internalname)` over an `ArrayClass`
+    /// (`parser/DirectiveParser.cpp:2344`). Measured, a two-line resource's
+    /// `~items` is `2` and `SAY` of it prints both lines.
+    Lines(Vec<Vec<u8>>),
 }
 
 impl Interp {
@@ -551,43 +570,71 @@ impl Interp {
     /// prints `.ROUTINES` in a file with no `::ROUTINE` and `a StringTable` in
     /// one with a `::ROUTINE`.
     ///
-    /// **The table's entries are not populated.** A value in one is a method
-    /// or a routine object, which this phase builds no value for; a program
-    /// that indexes one sends `[]` to a `StringTable`, which resolves and then
-    /// fails loudly for want of an implementation, so nothing here can answer
-    /// wrongly.
+    /// **One object per package, not one per evaluation**, which the oracle's
+    /// own identity says: measured, `.methods~identityHash` answers the same
+    /// number twice in a row. `.CONTEXT` beside this is the other way round
+    /// and says why -- see [`Interp::context_object`].
+    ///
+    /// The entries are the directives themselves, keyed by their upcased
+    /// spelling: `unattachedMethods->setEntry`
+    /// (`parser/DirectiveParser.cpp:617`) upcases, and so do `.ROUTINES`'s
+    /// and `.RESOURCES`'s own keys. Measured, `::method "MiXeD"` puts `MIXED`
+    /// in `.METHODS` and `::routine "r"` puts `R` in `.ROUTINES`.
     fn package_string_table(&mut self, kind: PackageTable) -> Option<ObjRef> {
         let program = self.running_program()?;
-        let program = std::rc::Rc::clone(self.programs.get(program.0)?);
-        let mut seen_class = false;
-        let declares = program.directives.iter().any(|directive| {
-            let unattached = !seen_class;
-            if matches!(directive.kind, rexx_parse::DirectiveKind::Class(_)) {
-                seen_class = true;
-            }
-            match kind {
-                PackageTable::UnattachedMethods => {
-                    unattached
-                        && matches!(
-                            directive.kind,
-                            rexx_parse::DirectiveKind::Method(_)
-                                | rexx_parse::DirectiveKind::Attribute(_)
-                                | rexx_parse::DirectiveKind::Constant(_)
-                        )
-                }
-                PackageTable::Routines => {
-                    matches!(directive.kind, rexx_parse::DirectiveKind::Routine(_))
-                }
-                PackageTable::Resources => {
-                    matches!(directive.kind, rexx_parse::DirectiveKind::Resource(_))
-                }
-            }
-        });
-        if !declares {
+        if let Some(found) = self.package_tables.get(&(program, kind)).copied() {
+            return Some(found);
+        }
+        let source = std::rc::Rc::clone(self.programs.get(program.0)?);
+        let entries = package_table_entries(&source, kind);
+        if entries.is_empty() {
             return None;
         }
         let class = self.environment_model().string_table;
-        Some(self.native_instance(class))
+        // The table is rooted before anything it will hold is allocated, and
+        // each value goes into it as soon as it exists: `alloc_with` collects
+        // before it allocates, and a `Body::Native`'s entries are traced, so
+        // a value stored here survives the next value's allocation.
+        let table = self.native_instance(class);
+        self.roots
+            .add_global(&package_table_root_key(program, kind), table);
+        self.package_tables.insert((program, kind), table);
+        let frame = self.roots.push_frame();
+        for (name, value) in entries {
+            let value = match value {
+                TableValue::Instance(id) => {
+                    let class = self
+                        .classes()
+                        .lookup(id)
+                        .expect("every TableValue::Instance names a native class");
+                    self.native_instance(class)
+                }
+                TableValue::Lines(lines) => self.line_array(&lines),
+            };
+            let object = self.heap.get_mut(table).expect("just allocated and rooted");
+            let Body::Native(native) = &mut object.body else {
+                unreachable!("allocated as Body::Native by native_instance")
+            };
+            native.set_entry(&name, value);
+        }
+        self.roots.pop_frame(frame);
+        Some(table)
+    }
+
+    /// One `::RESOURCE`'s body as the `Array` of strings `.RESOURCES` holds.
+    ///
+    /// Each line is pushed as a temporary as it is built, because the next
+    /// line's own allocation may collect and nothing else holds it yet.
+    fn line_array(&mut self, lines: &[Vec<u8>]) -> ObjRef {
+        let mut slots = Vec::with_capacity(lines.len());
+        for line in lines {
+            let text = self.text(line);
+            self.roots.push_temp(text);
+            slots.push(Some(text));
+        }
+        let array = self.alloc_with(BehaviourId::ARRAY, Body::Array(slots));
+        self.roots.push_temp(array);
+        array
     }
 
     /// `.CONTEXT`: `RexxActivation::getContextObject`.
@@ -619,7 +666,7 @@ impl Interp {
         object
     }
 
-    /// `Directory~at(index)`'s answer for a directory this model built, or the
+    /// The entry `index` names on a `Directory` or a `StringTable`, or the
     /// refusal for an index whose entry the oracle has and this crate does
     /// not.
     ///
@@ -634,15 +681,18 @@ impl Interp {
     /// passes to *find* a directory it was not handed; a send already holds the
     /// receiver, and the oracle asks its manager per `getLocal`/`getEnvironment`
     /// call (`PackageClass.cpp:1137`, `:1154`) and not per `~at`.
-    pub(crate) fn directory_entry_read(
+    pub(crate) fn hash_entry_read(
         &mut self,
-        directory: ObjRef,
+        receiver: ObjRef,
         index: &[u8],
     ) -> Result<ObjRef, Failure> {
-        if let Some(found) = self.native_entry(directory, index) {
+        if let Some(found) = self.native_entry(receiver, index) {
             return Ok(found);
         }
-        if let Some(scope) = self.directory_scope(directory)
+        // The unbuilt refusal is a directory's alone: `directory_scope`
+        // answers `None` for a package table, whose entries this crate builds
+        // in full.
+        if let Some(scope) = self.directory_scope(receiver)
             && let Some(unbuilt) = self.environment_model().unbuilt.get(index).copied()
             && unbuilt.scope == scope
         {
@@ -651,23 +701,23 @@ impl Interp {
         Ok(ObjRef::NIL)
     }
 
-    /// `Directory~put(item, index)`: stores `item` under `index`.
+    /// Stores `item` under `index` on a `Directory` or a `StringTable`.
     ///
     /// The entry replaces whatever the bootstrap put there, which is what makes
     /// a stored name answer where the unbuilt refusal above would otherwise
-    /// fire: `directory_entry_read` asks the map first, exactly as
+    /// fire: `hash_entry_read` asks the map first, exactly as
     /// [`Interp::dot_variable`] does.
-    pub(crate) fn directory_entry_write(
+    pub(crate) fn hash_entry_write(
         &mut self,
-        directory: ObjRef,
+        receiver: ObjRef,
         index: &[u8],
         item: ObjRef,
     ) -> Result<(), Failure> {
-        let Some(object) = self.heap.get_mut(directory) else {
+        let Some(object) = self.heap.get_mut(receiver) else {
             return Err(Loud::receiver_class("a value whose object is no longer live").into());
         };
         let Body::Native(native) = &mut object.body else {
-            return Err(Loud::receiver_class("a value that is not a directory").into());
+            return Err(Loud::receiver_class("a value that is not a hash collection").into());
         };
         native.set_entry(index, item);
         Ok(())
@@ -810,6 +860,117 @@ fn package_root_key(package: Package) -> String {
         Package::Rexx => "the REXX package".to_string(),
         Package::Program(ProgramId(id)) => format!("the package of program {id}"),
     }
+}
+
+/// The [`rexx_core::RootSet::add_global`] key one package table is held under.
+///
+/// A program's `.METHODS`, `.ROUTINES` and `.RESOURCES` are distinct objects
+/// and must not displace each other, so the kind is in the key alongside the
+/// program.
+fn package_table_root_key(ProgramId(program): ProgramId, kind: PackageTable) -> String {
+    let which = match kind {
+        PackageTable::UnattachedMethods => "methods",
+        PackageTable::Routines => "routines",
+        PackageTable::Resources => "resources",
+    };
+    format!("the {which} of program {program}")
+}
+
+/// What `kind`'s table holds for `program`, keyed the way the oracle keys it.
+///
+/// Empty for a package that declares no directive of that kind, which is the
+/// state `.METHODS` renders as its own text in --
+/// [`Interp::package_string_table`] is where that distinction is read.
+fn package_table_entries(
+    program: &rexx_parse::Program,
+    kind: PackageTable,
+) -> Vec<(Vec<u8>, TableValue)> {
+    let mut entries = Vec::new();
+    let mut seen_class = false;
+    for directive in &program.directives {
+        let unattached = !seen_class;
+        match &directive.kind {
+            rexx_parse::DirectiveKind::Class(_) => seen_class = true,
+            rexx_parse::DirectiveKind::Method(method)
+                if unattached && kind == PackageTable::UnattachedMethods =>
+            {
+                let upper = method.name.to_ascii_uppercase();
+                // `ATTRIBUTE` files the accessor pair under both names,
+                // which is `methodDirective`'s `addMethod` calls at
+                // `parser/DirectiveParser.cpp:875` and `:880`. Measured,
+                // `::method z attribute` puts `Z` and `Z=` in `.METHODS`.
+                if method.attribute {
+                    entries.push((crate::accessor_setter_name(&upper), method_value()));
+                }
+                entries.push((upper, method_value()));
+            }
+            rexx_parse::DirectiveKind::Attribute(attribute)
+                if unattached && kind == PackageTable::UnattachedMethods =>
+            {
+                let upper = attribute.name.to_ascii_uppercase();
+                let setter = crate::accessor_setter_name(&upper);
+                // The same split `Interp::install_attribute` makes over the
+                // same field, because the getter and the setter here are the
+                // ones it installs, under the same names. Measured,
+                // `::attribute zz` puts `ZZ` and `ZZ=` in `.METHODS`,
+                // `::attribute zz get` puts `ZZ` alone and `::attribute zz
+                // set` puts `ZZ=` alone.
+                match attribute.style {
+                    rexx_parse::AttributeStyle::Both => {
+                        entries.push((upper, method_value()));
+                        entries.push((setter, method_value()));
+                    }
+                    rexx_parse::AttributeStyle::Get => entries.push((upper, method_value())),
+                    rexx_parse::AttributeStyle::Set => entries.push((setter, method_value())),
+                }
+            }
+            rexx_parse::DirectiveKind::Constant(constant)
+                if unattached && kind == PackageTable::UnattachedMethods =>
+            {
+                // One getter, `createConstantGetterMethod`'s own
+                // `addMethod(name, method, false)`
+                // (`parser/DirectiveParser.cpp:2536`). Measured,
+                // `::constant sep '/'` leaves `.methods~items` `1`.
+                entries.push((constant.name.to_ascii_uppercase(), method_value()));
+            }
+            rexx_parse::DirectiveKind::Routine(routine) if kind == PackageTable::Routines => {
+                // Both access scopes, not the public ones alone: `.ROUTINES`
+                // is `package->routines` (`parser/LanguageParser.cpp:1893`)
+                // and `publicRoutines` is a second table nothing here reads.
+                // Measured, a file with one `PUBLIC` and one plain `::ROUTINE`
+                // leaves `.routines~items` `2`.
+                entries.push((
+                    routine.name.to_ascii_uppercase(),
+                    TableValue::Instance("Routine"),
+                ));
+            }
+            rexx_parse::DirectiveKind::Resource(resource) if kind == PackageTable::Resources => {
+                let lines = resource
+                    .lines
+                    .iter()
+                    .map(|span| {
+                        program
+                            .source
+                            .span_bytes(span.clone())
+                            .expect("a resource body line is a span of its own program's source")
+                            .to_vec()
+                    })
+                    .collect();
+                entries.push((resource.name.to_ascii_uppercase(), TableValue::Lines(lines)));
+            }
+            _ => {}
+        }
+    }
+    entries
+}
+
+/// The value a `.METHODS` entry holds.
+///
+/// A function rather than a constant so that the class name is written once:
+/// every one of `::METHOD`, `::ATTRIBUTE` and `::CONSTANT` files a
+/// `MethodClass`, whatever else differs between them.
+fn method_value() -> TableValue {
+    TableValue::Instance("Method")
 }
 
 /// `RexxObject::defaultName` (`classes/ObjectClass.cpp:1760`): the owning

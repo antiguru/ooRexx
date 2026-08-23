@@ -272,9 +272,14 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // them in `Directory`'s **own** dictionary, which is what the scope in the
     // traceback says: measured, `.environment~at()` reports `Compiled method
     // "AT" with scope "Directory".`, not `IdentityTable`.
-    ("Directory", "[]", Arity::Fixed(1), native_directory_at),
-    ("Directory", "AT", Arity::Fixed(1), native_directory_at),
-    ("Directory", "PUT", Arity::Fixed(2), native_directory_put),
+    ("Directory", "[]", Arity::Fixed(1), native_hash_at),
+    ("Directory", "AT", Arity::Fixed(1), native_hash_at),
+    ("Directory", "PUT", Arity::Fixed(2), native_hash_put),
+    // `StringHashCollection::unknownRexx`, `StringTable`'s own row
+    // (`memory/Setup.cpp:883`) and donated to `Directory` by the same
+    // `InheritInstanceMethods`. This is the entry-method mechanism: an entry
+    // is reached by sending its name.
+    ("Directory", "UNKNOWN", Arity::Fixed(2), native_hash_unknown),
     ("Object", "CLASS", Arity::Fixed(0), native_class),
     ("Object", "HASMETHOD", Arity::Fixed(1), native_has_method),
     (
@@ -303,6 +308,20 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         native_string_make_string,
     ),
     ("String", "REVERSE", Arity::Fixed(0), native_reverse),
+    // `.methods`, `.routines` and `.resources`. The same functions the
+    // `Directory` rows above name, because the C++ is the same code reached
+    // through the same donation: `StringTable` takes `[]`, `At` and `Put` from
+    // `IdentityTable` (`memory/Setup.cpp:881`) and declares `Unknown` itself
+    // (`:883`), and `Directory` then takes that whole set from `StringTable`.
+    ("StringTable", "[]", Arity::Fixed(1), native_hash_at),
+    ("StringTable", "AT", Arity::Fixed(1), native_hash_at),
+    ("StringTable", "PUT", Arity::Fixed(2), native_hash_put),
+    (
+        "StringTable",
+        "UNKNOWN",
+        Arity::Fixed(2),
+        native_hash_unknown,
+    ),
 ];
 
 /// `~defaultName` for an array -- `RexxObject::defaultName`'s article rule
@@ -348,6 +367,7 @@ pub(crate) struct ObjectModel {
     package: ObjRef,
     method: ObjRef,
     directory: ObjRef,
+    string_table: ObjRef,
 }
 
 impl ObjectModel {
@@ -391,6 +411,9 @@ impl ObjectModel {
         let directory = classes
             .lookup("Directory")
             .expect("Directory is a native class");
+        let string_table = classes
+            .lookup("StringTable")
+            .expect("StringTable is a native class");
         ObjectModel {
             classes,
             natives,
@@ -401,6 +424,7 @@ impl ObjectModel {
             package,
             method,
             directory,
+            string_table,
         }
     }
 }
@@ -446,14 +470,21 @@ enum Primitive {
     Package,
     /// A `Body::Native` whose class is `.Directory` -- `.environment` and
     /// `.local`. Measured, `.environment~class~id` is `Directory`.
-    ///
-    /// **`.methods`, `.routines`, `.resources` and `.context` are not this**,
-    /// even though a `StringTable` answers the names this module's `Directory`
-    /// rows answer, out of the same donated `IdentityTable` rows: this crate
-    /// populates none of those tables (`environment.rs`'s
-    /// `package_string_table`), so answering `~at` on one would answer `.nil`
-    /// for an index the oracle has an entry for. They keep the loud arm.
     Directory,
+    /// A `Body::Native` whose class is `.StringTable` -- `.methods`,
+    /// `.routines` and `.resources`. Measured, `.methods~class` is
+    /// `The StringTable class`.
+    ///
+    /// **Separate from [`Primitive::Directory`] even though every method
+    /// either answers is the same C++ function**, because `Directory` and
+    /// `StringTable` are separate behaviours: the traceback names the
+    /// receiver's own class, measured -- `.methods~at()` reports `Compiled
+    /// method "AT" with scope "StringTable".` where `.environment~at()`
+    /// reports `"Directory"`.
+    ///
+    /// **`.context` is not this.** A `RexxContext` answers no name this crate
+    /// implements, so it keeps the loud arm below.
+    StringTable,
     /// The receiver **is** a class object, so its messages resolve against
     /// that class's own class behaviour rather than against any class's
     /// instance behaviour. Measured, `::class K` plus `::method m class`:
@@ -849,13 +880,18 @@ impl Interp {
                     {
                         Ok(Primitive::Directory)
                     }
-                    // `.methods`, `.routines`, `.resources` and `.context`.
-                    // Their classes are in the registry, so there is a
+                    Body::Native(native)
+                        if self.object_model.as_ref().map(|model| model.string_table)
+                            == Some(native.class()) =>
+                    {
+                        Ok(Primitive::StringTable)
+                    }
+                    // `.context`. Its class is in the registry, so there is a
                     // behaviour to resolve against -- what is missing is a
-                    // `NATIVE_METHODS` row for anything a `StringTable` or a
-                    // `RexxContext` answers, and answering 97.1 for a name the
-                    // oracle implements is the wrong failure. Loud until a
-                    // task implements those methods.
+                    // `NATIVE_METHODS` row for anything a `RexxContext`
+                    // answers, and answering 97.1 for a name the oracle
+                    // implements is the wrong failure. Loud until a task
+                    // implements those methods.
                     Body::Native(_) => Err("one of the interpreter's own objects"),
                 },
             },
@@ -880,6 +916,7 @@ impl Interp {
             Primitive::Array => Behaviour::Instance(model.array),
             Primitive::Package => Behaviour::Instance(model.package),
             Primitive::Directory => Behaviour::Instance(model.directory),
+            Primitive::StringTable => Behaviour::Instance(model.string_table),
             Primitive::Class(class) => Behaviour::ClassSide(class),
         })
     }
@@ -2732,6 +2769,7 @@ fn native_class(
         Primitive::Array => model.array,
         Primitive::Package => model.package,
         Primitive::Directory => model.directory,
+        Primitive::StringTable => model.string_table,
         Primitive::Class(class) => model.classes.class_of(class),
     }))
 }
@@ -2976,8 +3014,8 @@ fn native_array_items(
     Ok(Some(interp.counted(items)))
 }
 
-/// The index argument a directory method was given, as the bytes it is stored
-/// and looked up under.
+/// The index argument a hash-collection method was given, as the bytes it is
+/// stored and looked up under.
 ///
 /// `stringArgument(index, "index")` (`runtime/MethodArguments.hpp:161`), which
 /// raises 88.901 for an omitted argument and 88.909 for a value with no string
@@ -2985,13 +3023,15 @@ fn native_array_items(
 /// argument index is required.` and `.environment~at(.nil)` reports `Argument
 /// index must have a string value.`
 ///
-/// **The bytes are not upcased.** A directory index is stored and matched
-/// verbatim -- measured, `d~put('v','kk')` leaves `d['kk']` `v` and `d['KK']`
+/// **The bytes are not upcased.** An index is stored and matched verbatim --
+/// measured, `d~put('v','kk')` leaves `d['kk']` `v` and `d['KK']`
 /// `The NIL object`, and `.environment['array']` is `The NIL object` where
 /// `.environment['ARRAY']` is `The Array class`. The entries `Setup.cpp`
 /// registers are uppercase because `completeSystemClass` upcases the *name it
-/// registers*, not because a lookup folds case.
-fn directory_index(
+/// registers*, not because a lookup folds case. [`native_hash_unknown`] is
+/// where the fold does happen, because `entry` and `setEntry` are the
+/// upcasing pair and `get`/`put` are not.
+fn hash_index(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
     position: usize,
@@ -3003,24 +3043,25 @@ fn directory_index(
     Ok(interp.to_text(argument).to_vec())
 }
 
-/// `Directory~at(index)` and `Directory~[index]`: the entry stored under
-/// `index`, or `.nil` -- `HashCollection::getRexx`, donated to `.Directory`
-/// by `InheritInstanceMethods(StringTable)`.
+/// `~at(index)` and `~[index]` on a `Directory` or a `StringTable`: the entry
+/// stored under `index`, or `.nil` -- `HashCollection::getRexx`, donated to
+/// each of them by an `InheritInstanceMethods`.
 ///
-/// Measured, `.environment['ARRAY']` is `The Array class` and
-/// `.environment['x']` is `The NIL object`.
-fn native_directory_at(
+/// Measured, `.environment['ARRAY']` is `The Array class`,
+/// `.environment['x']` is `The NIL object`, and `.methods['Z']` is `a Method`
+/// in a file whose only directive is `::method z`.
+fn native_hash_at(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let index = directory_index(interp, args, 1)?;
-    Ok(Some(interp.directory_entry_read(receiver, &index)?))
+    let index = hash_index(interp, args, 1)?;
+    Ok(Some(interp.hash_entry_read(receiver, &index)?))
 }
 
-/// `Directory~put(item, index)`: stores `item` under `index`, replacing
-/// whatever was there -- `HashCollection::putRexx`.
+/// `~put(item, index)` on a `Directory` or a `StringTable`: stores `item`
+/// under `index`, replacing whatever was there -- `HashCollection::putRexx`.
 ///
 /// **The item is argument one and the index argument two**, which is the order
 /// `CoreClasses.orx:66` writes (`.environment~put(class, name)`). Measured at
@@ -3030,7 +3071,7 @@ fn native_directory_at(
 ///
 /// **Answers no value**, measured: `.environment~put('v','q')` is rc 0 as a
 /// whole clause and 91.999 at rc 165 under `say`.
-fn native_directory_put(
+fn native_hash_put(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
@@ -3039,9 +3080,81 @@ fn native_directory_put(
     let Some(Some(item)) = args.first().copied() else {
         return Err(Raised::missing_named_argument("item").into());
     };
-    let index = directory_index(interp, args, 2)?;
-    interp.directory_entry_write(receiver, &index, item)?;
+    let index = hash_index(interp, args, 2)?;
+    interp.hash_entry_write(receiver, &index, item)?;
     Ok(None)
+}
+
+/// `~unknown(message, arguments)` on a `Directory` or a `StringTable`: **the
+/// entry-method mechanism**, `StringHashCollection::unknown`
+/// (`classes/support/HashCollection.cpp:1015`).
+///
+/// A name ending in `=` stores the send's own first argument under the name
+/// without it (`:1020` is the test); every other name reads the entry. So an entry
+/// answers a message of its own name without being in the behaviour at all --
+/// measured, `.environment~local~class` is `The Directory class` while
+/// `.environment~hasMethod("LOCAL")` is `0`.
+///
+/// **Both directions fold the name to upper case**, which `~at` and `~put` do
+/// not: `entry` and `setEntry` are `get` and `put` with `index->upper()`
+/// (`:824`, `:854`). Measured, `.local~"mything="('v')` then `.local["MYTHING"]`
+/// is `v` and `.local["mything"]` is `The NIL object`.
+///
+/// **The set form with no value argument is refused, and there is no oracle
+/// behaviour to match.** `unknown` reads `arguments[0]` whatever the argument
+/// count is, so a send that supplies none reads uninitialised memory:
+/// measured, `d~mything = 'v'` then `say 'a' d["MYTHING"]` then
+/// `d~"MYTHING="()` leaves `d["MYTHING"]` holding `a v` -- the string the
+/// intervening `SAY` had just built. `d~"MYTHING="(,)` and `(,,)` do the same.
+/// The message-assignment form always supplies a value, so nothing that
+/// reaches this from `receiver~NAME = expr` takes the refusal.
+///
+/// `arguments` is an `Array` on every send the interpreter itself forwards
+/// ([`Interp::unknown_or_nomethod`] builds one). A program sending `~UNKNOWN`
+/// by hand may pass anything, and the oracle converts it with `requestArray`;
+/// this crate has no `MAKEARRAY` for any receiver, so a value that is not
+/// already an array is the same refusal `~request('ARRAY')` gives.
+fn native_hash_unknown(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(Some(message)) = args.first().copied() else {
+        return Err(Raised::missing_method_argument(1).into());
+    };
+    let message = required_string_argument(interp, message, 1)?;
+    let name = interp.to_text(message).to_vec();
+    let Some(Some(arguments)) = args.get(1).copied() else {
+        return Err(Raised::missing_method_argument(2).into());
+    };
+    let Some(forwarded) = interp.array_slots_of(arguments) else {
+        return Err(unconverted_array_argument(interp, arguments));
+    };
+    let Some(index) = name.strip_suffix(b"=") else {
+        let index = name.to_ascii_uppercase();
+        return Ok(Some(interp.hash_entry_read(receiver, &index)?));
+    };
+    let index = index.to_ascii_uppercase();
+    let Some(Some(item)) = forwarded.first().copied() else {
+        return Err(Loud::entry_method_without_a_value(&index).into());
+    };
+    interp.hash_entry_write(receiver, &index, item)?;
+    Ok(None)
+}
+
+/// The refusal for an `~UNKNOWN` argument list that is not already an `Array`.
+///
+/// `arrayArgument` converts with `requestArray`, which is a `MAKEARRAY` send,
+/// so both arms name a step of that send: the method for a value whose class
+/// this crate has, and the send itself for a value it does not build a class
+/// for at all. Either way the message reads like the one `~request('ARRAY')`
+/// produces for the same value.
+fn unconverted_array_argument(interp: &mut Interp, value: ObjRef) -> Failure {
+    match interp.receiver_class_id(value) {
+        Some(id) => Loud::native_method(b"MAKEARRAY", &id).into(),
+        None => Loud::receiver_class("a value this phase builds no class for").into(),
+    }
 }
 
 /// `Array~makeString(format, separator)` and `Array~toString(format,
@@ -3186,7 +3299,8 @@ fn native_object_name(
         | Primitive::Array
         | Primitive::Class(_)
         | Primitive::Package
-        | Primitive::Directory => interp.string_value_text(receiver),
+        | Primitive::Directory
+        | Primitive::StringTable => interp.string_value_text(receiver),
     };
     Ok(Some(interp.text_built(name)))
 }
@@ -3224,14 +3338,14 @@ fn native_object_name_set(
             let name = String::from_utf8_lossy(&name).into_owned();
             interp.classes().set_object_name(class, &name);
         }
-        Primitive::Package | Primitive::Directory => {
+        Primitive::Package | Primitive::Directory | Primitive::StringTable => {
             let Some(object) = interp.heap.get_mut(receiver) else {
                 return Err(Loud::receiver_class("a value whose object is no longer live").into());
             };
             match &mut object.body {
                 Body::Native(native) => native.set_rendered(&name),
                 other => {
-                    unreachable!("a package or directory receiver is Body::Native, got {other:?}")
+                    unreachable!("each of these receivers is Body::Native, got {other:?}")
                 }
             }
         }
@@ -4468,34 +4582,145 @@ mod tests {
         assert!(stderr.contains("Error 93.901:"), "{stderr:?}");
     }
 
-    /// A name a directory's behaviour does not answer is **not** 97.1: the
-    /// forward reaches `Directory`'s own `UNKNOWN`, whose body reads the name
-    /// as an entry and which this phase does not implement -- so the refusal
-    /// names that method rather than the search step.
+    /// A name a hash collection's behaviour does not answer is **not** 97.1:
+    /// the forward reaches the receiver's own `UNKNOWN`, whose body reads the
+    /// name as an entry -- so a missing name is `.nil` and a present one is
+    /// the entry.
     ///
-    /// **The only instrument for these bytes**, and it has to be an in-crate
-    /// one: a refusal the oracle does not share is not expressible as a
-    /// corpus row, and no corpus program sends a missing name to a directory.
-    /// Measured, `.environment~nosuch` is `The NIL object` at rc 0 on the
-    /// oracle, so answering 97.1 here would be a wrong answer a program could
-    /// trap -- which is what the `String` row below is paired against: that
-    /// receiver's behaviour answers no `UNKNOWN`, so the same missing name
-    /// really is the condition there.
+    /// **The `String` row is the pair that makes this a rule about `UNKNOWN`
+    /// rather than about missing names.** That receiver's behaviour answers no
+    /// `UNKNOWN`, so the same shape really is the condition there, and a build
+    /// answering `.nil` for every miss fails it.
     #[test]
-    fn a_directory_forwards_a_missing_name_to_an_unknown_this_phase_lacks() {
-        for source in ["say .environment~nosuch\n", "say .local~nosuch\n"] {
-            let (code, stdout, stderr) = both_engines(source);
-            assert_eq!((code, stdout.as_str()), (120, ""), "{source:?}");
-            assert_eq!(
-                stderr,
-                "rexx-exec: method \"UNKNOWN\" of class \"Directory\" is not implemented \
-                 (Phase 5)\n",
-                "{source:?}"
-            );
-        }
+    fn a_hash_collection_forwards_a_missing_name_to_its_own_unknown() {
+        assert_eq!(
+            both_engines(
+                "say .environment~nosuch\n\
+                 say .local~nosuch\n\
+                 say .methods~nosuch\n\
+                 ::method z\n"
+            ),
+            (
+                0,
+                "The NIL object\nThe NIL object\nThe NIL object\n".to_string(),
+                String::new()
+            )
+        );
         let (code, stdout, stderr) = both_engines("say 'abc'~nosuch\n");
         assert_eq!((code, stdout.as_str()), (159, ""));
         assert!(stderr.contains("Error 97.1:"), "{stderr:?}");
+    }
+
+    /// **The entry-method assignment with no value to store**, which the
+    /// oracle answers by reading uninitialised memory -- see
+    /// [`Loud::entry_method_without_a_value`] for the measurement.
+    ///
+    /// The only instrument, for the reason that constructor's doc gives: there
+    /// is no oracle behaviour to agree with, so no corpus row can carry it.
+    ///
+    /// **The answering rows beside it are the point.** The same message name
+    /// with a value stores it, and the ordinary message-assignment form
+    /// reaches the same code with a value always present -- so a build that
+    /// refused the whole set form fails them rather than passing.
+    #[test]
+    fn an_entry_method_send_with_no_value_is_loud() {
+        for source in [
+            ".local~\"MYTHING=\"()\n",
+            ".local~\"MYTHING=\"(,)\n",
+            ".methods~\"Q=\"()\n::method z\n",
+        ] {
+            let (code, stdout, stderr) = both_engines(source);
+            assert_eq!((code, stdout.as_str()), (120, ""), "{source:?}");
+            assert!(
+                stderr.starts_with("rexx-exec: an entry-method assignment to ")
+                    && stderr.ends_with("with no value is not implemented\n"),
+                "{source:?} refused with {stderr:?}"
+            );
+        }
+        assert_eq!(
+            both_engines(
+                ".local~\"MYTHING=\"('v')\n\
+                 say .MYTHING\n\
+                 .local~MYTHING = 'w'\n\
+                 say .MYTHING\n"
+            ),
+            (0, "v\nw\n".to_string(), String::new())
+        );
+    }
+
+    /// **`.RESOURCES` holds each `::RESOURCE` body as an `Array` of its own
+    /// lines**, and this is the whole instrument for it.
+    ///
+    /// No corpus program can carry it: a `::RESOURCE` body is source lines
+    /// that no clause span covers, and `rexx-parse`'s
+    /// `every_corpus_program_tiles` requires every byte of a corpus program to
+    /// be tiled by a clause node. `corpus/phase-5a.txt` says so at the Task 17
+    /// block. Every row below was measured on the oracle at rc 0.
+    ///
+    /// The empty body is the neighbour that stops a build answering the whole
+    /// file, and the lower-case index is the one that stops a build keying by
+    /// the spelling the directive quoted.
+    #[test]
+    fn the_package_tables_hold_what_their_directives_declare() {
+        assert_eq!(
+            both_engines(
+                "say .resources~class\n\
+                 say .resources~x~class\n\
+                 say .resources~x~items\n\
+                 say .resources~x\n\
+                 say .resources[\"X\"]~at(2)\n\
+                 say .resources[\"x\"]\n\
+                 say .resources~q\n\
+                 ::resource \"x\"\n\
+                 line one\n\
+                 line two\n\
+                 ::END\n"
+            ),
+            (
+                0,
+                "The StringTable class\nThe Array class\n2\nline one\nline two\n\
+                 line two\nThe NIL object\nThe NIL object\n"
+                    .to_string(),
+                String::new()
+            )
+        );
+        assert_eq!(
+            both_engines(
+                "say .resources~x~items\n\
+                 say '[' || .resources~x || ']'\n\
+                 ::resource x\n\
+                 ::END\n"
+            ),
+            (0, "0\n[]\n".to_string(), String::new())
+        );
+    }
+
+    /// An `~UNKNOWN` sent by hand rather than forwarded: its argument list is
+    /// an `Array` on every forward and anything at all here, and the oracle
+    /// converts what it is given with `requestArray`.
+    ///
+    /// In-crate only, because the refusal is this crate's: no `MAKEARRAY` is
+    /// implemented for any receiver, so the conversion the oracle performs is
+    /// the same gap `~request('ARRAY')` already reports. The answering row
+    /// beside it is measured on the oracle -- `.environment~unknown('ARRAY',
+    /// .Array~superClasses)` is `The Array class` at rc 0 -- and is what stops
+    /// a build refusing every by-hand send from passing.
+    #[test]
+    fn an_unknown_sent_by_hand_needs_an_array_this_crate_does_not_convert() {
+        assert_eq!(
+            both_engines("say .environment~unknown('ARRAY', .Array~superClasses)\n"),
+            (0, "The Array class\n".to_string(), String::new())
+        );
+        assert_eq!(
+            both_engines("say .environment~unknown('ARRAY', 'y')\n"),
+            (
+                120,
+                String::new(),
+                "rexx-exec: method \"MAKEARRAY\" of class \"String\" is not implemented \
+                 (Phase 5)\n"
+                    .to_string()
+            )
+        );
     }
 
     /// An entry the oracle's own directory holds and this crate does not build
