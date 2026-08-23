@@ -1,3 +1,4 @@
 say 'main'
+say .k~at
 ::class k
-::attribute at abstract
+::attribute at class abstract

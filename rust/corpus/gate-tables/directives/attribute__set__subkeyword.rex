@@ -1,4 +1,4 @@
-say 'main'
+.k~at = 'stored'
 ::class k
-::attribute at set
-  return
+::attribute at class set
+  say arg(1)

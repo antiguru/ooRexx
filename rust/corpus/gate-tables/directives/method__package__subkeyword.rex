@@ -1,4 +1,4 @@
-say 'main'
+say .k~m
 ::class k
-::method m package
+::method m class package
   return 1

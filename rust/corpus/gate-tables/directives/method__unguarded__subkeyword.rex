@@ -1,4 +1,4 @@
-say 'main'
+say .k~m
 ::class k
-::method m unguarded
+::method m class unguarded
   return 1

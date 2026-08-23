@@ -1,4 +1,4 @@
-say 'main'
+say .k~m
 ::class k
-::method m public
+::method m class public
   return 1

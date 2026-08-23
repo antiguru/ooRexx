@@ -1,3 +1,4 @@
-say 'main'
+.k~at = 'stored'
+say .k~at
 ::class k
-::attribute at package
+::attribute at class package

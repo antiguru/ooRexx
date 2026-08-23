@@ -1,4 +1,4 @@
-say 'main'
+say .k~at
 ::class k
-::attribute at get
+::attribute at class get
   return 1

@@ -1,3 +1,4 @@
-say 'main'
+.k~m = 'stored'
+say .k~m
 ::class k
-::method m attribute
+::method m class attribute

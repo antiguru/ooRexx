@@ -1,3 +1,4 @@
 say 'main'
+say .k~m
 ::class k
-::method m abstract
+::method m class abstract
