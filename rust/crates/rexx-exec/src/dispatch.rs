@@ -3592,15 +3592,15 @@ mod tests {
             // **`DELEGATE` with `ATTRIBUTE`, both halves of the pair, and the
             // setter is the row with no other instrument at all.** The oracle
             // installs a delegate method under each key and forwards both, so
-            // it answers 97.1 at rc 159 naming `Object "P"` for either. Until
-            // this crate installed the setter's key that message was a name
-            // miss on the class: 97.1 at rc 159 naming `Object "The K class"`,
-            // which is the oracle's status and the oracle's catalogue row over
-            // a receiver the oracle does not name. No corpus program covers
+            // it answers 97.1 at rc 159 naming `Object "P"` for either. A key
+            // this crate's dictionary does not hold makes the same message a
+            // name miss on the class instead -- 97.1 at rc 159 naming
+            // `Object "The K class"`, the oracle's status and the oracle's
+            // catalogue row over a receiver the oracle does not name -- and
+            // the setter's row is what fails on that. No corpus program covers
             // the combination in either direction and table D's row identity
-            // is one keyword, so **these two rows are the whole instrument**,
-            // and the second is what stops the silent-receiver shape coming
-            // back.
+            // is one keyword, so **the rows here are the whole instrument for
+            // it**.
             (
                 "say .K~a\n::class K\n::method a class delegate p attribute\n\
                  ::attribute p class\n",
