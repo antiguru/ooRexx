@@ -1144,7 +1144,8 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     // tables, and the refusal the REXX package gives an addition. Beside them
     // the context object's own rows, which pin that object's identity rather
     // than the package's: one per activation, surviving a forced collection
-    // while running, and surviving one while parked by a REPLY.
+    // while its activation is running or suspended, and surviving one while
+    // it is parked by a REPLY.
     "lang/class_context_package.rex",
     "lang/class_context_identity.rex",
     "lang/class_context_gc.rex",

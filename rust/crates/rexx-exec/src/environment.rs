@@ -1016,10 +1016,18 @@ impl Interp {
     /// `x`. A fresh object per send answers `0` and `a Method`.
     ///
     /// The comparison is `==` and not `=`. The oracle's `identityHash` is an
-    /// address-derived integer of more than nine digits and `=` compares two
-    /// of those at `NUMERIC DIGITS`, so two genuinely different objects
-    /// compare equal under it -- measured, `-140404878001713` and
-    /// `-140404878167489` are `1` under `=` and `0` under `==`.
+    /// address-derived integer of more than nine digits, and `=` compares two
+    /// of those at `NUMERIC DIGITS`, where they round to the same value, so
+    /// two genuinely different objects compare equal under it. Measured with
+    /// the two answers in variables, which is how they arrive from
+    /// `~identityHash`: `a = "-140404878001713"; b = "-140404878167489"` then
+    /// `say (a = b) (a == b)` prints `1 0`.
+    ///
+    /// **Written as variables because the literal form measures something
+    /// else.** Unary minus is arithmetic, so `say (-140404878001713 ==
+    /// -140404878167489)` evaluates each literal at `NUMERIC DIGITS` first
+    /// and compares two copies of `-1.40404878E+14`: it prints `1`, and it is
+    /// not this rule.
     ///
     /// Rooted as a global for the reason a package object is: it outlives
     /// every send that reaches it and is reachable from no other object

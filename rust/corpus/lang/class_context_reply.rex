@@ -9,12 +9,14 @@
 
    The parked body prints nothing when it is right, and that is deliberate.
    The oracle runs a replied-to body on another thread, so anything it says
-   races with the main line's own output: measured, a version whose parked
-   body said its context unconditionally gave two distinct outputs over
-   twenty oracle runs. Reading the context and saying nothing is
-   order-independent, and it still discriminates in both directions -- a
-   collected object refuses the send outright, and a re-minted one answers
-   the default and takes the LOST branch. */
+   races with the main line's own output: a version whose parked body said
+   its context unconditionally gave more than one distinct output over twenty
+   oracle runs, reproducibly, and how many is not a stable quantity to write
+   down. Reading the context and saying nothing is order-independent -- this
+   program gives one hash over twenty runs of the oracle and twenty of each
+   engine -- and it still discriminates in both directions: a collected
+   object refuses the send outright, and a re-minted one answers the default
+   and takes the LOST branch. */
 say .K~inner()
 say gc('force')
 do i = 1 to 200

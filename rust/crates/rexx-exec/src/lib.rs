@@ -373,12 +373,13 @@ pub struct Outcome {
     pub stack: StackSpan,
     /// How many times `Heap::collect` ran during this program.
     ///
-    /// **Non-zero under an ordinary `run_program`**, because the watermark
-    /// policy collects on its own: `collect_policy.rs`'s churn program reads
-    /// 6 there, and `GC('Force')` reaches a collection from any program that
-    /// calls it. What
-    /// `run_program_collect_every_alloc` changes is the *trigger*, not
-    /// whether the counter can move -- under it every allocation collects.
+    /// **Can be non-zero under an ordinary `run_program`**, because the
+    /// watermark policy collects on its own: `collect_policy.rs`'s churn
+    /// program reads 6 there, and `GC('Force')` reaches a collection from any
+    /// program that calls it. Most programs never reach the watermark and do
+    /// read `0`. What `run_program_collect_every_alloc` changes is the
+    /// *trigger*, not whether the counter can move -- under it every
+    /// allocation collects.
     ///
     /// Criterion 4's gate asserts this is non-zero under the stress mode
     /// specifically so a mode that silently collected nothing cannot pass by

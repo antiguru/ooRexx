@@ -183,10 +183,14 @@ fn code_occurrences(needle: &str) -> Vec<String> {
 /// the activation is running or suspended; `collect_now` sweeps the
 /// activation stack for those objects and pushes them as temporaries around
 /// the collect. A collection reached by any other route therefore frees a
-/// live object, and it does so where no gate here can see it -- a build whose
-/// `GC('Force')` reaches `Heap::collect` directly refuses the next send to
-/// `.CONTEXT` at rc 120 against the oracle's rc 0, and that was found by hand
-/// rather than by a test.
+/// live object: a build whose `GC('Force')` reaches `Heap::collect` directly
+/// refuses the next send to `.CONTEXT` at rc 120 against the oracle's rc 0.
+///
+/// **The corpus does see that particular door.** `class_context_gc.rex` is
+/// red against such a build and `class_context_reply.rex` covers the parked
+/// route beside it. What no corpus row can see is a door nothing in the
+/// corpus reaches, and the door that produced those two rows was found by
+/// hand rather than by a gate.
 ///
 /// **This is a lexical assertion because the alternative is a paragraph.**
 /// Nothing in the type system stops a new caller of `Heap::collect`, and the
@@ -199,21 +203,57 @@ fn code_occurrences(needle: &str) -> Vec<String> {
 /// `Heap::collect` is the whole question rather than a proxy for it: the only
 /// writes of `Slot::Free` in the workspace are inside that function, so
 /// "reaches a collection" and "calls `Heap::collect`" name one set.
+///
+/// # What this leaves it unable to see
+///
+/// Stated rather than argued away, in the shape this file's module doc uses.
+/// The scan matches a spelling, so a call spelled differently passes it green
+/// with the sweep bypassed:
+///
+/// * **UFCS.** `Heap::collect(&mut self.heap, &self.roots)` names the type
+///   rather than the field and matches nothing here.
+/// * **A rebinding.** `let h = &mut self.heap;` then `h.collect(..)` moves
+///   the receiver's name out of the call.
+/// * **`rexx-core`'s own code.** The walker reads
+///   `crates/rexx-exec/src/` alone, so a collection introduced inside the
+///   crate that defines `Heap` is invisible to it.
+///
+/// Two spellings that would have escaped a narrower needle do **not** escape
+/// this one, which is why the needle is `heap.collect(` over whitespace-
+/// collapsed text rather than `heap.collect(&` per line: a call whose
+/// argument is already a reference (`self.heap.collect(roots)`) and one
+/// `rustfmt` wraps across lines both still match.
 #[test]
 fn heap_collect_is_called_from_collect_now_alone() {
     // Built rather than written literally, so this file's own text does not
     // contribute to the count it takes.
-    let call = format!("{}.{}(&", "heap", "collect");
-    let sites = code_occurrences(&call);
+    let call = format!("{}.{}(", "heap", "collect");
+
+    // Whitespace-collapsed, so a wrapped call is still one match. Comment
+    // lines go first, for the reason `code_occurrences` strips them: the
+    // needle is an ordinary phrase and this file's own prose uses it.
+    let mut sites = Vec::new();
+    for path in source_files() {
+        let text = fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        let code: String = text
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let collapsed: String = code.split_whitespace().collect::<Vec<_>>().join("");
+        for _ in collapsed.matches(&call) {
+            sites.push(path.display().to_string());
+        }
+    }
     assert_eq!(
         sites.len(),
         1,
         "every collection must go through `Interp::collect_now`, which is \
-         what completes the root set; {call} appears at {sites:?}"
+         what completes the root set; {call} appears in {sites:?}"
     );
     assert!(
         sites[0].contains("lib.rs"),
-        "the one collection site is outside `lib.rs`, at {:?} -- if \
+        "the one collection site is outside `lib.rs`, in {:?} -- if \
          `collect_now` moved there too this assertion needs updating, and if \
          it did not, the sweep is being bypassed",
         sites[0]
