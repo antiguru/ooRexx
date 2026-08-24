@@ -517,41 +517,12 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
   Taken on this table's standing trade: a refusal is visible and a wrong
   answer is not.
 
-  KNOWN GAP, NOT THIS TASK'S: A ::CONSTANT EXPRESSION CANNOT SEND TO A CLASS
-  DECLARED LATER IN THE SAME FILE. Measured, and it does not involve SUBCLASS
-  at all:
-
-    say 'main'                       oracle rc 0, prints `main`
-    ::class a                        crate  rc 159, 97.1 `Object "The LATER
-    ::constant c (.later~m)                 class" does not understand
-    ::class later                           message "M".`
-    ::method m class
-    return 'from a later class'
-
-  So the ORACLE has every class installed, with its methods, before it
-  evaluates any ::CONSTANT expression, and this crate evaluates each one as it
-  walks the directive list. The row is DIVERGES by this table's rule: rc 159
-  against rc 0, an answer rather than a refusal.
-
-  THE TRANSCRIPT ABOVE IS THE ONE 62de43c0f ANSWERS. The row as first written
-  recorded `Object ".LATER" does not understand message "M".`, which is the
-  message at 518cd6de7's own base: there the class objects were created as the
-  directive walk reached them, so `.LATER` was still unresolved when the
-  constant ran. Since 518cd6de7 every class in the file is created before the
-  walk starts, so the class object exists and only its methods are missing,
-  and the receiver renders as itself. rc 159 either way, oracle rc 0 either
-  way, so the verdict never moved -- only the bytes did.
-
-  PRESENT AT 83fa81b3b, verified by running the same program against a build of
-  that commit, so it is not the class-install work's. It is recorded here
-  because it was found while measuring that work and because the table's rule
-  is that a diverging row carries its own measurement rather than staying
-  undisclosed. OWNER: unplaced. Closing it means installing every class and its
-  methods before the first ::CONSTANT expression runs, which is a restructure
-  of the directive install rather than a fix to one arm.
-
-  THE BLAME TARGET OF A FAILING ::CONSTANT IS A DIFFERENT QUESTION AND IS
-  CLOSED. The oracle blames the class it installed LAST, which is not the last
+  THE BLAME TARGET OF A FAILING ::CONSTANT IS A SEPARATE QUESTION FROM WHICH
+  CLASSES ITS EXPRESSION CAN REACH, AND IS CLOSED. The two are recorded apart
+  because they answer to different rules: the class an expression may send to
+  is every class in the file (CLOSED DEFECTS carries that row), and the class
+  a failure is blamed against is one class.
+  The oracle blames the class it installed LAST, which is not the last
   in source order once a SUBCLASS names a class declared later.
   `corpus/lang/directive_constant_blames_the_last_installed_class.rex` makes
   the blame the FIRST class directive in the file, and
@@ -3766,6 +3737,45 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   :546-:547 are external natives, so the bootstrap CALLS a native while
   installing a directive. Evaluation happens now; resolving that particular
   native call is Task 10's (the entry-point registry), not this one's.
+
+  A ::CONSTANT EXPRESSION COULD NOT SEND TO A CLASS DECLARED LATER IN THE SAME
+  FILE (fixed at 34cd90a4a, 5a Task 18 -- this was the KNOWN GAP row in the
+  EXCLUSIONS section above, moved here at 5a Task 19). It never involved
+  SUBCLASS at all:
+
+    say 'main'                       oracle rc 0, prints `main`
+    ::class a                        crate  rc 159, 97.1 `Object "The LATER
+    ::constant c (.later~m)                 class" does not understand
+    ::class later                           message "M".`
+    ::method m class
+    return 'from a later class'
+
+  The ORACLE has every class installed, with its methods, before it evaluates
+  any ::CONSTANT expression, and this crate evaluated each one as it walked
+  the directive list. The row was DIVERGES by this table's rule: rc 159
+  against rc 0, an answer rather than a refusal.
+
+  THE TRANSCRIPT ABOVE IS THE ONE 62de43c0f ANSWERED. The row as first written
+  recorded `Object ".LATER" does not understand message "M".`, which is the
+  message at 518cd6de7's own base: there the class objects were created as the
+  directive walk reached them, so `.LATER` was still unresolved when the
+  constant ran. Since 518cd6de7 every class in the file is created before the
+  walk starts, so the class object exists and only its methods are missing,
+  and the receiver renders as itself. rc 159 either way, oracle rc 0 either
+  way, so the verdict never moved -- only the bytes did.
+
+  WHAT CLOSED IT is the restructure the row said it would take, and not a fix
+  to one arm. `Interp::install_directives` walks the dependency-ordered class
+  list once per pass: create every class, then resolve every ::CONSTANT
+  expression, then send ACTIVATE. Every class in the file therefore carries
+  its own members before the first expression runs.
+
+  WHAT WOULD GO RED IF THE FIX WERE REMOVED: `tests/corpus.rs`'s differential
+  over `corpus/lang/class_constant_expression_later_class.rex`, which is the
+  transcript above plus a negative control -- a second class whose constant
+  names a class declared BEFORE it, and which therefore resolves under either
+  ordering. The transcript program itself is rc 0 `main` on the oracle and on
+  both engines here, measured 2026-08-24.
 
 --------------------------------------------------------------------------
 STANDING RED, opened 2026-08-20: corpus/lang/loop_control_rounding.rex
