@@ -369,13 +369,22 @@ impl ClassGraph {
     /// Recompute [`Self::parent_has_uninit`] from the class's current
     /// superclass list.
     ///
-    /// **The oracle has no such function.** `RexxClass::subclass` propagates
-    /// this flag inline (`ClassClass.cpp:1634`-`:1637`), reading the parent
-    /// it is deriving from; [`ClassGraph::define_class`] asks
-    /// `uninit_reaches` of that same parent and so is that propagation for a
-    /// caller whose parent is already finished. This recomputes it from the
-    /// class's *current* superclass list, which is what a caller that builds
-    /// a class before the classes it derives from needs.
+    /// **The oracle has no such function, and this one recomputes an answer
+    /// its only caller already has.** `RexxClass::subclass` propagates the
+    /// flag inline (`ClassClass.cpp:1634`-`:1637`), reading the parent it is
+    /// deriving from; [`ClassGraph::define_class`] asks `uninit_reaches` of
+    /// that same parent, and `rexx-exec`'s directive install calls this
+    /// straight afterwards, with the superclass list still holding the one
+    /// entry `define_class` read -- the `INHERIT` sends that would push more
+    /// run later, and [`ClassGraph::inherit`] propagates the flag itself at
+    /// its own tail. So the two agree under every input, not only under the
+    /// ones a corpus builds.
+    ///
+    /// **Nothing witnesses the call**: deleting it leaves the whole gated
+    /// suite green, measured. It is kept because it stands where
+    /// `ClassClass.cpp:1634` stands and because deleting it leaves this
+    /// function and [`crate::ClassRegistry::refresh_parent_has_uninit`] with
+    /// no caller at all.
     pub fn refresh_parent_has_uninit(&mut self, class: ObjRef) {
         let reached = self.classes[&class]
             .superclasses

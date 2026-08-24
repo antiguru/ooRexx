@@ -1665,6 +1665,142 @@ fn class_install_order(
     Ok(order)
 }
 
+/// The dictionary keys a `::METHOD` directive claims, each with what a send
+/// reaching it runs.
+///
+/// **Shared with the duplicate check in `Interp::install_directives`' first
+/// walk, so that the keys a directive is refused for and the keys it installs
+/// are one enumeration.** The oracle shares them the same way:
+/// `methodDirective` calls `checkDuplicateMethod` once per name it is about
+/// to add (`parser/DirectiveParser.cpp:822`, `:841`, `:855`).
+///
+/// `methodDirective`'s own order of precedence over the generating options
+/// (`parser/DirectiveParser.cpp:826`-`:915`): `DELEGATE` first, then
+/// `ATTRIBUTE`, then `ABSTRACT`.
+///
+/// **`DELEGATE` under `ATTRIBUTE` installs the pair**, which is what the C++
+/// does: `methodDirective`'s comment there is "A delegate method can also be
+/// an attribute, which really just means we produce two delegate methods",
+/// and it calls `createDelegateMethod` for the setter name as well as the
+/// plain one. Both keys land on the body path, where [`method_body_gap`]
+/// refuses them, because forwarding a message to a delegate property's value
+/// is `FORWARD`'s job and 5b's.
+///
+/// **The refusal is a divergence from the oracle and is the one this crate
+/// chooses.** Measured, `::method a class delegate p attribute` beside
+/// `::attribute p class`: the oracle answers `.K~a = 5` with 97.1 at rc 159
+/// naming `Object "P"`, and `say .K~a` with 97.1 at rc 159 naming the same
+/// receiver, because both messages reach the delegate. This crate refuses
+/// both at rc 120, so it differs from the oracle on the status where a name
+/// miss would have matched it.
+///
+/// **The setter's key is here and not under `ATTRIBUTE`'s arm below**: a key
+/// the dictionary does not hold makes `.K~a = 5` a name miss on the class,
+/// reporting the oracle's own status and the oracle's own catalogue row over
+/// a receiver the oracle does not name -- a difference no comparison of exit
+/// status or error number can see. The refusal spends a matching status on a
+/// difference a reader can find.
+fn method_dictionary_keys(method: &MethodDirective) -> Vec<(Vec<u8>, Option<GeneratedKind>)> {
+    let upper = method.name.to_ascii_uppercase();
+    if method.delegate.is_some() {
+        if method.attribute {
+            vec![(accessor_setter_name(&upper), None), (upper, None)]
+        } else {
+            vec![(upper, None)]
+        }
+    } else if method.attribute {
+        let setter = accessor_setter_name(&upper);
+        let (get, set) = if method.abstract_ {
+            (Some(GeneratedKind::Abstract), Some(GeneratedKind::Abstract))
+        } else if method.external.is_some() {
+            (None, None)
+        } else {
+            (Some(GeneratedKind::Getter), Some(GeneratedKind::Setter))
+        };
+        vec![(upper, get), (setter, set)]
+    } else if method.abstract_ {
+        vec![(upper, Some(GeneratedKind::Abstract))]
+    } else {
+        vec![(upper, None)]
+    }
+}
+
+/// The dictionary keys an `::ATTRIBUTE` directive claims -- the plain name
+/// for a getter, the name with `=` appended for a setter, both for the
+/// default (neither `GET` nor `SET`) style.
+///
+/// Shared with the duplicate check for [`method_dictionary_keys`]' reason,
+/// and the oracle shares them the same way (`attributeDirective`'s
+/// `checkDuplicateMethod` calls at `parser/DirectiveParser.cpp:1664`,
+/// `:1667`, `:1725` and `:1790`, one per name it is about to add).
+///
+/// `attributeDirective` asks the same questions in the same order for each
+/// style (`parser/DirectiveParser.cpp:1671`-`:1855`) -- external, then
+/// abstract, then delegate -- and where none of them answers, the `GET` and
+/// `SET` styles let the presence of a body decide: `hasBody()` there
+/// (`:1773`, `:1836`), `attribute.body` here. The `BOTH` style admits no body
+/// at all, `checkDirective` refusing one at `:1670`: measured,
+/// `::attribute a class` with a following clause is `Error 99.937: Attribute
+/// methods without a SET or GET designation cannot have a method body.` So
+/// `attribute.body` is `None` on every directive that reaches this arm
+/// through that style.
+fn attribute_dictionary_keys(
+    attribute: &AttributeDirective,
+) -> Vec<(Vec<u8>, Option<GeneratedKind>)> {
+    let upper = attribute.name.to_ascii_uppercase();
+    let setter_name = accessor_setter_name(&upper);
+    let generated = if attribute.abstract_ {
+        Some(GeneratedKind::Abstract)
+    } else if attribute.external.is_some()
+        || attribute.delegate.is_some()
+        || attribute.body.is_some()
+    {
+        None
+    } else {
+        // The one place what an accessor is depends on which half of the pair
+        // it is.
+        Some(GeneratedKind::Getter)
+    };
+    // The setter's half of that one place.
+    let setter = match generated {
+        Some(GeneratedKind::Getter) => Some(GeneratedKind::Setter),
+        other => other,
+    };
+    match attribute.style {
+        AttributeStyle::Both => vec![(upper, generated), (setter_name, setter)],
+        AttributeStyle::Get => vec![(upper, generated)],
+        AttributeStyle::Set => vec![(setter_name, setter)],
+    }
+}
+
+/// The dictionary keys one member directive claims, each with the side it
+/// claims them on -- `true` for the class dictionary.
+///
+/// **A `::CONSTANT` claims its name on both sides from one directive**, which
+/// is `ClassDirective::addConstantMethod` adding the single method object it
+/// built to `classMethods` and to `instanceMethods`
+/// (`instructions/ClassDirective.cpp:520`-`:524`). Every other member
+/// directive claims its keys on the side its `CLASS` keyword names.
+///
+/// Empty for a directive that is not a member.
+fn member_dictionary_keys(kind: &DirectiveKind) -> Vec<(Vec<u8>, bool)> {
+    match kind {
+        DirectiveKind::Method(method) => method_dictionary_keys(method)
+            .into_iter()
+            .map(|(name, _)| (name, method.class_method))
+            .collect(),
+        DirectiveKind::Attribute(attribute) => attribute_dictionary_keys(attribute)
+            .into_iter()
+            .map(|(name, _)| (name, attribute.class_method))
+            .collect(),
+        DirectiveKind::Constant(constant) => {
+            let upper = constant.name.to_ascii_uppercase();
+            vec![(upper.clone(), false), (upper, true)]
+        }
+        _ => Vec::new(),
+    }
+}
+
 /// Which directives each `::CLASS` in `program` owns, keyed by that
 /// `::CLASS`'s own index and in source order within a class.
 ///
@@ -3872,9 +4008,26 @@ impl Interp {
         // duplicate's 99.903 instead -- which is a wrong answer where this is
         // a refusal (R33).
         let mut saw_class = false;
+        // The class a member directive's keys are claimed against, and the
+        // keys claimed so far. `None` is `LanguageParser`'s `unattachedMethods`
+        // table, which is one table for the whole file rather than one per
+        // class (`parser/DirectiveParser.cpp:518`).
+        let mut current_class: Option<usize> = None;
+        let mut claimed: std::collections::HashSet<(Option<usize>, bool, Vec<u8>)> =
+            std::collections::HashSet::new();
         for (index, directive) in program.directives.iter().enumerate() {
+            // **Before the arms below, because the oracle checks before it
+            // adds.** `constantDirective` calls `checkDuplicateMethod` ahead
+            // of `createConstantGetterMethod`, which is what raises 99.906
+            // (`parser/DirectiveParser.cpp:1926`, `:1933`), and the two part:
+            // measured, `::constant c 5` then `::constant c (1+2)` with no
+            // `::CLASS` in the file is 99.932 and not 99.906.
+            self.check_member_keys(program, directive, current_class, &mut claimed)?;
             match &directive.kind {
-                DirectiveKind::Class(_) => saw_class = true,
+                DirectiveKind::Class(_) => {
+                    saw_class = true;
+                    current_class = Some(index);
+                }
                 DirectiveKind::Constant(constant) => {
                     if matches!(constant.value, ConstantValue::Expression(_)) && !saw_class {
                         self.blame_directive(program, directive);
@@ -4044,21 +4197,79 @@ impl Interp {
         Ok(())
     }
 
+    /// `LanguageParser::checkDuplicateMethod`
+    /// (`parser/DirectiveParser.cpp:507`-`:530`): every dictionary key a
+    /// member directive is about to claim, refused if the class it attaches
+    /// to has already been given that key on that side.
+    ///
+    /// **A translation error on the oracle, not an install one**, so it is
+    /// raised in the walk that answers the rest of them and before this crate
+    /// installs anything: measured, `::method m` twice under a `::CLASS`,
+    /// followed by `::class B subclass zzznotaclass`, is 99.902 at rc 157 and
+    /// not the class error. `rexx-parse` does not detect it, so it is
+    /// detected here, where the accumulated set is what answers -- the same
+    /// place and the same reason as the duplicate `::ROUTINE` beside it.
+    ///
+    /// **It runs before [`directive_gap`] in the walk**, because a directive
+    /// that is both a duplicate and an `EXTERNAL` gets the duplicate:
+    /// measured, `::method m` followed by
+    /// `::method m external "LIBRARY nosuchlib nosuchfn"` is 99.902 at rc 157,
+    /// where the reverse order is the `EXTERNAL`'s own 98.903 at rc 158
+    /// because the file reaches it first.
+    ///
+    /// **Per side, so a class method and an instance method may share a
+    /// name**: measured, oracle rc 0 on `::CLASS A` carrying `::METHOD m` and
+    /// `::METHOD m CLASS`. `ClassDirective::checkDuplicateMethod` asks one
+    /// dictionary or the other (`instructions/ClassDirective.cpp:434`-`:444`).
+    ///
+    /// **The `CLASS` keyword with no `::CLASS` above it is this function's
+    /// own refusal and not a duplicate at all** (`:512`-`:515`), which is why
+    /// it is here: measured, `::METHOD m CLASS` alone in a file and
+    /// `::ATTRIBUTE p CLASS` alone in a file are each 99.905 at rc 157. A
+    /// `::CONSTANT` never reaches it, because `constantDirective` guards its
+    /// class-side call with `activeClass != OREF_NULL` (`:1929`).
+    fn check_member_keys(
+        &mut self,
+        program: &Rc<Program>,
+        directive: &Directive,
+        current_class: Option<usize>,
+        claimed: &mut std::collections::HashSet<(Option<usize>, bool, Vec<u8>)>,
+    ) -> Result<(), Failure> {
+        let constant = matches!(directive.kind, DirectiveKind::Constant(_));
+        for (name, class_side) in member_dictionary_keys(&directive.kind) {
+            if current_class.is_none() {
+                if constant && class_side {
+                    continue;
+                }
+                if class_side {
+                    self.blame_directive(program, directive);
+                    return Err(Raised::class_keyword_needs_class().into());
+                }
+            }
+            if !claimed.insert((current_class, class_side, name)) {
+                self.blame_directive(program, directive);
+                return Err(Raised::duplicate_member(&directive.kind).into());
+            }
+        }
+        Ok(())
+    }
+
     /// Records the value of every literal `::CONSTANT` among `attached`.
     ///
     /// **Before the class's own members are installed, because a class-side
     /// `INIT` can read one.** A literal constant's value is fixed when the
     /// directive is parsed -- `ConstantGetterCode(name, value)`
     /// (`parser/DirectiveParser.cpp:2520`), reached with `value` already set
-    /// from the token (`:1875`) -- where the expression form's value
+    /// from the value token (`:1911`) -- where the expression form's value
     /// arrives in the second install pass. Measured, oracle rc 0: an `init`
     /// class method saying `self~c` prints `5` under `::constant c 5` and is
     /// 97.4 under `::constant c (2+3)`.
     ///
-    /// A `::CONSTANT` with no value at all takes its own name, and the name
-    /// is the token's value, which the tokenizer has already upcased for a
-    /// symbol and left alone for a literal. Measured, oracle rc 0: `.A~c3` is
-    /// `C3` under `::constant c3` and `c4` under `::constant "c4"`.
+    /// A `::CONSTANT` with no value at all takes its own name instead
+    /// (`:1875`, the arm the end-of-clause test at `:1873` selects), and the
+    /// name is the token's value, which the tokenizer has already upcased for
+    /// a symbol and left alone for a literal. Measured, oracle rc 0: `.A~c3`
+    /// is `C3` under `::constant c3` and `c4` under `::constant "c4"`.
     fn record_literal_constants(
         &mut self,
         id: ProgramId,
@@ -4480,9 +4691,10 @@ impl Interp {
     /// and every install of the directive goes through it
     /// (`parser/DirectiveParser.cpp:1865`).
     ///
-    /// **No access scope and no protection**, which is what
-    /// `createConstantGetterMethod` builds: it calls `setUnguarded` and
-    /// nothing else (`parser/DirectiveParser.cpp:2523`), so the method is not
+    /// **No access scope and no protection.** `createConstantGetterMethod`
+    /// sets neither: what it does set is `setUnguarded`
+    /// (`parser/DirectiveParser.cpp:2523`) and `setConstant` (`:2525`), and
+    /// `MethodClass::isSpecial()` reads none of those, so the method is not
     /// one the oracle calls *special* and [`Interp::record_access_scope`]
     /// files no row for it.
     fn install_constant(
@@ -4626,57 +4838,7 @@ impl Interp {
         class: ObjRef,
         method: &MethodDirective,
     ) {
-        let upper = method.name.to_ascii_uppercase();
-        // `methodDirective`'s own order of precedence over the generating
-        // options (`parser/DirectiveParser.cpp:826`-`:915`): `DELEGATE`
-        // first, then `ATTRIBUTE`, then `ABSTRACT`.
-        //
-        // **`DELEGATE` under `ATTRIBUTE` installs the pair**, which is what
-        // the C++ does: `methodDirective`'s comment there is "A delegate
-        // method can also be an attribute, which really just means we produce
-        // two delegate methods", and it calls `createDelegateMethod` for the
-        // setter name as well as the plain one. Both keys land on the body
-        // path, where `method_body_gap` refuses them, because forwarding a
-        // message to a delegate property's value is `FORWARD`'s job and 5b's.
-        //
-        // **The refusal is a divergence from the oracle and is the one this
-        // crate chooses.** Measured, `::method a class delegate p attribute`
-        // beside `::attribute p class`: the oracle answers `.K~a = 5` with
-        // 97.1 at rc 159 naming `Object "P"`, and `say .K~a` with 97.1 at rc
-        // 159 naming the same receiver, because both messages reach the
-        // delegate. This crate refuses both at rc 120, so it differs from the
-        // oracle on the status where a name miss would have matched it.
-        //
-        // **The setter's key is installed for the refusal and for nothing
-        // else**, which is why it is here rather than under `ATTRIBUTE`'s arm
-        // below: a key the dictionary does not hold makes `.K~a = 5` a name
-        // miss on the class, reporting the oracle's own status and the
-        // oracle's own catalogue row over a receiver the oracle does not name
-        // -- a difference no comparison of exit status or error number can
-        // see. The refusal spends a matching status on a difference a reader
-        // can find.
-        let installed: Vec<(Vec<u8>, Option<GeneratedKind>)> = if method.delegate.is_some() {
-            if method.attribute {
-                vec![(accessor_setter_name(&upper), None), (upper, None)]
-            } else {
-                vec![(upper, None)]
-            }
-        } else if method.attribute {
-            let setter = accessor_setter_name(&upper);
-            let (get, set) = if method.abstract_ {
-                (Some(GeneratedKind::Abstract), Some(GeneratedKind::Abstract))
-            } else if method.external.is_some() {
-                (None, None)
-            } else {
-                (Some(GeneratedKind::Getter), Some(GeneratedKind::Setter))
-            };
-            vec![(upper, get), (setter, set)]
-        } else if method.abstract_ {
-            vec![(upper, Some(GeneratedKind::Abstract))]
-        } else {
-            vec![(upper, None)]
-        };
-        for (name, generated) in installed {
+        for (name, generated) in method_dictionary_keys(method) {
             self.install_one_method(
                 program,
                 directive,
@@ -4714,41 +4876,7 @@ impl Interp {
         class: ObjRef,
         attribute: &AttributeDirective,
     ) {
-        let upper = attribute.name.to_ascii_uppercase();
-        let setter_name = accessor_setter_name(&upper);
-        // `attributeDirective` asks the same questions in the same order for
-        // each style (`parser/DirectiveParser.cpp:1671`-`:1855`) -- external,
-        // then abstract, then delegate -- and where none of them answers, the
-        // `GET` and `SET` styles let the presence of a body decide:
-        // `hasBody()` there (`:1773`, `:1836`), `attribute.body` here. The
-        // `BOTH` style admits no body at all, `checkDirective` refusing one at
-        // `:1670`: measured, `::attribute a class` with a following clause is
-        // `Error 99.937: Attribute methods without a SET or GET designation
-        // cannot have a method body.` So `attribute.body` is `None` on every
-        // directive that reaches this arm through that style.
-        let generated = if attribute.abstract_ {
-            Some(GeneratedKind::Abstract)
-        } else if attribute.external.is_some()
-            || attribute.delegate.is_some()
-            || attribute.body.is_some()
-        {
-            None
-        } else {
-            // The one place what an accessor is depends on which half of the
-            // pair it is.
-            Some(GeneratedKind::Getter)
-        };
-        // The setter's half of that one place.
-        let setter = match generated {
-            Some(GeneratedKind::Getter) => Some(GeneratedKind::Setter),
-            other => other,
-        };
-        let installed: Vec<(Vec<u8>, Option<GeneratedKind>)> = match attribute.style {
-            AttributeStyle::Both => vec![(upper, generated), (setter_name, setter)],
-            AttributeStyle::Get => vec![(upper, generated)],
-            AttributeStyle::Set => vec![(setter_name, setter)],
-        };
-        for (name, generated) in installed {
+        for (name, generated) in attribute_dictionary_keys(attribute) {
             // Both accessors of a `Both`-style attribute carry the
             // directive's own access scope, which is the oracle's own shape:
             // `attributeDirective` builds the getter and the setter and calls

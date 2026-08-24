@@ -29,7 +29,7 @@
 use crate::Loud;
 use rexx_core::ObjRef;
 use rexx_num::{ArithError, FormatError};
-use rexx_parse::ParseError;
+use rexx_parse::{DirectiveKind, ParseError};
 use std::borrow::Cow;
 
 /// Which activations may trap one raise, walking outward from the one that
@@ -440,6 +440,45 @@ impl Raised {
     /// here too.
     pub(crate) fn duplicate_routine() -> Raised {
         Raised::syntax(99, 903, Vec::new())
+    }
+
+    /// 99.902, 99.931 and 99.932: two member directives of one class writing
+    /// the same dictionary key. No substitutions -- none of the messages
+    /// names anything.
+    ///
+    /// **Which of the three a collision reports is the *later* directive's
+    /// kind, not the earlier one's**, because `checkDuplicateMethod` takes
+    /// the error code from its caller and every caller passes its own
+    /// (`parser/DirectiveParser.cpp:507`-`:530`, and the call sites at
+    /// `:822`, `:1664` and `:1926`). Measured, all rc 157 echoing the second
+    /// directive: `::METHOD m CLASS` twice under one `::CLASS` is
+    /// `Error 99.902: Duplicate ::METHOD directive instruction.`,
+    /// `::ATTRIBUTE p` twice is `99.931: Duplicate ::ATTRIBUTE directive
+    /// instruction.`, `::CONSTANT c` twice is `99.932: Duplicate ::CONSTANT
+    /// directive instruction.`, and `::METHOD "p="` followed by
+    /// `::ATTRIBUTE p` is the **attribute's** 99.931 -- the setter key the
+    /// attribute generates is what collides.
+    pub(crate) fn duplicate_member(kind: &DirectiveKind) -> Raised {
+        let sub = match kind {
+            DirectiveKind::Attribute(_) => 931,
+            DirectiveKind::Constant(_) => 932,
+            _ => 902,
+        };
+        Raised::syntax(99, sub, Vec::new())
+    }
+
+    /// 99.905: a `CLASS` keyword on a member directive with no `::CLASS`
+    /// above it. No substitutions.
+    ///
+    /// **The message names `::METHOD` whatever directive carried the
+    /// keyword**, because it is `checkDuplicateMethod`'s own refusal and that
+    /// function takes one error code for this arm regardless of the one its
+    /// caller passed for a duplicate (`parser/DirectiveParser.cpp:512`-`:515`).
+    /// Measured, both rc 157: `::METHOD m CLASS` alone in a file and
+    /// `::ATTRIBUTE p CLASS` alone in a file each report `Error 99.905: CLASS
+    /// keyword on ::METHOD directive requires a matching ::CLASS directive.`
+    pub(crate) fn class_keyword_needs_class() -> Raised {
+        Raised::syntax(99, 905, Vec::new())
     }
 
     /// 98.909: a `::CLASS` directive naming a `SUBCLASS` or an `INHERIT`
