@@ -4207,7 +4207,7 @@ impl Interp {
 
         for index in &order {
             let attached = members.get(index).map_or(&[][..], Vec::as_slice);
-            self.resolve_constants(id, program, attached, last_class_directive)?;
+            self.resolve_constants(id, program, classes[index], attached, last_class_directive)?;
         }
 
         for index in &order {
@@ -4329,10 +4329,19 @@ impl Interp {
     /// the constants pass sets it again, so the enclosing echo is whichever
     /// class the install pass reached last. `class_install_order`'s own doc
     /// has the corpus witnesses that exclude each direction of source order.
+    ///
+    /// **`class` is the class each expression runs against and is the class
+    /// the constant attaches to**, not the blame target beside it: the two
+    /// are separate parameters because they name different classes whenever
+    /// a file declares more than one. Measured, oracle rc 0 on `::CLASS K` /
+    /// `::CONSTANT c (self~id)` / `::CLASS J SUBCLASS K` /
+    /// `::CONSTANT c (self~id "and" super~id)`: `.J~c` is `J and K` and
+    /// `.K~c` is `K`, where the blame target for either is `J`.
     fn resolve_constants(
         &mut self,
         id: ProgramId,
         program: &Rc<Program>,
+        class: ObjRef,
         attached: &[usize],
         last_class: Option<&Directive>,
     ) -> Result<(), Failure> {
@@ -4344,7 +4353,7 @@ impl Interp {
             let ConstantValue::Expression(expr) = &constant.value else {
                 continue;
             };
-            match self.eval_constant_expression(id, program, expr) {
+            match self.eval_constant_expression(id, program, class, expr) {
                 Ok(value) => self.record_constant_value(id, index, value),
                 Err(failure) => {
                     // Two clause echoes, innermost first, matching the
@@ -5045,8 +5054,32 @@ impl Interp {
     /// Evaluates a `::CONSTANT` directive's parenthesised expression in the
     /// second install pass, and answers what it produced.
     ///
+    /// **It runs as a method against the class object**, which is what
+    /// `ClassDirective::resolveConstants` builds it as: a `MethodClass` over
+    /// the class's accumulated expressions (`ClassDirective.cpp:271`),
+    /// `setScope(classObject)` (`:273`), then `run` with `classObject` as the
+    /// receiver (`:276`). What that buys, each measured against the oracle at
+    /// rc 0:
+    ///
+    /// * `SELF` is the class object. `::CLASS K` / `::CONSTANT c (self~id)`
+    ///   answers `K`.
+    /// * `SUPER` is what a class method of the same class reads, which is
+    ///   what `setScope` is there for. `::CLASS J SUBCLASS K` with
+    ///   `::CONSTANT c (super~id)` answers `K`, and `K`'s own answers
+    ///   `Class`.
+    /// * The receiver in the calling convention is the class object, so
+    ///   `checkPrivate` takes the arm that allows a sender which *is* the
+    ///   receiving object (`classes/ObjectClass.cpp:617`-`:620`) rather than
+    ///   the refusal a caller with no receiver takes (`:622`-`:626`).
+    ///   `::CONSTANT c (self~p)` answers for `::METHOD p CLASS PRIVATE`.
+    /// * The arguments are the method's own, which are none, and not the
+    ///   running program's. A program invoked with one argument reads `arg()`
+    ///   as `0` and `arg(1)` as the empty string inside the expression.
+    ///
     /// [`Interp::push_directive_activation`] is the frame it runs in: default
-    /// `NUMERIC` settings, `TRACE` off, no bindings of its own. This is
+    /// `NUMERIC` settings, `TRACE` off, and `SELF`/`SUPER` bound the way
+    /// [`Interp::enter_method_body`] binds them, through [`Interp::slot_of`]
+    /// so that a frame carrying no plan still grows a slot for each. This is
     /// engine-agnostic -- it runs before either engine's own instruction loop
     /// starts and reaches the same shared [`Interp::eval`] both loops call,
     /// so `REXX_ENGINE=tree-walker` and the default IR engine evaluate it
@@ -5061,10 +5094,32 @@ impl Interp {
         &mut self,
         id: ProgramId,
         program: &Rc<Program>,
+        class: ObjRef,
         expr: &Expr,
     ) -> Result<ObjRef, Failure> {
         let empty_body = CodeBody::default();
         let frame = self.push_directive_activation(id, program);
+        // The oracle's own message name for this run, which is the string
+        // `GlobalNames::CONSTANT_DIRECTIVE` holds (`memory/GlobalNames.h:84`).
+        // The failure path this crate has a witness for does not print it:
+        // measured, a condition raised inside a class method the expression
+        // calls echoes that method's clause above the `::CONSTANT` and the
+        // `::CLASS`, and names no method.
+        let saved_context = std::mem::replace(
+            &mut self.call_context,
+            CallContext {
+                name: b"::CONSTANT".to_vec(),
+                arguments: Vec::new(),
+                receiver: Some(class),
+            },
+        );
+        let self_slot = self.slot_of(b"SELF");
+        self.set_variable(frame, self_slot, class);
+        let super_slot = self.slot_of(b"SUPER");
+        // `.nil` for the topmost scope, which is what `superScope` answers
+        // there and what `Interp::enter_method_body` writes for it.
+        let super_scope = self.classes().class_super_scope(class, class);
+        self.set_variable(frame, super_slot, super_scope.unwrap_or(ObjRef::NIL));
         let code = Code {
             body: &empty_body,
             symbols: &program.symbols,
@@ -5072,6 +5127,7 @@ impl Interp {
             plan: None,
         };
         let result = self.eval(&code, expr);
+        self.call_context = saved_context;
         self.pop_directive_activation(frame);
         result
     }

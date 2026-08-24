@@ -141,6 +141,23 @@ say \"3 \" || length(n3) || \" \" || c2x(n3)
 say \"4 \" || length(n4) || \" \" || c2x(n4)
 ";
 
+/// The program the `::CONSTANT` argument row runs. A directive expression
+/// runs as a method against the class object with an argument list of its
+/// own, so the command line the program was invoked with is not what `ARG`
+/// reads inside it.
+///
+/// The main body prints the same readings, which is what makes the row
+/// discriminate: an implementation that let the expression see the program's
+/// own arguments prints the same bracketed text on both lines.
+const CONSTANT_ARG_PROGRAM: &str = "\
+say \"constant [\" || .K~c || \"]\"
+say \"program  [\" || arg() || \"][\" || arg(1) || \"]\"
+exit
+
+::class K
+::constant c (arg() || \"][\" || arg(1))
+";
+
 /// The `USE STRICT ARG` program: the argument model's own error path.
 const STRICT_PROGRAM: &str = "\
 use strict arg p
@@ -254,6 +271,17 @@ const CASES: &[Case] = &[
               not: the two lines of output differ in case on the same \
               argument. No corpus program can reach this, because with no \
               argument both spellings parse the null string",
+    },
+    Case {
+        name: "constant-expression-arguments",
+        program: CONSTANT_ARG_PROGRAM,
+        args: &["hello"],
+        stdin: None,
+        why: "a `::CONSTANT` expression runs as a method with its own \
+              argument list, which is empty, so `arg()` is `0` and `arg(1)` \
+              the null string inside it while the main body reads `1` and \
+              `hello`. No corpus program can reach this: the corpus harness \
+              passes no arguments, and with none the two readings are equal",
     },
     Case {
         name: "strict-none",
