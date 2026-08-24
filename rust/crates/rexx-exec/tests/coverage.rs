@@ -1130,6 +1130,7 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/class_mutator_define_nil_removes.rex",
     "lang/class_mutator_delete_absent_name.rex",
     "lang/class_mutator_inherit_position.rex",
+    "lang/class_mutator_inherit_position_not_inherited.rex",
     "lang/class_mutator_refusals.rex",
     "lang/class_mutator_uninherit_not_inherited.rex",
     "lang/class_mutator_define_methods_supplier.rex",
@@ -1142,6 +1143,7 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     // Task 21: the Package object -- `RexxContext~package`, the two class
     // tables, and the refusal the REXX package gives an addition.
     "lang/class_context_package.rex",
+    "lang/class_context_identity.rex",
     "lang/class_package_classes.rex",
     "lang/class_package_addition_refused.rex",
 ];

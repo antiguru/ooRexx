@@ -1,0 +1,13 @@
+count 12
+/* Task 21, fix round 1: `~inherit`'s position is not type-checked. The C++
+   uses it in one place, `superClasses->indexOf(position)`, so a value that is
+   not in the list falls out as 98.945 whatever kind of object it is -- the
+   second argument's error, not the first's. The successful shapes are in
+   class_mutator_inherit_position.rex; this is the refusal they lacked. */
+.K~inherit(.M1)
+say .K~superClasses
+.K~inherit(.M2, "abc")
+
+::class M1 mixinclass Object
+::class M2 mixinclass Object
+::class K
