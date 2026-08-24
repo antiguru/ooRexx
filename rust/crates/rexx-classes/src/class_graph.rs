@@ -369,16 +369,13 @@ impl ClassGraph {
     /// Recompute [`Self::parent_has_uninit`] from the class's current
     /// superclass list.
     ///
-    /// **The oracle has no such function, and the reason this one exists is
-    /// the same reason `rexx-exec` rebuilds a class's behaviour after the
-    /// file's directives are all in.** The oracle attaches a class's methods
-    /// while it constructs the class, so each site that propagates this flag
-    /// -- see the field for which -- reads a finished parent; this crate
-    /// creates every class a file declares before it attaches any method, so
-    /// at construction time a parent's own `UNINIT` has not arrived yet. A
-    /// caller that installs in that order runs this over its classes in
-    /// dependency order once the methods are in, and the answer is the one
-    /// the constructors would have computed had the parent been complete.
+    /// **The oracle has no such function.** `RexxClass::subclass` propagates
+    /// this flag inline (`ClassClass.cpp:1634`-`:1637`), reading the parent
+    /// it is deriving from; [`ClassGraph::define_class`] asks
+    /// `uninit_reaches` of that same parent and so is that propagation for a
+    /// caller whose parent is already finished. This recomputes it from the
+    /// class's *current* superclass list, which is what a caller that builds
+    /// a class before the classes it derives from needs.
     pub fn refresh_parent_has_uninit(&mut self, class: ObjRef) {
         let reached = self.classes[&class]
             .superclasses
@@ -753,11 +750,11 @@ impl ClassGraph {
     /// **The other situation is `class_define`'s own restriction being
     /// broken.** That function is `RexxClass::defineClassMethod`, which
     /// cascades to nothing because its own doc comment restricts it to image
-    /// build, before any subclass exists. A `::CLASS` naming a `SUBCLASS`
-    /// declared later in the same file is created before that superclass's
-    /// class methods are added, so the subclass never sees them; `rexx-exec`
-    /// rebuilds each class a program installs once that program's directives
-    /// are all in.
+    /// build, before any subclass exists. A caller that adds a class method
+    /// to a class which already has subclasses owes them a rebuild; a caller
+    /// that finishes each class before it builds the classes naming it owes
+    /// nothing, because [`ClassGraph::define_class`]'s own cascade reads the
+    /// finished dictionary.
     pub fn refresh_class_behaviour(&mut self, class: ObjRef) {
         self.rebuild_behaviour(class, Side::Class);
     }

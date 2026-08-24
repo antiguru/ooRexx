@@ -507,11 +507,7 @@ impl ClassRegistry {
     }
 
     /// See [`ClassGraph::refresh_class_behaviour`] for what it is for.
-    /// Bootstrapping `.Class` is one caller; `rexx-exec`'s directive install
-    /// is the other, and its reason is different -- a `::CLASS` naming a
-    /// `SUBCLASS` declared later in the same file is created before that
-    /// superclass's own class methods are added, which
-    /// [`ClassGraph::class_define`] does not cascade.
+    /// Bootstrapping `.Class` is the caller.
     pub fn refresh_class_behaviour(&mut self, class: ObjRef) {
         self.graph.refresh_class_behaviour(class);
     }

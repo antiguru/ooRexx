@@ -587,9 +587,10 @@ fn inherit_refuses_a_cycle_through_a_mixins_own_mixinclass_target() {
 ///
 /// **This is not evidence about what a Rexx program gets.** It calls
 /// `define` before `define_class`, an order `rexx-exec`'s directive install
-/// never produces -- that installer creates every class a file declares and
-/// only then attaches methods, so the flags a *declarable* class ends up
-/// with are decided by the pass it runs afterwards. `rexx-exec`'s own
+/// never produces -- that installer builds a class, attaches its own
+/// methods, and only then builds the classes naming it, so the flags a
+/// *declarable* class ends up with also depend on `check_uninit` reading the
+/// flattened behaviour. `rexx-exec`'s own
 /// `the_uninit_flags_are_set_for_the_classes_a_file_declares` is the test
 /// for that half, and neither stands in for the other.
 ///

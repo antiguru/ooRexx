@@ -247,6 +247,14 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         native_array_make_string,
     ),
     ("Array", "SIZE", Arity::Fixed(0), native_array_size),
+    // `RexxObject::initRexx`, bound to `.Class` under this name by
+    // `memory/Setup.cpp:497` whose own comment is "this is a NOP by default,
+    // so we'll just use the object init method as a fill in". Every class
+    // object answers it, because a class's class behaviour merges its
+    // metaclass's instance behaviour, and `ClassDirective::activate`
+    // (`instructions/ClassDirective.cpp:288`) sends it to every class the
+    // package installed.
+    ("Class", "ACTIVATE", Arity::Fixed(0), native_no_op),
     ("Class", "BASECLASS", Arity::Fixed(0), native_base_class),
     ("Class", "ID", Arity::Fixed(0), native_id),
     (
@@ -288,6 +296,13 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(0),
         native_identity_hash,
     ),
+    // `RexxObject::initRexx` under its own name, `memory/Setup.cpp:520`. The
+    // same function `ACTIVATE` above names, and a second row rather than a
+    // second implementation, because a second implementation is where the two
+    // could come to disagree. `RexxClass::subclass` sends this to every class
+    // it builds (`classes/ClassClass.cpp:1631`), so a `::CLASS` declaring no
+    // `::METHOD init CLASS` of its own reaches this entry.
+    ("Object", "INIT", Arity::Fixed(0), native_no_op),
     ("Object", "ISA", Arity::Fixed(1), native_is_a),
     ("Object", "ISNIL", Arity::Fixed(0), native_is_nil),
     ("Object", "OBJECTNAME", Arity::Fixed(0), native_object_name),
@@ -343,6 +358,16 @@ pub(crate) const ARRAY_DEFAULT_NAME: &[u8] = b"an Array";
 /// upcases the name in a send, and `::METHOD unknown` is installed upcased,
 /// so a lookup spelled any other way finds nothing.
 const UNKNOWN: &[u8] = b"UNKNOWN";
+
+/// The message a class construction sends the class it just built --
+/// `GlobalNames::INIT`, sent by `RexxClass::subclass`
+/// (`classes/ClassClass.cpp:1631`). Upper case for [`UNKNOWN`]'s reason.
+pub(crate) const INIT: &[u8] = b"INIT";
+
+/// The message the last install pass sends every class the package built --
+/// `GlobalNames::ACTIVATE`, sent by `ClassDirective::activate`
+/// (`instructions/ClassDirective.cpp:288`).
+pub(crate) const ACTIVATE: &[u8] = b"ACTIVATE";
 
 /// The class model this crate dispatches against, and the implementations
 /// its `MethodId`s name.
@@ -1271,6 +1296,9 @@ impl Interp {
                     self.write_attribute(cleared, generated, resolution, receiver, args)
                 }
                 crate::GeneratedKind::Abstract => Err(Raised::abstract_method(name).into()),
+                crate::GeneratedKind::Constant => {
+                    self.read_constant(cleared, generated, receiver, args)
+                }
             },
         }
     }
@@ -1349,6 +1377,53 @@ impl Interp {
         let owner = self.pool_owner(receiver)?;
         self.set_pool_variable(owner, resolution.scope, &variable, value);
         Ok(None)
+    }
+
+    /// A `::CONSTANT` accessor: the value the resolve-constants pass recorded
+    /// for the directive, on whichever dictionary side the send resolved
+    /// through.
+    ///
+    /// **No activation and no frame**, for the reason [`Interp::read_attribute`]
+    /// has none: `ConstantGetterCode::run` checks the argument count and
+    /// returns the stored value (`execution/CPPCode.cpp:438`-`:454`).
+    ///
+    /// The argument bound is that function's own and is checked before the
+    /// value is looked at: measured, `.A~c(1)` on `::constant c 5` is 93.902
+    /// naming `0 expected`.
+    ///
+    /// **A constant with no value yet is 97.4 and not 97.1**, and the
+    /// distinction is the oracle's: `reportNomethod` is reached with
+    /// `Error_No_method_constant` rather than through a dictionary miss, so
+    /// the name resolves and the *value* is what is missing. See
+    /// [`Raised::constant_not_initialized`] for when that is reachable. The
+    /// `NOMETHOD` condition it offers carries the **constant's** name as its
+    /// description, which is the `message` argument `reportNomethod` takes
+    /// (`execution/CPPCode.cpp:450`), and not the name the send spelled.
+    ///
+    /// [`Raised::constant_not_initialized`]: crate::Raised::constant_not_initialized
+    fn read_constant(
+        &mut self,
+        _cleared: Cleared,
+        generated: crate::GeneratedMethod,
+        receiver: ObjRef,
+        args: &[Option<ObjRef>],
+    ) -> Result<Option<ObjRef>, Failure> {
+        if !args.is_empty() {
+            return Err(Raised::too_many_method_arguments(0).into());
+        }
+        if let Some(value) = self.constant_value(generated) {
+            return Ok(Some(value));
+        }
+        let declared = self.constant_name(generated)?;
+        let target = self.message_target_text(receiver);
+        let report = Raised::constant_not_initialized(&target, &declared);
+        Err(
+            if self.trap_for(b"NOMETHOD").is_some_and(|trap| !trap.call) {
+                Raised::nomethod(report, &declared).into()
+            } else {
+                report.into()
+            },
+        )
     }
 
     /// The variable a generated accessor addresses, refusing the name shapes
@@ -2568,6 +2643,21 @@ fn required_string_named_argument(
         Some(text) => Ok(text),
         None => Err(Raised::named_argument_needs_a_string_value(argument).into()),
     }
+}
+
+/// `RexxObject::initRexx` (`classes/ObjectClass.cpp:2546`-`:2549`): it takes
+/// no arguments, does nothing, and answers `OREF_NULL`.
+///
+/// **Answering nothing is observable and is what the oracle answers**:
+/// measured, `say .K~init` under a lone `::CLASS K` is rc 165, `No result
+/// object.` and `Message "INIT" did not return a result.`
+fn native_no_op(
+    _interp: &mut Interp,
+    _cleared: Cleared,
+    _receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    Ok(None)
 }
 
 /// `Object~hasMethod(name)`: whether the receiver's behaviour answers `name`.

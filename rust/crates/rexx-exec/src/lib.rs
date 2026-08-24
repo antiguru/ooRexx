@@ -40,9 +40,9 @@ use rexx_classes::{ClassKind, InheritRefusal, MethodId};
 use rexx_core::{Body, Heap, NameMap, ObjRef, RootSet, SlotFrame, SlotRef};
 use rexx_parse::{
     Access, AnnotationTarget, AttributeDirective, AttributeStyle, ClassDirective, ClassRef,
-    CodeBody, ConstantValue, Directive, DirectiveKind, Expr, ExprKind, InstructionKind,
-    MethodDirective, Operator, Program, Protection, SymbolId, SymbolTable, compound_parts,
-    parse_program,
+    CodeBody, ConstantDirective, ConstantValue, Directive, DirectiveKind, Expr, ExprKind,
+    InstructionKind, MethodDirective, Operator, Program, Protection, SymbolId, SymbolTable,
+    compound_parts, parse_program,
 };
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
@@ -1665,6 +1665,50 @@ fn class_install_order(
     Ok(order)
 }
 
+/// Which directives each `::CLASS` in `program` owns, keyed by that
+/// `::CLASS`'s own index and in source order within a class.
+///
+/// R9's positional attachment: a `::METHOD`, `::ATTRIBUTE` or `::CONSTANT`
+/// belongs to the most recently declared `::CLASS` above it, which is
+/// `LanguageParser::addMethod` filing against `activeClass`
+/// (`parser/DirectiveParser.cpp:610`-`:623`). **No other directive resets
+/// that field** -- `parser/LanguageParser.cpp:1112` clears it before the
+/// directive walk starts and `parser/DirectiveParser.cpp:355` is the only
+/// assignment after that -- so a `::ROUTINE` standing between a `::CLASS`
+/// and a `::METHOD` does not detach the method. Measured, oracle rc 0:
+/// `::class a` / `::routine r` / `::method m class` answers `.a~m` with the
+/// method's own result.
+///
+/// A member above every `::CLASS` belongs to no class and appears in no
+/// entry. It installs on the oracle -- measured, a lone `::METHOD` under
+/// `say 'main ran'` is rc 0 printing that line -- and has nothing here to
+/// attach to, which is the R9 boundary rather than a gap.
+fn class_members(program: &Program) -> HashMap<usize, Vec<usize>> {
+    let mut members: HashMap<usize, Vec<usize>> = HashMap::new();
+    let mut current: Option<usize> = None;
+    for (index, directive) in program.directives.iter().enumerate() {
+        match &directive.kind {
+            DirectiveKind::Class(_) => current = Some(index),
+            DirectiveKind::Method(_) | DirectiveKind::Attribute(_) | DirectiveKind::Constant(_) => {
+                if let Some(class) = current {
+                    members.entry(class).or_default().push(index);
+                }
+            }
+            _ => {}
+        }
+    }
+    members
+}
+
+/// The [`rexx_core::RootSet::add_global`] key one `::CONSTANT`'s value is
+/// held under.
+///
+/// Keyed by the directive for the reason [`Interp::constant_values`] is, and
+/// spelled so that two programs' directives at the same index cannot collide.
+fn constant_root_key(ProgramId(program): ProgramId, directive: usize) -> String {
+    format!("constant:{program}:{directive}")
+}
+
 /// Why a resolved method's directive cannot be entered, or `None` when it
 /// can -- the gate `Interp::enter_method_body` (`dispatch.rs`) takes before
 /// it pushes anything.
@@ -1675,11 +1719,12 @@ fn class_install_order(
 /// no row for the resolved id, so a generated accessor and an `ABSTRACT`
 /// declaration never arrive.
 ///
-/// **Exhaustive over the directive kinds a `MethodId` can name**, which are
-/// the ones `Interp::install_method` and `Interp::install_attribute` mint ids
-/// for. Anything else arriving here is an internal inconsistency and gets
-/// a refusal of its own rather than a panic, on the reasoning
-/// [`Loud::instruction`]'s doc gives.
+/// **Exhaustive over the directive kinds that can arrive**, which are the
+/// ones `Interp::install_method` and `Interp::install_attribute` mint body
+/// ids for. `Interp::install_constant` mints ids too and none of them reaches
+/// here, because it mints only generated ones. Anything else arriving here is
+/// an internal inconsistency and gets a refusal of its own rather than a
+/// panic, on the reasoning [`Loud::instruction`]'s doc gives.
 ///
 /// `DELEGATE` is what is left: measured, `.K~m` on
 /// `::method m class delegate p` is 97.1 at rc 159 naming `"P"`, because the
@@ -2595,6 +2640,29 @@ struct Interp {
     ///
     /// [`Interp::package_objects`]: Interp::package_objects
     package_tables: HashMap<(ProgramId, environment::PackageTable), ObjRef>,
+    /// The value each `::CONSTANT` accessor answers, keyed by the directive
+    /// that declared it.
+    ///
+    /// **Keyed by the directive and not by the method identity**, because one
+    /// directive installs the same value under a separate identity per
+    /// dictionary side -- `ClassDirective::addConstantMethod` adds the single
+    /// method object it built to both `classMethods` and `instanceMethods`
+    /// (`instructions/ClassDirective.cpp:520`-`:524`), so the sides cannot
+    /// disagree there and do not disagree here.
+    ///
+    /// **An absent entry is a constant whose expression has not run yet**,
+    /// which the oracle reports as 97.4 rather than as a name miss; see
+    /// [`Raised::constant_not_initialized`]. A literal `::CONSTANT` is
+    /// recorded while its class is being installed, so only the expression
+    /// form is ever absent.
+    ///
+    /// **Rooted through [`rexx_core::RootSet::add_global`]**, the position
+    /// [`Interp::package_objects`]'s entries are in: an expression's value is
+    /// an ordinary heap object that nothing else names once the evaluating
+    /// activation is gone.
+    ///
+    /// [`Interp::package_objects`]: Interp::package_objects
+    constant_values: HashMap<(ProgramId, usize), ObjRef>,
     /// Which `(program, directive)` a [`rexx_classes::MethodId`] `install_directives`
     /// minted names -- the "bodies are stored" half of R9, addressed by the
     /// same identity `ClassRegistry::add_instance_method`/`add_class_method`
@@ -3393,6 +3461,13 @@ enum GeneratedKind {
     /// `ABSTRACT`, on either directive and on either half of a generated
     /// accessor pair: the send is 93.965 whatever the arguments are.
     Abstract,
+    /// A `::CONSTANT` accessor: it answers the value
+    /// [`Interp::constant_values`] holds for the directive.
+    ///
+    /// One directive mints one of these per dictionary side, which is what
+    /// `ClassDirective::addConstantMethod` does with the single method object
+    /// it builds (`instructions/ClassDirective.cpp:520`-`:524`).
+    Constant,
 }
 
 /// The name, arguments and receiver of one call in progress.
@@ -3626,6 +3701,7 @@ impl Interp {
             class_packages: HashMap::new(),
             package_objects: HashMap::new(),
             package_tables: HashMap::new(),
+            constant_values: HashMap::new(),
             method_bodies: HashMap::new(),
             generated_methods: HashMap::new(),
             special_methods: Vec::new(),
@@ -3774,9 +3850,9 @@ impl Interp {
     /// the program exactly the way the other install-time gaps above do --
     /// measured, `::class K` then `::constant c (1/0)` is rc 214 with stdout
     /// EMPTY, both engines, while the same directive with `(2+3)` is rc 0 with
-    /// `program.main`'s own output intact. A well-formed expression's *value*
-    /// is discarded: nothing in this crate can read it back yet, since
-    /// dispatching to a `::CONSTANT` accessor is later work.
+    /// `program.main`'s own output intact. A well-formed expression's value is
+    /// what the directive's accessor then answers -- see
+    /// [`Interp::constant_values`].
     fn install_directives(&mut self, id: ProgramId, program: &Rc<Program>) -> Result<(), Failure> {
         // **The oracle's first walk, and everything it can answer is answered
         // here in source order** -- a duplicate `::ROUTINE` name, a
@@ -3904,142 +3980,273 @@ impl Interp {
         // `::constant x (1/0)` / `::class b subclass a` blames `c`, first in
         // the file. Which positional rules the corpus excludes, and which
         // witness excludes which, is in `class_install_order`'s own doc.
-        // Tracked separately from `current_class_id` below, which is R9's
-        // registry attachment and a genuinely different rule: the `Method`
-        // and `Attribute` arms attach to the class positionally nearest above
-        // them.
+        // Tracked separately from `class_members` below, which is R9's
+        // registry attachment and a genuinely different rule: a `::METHOD` or
+        // `::ATTRIBUTE` attaches to the class positionally nearest above it.
         let last_class_directive = order.last().map(|index| &program.directives[*index]);
 
-        // **Classes install before anything else in the file is processed**,
-        // because their order is not the file's. A `::METHOD` still attaches
-        // positionally, which the pass below does; what happens here is only
-        // the creation of the class objects, in the order `order` gives.
+        // **Which class each `::METHOD`, `::ATTRIBUTE` and `::CONSTANT`
+        // attaches to**, taken positionally (R9), so that the pass below can
+        // install a class's own members while it is constructing that class.
+        let members = class_members(program);
+
+        // **Install walks the class list once per pass, and each pass
+        // finishes before the next begins** (`PackageClass::processInstall`):
+        // create every class (`classes/PackageClass.cpp:1281`), then resolve
+        // every `::CONSTANT` expression (`:1290`), then send `ACTIVATE` to
+        // every class (`:1299`). Each pass walks `order` rather than the
+        // file, because `processInstall`'s own list is the class list.
+        //
+        // **The second pass is what lets a constant expression name a class
+        // declared later.** Measured, oracle rc 0 printing `from B`:
+        // `::class A` / `::constant c (.B~m)` / `::class B` / `::method m
+        // class`. Evaluating that expression while `A` installs answers 97.1
+        // instead, because `B`'s own methods are not in yet.
+        //
+        // **A class's members are attached inside its own install, not in a
+        // pass of their own**, which is what makes the `INIT`/`ACTIVATE`
+        // split observable. Measured, oracle rc 0 on `::CLASS M MIXINCLASS
+        // Object` carrying `::METHOD mm CLASS`, with `::CLASS K INHERIT M`
+        // carrying class-side `init` and `activate`: `K init, hasMethod MM =
+        // 0` then `K activate, hasMethod MM = 1`. A pass that attached every
+        // file's methods after every file's classes would leave `M`'s own
+        // method out of `K`'s `INHERIT` merge and answer `0` twice.
         let mut classes: HashMap<usize, ObjRef> = HashMap::new();
         for index in &order {
-            let class_id = self.install_class_at(id, program, *index, &declared, &classes)?;
-            classes.insert(*index, class_id);
+            let attached = members.get(index).map_or(&[][..], Vec::as_slice);
+            let class =
+                self.install_class_at(id, program, *index, &declared, &classes, attached)?;
+            classes.insert(*index, class);
         }
 
-        // R9: the class a `::METHOD`/`::ATTRIBUTE` attaches to, tracked
-        // positionally (the most recently declared `::CLASS`) -- ordinary
-        // object-model attachment, unrelated to `last_class_directive` above.
-        let mut current_class_id: Option<ObjRef> = None;
-        for (index, directive) in program.directives.iter().enumerate() {
+        // The gap forms whose stage is after the classes are created; see
+        // `staged_gap` for the probe behind each. Measured, `::options digits
+        // 12` beside a failing `::CLASS` is the oracle's `::CLASS` line, so
+        // this walk cannot move ahead of the pass above.
+        for directive in &program.directives {
             if let Some(loud) = directive_gap(&directive.kind) {
                 return Err(loud.into());
             }
-            match &directive.kind {
-                DirectiveKind::Class(_) => {
-                    current_class_id = classes.get(&index).copied();
-                }
-                DirectiveKind::Method(method) => {
-                    if let Some(class_id) = current_class_id {
-                        self.install_method(id, index, class_id, method);
-                    }
-                    // A loose `::METHOD` with no preceding `::CLASS` installs
-                    // on the oracle (measured, rc 0 "main ran") and has
-                    // nothing here to attach to; recording nothing for it is
-                    // the R9 boundary, not a gap -- there is no dispatch yet
-                    // to observe the difference.
-                }
-                DirectiveKind::Attribute(attribute) => {
-                    if let Some(class_id) = current_class_id {
-                        self.install_attribute(id, index, class_id, attribute);
-                    }
-                }
-                DirectiveKind::Constant(constant) => {
-                    let ConstantValue::Expression(expr) = &constant.value else {
-                        continue;
-                    };
-                    if let Err(failure) = self.eval_constant_expression(id, program, expr) {
-                        // Two clause echoes, innermost first, matching the
-                        // oracle's own report exactly (measured, `::class K`
-                        // / `::constant c (1/0)`):
-                        //
-                        // ```text
-                        //      4 *-* ::constant c (1/0)
-                        //      3 *-* ::class K
-                        // ```
-                        //
-                        // `blame_directive` sets `self.failure_site`;
-                        // `seal_site_level` is the same mechanism
-                        // `invoke_call`/`run_fragment` use to move a level's
-                        // site into `self.failure_sites` before the next,
-                        // enclosing level sets its own -- there is no real
-                        // activation nesting here, only the two directives'
-                        // own clauses standing in for it.
-                        self.blame_directive(program, directive);
-                        self.seal_site_level();
-                        self.blame_directive(
-                            program,
-                            last_class_directive.expect(
-                                "the first pass already refused an expression with no \
-                                 preceding ::CLASS",
-                            ),
-                        );
-                        return Err(failure);
-                    }
-                }
-                _ => {}
-            }
         }
 
-        // **The class side of every class this file installed, rebuilt once
-        // the file's methods are all in.** `ClassRegistry::add_class_method`
-        // is `RexxClass::defineClassMethod`, which adds to the class's own
-        // behaviour and deliberately cascades to nothing -- its own doc
-        // comment restricts it to image build, before any subclass exists.
-        // A `::CLASS` naming a `SUBCLASS` declared **later** in the file
-        // breaks that restriction: the subclass is created first, so the
-        // superclass's class methods arrive after it. Measured on the oracle,
-        // rc 0: `::class c subclass b` / `::class b subclass a` / `::class a`
-        // with a class method on `a` answers that method through `.c`.
-        //
-        // **The metaclass edge is rebuilt by the same loop, and it is why the
-        // rebuild is on the class side.** `cascade_build`'s class-side arm
-        // merges the metaclass's flattened *instance* behaviour, so a
-        // `METACLASS` whose own `::METHOD` directives arrive after the class
-        // was created reaches the class side only once something rebuilds it
-        // -- the oracle's own `updateSubClasses` builds the class behaviour
-        // second for exactly this reason, "because the added methods may have
-        // an impact on metaclasses" (`ClassClass.cpp:1036`).
-        //
-        // One rebuild per class and no ordering between them. The class side
-        // reads each ancestor's **own** dictionary, which the cascade walks
-        // rather than reading a built behaviour, and the metaclass's
-        // flattened instance behaviour, which
-        // `ClassRegistry::add_instance_method` has already brought up to date
-        // for every class in the file -- it rebuilds the receiving class's
-        // instance side and cascades to its subclasses on every call, so the
-        // instance behaviours are final before this loop starts.
-        for class in classes.values() {
-            self.classes().refresh_class_behaviour(*class);
-        }
-
-        // **The `UNINIT` flags, for the same reason and at the same point.**
-        // The oracle attaches a class's methods while it constructs the class,
-        // so `subclass`'s own `checkUninit` (`ClassClass.cpp:1628`) and the
-        // propagation below it (`:1634`) both read a finished parent. This
-        // crate creates every class the file declares before it attaches any
-        // method, so at construction time a parent's own `UNINIT` has not
-        // arrived; running them here instead reads what the oracle's read.
-        //
-        // **In `order` and not over `classes.values()`**, which is the one
-        // difference from the rebuild above: `refresh_parent_has_uninit`
-        // reads its superclasses' flags rather than their dictionaries, so a
-        // parent has to be finished first, and `order` is the dependency
-        // order that guarantees it. `check_uninit` first and the propagation
-        // second, which is the oracle's order within a class.
-        //
-        // Indexed rather than looked up: the loop above walks this same
-        // `order` and inserts an entry for every index in it, and nothing in
-        // between removes one, so a miss here is not a case to handle.
         for index in &order {
-            let class = classes[index];
-            self.classes().check_uninit(class);
-            self.classes().refresh_parent_has_uninit(class);
+            let attached = members.get(index).map_or(&[][..], Vec::as_slice);
+            self.resolve_constants(id, program, attached, last_class_directive)?;
+        }
+
+        for index in &order {
+            // `Some` inside this loop by construction: `last_class_directive`
+            // is `order.last()` and the loop body runs only for a non-empty
+            // `order`.
+            let blame = last_class_directive.expect("a non-empty install order has a last class");
+            self.send_directive_message(id, program, classes[index], dispatch::ACTIVATE, blame)?;
         }
         Ok(())
+    }
+
+    /// Records the value of every literal `::CONSTANT` among `attached`.
+    ///
+    /// **Before the class's own members are installed, because a class-side
+    /// `INIT` can read one.** A literal constant's value is fixed when the
+    /// directive is parsed -- `ConstantGetterCode(name, value)`
+    /// (`parser/DirectiveParser.cpp:2520`), reached with `value` already set
+    /// from the token (`:1875`) -- where the expression form's value
+    /// arrives in the second install pass. Measured, oracle rc 0: an `init`
+    /// class method saying `self~c` prints `5` under `::constant c 5` and is
+    /// 97.4 under `::constant c (2+3)`.
+    ///
+    /// A `::CONSTANT` with no value at all takes its own name, and the name
+    /// is the token's value, which the tokenizer has already upcased for a
+    /// symbol and left alone for a literal. Measured, oracle rc 0: `.A~c3` is
+    /// `C3` under `::constant c3` and `c4` under `::constant "c4"`.
+    fn record_literal_constants(
+        &mut self,
+        id: ProgramId,
+        program: &Rc<Program>,
+        attached: &[usize],
+    ) {
+        for &index in attached {
+            let DirectiveKind::Constant(constant) = &program.directives[index].kind else {
+                continue;
+            };
+            let value = match &constant.value {
+                ConstantValue::Name => self.interned_literal(&constant.name),
+                ConstantValue::Text(text) => self.interned_literal(text),
+                ConstantValue::Expression(_) => continue,
+            };
+            self.record_constant_value(id, index, value);
+        }
+    }
+
+    /// Evaluates the `::CONSTANT` expressions among `attached`, in source
+    /// order, and records what each answered.
+    ///
+    /// **The blame on failure is the class installed LAST and not the class
+    /// this constant belongs to**, which is the same target the oracle's own
+    /// `activation->setCurrent` leaves behind: `ClassDirective::install` sets
+    /// it per class (`instructions/ClassDirective.cpp:171`) and nothing in
+    /// the constants pass sets it again, so the enclosing echo is whichever
+    /// class the install pass reached last. `class_install_order`'s own doc
+    /// has the corpus witnesses that exclude each direction of source order.
+    fn resolve_constants(
+        &mut self,
+        id: ProgramId,
+        program: &Rc<Program>,
+        attached: &[usize],
+        last_class: Option<&Directive>,
+    ) -> Result<(), Failure> {
+        for &index in attached {
+            let directive = &program.directives[index];
+            let DirectiveKind::Constant(constant) = &directive.kind else {
+                continue;
+            };
+            let ConstantValue::Expression(expr) = &constant.value else {
+                continue;
+            };
+            match self.eval_constant_expression(id, program, expr) {
+                Ok(value) => self.record_constant_value(id, index, value),
+                Err(failure) => {
+                    // Two clause echoes, innermost first, matching the
+                    // oracle's own report exactly (measured, `::class K` /
+                    // `::constant c (1/0)`):
+                    //
+                    // ```text
+                    //      4 *-* ::constant c (1/0)
+                    //      3 *-* ::class K
+                    // ```
+                    //
+                    // `blame_directive` sets `self.failure_site`;
+                    // `seal_site_level` is the same mechanism
+                    // `invoke_call`/`run_fragment` use to move a level's site
+                    // into `self.failure_sites` before the next, enclosing
+                    // level sets its own -- there is no real activation
+                    // nesting here, only the two directives' own clauses
+                    // standing in for it.
+                    self.blame_directive(program, directive);
+                    self.seal_site_level();
+                    self.blame_directive(
+                        program,
+                        last_class.expect(
+                            "the first pass already refused an expression with no \
+                             preceding ::CLASS",
+                        ),
+                    );
+                    return Err(failure);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Records what a `::CONSTANT` accessor answers, and roots it.
+    ///
+    /// [`rexx_core::RootSet::add_global`] keyed by the directive, so that a
+    /// value the evaluating activation was the only other holder of survives
+    /// the collector for the rest of the run.
+    fn record_constant_value(&mut self, program: ProgramId, directive: usize, value: ObjRef) {
+        self.constant_values.insert((program, directive), value);
+        self.roots
+            .add_global(&constant_root_key(program, directive), value);
+    }
+
+    /// The value a `::CONSTANT` accessor answers, or `None` for an expression
+    /// form whose pass has not run yet -- [`Interp::constant_values`] has
+    /// which of those is reachable.
+    pub(crate) fn constant_value(&self, generated: GeneratedMethod) -> Option<ObjRef> {
+        self.constant_values
+            .get(&(generated.program, generated.directive))
+            .copied()
+    }
+
+    /// The constant's name as its accessor was installed under, which is what
+    /// a 97.4 report names.
+    ///
+    /// `internalname = commonString(name->upper())` is what
+    /// `constantDirective` hands `createConstantGetterMethod`
+    /// (`parser/DirectiveParser.cpp:1865`, `:1933`), so the upcased spelling
+    /// is the one the message carries whatever the send spelled.
+    pub(crate) fn constant_name(&self, generated: GeneratedMethod) -> Result<Vec<u8>, Failure> {
+        let program = &self.programs[generated.program.0];
+        // `get` rather than an index, and a refusal rather than a panic, for
+        // the reason `Interp::enter_method_body`'s own reads carry.
+        let Some(directive) = program.directives.get(generated.directive) else {
+            return Err(Loud::missing_body().into());
+        };
+        let DirectiveKind::Constant(constant) = &directive.kind else {
+            return Err(Loud::missing_body().into());
+        };
+        Ok(constant.name.to_ascii_uppercase())
+    }
+
+    /// One message the install machinery sends a class object, run in a
+    /// throwaway activation carrying the installing program.
+    ///
+    /// **The activation is what makes the send's own package the installing
+    /// package**, which the oracle's is: `processInstall` runs inside an
+    /// activation of the package being installed, so a `PACKAGE`-scoped
+    /// method is callable from it. Measured, oracle rc 0: `::METHOD init
+    /// CLASS PACKAGE` and `::METHOD activate CLASS PACKAGE` both run.
+    ///
+    /// **The send carries no receiver**, and that is observable rather than
+    /// incidental: `checkPrivate` reads the sending frame's own receiver, and
+    /// an install frame has none, so a `PRIVATE` class-side `INIT` refuses
+    /// the install. Measured, oracle rc 159 on `::METHOD init CLASS PRIVATE`:
+    /// `Object "The A class" cannot accept private message "INIT" from this
+    /// context.` echoing the `::CLASS` clause alone.
+    ///
+    /// `blame` is the directive whose clause is echoed beneath the failure,
+    /// and it is not the same directive for the two senders: an `INIT` blames
+    /// the class being constructed and an `ACTIVATE` blames the class
+    /// installed last. Measured, oracle rc 214 with `x = 1/0` in a class-side
+    /// `activate` on `::CLASS A` followed by `::CLASS ZZ`: the second echo is
+    /// `::CLASS ZZ`.
+    fn send_directive_message(
+        &mut self,
+        id: ProgramId,
+        program: &Rc<Program>,
+        class: ObjRef,
+        name: &[u8],
+        blame: &Directive,
+    ) -> Result<(), Failure> {
+        let frame = self.push_directive_activation(id, program);
+        let caller = self.caller();
+        let sent = self.send_message(class, name, None, &[], caller);
+        self.pop_directive_activation(frame);
+        let Err(failure) = sent else {
+            return Ok(());
+        };
+        self.seal_site_level();
+        self.blame_directive(program, blame);
+        Err(failure)
+    }
+
+    /// Pushes the activation an install-time evaluation or send runs in, and
+    /// answers the frame [`Interp::pop_directive_activation`] takes back.
+    ///
+    /// **The `Plan::default()` handed to `Activation::new` is a placeholder,
+    /// not a plan.** `Activation::new`'s signature requires an `Rc<Plan>`
+    /// field to exist. [`Interp::slot_of`] does read it, but every read goes
+    /// through `Plan::slot_of`, which answers `None` for a name it does not
+    /// carry, so an empty plan sends each name down the unresolved path.
+    /// Building one would compute nothing either caller could reach: neither
+    /// has a body to walk, so the map comes out empty either way.
+    fn push_directive_activation(&mut self, id: ProgramId, program: &Rc<Program>) -> SlotFrame {
+        let frame = self.roots.push_slots(0);
+        let activation_id = self.next_activation_id();
+        self.push_activation(Activation::new(
+            activation_id,
+            Rc::clone(program),
+            id,
+            Rc::new(Plan::default()),
+            frame,
+        ));
+        frame
+    }
+
+    /// Tears down what [`Interp::push_directive_activation`] pushed.
+    fn pop_directive_activation(&mut self, frame: SlotFrame) {
+        self.pop_activation();
+        self.roots.pop_slots(frame);
     }
 
     /// `::CLASS`'s own R9 install: a class object in [`Interp::classes`],
@@ -4106,9 +4313,11 @@ impl Interp {
     /// (`ClassDirective::install`,
     /// `interpreter/instructions/ClassDirective.cpp:165`-`:249`): resolve the
     /// `METACLASS` target, then the `SUBCLASS`/`MIXINCLASS` one, create the
-    /// class from the pair, then walk the `INHERIT` list left to right
-    /// sending `INHERIT` to the new class for each entry, and finally apply
-    /// `ABSTRACT`. Each `INHERIT` send appends to the end of the superclass
+    /// class from the pair with its class-side members already in it, then
+    /// walk the `INHERIT` list left to right sending `INHERIT` to the new
+    /// class for each entry, then add the instance-side members
+    /// (`classObject->defineMethods(instanceMethods)`, `:237`), and finally
+    /// apply `ABSTRACT`. Each `INHERIT` send appends to the end of the superclass
     /// list (`superClasses->addLast`), and the cascade walks that list in
     /// reverse, so the leftmost `INHERIT` is folded in last among the mixins
     /// and wins a name conflict between them -- while the `SUBCLASS` target,
@@ -4123,6 +4332,9 @@ impl Interp {
     /// **The directive's own gap is checked here** rather than left to the
     /// pass that walks source order, which runs after every class is
     /// installed.
+    ///
+    /// `attached` is the directives this `::CLASS` owns, from
+    /// [`class_members`].
     fn install_class_at(
         &mut self,
         program_id: ProgramId,
@@ -4130,6 +4342,7 @@ impl Interp {
         index: usize,
         declared: &HashMap<Box<[u8]>, usize>,
         installed: &HashMap<usize, ObjRef>,
+        attached: &[usize],
     ) -> Result<ObjRef, Failure> {
         let directive = &program.directives[index];
         if let Some(loud) = directive_gap(&directive.kind) {
@@ -4174,6 +4387,23 @@ impl Interp {
             return Err(Raised::bad_metaclass(&name).into());
         }
         let id = self.install_class(program_id, class, superclass, metaclass);
+        self.record_literal_constants(program_id, program, attached);
+        // **The class-side members are the enhancing methods the class is
+        // built with**: `ClassDirective::install` hands `classMethods` to
+        // `mixinClass`/`subclass` (`ClassDirective.cpp:200`, `:205`), which
+        // merges them into the class method dictionary before it builds
+        // either behaviour and therefore before it sends `INIT`
+        // (`ClassClass.cpp:1602`-`:1607`, then `:1613` builds the behaviour and
+        // `:1631` sends the message).
+        self.install_class_members(program_id, program, id, attached, true);
+        // `RexxClass::subclass`'s own tail, in its order: `checkUninit`
+        // (`ClassClass.cpp:1628`), the `INIT` send (`:1631`), then the
+        // parent's `UNINIT` propagation (`:1634`-`:1637`). Reading a finished
+        // parent is what `order` buys: a class is constructed after every
+        // class it names.
+        self.classes().check_uninit(id);
+        self.send_directive_message(program_id, program, id, dispatch::INIT, directive)?;
+        self.classes().refresh_parent_has_uninit(id);
         for target in &class.inherit {
             let mixin = self.resolve_class_target(
                 program,
@@ -4185,6 +4415,7 @@ impl Interp {
             )?;
             self.inherit_mixin(program, directive, id, mixin)?;
         }
+        self.install_class_members(program_id, program, id, attached, false);
         // `RexxClass::makeAbstract` (`ClassClass.cpp:1754`-`:1761`): a
         // metaclass cannot be made abstract, and any other class takes the
         // keyword by setting a flag whose reader is `~new`.
@@ -4194,6 +4425,85 @@ impl Interp {
             return Err(Raised::abstract_metaclass(&class_id).into());
         }
         Ok(id)
+    }
+
+    /// One side of a class's own members: the `::METHOD` and `::ATTRIBUTE`
+    /// directives whose `CLASS` keyword matches `class_side`, and every
+    /// `::CONSTANT`, which installs on both.
+    ///
+    /// **The two sides go in at different moments and that is the oracle's
+    /// shape, not a convenience.** `ClassDirective` keeps `classMethods` and
+    /// `instanceMethods` apart (`ClassDirective::addMethod`,
+    /// `instructions/ClassDirective.cpp:501`-`:511`); the class side is
+    /// handed to the constructor and the instance side is added after the
+    /// `INHERIT` sends. A `::CONSTANT` is in both lists, because
+    /// `addConstantMethod` calls `addMethod` once for each (`:520`-`:524`).
+    ///
+    /// Source order within a side, and the last write to a dictionary key
+    /// wins. **That is observable only where the oracle refuses the file**:
+    /// measured, `::CLASS A` carrying `::METHOD m CLASS` twice is rc 157,
+    /// `Error 99.902: Duplicate ::METHOD directive instruction.`, echoing the
+    /// second directive, and so is the same class carrying `::CONSTANT c`
+    /// beside `::METHOD c CLASS` -- a `::CONSTANT` occupies both dictionaries,
+    /// so it collides with either kind. Nothing in this crate detects that
+    /// duplication, so both programs run here and answer the last member
+    /// installed.
+    fn install_class_members(
+        &mut self,
+        program_id: ProgramId,
+        program: &Rc<Program>,
+        class: ObjRef,
+        attached: &[usize],
+        class_side: bool,
+    ) {
+        for &index in attached {
+            match &program.directives[index].kind {
+                DirectiveKind::Method(method) if method.class_method == class_side => {
+                    self.install_method(program_id, index, class, method);
+                }
+                DirectiveKind::Attribute(attribute) if attribute.class_method == class_side => {
+                    self.install_attribute(program_id, index, class, attribute);
+                }
+                DirectiveKind::Constant(constant) => {
+                    self.install_constant(program_id, index, class, constant, class_side);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// `::CONSTANT`'s own R9 install: the upcased name lands in one of
+    /// `class`'s dictionaries as a [`GeneratedKind::Constant`] accessor.
+    ///
+    /// The key is upcased for the reason [`Interp::install_method`]'s is:
+    /// `constantDirective` builds `internalname = commonString(name->upper())`
+    /// and every install of the directive goes through it
+    /// (`parser/DirectiveParser.cpp:1865`).
+    ///
+    /// **No access scope and no protection**, which is what
+    /// `createConstantGetterMethod` builds: it calls `setUnguarded` and
+    /// nothing else (`parser/DirectiveParser.cpp:2523`), so the method is not
+    /// one the oracle calls *special* and [`Interp::record_access_scope`]
+    /// files no row for it.
+    fn install_constant(
+        &mut self,
+        program: ProgramId,
+        directive: usize,
+        class: ObjRef,
+        constant: &ConstantDirective,
+        class_method: bool,
+    ) {
+        let upper = constant.name.to_ascii_uppercase();
+        self.install_one_method(
+            program,
+            directive,
+            class,
+            &upper,
+            Some(GeneratedKind::Constant),
+            class_method,
+            Access::Default,
+            Protection::Default,
+        );
     }
 
     /// One class reference on a `::CLASS`, resolved against the file's own
@@ -4574,48 +4884,29 @@ impl Interp {
         ));
     }
 
-    /// Evaluates a `::CONSTANT` directive's parenthesised expression at
-    /// install time: a throwaway activation with default `NUMERIC` settings
-    /// and `TRACE` off, no bindings of its own, torn down immediately after.
-    /// Mirrors the oracle's own moment for this (before `program.main`'s
-    /// first clause), and is engine-agnostic: it runs once, before either
-    /// engine's own instruction loop starts, and reaches the same shared
-    /// [`Interp::eval`] both loops call, so `REXX_ENGINE=tree-walker` and the
-    /// default IR engine evaluate it identically.
+    /// Evaluates a `::CONSTANT` directive's parenthesised expression in the
+    /// second install pass, and answers what it produced.
+    ///
+    /// [`Interp::push_directive_activation`] is the frame it runs in: default
+    /// `NUMERIC` settings, `TRACE` off, no bindings of its own. This is
+    /// engine-agnostic -- it runs before either engine's own instruction loop
+    /// starts and reaches the same shared [`Interp::eval`] both loops call,
+    /// so `REXX_ENGINE=tree-walker` and the default IR engine evaluate it
+    /// identically.
     ///
     /// `slots: &[]` and `plan: None` on the [`Code`] below are correct rather
     /// than merely convenient: the expression is evaluated with no enclosing
-    /// frame at all, so every name in it -- there are none in this task's own
-    /// corpus witnesses -- falls through [`Code::slot_for`] to
+    /// frame at all, so every name in it falls through [`Code::slot_for`] to
     /// [`Interp::slot_of`]'s ordinary resolution exactly as an `INTERPRET`
     /// fragment's untranslated names do (`run_fragment`, `run.rs`).
-    ///
-    /// **The `Plan::default()` handed to `Activation::new` is a different,
-    /// unrelated placeholder, not a second copy of the one above.**
-    /// `Activation::new`'s signature requires an `Rc<Plan>` field to exist.
-    /// [`Interp::slot_of`] does read it, but every read goes through
-    /// `Plan::slot_of`, which answers `None` for a name it does not carry,
-    /// so an empty plan sends each name down the unresolved path. Building
-    /// one from the body here would compute nothing this call could reach:
-    /// the body it would walk has no instructions, so the map comes out
-    /// empty either way.
     fn eval_constant_expression(
         &mut self,
         id: ProgramId,
         program: &Rc<Program>,
         expr: &Expr,
-    ) -> Result<(), Failure> {
+    ) -> Result<ObjRef, Failure> {
         let empty_body = CodeBody::default();
-        let plan = Rc::new(Plan::default());
-        let frame = self.roots.push_slots(0);
-        let activation_id = self.next_activation_id();
-        self.push_activation(Activation::new(
-            activation_id,
-            Rc::clone(program),
-            id,
-            plan,
-            frame,
-        ));
+        let frame = self.push_directive_activation(id, program);
         let code = Code {
             body: &empty_body,
             symbols: &program.symbols,
@@ -4623,9 +4914,8 @@ impl Interp {
             plan: None,
         };
         let result = self.eval(&code, expr);
-        self.pop_activation();
-        self.roots.pop_slots(frame);
-        result.map(|_| ())
+        self.pop_directive_activation(frame);
+        result
     }
 
     /// Records `directive`'s own clause as the site a directive-time
@@ -6299,21 +6589,23 @@ say 1
     /// The `UNINIT` flags, **through the directive path** -- which is the
     /// half `rexx-classes`' own graph-API test cannot reach.
     ///
-    /// This crate creates every class a file declares before it attaches any
-    /// method, so a flag computed while the class is being constructed reads
-    /// a parent that has none of its methods yet. `install_directives` runs
-    /// `check_uninit` and `refresh_parent_has_uninit` over the file's classes
-    /// once the methods are in.
+    /// `Interp::install_class_at` runs `check_uninit` and then
+    /// `refresh_parent_has_uninit` on each class it builds, at the points
+    /// `RexxClass::subclass` does (`ClassClass.cpp:1628`, `:1634`-`:1637`).
     ///
-    /// **Each call in that pass is witnessed separately, measured by deleting
-    /// it on its own.** Dropping `check_uninit` reddens the `has_uninit(kid)`
-    /// row; dropping `refresh_parent_has_uninit` reddens the
-    /// `parent_has_uninit(kid)` row; dropping the whole pass reddens the
-    /// former, since it is asserted earlier. `has_uninit(base)` survives
-    /// every one of those, because [`ClassGraph::define`] sets it when the
-    /// `::METHOD uninit` is attached -- so the declaring class is not what
-    /// this pass is for, and an assertion on it alone would not have caught
-    /// the pass going missing.
+    /// **Only `check_uninit` is witnessed here, measured by deleting each on
+    /// its own.** Dropping `check_uninit` reddens the
+    /// `has_uninit(kid)` row -- that flag comes from the *flattened* instance
+    /// behaviour, which no constructor computes. Dropping
+    /// `refresh_parent_has_uninit` reddens nothing: a class is built after
+    /// every class it names, so [`ClassGraph::define_class`] already asks
+    /// `uninit_reaches` of the same finished parent, and the call is a second
+    /// computation of the answer it got.
+    ///
+    /// `has_uninit(base)` survives both, because [`ClassGraph::define`] sets
+    /// it when the `::METHOD uninit` is attached -- so the declaring class is
+    /// not what either call is for, and an assertion on it alone would not
+    /// have caught them going missing.
     ///
     /// The oracle's own answer for this hierarchy is measured, and it is what
     /// makes `has_uninit` on `KID` and `GRANDKID` right rather than merely

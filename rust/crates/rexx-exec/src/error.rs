@@ -1485,6 +1485,28 @@ impl Raised {
         Raised::syntax(97, 3, vec![target.to_vec(), name.to_vec()])
     }
 
+    /// 97.4: a `::CONSTANT` accessor whose expression form has not been
+    /// evaluated yet. `target` is the receiver's own string value and `name`
+    /// the constant, upcased as the directive installed it.
+    ///
+    /// **Reachable, and it is the install passes that make it so.** The
+    /// expressions are resolved in a pass of their own after every class is
+    /// built, so a class-side `INIT` -- which runs while its class is being
+    /// built -- reads a constant that has no value yet. Measured at rc 159,
+    /// on `::class A` carrying `::constant c (2+3)` and an `init` class
+    /// method that says `self~c`: `Constant "C" of object "The A class" has
+    /// not been initialized.`
+    ///
+    /// **The arguments are in [`Raised::no_method`]'s order and the template
+    /// is not.** `rexxmsg.xml`'s entry reads `Constant "&2" of object "&1"`
+    /// where 97.1's reads `Object "&1" ... message "&2"`, and `reportNomethod`
+    /// passes the receiver ahead of the name either way
+    /// (`concurrency/ActivityManager.hpp:509`-`:515`), so the receiver stays
+    /// first here and the catalogue does the reordering.
+    pub(crate) fn constant_not_initialized(target: &[u8], name: &[u8]) -> Raised {
+        Raised::syntax(97, 4, vec![target.to_vec(), name.to_vec()])
+    }
+
     /// The `NOMETHOD` condition a dispatch miss raises, whose untrapped
     /// rendering is [`Raised::no_method`]'s own 97.1.
     ///
