@@ -5976,49 +5976,66 @@ impl Interp {
         if self.stress_collect
             || (self.heap.will_grow() && self.heap.slot_capacity() >= self.collect_at)
         {
-            // The context objects of the activations on the stack, handed to
-            // the collector as temporaries for the length of the sweep.
-            //
-            // **The one object an activation owns outright.** Everything else
-            // it holds is rooted by its slot frame or by
-            // `Interp::class_variables`; a `RexxContext` is created by
-            // `Interp::context_object` and stored on the activation, and
-            // nothing else refers to it. Collected here rather than kept
-            // rooted per activation because the alternative is a global root
-            // whose key has to be minted, replaced and retired as activations
-            // come and go, and this pays only when a collection actually
-            // happens. `Activation::object_roots` is the same objects'
-            // other route, for an activation a `REPLY` has parked.
-            let contexts: Vec<ObjRef> = self
-                .running
-                .iter()
-                .map(std::ops::Deref::deref)
-                .chain(self.suspended.iter().map(Box::as_ref))
-                .filter_map(|activation| activation.context_object)
-                .collect();
-            let frame = self.roots.push_frame();
-            for context in contexts {
-                self.roots.push_temp(context);
-            }
-            let stats = self.heap.collect(&self.roots);
-            self.roots.pop_frame(frame);
-            // `pending_uninit` is what the collector resurrected so a finalizer
-            // could run against a whole graph. Nothing in this crate sets
-            // `Object::has_uninit`, because `UNINIT` needs a class to define
-            // it and message sends are Phase 5, so the list is empty and there
-            // is nothing to deliver. The day something sets that flag, this is
-            // the site that owes the delivery -- which is why the value is
-            // named here rather than dropped at the call.
-            debug_assert!(
-                stats.pending_uninit.is_empty(),
-                "an object was resurrected for UNINIT and nothing here runs a finalizer"
-            );
-            // **Not raised for the stress mode**, which collects on every
-            // allocation by definition and must not have its watermark moved
-            // out from under it.
-            if !self.stress_collect {
-                self.collect_at = COLLECT_FLOOR.max(stats.live.saturating_mul(2));
-            }
+            self.collect_now();
+        }
+    }
+
+    /// The collection itself, kept out of [`Interp::collect_if_due`]'s body so
+    /// that what an allocation pays when nothing is due is the test alone.
+    ///
+    /// **`inline(never)` is measured and not a precaution.** Folding this body
+    /// back into the caller costs the axes that allocate and nothing else.
+    /// `instructions:u` against the phase's pin, five rounds interleaved,
+    /// out-of-line against inlined, ir arm, small size: `alloc4c` 1.004808
+    /// against 1.010281, `arith` 0.989743 against 0.994651, `strings`
+    /// 1.013408 against 1.020129, `rexxcps` 1.020346 against 1.026159. The
+    /// three axes whose loops allocate nothing -- `compound`, `emptyloop`,
+    /// `varlookup` -- read the same to six decimal places either way. That
+    /// partition is what says the cost is on the allocation path and not in
+    /// the collection.
+    #[inline(never)]
+    fn collect_now(&mut self) {
+        // The context objects of the activations on the stack, handed to the
+        // collector as temporaries for the length of the sweep.
+        //
+        // **The one object an activation owns outright.** Everything else it
+        // holds is rooted by its slot frame or by `Interp::class_variables`;
+        // a `RexxContext` is created by `Interp::context_object` and stored
+        // on the activation, and nothing else refers to it. Swept here rather
+        // than kept rooted per activation because the alternative is a global
+        // root whose key has to be minted, replaced and retired as
+        // activations come and go, and this pays only when a collection
+        // actually happens. `Activation::object_roots` is the same objects'
+        // other route, for an activation a `REPLY` has parked.
+        let contexts: Vec<ObjRef> = self
+            .running
+            .iter()
+            .map(std::ops::Deref::deref)
+            .chain(self.suspended.iter().map(Box::as_ref))
+            .filter_map(|activation| activation.context_object)
+            .collect();
+        let frame = self.roots.push_frame();
+        for context in contexts {
+            self.roots.push_temp(context);
+        }
+        let stats = self.heap.collect(&self.roots);
+        self.roots.pop_frame(frame);
+        // `pending_uninit` is what the collector resurrected so a finalizer
+        // could run against a whole graph. Nothing in this crate sets
+        // `Object::has_uninit`, because `UNINIT` needs a class to define
+        // it and message sends are Phase 5, so the list is empty and there
+        // is nothing to deliver. The day something sets that flag, this is
+        // the site that owes the delivery -- which is why the value is
+        // named here rather than dropped at the call.
+        debug_assert!(
+            stats.pending_uninit.is_empty(),
+            "an object was resurrected for UNINIT and nothing here runs a finalizer"
+        );
+        // **Not raised for the stress mode**, which collects on every
+        // allocation by definition and must not have its watermark moved
+        // out from under it.
+        if !self.stress_collect {
+            self.collect_at = COLLECT_FLOOR.max(stats.live.saturating_mul(2));
         }
     }
 
