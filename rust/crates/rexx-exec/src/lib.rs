@@ -4214,8 +4214,15 @@ impl Interp {
     /// that is both a duplicate and an `EXTERNAL` gets the duplicate:
     /// measured, `::method m` followed by
     /// `::method m external "LIBRARY nosuchlib nosuchfn"` is 99.902 at rc 157,
-    /// where the reverse order is the `EXTERNAL`'s own 98.903 at rc 158
-    /// because the file reaches it first.
+    /// byte for byte on both engines.
+    ///
+    /// **The reverse order is not evidence for that placement and is not
+    /// offered as any**, because this crate never answers it the way the
+    /// oracle does: measured, the same pair with the `EXTERNAL` first is the
+    /// oracle's own 98.903 at rc 158 and this crate's `::METHOD EXTERNAL is
+    /// not implemented (Phase 7)` at rc 120, on both engines. Whichever of
+    /// the two checks the walk reached first, that file is refused here by
+    /// [`directive_gap`], which is a Phase 7 gap and not a duplicate.
     ///
     /// **Per side, so a class method and an instance method may share a
     /// name**: measured, oracle rc 0 on `::CLASS A` carrying `::METHOD m` and
