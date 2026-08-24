@@ -1011,12 +1011,11 @@ pub fn class_methods_header(stamp: &str) -> Vec<String> {
         "`(\"TRIGGERED\")` and `(\"SCHEDULEDTIME\")` are 0 while `.Alarm~new`".into(),
         "raises 93.901.".into(),
         String::new(),
-        format!(
-            "The two concatenation operators have no printable spelling, so they \
-             are written as the placeholders the class tables use. Measured, the \
-             names are the empty string and a single blank: `.Object~method(\"\")` \
-             and `.Object~method(\" \")` both answer `The Method class`."
-        ),
+        "The two concatenation operators have no printable spelling, so they \
+         are written as the placeholders the class tables use. Measured, the \
+         names are the empty string and a single blank: `.Object~method(\"\")` \
+         and `.Object~method(\" \")` both answer `The Method class`."
+            .into(),
         String::new(),
         format!("{EXCLUDED_CLASS} has no rows here, as it has none in class-set.txt."),
         String::new(),
