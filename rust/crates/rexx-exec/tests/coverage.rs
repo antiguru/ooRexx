@@ -211,9 +211,12 @@ fn assert_program_has_only_admitted_directives(path: &Path, p: &Program) {
 /// than imported for the reason this file's own module doc gives (an
 /// integration test cannot reach another crate's `tests/` module) -- and
 /// checks each one against a committed true/false expectation, so moving
-/// *any* one of the six refused variants into the admitted set (or vice
-/// versa) reddens here specifically, with the wrong keyword named in the
-/// failure.
+/// **any** variant across [`is_admitted_directive_kind`]'s arms in either
+/// direction reddens here specifically, with the wrong keyword named in the
+/// failure. Which variants sit on which side is that function's own match and
+/// is not restated here: `every_directive_keyword_reaches_its_node`'s literal
+/// list and this test's own `cases` table together enumerate the kinds, and
+/// the assertion below is what holds them equal.
 #[test]
 fn every_directive_keyword_is_correctly_admitted_or_refused() {
     let cases: &[(&str, &str, bool)] = &[

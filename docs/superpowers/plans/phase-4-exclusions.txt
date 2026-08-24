@@ -2517,13 +2517,23 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   class-less ::CONSTANT expression is 99.945 rc 157 on both sides rather than
   a loud refusal. Measured on both engines, three descriptors.
 
-  WHAT REMAINS REFUSED, so the entry is not read as more than it is:
-  `.K~method("M")~objectName = "x"` is rc 120 where the oracle stores the name
-  and answers it from the next ~method send. This crate builds a Method object
-  per send, so storing the name would be a wrong answer at the following one;
-  the shape was rc 120 before the Method class became a receiver too.
-  `dispatch.rs`'s `native_object_name_set` is the arm and its own comment
-  carries the measurement.
+  WHAT MAKING METHOD AND ROUTINE RECEIVERS ALSO CLOSED. ~objectName= stores on
+  either, because Class~method answers one Method object per instance
+  dictionary entry the way RexxClass::method does. Measured, oracle rc 0 and
+  byte-identical here on both engines: .K~method("M")~objectName = "renamedM"
+  then say .K~method("M") prints renamedM through a SECOND fetch, ~objectName
+  reads it back, and .K~method("P") still prints a Method; the same holds
+  through .routines["R"], .methods~u and .K~package. `dispatch.rs`'s
+  `native_object_name_set` is the arm.
+
+  WHAT REMAINS REFUSED, so the entry is not read as more than it is: every
+  name in either class's dictionary that NATIVE_METHODS has no row for --
+  measured, say .K~method("M")~source is the oracle's own method body at rc 0
+  and `method "SOURCE" of class "Method" is not implemented (Phase 5)` at rc
+  120 here. That is D37's rule and the position .Package was already in.
+  ~identityHash's values stay a licensed divergence: this crate answers the
+  handle where the oracle derives its answer from an address, so no corpus
+  program prints one.
 
   THE *-* CLAUSE ECHO SATURATES AT 40 COLUMNS OF INDENT (fixed, 4b Task 2).
   Nesting depth drives the echo's indent at two spaces per level and that

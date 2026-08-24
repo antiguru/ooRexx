@@ -259,9 +259,10 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // (`memory/Setup.cpp:499`, `:498`). The same pair is bound at `Method`
     // and `Routine` out of `BaseExecutable` (`:1112`/`:1111` and
     // `:1141`/`:1140`) and at `Package` out of `PackageClass` (`:1173`,
-    // `:1172`); the three C++ bodies differ only in which field they reach
-    // for, so the four classes share one implementation here for the reason
-    // `MAKESTRING`/`TOSTRING` share theirs.
+    // `:1172`); each C++ body differs from the others only in which field it
+    // reaches for, so `Class`, `Method`, `Routine` and `Package` share one
+    // implementation here for the reason `MAKESTRING`/`TOSTRING` share
+    // theirs.
     ("Class", "ANNOTATION", Arity::Fixed(1), native_annotation),
     ("Class", "ANNOTATIONS", Arity::Fixed(0), native_annotations),
     ("Class", "BASECLASS", Arity::Fixed(0), native_base_class),

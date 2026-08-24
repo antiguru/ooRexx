@@ -307,8 +307,8 @@ struct Unbuilt {
 /// **One key space rather than one table per kind**, because the readback is
 /// one pair of methods whatever the receiver: `memory/Setup.cpp` binds
 /// `Annotations`/`Annotation` at `Class` (`:498`), `Method` (`:1111`),
-/// `Routine` (`:1140`) and `Package` (`:1172`), and the three C++ bodies
-/// behind those rows differ only in which field they reach for.
+/// `Routine` (`:1140`) and `Package` (`:1172`), and the C++ bodies behind
+/// those rows differ from one another only in which field they reach for.
 ///
 /// The variants are what this crate can put a program's hands on. A member is
 /// keyed by its class, its dictionary side and its name rather than by the
@@ -903,9 +903,9 @@ impl Interp {
     /// answering a fresh table each time answers `The NIL object`.
     ///
     /// **Rooted as a global**, the position `.environment` and a package
-    /// object are in: the table outlives every send that reaches it and, for
-    /// a `Method` object this crate rebuilds per `~method`, is reachable from
-    /// no other object between two of them.
+    /// object are in: the table outlives every send that reaches it, and the
+    /// objects that carry a handle on it are rooted the same way, so nothing
+    /// on the temporaries stack keeps it alive between two sends.
     pub(crate) fn annotation_table(&mut self, site: Annotated) -> ObjRef {
         if let Some(found) = self.annotations.get(&site).copied() {
             return found;
@@ -955,10 +955,11 @@ impl Interp {
     /// Gives `object` the annotation table `site` names, so that a send to it
     /// needs no way back to the directive that declared it.
     ///
-    /// A `Method` object is rebuilt per `~method` send and a `Routine` object
-    /// is an entry of a cached table, and both must answer the one table
-    /// [`Interp::annotation_table`] keeps: what the object carries is a
-    /// handle on that table, never a copy of it.
+    /// **A handle on the table [`Interp::annotation_table`] keeps, never a
+    /// copy of it.** More than one object can name one table -- a
+    /// `::CONSTANT`'s single method is filed on both sides of its class's
+    /// dictionary -- and a program adding to the table through any of them
+    /// must be answered through all of them.
     pub(crate) fn attach_annotations(&mut self, object: ObjRef, site: Annotated) {
         let table = self.annotation_table(site);
         let Some(held) = self.heap.get_mut(object) else {
@@ -975,9 +976,10 @@ impl Interp {
     /// A class object answers from [`Interp::annotations`] directly, because
     /// a class handle is the key; every other carrier answers the handle it
     /// was built with. The refusal is an internal inconsistency rather than a
-    /// program's doing -- `NATIVE_METHODS` binds the two readers at `Class`,
-    /// `Method`, `Routine` and `Package` alone, and this crate gives an
-    /// object of each of the last three its table as it builds it.
+    /// program's doing -- `NATIVE_METHODS` binds `ANNOTATION` and
+    /// `ANNOTATIONS` at `Class`, `Method`, `Routine` and `Package` alone, and
+    /// a `Method`, a `Routine` and a `Package` object each get their table as
+    /// this crate builds them.
     ///
     /// [`Interp::annotations`]: Interp::annotations
     pub(crate) fn annotations_of(&mut self, receiver: ObjRef) -> Result<ObjRef, Failure> {

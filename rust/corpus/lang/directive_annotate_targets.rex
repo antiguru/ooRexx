@@ -1,9 +1,11 @@
 /* All six ::ANNOTATE targets in one file, each read back through the handle a
-   program has on the thing it annotated. The six readbacks reach four
-   different C++ implementations: RexxClass::getAnnotation for the class
+   program has on the thing it annotated. The readbacks reach a different C++
+   body per receiver kind: RexxClass::getAnnotation for the class
    (classes/ClassClass.cpp:357), BaseExecutable::getAnnotation for the method,
    attribute, constant and routine (execution/BaseExecutable.cpp:411) and
    PackageClass::getAnnotation for the package (classes/PackageClass.cpp:1791).
+   ClassDirective::getAnnotations is the directive-side accumulator and no
+   readback reaches it.
 
    The value each target carries is its own keyword, so a build that resolved
    an ::ANNOTATE to the wrong directive answers with the wrong word rather
