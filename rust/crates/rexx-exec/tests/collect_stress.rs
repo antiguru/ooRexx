@@ -195,6 +195,15 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     // once the divide has run: the operands are canonical small integers and
     // the report's own substitutions come from the catalogue.
     "lang/class_activate_failure_blames_the_last_installed_class.rex",
+    // The same 42.3, reached through a class method a `::CONSTANT`
+    // expression calls, so the run enters and unwinds a method activation
+    // before the main body's first clause and still asks the arena for
+    // nothing: the operands are canonical small integers and the report's
+    // substitutions come from the catalogue. Its siblings
+    // `class_constant_instance_method.rex` and
+    // `class_constant_expression_self.rex` are deliberately absent -- each
+    // builds values the arena holds.
+    "lang/class_constant_expression_method_failure.rex",
     // The duplicate-member refusals, which are translation errors: the walk
     // that finds them runs before any class is created and before the main
     // body's first clause, so nothing has been asked of the arena. The

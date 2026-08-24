@@ -1,0 +1,33 @@
+/* What a ::CONSTANT expression's own activation carries. It runs as a method
+   against the class object: ClassDirective::resolveConstants builds a
+   MethodClass over the class's expressions
+   (instructions/ClassDirective.cpp:271), gives it the class object as its
+   scope (:273), and runs it with the class object as the receiver (:276).
+
+   SELF is the class the constant attaches to, and SUPER is that class's own
+   super scope: K answers "K / Class" and J answers "J / K". Two classes are
+   what makes either half discriminate, because a build reading both out of
+   the class the file installs LAST -- which is the rule the blame target
+   follows, and which is J for every constant here -- says "J / K" for both
+   rows and reddens the first while leaving stderr and the exit code alone.
+   A build that binds neither raises 97.1 on the name SELF at that same row.
+
+   The private class method is the receiver half, which SELF alone does not
+   reach: checkPrivate reads the sending activation's own receiver
+   (classes/ObjectClass.cpp:616), and an expression run with none takes the
+   refusal at :622-:626 where this one takes the sender-is-the-receiver arm
+   above it at :617-:620. The constant reading it is K's, so the row answers
+   through the same class the private method is declared in. */
+say .K~c
+say .J~c
+say .K~p
+exit
+
+::class K
+::constant c (self~id "/" super~id)
+::method secret class private
+  return "the private class method answered"
+::constant p (self~secret)
+
+::class J subclass K
+::constant c (self~id "/" super~id)

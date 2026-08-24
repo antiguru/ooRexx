@@ -1,0 +1,39 @@
+count 38
+/* A ::CONSTANT installs its getter on the instance side as well as the class
+   side, and ~method is the reader a phase without ~new has for the instance
+   side: it retrieves from the class's own instanceMethodDictionary
+   (RexxClass::method, classes/ClassClass.cpp:984, the retrieval at :991).
+
+   The class-only ::METHOD under the same ::CLASS is what makes the constant's
+   answer mean that. Both names are K's own members and both are readable
+   through .K, and only the constant's getter is in the instance dictionary --
+   so a build that installed the constant on the class side alone answers
+   .K~c and .K~hasMethod("C") exactly as this build does, and raises here.
+   class_method_own_dictionary.rex pins the dictionary rule itself, for a
+   ::METHOD and an ::ATTRIBUTE; no program there declares a ::CONSTANT, so the
+   pairing of the two member kinds inside one class is this program's.
+
+   Both value forms are asked because the value and the getter arrive in
+   different install passes: a literal's value is recorded while the class is
+   created and an expression's in the pass after it, where the getter goes in
+   with the class's own members either way. A build that installed the
+   instance-side getter only for a value it already had answers the first row
+   and raises on the second.
+
+   The trap keeps the program at rc 0, so the class-side row is stdout rather
+   than a traceback; class_method_class_side_raises.rex is where those bytes
+   are pinned. */
+say .K~method("C")
+say .K~method("D")
+signal on syntax name classside
+say .K~method("M")
+say "the class-side method was in the instance dictionary"
+exit
+classside:
+say "the class-side method raised" rc
+
+::class K
+::constant c 42
+::constant d (1+1)
+::method m class
+  return "m"

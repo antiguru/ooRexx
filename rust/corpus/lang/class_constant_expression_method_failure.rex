@@ -1,0 +1,23 @@
+/* A condition raised inside a method a ::CONSTANT expression calls, which is
+   the failure path through the expression's own method activation.
+
+   The clause echoes run innermost first: the method's own clause, then the
+   ::CONSTANT and the ::CLASS the other failing-constant witnesses already
+   pin. directive_constant_expression_fails.rex has the directive echoes and
+   no method echo, because the expression itself raises and no method is
+   entered; this program is the only one that puts a real activation between
+   the raising clause and the directives.
+
+   Measured, rc 214, stdout EMPTY -- the failure is at install time, before
+   "prolog" is ever said.
+
+   The send is written as self~m, so the program cannot reach the method at
+   all unless SELF is bound: a build that leaves it unset raises 97.1 on
+   "SELF" instead and both the exit code and every stderr line differ. */
+say "prolog"
+exit
+
+::class K
+::method m class
+  return 1/0
+::constant c (self~m)

@@ -562,3 +562,17 @@ lang/class_member_names_per_side.rex
 # a_duplicate_resource_name_is_refused_and_a_distinct_one_is_not.
 lang/class_duplicate_class.rex
 lang/class_directive_names_are_their_own_table.rex
+
+# Phase 5a (2026-08-17 plan) Task 19: what a ::CONSTANT installs, and what its
+# expression runs as.
+#
+# The instance-side getter, read through ~method, with a class-only ::METHOD
+# beside it in the same class so that the constant's answer says which
+# dictionary it came out of. Then the expression's own activation: SELF and
+# SUPER over a pair of classes that answer differently, and a PRIVATE class
+# method the receiver is what reaches. Then the failure path through that
+# activation, whose traceback carries a method clause the two-echo witnesses
+# have no room for.
+lang/class_constant_instance_method.rex
+lang/class_constant_expression_self.rex
+lang/class_constant_expression_method_failure.rex

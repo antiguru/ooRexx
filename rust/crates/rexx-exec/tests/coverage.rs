@@ -1098,6 +1098,14 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     // sole instrument.
     "lang/class_duplicate_class.rex",
     "lang/class_directive_names_are_their_own_table.rex",
+    // Task 19: `::CONSTANT`'s instance-side getter, read through `~method`
+    // with a class-only `::METHOD` beside it in the same class; the
+    // expression's own activation, whose `SELF`, `SUPER` and receiver the two
+    // classes and the `PRIVATE` class method separate; and the failure path
+    // through that activation, whose traceback carries a method clause.
+    "lang/class_constant_instance_method.rex",
+    "lang/class_constant_expression_self.rex",
+    "lang/class_constant_expression_method_failure.rex",
 ];
 
 #[test]
