@@ -1468,16 +1468,45 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
         })
     };
     match kind {
-        // Loads a shared library and binds an entry point in it, before
-        // `main` and whether or not the routine is ever called -- measured,
-        // 98.903 rc 158 with stdout empty in both shapes. Phase 7 owns
-        // library loading.
+        // Binds an entry point before `main` and whether or not the routine
+        // is ever called. **Every one of its forms stays here, the
+        // `LIBRARY REXX` one included**, and that is worth saying because the
+        // `::METHOD` arm below moves exactly that spelling: a routine
+        // resolves against `rexx_routines[]`, which
+        // `dispatch::native`'s registry is not
+        // (`runtime/InternalPackage.cpp:230`, from `NativeFunctions.h`).
+        // Measured, oracle: `::routine r external "LIBRARY nosuchlib
+        // nosuchfn"` and the same without the third word are both 98.903 rc
+        // 158 with stdout empty; `"LIBRARY REXX file_separator"` is 90.999 rc
+        // 166, naming a method as a routine it cannot find; `"LIBRARY REXX
+        // Filespec"` is rc 0 and the routine runs.
         DirectiveKind::Routine(routine) if routine.external.is_some() => {
             gap("::ROUTINE EXTERNAL", "Phase 7")
         }
-        DirectiveKind::Method(method) if method.external.is_some() => {
-            gap("::METHOD EXTERNAL", "Phase 7")
-        }
+        // **The one `EXTERNAL` form this phase binds is a `::METHOD` whose
+        // library is `REXX` and which carries no `ATTRIBUTE` keyword**, and
+        // `dispatch::native::method_external` is what decides that -- read
+        // here and again by `Interp::install_directives`, so the form that
+        // binds and the forms that are refused cannot come apart. An entry
+        // point the `REXX` package does not export is 90.998 in that walk and
+        // not a gap here: the oracle answers it, so it is a differential row
+        // rather than a refusal.
+        DirectiveKind::Method(method) => match dispatch::native::method_external(method) {
+            None | Some(dispatch::native::MethodExternal::LibraryRexx(_)) => None,
+            // The `::ATTRIBUTE` mechanism under a `::METHOD` keyword, and it
+            // stays with `::ATTRIBUTE EXTERNAL` because it is the same code:
+            // both build `GET`- and `SET`-prefixed procedure names and
+            // resolve a method for each. See `MethodExternal::Attribute`.
+            Some(dispatch::native::MethodExternal::Attribute) => {
+                gap("::METHOD ATTRIBUTE EXTERNAL", "Phase 7")
+            }
+            // Loads a shared library, which is Phase 7's, exactly as
+            // `::ROUTINE EXTERNAL` above does.
+            Some(dispatch::native::MethodExternal::OtherLibrary) => gap(
+                "::METHOD EXTERNAL naming a library other than REXX",
+                "Phase 7",
+            ),
+        },
         DirectiveKind::Attribute(attribute) if attribute.external.is_some() => {
             gap("::ATTRIBUTE EXTERNAL", "Phase 7")
         }
@@ -1512,7 +1541,6 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
         | DirectiveKind::Attribute(_)
         | DirectiveKind::Class(_)
         | DirectiveKind::Constant(_)
-        | DirectiveKind::Method(_)
         | DirectiveKind::Resource(_)
         | DirectiveKind::Routine(_) => None,
     }
@@ -1545,8 +1573,17 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
 /// ::class q metaclass zzz                  vs a failing ::CLASS  98.908 or 98.909, whichever is first
 /// ```
 ///
+/// **Every `EXTERNAL` row above names a shared library.** `LIBRARY REXX` is
+/// not one, and the `::METHOD` form of it is not a gap at all: `dispatch::native`
+/// binds it and [`Interp::install_directives`] resolves it in the same first
+/// walk, so it never reaches a stage. Measured, oracle:
+/// `::method m external "LIBRARY REXX nosuch"` is 90.998 rc 166, which is a
+/// differential row rather than a refusal, and it still wins over a duplicate
+/// `::ROUTINE` pair standing later in the file.
+///
 /// So the oracle walks the directive list once, in source order, resolving
-/// `::ANNOTATE` targets and loading `EXTERNAL` libraries as it reaches them;
+/// `::ANNOTATE` targets, `LIBRARY REXX` entry points and the libraries the
+/// other `EXTERNAL` forms name as it reaches them;
 /// then looks for a cycle; then opens `::REQUIRES` files; then creates the
 /// classes, resolving `SUBCLASS` and `METACLASS` in that pass; and evaluates
 /// `::CONSTANT` expressions last. `::OPTIONS` is applied in the first walk and
@@ -2092,9 +2129,14 @@ fn annotation_target<'a>(
 /// `DELEGATE` is what is left: measured, `.K~m` on
 /// `::method m class delegate p` is 97.1 at rc 159 naming `"P"`, because the
 /// message is forwarded to the delegate property's value, and `FORWARD` is
-/// 5b's. `EXTERNAL` never reaches a send -- [`directive_gap`] refuses it
-/// while the package is still installing -- so the third arm below is what
-/// covers it rather than an arm of its own.
+/// 5b's. **`EXTERNAL` never reaches this function either, and no longer for
+/// one reason.** The `::METHOD ... EXTERNAL 'LIBRARY REXX name'` form does
+/// reach a send, and `Interp::invocable` answers it out of
+/// [`Interp::native_externals`] before it looks in
+/// [`Interp::method_bodies`], so no `InstalledMethodBody` is ever minted for
+/// it. The other `EXTERNAL` forms still stop at [`directive_gap`] while the
+/// package is installing. Either way the third arm below covers them rather
+/// than an arm of its own.
 ///
 /// **An access scope is not a reason to refuse a body**, and that is the one
 /// row this table lost. `PRIVATE` is decided at the send, by
@@ -3074,6 +3116,21 @@ struct Interp {
     ///
     /// [`method_bodies`]: Interp::method_bodies
     generated_methods: HashMap<MethodId, GeneratedMethod>,
+    /// Which `LIBRARY REXX` entry point each `::METHOD ... EXTERNAL` bound
+    /// to, keyed by the identity [`Interp::install_one_method`] minted for
+    /// its dictionary key.
+    ///
+    /// A table of its own for [`generated_methods`]' reason, and the last
+    /// table `dispatch::Interp::invocable` reads, so a send to a written body
+    /// or a primitive reaches the table it always reached and never this one.
+    ///
+    /// **A row here is a bind, not an implementation.** A row whose registry
+    /// entry is `dispatch::native::ExternalBody::Deferred` still binds and
+    /// its send is loud; the row exists because the *file* installs either
+    /// way, which is what `CoreClasses.orx` and `StreamClasses.orx` need.
+    ///
+    /// [`generated_methods`]: Interp::generated_methods
+    native_externals: HashMap<MethodId, &'static dispatch::native::NativeExternal>,
     /// The access scope and protection of every method that has one -- the
     /// oracle's `isSpecial()` set, which is what `RexxObject::messageSend`
     /// consults before it runs anything.
@@ -3836,11 +3893,16 @@ struct GeneratedMethod {
 
 /// Which method a directive generated.
 ///
-/// **`DELEGATE` and `EXTERNAL` are not here.** Those have no body either,
-/// but this crate refuses them, and what refuses them is
+/// **`DELEGATE` and `EXTERNAL` are not here, and not for the same reason.**
+/// `DELEGATE` has no body and this crate refuses it, and what refuses it is
 /// [`method_body_gap`] reading the directive behind an
-/// [`InstalledMethodBody`] -- so they stay on the body path and this enum
-/// covers only what a send actually runs.
+/// [`InstalledMethodBody`] -- so it stays on the body path. An `EXTERNAL`
+/// this phase binds has a body that is neither a directive's nor a
+/// dictionary key's: it is a row of `dispatch::native`'s registry, reached
+/// through [`Interp::native_externals`], and the `EXTERNAL` forms this phase
+/// does not bind are refused before any id is minted for them. So this enum
+/// covers what a send runs *out of a directive*, which is what an installer
+/// can decide from the directive alone.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum GeneratedKind {
     /// A generated getter: it answers the attribute's variable in the
@@ -3858,6 +3920,24 @@ enum GeneratedKind {
     /// `ClassDirective::addConstantMethod` does with the single method object
     /// it builds (`instructions/ClassDirective.cpp:520`-`:524`).
     Constant,
+}
+
+/// What one just-installed dictionary key resolves to, handed to
+/// [`Interp::install_one_method`] by whichever installer minted it.
+///
+/// One arm per table a resolved [`MethodId`] can be found in, and the
+/// installer is the only place that knows which: reading it back off the
+/// directive would mean deciding a generated accessor from a written body
+/// from a bound entry point by re-running every rule that produced the key.
+#[derive(Copy, Clone)]
+enum InstallBody {
+    /// The directive's own Rexx body: a row of [`Interp::method_bodies`].
+    Written,
+    /// A method the directive implements itself: a row of
+    /// [`Interp::generated_methods`].
+    Generated(GeneratedKind),
+    /// A `LIBRARY REXX` entry point: a row of [`Interp::native_externals`].
+    Native(&'static dispatch::native::NativeExternal),
 }
 
 /// The name, arguments and receiver of one call in progress.
@@ -4097,6 +4177,7 @@ impl Interp {
             method_objects: HashMap::new(),
             method_bodies: HashMap::new(),
             generated_methods: HashMap::new(),
+            native_externals: HashMap::new(),
             special_methods: Vec::new(),
             out: Vec::new(),
             trace: Vec::new(),
@@ -4229,6 +4310,7 @@ impl Interp {
     /// ::requires 'no_such_file_zz.rex'      43.901 rc 213
     /// ::routine z external "LIBRARY nosuchlib nosuchfn"   98.903 rc 158
     /// ::method m external "LIBRARY nosuchlib nosuchfn"    98.903 rc 158
+    /// ::method m external "LIBRARY REXX nosuchentry"      90.998 rc 166
     /// ::annotate routine nosuchrtn          99.945 rc 157
     /// duplicate ::routine of the same name  99.903 rc 157
     /// ```
@@ -4418,6 +4500,30 @@ impl Interp {
             ) && let Some(loud) = directive_gap(&directive.kind)
             {
                 return Err(loud.into());
+            }
+
+            // **The eager bind** (D37), in this walk because the oracle does
+            // it while the directive is being translated:
+            // `createNativeMethod` raises from inside `methodDirective`
+            // (`parser/DirectiveParser.cpp:1385`), so the file is refused
+            // before its own first clause runs. Measured, oracle: a file
+            // opening `say "prolog ran"` and carrying one `::METHOD
+            // EXTERNAL` on a missing entry point is rc 166 with stdout empty,
+            // and the same file naming `file_separator` is rc 0 printing the
+            // prologue.
+            //
+            // **After the arms above for their reason and not by accident.**
+            // Measured, oracle: a `::CLASS` carrying `::method m` and then
+            // `::method m external "LIBRARY REXX nosuch"` is the duplicate's
+            // 99.902 at rc 157, which `check_member_keys` answers at the top
+            // of this loop; and a file whose `::METHOD EXTERNAL` precedes a
+            // duplicate `::ROUTINE` pair is 90.998, which source order gives.
+            if let DirectiveKind::Method(method) = &directive.kind
+                && let Some(dispatch::native::MethodExternal::LibraryRexx(Err(missing))) =
+                    dispatch::native::method_external(method)
+            {
+                self.blame_directive(program, directive);
+                return Err(Raised::external_method_not_found(&missing).into());
             }
         }
 
@@ -5158,7 +5264,7 @@ impl Interp {
             directive,
             class,
             &upper,
-            Some(GeneratedKind::Constant),
+            InstallBody::Generated(GeneratedKind::Constant),
             class_method,
             Access::Default,
             Protection::Default,
@@ -5295,13 +5401,35 @@ impl Interp {
         class: ObjRef,
         method: &MethodDirective,
     ) {
+        // The bind `Interp::install_directives`' walk already resolved, asked
+        // again rather than staged: `method_external` is a pure function of
+        // the directive, and a staging map keyed by directive index would be
+        // a second place for the answer to live.
+        let native = match dispatch::native::method_external(method) {
+            Some(dispatch::native::MethodExternal::LibraryRexx(Ok(entry))) => Some(entry),
+            // `Err` cannot arrive: that walk returned 90.998 and this install
+            // never ran. The other arms are the forms `directive_gap`
+            // refuses, which never reach an install either.
+            _ => None,
+        };
         for (name, generated) in method_dictionary_keys(method) {
+            debug_assert!(
+                native.is_none() || generated.is_none(),
+                "a ::METHOD bound to a LIBRARY REXX entry point also generated a method \
+                 for {}, so one of the two is lost",
+                String::from_utf8_lossy(&name)
+            );
+            let body = match (generated, native) {
+                (Some(kind), _) => InstallBody::Generated(kind),
+                (None, Some(entry)) => InstallBody::Native(entry),
+                (None, None) => InstallBody::Written,
+            };
             self.install_one_method(
                 program,
                 directive,
                 class,
                 &name,
-                generated,
+                body,
                 method.class_method,
                 method.access,
                 method.protection,
@@ -5344,7 +5472,10 @@ impl Interp {
                 directive,
                 class,
                 &name,
-                generated,
+                match generated {
+                    Some(kind) => InstallBody::Generated(kind),
+                    None => InstallBody::Written,
+                },
                 attribute.class_method,
                 attribute.access,
                 attribute.protection,
@@ -5363,7 +5494,7 @@ impl Interp {
         directive: usize,
         class: ObjRef,
         name: &[u8],
-        generated: Option<GeneratedKind>,
+        body: InstallBody,
         class_method: bool,
         access: Access,
         protection: Protection,
@@ -5375,7 +5506,7 @@ impl Interp {
         } else {
             self.classes().add_instance_method(class, &name)
         };
-        self.record_method_body(method_id, program, directive, generated);
+        self.record_method_body(method_id, program, directive, body);
         self.record_access_scope(method_id, program, access, protection);
     }
 
@@ -5400,14 +5531,14 @@ impl Interp {
         method: MethodId,
         program: ProgramId,
         directive: usize,
-        generated: Option<GeneratedKind>,
+        body: InstallBody,
     ) {
-        let previous = match generated {
-            None => self
+        let previous = match body {
+            InstallBody::Written => self
                 .method_bodies
                 .insert(method, InstalledMethodBody { program, directive })
                 .is_some(),
-            Some(kind) => self
+            InstallBody::Generated(kind) => self
                 .generated_methods
                 .insert(
                     method,
@@ -5418,6 +5549,7 @@ impl Interp {
                     },
                 )
                 .is_some(),
+            InstallBody::Native(entry) => self.native_externals.insert(method, entry).is_some(),
         };
         debug_assert!(
             !previous,
@@ -6129,6 +6261,37 @@ impl Interp {
 /// itself: this crate has one front door, and a second one is a second thing
 /// for every future caller to choose between. Widening the parameter list once
 /// costs a mechanical edit at every existing call site and nothing afterward.
+/// One row of the `LIBRARY REXX` entry-point registry (D37), for a caller
+/// that walks it.
+///
+/// **A flattened copy rather than the registry's own row.** A row's body is a
+/// function taking `dispatch`'s security-seam token, which nothing outside
+/// that module can name, so handing out the row itself would mean widening
+/// the seam. `render_ir` and [`run_program_collect_every_alloc`] are the same
+/// shape of surface: a projection this crate computes for a test to read.
+pub struct NativeEntryPoint {
+    /// The name the `REXX` package exports the entry point under, spelled as
+    /// `interpreter/runtime/NativeMethods.h` spells it. The lookup that
+    /// matches it is caseless.
+    pub entry: &'static str,
+    /// The family it belongs to, lower case: the interpreter subsystem whose
+    /// C++ translation unit defines it.
+    pub family: &'static str,
+    /// The phase that owes the family a body, spelled as every other owner
+    /// string in this crate is.
+    pub owner: &'static str,
+    /// Whether this phase runs the entry point rather than refusing a send to
+    /// it. A bind succeeds either way -- what it decides is whether the
+    /// declaring *file* installs.
+    pub implemented: bool,
+}
+
+/// Every entry point a `::METHOD ... EXTERNAL 'LIBRARY REXX name'` can bind
+/// to. See [`NativeEntryPoint`].
+pub fn native_entry_points() -> Vec<NativeEntryPoint> {
+    dispatch::native::entry_points().collect()
+}
+
 pub fn run_program(path: &str, text: Vec<u8>, invocation: Invocation) -> Outcome {
     let path = path.to_string();
     on_interpreter_thread(move || execute(&path, text, false, invocation))

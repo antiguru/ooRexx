@@ -1456,9 +1456,15 @@ pub struct ExternalSpec {
     ///   (`DirectiveParser.cpp:2664`).
     /// * A `::METHOD` uses the method's UPCASED lookup name
     ///   (`DirectiveParser.cpp:1406`).
-    /// * A `::METHOD ATTRIBUTE` or `::ATTRIBUTE` uses that upcased name with
-    ///   `GET` or `SET` appended, one method each
-    ///   (`DirectiveParser.cpp:1678`-`1679`).
+    /// * A `::METHOD ATTRIBUTE` or `::ATTRIBUTE` resolves two entry points,
+    ///   one per accessor, each **prefixed** with `GET` or `SET`
+    ///   (`DirectiveParser.cpp:867`-`868`, `:1678`-`1679`). The prefix goes
+    ///   in front because `concatToCstring` appends the receiver to its
+    ///   argument (`StringClass.cpp:1405`-`:1416`), and what it is prefixed
+    ///   to is the *procedure*, so the upcased method name is what gets
+    ///   prefixed only where there was no third word. Measured, oracle:
+    ///   `::attribute a external "LIBRARY REXX file_separator"` is
+    ///   `90.998 Unable to find external method "GETfile_separator"`.
     ///
     /// Resolving those is the caller's, along with loading the library, so
     /// filling one in here would be picking one of the three arbitrarily.

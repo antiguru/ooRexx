@@ -426,6 +426,32 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
     ::method m external "LIBRARY nosuchlib nosuchfn"      98.903 rc 158
     ::attribute a external "LIBRARY nosuchlib nosuchfn"   98.903 rc 158
 
+  NARROWED BY PHASE 5A'S TASK 22, AND ONLY FOR ONE OF THE THREE FORMS.
+  `::METHOD ... EXTERNAL 'LIBRARY REXX name'` is bound at install now, against
+  the entry points `interpreter/runtime/NativeMethods.h` exports, so it is no
+  longer refused and its failure is the oracle's own:
+
+    ::method m external "LIBRARY REXX nosuchentry"        90.998 rc 166,
+                                                          matched byte for
+                                                          byte on both engines
+
+  THE OTHER TWO FORMS ARE UNTOUCHED, AND SO IS `::ROUTINE EXTERNAL` NAMING
+  `LIBRARY REXX`. What stays a loud refusal, each measured against the oracle
+  on 2026-08-25:
+
+    ::routine r external "LIBRARY REXX file_separator"    90.999 rc 166
+    ::routine r external "LIBRARY REXX Filespec"          rc 0, runs
+    ::attribute a external "LIBRARY REXX file_separator"  90.998 rc 166 on
+                                                          "GETfile_separator"
+    ::method m attribute external "LIBRARY REXX file_separator"   the same
+    ::method m external "LIBRARY nosuchlib nosuchfn"      98.903 rc 158
+
+  A routine resolves against `rexx_routines[]` and not the method table, which
+  is why naming a method entry point from a `::ROUTINE` is 90.999 rather than
+  rc 0. The `GET` prefix is `concatToCstring`, which puts its argument in
+  front of the receiver -- the two `::ATTRIBUTE` rows are the same code as
+  each other and not the `::METHOD` row's.
+
   A DELIBERATE OVER-REFUSAL ADDED BY TASK 8 FIX ROUNDS 2 AND 3: A FILE HOLDING
   AN EXTERNAL DIRECTIVE OR A ::REQUIRES, BESIDE A ::CLASS THAT CANNOT INSTALL
   OR A ::CLASS CYCLE, IS REFUSED RATHER THAN GIVEN THE CLASS ERROR.
@@ -463,8 +489,11 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
   That row puts the gap AFTER the failing directive, which is what makes it a
   loss: with the gap first, this crate refused at 62de43c0f too. THE SAME
   SHAPE WITH AN EXTERNAL DIRECTIVE WHOSE LIBRARY LOADS IS REASONED, NOT
-  PROBED -- it follows the same code path, but no library in this tree loads,
-  so nothing has measured it and it must not be read as a measurement.
+  PROBED -- it follows the same code path, but no shared library in this tree
+  loads, so nothing has measured it and it must not be read as a measurement.
+  `LIBRARY REXX` is not a counterexample: it is compiled into the interpreter
+  rather than loaded, and since Task 22 the `::METHOD` form of it is not a gap
+  here at all, so it never reaches the staged check this paragraph is about.
   Telling the installable case from the failing one means opening the file and
   loading the library. OWNER: Phase 5 for the rest of ::REQUIRES, and Phase 7
   for EXTERNAL. The ::ANNOTATE shapes this paragraph used to carry are in

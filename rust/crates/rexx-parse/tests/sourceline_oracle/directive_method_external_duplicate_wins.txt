@@ -1,0 +1,12 @@
+count 11
+/* The duplicate dictionary key is answered before the entry point is
+   resolved, so this is 99.902 and not the 90.998 the second directive would
+   raise on its own. */
+say 'main ran'
+
+::class k
+
+::method m
+  return 1
+
+::method m external 'LIBRARY REXX no_such_entry_point_xyz'

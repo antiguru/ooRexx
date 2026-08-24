@@ -156,6 +156,9 @@ const SUBSET_FILES: &[&str] = &[
 /// A program belongs here because of what it contains, not because it was
 /// inconvenient -- see the both-directions assertion at the use site.
 const NO_ALLOCATION_PROGRAMS: &[&str] = &[
+    // Gate table D's `::METHOD EXTERNAL` probe, which is a subset row as
+    // well as a table-D probe. Its shape is the `_missing` refusal below.
+    "gate-tables/directives/method__external__subkeyword.rex",
     // The class-directive refusals: each is refused before the main body's
     // first clause, and nothing has been asked of the arena by then.
     "lang/class_abstract_metaclass.rex",
@@ -229,6 +232,16 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/directive_constant_expression_fails.rex",
     "lang/directive_constant_expression_installs.rex",
     "lang/directive_constant_expression_needs_class.rex",
+    // The `::METHOD ... EXTERNAL 'LIBRARY REXX name'` refusals: each is
+    // answered while the package is still installing, from a table the
+    // registry holds statically, so the arena is never asked for the entry
+    // point's name or the report's substitution. Their siblings
+    // `directive_method_external_bind.rex` and
+    // `directive_method_external_arguments.rex` are not here, because both
+    // reach their main body and build values in it.
+    "lang/directive_method_external_duplicate_wins.rex",
+    "lang/directive_method_external_missing.rex",
+    "lang/directive_method_external_source_order.rex",
     "lang/do_loop_forms.rex",
     // Both resolve every name they read out of the running package's own
     // class table, which is consulted ahead of `.environment` and so never

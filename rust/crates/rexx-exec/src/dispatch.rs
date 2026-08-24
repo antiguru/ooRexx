@@ -156,6 +156,13 @@ mod seam {
 
 use seam::Cleared;
 
+// The `LIBRARY REXX` entry-point registry (D37): the names a
+// `::METHOD ... EXTERNAL 'LIBRARY REXX name'` binds to at install, and which
+// phase owes each of them a body. A child of this module rather than a
+// sibling, because the table's rows point at `NativeMethod`s, whose
+// parameter list names a type only this module can.
+pub(crate) mod native;
+
 /// One primitive method's implementation.
 ///
 /// The [`Cleared`] parameter is the seam's own enforcement and is never read
@@ -171,13 +178,23 @@ type NativeMethod =
 /// What a resolved [`MethodId`] runs.
 ///
 /// The kinds are not interchangeable and are kept apart rather than
-/// hidden behind one closure: only a native method has a declared argument
-/// count for the send to check, and only a native method contributes a
-/// `Compiled method` traceback line.
+/// hidden behind one closure. What separates them is what [`Interp::invoke`]
+/// has to do around the code: a declared argument count for the send to
+/// check, a `Compiled method` traceback line to contribute, an activation to
+/// push. `Native` and the implemented half of `External` are the kinds that
+/// run compiled code: both take a count check and both contribute the
+/// traceback line, and they differ in which error the count check raises,
+/// which is measured on [`Raised::too_many_external_arguments`].
 enum Invocable {
     Native(NativeEntry),
     Rexx(crate::InstalledMethodBody),
     Generated(crate::GeneratedMethod),
+    /// A `::METHOD ... EXTERNAL 'LIBRARY REXX name'` bound at install to a
+    /// row of [`native`]'s registry. Apart from the entry points this phase
+    /// implements, running one is loud -- so this is the kind whose ordinary
+    /// outcome is a refusal, which is why it is not folded into `Native`
+    /// beside the primitives.
+    External(&'static native::NativeExternal),
 }
 
 /// What [`Interp::invoke`] needs about one primitive method beyond its code.
@@ -1352,11 +1369,11 @@ impl Interp {
         }
     }
 
-    /// What a resolved [`MethodId`] runs, or the refusal for one this phase
-    /// implements neither way.
+    /// What a resolved [`MethodId`] runs, or the refusal for one no table
+    /// below names.
     ///
     /// Asked **before** the seam rather than after, so the seam stays a
-    /// single call site with both invocable kinds behind it.
+    /// single call site with every invocable kind behind it.
     fn invocable(&mut self, resolution: Resolution, name: &[u8]) -> Result<Invocable, Failure> {
         if let Some(entry) = self.object_model().natives.get(&resolution.method).copied() {
             return Ok(Invocable::Native(entry));
@@ -1370,6 +1387,13 @@ impl Interp {
         // that ordering is worth on `dispatchclass`.
         if let Some(generated) = self.generated_methods.get(&resolution.method).copied() {
             return Ok(Invocable::Generated(generated));
+        }
+        // **Last, so the tables above are read exactly as they were before
+        // an `EXTERNAL` method could be sent to.** A send that reaches here
+        // has already missed every table a send to an ordinary body or a
+        // primitive reads, so no path this table is not on pays for it.
+        if let Some(entry) = self.native_externals.get(&resolution.method).copied() {
+            return Ok(Invocable::External(entry));
         }
         // The scope's `~id` is rendered only where it is printed -- a
         // successful send has no use for it, and every send would otherwise
@@ -1431,6 +1455,30 @@ impl Interp {
             Invocable::Rexx(installed) => {
                 self.enter_method_body(cleared, installed, resolution, receiver, name, args)
             }
+            // **The refusal is the ordinary outcome here**, so unlike the
+            // `Native` arm above this one does not blame the method for it:
+            // a `Loud` is a report about this crate and carries no traceback
+            // at all. The implemented arm does blame, because its refusals
+            // are the oracle's own -- measured, `.k~sep(1)` on a class method
+            // bound to `file_separator` is `88.922 Too many arguments in
+            // invocation; 0 expected.` at rc 168, under a `Compiled method
+            // "SEP" with scope "K".` line.
+            Invocable::External(entry) => match &entry.body {
+                native::ExternalBody::Deferred => Err(native::deferred_send(entry).into()),
+                native::ExternalBody::Implemented { arity, run } => {
+                    let outcome = match arity {
+                        Arity::Fixed(arity) if args.len() > *arity => {
+                            Err(Raised::too_many_external_arguments(*arity).into())
+                        }
+                        Arity::Fixed(_) | Arity::Counted => run(self, cleared, receiver, args),
+                    };
+                    if outcome.is_err() {
+                        let scope = self.classes().id_string(resolution.scope).to_string();
+                        self.blame_native_method(name, &scope);
+                    }
+                    outcome
+                }
+            },
             Invocable::Generated(generated) => match generated.kind {
                 crate::GeneratedKind::Getter => {
                     self.read_attribute(cleared, generated, resolution, receiver, args)
@@ -4146,6 +4194,38 @@ fn native_length(
 ) -> Result<Option<ObjRef>, Failure> {
     let length = interp.text_len(receiver);
     Ok(Some(interp.counted(length)))
+}
+
+/// `file_separator`: the file system's name separator.
+///
+/// **The unix answer, which is the platform this crate is checked against.**
+/// `SysFileSystem::getSeparator` returns `"/"`
+/// (`platform/unix/SysFileSystem.cpp:1358`-`:1361`) and the windows half of
+/// the platform layer is Phase 7's, unread and unbuilt here, exactly as Task
+/// 23 embeds `platform/unix/PlatformObjects.orx` and no other. Measured,
+/// oracle: a class method bound to this entry answers `/`.
+fn native_file_separator(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    _receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    Ok(Some(interp.text_built(b"/".to_vec())))
+}
+
+/// `file_path_separator`: the separator between the entries of a search path.
+///
+/// `SysFileSystem::getPathSeparator` returns `":"`
+/// (`platform/unix/SysFileSystem.cpp:1369`-`:1372`); see
+/// [`native_file_separator`] for the platform note. Measured, oracle: a class
+/// method bound to this entry answers `:`.
+fn native_file_path_separator(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    _receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    Ok(Some(interp.text_built(b":".to_vec())))
 }
 
 /// `String~reverse`: the receiver's own bytes, last to first.

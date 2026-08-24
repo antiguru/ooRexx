@@ -7771,7 +7771,25 @@ fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
         ),
         (
             b"say 'main ran'\n::class foo\n::method m external \"LIBRARY nosuchlib nosuchfn\"\n",
-            "::METHOD EXTERNAL is not implemented (Phase 7)",
+            "::METHOD EXTERNAL naming a library other than REXX is not implemented (Phase 7)",
+        ),
+        // **The rows that say which `EXTERNAL` form Task 22 moved and which
+        // it did not**, each naming the library `REXX` and an entry point
+        // that package really exports, so the only thing left to refuse them
+        // is the form. Without them, moving another form by accident would
+        // leave every test in this file green: the rows above name a library
+        // nothing can load, which refuses whatever the form.
+        (
+            b"say 'main ran'\n::routine r external \"LIBRARY REXX file_separator\"\n",
+            "::ROUTINE EXTERNAL is not implemented (Phase 7)",
+        ),
+        (
+            b"say 'main ran'\n::class foo\n::attribute a external \"LIBRARY REXX file_separator\"\n",
+            "::ATTRIBUTE EXTERNAL is not implemented (Phase 7)",
+        ),
+        (
+            b"say 'main ran'\n::class foo\n::method m attribute external \"LIBRARY REXX file_separator\"\n",
+            "::METHOD ATTRIBUTE EXTERNAL is not implemented (Phase 7)",
         ),
     ];
     for (source, message) in cases {
@@ -7837,7 +7855,7 @@ fn a_gap_the_oracle_diagnoses_before_a_class_refuses_ahead_of_the_class_error() 
         ),
         (
             "::class kk\n::method mm external \"LIBRARY nosuchlib nosuchfn\"\n",
-            "::METHOD EXTERNAL is not implemented (Phase 7)",
+            "::METHOD EXTERNAL naming a library other than REXX is not implemented (Phase 7)",
         ),
         (
             "::class kk\n::attribute aa external \"LIBRARY nosuchlib nosuchfn\"\n",

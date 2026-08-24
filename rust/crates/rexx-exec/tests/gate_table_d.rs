@@ -206,18 +206,22 @@ fn read_rows() -> Vec<Row> {
 ///   its refusal is untouched by this phase, which the plan states in the same
 ///   place it moves `::METHOD ... EXTERNAL 'LIBRARY REXX name'` into 5a.
 ///
-///   **This one row spans a boundary the plan asks a later task to draw, and
-///   the row cannot hold both sides of it.** A row's identity here is
-///   (directive, keyword, position), so `::ROUTINE r EXTERNAL 'LIBRARY <lib>
-///   <entry>'` and `::ROUTINE r EXTERNAL 'LIBRARY REXX <entry>'` are one row,
-///   and its probe picks the first. If the `LIBRARY REXX` form moves into 5a
-///   the way `::METHOD`'s did, that behaviour has **no row in this table**:
-///   the row that exists is filed against a phase the 5a gate never reads, and
-///   the moved form is outside the denominator. Closing that needs the row set
-///   to distinguish the two forms, which is
-///   `corpus/docs/directive-options.txt`'s shape and not this file's -- so the
-///   task that draws the boundary decides it, and this note is where it meets
-///   the consequence.
+///   **This one row spans a boundary, and the row cannot hold both sides of
+///   it.** A row's identity here is (directive, keyword, position), so
+///   `::ROUTINE r EXTERNAL 'LIBRARY <lib> <entry>'` and `::ROUTINE r EXTERNAL
+///   'LIBRARY REXX <entry>'` are one row, and its probe picks the first.
+///
+///   **Task 22 drew the boundary and left `::ROUTINE` whole**: it moved the
+///   `::METHOD ... EXTERNAL 'LIBRARY REXX name'` form into 5a and neither
+///   half of `::ROUTINE EXTERNAL`, so this row is still filed against the
+///   phase that owns every form of it. What that costs is a *reported*
+///   behaviour rather than a gated one: measured, oracle, `::routine r
+///   external 'LIBRARY REXX Filespec'` is rc 0 and the routine runs, and this
+///   crate refuses it at rc 120 -- a divergence no row of this table sees,
+///   because the probe names a shared library instead. Closing it needs the
+///   row set to distinguish the two forms, which is
+///   `corpus/docs/directive-options.txt`'s shape and not this file's, and
+///   Phase 7 is where the behaviour it would gate lands.
 /// * `::CLASS CLASS` and `::RESOURCE LIBRARY` are the row set's two
 ///   `cross-reference` rows: the section documents the name and the
 ///   directive's own parser has no arm for it, so both interpreters refuse
@@ -273,10 +277,16 @@ const PARSE_ERROR_RENDERING: &str = "deferred-parse-error-rendering";
 ///   `cross-reference` rows: the section documents the name and the
 ///   directive's own parser has no arm for it, so the directive is a syntax
 ///   error and no clause of the program runs.
-/// * `::ATTRIBUTE`, `::METHOD` and `::ROUTINE`'s `EXTERNAL` name a shared
-///   library, and `::REQUIRES`'s `LIBRARY` and `NAMESPACE` name a package;
-///   neither is present on this build, so the failure is at install time,
-///   before the program's own first clause.
+/// * `::ROUTINE`'s `EXTERNAL` names a shared library, and `::REQUIRES`'s
+///   `LIBRARY` and `NAMESPACE` name a package; neither is present on this
+///   build, so the failure is at install time, before the program's own first
+///   clause.
+/// * `::ATTRIBUTE`'s and `::METHOD`'s `EXTERNAL` name `LIBRARY REXX`, which
+///   **is** present -- their probes refuse on the *entry point* instead, at
+///   the same install time. Measured, oracle: both are `90.998 Unable to find
+///   external method` at rc 166, the `::ATTRIBUTE` one naming
+///   `GETzzz_no_entry`, because that directive prefixes the procedure with
+///   `GET`.
 const ORACLE_REFUSES: &[(&str, &str)] = &[
     ("::ATTRIBUTE", "EXTERNAL"),
     ("::CLASS", "CLASS"),

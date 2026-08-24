@@ -124,6 +124,21 @@ pub(crate) struct Delivery {
     /// clause echoes above it are unchanged (one per level, innermost
     /// first), and only the ` running <path> line <n>` span is dropped.
     pub(crate) positionless: bool,
+    /// Render the major line as `Error 88 running <path>:  ...`: the program
+    /// name, and no ` line <n>` after it.
+    ///
+    /// **Not a narrower [`Delivery::positionless`]** -- that one drops the
+    /// program name too. `Activity::displayCondition` adds ` line <n>` only
+    /// when the condition object carries a `POSITION`
+    /// (`concurrency/Activity.cpp:1453`-`:1459`), and a raise from inside a
+    /// native method's own activation carries none, because the native body
+    /// has no Rexx clause to be at. Measured, oracle: `.k~sep(1)` on a class
+    /// method bound to `file_separator` writes the `Compiled method` line and
+    /// the sending clause exactly as `'abc'~length(1)` does, and then `Error
+    /// 88 running <path>:  Invalid argument.` with no line -- where
+    /// `'abc'~length(1)`, whose 93.902 is raised by the send rather than from
+    /// inside the body, writes `Error 93 running <path> line 2:`.
+    pub(crate) lineless: bool,
 }
 
 /// One value a catalogue message interpolates: **bytes, not text**.
@@ -427,6 +442,42 @@ impl Raised {
     /// as the oracle does.
     pub(crate) fn routine_not_found(name: &[u8]) -> Raised {
         Raised::syntax(43, 1, vec![name.to_vec()])
+    }
+
+    /// 90.998: a `::METHOD ... EXTERNAL 'LIBRARY REXX name'` whose entry
+    /// point the `REXX` package does not export. `entry` is the name the
+    /// directive resolved against -- its third word, or the method's own name
+    /// upcased -- and the message quotes it as it was resolved.
+    ///
+    /// **A translation-time refusal on the oracle**, so the file is refused
+    /// before its own first clause: `createNativeMethod` raises it from
+    /// inside the directive parse (`parser/DirectiveParser.cpp:1385`).
+    /// Measured, a file whose first clause is `say "prolog ran"`: rc 166,
+    /// **stdout empty**, the directive's own clause echoed, `Error 90 ...
+    /// External name not found.` and `Error 90.998:  Unable to find external
+    /// method "no_such_entry_point_xyz".`
+    pub(crate) fn external_method_not_found(entry: &[u8]) -> Raised {
+        Raised::syntax(90, 998, vec![entry.to_vec()])
+    }
+
+    /// 88.922: more arguments than a `LIBRARY REXX` entry point's own
+    /// signature declares.
+    ///
+    /// **Not [`Raised::too_many_method_arguments`], and the difference is
+    /// measured on both.** A primitive method's count is checked by
+    /// `CPPCode::run` and reports 93.902; a native library method's is
+    /// checked inside `NativeActivation` and reports this one. Measured, on
+    /// two programs differing only in which method they call with an
+    /// argument: `'abc'~length(1)` is `93.902 Too many arguments in
+    /// invocation of method; 0 expected.` at rc 163, and `.k~sep(1)` on a
+    /// class method bound to `file_separator` is `88.922 Too many arguments
+    /// in invocation; 0 expected.` at rc 168.
+    ///
+    /// [`Delivery::lineless`] carries the other half of the difference.
+    pub(crate) fn too_many_external_arguments(arity: usize) -> Raised {
+        let mut raised = Raised::syntax(88, 922, vec![arity.to_string().into_bytes()]);
+        raised.delivery.lineless = true;
+        raised
     }
 
     /// 99.903: two `::ROUTINE` directives of the same name in one program.
@@ -2331,6 +2382,8 @@ impl Raised {
         // goes.
         let position = if self.delivery.positionless {
             String::new()
+        } else if self.delivery.lineless {
+            format!(" running {}", site.path)
         } else {
             format!(" running {} line {line}", site.path)
         };

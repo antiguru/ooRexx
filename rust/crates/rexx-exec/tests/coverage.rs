@@ -1152,6 +1152,17 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/class_context_reply.rex",
     "lang/class_package_classes.rex",
     "lang/class_package_addition_refused.rex",
+    // `::METHOD ... EXTERNAL 'LIBRARY REXX name'`: the bind, its eager
+    // failure, the entry point's own argument check, and where the
+    // resolution sits in the install walk, pinned from either side. The last
+    // is gate table D's own `::METHOD EXTERNAL` probe, whose row this task
+    // made `agree`.
+    "lang/directive_method_external_bind.rex",
+    "lang/directive_method_external_missing.rex",
+    "lang/directive_method_external_arguments.rex",
+    "lang/directive_method_external_duplicate_wins.rex",
+    "lang/directive_method_external_source_order.rex",
+    "gate-tables/directives/method__external__subkeyword.rex",
 ];
 
 #[test]

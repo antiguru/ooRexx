@@ -1,0 +1,36 @@
+count 35
+/* ::METHOD ... EXTERNAL 'LIBRARY REXX name' binding to the REXX package's
+   own method table (D37). The private class method read back through a
+   ::CONSTANT expression is StreamClasses.orx:546-549's own shape, which is
+   what makes the entry point resolvable at install rather than at a send.
+   The last two directives are the other two ways the entry point can be
+   named: no third word at all, whose default is the method's upcased name,
+   and a third word whose case differs from the exported one. */
+say 'prolog ran'
+say 'constant  [' || .k~separator || ']'
+say 'path      [' || .k~pathSeparator || ']'
+say 'default   [' || .k~file_separator || ']'
+say 'caseless  [' || .k~upper || ']'
+say 'via body  [' || .k~ask || ']'
+say 'hasMethod SEP           ' .k~hasMethod('SEP')
+say 'hasMethod GETSEP        ' .k~hasMethod('GETSEP')
+say 'hasMethod FILE_SEPARATOR' .k~hasMethod('FILE_SEPARATOR')
+m = .k~method('ISEP')
+say 'method    ' m~class~id
+say 'isA       ' m~isA(.Method)
+
+::class k
+
+::method sep  private class external 'LIBRARY REXX file_separator'
+::method psep private class external 'LIBRARY REXX file_path_separator'
+
+::constant separator     (.k~sep)
+::constant pathSeparator (.k~psep)
+
+::method file_separator class external 'LIBRARY REXX'
+::method upper          class external 'LIBRARY REXX FILE_SEPARATOR'
+
+::method isep external 'LIBRARY REXX file_separator'
+
+::method ask class
+  return self~sep

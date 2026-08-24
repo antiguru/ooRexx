@@ -648,3 +648,19 @@ lang/class_context_gc.rex
 lang/class_context_reply.rex
 lang/class_package_classes.rex
 lang/class_package_addition_refused.rex
+# Task 22: `::METHOD ... EXTERNAL 'LIBRARY REXX name'`. `_bind` is the shape
+# `StreamClasses.orx:546`-`:549` uses -- a private class method read back
+# through a `::CONSTANT` expression -- beside the entry point's other
+# spellings, the default name and a case that differs from the exported one.
+# `_missing` is the eager bind's failure, whose empty stdout is what a lazy
+# bind would fill. `_arguments` is the entry point's own argument check, whose
+# major line names no source line. `_duplicate_wins` and `_source_order` pin
+# where the resolution sits in the install walk, from either side of it. The
+# last row is gate table D's `::METHOD EXTERNAL` probe, which stays in
+# `gate-tables/directives/` because that table's row set still names it.
+lang/directive_method_external_bind.rex
+lang/directive_method_external_missing.rex
+lang/directive_method_external_arguments.rex
+lang/directive_method_external_duplicate_wins.rex
+lang/directive_method_external_source_order.rex
+gate-tables/directives/method__external__subkeyword.rex

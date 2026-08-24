@@ -1,0 +1,6 @@
+/* The bind is eager: an entry point the REXX package does not export stops
+   the file before its own first clause, so this program's stdout is empty.
+   Binding lazily instead would let the prologue print. */
+say 'prolog ran'
+
+::method m external 'LIBRARY REXX no_such_entry_point_xyz'
