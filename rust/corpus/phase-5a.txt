@@ -627,16 +627,18 @@ lang/class_native_hiding.rex
 lang/class_native_removal_sort.rex
 lang/class_native_removal_make_string.rex
 
-# The Package object: `RexxContext~package` and the two class tables. No row
-# prints `~name` for the running package -- it answers the program's own
-# absolute path, and the corpus compares stdout byte for byte across
-# checkouts.
+# The Package object. `class_context_package.rex` reaches it through
+# `RexxContext~package`, `class_package_classes.rex` reads and writes its class
+# tables, and `class_package_addition_refused.rex` is the refusal the REXX
+# package gives an addition. No row prints `~name` for the running package --
+# it answers the program's own absolute path, and the corpus compares stdout
+# byte for byte across checkouts.
 #
-# The `class_context_*` rows beside them are the context object's own identity
-# rather than the package's. `class_context_identity.rex` says it is one object
-# per activation; `class_context_gc.rex` says it survives a forced collection
-# while its activation is running or suspended; `class_context_reply.rex` says
-# it survives one while the activation is parked by a REPLY. The last two exist
+# Beside them, the context object's own identity rather than the package's.
+# `class_context_identity.rex` says it is one object per activation.
+# `class_context_gc.rex` says it survives a forced collection while its
+# activation is running or suspended. `class_context_reply.rex` says it
+# survives one while the activation is parked by a REPLY. The last two exist
 # because the sets were disjoint: no program held both `gc(` and `.context`,
 # and none held both `reply` and `.context`, so neither rooting route had a
 # differential row at all.

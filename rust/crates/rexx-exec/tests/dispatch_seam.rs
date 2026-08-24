@@ -218,10 +218,9 @@ fn code_occurrences(needle: &str) -> Vec<String> {
 ///   `crates/rexx-exec/src/` alone, so a collection introduced inside the
 ///   crate that defines `Heap` is invisible to it.
 ///
-/// Two spellings that would have escaped a narrower needle do **not** escape
-/// this one, which is why the needle is `heap.collect(` over whitespace-
-/// collapsed text rather than `heap.collect(&` per line: a call whose
-/// argument is already a reference (`self.heap.collect(roots)`) and one
+/// The needle is `heap.collect(` over whitespace-collapsed text rather than
+/// `heap.collect(&` per line so that these do **not** escape either: a call
+/// whose argument is already a reference (`self.heap.collect(roots)`) and one
 /// `rustfmt` wraps across lines both still match.
 #[test]
 fn heap_collect_is_called_from_collect_now_alone() {
@@ -230,8 +229,7 @@ fn heap_collect_is_called_from_collect_now_alone() {
     let call = format!("{}.{}(", "heap", "collect");
 
     // Whitespace-collapsed, so a wrapped call is still one match. Comment
-    // lines go first, for the reason `code_occurrences` strips them: the
-    // needle is an ordinary phrase and this file's own prose uses it.
+    // lines go first, so that a comment cannot satisfy the assertion.
     let mut sites = Vec::new();
     for path in source_files() {
         let text = fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
