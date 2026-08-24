@@ -442,6 +442,34 @@ impl Raised {
         Raised::syntax(99, 903, Vec::new())
     }
 
+    /// 99.901: two `::CLASS` directives of one name in one program, and
+    /// 99.942: two `::RESOURCE` directives of one name. No substitutions --
+    /// neither message names anything.
+    ///
+    /// **Both are keyed by the upcased name, whatever the directive spelled.**
+    /// `classDirective` compares `commonString(name->upper())`
+    /// (`parser/DirectiveParser.cpp:347`, `:349`) and `resourceDirective` the
+    /// same (`:2277`, `:2316`). Measured, all rc 157 echoing the second
+    /// directive: `::CLASS a` beside `::CLASS A` and `::CLASS a` beside
+    /// `::CLASS "A"` are each `Error 99.901: Duplicate ::CLASS directive
+    /// instruction.`, and two `::RESOURCE d` bodies are `Error 99.942:
+    /// Duplicate ::RESOURCE directive instruction.`
+    ///
+    /// **One table per directive kind, so the names do not collide across
+    /// kinds**: measured, oracle rc 0 on `::CLASS r` beside `::ROUTINE r` and
+    /// on `::RESOURCE d` beside `::ROUTINE d`. `isDuplicateClass` asks
+    /// `classDependencies` (`:217`-`:220`) where `resourceDirective` asks
+    /// `resources` (`:2316`).
+    pub(crate) fn duplicate_class() -> Raised {
+        Raised::syntax(99, 901, Vec::new())
+    }
+
+    /// See [`Raised::duplicate_class`], which carries the measurements for
+    /// both halves of the pair.
+    pub(crate) fn duplicate_resource() -> Raised {
+        Raised::syntax(99, 942, Vec::new())
+    }
+
     /// 99.902, 99.931 and 99.932: two member directives of one class writing
     /// the same dictionary key. No substitutions -- none of the messages
     /// names anything.

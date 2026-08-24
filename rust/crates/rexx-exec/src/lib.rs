@@ -3991,22 +3991,25 @@ impl Interp {
     /// [`Interp::constant_values`].
     fn install_directives(&mut self, id: ProgramId, program: &Rc<Program>) -> Result<(), Failure> {
         // **The oracle's first walk, and everything it can answer is answered
-        // here in source order** -- a duplicate `::ROUTINE` name, a
-        // parenthesised `::CONSTANT` with no `::CLASS` before it, an
-        // `::ANNOTATE` target and an `EXTERNAL` library. Measured,
-        // `::constant sep (1+2)` alone in a file is rc 157 with `Error
-        // 99.906`, where the identical directive under a preceding `::CLASS`
-        // reaches the install-time evaluation below instead; and see
-        // `staged_gap` for the stage order this walk is the first of, and for
-        // every probe placing a form in it.
+        // here in source order** -- the duplicate names (`::CLASS`,
+        // `::ROUTINE`, `::RESOURCE`, and a member directive's own dictionary
+        // keys), a parenthesised `::CONSTANT` with no `::CLASS` before it, a
+        // `CLASS` keyword with no `::CLASS` before it, an `::ANNOTATE` target
+        // and an `EXTERNAL` library. Measured, `::constant sep (1+2)` alone in
+        // a file is rc 157 with `Error 99.906`, where the identical directive
+        // under a preceding `::CLASS` reaches the install-time evaluation
+        // below instead; and see `staged_gap` for the stage order this walk is
+        // the first of, and for every probe placing a form in it.
         //
         // **One walk rather than a walk and then a gap pass, because the
-        // oracle takes whichever of the four it reaches first.** Measured,
-        // `::annotate routine nosuchrtn` above a duplicate `::routine` pair
-        // is the oracle's 99.945 and `::routine zz external` in the same
-        // position is its 98.903, where a separate later pass answers the
-        // duplicate's 99.903 instead -- which is a wrong answer where this is
-        // a refusal (R33).
+        // oracle takes whichever it reaches first.** Measured, `::annotate
+        // routine nosuchrtn` above a duplicate `::routine` pair is the
+        // oracle's 99.945 and `::routine zz external` in the same position is
+        // its 98.903, where a separate later pass answers the duplicate's
+        // 99.903 instead -- which is a wrong answer where this is a refusal
+        // (R33). The same source order decides between the duplicate checks:
+        // measured, a duplicate `::ROUTINE` pair above a duplicate `::CLASS`
+        // pair is 99.903 and the two blocks swapped is 99.901.
         let mut saw_class = false;
         // The class a member directive's keys are claimed against, and the
         // keys claimed so far. `None` is `LanguageParser`'s `unattachedMethods`
@@ -4014,6 +4017,14 @@ impl Interp {
         // class (`parser/DirectiveParser.cpp:518`).
         let mut current_class: Option<usize> = None;
         let mut claimed: std::collections::HashSet<(Option<usize>, bool, Vec<u8>)> =
+            std::collections::HashSet::new();
+        // The other two tables the duplicate checks keep, each keyed by the
+        // upcased name and separate from the others, so that a `::CLASS` and a
+        // `::ROUTINE` of one name are not a collision. See
+        // `Raised::duplicate_class` for the probes on both halves.
+        let mut declared_classes: std::collections::HashSet<Vec<u8>> =
+            std::collections::HashSet::new();
+        let mut declared_resources: std::collections::HashSet<Vec<u8>> =
             std::collections::HashSet::new();
         for (index, directive) in program.directives.iter().enumerate() {
             // **Before the arms below, because the oracle checks before it
@@ -4024,9 +4035,19 @@ impl Interp {
             // `::CLASS` in the file is 99.932 and not 99.906.
             self.check_member_keys(program, directive, current_class, &mut claimed)?;
             match &directive.kind {
-                DirectiveKind::Class(_) => {
+                DirectiveKind::Class(class) => {
+                    if !declared_classes.insert(class.name.to_ascii_uppercase()) {
+                        self.blame_directive(program, directive);
+                        return Err(Raised::duplicate_class().into());
+                    }
                     saw_class = true;
                     current_class = Some(index);
+                }
+                DirectiveKind::Resource(resource) => {
+                    if !declared_resources.insert(resource.name.to_ascii_uppercase()) {
+                        self.blame_directive(program, directive);
+                        return Err(Raised::duplicate_resource().into());
+                    }
                 }
                 DirectiveKind::Constant(constant) => {
                     if matches!(constant.value, ConstantValue::Expression(_)) && !saw_class {
@@ -4091,7 +4112,9 @@ impl Interp {
         //
         // Every `::CLASS` name this file declares, upcased, so that a
         // `SUBCLASS` target can be told from a name the registry answers.
-        // First wins, matching the class a later `.NAME` resolves to.
+        // One entry per name by construction: the walk above refuses a second
+        // `::CLASS` of one name with 99.901, so `or_insert` below can only
+        // ever insert.
         let mut declared: HashMap<Box<[u8]>, usize> = HashMap::new();
         for (index, directive) in program.directives.iter().enumerate() {
             if let DirectiveKind::Class(class) = &directive.kind {
