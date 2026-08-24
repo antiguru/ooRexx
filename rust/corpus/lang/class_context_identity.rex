@@ -8,10 +8,11 @@
    program -- the method's `.context` is not the caller's, so passing the
    caller's in and comparing gives 0.
 
-   The loop between the first two rows is deliberate: it allocates enough to
-   run the collector, so the row after it also says the held object survived
-   a collection. `collect_stress.rs` runs this program with the collector on
-   every allocation, which is what makes that half real rather than lucky. */
+   The loop between the first two rows allocates, and on a plain run that is
+   all it does: the collector's floor is far above 300 slots, so no collection
+   happens here. `collect_stress.rs` runs this same program with the collector
+   on every allocation, and that is what makes the held object's survival
+   across a collection a real row rather than a lucky one. */
 c = .context
 do i = 1 to 300
   s = copies("x", i)

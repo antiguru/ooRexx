@@ -1,0 +1,26 @@
+count 25
+/* Task 21, fix round 2: a forced collection does not take the running
+   activation's context object with it.
+
+   `GC('force')` reached `Heap::collect` directly, past the sweep that names
+   an activation's context object, so the object was freed under a live
+   activation and the send after it refused. The rename is what makes the row
+   read the cached object rather than a fresh one: a build that mints per
+   evaluation prints the default here and passes nothing.
+
+   The inner class method has its own context and its own forced collection,
+   so the row after the call says the caller's survived a collection taken
+   while it was suspended rather than running -- the half the single-activation
+   rows cannot reach. */
+.context~objectName = "outer"
+say gc('force')
+say .context~objectName
+
+say .K~inner()
+say .context~objectName
+
+::class K
+::method inner class
+  .context~objectName = "inner"
+  say gc('force')
+  return .context~objectName

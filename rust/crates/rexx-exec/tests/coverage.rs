@@ -1144,6 +1144,7 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     // tables, and the refusal the REXX package gives an addition.
     "lang/class_context_package.rex",
     "lang/class_context_identity.rex",
+    "lang/class_context_gc.rex",
     "lang/class_package_classes.rex",
     "lang/class_package_addition_refused.rex",
 ];
