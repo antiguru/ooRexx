@@ -190,6 +190,11 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     // `class_method_own_dictionary.rex` does, because the rows before its own
     // refusal each build a `Method` object.
     "lang/class_method_class_side_raises.rex",
+    // A class-side `ACTIVATE` raising 42.3 before the main body's first
+    // clause, which is the same shape as the class-directive refusals above
+    // once the divide has run: the operands are canonical small integers and
+    // the report's own substitutions come from the catalogue.
+    "lang/class_activate_failure_blames_the_last_installed_class.rex",
     "lang/comparison_families.rex",
     "lang/comparison_operators_remaining.rex",
     "lang/deep_nested_expr.rex",

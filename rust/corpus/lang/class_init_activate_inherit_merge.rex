@@ -1,0 +1,21 @@
+/* INIT fires before a ::CLASS's INHERIT merge and ACTIVATE after it.
+
+   The pair is the discriminator and neither half is one alone: both methods
+   ask the same question of the same object, and only the moment differs.
+   M's own method carries CLASS because self in a class-side init or activate
+   is the class object, so a plain ::METHOD mm would answer 0 from both lines
+   and the transcript would discriminate nothing.
+
+   The prologue line last is what says the two ran during the install and not
+   from the main body. */
+say "prologue"
+
+::CLASS M MIXINCLASS Object
+::METHOD mm CLASS
+  return 1
+
+::CLASS K INHERIT M
+::METHOD init CLASS
+  say "K init,     hasMethod MM =" self~hasMethod("MM")
+::METHOD activate CLASS
+  say "K activate, hasMethod MM =" self~hasMethod("MM")

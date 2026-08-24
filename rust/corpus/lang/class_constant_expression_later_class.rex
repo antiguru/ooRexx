@@ -1,0 +1,24 @@
+/* A ::CONSTANT expression resolves against a class the file declares later.
+
+   Constants are a pass of their own over an already-installed class list, so
+   .B's own class method is in by the time A's constant runs. Evaluating the
+   expression while A installs answers 97.1 on "The B class" instead, which
+   is what this program's own directive order is chosen to expose: B follows
+   the constant in the file and its method follows B.
+
+   The negative control is the second class: D's constant names a class
+   declared BEFORE it, so it would resolve under either rule and says that
+   the program is measuring the pass and not the ability to evaluate a
+   constant at all. */
+say .A~c
+say .D~c
+
+::CLASS A
+::CONSTANT c (.B~m)
+
+::CLASS B
+::METHOD m CLASS
+  return "from B"
+
+::CLASS D
+::CONSTANT c (.B~m || " through D")

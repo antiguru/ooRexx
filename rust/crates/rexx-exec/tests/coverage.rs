@@ -1063,6 +1063,18 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/environment_directory_entry_method.rex",
     "lang/environment_methods_join.rex",
     "lang/environment_routines_table.rex",
+    // Task 18: the install passes and class-object initialization. The
+    // INIT/ACTIVATE pair, which discriminates only together; a constant
+    // expression naming a class declared later; the construction order every
+    // pass walks; what each form of a `::CONSTANT` answers; the 97.4 an
+    // expression form gets while its own class is still being built; and the
+    // class a failing `ACTIVATE` is blamed against.
+    "lang/class_init_activate_inherit_merge.rex",
+    "lang/class_constant_expression_later_class.rex",
+    "lang/class_init_activate_order.rex",
+    "lang/class_constant_values.rex",
+    "lang/class_constant_uninitialized.rex",
+    "lang/class_activate_failure_blames_the_last_installed_class.rex",
 ];
 
 #[test]

@@ -1,0 +1,37 @@
+count 36
+/* Every class is constructed, then every constant resolved, then every class
+   activated -- and each of those passes walks the construction order.
+
+   The file declares the chain leaf first and root last, so source order and
+   construction order disagree on every line of the transcript. Both sends
+   are here because the passes are separate: INIT interleaves with the
+   construction, so its three lines come first in dependency order, and
+   ACTIVATE is a walk of its own, so its three follow them rather than
+   pairing off with each INIT.
+
+   The constant is the third pass's own marker: A's activate reads a value
+   whose expression names C, which is constructed after A, so the answer
+   exists only because the constants pass runs after every class is built and
+   before any ACTIVATE. */
+say "main"
+
+::CLASS C SUBCLASS B
+::METHOD mark CLASS
+  return "from C"
+::METHOD init CLASS
+  say "init C"
+::METHOD activate CLASS
+  say "activate C"
+
+::CLASS A
+::CONSTANT tag (.C~mark)
+::METHOD init CLASS
+  say "init A"
+::METHOD activate CLASS
+  say "activate A, tag =" self~tag
+
+::CLASS B SUBCLASS A
+::METHOD init CLASS
+  say "init B"
+::METHOD activate CLASS
+  say "activate B"
