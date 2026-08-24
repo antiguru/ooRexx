@@ -2958,6 +2958,15 @@ struct Interp {
     ///
     /// [`Interp::package_objects`]: Interp::package_objects
     annotations: HashMap<environment::Annotated, ObjRef>,
+    /// The `Method` object `Class~method` answers, keyed by the class and the
+    /// instance dictionary name -- see [`Interp::method_object`] for the two
+    /// oracle answers that make one object per entry observable.
+    ///
+    /// **Rooted through [`rexx_core::RootSet::add_global`]**, the position
+    /// [`Interp::package_objects`]'s entries are in.
+    ///
+    /// [`Interp::package_objects`]: Interp::package_objects
+    method_objects: HashMap<(ObjRef, Box<[u8]>), ObjRef>,
     /// Which `(program, directive)` a [`rexx_classes::MethodId`] `install_directives`
     /// minted names -- the "bodies are stored" half of R9, addressed by the
     /// same identity `ClassRegistry::add_instance_method`/`add_class_method`
@@ -3998,6 +4007,7 @@ impl Interp {
             package_tables: HashMap::new(),
             constant_values: HashMap::new(),
             annotations: HashMap::new(),
+            method_objects: HashMap::new(),
             method_bodies: HashMap::new(),
             generated_methods: HashMap::new(),
             special_methods: Vec::new(),

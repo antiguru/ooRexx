@@ -879,6 +879,13 @@ impl Interp {
         self.object_model().package
     }
 
+    /// `.Method`: the class of the object `Class~method` answers, which
+    /// `environment.rs` builds one of per instance dictionary entry a program
+    /// asks for.
+    pub(crate) fn method_class(&mut self) -> ObjRef {
+        self.object_model().method
+    }
+
     /// Which native class a value answers to, or the value's own shape when
     /// this phase builds no class for it.
     ///
@@ -3067,18 +3074,7 @@ fn native_method(
         let target = interp.class_default_name(class).to_vec();
         return Err(Raised::no_method(&target, &name).into());
     }
-    let method_class = interp.object_model().method;
-    // Through `native_instance` for its rooting: the object is pushed as a
-    // temporary before the line below allocates the annotation table, and
-    // nothing else holds it until this function returns.
-    let object = interp.native_instance(method_class);
-    // The dictionary entry the retrieval above found, which is what its
-    // annotations are keyed by: this class, the instance side, this name.
-    interp.attach_annotations(
-        object,
-        crate::environment::Annotated::Member(class, false, name.into()),
-    );
-    Ok(Some(object))
+    Ok(Some(interp.method_object(class, &name)))
 }
 
 /// An array receiver's own slots, borrowed, or the refusal for a receiver that
@@ -3548,7 +3544,11 @@ fn native_object_name_set(
             let name = String::from_utf8_lossy(&name).into_owned();
             interp.classes().set_object_name(class, &name);
         }
-        Primitive::Package | Primitive::Directory | Primitive::StringTable => {
+        Primitive::Package
+        | Primitive::Method
+        | Primitive::Routine
+        | Primitive::Directory
+        | Primitive::StringTable => {
             let Some(object) = interp.heap.get_mut(receiver) else {
                 return Err(Loud::receiver_class("a value whose object is no longer live").into());
             };
@@ -3558,16 +3558,6 @@ fn native_object_name_set(
                     unreachable!("each of these receivers is Body::Native, got {other:?}")
                 }
             }
-        }
-        // A `Method` object is built per `~method` send, so a name stored on
-        // one is gone by the next send and the oracle's is not: measured,
-        // oracle rc 0, `.K~method("M")~objectName = "x"` then
-        // `say .K~method("M")` prints `x`, because `RexxClass::method`
-        // retrieves one object from the dictionary and answers it every
-        // time. Refused rather than stored, this crate's standing trade: the
-        // shape was already rc 120 before either class became a receiver.
-        Primitive::Method | Primitive::Routine => {
-            return Err(Loud::native_method(b"OBJECTNAME=", "Object").into());
         }
         Primitive::String | Primitive::SmallInt | Primitive::Object | Primitive::Array => {
             return Err(Loud::native_method(b"OBJECTNAME=", "Object").into());

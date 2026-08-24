@@ -859,6 +859,37 @@ impl Interp {
         object
     }
 
+    /// `Class~method`'s answer: the one `Method` object this class's instance
+    /// dictionary entry named `name` has, built on first ask and kept.
+    ///
+    /// **One object per dictionary entry, because the oracle's identity is
+    /// observable through two of its own methods.** `RexxClass::method`
+    /// retrieves the method out of `instanceMethodDictionary` and answers it
+    /// (`classes/ClassClass.cpp:984`, the retrieval at `:991`), so two sends
+    /// of `~method` for one name answer one object. Measured, oracle rc 0 and
+    /// `1` for both: `(.K~method("M")~identityHash = .K~method("M")~identityHash)`,
+    /// and `.K~method("M")~objectName = "x"` then `say .K~method("M")`
+    /// printing `x`. A fresh object per send answers `0` and `a Method`.
+    ///
+    /// Rooted as a global for the reason a package object is: it outlives
+    /// every send that reaches it and is reachable from no other object
+    /// between two of them.
+    pub(crate) fn method_object(&mut self, class: ObjRef, name: &[u8]) -> ObjRef {
+        let key = (class, Box::<[u8]>::from(name));
+        if let Some(found) = self.method_objects.get(&key).copied() {
+            return found;
+        }
+        let method_class = self.method_class();
+        let object = self.native_instance(method_class);
+        self.roots
+            .add_global(&method_object_root_key(class, name), object);
+        self.method_objects.insert(key, object);
+        // The dictionary entry the caller found, which is what its
+        // annotations are keyed by: this class, the instance side, this name.
+        self.attach_annotations(object, Annotated::Member(class, false, name.into()));
+        object
+    }
+
     /// The `StringTable` `~annotations` answers for `site`, built empty on
     /// first ask and kept.
     ///
@@ -997,6 +1028,16 @@ fn package_root_key(package: Package) -> String {
         Package::Rexx => "the REXX package".to_string(),
         Package::Program(ProgramId(id)) => format!("the package of program {id}"),
     }
+}
+
+/// The [`rexx_core::RootSet::add_global`] key one `Method` object is held
+/// under.
+fn method_object_root_key(class: ObjRef, name: &[u8]) -> String {
+    format!(
+        "the instance method {} of the class at {}",
+        String::from_utf8_lossy(name),
+        class.bits()
+    )
 }
 
 /// The [`rexx_core::RootSet::add_global`] key one annotation table is held

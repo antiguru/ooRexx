@@ -8950,31 +8950,35 @@ fn an_annotate_target_resolves_the_way_the_directive_walk_accumulates() {
     }
 }
 
-/// A `Method` and a `Routine` object are receivers, and `~objectName=` is the
-/// one message on them this crate refuses rather than answers.
+/// A `Method` object is one object per dictionary entry, which two of the
+/// oracle's own methods can see.
 ///
-/// The refusal's reason is at `dispatch::native_object_name_set`. This test
-/// is its only instrument: the oracle answers the program at rc 0, so no
-/// corpus row can carry it, and the getter beside it is the control that says
-/// the refusal is the setter's and not the whole class's.
+/// **This is the property a `~method` answering a fresh object each send
+/// would fail**, and what separates the two builds is the **second** `~method`
+/// send rather than either message on its own: a name stored and reread
+/// inside one clause would pass against a throwaway object.
+///
+/// `~identityHash` cannot be a corpus row at all -- `dispatch.rs`'s
+/// `native_identity_hash` answers the handle where the oracle derives its
+/// answer from an address, which is a licensed divergence and means no
+/// program may print one. The `~objectName=` half could be one, and is
+/// asserted here beside its sibling rather than as a program of its own.
+///
+/// Both rows are the oracle's answer, measured, three descriptors. The `P`
+/// row is the control: a second method of the same class is a different entry
+/// and must not answer the first one's name.
 #[test]
-fn a_method_or_routine_object_refuses_only_the_stored_object_name() {
-    let class = "::class K\n::method m\n  return 1\n::routine r\n  return 2\n";
-    for receiver in [".K~method('M')", ".routines~r"] {
-        let (code, stdout, stderr) =
-            annotate_on_both_engines(&format!("{receiver}~objectName = 'x'\n{class}"));
-        assert_eq!((code, stdout.as_str()), (crate::NOT_IMPLEMENTED_EXIT, ""));
-        assert_eq!(
-            stderr,
-            "rexx-exec: method \"OBJECTNAME=\" of class \"Object\" is not implemented (Phase 5)\n"
-        );
+fn a_class_answers_one_method_object_per_dictionary_entry() {
+    let class = "::class K\n::method m\n  return 1\n::method p\n  return 2\n";
+    let (code, stdout, stderr) = annotate_on_both_engines(&format!(
+        "say (.K~method('M')~identityHash = .K~method('M')~identityHash)\n{class}"
+    ));
+    assert_eq!((code, stderr.as_str()), (0, ""));
+    assert_eq!(stdout, "1\n");
 
-        let (code, stdout, stderr) =
-            annotate_on_both_engines(&format!("say {receiver}~objectName\n{class}"));
-        assert_eq!((code, stderr.as_str()), (0, ""));
-        assert!(
-            stdout == "a Method\n" || stdout == "a Routine\n",
-            "{receiver}: stdout was {stdout:?}"
-        );
-    }
+    let (code, stdout, stderr) = annotate_on_both_engines(&format!(
+        ".K~method('M')~objectName = 'renamed'\nsay .K~method('M')\nsay .K~method('P')\n{class}"
+    ));
+    assert_eq!((code, stderr.as_str()), (0, ""));
+    assert_eq!(stdout, "renamed\na Method\n");
 }
