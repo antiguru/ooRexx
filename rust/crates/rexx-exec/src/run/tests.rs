@@ -7663,6 +7663,66 @@ fn every_directive_this_crate_can_install_leaves_the_program_alone() {
     }
 }
 
+/// The refusals Task 21 leaves where the oracle answers, asserted here
+/// because nothing else can assert them.
+///
+/// **A refusal the oracle does not share is not expressible as a corpus
+/// row**, so the corpus gate cannot see one of these becoming an answer.
+/// That is the "an in-crate test only" case the global constraints name,
+/// and this is it: every source below is one the shipped oracle runs or
+/// raises a Rexx condition for, and that this crate refuses.
+///
+/// The measured oracle answer for each, rc 0 unless stated:
+///
+/// * `.Array~package~publicClasses` is `a StringTable`, and
+///   `["ORDEREDCOLLECTION"]` on it is `The OrderedCollection class` -- a
+///   name no class this crate registers carries, which is why the partial
+///   table is refused rather than answered.
+/// * `.K~define("SRC", "say 'x'")` installs a compiled method, and
+///   `.K~method("SRC")` then prints `a Method`.
+/// * `.K~defineMethods(.local)` is **rc 163**, `93.974`: the oracle reads
+///   `.local`'s entries and finds they are not methods, where this crate
+///   cannot read them at all.
+///
+/// **The exit code alone would not do it.** Each row asserts the message
+/// too, because `NOT_IMPLEMENTED_EXIT` is what a refusal from anywhere in
+/// the program produces, and a row checking only the code would pass on a
+/// refusal raised by some other construct on the same line.
+#[test]
+fn the_refusals_this_task_leaves_where_the_oracle_answers_still_fire() {
+    let cases: &[(&[u8], &str)] = &[
+        (
+            b"say .Array~package~publicClasses\n",
+            "the REXX package's class table is not implemented (Phase 5)",
+        ),
+        (
+            b".K~define(\"SRC\", \"say 'x'\")\n::class K\n",
+            "a method built from source text is not implemented (Phase 5)",
+        ),
+        (
+            b".K~defineMethods(.local)\n::class K\n",
+            "a directory whose entries this crate does not fill is not implemented (Phase 7)",
+        ),
+        (
+            b".K~defineMethods(.environment)\n::class K\n",
+            "a directory whose entries this crate does not fill is not implemented (Phase 5)",
+        ),
+    ];
+    for (source, message) in cases {
+        let outcome = routine_program(source);
+        assert_eq!(
+            outcome.exit_code,
+            crate::NOT_IMPLEMENTED_EXIT,
+            "{message}: exit code"
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&outcome.stderr),
+            format!("rexx-exec: {message}\n"),
+            "{message}: stderr"
+        );
+    }
+}
+
 /// Every directive form whose installation this crate **cannot** perform
 /// refuses the program before its first clause, naming the owning phase.
 ///

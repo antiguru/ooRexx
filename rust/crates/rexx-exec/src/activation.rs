@@ -741,6 +741,24 @@ pub(crate) struct Activation {
     ///
     /// [`cached_clock`]: Activation::cached_clock
     pub(crate) clock_stale: bool,
+    /// The `RexxContext` this activation's `.CONTEXT` answers, built on the
+    /// first ask and kept for the rest of the activation --
+    /// `RexxActivation::getContextObject`, which fills its own field the
+    /// same way.
+    ///
+    /// **One per activation and not one per evaluation**, which the oracle's
+    /// identity says out loud. Measured, oracle rc 0: `c = .context` then
+    /// `c~identityHash == .context~identityHash` is `1`, and the same
+    /// comparison against the outer context passed into a method is `0`. A
+    /// program-wide object would answer `1` to both and a fresh one `0` to
+    /// both.
+    ///
+    /// **Rooted by [`Interp::collect_if_due`]'s sweep over the activation
+    /// stack while this activation is running or suspended, and by
+    /// [`Activation::object_roots`] while it is parked.** Those are the two
+    /// states an activation can be in and neither reaches the other's
+    /// mechanism.
+    pub(crate) context_object: Option<ObjRef>,
 }
 
 /// How control arrived at an activation.
@@ -976,6 +994,7 @@ impl Activation {
             condition: None,
             cached_clock: None,
             clock_stale: true,
+            context_object: None,
         }
     }
 
@@ -1087,6 +1106,7 @@ impl Activation {
             // invalid" rather than something `Inherited` should carry.
             cached_clock: None,
             clock_stale: true,
+            context_object: None,
         }
     }
 
@@ -1145,6 +1165,7 @@ impl Activation {
             condition: None,
             cached_clock: None,
             clock_stale: true,
+            context_object: None,
         }
     }
 
@@ -1200,6 +1221,7 @@ impl Activation {
             condition: None,
             cached_clock: None,
             clock_stale: true,
+            context_object: None,
         }
     }
 
@@ -1265,7 +1287,9 @@ impl Activation {
             condition: _,
             cached_clock: _,
             clock_stale: _,
+            context_object,
         } = self;
+        out.extend(*context_object);
         if let Some(MethodIdentity {
             name: _,
             scope,

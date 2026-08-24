@@ -645,12 +645,12 @@ impl Loud {
     /// A message sent to a value whose class this phase does not build, so
     /// there is no behaviour to resolve the name against at all.
     ///
-    /// The reachable case is a stem: `rexx_classes::deferred_classes` leaves
-    /// `.Stem` out because its `Setup.cpp` block hides the comparison
-    /// methods and `MethodDict` models no removal. The oracle answers a send
-    /// to one -- `a. = 'dflt'; say a.~length` is `4`, forwarded through
-    /// `StemClass`'s own `UNKNOWN` -- so 97.1 would be a wrong answer that a
-    /// program could trap, which is why this is loud instead.
+    /// The reachable case is a stem: `Interp::receiver_kind` has no arm that
+    /// maps a `Body::Stem` onto `.Stem`, so a send to one finds no behaviour
+    /// to search. The oracle answers such a send -- `a. = 'dflt'; say
+    /// a.~length` is `4`, forwarded through `StemClass`'s own `UNKNOWN` --
+    /// so 97.1 would be a wrong answer that a program could trap, which is
+    /// why this is loud instead.
     ///
     /// `kind` names the value's shape rather than a class, because the whole
     /// point is that no class object was found for it.
@@ -859,6 +859,24 @@ impl Loud {
     fn rexx_package_classes() -> Loud {
         Loud {
             message: owned_message("the REXX package's class table", Some("Phase 5")),
+        }
+    }
+
+    /// A collection this crate can name but cannot read: one whose entries
+    /// the oracle has and this crate answers per name through
+    /// [`Loud::environment_entry`] instead of building.
+    ///
+    /// `~defineMethods` is the caller. Walking such a collection's own map
+    /// finds what this crate put there, which for `.local` is nothing, so a
+    /// mutation driven by the walk would silently do nothing where the oracle
+    /// raises -- measured, `.K~defineMethods(.local)` is oracle rc 163,
+    /// `93.974`.
+    fn unreadable_collection(owner: &'static str) -> Loud {
+        Loud {
+            message: owned_message(
+                "a directory whose entries this crate does not fill",
+                Some(owner),
+            ),
         }
     }
 
@@ -5958,7 +5976,32 @@ impl Interp {
         if self.stress_collect
             || (self.heap.will_grow() && self.heap.slot_capacity() >= self.collect_at)
         {
+            // The context objects of the activations on the stack, handed to
+            // the collector as temporaries for the length of the sweep.
+            //
+            // **The one object an activation owns outright.** Everything else
+            // it holds is rooted by its slot frame or by
+            // `Interp::class_variables`; a `RexxContext` is created by
+            // `Interp::context_object` and stored on the activation, and
+            // nothing else refers to it. Collected here rather than kept
+            // rooted per activation because the alternative is a global root
+            // whose key has to be minted, replaced and retired as activations
+            // come and go, and this pays only when a collection actually
+            // happens. `Activation::object_roots` is the same objects'
+            // other route, for an activation a `REPLY` has parked.
+            let contexts: Vec<ObjRef> = self
+                .running
+                .iter()
+                .map(std::ops::Deref::deref)
+                .chain(self.suspended.iter().map(Box::as_ref))
+                .filter_map(|activation| activation.context_object)
+                .collect();
+            let frame = self.roots.push_frame();
+            for context in contexts {
+                self.roots.push_temp(context);
+            }
             let stats = self.heap.collect(&self.roots);
+            self.roots.pop_frame(frame);
             // `pending_uninit` is what the collector resurrected so a finalizer
             // could run against a whole graph. Nothing in this crate sets
             // `Object::has_uninit`, because `UNINIT` needs a class to define

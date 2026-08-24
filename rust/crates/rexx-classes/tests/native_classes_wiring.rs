@@ -767,7 +767,7 @@ fn every_prologue_mutated_class_matches_its_recorded_own_instance_method_set() {
                 "WAIT",
             ],
         ),
-        // `Queue`'s own set is `Array`'s, minus the nine names
+        // `Queue`'s own set is `Array`'s, minus the names
         // `Setup.cpp:792`-`:804` removes and plus `Queue`'s own additions.
         // Unlike `Supplier`/`Set`/`Bag`/`Relation` below, the donation this
         // one rests on is `Setup.cpp`'s own (`InheritInstanceMethods(Array)`,
@@ -1052,7 +1052,7 @@ fn every_untouched_class_matches_its_recorded_own_instance_method_set() {
                 "TYPE",
             ],
         ),
-        // The six names `Setup.cpp:1307`-`:1312` hides are absent, matching
+        // The names `Setup.cpp:1307`-`:1312` hides are absent, matching
         // the measured `.VariableReference~methods(.VariableReference)`.
         // `VALUE=` is here and `==` is not, which separates the tombstone
         // from an entry whose name merely ends in `=`.

@@ -937,14 +937,13 @@ impl Interp {
     /// Which native class a value answers to, or the value's own shape when
     /// this phase builds no class for it.
     ///
-    /// A stem answers `Stem` on the oracle, and
-    /// `rexx_classes::deferred_classes` does not build that class (its
-    /// `Setup.cpp` block hides the comparison methods, and `MethodDict`
-    /// models no removal), so a stem receiver resolves nothing and fails
-    /// loudly rather than answering from the wrong class. Every other heap
-    /// shape that has no class here gets a refusal naming itself rather than
-    /// a shared one, so whichever task makes one reachable as a receiver gets
-    /// a message that says which.
+    /// A stem answers `Stem` on the oracle, and this function has no arm
+    /// that reaches `.Stem` -- a `Body::Stem` is a value kind of its own here
+    /// and nothing maps it onto the class object. So a stem receiver resolves
+    /// nothing and fails loudly rather than answering from the wrong class.
+    /// Every other heap shape that has no class here gets a refusal naming
+    /// itself rather than a shared one, so whichever task makes one reachable
+    /// as a receiver gets a message that says which.
     ///
     /// A **class object** is the one heap-tagged handle that answers, and it
     /// answers as itself rather than as an instance of anything: its
@@ -3183,7 +3182,7 @@ fn rexx_defined_lock(interp: &mut Interp, class: ObjRef) -> Result<(), Failure> 
 /// The `method name` argument `~define`, `~delete` and `~method` share:
 /// required, string-valued, and upcased before it reaches a dictionary --
 /// `stringArgument(method_name, "method name")->upper()`
-/// (`classes/ClassClass.cpp:826`-`:828`, `:963`, `:986`).
+/// (`classes/ClassClass.cpp:831`-`:832`, `:961`, `:987`).
 fn method_name_argument(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<Vec<u8>, Failure> {
     let Some(Some(argument)) = args.first().copied() else {
         return Err(Raised::missing_named_argument("method name").into());
@@ -3290,6 +3289,13 @@ fn native_define_methods(
     ) {
         return Err(supplier_refusal(interp, table));
     }
+    // **Asked before the walk**, because the walk cannot see the difference:
+    // a collection whose entries this crate answers per name rather than
+    // storing looks empty to `native_keys`, and a mutation over an empty walk
+    // is a mutation that silently does nothing.
+    if let Some(owner) = interp.unbuilt_collection_owner(table) {
+        return Err(Loud::unreadable_collection(owner).into());
+    }
     let mut names = interp.native_keys(table);
     names.sort();
     let mut entries: Vec<(Box<[u8]>, Option<ObjRef>)> = Vec::with_capacity(names.len());
@@ -3368,13 +3374,15 @@ fn native_class_inherit(
     let class = class_receiver(interp, receiver)?;
     rexx_defined_lock(interp, class)?;
     let mixin = mixin_class_argument(interp, args)?;
-    let position = match args.get(1).copied().flatten() {
-        None => None,
-        Some(position) => Some(class_receiver(interp, position).map_err(|_| {
-            let shown = interp.string_value_text(position);
-            Failure::from(Raised::inherit_needs_a_mixinclass(&shown))
-        })?),
-    };
+    // **The position is not type-checked, and that is the oracle's shape.**
+    // `RexxClass::inherit` uses it in one place, `superClasses->indexOf(position)`
+    // (`classes/ClassClass.cpp:1346`), and a value that is not in the list gives
+    // index 0 and `Error_Execution_uninherit` at `:1350` whatever kind of
+    // object it was. Measured at rc 158, `::class K` inheriting `.M1`:
+    // `.K~inherit(.M2, "abc")` is `98.945`, `Class "The K class" has not
+    // inherited class "abc".` -- the second argument's error and not the
+    // first's.
+    let position = args.get(1).copied().flatten();
     match interp.classes().inherit_at(class, mixin, position) {
         Ok(()) => Ok(None),
         Err(refusal) => Err(inherit_refusal(interp, class, mixin, refusal)),

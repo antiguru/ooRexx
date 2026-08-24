@@ -672,17 +672,33 @@ impl Interp {
         array
     }
 
-    /// `.CONTEXT`: `RexxActivation::getContextObject`.
+    /// `.CONTEXT`: `RexxActivation::getContextObject`, which builds the
+    /// object on the first ask and keeps it in the activation's own field.
     ///
-    /// **A fresh object per evaluation where the oracle caches one per
-    /// activation**, and the difference is not observable in this phase: a
-    /// `RexxContext` answers no method this crate implements, and identity
-    /// comparison needs `~==`, which is 5b's. Caching one would need somewhere
-    /// to root it for the activation's whole life, and an activation holds no
-    /// object references at all today.
+    /// **One object per activation, which is observable and is measured.**
+    /// Oracle rc 0: `c = .context` then
+    /// `(c~identityHash == .context~identityHash)` is `1`, and
+    /// `.context~objectName = "tagged"` then `say .context~objectName` prints
+    /// `tagged`. The same comparison against a context passed into a method
+    /// is `0`, so the object is the activation's and not the program's.
+    ///
+    /// [`Activation::context_object`] is where it lives and carries how it is
+    /// rooted in each of the two states an activation can be in.
+    ///
+    /// The `None` arm is a resolution with no activation running, which is how
+    /// a unit test against a bare `Interp` reaches this; nothing a program can
+    /// write does, since `.CONTEXT` is resolved from inside the activation
+    /// evaluating it.
     fn context_object(&mut self) -> ObjRef {
+        if let Some(found) = self.running_activation().and_then(|a| a.context_object) {
+            return found;
+        }
         let class = self.environment_model().context;
-        self.native_instance(class)
+        let object = self.native_instance(class);
+        if let Some(activation) = self.running.as_deref_mut() {
+            activation.context_object = Some(object);
+        }
+        object
     }
 
     /// An instance of `class` with no entries, rendered the way
@@ -792,6 +808,30 @@ impl Interp {
     /// build, or `None` for a name the oracle does not answer either.
     fn unbuilt_owner(&mut self, bare: &[u8]) -> Option<&'static str> {
         Some(self.environment_model().unbuilt.get(bare)?.owner)
+    }
+
+    /// The phase owing the entries of `object` that this crate does not
+    /// build, or `None` for a collection whose entries it fills.
+    ///
+    /// **The question [`Interp::hash_entry_read`] asks per name, asked about
+    /// the whole collection**, for a caller that walks the entries instead of
+    /// reading one. Walking a `Body::Native`'s own map answers what this
+    /// crate put there, which for `.local` is nothing at all: every entry it
+    /// has on the oracle is in the `unbuilt` table, so a walk sees an empty
+    /// collection and a caller that acts on what it sees does nothing at all
+    /// where the oracle acts. Measured before this check existed:
+    /// `.K~defineMethods(.local)` was rc 0 against the oracle's rc 163.
+    ///
+    /// The owner is the smallest of the owners in that scope, so the refusal
+    /// names one phase rather than depending on a `HashMap`'s order.
+    pub(crate) fn unbuilt_collection_owner(&mut self, object: ObjRef) -> Option<&'static str> {
+        let scope = self.directory_scope(object)?;
+        self.environment_model()
+            .unbuilt
+            .values()
+            .filter(|entry| entry.scope == scope)
+            .map(|entry| entry.owner)
+            .min()
     }
 
     /// The program whose directives and installed classes a `.NAME` resolves
@@ -996,8 +1036,7 @@ impl Interp {
 
     /// The package object of the program that is running -- what
     /// `RexxContext~package` answers, `RexxContext::getPackage`
-    /// (`classes/ContextClass.cpp`'s `getPackage`, bound by
-    /// `memory/Setup.cpp:1216`).
+    /// (`classes/ContextClass.cpp:160`, bound by `memory/Setup.cpp:1218`).
     ///
     /// `None` when no activation is running, which is the position
     /// [`Interp::running_program`] is in and is how a unit test against a
@@ -1128,8 +1167,16 @@ impl Interp {
     /// `~delete` or a `~define` that took the entry away.
     ///
     /// The identity `~method` hands out is per dictionary entry, so an entry
-    /// that stops existing must not leave its object behind to be answered
-    /// by whatever occupies the name next.
+    /// that stops existing must not leave its object behind to be answered by
+    /// whatever occupies the name next.
+    ///
+    /// **The map entry goes and the global root stays.** `RootSet` has no
+    /// counterpart to `add_global`, so the object [`Interp::hold_method_object`]
+    /// rooted stays reachable for the rest of the run. That costs one live
+    /// object per (class, name) pair a program ever installs and answers
+    /// nothing: `~method` reads this map, and it no longer has the entry. A
+    /// later `~define` under the same name replaces the root as well as the
+    /// entry, because `add_global` replaces by name.
     pub(crate) fn drop_method_object(&mut self, class: ObjRef, name: &[u8]) {
         self.method_objects.remove(&(class, name.into()));
     }
