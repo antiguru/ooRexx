@@ -281,7 +281,8 @@ const CASES: &[Case] = &[
               argument list, which is empty, so `arg()` is `0` and `arg(1)` \
               the null string inside it while the main body reads `1` and \
               `hello`. No corpus program can reach this: the corpus harness \
-              passes no arguments, and with none the two readings are equal",
+              passes no arguments, and with none the two readings are equal. \
+              `run_rust`'s own doc has which engine this compares",
     },
     Case {
         name: "strict-none",
@@ -385,6 +386,11 @@ const CASES: &[Case] = &[
 /// test target, so there is no chance of driving a stale copy from `PATH`.
 /// No memory limit wrapper: the limit exists for the oracle, which requests
 /// gigabytes mid-range without it.
+///
+/// **No `REXX_ENGINE`, so every row here compares the default engine alone**,
+/// which is what `corpus.rs`'s own differential does with `Invocation::none()`.
+/// A row whose subject is not the engines is no worse covered here than in the
+/// corpus; a row that wanted both would have to set the variable itself.
 fn run_rust(path: &Path, args: &[&str], stdin: Option<&[u8]>) -> CppOutcome {
     let mut command = Command::new(env!("CARGO_BIN_EXE_rexx-run"));
     command

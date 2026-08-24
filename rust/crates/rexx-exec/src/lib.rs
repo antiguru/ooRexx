@@ -4369,9 +4369,19 @@ impl Interp {
                     // `seal_site_level` is the same mechanism
                     // `invoke_call`/`run_fragment` use to move a level's site
                     // into `self.failure_sites` before the next, enclosing
-                    // level sets its own -- there is no real activation
-                    // nesting here, only the two directives' own clauses
-                    // standing in for it.
+                    // level sets its own. **The two directive clauses stand in
+                    // for activation nesting between themselves**, and only
+                    // between themselves: a method the expression calls is a
+                    // real activation and has already sealed its own site
+                    // below these two. Measured, the probe above with the
+                    // divide moved into a class method that
+                    // `::constant c (self~m)` calls:
+                    //
+                    // ```text
+                    //      5 *-* return 1/0
+                    //      6 *-* ::constant c (self~m)
+                    //      3 *-* ::class K
+                    // ```
                     self.blame_directive(program, directive);
                     self.seal_site_level();
                     self.blame_directive(
@@ -5079,11 +5089,14 @@ impl Interp {
     /// [`Interp::push_directive_activation`] is the frame it runs in: default
     /// `NUMERIC` settings, `TRACE` off, and `SELF`/`SUPER` bound the way
     /// [`Interp::enter_method_body`] binds them, through [`Interp::slot_of`]
-    /// so that a frame carrying no plan still grows a slot for each. This is
-    /// engine-agnostic -- it runs before either engine's own instruction loop
-    /// starts and reaches the same shared [`Interp::eval`] both loops call,
-    /// so `REXX_ENGINE=tree-walker` and the default IR engine evaluate it
-    /// identically.
+    /// so that a frame carrying no plan still grows a slot for each.
+    ///
+    /// **The expression's own operators are engine-agnostic**: the walk below
+    /// reaches the shared [`Interp::eval`] that both engines' instruction
+    /// loops call, so an expression that only computes enters neither loop.
+    /// **A method or a `::ROUTINE` the expression calls does enter one**,
+    /// under whichever engine is selected, so this function is not the reason
+    /// such a body answers alike on both.
     ///
     /// `slots: &[]` and `plan: None` on the [`Code`] below are correct rather
     /// than merely convenient: the expression is evaluated with no enclosing

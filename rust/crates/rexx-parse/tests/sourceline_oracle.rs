@@ -37,18 +37,28 @@
 //!
 //! The fallback is `LINEIN()` in a loop, not another call into `.Package`,
 //! specifically so a crashing prolog cannot run a second time. It is a
-//! faithful substitute for `~source` only because none of today's crashing
-//! programs need the cases where a naive line reader and `~source` could
-//! disagree -- CRLF terminators, an embedded `CTRL-Z`, or a missing final
-//! newline (`no_trailing_newline.rex`'s entire reason to exist, and why it
-//! must never be the file whose prolog is made to crash). Verified this
-//! driver taking the fallback path on `trace_numeric_request.rex` and the
-//! primary path everywhere else, including on `no_trailing_newline.rex`
-//! itself (still 7 lines, matching `~source`, not 6): the `SIGNAL ON
-//! SYNTAX` wrapper does not change what any non-crashing file's expectation
-//! looks like. If a future witness program needs to crash its prolog *and*
-//! has one of those three shapes, this fallback stops being faithful and
-//! needs its own measurement before being trusted for that file.
+//! faithful substitute for `~source` only for a file carrying none of the
+//! shapes a naive line reader and `~source` read differently: a CRLF
+//! terminator, an embedded `CTRL-Z`, or a missing final newline
+//! (`no_trailing_newline.rex`'s entire reason to exist).
+//!
+//! **Which programs take the fallback is not written down here, because it is
+//! not a fact about this module.** A file takes it when constructing its
+//! package raises, and constructing a package runs the file's prolog and
+//! installs its directives, so every witness program whose whole purpose is a
+//! failure takes it -- measured with a copy of this driver instrumented to
+//! report the path it took, a large fraction of `corpus/lang` does,
+//! `trace_numeric_request.rex` among them. What has to
+//! hold instead is the condition above, and the test below asserts it over
+//! every corpus program: no CR byte, no `CTRL-Z`, and a final terminator on
+//! every file except the one whose name says it has none. A future witness
+//! program that broke any of those would redden that assertion rather than
+//! quietly gain an expectation this driver captured wrongly.
+//!
+//! `no_trailing_newline.rex` is therefore the file that must never be the one
+//! whose prolog is made to crash: measured, it takes the primary path and is
+//! 7 lines under `~source`, not 6, and the `SIGNAL ON SYNTAX` wrapper does not
+//! change what any non-crashing file's expectation looks like.
 //!
 //! To regenerate, put this driver in a scratch directory as `srclines.rex`:
 //!
@@ -134,7 +144,7 @@ fn sourceline_matches_the_interpreter_for_every_corpus_program() {
     let oracle = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/sourceline_oracle");
 
     let mut checked = 0;
-    let mut saw_unterminated_final_line = false;
+    let mut unterminated: Vec<String> = Vec::new();
     for entry in std::fs::read_dir(&corpus).expect("corpus/lang exists") {
         let path = entry.expect("readable directory entry").path();
         if path.extension().and_then(|e| e.to_str()) != Some("rex") {
@@ -152,9 +162,24 @@ fn sourceline_matches_the_interpreter_for_every_corpus_program() {
         let (count, lines) = parse_expectation(&expectation, name);
 
         let text = std::fs::read(&path).expect("readable corpus file");
-        if text.last() != Some(&b'\n') && text.last() != Some(&b'\r') {
-            saw_unterminated_final_line = true;
+        if text.last() != Some(&b'\n') {
+            unterminated.push(name.to_owned());
         }
+        // The CR and `CTRL-Z` shapes the module comment names as making its
+        // regeneration driver's fallback unfaithful, asserted here rather
+        // than written down, for the reason that comment gives. A missing
+        // final terminator is the shape the walk collects above and the tail
+        // below pins to the one file that is allowed it.
+        assert!(
+            !text.contains(&b'\r'),
+            "{name}: a CR byte, which the regeneration driver's LINEIN \
+             fallback does not read the way `~source` does"
+        );
+        assert!(
+            !text.contains(&0x1a),
+            "{name}: an embedded CTRL-Z, which the regeneration driver's \
+             LINEIN fallback does not read the way `~source` does"
+        );
         let src = ProgramSource::new(text, SourceKind::Program);
         assert_eq!(
             src.line_count(),
@@ -182,9 +207,14 @@ fn sourceline_matches_the_interpreter_for_every_corpus_program() {
     // named edge case, a file whose last line has no terminator, was among
     // the files rather than silently absent.
     assert!(checked >= 14, "corpus went missing: {checked}");
-    assert!(
-        saw_unterminated_final_line,
-        "no corpus program lacks a trailing newline, so the criterion's edge \
-         case is untested; no_trailing_newline.rex exists for this"
+    unterminated.sort();
+    assert_eq!(
+        unterminated,
+        ["no_trailing_newline"],
+        "the set of corpus programs whose last line has no terminator moved. \
+         Losing no_trailing_newline.rex leaves the criterion's edge case \
+         untested, which is why that file exists; gaining another leaves a \
+         file this module's regeneration driver cannot capture faithfully if \
+         its prolog ever raises"
     );
 }

@@ -1,13 +1,16 @@
-count 23
+count 26
 /* A condition raised inside a method a ::CONSTANT expression calls, which is
    the failure path through the expression's own method activation.
 
    The clause echoes run innermost first: the method's own clause, then the
    ::CONSTANT and the ::CLASS the other failing-constant witnesses already
-   pin. directive_constant_expression_fails.rex has the directive echoes and
-   no method echo, because the expression itself raises and no method is
-   entered; this program is the only one that puts a real activation between
-   the raising clause and the directives.
+   pin. directive_constant_expression_fails.rex has those two directive echoes
+   and no method echo, because the expression itself raises and no method is
+   entered. class_activate_failure_blames_the_last_installed_class.rex has a
+   method echo above one directive echo, because an ACTIVATE failure blames a
+   class and nothing else. What this program adds is a method echo above a
+   ::CONSTANT echo AND a ::CLASS echo together, which is what the constants
+   pass produces and what neither of those two reaches.
 
    Measured, rc 214, stdout EMPTY -- the failure is at install time, before
    "prolog" is ever said.
