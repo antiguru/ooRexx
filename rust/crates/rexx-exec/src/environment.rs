@@ -895,10 +895,14 @@ fn package_table_entries(
                 if unattached && kind == PackageTable::UnattachedMethods =>
             {
                 let upper = method.name.to_ascii_uppercase();
-                // `ATTRIBUTE` files the accessor pair under both names,
-                // which is `methodDirective`'s `addMethod` calls at
-                // `parser/DirectiveParser.cpp:875` and `:880`. Measured,
-                // `::method z attribute` puts `Z` and `Z=` in `.METHODS`.
+                // `ATTRIBUTE` files an accessor pair, the plain name and
+                // that name with `=`. Measured, `::method z attribute` puts
+                // `Z` and `Z=` in `.METHODS`; that spelling takes
+                // `methodDirective`'s `else` at
+                // `parser/DirectiveParser.cpp:889` and files each half
+                // through `createAttributeGetterMethod` and
+                // `createAttributeSetterMethod` (`:895`, `:896`), whose own
+                // `addMethod` calls are at `:2418` and `:2474`.
                 if method.attribute {
                     entries.push((crate::accessor_setter_name(&upper), method_value()));
                 }

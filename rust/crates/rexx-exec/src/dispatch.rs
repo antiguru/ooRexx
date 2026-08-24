@@ -3064,7 +3064,7 @@ fn native_hash_at(
 /// under `index`, replacing whatever was there -- `HashCollection::putRexx`.
 ///
 /// **The item is argument one and the index argument two**, which is the order
-/// `CoreClasses.orx:66` writes (`.environment~put(class, name)`). Measured at
+/// `CoreClasses.orx:65` writes (`.environment~put(class, name)`). Measured at
 /// rc 168, the two refusals in the order the C++ checks them:
 /// `.environment~put()` reports `Missing argument; argument item is required.`
 /// and `.environment~put('a')` reports `... argument index is required.`
