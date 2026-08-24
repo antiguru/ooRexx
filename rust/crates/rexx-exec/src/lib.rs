@@ -5988,11 +5988,17 @@ impl Interp {
     /// `instructions:u` against the phase's pin, five rounds interleaved,
     /// out-of-line against inlined, ir arm, small size: `alloc4c` 1.004808
     /// against 1.010281, `arith` 0.989743 against 0.994651, `strings`
-    /// 1.013408 against 1.020129, `rexxcps` 1.020346 against 1.026159. The
-    /// three axes whose loops allocate nothing -- `compound`, `emptyloop`,
+    /// 1.013408 against 1.020129, `rexxcps` 1.020337 against 1.026160. The
+    /// axes whose loops allocate nothing -- `compound`, `emptyloop`,
     /// `varlookup` -- read the same to six decimal places either way. That
     /// partition is what says the cost is on the allocation path and not in
     /// the collection.
+    ///
+    /// `dispatchclass` is deliberately not in that list: its ir/small cell is
+    /// bimodal, and both clusters appear inside a single sitting's rounds --
+    /// `[1.017560..1.019626]` out of line and `[1.017565..1.019938]` inlined,
+    /// medians landing in different clusters from overlapping spreads. Its
+    /// other three cells read the same on both builds.
     #[inline(never)]
     fn collect_now(&mut self) {
         // The context objects of the activations on the stack, handed to the
