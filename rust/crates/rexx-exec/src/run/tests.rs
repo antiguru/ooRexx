@@ -7629,6 +7629,26 @@ fn every_directive_this_crate_can_install_leaves_the_program_alone() {
             "::ANNOTATE PACKAGE",
             b"say 'main ran'\n::annotate package author 'me'\n",
         ),
+        (
+            "::ANNOTATE CLASS",
+            b"say 'main ran'\n::class foo\n::annotate class foo author 'me'\n",
+        ),
+        (
+            "::ANNOTATE ROUTINE",
+            b"say 'main ran'\n::routine r\nreturn 1\n::annotate routine r author 'me'\n",
+        ),
+        (
+            "::ANNOTATE METHOD",
+            b"say 'main ran'\n::class foo\n::method m\nreturn 1\n::annotate method m author 'me'\n",
+        ),
+        (
+            "::ANNOTATE ATTRIBUTE",
+            b"say 'main ran'\n::class foo\n::attribute a\n::annotate attribute a author 'me'\n",
+        ),
+        (
+            "::ANNOTATE CONSTANT",
+            b"say 'main ran'\n::class foo\n::constant c 5\n::annotate constant c author 'me'\n",
+        ),
     ];
     for (what, source) in sources {
         let outcome = routine_program(source);
@@ -7686,10 +7706,6 @@ fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
             "::OPTIONS is not implemented (Phase 5)",
         ),
         (
-            b"say 'main ran'\n::annotate routine nosuchrtn\n",
-            "::ANNOTATE naming a target is not implemented (Phase 5)",
-        ),
-        (
             b"say 'main ran'\n::routine z external \"LIBRARY nosuchlib nosuchfn\"\n",
             "::ROUTINE EXTERNAL is not implemented (Phase 7)",
         ),
@@ -7729,7 +7745,6 @@ fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
 /// answer, measured in a clean directory, is the same in either order:
 ///
 /// ```text
-/// ::annotate routine nosuchrtn                          99.945 rc 157, the ::ANNOTATE line
 /// ::requires 'zzznosuchfile.rex'                        43.901 rc 213, the ::REQUIRES line
 /// ::routine zz external "LIBRARY nosuchlib nosuchfn"    98.903 rc 158, the ::ROUTINE line
 /// ::method mm external "LIBRARY nosuchlib nosuchfn"     98.903 rc 158, the ::METHOD line
@@ -7743,19 +7758,15 @@ fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
 /// to the front instead reddens the `::OPTIONS` rows. One half alone does not
 /// say where the boundary is.
 ///
-/// **A refusal here is not a match** -- the oracle answers 99.945, 43.901 and
-/// 98.903, and this crate answers none of them. It is the honest half of the
-/// trade `staged_gap`'s doc states, and the corpus differential cannot see
-/// any of it, because no program in any corpus subset carries a `::REQUIRES`,
-/// an `EXTERNAL` directive or an `::ANNOTATE` with a target.
+/// **A refusal here is not a match** -- the oracle answers 43.901 and 98.903,
+/// and this crate answers neither. It is the honest half of the trade
+/// `staged_gap`'s doc states, and the corpus differential cannot see any of
+/// it, because a corpus program is a program both implementations answer and
+/// none of these is one.
 #[test]
 fn a_gap_the_oracle_diagnoses_before_a_class_refuses_ahead_of_the_class_error() {
     let failing_class = "::class a subclass zzznotaclass\n";
     let refusing: &[(&str, &str)] = &[
-        (
-            "::annotate routine nosuchrtn\n",
-            "::ANNOTATE naming a target is not implemented (Phase 5)",
-        ),
         (
             "::requires 'zzznosuchfile.rex'\n",
             "::REQUIRES is not implemented (Phase 5)",
@@ -8786,5 +8797,184 @@ fn the_guard_instructions_answers_and_the_phase_6_refusals() {
                 );
             }
         }
+    }
+}
+
+/// Runs `source` on both engines, insisting they agree with each other, and
+/// hands back `(exit code, stdout, stderr)`.
+///
+/// **Both, because `::ANNOTATE`'s install runs before either engine is
+/// chosen and its readback runs inside one.** The install half would pass
+/// with a single engine; the sends in the readback rows would not, and only
+/// running both says which.
+fn annotate_on_both_engines(source: &str) -> (i32, String, String) {
+    let mut answer = None;
+    for engine in [crate::Engine::Ir, crate::Engine::TreeWalker] {
+        let outcome = crate::run_program(
+            "/abs/annotate.rex",
+            source.as_bytes().to_vec(),
+            crate::Invocation::none().with_engine(engine),
+        );
+        let seen = (
+            outcome.exit_code,
+            String::from_utf8_lossy(&outcome.stdout).into_owned(),
+            String::from_utf8_lossy(&outcome.stderr).into_owned(),
+        );
+        match &answer {
+            None => answer = Some(seen),
+            Some(first) => assert_eq!(first, &seen, "the two engines disagree on {source:?}"),
+        }
+    }
+    answer.expect("at least one engine ran")
+}
+
+/// Every `::ANNOTATE` target the accumulated package does not hold is the
+/// oracle's 99.945, naming the keyword and the upcased target.
+///
+/// **The corpus carries one of these and cannot carry the rest**: a program
+/// refuses once, so five keywords need five programs, and the two kind
+/// filters below need two more. `directive_annotate_missing_target.rex` is
+/// the differential witness for the `class` row and this test is the only
+/// instrument for the others -- stated rather than implied, because a
+/// refusal this crate shares with the oracle is expressible as a corpus row
+/// and these are only left out for their cost.
+///
+/// The last two rows are the kind filters, and they are what says the
+/// resolution is more than a name lookup: `::ANNOTATE ATTRIBUTE` takes only
+/// an attribute method (`isAttribute()`, `parser/DirectiveParser.cpp:2164`)
+/// and `::ANNOTATE CONSTANT` only a constant one (`isConstant()`, `:2081`),
+/// so a plain `::METHOD` of the right name is not a target. Each row is the
+/// oracle's answer, measured, three descriptors.
+#[test]
+fn an_annotate_target_the_package_does_not_hold_is_the_oracles_own_refusal() {
+    let rows: &[(&str, &str)] = &[
+        (
+            "say 'main'\n::annotate class nosuch a 1\n",
+            "class \"NOSUCH\"",
+        ),
+        (
+            "say 'main'\n::annotate routine nosuch a 1\n",
+            "routine \"NOSUCH\"",
+        ),
+        (
+            "say 'main'\n::annotate method nosuch a 1\n",
+            "method \"NOSUCH\"",
+        ),
+        (
+            "say 'main'\n::annotate attribute nosuch a 1\n",
+            "attribute \"NOSUCH\"",
+        ),
+        (
+            "say 'main'\n::annotate constant nosuch a 1\n",
+            "constant \"NOSUCH\"",
+        ),
+        (
+            "say 'main'\n::class K\n::method a\n  return 1\n::annotate attribute a x 1\n",
+            "attribute \"A\"",
+        ),
+        (
+            "say 'main'\n::class K\n::method c\n  return 1\n::annotate constant c x 1\n",
+            "constant \"C\"",
+        ),
+    ];
+    for (source, target) in rows {
+        let (code, stdout, stderr) = annotate_on_both_engines(source);
+        assert_eq!((code, stdout.as_str()), (157, ""), "{source:?}: {stderr:?}");
+        assert!(
+            stderr.contains(&format!(
+                "Error 99.945:  ::ANNOTATE target {target} not found."
+            )),
+            "{source:?}: stderr was {stderr:?}"
+        );
+    }
+}
+
+/// What an `::ANNOTATE` resolves to, in the cases a single readback program
+/// cannot separate.
+///
+/// Each row's expected stdout is the oracle's, measured, three descriptors,
+/// and each is chosen so that a plausible wrong resolution answers a
+/// different line rather than failing:
+///
+/// * a second `::ANNOTATE` of one target **adds** to the first's pairs, and a
+///   repeated name inside one directive takes the later value -- both are
+///   `StringTable::put` into a table the target already owns;
+/// * `findMethod` reads the instance dictionary before the class one, so a
+///   class named on both sides annotates the instance method;
+/// * `::ANNOTATE ATTRIBUTE` annotates both halves of the accessor pair where
+///   `::ANNOTATE METHOD` naming the getter annotates the getter alone;
+/// * a class-side `::ATTRIBUTE` is reached only because the instance side
+///   holds neither half, which is `processAttributeAnnotations`' second
+///   lookup and the row that would go green by accident if the first lookup
+///   searched both sides at once.
+#[test]
+fn an_annotate_target_resolves_the_way_the_directive_walk_accumulates() {
+    let rows: &[(&str, &str)] = &[
+        (
+            "say .K~annotation('A') .K~annotation('B')\n::class K\n\
+             ::annotate class K a 1 b 2\n::annotate class K a 3\n",
+            "3 2\n",
+        ),
+        (
+            "say .K~method('M')~annotation('X')\n::class K\n::method m class\n  return 1\n\
+             ::method m\n  return 2\n::annotate method m x 'instance'\n",
+            "instance\n",
+        ),
+        (
+            "say .K~method('A')~annotation('X') .K~method('A=')~annotation('X')\n\
+             ::class K\n::attribute a\n::annotate attribute a x 'pair'\n",
+            "pair pair\n",
+        ),
+        (
+            "say .K~method('A')~annotation('X') .K~method('A=')~annotation('X')\n\
+             ::class K\n::attribute a\n::annotate method A x 'getter'\n",
+            "getter The NIL object\n",
+        ),
+        (
+            "say 'installed'\n::class K\n::attribute a class\n::annotate attribute a x 'c'\n",
+            "installed\n",
+        ),
+        (
+            "say .methods~m~annotation('X')\n::method m\n  return 1\n\
+             ::annotate method m x 'unattached'\n",
+            "unattached\n",
+        ),
+    ];
+    for (source, stdout) in rows {
+        let (code, seen, stderr) = annotate_on_both_engines(source);
+        assert_eq!(
+            (code, seen.as_str()),
+            (0, *stdout),
+            "{source:?}: stderr was {stderr:?}"
+        );
+    }
+}
+
+/// A `Method` and a `Routine` object are receivers, and `~objectName=` is the
+/// one message on them this crate refuses rather than answers.
+///
+/// The refusal's reason is at `dispatch::native_object_name_set`. This test
+/// is its only instrument: the oracle answers the program at rc 0, so no
+/// corpus row can carry it, and the getter beside it is the control that says
+/// the refusal is the setter's and not the whole class's.
+#[test]
+fn a_method_or_routine_object_refuses_only_the_stored_object_name() {
+    let class = "::class K\n::method m\n  return 1\n::routine r\n  return 2\n";
+    for receiver in [".K~method('M')", ".routines~r"] {
+        let (code, stdout, stderr) =
+            annotate_on_both_engines(&format!("{receiver}~objectName = 'x'\n{class}"));
+        assert_eq!((code, stdout.as_str()), (crate::NOT_IMPLEMENTED_EXIT, ""));
+        assert_eq!(
+            stderr,
+            "rexx-exec: method \"OBJECTNAME=\" of class \"Object\" is not implemented (Phase 5)\n"
+        );
+
+        let (code, stdout, stderr) =
+            annotate_on_both_engines(&format!("say {receiver}~objectName\n{class}"));
+        assert_eq!((code, stderr.as_str()), (0, ""));
+        assert!(
+            stdout == "a Method\n" || stdout == "a Routine\n",
+            "{receiver}: stdout was {stdout:?}"
+        );
     }
 }

@@ -301,6 +301,39 @@ struct Unbuilt {
     scope: EnvScope,
 }
 
+/// What one `::ANNOTATE` directive's pairs belong to, once the object that
+/// carries them exists.
+///
+/// **One key space rather than one table per kind**, because the readback is
+/// one pair of methods whatever the receiver: `memory/Setup.cpp` binds
+/// `Annotations`/`Annotation` at `Class` (`:498`), `Method` (`:1111`),
+/// `Routine` (`:1140`) and `Package` (`:1172`), and the three C++ bodies
+/// behind those rows differ only in which field they reach for.
+///
+/// The variants are what this crate can put a program's hands on. A member is
+/// keyed by its class, its dictionary side and its name rather than by the
+/// directive that declared it, because that is what
+/// `dispatch::native_method` holds when a program asks: `~method` takes a
+/// name and a class object and has no directive.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub(crate) enum Annotated {
+    /// `::ANNOTATE PACKAGE`. The `REXX` package is a variant of [`Package`]
+    /// and no `::ANNOTATE` can name it, so it reaches this key only through
+    /// `.Array~package~annotations`, whose table starts empty.
+    Package(Package),
+    /// A class, by the object its `::CLASS` installed. A class this crate's
+    /// own bootstrap built is here too, for the same reason.
+    Class(ObjRef),
+    /// One entry of a class's method dictionary: the class, which side, and
+    /// the name.
+    Member(ObjRef, bool, Box<[u8]>),
+    /// A method-shaped directive ahead of the file's first `::CLASS`, which
+    /// attaches to no class -- `.METHODS`'s own key.
+    Unattached(ProgramId, Box<[u8]>),
+    /// A `::ROUTINE`, by the directive that declares it.
+    Routine(ProgramId, usize),
+}
+
 /// Which directive list a reflection name reports on.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum PackageTable {
@@ -325,11 +358,11 @@ pub(crate) enum PackageTable {
 /// `.methods~z` and `.routines~r` render `a Method` and `a Routine`, and
 /// `.resources~x~class` is `The Array class`.
 enum TableValue {
-    /// A `Method` or a `Routine`. Everything about one that this phase can
-    /// observe is the class it answers to, so the class is the whole of it:
-    /// nothing here dispatches a `::METHOD` body through `.METHODS`, and a
-    /// message a `Method` does not answer is 97.1 on either side.
-    Instance(&'static str),
+    /// A `Method` or a `Routine`: the class it answers to and the annotations
+    /// it carries. Nothing here dispatches a `::METHOD` body through
+    /// `.METHODS`, and a message neither the class's dictionary nor
+    /// `NATIVE_METHODS` holds is 97.1 on either side.
+    Instance(&'static str, Annotated),
     /// A `::RESOURCE`'s own body lines, which is what `.RESOURCES` holds --
     /// `resources->put(resource, internalname)` over an `ArrayClass`
     /// (`parser/DirectiveParser.cpp:2344`). Measured, a two-line resource's
@@ -586,7 +619,7 @@ impl Interp {
             return Some(found);
         }
         let source = std::rc::Rc::clone(self.programs.get(program.0)?);
-        let entries = package_table_entries(&source, kind);
+        let entries = package_table_entries(program, &source, kind);
         if entries.is_empty() {
             return None;
         }
@@ -602,12 +635,14 @@ impl Interp {
         let frame = self.roots.push_frame();
         for (name, value) in entries {
             let value = match value {
-                TableValue::Instance(id) => {
+                TableValue::Instance(id, site) => {
                     let class = self
                         .classes()
                         .lookup(id)
                         .expect("every TableValue::Instance names a native class");
-                    self.native_instance(class)
+                    let object = self.native_instance(class);
+                    self.attach_annotations(object, site);
+                    object
                 }
                 TableValue::Lines(lines) => self.line_array(&lines),
             };
@@ -656,7 +691,7 @@ impl Interp {
     /// Pushed onto the temporaries stack rather than left unrooted: the value
     /// is returned into an expression that may allocate again before anything
     /// stores it.
-    fn native_instance(&mut self, class: ObjRef) -> ObjRef {
+    pub(crate) fn native_instance(&mut self, class: ObjRef) -> ObjRef {
         let rendered = default_object_name(self.classes().id_string(class));
         let object = self.alloc_with(
             BehaviourId::OBJECT,
@@ -724,7 +759,7 @@ impl Interp {
     }
 
     /// One entry of a `Body::Native`'s own map, by the key the caller holds.
-    fn native_entry(&self, object: ObjRef, index: &[u8]) -> Option<ObjRef> {
+    pub(crate) fn native_entry(&self, object: ObjRef, index: &[u8]) -> Option<ObjRef> {
         match &self.heap.get(object)?.body {
             Body::Native(native) => native.entry(index),
             _ => None,
@@ -820,7 +855,109 @@ impl Interp {
         // a temp -- the position `.environment` and `.local` are in.
         self.roots.add_global(&package_root_key(package), object);
         self.package_objects.insert(package, object);
+        self.attach_annotations(object, Annotated::Package(package));
         object
+    }
+
+    /// The `StringTable` `~annotations` answers for `site`, built empty on
+    /// first ask and kept.
+    ///
+    /// **Kept, because the oracle's is a live table and not a snapshot**:
+    /// `RexxClass::getAnnotations` and `BaseExecutable::getAnnotations` both
+    /// create the table on the first ask and store it in the object's own
+    /// field (`classes/ClassClass.cpp:325`, `execution/BaseExecutable.cpp:378`).
+    /// Measured, oracle rc 0 in each of three shapes: `.K~annotations~put('v',
+    /// 'N')` then `.K~annotation('N')` answers `v`, and so do the same pair
+    /// through `.K~method('M')` and through `.routines~r`, where a build
+    /// answering a fresh table each time answers `The NIL object`.
+    ///
+    /// **Rooted as a global**, the position `.environment` and a package
+    /// object are in: the table outlives every send that reaches it and, for
+    /// a `Method` object this crate rebuilds per `~method`, is reachable from
+    /// no other object between two of them.
+    pub(crate) fn annotation_table(&mut self, site: Annotated) -> ObjRef {
+        if let Some(found) = self.annotations.get(&site).copied() {
+            return found;
+        }
+        let class = self.environment_model().string_table;
+        let table = self.native_instance(class);
+        self.roots.add_global(&annotation_root_key(&site), table);
+        self.annotations.insert(site, table);
+        table
+    }
+
+    /// Records what one `::ANNOTATE` directive named, under every key that
+    /// reaches it.
+    ///
+    /// More than one key where a `::CONSTANT` is annotated: one directive
+    /// files a single method object in both of its class's dictionaries
+    /// (`instructions/ClassDirective.cpp:520`-`:524`), so both sides answer
+    /// the same table rather than two tables that could come to disagree.
+    pub(crate) fn record_annotations(
+        &mut self,
+        sites: &[Annotated],
+        pairs: &[(Box<[u8]>, Box<[u8]>)],
+    ) {
+        let Some((first, rest)) = sites.split_first() else {
+            return;
+        };
+        let table = self.annotation_table(first.clone());
+        // Each value is pushed as a temporary as it is built, because the
+        // next value's own allocation may collect and the table does not hold
+        // it until the line below.
+        let frame = self.roots.push_frame();
+        for (name, value) in pairs {
+            let value = self.text(value);
+            self.roots.push_temp(value);
+            let object = self.heap.get_mut(table).expect("just built and rooted");
+            let Body::Native(native) = &mut object.body else {
+                unreachable!("allocated as Body::Native by native_instance")
+            };
+            native.set_entry(name, value);
+        }
+        self.roots.pop_frame(frame);
+        for site in rest {
+            self.annotations.insert(site.clone(), table);
+        }
+    }
+
+    /// Gives `object` the annotation table `site` names, so that a send to it
+    /// needs no way back to the directive that declared it.
+    ///
+    /// A `Method` object is rebuilt per `~method` send and a `Routine` object
+    /// is an entry of a cached table, and both must answer the one table
+    /// [`Interp::annotation_table`] keeps: what the object carries is a
+    /// handle on that table, never a copy of it.
+    pub(crate) fn attach_annotations(&mut self, object: ObjRef, site: Annotated) {
+        let table = self.annotation_table(site);
+        let Some(held) = self.heap.get_mut(object) else {
+            return;
+        };
+        if let Body::Native(native) = &mut held.body {
+            native.set_annotations(table);
+        }
+    }
+
+    /// The `StringTable` a receiver's `~annotations` answers, or the refusal
+    /// for a receiver that carries none.
+    ///
+    /// A class object answers from [`Interp::annotations`] directly, because
+    /// a class handle is the key; every other carrier answers the handle it
+    /// was built with. The refusal is an internal inconsistency rather than a
+    /// program's doing -- `NATIVE_METHODS` binds the two readers at `Class`,
+    /// `Method`, `Routine` and `Package` alone, and this crate gives an
+    /// object of each of the last three its table as it builds it.
+    ///
+    /// [`Interp::annotations`]: Interp::annotations
+    pub(crate) fn annotations_of(&mut self, receiver: ObjRef) -> Result<ObjRef, Failure> {
+        if self.is_class_object(receiver) {
+            return Ok(self.annotation_table(Annotated::Class(receiver)));
+        }
+        match self.heap.get(receiver).map(|held| &held.body) {
+            Some(Body::Native(native)) => native.annotations(),
+            _ => None,
+        }
+        .ok_or_else(|| Loud::receiver_class("a value that carries no annotations").into())
     }
 
     /// `Package~name`'s answer for a package object this crate built, or
@@ -862,6 +999,36 @@ fn package_root_key(package: Package) -> String {
     }
 }
 
+/// The [`rexx_core::RootSet::add_global`] key one annotation table is held
+/// under.
+///
+/// Spelled so that no two [`Annotated`] keys can collide: a class handle and
+/// a program id are numbers from different spaces, so each variant names
+/// itself as well as its parts.
+fn annotation_root_key(site: &Annotated) -> String {
+    match site {
+        Annotated::Package(package) => format!("annotations of {}", package_root_key(*package)),
+        Annotated::Class(class) => format!("annotations of the class at {}", class.bits()),
+        Annotated::Member(class, class_side, name) => format!(
+            "annotations of the {} {} of the class at {}",
+            if *class_side {
+                "class method"
+            } else {
+                "instance method"
+            },
+            String::from_utf8_lossy(name),
+            class.bits()
+        ),
+        Annotated::Unattached(ProgramId(program), name) => format!(
+            "annotations of the unattached method {} of program {program}",
+            String::from_utf8_lossy(name)
+        ),
+        Annotated::Routine(ProgramId(program), directive) => {
+            format!("annotations of the routine at directive {directive} of program {program}")
+        }
+    }
+}
+
 /// The [`rexx_core::RootSet::add_global`] key one package table is held under.
 ///
 /// A program's `.METHODS`, `.ROUTINES` and `.RESOURCES` are distinct objects
@@ -882,12 +1049,15 @@ fn package_table_root_key(ProgramId(program): ProgramId, kind: PackageTable) -> 
 /// state `.METHODS` renders as its own text in --
 /// [`Interp::package_string_table`] is where that distinction is read.
 fn package_table_entries(
+    id: ProgramId,
     program: &rexx_parse::Program,
     kind: PackageTable,
 ) -> Vec<(Vec<u8>, TableValue)> {
+    let method_value =
+        |name: &[u8]| TableValue::Instance("Method", Annotated::Unattached(id, name.into()));
     let mut entries = Vec::new();
     let mut seen_class = false;
-    for directive in &program.directives {
+    for (index, directive) in program.directives.iter().enumerate() {
         let unattached = !seen_class;
         match &directive.kind {
             rexx_parse::DirectiveKind::Class(_) => seen_class = true,
@@ -904,9 +1074,12 @@ fn package_table_entries(
                 // `createAttributeSetterMethod` (`:895`, `:896`), whose own
                 // `addMethod` calls are at `:2418` and `:2474`.
                 if method.attribute {
-                    entries.push((crate::accessor_setter_name(&upper), method_value()));
+                    let setter = crate::accessor_setter_name(&upper);
+                    let value = method_value(&setter);
+                    entries.push((setter, value));
                 }
-                entries.push((upper, method_value()));
+                let value = method_value(&upper);
+                entries.push((upper, value));
             }
             rexx_parse::DirectiveKind::Attribute(attribute)
                 if unattached && kind == PackageTable::UnattachedMethods =>
@@ -921,11 +1094,19 @@ fn package_table_entries(
                 // set` puts `ZZ=` alone.
                 match attribute.style {
                     rexx_parse::AttributeStyle::Both => {
-                        entries.push((upper, method_value()));
-                        entries.push((setter, method_value()));
+                        let getter_value = method_value(&upper);
+                        let setter_value = method_value(&setter);
+                        entries.push((upper, getter_value));
+                        entries.push((setter, setter_value));
                     }
-                    rexx_parse::AttributeStyle::Get => entries.push((upper, method_value())),
-                    rexx_parse::AttributeStyle::Set => entries.push((setter, method_value())),
+                    rexx_parse::AttributeStyle::Get => {
+                        let value = method_value(&upper);
+                        entries.push((upper, value));
+                    }
+                    rexx_parse::AttributeStyle::Set => {
+                        let value = method_value(&setter);
+                        entries.push((setter, value));
+                    }
                 }
             }
             rexx_parse::DirectiveKind::Constant(constant)
@@ -935,7 +1116,9 @@ fn package_table_entries(
                 // `addMethod(name, method, false)`
                 // (`parser/DirectiveParser.cpp:2536`). Measured,
                 // `::constant sep '/'` leaves `.methods~items` `1`.
-                entries.push((constant.name.to_ascii_uppercase(), method_value()));
+                let upper = constant.name.to_ascii_uppercase();
+                let value = method_value(&upper);
+                entries.push((upper, value));
             }
             rexx_parse::DirectiveKind::Routine(routine) if kind == PackageTable::Routines => {
                 // Both access scopes, not the public ones alone: `.ROUTINES`
@@ -945,7 +1128,7 @@ fn package_table_entries(
                 // leaves `.routines~items` `2`.
                 entries.push((
                     routine.name.to_ascii_uppercase(),
-                    TableValue::Instance("Routine"),
+                    TableValue::Instance("Routine", Annotated::Routine(id, index)),
                 ));
             }
             rexx_parse::DirectiveKind::Resource(resource) if kind == PackageTable::Resources => {
@@ -966,15 +1149,6 @@ fn package_table_entries(
         }
     }
     entries
-}
-
-/// The value a `.METHODS` entry holds.
-///
-/// A function rather than a constant so that the class name is written once:
-/// every one of `::METHOD`, `::ATTRIBUTE` and `::CONSTANT` files a
-/// `MethodClass`, whatever else differs between them.
-fn method_value() -> TableValue {
-    TableValue::Instance("Method")
 }
 
 /// `RexxObject::defaultName` (`classes/ObjectClass.cpp:1760`): the owning

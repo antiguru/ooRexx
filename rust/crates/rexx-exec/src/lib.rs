@@ -1445,14 +1445,6 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
         DirectiveKind::Class(class) if class_names_a_namespace(class) => {
             gap("::CLASS naming a namespace", "Phase 5")
         }
-        // Resolves its target against the accumulated package: measured,
-        // `::annotate routine nosuchrtn` is 99.945 rc 157. `::ANNOTATE
-        // PACKAGE` names nothing and is ignored with the rest.
-        DirectiveKind::Annotate(annotate)
-            if !matches!(annotate.target, AnnotationTarget::Package) =>
-        {
-            gap("::ANNOTATE naming a target", "Phase 5")
-        }
         DirectiveKind::Annotate(_)
         | DirectiveKind::Attribute(_)
         | DirectiveKind::Class(_)
@@ -1522,31 +1514,35 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
 /// where that puts the gap check relative to its arms.
 ///
 /// **The cost is a refusal wherever the oracle would have carried on**, and
-/// it is not confined to the class error. With the `::ANNOTATE` target
-/// declared above it, the `::REQUIRES` file present, or the `EXTERNAL`
-/// library loadable, the oracle installs the directive and goes on to
-/// whatever the file fails at next. Measured; each row matched the oracle
-/// byte for byte at `62de43c0f` and refuses here:
+/// it is not confined to the class error. With the `::REQUIRES` file present
+/// or the `EXTERNAL` library loadable, the oracle installs the directive and
+/// goes on to whatever the file fails at next, where this crate refuses:
+///
+/// ```text
+/// ::class a / ::constant kk (1/0) / ::requires 'helper.rex', present    42.3 rc 214
+/// an EXTERNAL directive whose library loads, in any such shape        REASONED, NOT PROBED
+/// ```
+///
+/// The second row is **reasoned rather than probed**: it follows the same
+/// code path as the row above it, but no library in this tree loads, so
+/// nothing here has measured it and it must not be read as a measurement.
+///
+/// The rows put the gap **after** the failing directive, which is what makes
+/// them losses: with the gap first this crate refuses whatever the staging.
+/// Telling the installable case from the failing one means opening the file
+/// and loading the library, which is the work Phase 5 and Phase 7 own; until
+/// then a refusal is the answer that cannot be wrong.
+///
+/// **A resolvable `::ANNOTATE` target is no longer one of them**, because
+/// resolving one is what this crate does now. Measured, each matching the
+/// oracle byte for byte on both engines:
 ///
 /// ```text
 /// ::routine r / ::annotate routine r / ::class a subclass zzznotaclass  98.909 rc 158
 /// ::class a / ::constant kk (1/0) / ::routine r / ::annotate routine r  42.3 rc 214
-/// ::class a / ::constant kk (1/0) / ::requires 'helper.rex', present    42.3 rc 214
 /// ::routine r / ::annotate routine r / a duplicate ::ROUTINE pair       99.903 rc 157
 /// ::routine r / ::annotate routine r / a class-less ::constant (1/0)    99.906 rc 157
-/// an EXTERNAL directive whose library loads, in any of the above      REASONED, NOT PROBED
 /// ```
-///
-/// The last row is **reasoned rather than probed**: it follows the same code
-/// path as the rows above it, but no library in this tree loads, so nothing
-/// here has measured it and it must not be read as a measurement.
-///
-/// The rows put the gap **after** the failing directive, which is what makes
-/// them losses: with the gap first this crate refused before any of this
-/// staging existed too. Telling the installable case from the failing one
-/// means resolving the target, opening the file and loading the library,
-/// which is the work Phase 5 and Phase 7 own; until then a refusal is the
-/// answer that cannot be wrong.
 fn staged_gap(program: &Program, stage: fn(&DirectiveKind) -> bool) -> Option<Loud> {
     program
         .directives
@@ -1843,6 +1839,159 @@ fn class_members(program: &Program) -> HashMap<usize, Vec<usize>> {
 /// spelled so that two programs' directives at the same index cannot collide.
 fn constant_root_key(ProgramId(program): ProgramId, directive: usize) -> String {
     format!("constant:{program}:{directive}")
+}
+
+/// What an `::ANNOTATE` names, as the first install walk can express it.
+///
+/// **Keyed by the directive and not by the object the target becomes**,
+/// because that walk runs before any of those objects exists: a `::CLASS`
+/// has no class object until the install pass creates one, and a method
+/// dictionary entry has no [`rexx_classes::MethodId`] until the same pass
+/// mints it. [`Interp::install_directives`] converts every one of these into
+/// an [`Annotated`] key as soon as the object is there, which is the split
+/// the oracle has too -- `ClassDirective` carries a class's annotations
+/// through translation and `install` hands them to the class object it just
+/// built (`instructions/ClassDirective.cpp:243`).
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+enum AnnotatedSite {
+    /// `::ANNOTATE PACKAGE`, which names the running package and no
+    /// directive.
+    Package,
+    /// The `::CLASS` or `::ROUTINE` directive named.
+    Directive(usize),
+    /// One dictionary entry of a method-shaped directive: the directive that
+    /// declares it and the name it is filed under.
+    ///
+    /// The name is what tells the two halves of an accessor pair apart, and
+    /// they do part: measured, oracle rc 0, `::ATTRIBUTE a` under
+    /// `::ANNOTATE METHOD A` leaves `~method("A")~annotation("X")` the
+    /// annotation's value and `~method("A=")~annotation("X")` `The NIL
+    /// object`, where `::ANNOTATE ATTRIBUTE a` answers it on both.
+    Member(usize, Box<[u8]>),
+}
+
+/// An `::ANNOTATE` target the accumulated package does not hold: the
+/// keyword's own spelling for the message, and the name that resolved to
+/// nothing.
+struct MissingTarget<'a> {
+    kind: &'static str,
+    name: &'a [u8],
+}
+
+/// Whether a member directive's methods are the *attribute* methods
+/// `::ANNOTATE ATTRIBUTE` will accept -- `MethodClass::isAttribute()`.
+///
+/// `::ATTRIBUTE` sets it on every method it creates, and `::METHOD name
+/// ATTRIBUTE` reaches the same two constructors
+/// (`parser/DirectiveParser.cpp:895`, `:896`), so the two spellings are one
+/// test. A `GET` or `SET` half written as Rexx keeps it: `createMethod`'s
+/// last argument is the flag and `attributeDirective` passes `true`
+/// (`:1774`, and `_method->setAttribute(isAttribute)` at `:2388`).
+fn is_attribute_method(kind: &DirectiveKind) -> bool {
+    match kind {
+        DirectiveKind::Attribute(_) => true,
+        DirectiveKind::Method(method) => method.attribute,
+        _ => false,
+    }
+}
+
+/// `annotateDirective`'s target resolution (`parser/DirectiveParser.cpp:1940`):
+/// which directives an `::ANNOTATE` annotates, or the target it could not
+/// find.
+///
+/// **Against the accumulated package, which is the state this walk has
+/// reached and not the whole file.** Measured, oracle rc 157 with 99.945:
+/// `::ANNOTATE CLASS K` above `::CLASS K`, and `::ANNOTATE METHOD m` under
+/// `::CLASS B` when `m` was declared under `::CLASS A`.
+///
+/// **A member is looked up in the active class's own two dictionaries,
+/// instance side first** -- `ClassDirective::findMethod`
+/// (`instructions/ClassDirective.cpp:455`), reached through
+/// `LanguageParser::findMethod` (`parser/DirectiveParser.cpp:540`), which
+/// reads the file's unattached table instead while no `::CLASS` has been
+/// seen. Measured, oracle rc 0: `::METHOD m CLASS` and `::METHOD m` in one
+/// class with `::ANNOTATE METHOD m` under them annotates the instance one,
+/// and a lone `::METHOD m` with no `::CLASS` at all is annotated and read
+/// back through `.methods~m`.
+///
+/// `ATTRIBUTE` is the one target that can name two: `processAttributeAnnotations`
+/// (`:2160`) takes the getter and the setter together, refuses a name that is
+/// neither's, and looks at the class side only when the instance side holds
+/// neither. `CONSTANT` is the one target that tests the claimant's kind
+/// without pairing anything (`:2081`, `isConstant()`).
+fn annotation_target<'a>(
+    program: &Program,
+    target: &'a AnnotationTarget,
+    current_class: Option<usize>,
+    claimed: &HashMap<(Option<usize>, bool, Vec<u8>), usize>,
+    declared_classes: &HashMap<Vec<u8>, usize>,
+    declared_routines: &HashMap<Vec<u8>, usize>,
+) -> Result<Vec<AnnotatedSite>, MissingTarget<'a>> {
+    // `findMethod`'s own order, instance dictionary before class.
+    let member = |name: &[u8]| -> Option<usize> {
+        [false, true]
+            .into_iter()
+            .find_map(|side| claimed.get(&(current_class, side, name.to_vec())).copied())
+    };
+    // One half of an accessor pair, on the side asked and only where the
+    // directive that claimed the name is an attribute directive.
+    let accessor = |name: &[u8], side: bool| -> Option<usize> {
+        let directive = claimed
+            .get(&(current_class, side, name.to_vec()))
+            .copied()?;
+        is_attribute_method(&program.directives[directive].kind).then_some(directive)
+    };
+    match target {
+        AnnotationTarget::Package => Ok(vec![AnnotatedSite::Package]),
+        AnnotationTarget::Class(name) => declared_classes
+            .get(&name.to_vec())
+            .map(|index| vec![AnnotatedSite::Directive(*index)])
+            .ok_or(MissingTarget {
+                kind: "class",
+                name,
+            }),
+        AnnotationTarget::Routine(name) => declared_routines
+            .get(&name.to_vec())
+            .map(|index| vec![AnnotatedSite::Directive(*index)])
+            .ok_or(MissingTarget {
+                kind: "routine",
+                name,
+            }),
+        AnnotationTarget::Method(name) => member(name)
+            .map(|index| vec![AnnotatedSite::Member(index, name.clone())])
+            .ok_or(MissingTarget {
+                kind: "method",
+                name,
+            }),
+        AnnotationTarget::Constant(name) => member(name)
+            .filter(|index| matches!(program.directives[*index].kind, DirectiveKind::Constant(_)))
+            .map(|index| vec![AnnotatedSite::Member(index, name.clone())])
+            .ok_or(MissingTarget {
+                kind: "constant",
+                name,
+            }),
+        AnnotationTarget::Attribute(name) => {
+            let setter: Box<[u8]> = accessor_setter_name(name).into();
+            let mut found = Vec::new();
+            for side in [false, true] {
+                for half in [name, &setter] {
+                    if let Some(index) = accessor(half, side) {
+                        found.push(AnnotatedSite::Member(index, half.clone()));
+                    }
+                }
+                if !found.is_empty() {
+                    break;
+                }
+            }
+            if found.is_empty() {
+                return Err(MissingTarget {
+                    kind: "attribute",
+                    name,
+                });
+            }
+            Ok(found)
+        }
+    }
 }
 
 /// Why a resolved method's directive cannot be entered, or `None` when it
@@ -2799,6 +2948,16 @@ struct Interp {
     ///
     /// [`Interp::package_objects`]: Interp::package_objects
     constant_values: HashMap<(ProgramId, usize), ObjRef>,
+    /// The `StringTable` each annotated thing's `~annotations` answers, keyed
+    /// by the thing -- see [`environment::Annotated`] for the key space and
+    /// [`Interp::annotation_table`] for why the table is kept rather than
+    /// rebuilt.
+    ///
+    /// **Rooted through [`rexx_core::RootSet::add_global`]**, the position
+    /// [`Interp::package_objects`]'s entries are in.
+    ///
+    /// [`Interp::package_objects`]: Interp::package_objects
+    annotations: HashMap<environment::Annotated, ObjRef>,
     /// Which `(program, directive)` a [`rexx_classes::MethodId`] `install_directives`
     /// minted names -- the "bodies are stored" half of R9, addressed by the
     /// same identity `ClassRegistry::add_instance_method`/`add_class_method`
@@ -3838,6 +3997,7 @@ impl Interp {
             package_objects: HashMap::new(),
             package_tables: HashMap::new(),
             constant_values: HashMap::new(),
+            annotations: HashMap::new(),
             method_bodies: HashMap::new(),
             generated_methods: HashMap::new(),
             special_methods: Vec::new(),
@@ -3959,6 +4119,7 @@ impl Interp {
     /// ::constant kk 5
     /// ::resource foo ... ::END
     /// ::annotate package author 'me'
+    /// ::annotate <target> <name>, with the target declared above it
     /// a loose ::method with no ::class
     /// ```
     ///
@@ -3977,8 +4138,13 @@ impl Interp {
     ///
     /// So the predicate below is: **a directive installs here when installing
     /// it neither runs code, changes a setting a Phase 4 construct can read,
-    /// nor resolves a name against a table this crate does not have.** Each
-    /// arm's own comment says which of the three it trips.
+    /// nor resolves a name against a table this crate does not have.**
+    /// [`directive_gap`]'s arms each say which of the three they trip. An
+    /// `::ANNOTATE` naming a target resolves it against the accumulated
+    /// package, which the walk below carries, so it trips none of them and
+    /// answers the oracle's own 99.945 where the name is not there --
+    /// [`annotation_target`] is the resolution and [`AnnotatedSite`] is what
+    /// it produces.
     ///
     /// **`::CONSTANT`'s parenthesised expression form is the one exception to
     /// "installing does not run code".** The oracle evaluates it right here,
@@ -4016,16 +4182,29 @@ impl Interp {
         // table, which is one table for the whole file rather than one per
         // class (`parser/DirectiveParser.cpp:518`).
         let mut current_class: Option<usize> = None;
-        let mut claimed: std::collections::HashSet<(Option<usize>, bool, Vec<u8>)> =
-            std::collections::HashSet::new();
+        // Which directive claimed each key, and not merely that one did:
+        // `::ANNOTATE ATTRIBUTE` and `::ANNOTATE CONSTANT` accept only a key
+        // whose claimant is of the matching kind, which is `isAttribute()`
+        // and `isConstant()` on the method object the C++ finds.
+        let mut claimed: HashMap<(Option<usize>, bool, Vec<u8>), usize> = HashMap::new();
         // The other two tables the duplicate checks keep, each keyed by the
         // upcased name and separate from the others, so that a `::CLASS` and a
         // `::ROUTINE` of one name are not a collision. See
         // `Raised::duplicate_class` for the probes on both halves.
-        let mut declared_classes: std::collections::HashSet<Vec<u8>> =
-            std::collections::HashSet::new();
+        // The class and routine tables carry the declaring directive's index
+        // as well, because an `::ANNOTATE CLASS` or `::ANNOTATE ROUTINE`
+        // resolves its target against exactly these two -- `classDependencies`
+        // and `routines`, the same tables `findClassDirective` and
+        // `findRoutine` read (`parser/DirectiveParser.cpp:230`, `:258`).
+        let mut declared_classes: HashMap<Vec<u8>, usize> = HashMap::new();
+        let mut declared_routines: HashMap<Vec<u8>, usize> = HashMap::new();
         let mut declared_resources: std::collections::HashSet<Vec<u8>> =
             std::collections::HashSet::new();
+        // What each `::ANNOTATE` recorded, keyed by what its target names.
+        // Filled in this walk and converted below, because a target's own
+        // object does not exist yet: a `::CLASS` has no class object until
+        // the install pass creates one.
+        let mut staged: HashMap<AnnotatedSite, Vec<(Box<[u8]>, Box<[u8]>)>> = HashMap::new();
         for (index, directive) in program.directives.iter().enumerate() {
             // **Before the arms below, because the oracle checks before it
             // adds.** `constantDirective` calls `checkDuplicateMethod` ahead
@@ -4033,10 +4212,13 @@ impl Interp {
             // (`parser/DirectiveParser.cpp:1926`, `:1933`), and the two part:
             // measured, `::constant c 5` then `::constant c (1+2)` with no
             // `::CLASS` in the file is 99.932 and not 99.906.
-            self.check_member_keys(program, directive, current_class, &mut claimed)?;
+            self.check_member_keys(program, directive, current_class, &mut claimed, index)?;
             match &directive.kind {
                 DirectiveKind::Class(class) => {
-                    if !declared_classes.insert(class.name.to_ascii_uppercase()) {
+                    if declared_classes
+                        .insert(class.name.to_ascii_uppercase(), index)
+                        .is_some()
+                    {
                         self.blame_directive(program, directive);
                         return Err(Raised::duplicate_class().into());
                     }
@@ -4060,6 +4242,7 @@ impl Interp {
                     // the body is already assembled in the AST, so installing
                     // it is recording a name.
                     let name: Box<[u8]> = routine.name.to_ascii_uppercase().into();
+                    declared_routines.insert(name.to_vec(), index);
                     let installed = InstalledRoutine {
                         program: id,
                         directive: index,
@@ -4074,6 +4257,43 @@ impl Interp {
                         // accumulated table is what answers.
                         self.blame_directive(program, directive);
                         return Err(Raised::duplicate_routine().into());
+                    }
+                }
+                DirectiveKind::Annotate(annotate) => {
+                    let target = match annotation_target(
+                        program,
+                        &annotate.target,
+                        current_class,
+                        &claimed,
+                        &declared_classes,
+                        &declared_routines,
+                    ) {
+                        Ok(target) => target,
+                        Err(missing) => {
+                            self.blame_directive(program, directive);
+                            return Err(Raised::missing_annotation_target(
+                                missing.kind,
+                                missing.name,
+                            )
+                            .into());
+                        }
+                    };
+                    // **Accumulative, and the last write to a name wins.**
+                    // Each arm of `annotateDirective` reaches for its
+                    // target's own table and `processAnnotation` puts into
+                    // it (`parser/DirectiveParser.cpp:2258`), so a second
+                    // `::ANNOTATE` of one target adds to the first's pairs.
+                    // Measured, oracle rc 0: `::annotate class K a 1` beside
+                    // `::annotate class K b 2` leaves `~annotations~items` 2,
+                    // and `::annotate class K a 1 a 2` leaves it 1 with `A`
+                    // answering `2`.
+                    for site in target {
+                        let pairs = staged.entry(site).or_default();
+                        for annotation in &annotate.annotations {
+                            let name = program.symbols.name(annotation.name).as_bytes();
+                            pairs.retain(|(held, _)| **held != *name);
+                            pairs.push((name.into(), annotation.value.clone()));
+                        }
                     }
                 }
                 _ => {}
@@ -4193,6 +4413,30 @@ impl Interp {
             let class =
                 self.install_class_at(id, program, *index, &declared, &classes, attached)?;
             classes.insert(*index, class);
+            // **After the install and not inside it**, which is where
+            // `ClassDirective::install` puts `setAnnotations`
+            // (`instructions/ClassDirective.cpp:243`): the class is built and
+            // has been sent `INIT` by then. Measured, oracle rc 0: a
+            // class-side `init` saying `self~annotation("A")` prints `The NIL
+            // object` under an `::ANNOTATE CLASS` that the main body reads
+            // back as the annotation's value.
+            self.attach_directive_annotations(program, &mut staged, *index, class, attached);
+        }
+
+        // What is left names no class object: the package, the file's
+        // `::ROUTINE`s, and the method-shaped directives ahead of its first
+        // `::CLASS`. `annotation_target` produces a `Directive` key for a
+        // `::CLASS` and a `::ROUTINE` alone, and the loop above removed every
+        // `::CLASS`'s, because `order` holds every `::CLASS` in the file.
+        for (target, pairs) in staged {
+            let site = match target {
+                AnnotatedSite::Package => environment::Annotated::Package(Package::Program(id)),
+                AnnotatedSite::Directive(directive) => {
+                    environment::Annotated::Routine(id, directive)
+                }
+                AnnotatedSite::Member(_, name) => environment::Annotated::Unattached(id, name),
+            };
+            self.record_annotations(&[site], &pairs);
         }
 
         // The gap forms whose stage is after the classes are created; see
@@ -4218,6 +4462,51 @@ impl Interp {
             self.send_directive_message(id, program, classes[index], dispatch::ACTIVATE, blame)?;
         }
         Ok(())
+    }
+
+    /// Moves what the first walk recorded for one `::CLASS` and for the
+    /// members attached to it onto the class object that has just been built.
+    ///
+    /// **The two stages the oracle has**, and the reason for them here is the
+    /// same: a `ClassDirective` accumulates annotations while the file is
+    /// read and hands them to a class object that does not exist until
+    /// `install` runs (`instructions/ClassDirective.cpp:243`). A member's are
+    /// keyed by the class and the dictionary name rather than by the
+    /// directive, because `~method` is what a program reads them through and
+    /// it holds a class object and a name.
+    fn attach_directive_annotations(
+        &mut self,
+        program: &Rc<Program>,
+        staged: &mut HashMap<AnnotatedSite, Vec<(Box<[u8]>, Box<[u8]>)>>,
+        index: usize,
+        class: ObjRef,
+        attached: &[usize],
+    ) {
+        if let Some(pairs) = staged.remove(&AnnotatedSite::Directive(index)) {
+            self.record_annotations(&[environment::Annotated::Class(class)], &pairs);
+        }
+        for &member in attached {
+            // The sides one name is filed under, which is more than one for a
+            // `::CONSTANT` and is why the keys are collected before the table
+            // is built: both sides must answer one table.
+            let mut sides: HashMap<Vec<u8>, Vec<bool>> = HashMap::new();
+            for (name, class_side) in member_dictionary_keys(&program.directives[member].kind) {
+                sides.entry(name).or_default().push(class_side);
+            }
+            for (name, sides) in sides {
+                let key = AnnotatedSite::Member(member, name.clone().into());
+                let Some(pairs) = staged.remove(&key) else {
+                    continue;
+                };
+                let keys: Vec<environment::Annotated> = sides
+                    .into_iter()
+                    .map(|class_side| {
+                        environment::Annotated::Member(class, class_side, name.clone().into())
+                    })
+                    .collect();
+                self.record_annotations(&keys, &pairs);
+            }
+        }
     }
 
     /// `LanguageParser::checkDuplicateMethod`
@@ -4263,7 +4552,8 @@ impl Interp {
         program: &Rc<Program>,
         directive: &Directive,
         current_class: Option<usize>,
-        claimed: &mut std::collections::HashSet<(Option<usize>, bool, Vec<u8>)>,
+        claimed: &mut HashMap<(Option<usize>, bool, Vec<u8>), usize>,
+        index: usize,
     ) -> Result<(), Failure> {
         let constant = matches!(directive.kind, DirectiveKind::Constant(_));
         for (name, class_side) in member_dictionary_keys(&directive.kind) {
@@ -4276,7 +4566,10 @@ impl Interp {
                     return Err(Raised::class_keyword_needs_class().into());
                 }
             }
-            if !claimed.insert((current_class, class_side, name)) {
+            if claimed
+                .insert((current_class, class_side, name), index)
+                .is_some()
+            {
                 self.blame_directive(program, directive);
                 return Err(Raised::duplicate_member(&directive.kind).into());
             }

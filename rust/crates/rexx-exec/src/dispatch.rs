@@ -97,7 +97,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use rexx_classes::{ClassRegistry, MethodId};
-use rexx_core::{BehaviourId, Body, Decoded, NativeObject, ObjRef};
+use rexx_core::{BehaviourId, Body, Decoded, ObjRef};
 use rexx_parse::{Access, Expr};
 
 use crate::activation::{
@@ -255,6 +255,15 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // (`instructions/ClassDirective.cpp:288`) sends it to every class the
     // package installed.
     ("Class", "ACTIVATE", Arity::Fixed(0), native_no_op),
+    // `RexxClass::getAnnotationRexx` and `RexxClass::getAnnotations`
+    // (`memory/Setup.cpp:499`, `:498`). The same pair is bound at `Method`
+    // and `Routine` out of `BaseExecutable` (`:1112`/`:1111` and
+    // `:1141`/`:1140`) and at `Package` out of `PackageClass` (`:1173`,
+    // `:1172`); the three C++ bodies differ only in which field they reach
+    // for, so the four classes share one implementation here for the reason
+    // `MAKESTRING`/`TOSTRING` share theirs.
+    ("Class", "ANNOTATION", Arity::Fixed(1), native_annotation),
+    ("Class", "ANNOTATIONS", Arity::Fixed(0), native_annotations),
     ("Class", "BASECLASS", Arity::Fixed(0), native_base_class),
     ("Class", "ID", Arity::Fixed(0), native_id),
     (
@@ -288,6 +297,8 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `InheritInstanceMethods`. This is the entry-method mechanism: an entry
     // is reached by sending its name.
     ("Directory", "UNKNOWN", Arity::Fixed(2), native_hash_unknown),
+    ("Method", "ANNOTATION", Arity::Fixed(1), native_annotation),
+    ("Method", "ANNOTATIONS", Arity::Fixed(0), native_annotations),
     ("Object", "CLASS", Arity::Fixed(0), native_class),
     ("Object", "HASMETHOD", Arity::Fixed(1), native_has_method),
     (
@@ -314,7 +325,21 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     ("Object", "REQUEST", Arity::Fixed(1), native_request),
     ("Object", "STRING", Arity::Fixed(0), native_string),
+    ("Package", "ANNOTATION", Arity::Fixed(1), native_annotation),
+    (
+        "Package",
+        "ANNOTATIONS",
+        Arity::Fixed(0),
+        native_annotations,
+    ),
     ("Package", "NAME", Arity::Fixed(0), native_package_name),
+    ("Routine", "ANNOTATION", Arity::Fixed(1), native_annotation),
+    (
+        "Routine",
+        "ANNOTATIONS",
+        Arity::Fixed(0),
+        native_annotations,
+    ),
     ("String", "LENGTH", Arity::Fixed(0), native_length),
     (
         "String",
@@ -391,6 +416,7 @@ pub(crate) struct ObjectModel {
     array: ObjRef,
     package: ObjRef,
     method: ObjRef,
+    routine: ObjRef,
     directory: ObjRef,
     string_table: ObjRef,
 }
@@ -433,6 +459,9 @@ impl ObjectModel {
             .lookup("Package")
             .expect("Package is a native class");
         let method = classes.lookup("Method").expect("Method is a native class");
+        let routine = classes
+            .lookup("Routine")
+            .expect("Routine is a native class");
         let directory = classes
             .lookup("Directory")
             .expect("Directory is a native class");
@@ -448,6 +477,7 @@ impl ObjectModel {
             array,
             package,
             method,
+            routine,
             directory,
             string_table,
         }
@@ -493,6 +523,20 @@ enum Primitive {
     /// A `Body::Native` whose class is `.Package` -- what `~package` answers.
     /// Measured, `.Array~package~class~id` is `Package`.
     Package,
+    /// A `Body::Native` whose class is `.Method` -- what `Class~method`
+    /// answers and what a `.METHODS` entry holds. Measured,
+    /// `.K~method("M")~class` is `The Method class`.
+    Method,
+    /// A `Body::Native` whose class is `.Routine` -- what a `.ROUTINES` entry
+    /// holds. Measured, `.routines~r~class` is `The Routine class`.
+    ///
+    /// **Kept apart from [`Primitive::Method`] beside it** for
+    /// [`Primitive::StringTable`]'s reason: the two classes hold different
+    /// names and the traceback says which was the receiver's -- measured,
+    /// `.routines~r~annotation()` reports `Compiled method "ANNOTATION" with
+    /// scope "Routine".` where `.K~method("M")~annotation()` reports
+    /// `"Method"`.
+    Routine,
     /// A `Body::Native` whose class is `.Directory` -- `.environment` and
     /// `.local`. Measured, `.environment~class~id` is `Directory`.
     Directory,
@@ -899,6 +943,24 @@ impl Interp {
                     {
                         Ok(Primitive::Package)
                     }
+                    // The `Method` and `Routine` objects `~method` and a
+                    // package table put in a program's hands. Each class's
+                    // instance behaviour here is `Setup.cpp`'s whole set, so
+                    // a name it does not hold is a name the running oracle
+                    // does not hold either -- the position `.Package` beside
+                    // them is in.
+                    Body::Native(native)
+                        if self.object_model.as_ref().map(|model| model.method)
+                            == Some(native.class()) =>
+                    {
+                        Ok(Primitive::Method)
+                    }
+                    Body::Native(native)
+                        if self.object_model.as_ref().map(|model| model.routine)
+                            == Some(native.class()) =>
+                    {
+                        Ok(Primitive::Routine)
+                    }
                     Body::Native(native)
                         if self.object_model.as_ref().map(|model| model.directory)
                             == Some(native.class()) =>
@@ -940,6 +1002,8 @@ impl Interp {
             Primitive::Object => Behaviour::Instance(model.object),
             Primitive::Array => Behaviour::Instance(model.array),
             Primitive::Package => Behaviour::Instance(model.package),
+            Primitive::Method => Behaviour::Instance(model.method),
+            Primitive::Routine => Behaviour::Instance(model.routine),
             Primitive::Directory => Behaviour::Instance(model.directory),
             Primitive::StringTable => Behaviour::Instance(model.string_table),
             Primitive::Class(class) => Behaviour::ClassSide(class),
@@ -1189,7 +1253,7 @@ impl Interp {
     /// Asked through `receiver_kind` rather than off the handle's own tag,
     /// because a heap-tagged handle with a class id is the one shape that
     /// names no arena slot and that distinction is that function's.
-    fn is_class_object(&self, value: ObjRef) -> bool {
+    pub(crate) fn is_class_object(&self, value: ObjRef) -> bool {
         matches!(self.receiver_kind(value), Ok(Primitive::Class(_)))
     }
 
@@ -2858,6 +2922,8 @@ fn native_class(
         Primitive::Object => model.object,
         Primitive::Array => model.array,
         Primitive::Package => model.package,
+        Primitive::Method => model.method,
+        Primitive::Routine => model.routine,
         Primitive::Directory => model.directory,
         Primitive::StringTable => model.string_table,
         Primitive::Class(class) => model.classes.class_of(class),
@@ -2923,6 +2989,55 @@ fn native_identity_hash(
     Ok(Some(interp.text_built(bits)))
 }
 
+/// `Class~annotation(name)`, and the same method at `Method`, `Routine` and
+/// `Package`: the annotation `name` holds, or `.nil`.
+///
+/// `RexxClass::getAnnotationRexx` (`classes/ClassClass.cpp:374`) and its two
+/// siblings are each `resultOrNil(getAnnotation(stringArgument(name,
+/// "name")))`, and every `getAnnotation` reads
+/// `annotations->entry(name)`, which **upcases the index it is given**
+/// (`StringHashCollection::entry`, `classes/support/HashCollection.cpp:824`).
+/// Measured, oracle rc 0 under `::ANNOTATE CLASS K author 'moritz'`:
+/// `.K~annotation("AUTHOR")` and `.K~annotation("author")` both answer
+/// `moritz`, and `.K~annotation("ZZ")` answers `The NIL object`.
+///
+/// The argument is a required string named `name` in the message the oracle
+/// reports: measured, `.K~annotation()` is 88.901 `Missing argument;
+/// argument name is required.` and `.K~annotation(.array)` is 88.909
+/// `Argument name must have a string value.`
+fn native_annotation(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(Some(argument)) = args.first().copied() else {
+        return Err(Raised::missing_named_argument("name").into());
+    };
+    let argument = required_string_named_argument(interp, argument, "name")?;
+    let name = interp.to_text(argument).to_ascii_uppercase();
+    let table = interp.annotations_of(receiver)?;
+    Ok(Some(
+        interp.native_entry(table, &name).unwrap_or(ObjRef::NIL),
+    ))
+}
+
+/// `Class~annotations`, and the same method at `Method`, `Routine` and
+/// `Package`: the receiver's own annotation table.
+///
+/// `RexxClass::getAnnotations` (`classes/ClassClass.cpp:325`) creates an
+/// empty `StringTable` on the first ask and stores it, so a target no
+/// `::ANNOTATE` named still answers a table and a program can add to it --
+/// [`Interp::annotation_table`] carries the measurement.
+fn native_annotations(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    Ok(Some(interp.annotations_of(receiver)?))
+}
+
 /// `Class~method(name)`: the method object `name` names **in this class's own
 /// instance dictionary**, and 97.1 for anything else.
 ///
@@ -2953,14 +3068,17 @@ fn native_method(
         return Err(Raised::no_method(&target, &name).into());
     }
     let method_class = interp.object_model().method;
-    let rendered = crate::environment::default_object_name(interp.class_id_text(method_class));
-    Ok(Some(interp.alloc_with(
-        BehaviourId::OBJECT,
-        Body::Native(Box::new(NativeObject::new(
-            method_class,
-            rendered.as_bytes(),
-        ))),
-    )))
+    // Through `native_instance` for its rooting: the object is pushed as a
+    // temporary before the line below allocates the annotation table, and
+    // nothing else holds it until this function returns.
+    let object = interp.native_instance(method_class);
+    // The dictionary entry the retrieval above found, which is what its
+    // annotations are keyed by: this class, the instance side, this name.
+    interp.attach_annotations(
+        object,
+        crate::environment::Annotated::Member(class, false, name.into()),
+    );
+    Ok(Some(object))
 }
 
 /// An array receiver's own slots, borrowed, or the refusal for a receiver that
@@ -3389,6 +3507,8 @@ fn native_object_name(
         | Primitive::Array
         | Primitive::Class(_)
         | Primitive::Package
+        | Primitive::Method
+        | Primitive::Routine
         | Primitive::Directory
         | Primitive::StringTable => interp.string_value_text(receiver),
     };
@@ -3438,6 +3558,16 @@ fn native_object_name_set(
                     unreachable!("each of these receivers is Body::Native, got {other:?}")
                 }
             }
+        }
+        // A `Method` object is built per `~method` send, so a name stored on
+        // one is gone by the next send and the oracle's is not: measured,
+        // oracle rc 0, `.K~method("M")~objectName = "x"` then
+        // `say .K~method("M")` prints `x`, because `RexxClass::method`
+        // retrieves one object from the dictionary and answers it every
+        // time. Refused rather than stored, this crate's standing trade: the
+        // shape was already rc 120 before either class became a receiver.
+        Primitive::Method | Primitive::Routine => {
+            return Err(Loud::native_method(b"OBJECTNAME=", "Object").into());
         }
         Primitive::String | Primitive::SmallInt | Primitive::Object | Primitive::Array => {
             return Err(Loud::native_method(b"OBJECTNAME=", "Object").into());

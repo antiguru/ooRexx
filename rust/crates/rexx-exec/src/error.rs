@@ -656,6 +656,26 @@ impl Raised {
         Raised::syntax(99, 906, Vec::new())
     }
 
+    /// 99.945: an `::ANNOTATE` named a target the accumulated package does
+    /// not hold. `kind` is the keyword's own lower-case spelling and `name`
+    /// the upcased target name, which is how
+    /// `Error_Translation_missing_annotation_target` takes them:
+    /// `::ANNOTATE target &1 "&2" not found.`
+    /// (`messages/RexxErrorMessages.h:715`), with the quotes in the template
+    /// and each `syntaxError` call passing a bare C string for `&1`
+    /// (`parser/DirectiveParser.cpp:1983`, `:2010`, `:2037`, `:2090`,
+    /// `:2172`).
+    ///
+    /// Measured, rc 157 with stdout empty and the `::ANNOTATE` clause echoed,
+    /// one probe per keyword: `::ANNOTATE target class "NOSUCH" not found.`
+    /// and the same line for `routine`, `method`, `attribute` and `constant`.
+    /// A target the file declares *below* the `::ANNOTATE` reports it too,
+    /// because the tables the C++ searches hold only what the walk has
+    /// already reached.
+    pub(crate) fn missing_annotation_target(kind: &str, name: &[u8]) -> Raised {
+        Raised::syntax(99, 945, vec![kind.as_bytes().to_vec(), name.to_vec()])
+    }
+
     /// 16.1: `SIGNAL`/`SIGNAL VALUE` named a target that matches no label in
     /// the running activation's own body. `name` is the resolved target's
     /// own bytes -- already upcased for a bare symbol, verbatim for a quoted

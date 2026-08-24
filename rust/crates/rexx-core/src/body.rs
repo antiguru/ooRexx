@@ -245,11 +245,20 @@ impl ScopePools {
 /// `entries` is empty for an object that holds no table -- an activation's
 /// context object is one -- rather than optional, because a reader asking for
 /// a name it does not hold gets the same `None` either way.
+///
+/// `annotations` is the `StringTable` `~annotations` answers, which is
+/// `Option` rather than empty because absent and empty are different answers:
+/// the oracle's `getAnnotations()` creates the table on first ask and keeps
+/// it, so a program that adds to one sees the addition through `~annotation`
+/// afterwards, and a caller that has nowhere to keep the table must not hand
+/// out one that silently forgets. The kinds of object that carry one are the
+/// ones `memory/Setup.cpp` gives an `Annotations` method to.
 #[derive(Clone, Debug)]
 pub struct NativeObject {
     class: ObjRef,
     rendered: Box<[u8]>,
     entries: HashMap<Box<[u8]>, ObjRef>,
+    annotations: Option<ObjRef>,
 }
 
 impl NativeObject {
@@ -258,6 +267,7 @@ impl NativeObject {
             class,
             rendered: rendered.into(),
             entries: HashMap::new(),
+            annotations: None,
         }
     }
 
@@ -289,6 +299,16 @@ impl NativeObject {
 
     pub fn set_entry(&mut self, key: &[u8], value: ObjRef) {
         self.entries.insert(key.into(), value);
+    }
+
+    /// The `StringTable` this object's `~annotations` answers, or `None` for
+    /// an object whose builder gave it none.
+    pub fn annotations(&self) -> Option<ObjRef> {
+        self.annotations
+    }
+
+    pub fn set_annotations(&mut self, annotations: ObjRef) {
+        self.annotations = Some(annotations);
     }
 }
 
@@ -341,6 +361,9 @@ impl Body {
                 // anything else.
                 out.push(native.class);
                 out.extend(native.entries.values().copied());
+                // Reachable from the object alone once a program holds the
+                // table and drops every other handle on it.
+                out.extend(native.annotations);
             }
             // Deliberately reaches nothing: a weak reference must not keep
             // its target alive.
