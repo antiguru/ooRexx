@@ -1006,12 +1006,20 @@ impl Interp {
     /// dictionary entry named `name` has, built on first ask and kept.
     ///
     /// **One object per dictionary entry, because the oracle's identity is
-    /// observable through two of its own methods.** `RexxClass::method`
-    /// retrieves the method out of `instanceMethodDictionary` and answers it
+    /// observable.** `RexxClass::method` retrieves the method out of
+    /// `instanceMethodDictionary` and answers it
     /// (`classes/ClassClass.cpp:984`, the retrieval at `:991`), so two sends
-    /// of `~method` for one name answer one object. Measured, oracle rc 0:
-    /// `.K~method("M")~objectName = "x"` then `say .K~method("M")` prints
-    /// `x`. A fresh object per send answers `a Method`.
+    /// of `~method` for one name answer one object. Measured, oracle rc 0
+    /// and both engines identical:
+    /// `(.K~method("M")~identityHash == .K~method("M")~identityHash)` is `1`,
+    /// and `.K~method("M")~objectName = "x"` then `say .K~method("M")` prints
+    /// `x`. A fresh object per send answers `0` and `a Method`.
+    ///
+    /// The comparison is `==` and not `=`. The oracle's `identityHash` is an
+    /// address-derived integer of more than nine digits and `=` compares two
+    /// of those at `NUMERIC DIGITS`, so two genuinely different objects
+    /// compare equal under it -- measured, `-140404878001713` and
+    /// `-140404878167489` are `1` under `=` and `0` under `==`.
     ///
     /// Rooted as a global for the reason a package object is: it outlives
     /// every send that reaches it and is reachable from no other object

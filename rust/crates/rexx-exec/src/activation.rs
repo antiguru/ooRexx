@@ -760,13 +760,14 @@ pub(crate) struct Activation {
     /// **The rooting hangs off the collection site, not off the state**, and
     /// that distinction is load-bearing rather than pedantic: an activation
     /// really is only ever running, suspended or parked, but a collection
-    /// reached by some other door sees neither mechanism. `GC('Force')`
-    /// was such a door -- it called `Heap::collect` directly, and a forced
-    /// collection freed the running activation's own context object.
-    /// Measured: `say .context~objectName` either side of `gc('force')` was
-    /// oracle rc 0 twice and rc 120 here on the second. So every collection
-    /// goes through [`Interp::collect_now`], and a new collection site is
-    /// the thing to check against this paragraph.
+    /// reached by some other door sees neither mechanism. A door that calls
+    /// `Heap::collect` directly frees the running activation's own context
+    /// object -- measured against such a build, `say .context~objectName`
+    /// either side of `gc('force')` answers `a RexxContext` twice at rc 0 on
+    /// the oracle and refuses the second send at rc 120 here. So every
+    /// collection goes through [`Interp::collect_now`], which
+    /// `dispatch_seam.rs`'s `heap_collect_is_called_from_collect_now_alone`
+    /// asserts rather than leaving to this paragraph.
     pub(crate) context_object: Option<ObjRef>,
 }
 

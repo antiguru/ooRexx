@@ -223,12 +223,13 @@ pub(crate) fn gc(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<Obj
     // **Through `Interp::collect_now` and not `Heap::collect` directly**,
     // because the root set the collector is handed is not `Interp::roots`
     // alone: an activation's context object is named by nothing in it and is
-    // swept in there. Reaching past it left `gc('force')` freeing the
-    // running activation's own `.CONTEXT` -- measured, `say
-    // .context~objectName` either side of a forced collection was oracle
-    // rc 0 twice and rc 120 here on the second. Going through the same door
-    // every allocation goes through also keeps `collect_at` adjusted, which
-    // a bare `Heap::collect` left where it was.
+    // swept in there. A build that reaches past it frees the running
+    // activation's own `.CONTEXT` -- measured against one, `say
+    // .context~objectName` either side of a forced collection answers
+    // `a RexxContext` twice at rc 0 on the oracle and refuses the second
+    // send at rc 120 here. Going through the same door every allocation goes
+    // through also keeps `collect_at` adjusted, which a bare `Heap::collect`
+    // leaves where it was.
     interp.collect_now();
     Ok(interp.text(b"1"))
 }

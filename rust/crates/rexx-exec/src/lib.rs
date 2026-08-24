@@ -371,14 +371,20 @@ pub struct Outcome {
     /// What the run cost in stack. Task 11 reads this to set the
     /// evaluation-depth limit; see `StackSpan`.
     pub stack: StackSpan,
-    /// How many times `Heap::collect` ran during this program. Always `0`
-    /// under `run_program`, which does not enable Task 16's stress mode and
-    /// nothing else in this crate calls
-    /// `collect` at all -- a non-zero value here is only ever possible
-    /// through `run_program_collect_every_alloc`, and criterion 4's gate
-    /// asserts it is non-zero specifically so a mode that silently
-    /// collected nothing cannot pass by being indistinguishable from one
-    /// that collected correctly.
+    /// How many times `Heap::collect` ran during this program.
+    ///
+    /// **Non-zero under an ordinary `run_program`**, because the watermark
+    /// policy collects on its own: `collect_policy.rs`'s churn program reads
+    /// 6 there, and `GC('Force')` reaches a collection from any program that
+    /// calls it. What
+    /// `run_program_collect_every_alloc` changes is the *trigger*, not
+    /// whether the counter can move -- under it every allocation collects.
+    ///
+    /// Criterion 4's gate asserts this is non-zero under the stress mode
+    /// specifically so a mode that silently collected nothing cannot pass by
+    /// being indistinguishable from one that collected correctly, and
+    /// `collect_policy.rs` asserts a **bound** on it under the ordinary
+    /// policy, in both directions, for the same reason.
     pub collections: u64,
     /// How many times the run declined to compile a body because it does not
     /// fit the compiled stream's index widths, and ran it on the tree-walker

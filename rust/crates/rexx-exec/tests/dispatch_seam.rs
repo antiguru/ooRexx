@@ -175,6 +175,74 @@ fn code_occurrences(needle: &str) -> Vec<String> {
     found
 }
 
+/// Every collection in this crate goes through `Interp::collect_now`, which
+/// is where the root set is completed before `Heap::collect` is handed it.
+///
+/// **The root set the collector receives is not `Interp::roots` alone.** An
+/// activation's context object is named by nothing in that structure while
+/// the activation is running or suspended; `collect_now` sweeps the
+/// activation stack for those objects and pushes them as temporaries around
+/// the collect. A collection reached by any other route therefore frees a
+/// live object, and it does so where no gate here can see it -- a build whose
+/// `GC('Force')` reaches `Heap::collect` directly refuses the next send to
+/// `.CONTEXT` at rc 120 against the oracle's rc 0, and that was found by hand
+/// rather than by a test.
+///
+/// **This is a lexical assertion because the alternative is a paragraph.**
+/// Nothing in the type system stops a new caller of `Heap::collect`, and the
+/// rooting hangs off the *call site* rather than off any value a compiler can
+/// track. It is the same argument this file's module doc makes for the seam
+/// and `rexx-core/tests/unsafe_sites.rs` makes for `unsafe`: where the
+/// property is "this is the only place that does X", the text is the only
+/// thing there is to check.
+///
+/// `Heap::collect` is the whole question rather than a proxy for it: the only
+/// writes of `Slot::Free` in the workspace are inside that function, so
+/// "reaches a collection" and "calls `Heap::collect`" name one set.
+#[test]
+fn heap_collect_is_called_from_collect_now_alone() {
+    // Built rather than written literally, so this file's own text does not
+    // contribute to the count it takes.
+    let call = format!("{}.{}(&", "heap", "collect");
+    let sites = code_occurrences(&call);
+    assert_eq!(
+        sites.len(),
+        1,
+        "every collection must go through `Interp::collect_now`, which is \
+         what completes the root set; {call} appears at {sites:?}"
+    );
+    assert!(
+        sites[0].contains("lib.rs"),
+        "the one collection site is outside `lib.rs`, at {:?} -- if \
+         `collect_now` moved there too this assertion needs updating, and if \
+         it did not, the sweep is being bypassed",
+        sites[0]
+    );
+
+    // Inside `collect_now` and not merely somewhere in `lib.rs`, which is
+    // what makes this stronger than the file check above: the body is read
+    // from the signature to the first closing brace at the same indentation.
+    let lib = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("lib.rs"),
+    )
+    .expect("lib.rs is readable");
+    let signature = format!("    fn {}_{}(&mut self) {{", "collect", "now");
+    let start = lib
+        .find(&signature)
+        .unwrap_or_else(|| panic!("no function matching {signature:?}"));
+    let body = &lib[start..];
+    let end = body
+        .find("\n    }\n")
+        .expect("the function has a closing brace at its own indentation");
+    assert!(
+        body[..end].contains(&call),
+        "the one `Heap::collect` call in this crate is in `lib.rs` but not \
+         inside `collect_now`, so it does not get the swept root set"
+    );
+}
+
 /// The whole of D45's site-one claim: one call to the seam, and one way to
 /// build the token it hands out.
 #[test]
