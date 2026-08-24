@@ -1,0 +1,16 @@
+count 15
+/* Two ::METHOD directives writing one dictionary key of one class.
+
+   A translation error on the oracle rather than an install one, which is
+   what the trailing ::CLASS makes visible: that class names a superclass
+   nothing resolves, so a file diagnosed at install time would report the
+   class error instead. The clause echoed is the second ::METHOD. */
+say 'prolog'
+
+::CLASS A
+::METHOD m CLASS
+  return 'first'
+::METHOD m CLASS
+  return 'second'
+
+::CLASS B SUBCLASS zzznotaclass

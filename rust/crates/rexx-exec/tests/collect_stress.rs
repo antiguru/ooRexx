@@ -195,6 +195,16 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     // once the divide has run: the operands are canonical small integers and
     // the report's own substitutions come from the catalogue.
     "lang/class_activate_failure_blames_the_last_installed_class.rex",
+    // The duplicate-member refusals, which are translation errors: the walk
+    // that finds them runs before any class is created and before the main
+    // body's first clause, so nothing has been asked of the arena. The
+    // negative control beside them, `class_member_names_per_side.rex`, runs
+    // and allocates and is deliberately absent.
+    "lang/class_duplicate_attribute.rex",
+    "lang/class_duplicate_constant.rex",
+    "lang/class_duplicate_constant_and_method.rex",
+    "lang/class_duplicate_method.rex",
+    "lang/class_member_class_keyword_needs_class.rex",
     "lang/comparison_families.rex",
     "lang/comparison_operators_remaining.rex",
     "lang/deep_nested_expr.rex",

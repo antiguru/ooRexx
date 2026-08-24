@@ -1,0 +1,10 @@
+count 9
+/* The CLASS keyword on a member directive with no ::CLASS above it.
+
+   The message names ::METHOD whatever directive carried the keyword, and
+   this file carries it on an ::ATTRIBUTE to say so. Not a duplicate: it is
+   the other refusal the same check makes, and it fires on the first
+   directive to reach it rather than on a second. */
+say 'prolog'
+
+::ATTRIBUTE p CLASS

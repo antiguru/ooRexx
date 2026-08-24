@@ -1075,6 +1075,19 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/class_constant_values.rex",
     "lang/class_constant_uninitialized.rex",
     "lang/class_activate_failure_blames_the_last_installed_class.rex",
+    // Task 18, fix round 1: the duplicate-member refusals. One row per code,
+    // because a program can only fail once -- `::METHOD`'s own, `::METHOD`
+    // colliding with a `::CONSTANT` that occupies both dictionaries,
+    // `::ATTRIBUTE`'s own reached through a setter key nothing in the file
+    // spells, `::CONSTANT`'s own, and the `CLASS` keyword with no `::CLASS`
+    // above it -- and then the negative control, whose every name is written
+    // twice and which the oracle runs.
+    "lang/class_duplicate_method.rex",
+    "lang/class_duplicate_constant_and_method.rex",
+    "lang/class_duplicate_attribute.rex",
+    "lang/class_duplicate_constant.rex",
+    "lang/class_member_class_keyword_needs_class.rex",
+    "lang/class_member_names_per_side.rex",
 ];
 
 #[test]

@@ -1,0 +1,14 @@
+count 13
+/* An ::ATTRIBUTE colliding on the setter key a ::METHOD already wrote.
+
+   Nothing in the file spells the same name twice: the ::METHOD is named
+   "p=" and the ::ATTRIBUTE is named p, and they meet only because an
+   attribute with neither GET nor SET generates both accessors. So this is a
+   witness for the key set the directive claims rather than for its spelling,
+   and the code is the ::ATTRIBUTE's own. */
+say 'prolog'
+
+::CLASS A
+::METHOD "p="
+  return 1
+::ATTRIBUTE p

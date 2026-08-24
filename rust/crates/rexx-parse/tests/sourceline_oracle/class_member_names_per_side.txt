@@ -1,0 +1,30 @@
+count 29
+/* What sharing a name between member directives is allowed to do.
+
+   The negative control for the duplicate refusals beside it: a rule phrased
+   over the directive's name rather than over the dictionary keys it claims
+   would refuse every line of this file, and the oracle runs all of it.
+
+   The class side and the instance side are separate dictionaries, so m may
+   name one of each. GET and SET claim one accessor apiece rather than the
+   pair, so p is written by two directives and collides with neither. And a
+   member above the first ::CLASS belongs to no class at all, which is a
+   table of its own -- the leading ::METHOD m is in it, and A has an M in
+   both of its own dictionaries. */
+say .A~m
+say .A~c
+say .A~p
+
+::METHOD m
+  return 'unattached'
+
+::CLASS A
+::METHOD m CLASS
+  return 'class side'
+::METHOD m
+  return 'instance side'
+::CONSTANT c 'shared'
+::ATTRIBUTE p GET CLASS
+  return 'getter'
+::ATTRIBUTE p SET CLASS
+  return 'setter'
