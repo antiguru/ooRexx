@@ -8832,8 +8832,8 @@ fn annotate_on_both_engines(source: &str) -> (i32, String, String) {
 /// oracle's 99.945, naming the keyword and the upcased target.
 ///
 /// **The corpus carries one of these and cannot carry the rest**: a program
-/// refuses once, so five keywords need five programs, and the two kind
-/// filters below need two more. `directive_annotate_missing_target.rex` is
+/// refuses once, so `class`, `routine`, `method`, `attribute` and `constant`
+/// would need a program each, and the kind filters below one each again. `directive_annotate_missing_target.rex` is
 /// the differential witness for the `class` row and this test is the only
 /// instrument for the others -- stated rather than implied, because a
 /// refusal this crate shares with the oracle is expressible as a corpus row
@@ -8841,9 +8841,11 @@ fn annotate_on_both_engines(source: &str) -> (i32, String, String) {
 ///
 /// The last two rows are the kind filters, and they are what says the
 /// resolution is more than a name lookup: `::ANNOTATE ATTRIBUTE` takes only
-/// an attribute method (`isAttribute()`, `parser/DirectiveParser.cpp:2164`)
-/// and `::ANNOTATE CONSTANT` only a constant one (`isConstant()`, `:2081`),
-/// so a plain `::METHOD` of the right name is not a target. Each row is the
+/// an attribute method -- the getter each row names is found by
+/// `findInstanceMethod` and then discarded by `!getterMethod->isAttribute()`
+/// (`parser/DirectiveParser.cpp:2140`) -- and `::ANNOTATE CONSTANT` only a
+/// constant one (`isConstant()`, `:2081`), so a plain `::METHOD` of the right
+/// name is not a target. Each row is the
 /// oracle's answer, measured, three descriptors.
 #[test]
 fn an_annotate_target_the_package_does_not_hold_is_the_oracles_own_refusal() {
@@ -8981,4 +8983,48 @@ fn a_class_answers_one_method_object_per_dictionary_entry() {
     ));
     assert_eq!((code, stderr.as_str()), (0, ""));
     assert_eq!(stdout, "renamed\na Method\n");
+}
+
+/// Two runs of one program in one process allocate the annotation tables in
+/// the same order.
+///
+/// **The property is determinism, and the instrument has to be two runs in
+/// one process rather than two processes.** `std`'s `RandomState` seeds each
+/// map from a thread-local counter, so a second `HashMap` built in this
+/// thread iterates differently from the first -- which is exactly the shape
+/// that made the release binary answer a different `~identityHash` per run
+/// while every in-process test stayed green. `AnnotatedSite`'s own doc
+/// carries the twelve-run measurement.
+///
+/// `~identityHash` is what exposes it: it answers the handle, so it reads
+/// the arena index an annotation table was allocated at.  That is also why
+/// this cannot be a corpus row -- the oracle derives its answer from an
+/// address -- so the assertion is against the program's own first run rather
+/// than against the oracle.
+///
+/// The program annotates a target of every shape a separate table is built
+/// for, so a walk that ordered only some of them still reddens here.
+#[test]
+fn two_runs_in_one_process_allocate_the_annotation_tables_alike() {
+    let source = "say .K~annotations~identityHash\n\
+                  say .K~method('M')~annotations~identityHash\n\
+                  say .K~method('A')~annotations~identityHash\n\
+                  say .K~method('A=')~annotations~identityHash\n\
+                  say .routines~r~annotations~identityHash\n\
+                  say .methods~u~annotations~identityHash\n\
+                  ::method u\n  return 0\n::annotate method u a 0\n\
+                  ::class K\n::annotate class K a 1\n\
+                  ::method m\n  return 1\n::annotate method m a 2\n\
+                  ::attribute a\n::annotate attribute a a 3\n\
+                  ::routine r\n  return 2\n::annotate routine r a 4\n";
+    let first = annotate_on_both_engines(source);
+    assert_eq!(first.0, 0, "stderr {:?}", first.2);
+    assert_eq!(first.1.lines().count(), 6, "stdout {:?}", first.1);
+    for _ in 0..8 {
+        assert_eq!(
+            annotate_on_both_engines(source),
+            first,
+            "a later run in this process allocated the annotation tables in a different order"
+        );
+    }
 }

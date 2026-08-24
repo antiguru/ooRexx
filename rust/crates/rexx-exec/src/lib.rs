@@ -44,7 +44,7 @@ use rexx_parse::{
     InstructionKind, MethodDirective, Operator, Program, Protection, SymbolId, SymbolTable,
     compound_parts, parse_program,
 };
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::rc::Rc;
 
 // The value model: `text`/`number`/`to_text`/`to_number` on `Interp`, and the
@@ -1533,9 +1533,9 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
 /// and loading the library, which is the work Phase 5 and Phase 7 own; until
 /// then a refusal is the answer that cannot be wrong.
 ///
-/// **A resolvable `::ANNOTATE` target is no longer one of them**, because
-/// resolving one is what this crate does now. Measured, each matching the
-/// oracle byte for byte on both engines:
+/// **A resolvable `::ANNOTATE` target is not one of them**, because this
+/// crate resolves one against the accumulated package. Measured, each
+/// matching the oracle byte for byte on both engines:
 ///
 /// ```text
 /// ::routine r / ::annotate routine r / ::class a subclass zzznotaclass  98.909 rc 158
@@ -1852,7 +1852,22 @@ fn constant_root_key(ProgramId(program): ProgramId, directive: usize) -> String 
 /// the oracle has too -- `ClassDirective` carries a class's annotations
 /// through translation and `install` hands them to the class object it just
 /// built (`instructions/ClassDirective.cpp:243`).
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+/// **Ordered, and that is a correctness requirement rather than tidiness.**
+/// [`Interp::install_directives`] walks the staging map to allocate one
+/// annotation table per target, and an object's handle is what
+/// `Object~identityHash` answers, so an unordered walk makes that answer
+/// depend on a hash seed. Measured before the map was ordered: one program
+/// printing four annotation tables' `~identityHash`, twelve runs of the
+/// release binary, ten distinct outputs -- where the same program with the
+/// `::ANNOTATE` directives removed was identical on all twelve.
+/// `run/tests.rs`'s
+/// `two_runs_in_one_process_allocate_the_annotation_tables_alike` is what
+/// holds it, and it fails against a `HashMap` here because a second map in
+/// one thread is seeded differently from the first.
+///
+/// The order the derive gives is the walk's own: the package, then the
+/// directives by index, then the member entries by directive and name.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 enum AnnotatedSite {
     /// `::ANNOTATE PACKAGE`, which names the running package and no
     /// directive.
@@ -1886,7 +1901,7 @@ struct MissingTarget<'a> {
 /// (`parser/DirectiveParser.cpp:895`, `:896`), so the two spellings are one
 /// test. A `GET` or `SET` half written as Rexx keeps it: `createMethod`'s
 /// last argument is the flag and `attributeDirective` passes `true`
-/// (`:1774`, and `_method->setAttribute(isAttribute)` at `:2388`).
+/// (`:1775`, and `_method->setAttribute(isAttribute)` at `:2388`).
 fn is_attribute_method(kind: &DirectiveKind) -> bool {
     match kind {
         DirectiveKind::Attribute(_) => true,
@@ -1915,7 +1930,7 @@ fn is_attribute_method(kind: &DirectiveKind) -> bool {
 /// back through `.methods~m`.
 ///
 /// `ATTRIBUTE` is the one target that can name two: `processAttributeAnnotations`
-/// (`:2160`) takes the getter and the setter together, refuses a name that is
+/// (`:2131`) takes the getter and the setter together, refuses a name that is
 /// neither's, and looks at the class side only when the instance side holds
 /// neither. `CONSTANT` is the one target that tests the claimant's kind
 /// without pairing anything (`:2081`, `isConstant()`).
@@ -4214,7 +4229,7 @@ impl Interp {
         // Filled in this walk and converted below, because a target's own
         // object does not exist yet: a `::CLASS` has no class object until
         // the install pass creates one.
-        let mut staged: HashMap<AnnotatedSite, Vec<(Box<[u8]>, Box<[u8]>)>> = HashMap::new();
+        let mut staged: BTreeMap<AnnotatedSite, Vec<(Box<[u8]>, Box<[u8]>)>> = BTreeMap::new();
         for (index, directive) in program.directives.iter().enumerate() {
             // **Before the arms below, because the oracle checks before it
             // adds.** `constantDirective` calls `checkDuplicateMethod` ahead
@@ -4291,7 +4306,7 @@ impl Interp {
                     // **Accumulative, and the last write to a name wins.**
                     // Each arm of `annotateDirective` reaches for its
                     // target's own table and `processAnnotation` puts into
-                    // it (`parser/DirectiveParser.cpp:2258`), so a second
+                    // it (`parser/DirectiveParser.cpp:2259`), so a second
                     // `::ANNOTATE` of one target adds to the first's pairs.
                     // Measured, oracle rc 0: `::annotate class K a 1` beside
                     // `::annotate class K b 2` leaves `~annotations~items` 2,
@@ -4487,7 +4502,7 @@ impl Interp {
     fn attach_directive_annotations(
         &mut self,
         program: &Rc<Program>,
-        staged: &mut HashMap<AnnotatedSite, Vec<(Box<[u8]>, Box<[u8]>)>>,
+        staged: &mut BTreeMap<AnnotatedSite, Vec<(Box<[u8]>, Box<[u8]>)>>,
         index: usize,
         class: ObjRef,
         attached: &[usize],
@@ -4499,7 +4514,10 @@ impl Interp {
             // The sides one name is filed under, which is more than one for a
             // `::CONSTANT` and is why the keys are collected before the table
             // is built: both sides must answer one table.
-            let mut sides: HashMap<Vec<u8>, Vec<bool>> = HashMap::new();
+            // Ordered for [`AnnotatedSite`]'s reason: the two halves of an
+            // accessor pair are two names of one directive, and which of
+            // them gets its table first must not depend on a hash seed.
+            let mut sides: BTreeMap<Vec<u8>, Vec<bool>> = BTreeMap::new();
             for (name, class_side) in member_dictionary_keys(&program.directives[member].kind) {
                 sides.entry(name).or_default().push(class_side);
             }
