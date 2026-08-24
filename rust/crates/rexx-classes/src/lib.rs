@@ -39,6 +39,6 @@ mod native_classes;
 mod registry;
 
 pub use class_graph::{BehaviourHandle, ClassGraph, ClassKind, InheritRefusal};
-pub use method_dict::{MethodDict, MethodId};
+pub use method_dict::{MethodDict, MethodId, MethodSlot};
 pub use native_classes::{Deferral, deferred_classes, native_classes, setup_class_names};
 pub use registry::ClassRegistry;

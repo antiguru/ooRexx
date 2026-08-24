@@ -29,7 +29,7 @@
 //! `.context`/`.rexxinfo`-style dynamic instance).
 
 use crate::class_graph::{ClassGraph, ClassKind, InheritRefusal};
-use crate::method_dict::MethodId;
+use crate::method_dict::{MethodId, MethodSlot};
 use rexx_core::ObjRef;
 use std::collections::HashMap;
 
@@ -333,6 +333,11 @@ impl ClassRegistry {
         self.graph.has_own_instance_method(class, name)
     }
 
+    /// What `~method` actually reads -- see [`ClassGraph::own_instance_slot`].
+    pub fn own_instance_slot(&self, class: ObjRef, name: &str) -> Option<MethodSlot> {
+        self.graph.own_instance_slot(class, name)
+    }
+
     /// `class`'s own, unflattened class-method names -- see
     /// [`ClassGraph::own_class_method_names`].
     pub fn own_class_method_names(&self, class: ObjRef) -> std::collections::BTreeSet<String> {
@@ -476,6 +481,68 @@ impl ClassRegistry {
     /// the way `~inherit` does (D44).
     pub fn inherit(&mut self, class: ObjRef, mixin: ObjRef) -> Result<(), InheritRefusal> {
         self.graph.inherit(class, mixin)
+    }
+
+    /// `~inherit` with a position -- see [`ClassGraph::inherit_at`].
+    pub fn inherit_at(
+        &mut self,
+        class: ObjRef,
+        mixin: ObjRef,
+        position: Option<ObjRef>,
+    ) -> Result<(), InheritRefusal> {
+        self.graph.inherit_at(class, mixin, position)
+    }
+
+    /// `~uninherit` -- see [`ClassGraph::uninherit`].
+    pub fn uninherit(&mut self, class: ObjRef, mixin: ObjRef) -> Result<(), InheritRefusal> {
+        self.graph.uninherit(class, mixin)
+    }
+
+    /// `~define` with a method -- see [`ClassGraph::define`]. The
+    /// [`MethodId`] is the caller's, not minted here: `~define` is handed a
+    /// `Method` object whose identity the caller already has to keep, unlike
+    /// [`Self::add_instance_method`]'s bootstrap population.
+    pub fn define_instance_method(&mut self, class: ObjRef, name: &str, method: MethodId) {
+        self.graph.define(class, name, method);
+    }
+
+    /// `~define` with the method omitted, and `Setup.cpp`'s `HideMethod` --
+    /// see [`ClassGraph::hide`].
+    pub fn hide_instance_method(&mut self, class: ObjRef, name: &str) {
+        self.graph.hide(class, name);
+    }
+
+    /// `~delete`, and `Setup.cpp`'s `RemoveMethod` -- see
+    /// [`ClassGraph::delete`].
+    pub fn delete_instance_method(&mut self, class: ObjRef, name: &str) -> bool {
+        self.graph.delete(class, name)
+    }
+
+    /// `~defineMethods` -- see [`ClassGraph::define_methods`].
+    pub fn define_instance_methods(
+        &mut self,
+        class: ObjRef,
+        methods: &[(String, Option<MethodId>)],
+    ) {
+        self.graph.define_methods(class, methods);
+    }
+
+    /// A fresh [`MethodId`] that names no method yet -- what a caller
+    /// installing a method object of its own needs, since the identity a
+    /// dictionary entry carries is this crate's to allocate and the body
+    /// behind it is not.
+    pub fn mint_method_id(&mut self) -> MethodId {
+        self.next_method_id()
+    }
+
+    /// Oracle's `isRexxDefined` -- see [`ClassGraph::is_rexx_defined`].
+    pub fn is_rexx_defined(&self, class: ObjRef) -> bool {
+        self.graph.is_rexx_defined(class)
+    }
+
+    /// Oracle's `setRexxDefined` -- see [`ClassGraph::set_rexx_defined`].
+    pub fn set_rexx_defined(&mut self, class: ObjRef) {
+        self.graph.set_rexx_defined(class);
     }
 
     /// `inheritInstanceMethods` by name -- oracle's `Setup.cpp` bootstrap

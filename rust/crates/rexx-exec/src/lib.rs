@@ -842,6 +842,44 @@ impl Loud {
         }
     }
 
+    /// `~publicClasses` sent to the package the primitive classes belong to.
+    ///
+    /// `completeSystemClass` files every `Setup.cpp` class in that package as
+    /// a public class (`memory/Setup.cpp:205`), so this crate has most of the
+    /// table -- and the shipped image's own is larger, because
+    /// `CoreClasses.orx` installs into the same package. Measured, oracle
+    /// rc 0: `.Array~package~publicClasses["ORDEREDCOLLECTION"]` is `The
+    /// OrderedCollection class`, a name no class this crate registers
+    /// carries. Answering the partial table would make that read `The NIL
+    /// object`, which is the shape of wrong answer a `StringTable` cannot
+    /// refuse its way out of: `.environment` reaches the same names through
+    /// [`Loud::environment_entry`] because a `Directory` this crate builds is
+    /// asked by identity, and `~publicClasses` hands back a fresh table on
+    /// every ask.
+    fn rexx_package_classes() -> Loud {
+        Loud {
+            message: owned_message("the REXX package's class table", Some("Phase 5")),
+        }
+    }
+
+    /// `~define` or `~defineMethods` handed something to compile rather than
+    /// a `Method` object.
+    ///
+    /// `MethodClass::newMethodObject` answers an existing method object
+    /// unchanged and otherwise runs the source through
+    /// `LanguageParser::createMethod` (`classes/MethodClass.cpp:457`-`:486`),
+    /// which builds a method whose package context is the running one.
+    /// Measured, oracle rc 0: `.K~define("SRC", "say 'x'")` then
+    /// `.K~method("SRC")` prints `a Method`. Nothing in this phase compiles a
+    /// method body outside a `::METHOD` directive, and answering a method
+    /// object with no body behind it would be a wrong answer to `~method`
+    /// rather than a gap.
+    fn method_from_source() -> Loud {
+        Loud {
+            message: owned_message("a method built from source text", Some("Phase 5")),
+        }
+    }
+
     /// A message that resolved to a `::METHOD` or `::ATTRIBUTE` directive
     /// whose body this crate cannot run -- see [`method_body_gap`], which
     /// enumerates the cases and supplies `what`.
@@ -2914,6 +2952,14 @@ struct Interp {
     /// step of the order mean anything: two packages may each declare a class
     /// of one name.
     package_classes: HashMap<ProgramId, HashMap<Box<[u8]>, ObjRef>>,
+    /// The subset of [`package_classes`] a `::CLASS ... PUBLIC` directive or
+    /// `~addPublicClass` filed -- the oracle's `installedPublicClasses`,
+    /// which is a second table beside `installedClasses` and not a flag on
+    /// the entries of one (`classes/PackageClass.cpp:1406`-`:1419`).
+    /// `~publicClasses` is what reads it.
+    ///
+    /// [`package_classes`]: Interp::package_classes
+    package_public_classes: HashMap<ProgramId, HashMap<Box<[u8]>, ObjRef>>,
     /// Which program's `::CLASS` directive created a class -- the other
     /// direction of [`package_classes`], which `~package` reads.
     ///
@@ -4017,6 +4063,7 @@ impl Interp {
             class_variables: HashMap::new(),
             environment: None,
             package_classes: HashMap::new(),
+            package_public_classes: HashMap::new(),
             class_packages: HashMap::new(),
             package_objects: HashMap::new(),
             package_tables: HashMap::new(),
@@ -4883,7 +4930,12 @@ impl Interp {
         // resolution reads first -- see `environment.rs`'s
         // `record_package_class` for why the registry's flat table is not
         // that.
-        self.record_package_class(program, &class.name, id);
+        // `ClassDirective::install` passes the directive's own `isPublic()`
+        // to `addInstalledClass` (`instructions/ClassDirective.cpp:209`),
+        // which files a public class in both of the package's tables and
+        // every other class in one (`classes/PackageClass.cpp:1410`-`:1419`).
+        // That is the difference `~publicClasses` reads back.
+        self.record_package_class(program, &class.name, id, class.access == Access::Public);
         id
     }
 
@@ -5170,6 +5222,16 @@ impl Interp {
                 let class_name = self.class_default_name(class).to_vec();
                 let base_name = self.class_default_name(base).to_vec();
                 Raised::inherit_base_class(&class_name, &mixin_name, &base_name)
+            }
+            // The `INHERIT` keyword carries no position, and this refusal is
+            // the position's alone (`ClassClass.cpp:1350`), so a directive
+            // cannot reach it. Answered rather than unreachable-panicked,
+            // this crate's rule for a case the type admits and the caller
+            // does not produce.
+            InheritRefusal::NotInherited(other) => {
+                let class_name = self.class_default_name(class).to_vec();
+                let other_name = self.class_default_name(other).to_vec();
+                Raised::not_inherited(&class_name, &other_name)
             }
         };
         let scope = self.root_and_metaclass().1;

@@ -47,7 +47,7 @@
 //! `tests/native_classes_wiring.rs`'s `mixinclass class` and `.class`-is-an-
 //! instance-of-itself probes.
 
-use crate::method_dict::{MethodDict, MethodId};
+use crate::method_dict::{MethodDict, MethodId, MethodSlot};
 use rexx_core::ObjRef;
 use std::collections::{BTreeSet, HashMap};
 
@@ -82,6 +82,13 @@ pub enum InheritRefusal {
     /// class does not already have the mixin's base class in scope. The base
     /// class travels with the refusal because the oracle's message names it.
     BaseClass(ObjRef),
+    /// `Error_Execution_uninherit` (`:1350`, `:1407`), 98.945: a class named
+    /// as a position or as an `~uninherit` target is not one this class
+    /// inherits. The class travels with the refusal because the oracle's
+    /// message names it, and it is the *named* class rather than the mixin:
+    /// measured, `.K~inherit(.M1, .M2)` reports `has not inherited class
+    /// "The M2 class"`.
+    NotInherited(ObjRef),
 }
 
 /// Which of a class's two behaviours (D44) an internal cascade operation
@@ -215,6 +222,21 @@ struct ClassDef {
     /// inheritance edge: `subclass` (`:1634`), `mixinClass` (`:1525`) and
     /// `inherit` (`:1364`).
     parent_has_uninit: bool,
+    /// This class may not be altered from Rexx -- oracle's `REXX_DEFINED`
+    /// class flag. `RexxClass::liveGeneral` sets it on every class in the
+    /// image under `PREPARINGIMAGE` (`ClassClass.cpp:136`-`:142`), which is
+    /// why every class a program can reach through `.environment` carries
+    /// it and a `::CLASS` a program declares does not.
+    ///
+    /// **The five methods that read it are the five that mutate a class**:
+    /// `defineMethod` (`:823`), `defineMethodsRexx` (`:522`), `deleteMethod`
+    /// (`:955`), `inherit` (`:1290`) and `uninherit` (`:1382`), each raising
+    /// 98.985 before it validates anything else. Nothing inside this crate
+    /// reads it: the bootstrap replays `Setup.cpp` through the same graph
+    /// operations after the flag is set, exactly as the oracle's own image
+    /// build does, and the check lives where the oracle puts it -- in the
+    /// method a program sends.
+    rexx_defined: bool,
 }
 
 /// The class graph and its behaviour storage.
@@ -321,6 +343,7 @@ impl ClassGraph {
                 is_metaclass: derived_from_metaclass.is_some(),
                 has_uninit: false,
                 parent_has_uninit,
+                rexx_defined: false,
             },
         );
         if let Some(sup) = superclass {
@@ -546,13 +569,110 @@ impl ClassGraph {
     /// [`MethodDict::add_method`] takes the key in either spelling.
     pub fn define(&mut self, class: ObjRef, name: &str, method: MethodId) {
         let def = self.classes.get_mut(&class).expect("define: unknown class");
-        def.own_instance_methods.add_method(name, class, method);
+        def.own_instance_methods.replace_method(name, class, method);
         if name.eq_ignore_ascii_case("UNINIT") {
             def.has_uninit = true;
         }
-        let fresh = self.alloc_behaviour();
-        self.classes.get_mut(&class).unwrap().instance_behaviour = fresh;
+        self.copy_instance_behaviour(class);
         self.update_instance_sub_classes(class);
+    }
+
+    /// `~define` with the method argument omitted, and `Setup.cpp`'s
+    /// `HideMethod`: a `.nil` tombstone under `name`, which the oracle's own
+    /// comment calls "hiding this method definition"
+    /// (`ClassClass.cpp:836`-`:843`).
+    ///
+    /// The name stops resolving on this class and on every subclass, and
+    /// `~method` answers `The NIL object` for it rather than raising --
+    /// [`MethodSlot::Hidden`] carries which reader sees which.
+    pub fn hide(&mut self, class: ObjRef, name: &str) {
+        self.classes
+            .get_mut(&class)
+            .expect("hide: unknown class")
+            .own_instance_methods
+            .hide_method(name);
+        self.copy_instance_behaviour(class);
+        self.update_instance_sub_classes(class);
+    }
+
+    /// `~delete`, and `Setup.cpp`'s `RemoveMethod`: take `name` out of
+    /// `class`'s own instance dictionary -- `RexxClass::deleteMethod`
+    /// (`ClassClass.cpp:952`). Answers whether there was anything to remove,
+    /// which is what decides whether the subclasses are told: the oracle
+    /// copies the behaviour unconditionally and calls
+    /// `updateInstanceSubClasses` only inside the `if` (`:966`-`:971`).
+    ///
+    /// A name this class does not define is not an error -- measured on the
+    /// oracle, `.K~delete("ZZZ")` for a `::class K` is rc 0 with nothing on
+    /// either descriptor.
+    pub fn delete(&mut self, class: ObjRef, name: &str) -> bool {
+        let removed = self
+            .classes
+            .get_mut(&class)
+            .expect("delete: unknown class")
+            .own_instance_methods
+            .remove_method(name);
+        self.copy_instance_behaviour(class);
+        if removed {
+            self.update_instance_sub_classes(class);
+        } else {
+            // The oracle's copy carries the old contents across; this one is
+            // built empty, so the class's own behaviour is rebuilt into it
+            // either way and only the walk over the subclasses is conditional.
+            self.rebuild_behaviour(class, Side::Instance);
+        }
+        removed
+    }
+
+    /// `~defineMethods`: a whole table of names in one mutation --
+    /// `RexxClass::defineMethodsRexx` (`ClassClass.cpp:518`), whose
+    /// `replaceMethods` is a `replaceMethod` per entry (`:536`,
+    /// `MethodDictionary.cpp:221`-`:237`) and which copies the behaviour and
+    /// cascades once for the whole table rather than once per name.
+    ///
+    /// `None` under a name is the oracle's `.nil` entry, which
+    /// `createMethodDictionary` passes straight through -- its own comment
+    /// reads "a method can be included in the table as the Nil object...this
+    /// hides the method of that name and is allowed"
+    /// (`ClassClass.cpp:1260`-`:1261`).
+    pub fn define_methods(&mut self, class: ObjRef, methods: &[(String, Option<MethodId>)]) {
+        let def = self
+            .classes
+            .get_mut(&class)
+            .expect("define_methods: unknown class");
+        for (name, method) in methods {
+            match method {
+                Some(id) => {
+                    def.own_instance_methods.replace_method(name, class, *id);
+                    // `checkUninit` (`ClassClass.cpp:543`) reads the flattened
+                    // behaviour; this crate's `has_uninit` is the same fact
+                    // asked of the name being installed, exactly as
+                    // `define` above asks it.
+                    if name.eq_ignore_ascii_case("UNINIT") {
+                        def.has_uninit = true;
+                    }
+                }
+                None => def.own_instance_methods.hide_method(name),
+            }
+        }
+        self.copy_instance_behaviour(class);
+        self.update_instance_sub_classes(class);
+    }
+
+    /// Point `class` at a fresh, empty [`BehaviourHandle`] -- the
+    /// `setField(instanceBehaviour, instanceBehaviour->copy())` that
+    /// `~define`, `~defineMethods` and `~delete` each take before they touch
+    /// the dictionary, so that an object created before the call keeps
+    /// answering the old method set (D43).
+    ///
+    /// The old handle is never written to again. The fresh one is empty on
+    /// return and every caller rebuilds into it.
+    fn copy_instance_behaviour(&mut self, class: ObjRef) {
+        let fresh = self.alloc_behaviour();
+        self.classes
+            .get_mut(&class)
+            .expect("copy_instance_behaviour: unknown class")
+            .instance_behaviour = fresh;
     }
 
     /// Install a class (static) method directly -- oracle's
@@ -615,6 +735,34 @@ impl ClassGraph {
     /// gives the inheriting class `parent_has_uninit`. It runs after the
     /// cascade, as the oracle's does, and not at all on a refusal.
     pub fn inherit(&mut self, class: ObjRef, mixin: ObjRef) -> Result<(), InheritRefusal> {
+        self.inherit_at(class, mixin, None)
+    }
+
+    /// `~inherit`'s own two-argument form: the same operation as
+    /// [`Self::inherit`], with the optional `position` the `INHERIT` keyword
+    /// of a `::CLASS` directive cannot supply.
+    ///
+    /// **`position` names where in the superclass list the mixin lands, and
+    /// the entry goes *before* it.** The oracle spells this
+    /// `superClasses->insertAfter(mixin_class, instanceIndex)`
+    /// (`ClassClass.cpp:1353`), but `ArrayClass::insertAfter` is
+    /// `insert(item, index)` (`ArrayClass.hpp:247`) and `insert` opens the
+    /// gap *at* `index` (`ArrayClass.cpp:797`), so the item takes the
+    /// position the named class held. Measured on the oracle, `::class K`
+    /// with `.K~inherit(.M1)` then `.K~inherit(.M2, .Object)`:
+    /// `~superClasses` reads `M2`, `Object`, `M1`, and the same pair with
+    /// `.M1` as the position reads `Object`, `M2`, `M1`.
+    ///
+    /// A `position` this class does not already inherit is
+    /// [`InheritRefusal::NotInherited`] naming it (`:1350`), checked after
+    /// every validation the one-argument form does and before anything is
+    /// changed.
+    pub fn inherit_at(
+        &mut self,
+        class: ObjRef,
+        mixin: ObjRef,
+        position: Option<ObjRef>,
+    ) -> Result<(), InheritRefusal> {
         if !matches!(self.classes[&mixin].kind, ClassKind::Mixin) {
             return Err(InheritRefusal::NotAMixin);
         }
@@ -631,16 +779,75 @@ impl ClassGraph {
         if !self.behaviour_has_scope(class, Side::Instance, mixin_base) {
             return Err(InheritRefusal::BaseClass(mixin_base));
         }
+        let at = match position {
+            None => self.classes[&class].superclasses.len(),
+            Some(position) => {
+                match self.classes[&class]
+                    .superclasses
+                    .iter()
+                    .position(|&sup| sup == position)
+                {
+                    Some(at) => at,
+                    None => return Err(InheritRefusal::NotInherited(position)),
+                }
+            }
+        };
         self.classes
             .get_mut(&class)
             .unwrap()
             .superclasses
-            .push(mixin);
+            .insert(at, mixin);
         self.classes.get_mut(&mixin).unwrap().subclasses.push(class);
         self.update_sub_classes(class);
         if self.uninit_reaches(mixin) {
             self.classes.get_mut(&class).unwrap().parent_has_uninit = true;
         }
+        Ok(())
+    }
+
+    /// `~uninherit`: take a mixin back out of the superclass list --
+    /// `RexxClass::uninherit` (`ClassClass.cpp:1379`).
+    ///
+    /// The mixin must be a `MIXINCLASS` ([`InheritRefusal::NotAMixin`],
+    /// `:1393`) and must be in the list at a position past the first
+    /// ([`InheritRefusal::NotInherited`], `:1407`). **Past the first, not
+    /// merely present**: the oracle's test is `instance_index > 1` over a
+    /// 1-based list (`:1401`), so a class's own `SUBCLASS`/`MIXINCLASS`
+    /// target is not removable this way. Measured, `::class M mixinclass
+    /// Object` with `::class K subclass M` gives `.K~uninherit(.M)` the same
+    /// 98.945 a mixin that was never inherited gets.
+    ///
+    /// Both behaviours are rebuilt in place and the change cascades
+    /// (`updateSubClasses`, `:1413`), so this is `~inherit`'s exact reverse
+    /// and not `~delete`'s copy-first shape.
+    pub fn uninherit(&mut self, class: ObjRef, mixin: ObjRef) -> Result<(), InheritRefusal> {
+        if !matches!(self.classes[&mixin].kind, ClassKind::Mixin) {
+            return Err(InheritRefusal::NotAMixin);
+        }
+        let at = self.classes[&class]
+            .superclasses
+            .iter()
+            .position(|&sup| sup == mixin)
+            .filter(|at| *at > 0);
+        let Some(at) = at else {
+            return Err(InheritRefusal::NotInherited(mixin));
+        };
+        self.classes
+            .get_mut(&class)
+            .unwrap()
+            .superclasses
+            .remove(at);
+        // `RexxClass::removeSubclass` (`:1424`) takes out the one entry it
+        // finds, and a class reaches a mixin's subclass list once: a second
+        // `~inherit` of the same mixin is the recursive refusal above.
+        if let Some(sub) = self.classes[&mixin]
+            .subclasses
+            .iter()
+            .position(|&sub| sub == class)
+        {
+            self.classes.get_mut(&mixin).unwrap().subclasses.remove(sub);
+        }
+        self.update_sub_classes(class);
         Ok(())
     }
 
@@ -830,6 +1037,32 @@ impl ClassGraph {
     /// throw it away.
     pub fn has_own_instance_method(&self, class: ObjRef, name: &str) -> bool {
         self.classes[&class].own_instance_methods.has_method(name)
+    }
+
+    /// What `name` holds in `class`'s own, unflattened instance-method
+    /// dictionary, tombstone included -- what `RexxClass::method` reads
+    /// (`ClassClass.cpp:991`) and where it parts from
+    /// [`Self::has_own_instance_method`] beside it: a hidden name is
+    /// `Some(MethodSlot::Hidden)` here and `false` there, and the oracle
+    /// answers the two the same way round.
+    pub fn own_instance_slot(&self, class: ObjRef, name: &str) -> Option<MethodSlot> {
+        self.classes[&class].own_instance_methods.slot(name)
+    }
+
+    /// Oracle's `isRexxDefined` -- see [`ClassDef::rexx_defined`].
+    pub fn is_rexx_defined(&self, class: ObjRef) -> bool {
+        self.classes[&class].rexx_defined
+    }
+
+    /// Oracle's `setRexxDefined` (`ClassClass.cpp:396`), which
+    /// `liveGeneral` calls on every class it walks while the image is being
+    /// prepared. There is no clearing counterpart, in this crate or in the
+    /// oracle.
+    pub fn set_rexx_defined(&mut self, class: ObjRef) {
+        self.classes
+            .get_mut(&class)
+            .expect("set_rexx_defined: unknown class")
+            .rexx_defined = true;
     }
 
     /// `class`'s own, unflattened class-method names -- oracle's

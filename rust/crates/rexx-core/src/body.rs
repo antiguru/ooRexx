@@ -253,12 +253,24 @@ impl ScopePools {
 /// afterwards, and a caller that has nowhere to keep the table must not hand
 /// out one that silently forgets. The kinds of object that carry one are the
 /// ones `memory/Setup.cpp` gives an `Annotations` method to.
+///
+/// `scope` is `MethodClass::scope`, the class a method object has been
+/// installed on, and only a `Method` object ever carries one. It is
+/// observable: `MethodClass::newScope` (`classes/MethodClass.cpp:183`) hands
+/// back the same object when the scope is still unset and a copy when it is
+/// not, so `~define`'s answer to `~method` afterwards is the very object it
+/// was given or a different one depending on this field. Measured on the
+/// oracle at rc 0 with `::method z` above `::class K`:
+/// `m = .methods~z; .K~define("ZORK", m); say (m == .K~method("ZORK"))`
+/// prints `1`, and the same pair with `.K2~method("M")` in place of
+/// `.methods~z` prints `0`.
 #[derive(Clone, Debug)]
 pub struct NativeObject {
     class: ObjRef,
     rendered: Box<[u8]>,
     entries: HashMap<Box<[u8]>, ObjRef>,
     annotations: Option<ObjRef>,
+    scope: Option<ObjRef>,
 }
 
 impl NativeObject {
@@ -268,6 +280,7 @@ impl NativeObject {
             rendered: rendered.into(),
             entries: HashMap::new(),
             annotations: None,
+            scope: None,
         }
     }
 
@@ -301,6 +314,17 @@ impl NativeObject {
         self.entries.insert(key.into(), value);
     }
 
+    /// Every key this object holds, as owned copies.
+    ///
+    /// Owned and not borrowed because the one caller reads the whole table
+    /// and then allocates against `Interp`, which it cannot do while a
+    /// borrow of the heap is live. The keys come back in no particular
+    /// order -- the storage is a `HashMap` -- so a caller whose next step
+    /// allocates sorts them first.
+    pub fn keys(&self) -> Vec<Box<[u8]>> {
+        self.entries.keys().cloned().collect()
+    }
+
     /// The `StringTable` this object's `~annotations` answers, or `None` for
     /// an object whose builder gave it none.
     pub fn annotations(&self) -> Option<ObjRef> {
@@ -309,6 +333,17 @@ impl NativeObject {
 
     pub fn set_annotations(&mut self, annotations: ObjRef) {
         self.annotations = Some(annotations);
+    }
+
+    /// `MethodClass::getScope`: the class this method object is installed on,
+    /// or `None` for one nothing has installed yet.
+    pub fn scope(&self) -> Option<ObjRef> {
+        self.scope
+    }
+
+    /// `MethodClass::setScope` (`classes/MethodClass.cpp:219`).
+    pub fn set_scope(&mut self, scope: ObjRef) {
+        self.scope = Some(scope);
     }
 }
 
@@ -361,6 +396,9 @@ impl Body {
                 // anything else.
                 out.push(native.class);
                 out.extend(native.entries.values().copied());
+                // A method object's scope, in the position the class handle
+                // above is in and traced for the same reason.
+                out.extend(native.scope);
                 // Reachable from the object alone once a program holds the
                 // table and drops every other handle on it.
                 out.extend(native.annotations);

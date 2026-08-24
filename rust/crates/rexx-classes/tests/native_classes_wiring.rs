@@ -11,7 +11,8 @@
 //! asserted.
 
 use rexx_classes::{
-    ClassKind, ClassRegistry, InheritRefusal, deferred_classes, native_classes, setup_class_names,
+    ClassKind, ClassRegistry, InheritRefusal, MethodSlot, deferred_classes, native_classes,
+    setup_class_names,
 };
 use rexx_core::ObjRef;
 use std::collections::BTreeSet;
@@ -289,6 +290,7 @@ const UNTOUCHED_BY_PROLOGUE: &[&str] = &[
     "MutableBuffer",
     "WeakReference",
     "StackFrame",
+    "VariableReference",
 ];
 
 /// The classes R8 un-deferred (named below): `CoreClasses.orx` mutates each
@@ -310,10 +312,16 @@ const MUTATED_BY_PROLOGUE: &[&str] = &[
     "List",
     "Message",
     "Supplier",
+    // `CoreClasses.orx:99` and `:110` are the `~inherit`s: measured on the
+    // shipped image, `.Queue~superClasses` is `The Object class` and `The
+    // OrderedCollection class`, and `.Stem~superClasses` is `The Object
+    // class` and `The MapCollection class`.
+    "Queue",
+    "Stem",
 ];
 
 #[test]
-fn the_thirteen_classes_untouched_by_the_prologue_match_the_live_oracle_exactly() {
+fn every_class_untouched_by_the_prologue_matches_the_live_oracle_exactly() {
     let r = native_classes();
     let object = r.lookup("OBJECT").unwrap();
 
@@ -348,7 +356,7 @@ fn the_thirteen_classes_untouched_by_the_prologue_match_the_live_oracle_exactly(
 /// `Object OrderedCollection`). Full post-prologue verification for these
 /// classes is Task 13's.
 #[test]
-fn the_twelve_prologue_mutated_classes_have_the_pre_prologue_superclasses_setup_cpp_builds() {
+fn every_prologue_mutated_class_has_the_pre_prologue_superclasses_setup_cpp_builds() {
     let r = native_classes();
     let object = r.lookup("OBJECT").unwrap();
     for &name in MUTATED_BY_PROLOGUE {
@@ -759,6 +767,80 @@ fn every_prologue_mutated_class_matches_its_recorded_own_instance_method_set() {
                 "WAIT",
             ],
         ),
+        // `Queue`'s own set is `Array`'s, minus the nine names
+        // `Setup.cpp:792`-`:804` removes and plus `Queue`'s own additions.
+        // Unlike `Supplier`/`Set`/`Bag`/`Relation` below, the donation this
+        // one rests on is `Setup.cpp`'s own (`InheritInstanceMethods(Array)`,
+        // `:775`) and is replayed here, so the live oracle's
+        // `.Queue~methods(.Queue)` is exactly this set -- measured, and the
+        // absence of `SORT`, `MAKESTRING` and the rest is what says the
+        // removals ran.
+        (
+            "Queue",
+            &[
+                "[]",
+                "[]=",
+                "ALLINDEXES",
+                "ALLITEMS",
+                "APPEND",
+                "AT",
+                "DELETE",
+                "EMPTY",
+                "FIRST",
+                "FIRSTITEM",
+                "HASINDEX",
+                "HASITEM",
+                "INDEX",
+                "INIT",
+                "INSERT",
+                "ISEMPTY",
+                "ITEMS",
+                "LAST",
+                "LASTITEM",
+                "MAKEARRAY",
+                "NEXT",
+                "PEEK",
+                "PREVIOUS",
+                "PULL",
+                "PUSH",
+                "PUT",
+                "QUEUE",
+                "REMOVE",
+                "REMOVEITEM",
+                "SECTION",
+                "SIZE",
+                "SUPPLIER",
+            ],
+        ),
+        // `Stem`'s hidden names are absent here for the same reason they are
+        // absent from the live oracle's answer: `~methods` steps over a
+        // tombstone (`MethodDictionary.cpp:486`), so the measured
+        // `.Stem~methods(.Stem)` has no `==` either. `.Stem~method("==")` is
+        // what reads it back, and that is the corpus row.
+        (
+            "Stem",
+            &[
+                "[]",
+                "[]=",
+                "ALLINDEXES",
+                "ALLITEMS",
+                "AT",
+                "EMPTY",
+                "HASINDEX",
+                "HASITEM",
+                "INDEX",
+                "ISEMPTY",
+                "ITEMS",
+                "MAKEARRAY",
+                "PUT",
+                "REMOVE",
+                "REMOVEITEM",
+                "REQUEST",
+                "SUPPLIER",
+                "TODIRECTORY",
+                "UNKNOWN",
+            ],
+        ),
         // `Supplier`, `Set`, `Bag` and `Relation` are deliberately not in
         // this table: `~inheritInstanceMethods` (unlike `~inherit`) rewrites
         // the donor's methods to the recipient's *own* scope
@@ -970,6 +1052,14 @@ fn every_untouched_class_matches_its_recorded_own_instance_method_set() {
                 "TYPE",
             ],
         ),
+        // The six names `Setup.cpp:1307`-`:1312` hides are absent, matching
+        // the measured `.VariableReference~methods(.VariableReference)`.
+        // `VALUE=` is here and `==` is not, which separates the tombstone
+        // from an entry whose name merely ends in `=`.
+        (
+            "VariableReference",
+            &["NAME", "REQUEST", "UNKNOWN", "VALUE", "VALUE="],
+        ),
     ];
     for &(name, expected) in cases {
         let id = r.lookup(&name.to_ascii_uppercase()).unwrap();
@@ -979,6 +1069,69 @@ fn every_untouched_class_matches_its_recorded_own_instance_method_set() {
             "{name}'s own instance methods, task3_fixround1.rex Part A"
         );
     }
+}
+
+/// Removal and hiding read back differently through the class's own
+/// dictionary, which is the whole reason they are two operations and not
+/// one. Measured on the shipped oracle at rc 0: `.Queue~method("SORT")`
+/// raises 97.1 where `.Stem~method("==")` and
+/// `.VariableReference~method("==")` both print `The NIL object`, and
+/// `.Array~method("SORT")` answers `a Method` -- the decoy that says
+/// `SORT`'s absence from `Queue` is the removal rather than a donation that
+/// never happened.
+///
+/// The pair is asserted here as well as through the corpus because the
+/// corpus can only see it through `~method`: a build that modelled hiding
+/// as removal would answer the wrong thing to one row and the right thing
+/// to the other, and a build that modelled removal as hiding would swap
+/// them.
+#[test]
+fn hiding_leaves_a_tombstone_where_removal_leaves_nothing() {
+    let r = native_classes();
+    let queue = r.lookup("QUEUE").unwrap();
+    let stem = r.lookup("STEM").unwrap();
+    let variable_reference = r.lookup("VARIABLEREFERENCE").unwrap();
+    let array = r.lookup("ARRAY").unwrap();
+
+    for name in ["SORT", "MAKESTRING", "TOSTRING", "DIMENSION", "FILL"] {
+        assert_eq!(
+            r.own_instance_slot(queue, name),
+            None,
+            "Setup.cpp removes {name} from Queue"
+        );
+        assert!(
+            matches!(
+                r.own_instance_slot(array, name),
+                Some(MethodSlot::Defined { .. })
+            ),
+            "{name} is Array's own, which is what the removal took off Queue"
+        );
+    }
+    // Donated and kept: without this row a build that donated nothing to
+    // Queue at all would pass every assertion above.
+    assert!(matches!(
+        r.own_instance_slot(queue, "APPEND"),
+        Some(MethodSlot::Defined { .. })
+    ));
+
+    for name in ["==", "=", "\\==", "\\=", "<>", "><"] {
+        for (class, id) in [("Stem", stem), ("VariableReference", variable_reference)] {
+            assert_eq!(
+                r.own_instance_slot(id, name),
+                Some(MethodSlot::Hidden),
+                "Setup.cpp hides {name} on {class}"
+            );
+            assert!(
+                !r.has_method(id, name),
+                "{class}~hasMethod({name:?}) is what a send asks, and a hidden \
+                 name does not resolve"
+            );
+        }
+    }
+    // The hidden names are `.Object`'s, so the tombstone is overriding
+    // something rather than sitting over an empty slot.
+    let object = r.lookup("OBJECT").unwrap();
+    assert!(r.has_method(object, "=="));
 }
 
 /// Object and String's own set includes `""` and `" "` (the concatenation
@@ -1140,6 +1293,8 @@ fn every_native_class_matches_its_recorded_own_class_method_set() {
         "Buffer",
         "WeakReference",
         "StackFrame",
+        "Stem",
+        "VariableReference",
     ];
     for name in new_only {
         let id = r.lookup(&name.to_ascii_uppercase()).unwrap();
@@ -1158,6 +1313,7 @@ fn every_native_class_matches_its_recorded_own_class_method_set() {
         ("Method", &["NEW", "NEWFILE", "LOADEXTERNALMETHOD"]),
         ("Routine", &["NEW", "NEWFILE", "LOADEXTERNALROUTINE"]),
         ("Package", &["NEW", "DEFAULTOPTIONS"]),
+        ("Queue", &["NEW", "OF"]),
     ];
     for &(name, expected) in cases {
         let id = r.lookup(&name.to_ascii_uppercase()).unwrap();
@@ -1167,6 +1323,20 @@ fn every_native_class_matches_its_recorded_own_class_method_set() {
             "{name}'s own class methods"
         );
     }
+    // The doc above claims this covers every class `native_classes()`
+    // builds, and this is what makes that a fact rather than a note: the two
+    // tables together name exactly the registered set, so a class lifted out
+    // of the deferral table lands in one of them or fails here.
+    let named: BTreeSet<String> = new_only
+        .iter()
+        .chain(cases.iter().map(|(name, _)| name))
+        .map(|name| name.to_string())
+        .collect();
+    let built: BTreeSet<String> = native_class_ids(&r)
+        .iter()
+        .map(|(name, _)| name.to_string())
+        .collect();
+    assert_eq!(named, built);
 }
 
 /// `class_method_names` (the *flattened* class-side set -- own class

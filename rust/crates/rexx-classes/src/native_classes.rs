@@ -52,16 +52,17 @@
 //!   only a pre-built *instance* is `addToEnvironment`'d
 //!   (`Setup.cpp:1737`). This registry models environment-reachable class
 //!   objects; none of the classes above is one.
-//! * `QueueClass` -- Setup.cpp donates Array's instance methods
-//!   (`InheritInstanceMethods(Array)`) then removes several of them
-//!   (`Dimension`, `Dimensions`, `Fill`, `sort`, `sortWith`, `stableSort`,
-//!   `stableSortWith`, `makeString`, `toString`). `MethodDict` does not
-//!   model method removal at all -- Task 2's own scope decision
-//!   (`method_dict.rs`'s doc comment: "no probe this task specifies needs
-//!   it"). Building `.Queue` here would leave those names present.
-//! * `VariableReference`, `StemClass` -- Setup.cpp hides `=`, `==`, `\=`,
-//!   `\==`, `<>`, `><` (`HideMethod`) so they redirect to `UNKNOWN`; the
-//!   same not-modelled removal/tombstone mechanism as `Queue`'s.
+//!
+//! **`Queue`, `Stem` and `VariableReference` are the classes that need
+//! [`Op::RemoveInstanceMethod`] and [`Op::HideInstanceMethod`]**, the two
+//! operations [`replay`] carries beyond adding and donating. `Queue`
+//! donates `Array`'s instance methods and then takes several of them back
+//! off (`Setup.cpp:792`-`:804`); `VariableReference` (`:1307`-`:1312`) and
+//! `Stem` (`:1399`-`:1404`) each hide `=`, `==`, `\=`, `\==`, `<>` and
+//! `><`, which routes those names to `UNKNOWN`. Removal and hiding are
+//! separate [`crate::MethodDict`] operations because the oracle answers
+//! them apart: measured at rc 0, `.Queue~method("SORT")` raises 97.1 where
+//! `.Stem~method("==")` prints `The NIL object`.
 //!
 //! **Ruling R8 (task review, 2026-08-16): the classes `CoreClasses.orx`
 //! later mutates are built here, not deferred.** `RexxString`/`ArrayClass`/
@@ -193,25 +194,6 @@ const DEFERRALS: &[Deferral] = &[
                  pre-built instance is addToEnvironment'd under REXXINFO (Setup.cpp:1737). This \
                  registry has no dot-variable path to the class object itself to model.",
     },
-    Deferral {
-        setup_class: "QueueClass",
-        reason: "donates Array's instance methods then RemoveMethod's several of them \
-                 (Dimension, Dimensions, Fill, sort, sortWith, stableSort, stableSortWith, \
-                 makeString, toString). MethodDict does not model method removal (Task 2's own \
-                 scope decision, method_dict.rs: \"no probe this task specifies needs it\").",
-    },
-    Deferral {
-        setup_class: "VariableReference",
-        reason: "HideMethod's =, ==, \\=, \\==, <>, >< so they redirect to UNKNOWN -- the same \
-                 not-modelled hideMethod/tombstone mechanism QueueClass needs.",
-    },
-    Deferral {
-        setup_class: "StemClass",
-        reason: "HideMethod's =, ==, \\=, \\==, <>, >< so they redirect to UNKNOWN -- the same \
-                 not-modelled hideMethod/tombstone mechanism QueueClass needs. Also ~inherit's \
-                 .MapCollection from CoreClasses.orx, measured (~superClasses gains it): a \
-                 second, independent reason.",
-    },
 ];
 
 /// The checklist, unfiltered -- `SETUP_CLASSES`, `build.rs`-derived.
@@ -233,12 +215,19 @@ fn definition_for(block_name: &str) -> &'static ClassDefinition {
 
 /// `Setup.cpp:1809`'s `TheClassClass->removeSetupMethods()`: `TheClassClass`
 /// specifically, applied at image-save time to delete exactly the names
-/// below from `.Class`'s own instance methods (D39). `MethodDict` has no
-/// removal primitive (Task 2's own scope decision), so this bootstrap
-/// reproduces the *deleted* state by never adding them in the first place,
-/// rather than adding then removing -- the same final answer
-/// `removeSetupMethods` leaves, reached without a removal mechanism this
-/// crate does not otherwise need. Measured: the live oracle's
+/// below from `.Class`'s own instance methods (D39). This bootstrap
+/// reproduces the *deleted* state by never adding them, which is the same
+/// final answer `removeSetupMethods` leaves and is reached in one step
+/// rather than three. `removeSetupMethods` needs the other two because a
+/// name it deletes from `.Class`'s dictionary is already in every class
+/// object's class behaviour by then, through the metaclass merge
+/// ([`crate::ClassGraph::bootstrap_root_class_behaviour`] is where `.Object`'s
+/// picks `.Class`'s instance methods up here), so it walks `.Object`'s
+/// whole subclass tree deleting from each behaviour as well
+/// (`ClassClass.cpp:923`-`:941`). [`ClassRegistry::delete_instance_method`]
+/// cascades over the *instance* side alone, matching
+/// `RexxClass::deleteMethod`, so it is not that walk. Measured: the live
+/// oracle's
 /// `.class~instancemethods(.class)` does not include either name; keeping
 /// them would be the exact corpus-visible divergence D39 warns about. Scoped
 /// to the `"Class"` block alone in [`replay`], matching `removeSetupMethods`
@@ -265,16 +254,12 @@ fn replay(registry: &mut ClassRegistry, class: rexx_core::ObjRef, def: &ClassDef
                 });
                 registry.inherit_instance_methods(class, source_id);
             }
-            Op::RemoveInstanceMethod(name) => panic!(
-                "{:?} removes {name:?}; a class with a RemoveInstanceMethod op must be in \
-                 DEFERRALS, not replayed",
-                def.name
-            ),
-            Op::HideInstanceMethod(name) => panic!(
-                "{:?} hides {name:?}; a class with a HideInstanceMethod op must be in \
-                 DEFERRALS, not replayed",
-                def.name
-            ),
+            Op::RemoveInstanceMethod(name) => {
+                registry.delete_instance_method(class, name);
+            }
+            Op::HideInstanceMethod(name) => {
+                registry.hide_instance_method(class, name);
+            }
         }
     }
 }
@@ -324,6 +309,8 @@ pub fn native_classes() -> ClassRegistry {
     // `ClassGraph::bootstrap_root_class_behaviour`'s doc comment for why the
     // ordinary is-this-the-root cascade guard cannot produce that on its own.
     registry.bootstrap_root_class_behaviour(object_id, class_id);
+    registry.set_rexx_defined(object_id);
+    registry.set_rexx_defined(class_id);
 
     // `CLASS_DEFINITIONS` is in `Setup.cpp`'s own file order, which is a real
     // dependency order (a donor's `StartClassDefinition` block precedes
@@ -351,6 +338,14 @@ pub fn native_classes() -> ClassRegistry {
         }
         let id = registry.define_class(def.name, Some(object_id), ClassKind::Regular, class_id);
         replay(&mut registry, id, def);
+        // `RexxClass::liveGeneral` sets `REXX_DEFINED` on every class it
+        // reaches while the image is being prepared
+        // (`ClassClass.cpp:136`-`:142`), which is every class this function
+        // builds. Set here, and beside the two bootstrapped above, rather
+        // than by a sweep over the finished registry: the sweep's only
+        // source of classes is a `HashMap`, and a loop whose order is the
+        // map's is a loop that could come to matter.
+        registry.set_rexx_defined(id);
     }
 
     registry

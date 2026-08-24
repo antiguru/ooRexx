@@ -96,7 +96,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use rexx_classes::{ClassRegistry, MethodId};
+use rexx_classes::{ClassRegistry, InheritRefusal, MethodId, MethodSlot};
 use rexx_core::{BehaviourId, Body, Decoded, ObjRef};
 use rexx_parse::{Access, Expr};
 
@@ -266,7 +266,19 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("Class", "ANNOTATION", Arity::Fixed(1), native_annotation),
     ("Class", "ANNOTATIONS", Arity::Fixed(0), native_annotations),
     ("Class", "BASECLASS", Arity::Fixed(0), native_base_class),
+    // The five mutators, each of which `Setup.cpp` declares
+    // `AddProtectedMethod` (`:456`, `:457`, `:463`, `:478`) except `Inherit`
+    // (`:466`), and each of which opens with the same `REXX_DEFINED` refusal.
+    ("Class", "DEFINE", Arity::Fixed(2), native_define),
+    (
+        "Class",
+        "DEFINEMETHODS",
+        Arity::Fixed(1),
+        native_define_methods,
+    ),
+    ("Class", "DELETE", Arity::Fixed(1), native_delete),
     ("Class", "ID", Arity::Fixed(0), native_id),
+    ("Class", "INHERIT", Arity::Fixed(2), native_class_inherit),
     (
         "Class",
         "ISSUBCLASSOF",
@@ -283,6 +295,7 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(0),
         native_superclasses,
     ),
+    ("Class", "UNINHERIT", Arity::Fixed(1), native_uninherit),
     // `HashCollection::getRexx` under both of its names and
     // `HashCollection::putRexx`, donated to `Directory` by
     // `InheritInstanceMethods(StringTable)` (`memory/Setup.cpp:933`) out of
@@ -326,6 +339,18 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     ("Object", "REQUEST", Arity::Fixed(1), native_request),
     ("Object", "STRING", Arity::Fixed(0), native_string),
+    (
+        "Package",
+        "ADDCLASS",
+        Arity::Fixed(2),
+        native_package_add_class,
+    ),
+    (
+        "Package",
+        "ADDPUBLICCLASS",
+        Arity::Fixed(2),
+        native_package_add_public_class,
+    ),
     ("Package", "ANNOTATION", Arity::Fixed(1), native_annotation),
     (
         "Package",
@@ -334,6 +359,21 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         native_annotations,
     ),
     ("Package", "NAME", Arity::Fixed(0), native_package_name),
+    (
+        "Package",
+        "PUBLICCLASSES",
+        Arity::Fixed(0),
+        native_package_public_classes,
+    ),
+    // `.context`'s own package, which is the running program's -- the one
+    // route to it, since `Class~package` above answers `REXX` for every
+    // class the bootstrap registered.
+    (
+        "RexxContext",
+        "PACKAGE",
+        Arity::Fixed(0),
+        native_context_package,
+    ),
     ("Routine", "ANNOTATION", Arity::Fixed(1), native_annotation),
     (
         "Routine",
@@ -420,6 +460,7 @@ pub(crate) struct ObjectModel {
     routine: ObjRef,
     directory: ObjRef,
     string_table: ObjRef,
+    context: ObjRef,
 }
 
 impl ObjectModel {
@@ -469,6 +510,9 @@ impl ObjectModel {
         let string_table = classes
             .lookup("StringTable")
             .expect("StringTable is a native class");
+        let context = classes
+            .lookup("RexxContext")
+            .expect("RexxContext is a native class");
         ObjectModel {
             classes,
             natives,
@@ -481,6 +525,7 @@ impl ObjectModel {
             routine,
             directory,
             string_table,
+            context,
         }
     }
 }
@@ -552,9 +597,11 @@ enum Primitive {
     /// method "AT" with scope "StringTable".` where `.environment~at()`
     /// reports `"Directory"`.
     ///
-    /// **`.context` is not this.** A `RexxContext` answers no name this crate
-    /// implements, so it keeps the loud arm below.
+    /// **`.context` is not this**; it is [`Primitive::Context`] below.
     StringTable,
+    /// A `Body::Native` whose class is `.RexxContext` -- what `.context`
+    /// answers. Measured, `.context~class` is `The RexxContext class`.
+    Context,
     /// The receiver **is** a class object, so its messages resolve against
     /// that class's own class behaviour rather than against any class's
     /// instance behaviour. Measured, `::class K` plus `::method m class`:
@@ -981,12 +1028,22 @@ impl Interp {
                     {
                         Ok(Primitive::StringTable)
                     }
-                    // `.context`. Its class is in the registry, so there is a
-                    // behaviour to resolve against -- what is missing is a
-                    // `NATIVE_METHODS` row for anything a `RexxContext`
-                    // answers, and answering 97.1 for a name the oracle
-                    // implements is the wrong failure. Loud until a task
-                    // implements those methods.
+                    // `.context`. Its class is in the registry, so there is
+                    // a behaviour to resolve against, and `RexxContext`'s
+                    // instance behaviour here is `Setup.cpp`'s whole set --
+                    // the position `.Package` above is in, so a name it does
+                    // not hold is 97.1 and a name it holds with no row here
+                    // is this crate's own gap.
+                    Body::Native(native)
+                        if self.object_model.as_ref().map(|model| model.context)
+                            == Some(native.class()) =>
+                    {
+                        Ok(Primitive::Context)
+                    }
+                    // A `Body::Native` of a class this crate builds no
+                    // receiver arm for. Nothing constructs one today; loud
+                    // rather than answered, this crate's rule for an internal
+                    // inconsistency.
                     Body::Native(_) => Err("one of the interpreter's own objects"),
                 },
             },
@@ -1014,6 +1071,7 @@ impl Interp {
             Primitive::Routine => Behaviour::Instance(model.routine),
             Primitive::Directory => Behaviour::Instance(model.directory),
             Primitive::StringTable => Behaviour::Instance(model.string_table),
+            Primitive::Context => Behaviour::Instance(model.context),
             Primitive::Class(class) => Behaviour::ClassSide(class),
         })
     }
@@ -1097,6 +1155,17 @@ impl Interp {
                 .lookup_class_method_from_scope(class, &name, start)?,
         };
         Some(Resolution { scope, method })
+    }
+
+    /// The scope a name would resolve to on this receiver, for a caller that
+    /// reports what a send it is not making would have failed with.
+    ///
+    /// `None` is 97.1's case -- the behaviour does not answer the name --
+    /// and `Some(id)` names the class the entry came from, which is what
+    /// [`Loud::native_method`]'s message carries.
+    fn lookup_for_refusal(&mut self, receiver: ObjRef, name: &[u8]) -> Option<String> {
+        let resolution = self.lookup(receiver, name, None)?;
+        Some(self.classes().id_string(resolution.scope).to_string())
     }
 
     /// The access scope and protection of a resolved method, for the methods
@@ -2934,6 +3003,7 @@ fn native_class(
         Primitive::Routine => model.routine,
         Primitive::Directory => model.directory,
         Primitive::StringTable => model.string_table,
+        Primitive::Context => model.context,
         Primitive::Class(class) => model.classes.class_of(class),
     }))
 }
@@ -3056,6 +3126,13 @@ fn native_annotations(
 /// whose name `.Object` defines and `.Array`'s flattened behaviour holds, is
 /// 97.1 at rc 159; and `.K~method("M")` for `::method m class` is 97.1 too,
 /// while the same directive without `CLASS` answers.
+///
+/// **A hidden name answers `.nil` rather than raising**, which is the one
+/// reader that tells hiding and removal apart -- the C++ says so in its own
+/// comment at the raise (`:992`-`:993`: "Note that is could be there, but as
+/// .nil.  We will return that value"). Measured at rc 0,
+/// `.Stem~method("==")` and `.VariableReference~method("==")` both print
+/// `The NIL object` where `.Queue~method("SORT")` raises 97.1.
 fn native_method(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -3068,14 +3145,406 @@ fn native_method(
     let argument = required_string_named_argument(interp, argument, "method name")?;
     let name = interp.to_text(argument).to_ascii_uppercase();
     let class = class_receiver(interp, receiver)?;
-    let found = interp
+    match interp
         .classes()
-        .has_own_instance_method(class, &String::from_utf8_lossy(&name));
-    if !found {
-        let target = interp.class_default_name(class).to_vec();
-        return Err(Raised::no_method(&target, &name).into());
+        .own_instance_slot(class, &String::from_utf8_lossy(&name))
+    {
+        None => {
+            let target = interp.class_default_name(class).to_vec();
+            Err(Raised::no_method(&target, &name).into())
+        }
+        Some(MethodSlot::Hidden) => Ok(Some(ObjRef::NIL)),
+        Some(MethodSlot::Defined { .. }) => Ok(Some(interp.method_object(class, &name))),
     }
-    Ok(Some(interp.method_object(class, &name)))
+}
+
+/// The `REXX_DEFINED` refusal every class mutator opens with --
+/// `isRexxDefined()` and its `reportException(Error_Execution_rexx_defined_class)`
+/// (`classes/ClassClass.cpp:823`, `:522`, `:955`, `:1290`, `:1382`, one per
+/// mutator).
+///
+/// **Checked before the arguments are**, which the five methods all do and
+/// which is measured: `.Array~inherit()` reports 98.985 where the same send
+/// to a class a `::CLASS` declared reports 88.901.
+///
+/// **The only instrument that can catch a regression here is the corpus.**
+/// Every class in `.environment` carries the flag and every `::CLASS` a
+/// program declares does not, so a build that dropped this check would let
+/// `.Array~define(...)` succeed at rc 0 where the oracle raises -- a
+/// divergence a differential row sees, unlike a refusal the oracle does not
+/// share.
+fn rexx_defined_lock(interp: &mut Interp, class: ObjRef) -> Result<(), Failure> {
+    if interp.classes().is_rexx_defined(class) {
+        return Err(Raised::rexx_defined_class().into());
+    }
+    Ok(())
+}
+
+/// The `method name` argument `~define`, `~delete` and `~method` share:
+/// required, string-valued, and upcased before it reaches a dictionary --
+/// `stringArgument(method_name, "method name")->upper()`
+/// (`classes/ClassClass.cpp:826`-`:828`, `:963`, `:986`).
+fn method_name_argument(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<Vec<u8>, Failure> {
+    let Some(Some(argument)) = args.first().copied() else {
+        return Err(Raised::missing_named_argument("method name").into());
+    };
+    let argument = required_string_named_argument(interp, argument, "method name")?;
+    Ok(interp.to_text(argument).to_ascii_uppercase())
+}
+
+/// `Class~define(name, method)`: install one instance method on the receiver
+/// -- `RexxClass::defineMethod` (`classes/ClassClass.cpp:819`).
+///
+/// **The second argument has three shapes and they are three answers**,
+/// measured on the oracle for a `::class K` and read back through `~method`:
+///
+/// * a `Method` object -- installed, and `~method` answers **that** object;
+/// * omitted -- a `.nil` tombstone, and `~method` answers `The NIL object`.
+///   `.K~define("STRING")` does this for a name `.Object` supplies, so the
+///   entry is created rather than overwritten;
+/// * `.nil` -- the entry goes away, and `~method` raises 97.1. This is not
+///   the tombstone: measured, `.K~define("Z", .methods~z)` followed by
+///   `.K~define("Z", .nil)` leaves `.K~method("Z")` raising where the
+///   omitted form leaves it answering `The NIL object`. The C++ leaves
+///   `methodObject` at `OREF_NULL` for this arm alone (`:840`-`:849`, whose
+///   two tests are `OREF_NULL == methodSource` and
+///   `TheNilObject != methodSource`) and hands that to `replaceMethod`.
+///   Modelled as the removal it reads as; the flattened behaviour is where a
+///   stored null and an absent entry could still part, and no send this
+///   phase can make reaches one, since `~new` is not built.
+///
+/// Anything else is source text for `newMethodObject` to compile, which is
+/// [`Loud::method_from_source`].
+fn native_define(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    rexx_defined_lock(interp, class)?;
+    let name = method_name_argument(interp, args)?;
+    match args.get(1).copied().flatten() {
+        None => {
+            interp
+                .classes()
+                .hide_instance_method(class, &String::from_utf8_lossy(&name));
+            interp.drop_method_object(class, &name);
+        }
+        Some(source) if source == ObjRef::NIL => {
+            interp
+                .classes()
+                .delete_instance_method(class, &String::from_utf8_lossy(&name));
+            interp.drop_method_object(class, &name);
+        }
+        Some(source) => {
+            if interp.receiver_kind(source) != Ok(Primitive::Method) {
+                return Err(Loud::method_from_source().into());
+            }
+            interp
+                .define_method_object(class, &name, source)
+                .ok_or_else(|| {
+                    Failure::from(Loud::receiver_class(
+                        "a method object this crate did not build",
+                    ))
+                })?;
+        }
+    }
+    Ok(None)
+}
+
+/// `Class~defineMethods(methods)`: install a whole table of instance methods
+/// in one mutation -- `RexxClass::defineMethodsRexx`
+/// (`classes/ClassClass.cpp:518`).
+///
+/// **The object stored is never the one the table held**, unlike `~define`
+/// beside it -- see [`Interp::define_method_table`] for the two `newScope`
+/// calls that make it so and the measurement.
+///
+/// The oracle reads the argument by sending it `SUPPLIER`
+/// (`classes/ClassClass.cpp:1250`), so what a value that has no such method
+/// gets is 97.1 naming that message, and this raises the same: measured,
+/// `.K~defineMethods("abc")` is rc 159, `Object "abc" does not understand
+/// message "SUPPLIER".` under the `DEFINEMETHODS` frame. A value whose
+/// behaviour *does* answer `SUPPLIER` and which this phase cannot walk is
+/// the refusal that send would have produced instead.
+///
+/// The two hash collections are read from their own entries rather than
+/// through a supplier object, which this phase does not build. They are
+/// walked in sorted name order: the order is not observable, and a stable
+/// one is what keeps the run-to-run allocation sequence fixed.
+fn native_define_methods(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    rexx_defined_lock(interp, class)?;
+    let Some(Some(table)) = args.first().copied() else {
+        return Err(Raised::missing_named_argument("methods").into());
+    };
+    if !matches!(
+        interp.receiver_kind(table),
+        Ok(Primitive::Directory | Primitive::StringTable)
+    ) {
+        return Err(supplier_refusal(interp, table));
+    }
+    let mut names = interp.native_keys(table);
+    names.sort();
+    let mut entries: Vec<(Box<[u8]>, Option<ObjRef>)> = Vec::with_capacity(names.len());
+    for name in names {
+        let value = interp.native_entry(table, &name).unwrap_or(ObjRef::NIL);
+        if value == ObjRef::NIL {
+            entries.push((name, None));
+            continue;
+        }
+        if interp.receiver_kind(value) != Ok(Primitive::Method) {
+            return Err(Loud::method_from_source().into());
+        }
+        entries.push((name, Some(value)));
+    }
+    interp.define_method_table(class, &entries).ok_or_else(|| {
+        Failure::from(Loud::receiver_class(
+            "a method object this crate did not build",
+        ))
+    })?;
+    Ok(None)
+}
+
+/// What a `SUPPLIER` send to `table` would have answered, as the failure
+/// `~defineMethods` reports for a value it cannot walk.
+///
+/// Asking the same lookup a send asks, rather than deciding from the value's
+/// kind: a receiver whose behaviour has no `SUPPLIER` entry is the oracle's
+/// own 97.1, and one that has an entry this crate implements no code for is
+/// this crate's gap. Nothing is run either way -- no value this phase builds
+/// answers `SUPPLIER` with a supplier object.
+fn supplier_refusal(interp: &mut Interp, table: ObjRef) -> Failure {
+    match interp.lookup_for_refusal(table, b"SUPPLIER") {
+        Some(scope) => Loud::native_method(b"SUPPLIER", &scope).into(),
+        None => {
+            let target = interp.string_value_text(table);
+            Raised::no_method(&target, b"SUPPLIER").into()
+        }
+    }
+}
+
+/// `Class~delete(name)`: take one instance method back off the receiver --
+/// `RexxClass::deleteMethod` (`classes/ClassClass.cpp:952`).
+///
+/// A name the class does not define is not an error: measured, oracle rc 0
+/// with nothing on either descriptor.
+fn native_delete(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    rexx_defined_lock(interp, class)?;
+    let name = method_name_argument(interp, args)?;
+    interp
+        .classes()
+        .delete_instance_method(class, &String::from_utf8_lossy(&name));
+    interp.drop_method_object(class, &name);
+    Ok(None)
+}
+
+/// `Class~inherit(mixin, position)`: add a mixin to the receiver's
+/// superclass list -- `RexxClass::inherit` (`classes/ClassClass.cpp:1287`),
+/// the same function the `INHERIT` keyword of a `::CLASS` directive reaches
+/// by sending this message ([`Interp::inherit_mixin`]).
+///
+/// `position` is optional and says where in the list the mixin lands --
+/// [`rexx_classes::ClassGraph::inherit_at`] carries what "after" means
+/// there.
+fn native_class_inherit(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    rexx_defined_lock(interp, class)?;
+    let mixin = mixin_class_argument(interp, args)?;
+    let position = match args.get(1).copied().flatten() {
+        None => None,
+        Some(position) => Some(class_receiver(interp, position).map_err(|_| {
+            let shown = interp.string_value_text(position);
+            Failure::from(Raised::inherit_needs_a_mixinclass(&shown))
+        })?),
+    };
+    match interp.classes().inherit_at(class, mixin, position) {
+        Ok(()) => Ok(None),
+        Err(refusal) => Err(inherit_refusal(interp, class, mixin, refusal)),
+    }
+}
+
+/// `Class~uninherit(mixin)`: take a mixin back out of the receiver's
+/// superclass list -- `RexxClass::uninherit` (`classes/ClassClass.cpp:1379`).
+fn native_uninherit(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    rexx_defined_lock(interp, class)?;
+    let mixin = mixin_class_argument(interp, args)?;
+    match interp.classes().uninherit(class, mixin) {
+        Ok(()) => Ok(None),
+        Err(refusal) => Err(inherit_refusal(interp, class, mixin, refusal)),
+    }
+}
+
+/// The `mixin class` argument `~inherit` and `~uninherit` share: required,
+/// and a `MIXINCLASS` class object or 98.942 naming the value
+/// (`classes/ClassClass.cpp:1298`-`:1301`, `:1391`-`:1394`).
+///
+/// **The mixin test is the graph's and the class-object test is here**,
+/// because the two report the same error and only one of them has a class to
+/// ask about. Measured at rc 158: `.K~uninherit('abc')` reports `Class "abc"
+/// must be a MIXINCLASS for INHERIT.` and `.K~uninherit(.Object)` reports the
+/// same sentence with `The Object class` in it.
+fn mixin_class_argument(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<ObjRef, Failure> {
+    let Some(Some(argument)) = args.first().copied() else {
+        return Err(Raised::missing_named_argument("mixin class").into());
+    };
+    class_receiver(interp, argument).map_err(|_| {
+        let shown = interp.string_value_text(argument);
+        Failure::from(Raised::inherit_needs_a_mixinclass(&shown))
+    })
+}
+
+/// One [`InheritRefusal`] as the condition the oracle reports in its place,
+/// with the substitutions rendered the way the message renders an object:
+/// `stringValue()`, which is `~objectName` and so follows a rename.
+fn inherit_refusal(
+    interp: &mut Interp,
+    class: ObjRef,
+    mixin: ObjRef,
+    refusal: InheritRefusal,
+) -> Failure {
+    let class_name = interp.string_value_text(class);
+    let mixin_name = interp.string_value_text(mixin);
+    match refusal {
+        InheritRefusal::NotAMixin => Raised::inherit_needs_a_mixinclass(&mixin_name).into(),
+        InheritRefusal::Recursive => Raised::recursive_inherit(&class_name, &mixin_name).into(),
+        InheritRefusal::BaseClass(base) => {
+            let base_name = interp.string_value_text(base);
+            Raised::inherit_base_class(&class_name, &mixin_name, &base_name).into()
+        }
+        InheritRefusal::NotInherited(other) => {
+            let other_name = interp.string_value_text(other);
+            Raised::not_inherited(&class_name, &other_name).into()
+        }
+    }
+}
+
+/// `RexxContext~package`: the package of the program the running activation
+/// belongs to -- `RexxContext::getPackage` (`classes/ContextClass.cpp:160`).
+///
+/// **The one route to the running program's package object**, which is why
+/// it is here rather than left to `Class~package`: measured,
+/// `.Array~package~name` is `REXX`, so a class the bootstrap registered
+/// reaches the interpreter's own package and not this one.
+fn native_context_package(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    _receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    // `checkValid` (`ContextClass.cpp:162`) is what refuses a context object
+    // whose activation has returned; nothing here hands one out that
+    // outlives its activation, and a context object exists only while one is
+    // running.
+    interp
+        .running_package_object()
+        .map(Some)
+        .ok_or_else(|| Loud::receiver_class("a context object outside a running program").into())
+}
+
+/// `Package~addClass(name, class)` and `Package~addPublicClass(name, class)`
+/// -- `PackageClass::addClassRexx` (`classes/PackageClass.cpp:1926`) and
+/// `addPublicClassRexx` (`:1944`), which differ only in the flag they hand
+/// `addInstalledClass`.
+///
+/// Both answer the package object itself (`return this`, `:1933`), which is
+/// measured: `p~addClass("zz", .K) == p` is `1`.
+fn native_package_add_class(
+    interp: &mut Interp,
+    cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    add_installed_class(interp, cleared, receiver, args, false)
+}
+
+/// `Package~addPublicClass` -- see [`native_package_add_class`].
+fn native_package_add_public_class(
+    interp: &mut Interp,
+    cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    add_installed_class(interp, cleared, receiver, args, true)
+}
+
+/// The body both `~addClass` rows share, since a second implementation is
+/// where the two could come to disagree.
+///
+/// The arguments are validated in the C++'s order: `stringArgument(name,
+/// "name")`, then `classArgument(clazz, TheClassClass, "class")`, then
+/// `checkRexxPackage`. Measured at rc 168, `~addClass()` is `Missing
+/// argument; argument name is required.`, `~addClass("a")` is the same
+/// sentence for `class`, and `~addClass("a", "b")` is 88.914 `Argument class
+/// must be an instance of the Class class.`
+fn add_installed_class(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    public: bool,
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(Some(name)) = args.first().copied() else {
+        return Err(Raised::missing_named_argument("name").into());
+    };
+    let name = required_string_named_argument(interp, name, "name")?;
+    let name = interp.to_text(name).to_vec();
+    let Some(Some(class)) = args.get(1).copied() else {
+        return Err(Raised::missing_named_argument("class").into());
+    };
+    if class.class_id().is_none() {
+        return Err(Raised::argument_not_a_class("class").into());
+    }
+    match interp.which_package(receiver) {
+        Some(Package::Program(program)) => {
+            interp.add_installed_class(program, &name, class, public);
+            Ok(Some(receiver))
+        }
+        Some(Package::Rexx) => Err(Raised::rexx_package_addition().into()),
+        None => Err(Loud::receiver_class("a package object this crate did not build").into()),
+    }
+}
+
+/// `Package~publicClasses`: a fresh `StringTable` of the classes this
+/// package exports -- `PackageClass::getPublicClassesRexx`
+/// (`classes/PackageClass.cpp:1563`).
+///
+/// The REXX package's own table is [`Loud::rexx_package_classes`], which
+/// carries why.
+fn native_package_public_classes(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    match interp.which_package(receiver) {
+        Some(Package::Program(program)) => Ok(Some(interp.public_classes_table(program))),
+        Some(Package::Rexx) => Err(Loud::rexx_package_classes().into()),
+        None => Err(Loud::receiver_class("a package object this crate did not build").into()),
+    }
 }
 
 /// An array receiver's own slots, borrowed, or the refusal for a receiver that
@@ -3507,7 +3976,8 @@ fn native_object_name(
         | Primitive::Method
         | Primitive::Routine
         | Primitive::Directory
-        | Primitive::StringTable => interp.string_value_text(receiver),
+        | Primitive::StringTable
+        | Primitive::Context => interp.string_value_text(receiver),
     };
     Ok(Some(interp.text_built(name)))
 }
@@ -3549,7 +4019,8 @@ fn native_object_name_set(
         | Primitive::Method
         | Primitive::Routine
         | Primitive::Directory
-        | Primitive::StringTable => {
+        | Primitive::StringTable
+        | Primitive::Context => {
             let Some(object) = interp.heap.get_mut(receiver) else {
                 return Err(Loud::receiver_class("a value whose object is no longer live").into());
             };

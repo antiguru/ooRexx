@@ -758,6 +758,16 @@ impl Interp {
         Ok(())
     }
 
+    /// Every key a `Body::Native`'s own map holds, or an empty list for any
+    /// other object. Owned, and in no particular order -- see
+    /// [`rexx_core::NativeObject::keys`].
+    pub(crate) fn native_keys(&self, object: ObjRef) -> Vec<Box<[u8]>> {
+        match self.heap.get(object).map(|held| &held.body) {
+            Some(Body::Native(native)) => native.keys(),
+            _ => Vec::new(),
+        }
+    }
+
     /// One entry of a `Body::Native`'s own map, by the key the caller holds.
     pub(crate) fn native_entry(&self, object: ObjRef, index: &[u8]) -> Option<ObjRef> {
         match &self.heap.get(object)?.body {
@@ -810,12 +820,95 @@ impl Interp {
     /// `PackageClass::install` files an installed class against the package
     /// (`addInstalledClass`). Resolution reads this table and the environment
     /// object; it never reads `ClassRegistry::lookup`.
-    pub(crate) fn record_package_class(&mut self, program: ProgramId, name: &[u8], class: ObjRef) {
+    pub(crate) fn record_package_class(
+        &mut self,
+        program: ProgramId,
+        name: &[u8],
+        class: ObjRef,
+        public: bool,
+    ) {
         self.package_classes
             .entry(program)
             .or_default()
             .insert(name.to_ascii_uppercase().into(), class);
+        if public {
+            self.package_public_classes
+                .entry(program)
+                .or_default()
+                .insert(name.to_ascii_uppercase().into(), class);
+        }
         self.class_packages.insert(class, program);
+    }
+
+    /// `Package~addClass` and `Package~addPublicClass`, which differ only in
+    /// whether the public table gets the entry too --
+    /// `PackageClass::addInstalledClass` (`classes/PackageClass.cpp:1401`),
+    /// which both `addClassRexx` (`:1932`) and `addPublicClassRexx`
+    /// (`:1950`) reach with the flag set differently.
+    ///
+    /// The name is stored upcased, because `setEntry` upcases its index
+    /// (`StringHashCollection::setEntry`, `classes/support/HashCollection.cpp:854`).
+    /// Measured on the oracle at rc 0: after `p~addClass("zz", .K)`,
+    /// `p~classes["ZZ"]` is `The K class` and `p~classes["zz"]` is `The NIL
+    /// object`.
+    pub(crate) fn add_installed_class(
+        &mut self,
+        program: ProgramId,
+        name: &[u8],
+        class: ObjRef,
+        public: bool,
+    ) {
+        // The reverse direction is deliberately not written here.
+        // `~package` answers the package a class was *defined* in, which is
+        // `RexxClass::package`, a field of the class object;
+        // `addInstalledClass` writes the package's own two tables and
+        // touches no field of the class it is handed, so adding a class to a
+        // package's table does not move it.
+        self.package_classes
+            .entry(program)
+            .or_default()
+            .insert(name.to_ascii_uppercase().into(), class);
+        if public {
+            self.package_public_classes
+                .entry(program)
+                .or_default()
+                .insert(name.to_ascii_uppercase().into(), class);
+        }
+    }
+
+    /// `Package~publicClasses` for a program's own package: a fresh
+    /// `StringTable` holding what the `::CLASS ... PUBLIC` directives and
+    /// `~addPublicClass` have put there.
+    ///
+    /// **Fresh on every ask, not one kept table**, which is the oracle's own
+    /// answer: `getPublicClassesRexx` returns `installedPublicClasses->copy()`
+    /// (`classes/PackageClass.cpp:1570`) or a new empty one. Measured at rc
+    /// 0, `p~publicClasses == p~publicClasses` is `0` where
+    /// `.context~package == .context~package` is `1`.
+    ///
+    /// The table is filled in sorted name order. The order is not observable
+    /// -- a `StringTable` answers by name -- and sorting is what keeps the
+    /// allocation sequence the same from run to run.
+    pub(crate) fn public_classes_table(&mut self, program: ProgramId) -> ObjRef {
+        let class = self.environment_model().string_table;
+        let table = self.native_instance(class);
+        let mut entries: Vec<(Box<[u8]>, ObjRef)> = self
+            .package_public_classes
+            .get(&program)
+            .map(|held| held.iter().map(|(k, v)| (k.clone(), *v)).collect())
+            .unwrap_or_default();
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
+        let object = self.heap.get_mut(table).expect("just allocated and rooted");
+        let Body::Native(native) = &mut object.body else {
+            unreachable!("allocated as Body::Native by native_instance")
+        };
+        // Every value is a class identity, which names no arena slot, so
+        // nothing here can be collected between two of these writes and the
+        // table needs no per-value rooting.
+        for (name, id) in entries {
+            native.set_entry(&name, id);
+        }
+        table
     }
 
     /// The package object `class~package` answers, built on first use.
@@ -831,6 +924,17 @@ impl Interp {
             None => Package::Rexx,
             Some(program) => Package::Program(program),
         };
+        self.package_object(package)
+    }
+
+    /// The one object standing for `package`, built on first use.
+    ///
+    /// Split out of [`Interp::package_object_for`] because
+    /// `RexxContext~package` names the running program's package with no
+    /// class to read it off, and the two must answer the same object:
+    /// measured, `.context~package == .K~package` is `1` for a `::class K`
+    /// in the running file.
+    pub(crate) fn package_object(&mut self, package: Package) -> ObjRef {
         if let Some(found) = self.package_objects.get(&package).copied() {
             return found;
         }
@@ -888,6 +992,146 @@ impl Interp {
         // annotations are keyed by: this class, the instance side, this name.
         self.attach_annotations(object, Annotated::Member(class, false, name.into()));
         object
+    }
+
+    /// The package object of the program that is running -- what
+    /// `RexxContext~package` answers, `RexxContext::getPackage`
+    /// (`classes/ContextClass.cpp`'s `getPackage`, bound by
+    /// `memory/Setup.cpp:1216`).
+    ///
+    /// `None` when no activation is running, which is the position
+    /// [`Interp::running_program`] is in and is how a unit test against a
+    /// bare `Interp` reaches this.
+    ///
+    /// **The same object `~package` answers for a class the program
+    /// declared**, because both go through [`Interp::package_object_for`]'s
+    /// cache under one key. Measured, oracle rc 0: with `::class K public`,
+    /// `.context~package == .K~package` is `1`,
+    /// `.context~package == .context~package` is `1`, and
+    /// `.context~package == .Array~package` is `0`.
+    pub(crate) fn running_package_object(&mut self) -> Option<ObjRef> {
+        let program = self.running_program()?;
+        Some(self.package_object(Package::Program(program)))
+    }
+
+    /// `MethodClass::newScope` (`classes/MethodClass.cpp:183`): the same
+    /// method object with `scope` filled in when it had none, and a copy
+    /// carrying `scope` when it already had one.
+    ///
+    /// This is what decides whether `~define` stores the very object it was
+    /// handed. Measured, oracle rc 0, with `::method z` above `::class K`
+    /// and `::class K2`: `m = .methods~z; .K2~define("Y", m)` then
+    /// `m == .K2~method("Y")` is `1`, and `.K2~define("X", .K~method("M"))`
+    /// then `.K~method("M") == .K2~method("X")` is `0` -- `.K`'s own method
+    /// already carries `.K` as its scope.
+    ///
+    /// The copy is shallow, which is `RexxObject::copy`: it shares the
+    /// annotation table rather than duplicating it, so the copy answers the
+    /// `::ANNOTATE` pairs the original was given. Measured at rc 0,
+    /// `.K2~method("X")~annotation("A")` answers what `::annotate method m A`
+    /// set.
+    fn method_new_scope(&mut self, method: ObjRef, scope: ObjRef) -> Option<ObjRef> {
+        let mut copy = match self.heap.get(method).map(|held| &held.body) {
+            Some(Body::Native(native)) if native.scope().is_none() => {
+                let object = self.heap.get_mut(method).expect("read just above");
+                let Body::Native(native) = &mut object.body else {
+                    unreachable!("matched as Body::Native just above")
+                };
+                native.set_scope(scope);
+                return Some(method);
+            }
+            Some(Body::Native(native)) => native.clone(),
+            _ => return None,
+        };
+        copy.set_scope(scope);
+        // The clone is out of the collector's sight until `alloc_with`
+        // returns, and `alloc_with` can collect. The only arena handle it
+        // carries is its annotation table, which
+        // [`Interp::annotation_table`] roots as a global for the whole run,
+        // so nothing the clone reaches can be swept while it is detached.
+        let object = self.alloc_with(BehaviourId::OBJECT, Body::Native(copy));
+        self.roots.push_temp(object);
+        Some(object)
+    }
+
+    /// `~define` with a method object: install it in `class`'s own instance
+    /// dictionary under `name` and make [`Interp::method_object`] answer it.
+    ///
+    /// `RexxClass::defineMethod` (`classes/ClassClass.cpp:819`) puts the
+    /// object `newMethodObject` gave it straight into the dictionary
+    /// (`:864`), so `~method` afterwards answers that object and not a fresh
+    /// one -- which is the difference `~defineMethods` beside it does not
+    /// have.
+    pub(crate) fn define_method_object(
+        &mut self,
+        class: ObjRef,
+        name: &[u8],
+        source: ObjRef,
+    ) -> Option<()> {
+        let object = self.method_new_scope(source, class)?;
+        let method = self.classes().mint_method_id();
+        self.classes()
+            .define_instance_method(class, &String::from_utf8_lossy(name), method);
+        self.hold_method_object(class, name, object);
+        Some(())
+    }
+
+    /// `~defineMethods`: one mutation for the whole table.
+    ///
+    /// Each entry goes through [`Interp::method_new_scope`] **twice**, which
+    /// is the oracle's own path and not a doubling:
+    /// `createMethodDictionary` calls `newMethodObject`
+    /// (`classes/ClassClass.cpp:1265`), and `replaceMethods` calls
+    /// `newScope` again on what that produced (`MethodDictionary.cpp:233`).
+    /// The second call always finds a scope set by the first, so the object
+    /// stored is always a copy -- measured, oracle rc 0:
+    /// `m = .methods~z; .K~defineMethods(.methods)` then
+    /// `m == .K~method("Z")` is `0` while `m == .methods~z` is `1`.
+    pub(crate) fn define_method_table(
+        &mut self,
+        class: ObjRef,
+        entries: &[(Box<[u8]>, Option<ObjRef>)],
+    ) -> Option<()> {
+        let mut installed: Vec<(String, Option<rexx_classes::MethodId>)> = Vec::new();
+        let mut objects: Vec<(Box<[u8]>, ObjRef)> = Vec::new();
+        let frame = self.roots.push_frame();
+        for (name, source) in entries {
+            let name_text = String::from_utf8_lossy(name).into_owned();
+            let Some(source) = *source else {
+                installed.push((name_text, None));
+                continue;
+            };
+            let object = self.method_new_scope(source, class)?;
+            self.roots.push_temp(object);
+            let object = self.method_new_scope(object, class)?;
+            self.roots.push_temp(object);
+            installed.push((name_text, Some(self.classes().mint_method_id())));
+            objects.push((name.clone(), object));
+        }
+        self.classes().define_instance_methods(class, &installed);
+        for (name, object) in objects {
+            self.hold_method_object(class, &name, object);
+        }
+        self.roots.pop_frame(frame);
+        Some(())
+    }
+
+    /// Make [`Interp::method_object`] answer `object` for this dictionary
+    /// entry, and root it the way one this crate built is rooted.
+    fn hold_method_object(&mut self, class: ObjRef, name: &[u8], object: ObjRef) {
+        self.roots
+            .add_global(&method_object_root_key(class, name), object);
+        self.method_objects.insert((class, name.into()), object);
+    }
+
+    /// Forget the `Method` object this dictionary entry answered, for a
+    /// `~delete` or a `~define` that took the entry away.
+    ///
+    /// The identity `~method` hands out is per dictionary entry, so an entry
+    /// that stops existing must not leave its object behind to be answered
+    /// by whatever occupies the name next.
+    pub(crate) fn drop_method_object(&mut self, class: ObjRef, name: &[u8]) {
+        self.method_objects.remove(&(class, name.into()));
     }
 
     /// The `StringTable` `~annotations` answers for `site`, built empty on
@@ -1006,17 +1250,21 @@ impl Interp {
     /// this crate builds one only above. Answered rather than panicked, so the
     /// caller can refuse loudly.
     pub(crate) fn package_name(&self, package: ObjRef) -> Option<Vec<u8>> {
-        let which = self
-            .package_objects
-            .iter()
-            .find(|(_, object)| **object == package)
-            .map(|(which, _)| *which)?;
-        Some(match which {
+        Some(match self.which_package(package)? {
             Package::Rexx => b"REXX".to_vec(),
             // A program's own package. This phase loads one program, so its
             // path is the running program's.
             Package::Program(_) => self.program_path.clone().into_bytes(),
         })
+    }
+
+    /// Which package a package object stands for, or `None` for a handle
+    /// [`Interp::package_object`] did not produce.
+    pub(crate) fn which_package(&self, package: ObjRef) -> Option<Package> {
+        self.package_objects
+            .iter()
+            .find(|(_, object)| **object == package)
+            .map(|(which, _)| *which)
     }
 }
 

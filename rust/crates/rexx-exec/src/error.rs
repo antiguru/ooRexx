@@ -627,6 +627,52 @@ impl Raised {
         Raised::syntax(98, 944, vec![class.to_vec(), mixin.to_vec()])
     }
 
+    /// 98.945: a class named as an `~inherit` position or as an `~uninherit`
+    /// target that the receiving class does not inherit. Two substitutions,
+    /// the receiver's `~defaultName` and the named class's.
+    ///
+    /// Measured, rc 158 with stdout empty. On `::class M mixinclass Object`
+    /// with `::class K`, `.K~uninherit(.M)` gives `Error 98.945:  Class "The
+    /// K class" has not inherited class "The M class".` The same message
+    /// answers `.K~inherit(.M1, .M2)` for a position `.M2` that is not in
+    /// the list, naming `.M2` rather than the mixin, and
+    /// `.K~uninherit(.M)` for `::class K subclass M`, where `.M` *is* in the
+    /// list but at the one position `uninherit` refuses.
+    pub(crate) fn not_inherited(class: &[u8], other: &[u8]) -> Raised {
+        Raised::syntax(98, 945, vec![class.to_vec(), other.to_vec()])
+    }
+
+    /// 98.985: one of the five class mutators sent to a class the image
+    /// itself defines. No substitutions -- the message names neither the
+    /// class nor the method.
+    ///
+    /// Measured, rc 158 with stdout empty, on `.Array~define("ZORK",
+    /// .methods~z)` in a file carrying a `::method z`: `Error 98.985:  User
+    /// additions are not allowed to the REXX language classes.`, above it
+    /// the sending clause's echo, and above *that* `       *-* Compiled
+    /// method "DEFINE" with scope "Class".`
+    ///
+    /// **Raised before the method validates anything else**, which is what
+    /// makes the frame line the only part that varies between the five:
+    /// measured, `.Array~inherit()` reports this and not the 88.901 the same
+    /// send to a `::class` of one's own reports.
+    pub(crate) fn rexx_defined_class() -> Raised {
+        Raised::syntax(98, 985, Vec::new())
+    }
+
+    /// 98.984: `~addClass` or `~addPublicClass` sent to the package the
+    /// primitive classes belong to. No substitutions.
+    ///
+    /// `PackageClass::checkRexxPackage`, which `addClassRexx` and
+    /// `addPublicClassRexx` each call before they store anything
+    /// (`classes/PackageClass.cpp:1931`, `:1949`). Measured, rc 158 with
+    /// stdout empty: `.Array~package~addClass("ZZ", .Array)` reports
+    /// `Error 98.984:  User additions are not allowed to the REXX package.`
+    /// under `       *-* Compiled method "ADDCLASS" with scope "Package".`
+    pub(crate) fn rexx_package_addition() -> Raised {
+        Raised::syntax(98, 984, Vec::new())
+    }
+
     /// 98.911: `::CLASS` directives whose declared targets cannot be put in
     /// an order. One substitution, the program's own path.
     ///
