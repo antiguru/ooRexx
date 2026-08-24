@@ -23,18 +23,19 @@
 //! What stays refused, each with the oracle's own answer measured beside it:
 //!
 //! ```text
-//! ::routine r external 'LIBRARY REXX Filespec'     resolves against a
-//!                                                  routine table this
-//!                                                  registry does not hold
+//! ::routine r external 'LIBRARY REXX Filespec'     rc 0, and the routine
+//!                                                  runs: it resolves
+//!                                                  against a routine table
+//!                                                  this registry is not
 //! ::routine r external 'LIBRARY zzznolib zzzr'     98.903 rc 158
-//! ::attribute a external 'LIBRARY REXX file_separator'   90.998 rc 158 on
+//! ::attribute a external 'LIBRARY REXX file_separator'   90.998 rc 166 on
 //!                                                  "GETfile_separator"
 //! ::method m attribute external 'LIBRARY REXX file_separator'  the same
 //! ::method m external 'LIBRARY zzznolib zzzr'      98.903 rc 158
 //! ```
 //!
-//! `::ROUTINE`'s two forms are one row of gate table D and its probe names a
-//! shared library, so the `LIBRARY REXX` routine form has no row of its own
+//! Every `::ROUTINE` spelling is one row of gate table D and its probe names
+//! a shared library, so the `LIBRARY REXX` routine form has no row of its own
 //! there either; `tests/gate_table_d.rs`'s `owning_phase` carries that.
 //!
 //! # The library name is compared exactly and the entry point caselessly
