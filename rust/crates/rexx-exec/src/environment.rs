@@ -819,8 +819,7 @@ impl Interp {
     /// crate put there, which for `.local` is nothing at all: every entry it
     /// has on the oracle is in the `unbuilt` table, so a walk sees an empty
     /// collection and a caller that acts on what it sees does nothing at all
-    /// where the oracle acts. Measured before this check existed:
-    /// `.K~defineMethods(.local)` was rc 0 against the oracle's rc 163.
+    /// where the oracle acts.
     ///
     /// The owner is the smallest of the owners in that scope, so the refusal
     /// names one phase rather than depending on a `HashMap`'s order.
@@ -1010,10 +1009,9 @@ impl Interp {
     /// observable through two of its own methods.** `RexxClass::method`
     /// retrieves the method out of `instanceMethodDictionary` and answers it
     /// (`classes/ClassClass.cpp:984`, the retrieval at `:991`), so two sends
-    /// of `~method` for one name answer one object. Measured, oracle rc 0 and
-    /// `1` for both: `(.K~method("M")~identityHash = .K~method("M")~identityHash)`,
-    /// and `.K~method("M")~objectName = "x"` then `say .K~method("M")`
-    /// printing `x`. A fresh object per send answers `0` and `a Method`.
+    /// of `~method` for one name answer one object. Measured, oracle rc 0:
+    /// `.K~method("M")~objectName = "x"` then `say .K~method("M")` prints
+    /// `x`. A fresh object per send answers `a Method`.
     ///
     /// Rooted as a global for the reason a package object is: it outlives
     /// every send that reaches it and is reachable from no other object

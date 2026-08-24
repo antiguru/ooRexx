@@ -967,11 +967,14 @@ impl Interp {
             // from whatever object happens to hold that index.
             Decoded::Heap { .. } if receiver.class_id().is_some() => Ok(Primitive::Class(receiver)),
             Decoded::Heap { .. } => match self.heap.get(receiver) {
-                // A handle whose slot is gone. Not reachable from a running
-                // program -- a receiver is rooted by the term that evaluated
-                // it -- and answered rather than panicked for the reason
-                // every error path here is: an implementation gap must not
-                // become a crash.
+                // A handle whose slot is gone. A receiver is rooted by the
+                // term that evaluated it, so an expression cannot reach this
+                // with a value it just produced; what can is a handle held
+                // somewhere the collector's root set does not name, which is
+                // a defect in the rooting rather than in the program.
+                // Answered rather than panicked for the reason every error
+                // path here is: an implementation gap must not become a
+                // crash.
                 None => Err("a value whose object is no longer live"),
                 Some(object) => match &object.body {
                     Body::Text { .. } | Body::Num { .. } => Ok(Primitive::String),
@@ -1918,6 +1921,14 @@ impl Interp {
             }
         }
         // Released only once the arena holds the values again.
+        //
+        // **The context object is rooted by neither mechanism between here
+        // and the `push_activation` below.** The park named it while the
+        // activation was off the stack; `Interp::collect_now`'s sweep names
+        // it once it is back on. Nothing between the two lines allocates a
+        // Rexx object, so no collection can happen in that window today --
+        // which makes this latent rather than live, and makes an allocation
+        // added here the thing that would turn it live.
         self.roots.release(parked);
         activation.frame = frame;
         activation.trace_entry = if activation.trace_entry == TraceEntry::Done {

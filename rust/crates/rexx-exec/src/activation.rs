@@ -753,11 +753,20 @@ pub(crate) struct Activation {
     /// program-wide object would answer `1` to both and a fresh one `0` to
     /// both.
     ///
-    /// **Rooted by [`Interp::collect_if_due`]'s sweep over the activation
-    /// stack while this activation is running or suspended, and by
-    /// [`Activation::object_roots`] while it is parked.** Those are the two
-    /// states an activation can be in and neither reaches the other's
-    /// mechanism.
+    /// **Rooted by [`Interp::collect_now`]'s sweep over the activation stack
+    /// while this activation is running or suspended, and by
+    /// [`Activation::object_roots`] while it is parked.**
+    ///
+    /// **The rooting hangs off the collection site, not off the state**, and
+    /// that distinction is load-bearing rather than pedantic: an activation
+    /// really is only ever running, suspended or parked, but a collection
+    /// reached by some other door sees neither mechanism. `GC('Force')`
+    /// was such a door -- it called `Heap::collect` directly, and a forced
+    /// collection freed the running activation's own context object.
+    /// Measured: `say .context~objectName` either side of `gc('force')` was
+    /// oracle rc 0 twice and rc 120 here on the second. So every collection
+    /// goes through [`Interp::collect_now`], and a new collection site is
+    /// the thing to check against this paragraph.
     pub(crate) context_object: Option<ObjRef>,
 }
 
