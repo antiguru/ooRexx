@@ -547,3 +547,18 @@ lang/class_duplicate_attribute.rex
 lang/class_duplicate_constant.rex
 lang/class_member_class_keyword_needs_class.rex
 lang/class_member_names_per_side.rex
+
+# Task 18, fix round 3: the rest of the duplicate-directive family. ::CLASS
+# was the last silent wrong answer in it, and ::RESOURCE the last gap.
+#
+# The refusal row is chosen to exclude three weaker rules at once: the pair is
+# spelled once as a lower-case symbol and once as a quoted upper-case literal,
+# the two are not adjacent, and a ::CLASS naming an unresolvable superclass
+# follows them. The control row says the tables are per directive kind.
+#
+# ::RESOURCE has no row and cannot: every_corpus_program_tiles requires every
+# byte of a corpus program to be covered by a clause node and a ::RESOURCE body
+# is not clauses, measured directly. Its sole instrument is run/tests.rs's
+# a_duplicate_resource_name_is_refused_and_a_distinct_one_is_not.
+lang/class_duplicate_class.rex
+lang/class_directive_names_are_their_own_table.rex

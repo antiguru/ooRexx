@@ -1,0 +1,19 @@
+/* Two ::CLASS directives of one name in one program.
+
+   The key is the upcased name and not the name the directive stored, which
+   the pair here is chosen to say. The tokenizer upcases a symbol and leaves a
+   quoted literal alone, so the first directive below stores "a" and the third
+   stores "A": a check comparing the stored names finds no collision and runs
+   this file. They are not adjacent either, so a check comparing each
+   directive with the one before it runs it too.
+
+   The trailing ::CLASS is what makes this a translation error rather than an
+   install one: it names a superclass nothing resolves, so a file diagnosed at
+   install time would report 98.909 against that line instead. */
+say 'prolog'
+
+::CLASS "a"
+::CLASS B
+::CLASS A
+
+::CLASS X SUBCLASS zzznotaclass

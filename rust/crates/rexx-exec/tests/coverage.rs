@@ -1088,6 +1088,16 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/class_duplicate_constant.rex",
     "lang/class_member_class_keyword_needs_class.rex",
     "lang/class_member_names_per_side.rex",
+    // Task 18, fix round 3: the rest of the duplicate-directive family. The
+    // `::CLASS` refusal, whose pair is spelled two ways and is not adjacent,
+    // with a `::CLASS` naming an unresolvable superclass below it; and the
+    // control that says each directive kind keeps its own table of names.
+    // `::RESOURCE` has no row and cannot -- `every_corpus_program_tiles`
+    // rejects a `::RESOURCE` body byte by byte -- so `run/tests.rs`'s
+    // `a_duplicate_resource_name_is_refused_and_a_distinct_one_is_not` is its
+    // sole instrument.
+    "lang/class_duplicate_class.rex",
+    "lang/class_directive_names_are_their_own_table.rex",
 ];
 
 #[test]

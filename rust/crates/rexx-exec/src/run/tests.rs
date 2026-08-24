@@ -7136,6 +7136,60 @@ fn a_duplicate_routine_directive_is_99_903_before_the_first_clause() {
     );
 }
 
+/// Two `::RESOURCE` directives of the same name refuse the program before its
+/// first clause, and two of different names do not.
+///
+/// **This is the sole instrument for 99.942 and there can be no corpus row.**
+/// Measured by adding a `::RESOURCE` program to `corpus/lang/`:
+/// `rexx-parse`'s `every_corpus_program_tiles` fails it byte by byte -- "byte
+/// 'o' at offset 45 sits after the last clause span and belongs to no node"
+/// -- because a `::RESOURCE` body is source lines that no clause span covers.
+/// The same reason keeps `.RESOURCES` out of the corpus.
+///
+/// The key is the upcased name whatever the directive spelled, which the
+/// quoted lower-case first name is here to say. Measured against the oracle,
+/// rc 157 with stdout EMPTY and the second directive echoed; the distinct-name
+/// pair below it is rc 0 with `main ran` on stdout.
+#[test]
+fn a_duplicate_resource_name_is_refused_and_a_distinct_one_is_not() {
+    let refused = routine_program(
+        b"say 'main ran'\n\
+          ::resource \"d\"\n\
+          one\n\
+          ::END\n\
+          ::resource D\n\
+          two\n\
+          ::END\n",
+    );
+    assert_eq!(refused.exit_code, 157, "256 - 99");
+    assert_eq!(refused.stdout, b"", "stdout is empty: main never ran");
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        stderr.contains("Error 99.942:  Duplicate ::RESOURCE directive instruction.")
+            && stderr.contains("*-* ::resource D"),
+        "expected the oracle's own report with the second directive echoed, got: {stderr}"
+    );
+
+    // The adjacent success, which is what says the refusal is about the name
+    // and not about a second `::RESOURCE` at all.
+    let accepted = routine_program(
+        b"say 'main ran'\n\
+          ::resource d\n\
+          one\n\
+          ::END\n\
+          ::resource e\n\
+          two\n\
+          ::END\n",
+    );
+    assert_eq!(
+        accepted.exit_code,
+        0,
+        "stderr: {}",
+        String::from_utf8_lossy(&accepted.stderr)
+    );
+    assert_eq!(accepted.stdout, b"main ran\n".to_vec());
+}
+
 /// A program carrying a `::ROUTINE` it never calls runs exactly as one
 /// with no directive does -- the adjacent success for the refusal above,
 /// and the boundary Step 4's rule turns on: presence is not use.

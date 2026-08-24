@@ -201,6 +201,7 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     // negative control beside them, `class_member_names_per_side.rex`, runs
     // and allocates and is deliberately absent.
     "lang/class_duplicate_attribute.rex",
+    "lang/class_duplicate_class.rex",
     "lang/class_duplicate_constant.rex",
     "lang/class_duplicate_constant_and_method.rex",
     "lang/class_duplicate_method.rex",
