@@ -1115,6 +1115,35 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/directive_annotate_targets.rex",
     "lang/directive_annotate_table_is_live.rex",
     "lang/directive_annotate_missing_target.rex",
+    // Task 21: the REXX_DEFINED lock, one row per mutator so that the frame
+    // line names each of the five it refuses.
+    "lang/class_rexx_defined_define.rex",
+    "lang/class_rexx_defined_define_methods.rex",
+    "lang/class_rexx_defined_delete.rex",
+    "lang/class_rexx_defined_inherit.rex",
+    "lang/class_rexx_defined_uninherit.rex",
+    // Task 21: the same five on a class the file declares, where they
+    // succeed -- the identity split between `~define` and `~defineMethods`,
+    // the omitted argument's tombstone against `.nil`'s removal,
+    // `~inherit`'s position, and the refusals.
+    "lang/class_mutators_user_class.rex",
+    "lang/class_mutator_define_nil_removes.rex",
+    "lang/class_mutator_delete_absent_name.rex",
+    "lang/class_mutator_inherit_position.rex",
+    "lang/class_mutator_refusals.rex",
+    "lang/class_mutator_uninherit_not_inherited.rex",
+    "lang/class_mutator_define_methods_supplier.rex",
+    // Task 21: Setup.cpp's own removal and hiding, which `~method` reads
+    // apart, each removal against the same name on the class it was donated
+    // from.
+    "lang/class_native_hiding.rex",
+    "lang/class_native_removal_sort.rex",
+    "lang/class_native_removal_make_string.rex",
+    // Task 21: the Package object -- `RexxContext~package`, the two class
+    // tables, and the refusal the REXX package gives an addition.
+    "lang/class_context_package.rex",
+    "lang/class_package_classes.rex",
+    "lang/class_package_addition_refused.rex",
 ];
 
 #[test]

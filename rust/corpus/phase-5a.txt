@@ -589,3 +589,47 @@ lang/class_constant_expression_method_failure.rex
 lang/directive_annotate_targets.rex
 lang/directive_annotate_table_is_live.rex
 lang/directive_annotate_missing_target.rex
+
+# Phase 5a (2026-08-17 plan) Task 21: the class mutators, the REXX_DEFINED
+# lock, Setup.cpp's own removal and hiding, and the Package object.
+#
+# The lock has one row per mutator because the traceback's frame line names
+# the message that was sent, and a check missing from one of the five is what
+# five rows catch and one does not. Each is `.Array`, a class the image
+# defines; the mutators succeed on a class the file declares, which is the
+# next group.
+lang/class_rexx_defined_define.rex
+lang/class_rexx_defined_define_methods.rex
+lang/class_rexx_defined_delete.rex
+lang/class_rexx_defined_inherit.rex
+lang/class_rexx_defined_uninherit.rex
+
+# The mutators on a user class. The main row carries `~define`'s
+# identity-preserving install against `~defineMethods`'s copy, the omitted
+# argument's tombstone, `~delete` and `~uninherit`; the four beside it are the
+# shapes that raise or that need their own file -- `.nil` in the method
+# position, a delete of a name that is not there, `~inherit`'s position
+# argument, and the three refusals.
+lang/class_mutators_user_class.rex
+lang/class_mutator_define_nil_removes.rex
+lang/class_mutator_delete_absent_name.rex
+lang/class_mutator_inherit_position.rex
+lang/class_mutator_refusals.rex
+lang/class_mutator_uninherit_not_inherited.rex
+lang/class_mutator_define_methods_supplier.rex
+
+# Setup.cpp's own removal and hiding, which `~method` reads apart: a hidden
+# name answers `The NIL object` and a removed one raises. `.Array`'s rows are
+# the decoy each removal is read against, and `.Queue~method("APPEND")` is
+# what says the donation happened at all.
+lang/class_native_hiding.rex
+lang/class_native_removal_sort.rex
+lang/class_native_removal_make_string.rex
+
+# The Package object: `RexxContext~package` and the two class tables. No row
+# prints `~name` for the running package -- it answers the program's own
+# absolute path, and the corpus compares stdout byte for byte across
+# checkouts.
+lang/class_context_package.rex
+lang/class_package_classes.rex
+lang/class_package_addition_refused.rex

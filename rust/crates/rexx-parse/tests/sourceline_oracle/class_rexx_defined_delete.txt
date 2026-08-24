@@ -1,0 +1,4 @@
+count 3
+/* Task 21: the REXX_DEFINED lock under DELETE. The name is one `.Array`
+   really answers, so the refusal is the lock and not a missing method. */
+.Array~delete("ID")

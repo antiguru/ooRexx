@@ -172,6 +172,11 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/class_metaclass_not_found.rex",
     "lang/class_subclass_cycle.rex",
     "lang/class_subclass_not_found.rex",
+    // `~defineMethods` refuses its argument before it has read anything out
+    // of it: the value is an inline literal, and the refusal's own
+    // substitution is rendered by the reporting path rather than built as a
+    // value here.
+    "lang/class_mutator_define_methods_supplier.rex",
     // These run rather than refusing, and still allocate nothing: every
     // value they say is either a class method's short literal result or a
     // class object's own `~defaultName`, which is rendered out of the

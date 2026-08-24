@@ -1,0 +1,20 @@
+count 19
+/* Task 21: `~inherit`'s optional second argument. The mixin takes the
+   position the named class held, pushing it and everything after it back --
+   `insertAfter` is `insert` and `insert` opens the gap at the index. */
+.K~inherit(.M1)
+.K~inherit(.M2, .M1)
+s = .K~superClasses
+do i = 1 to 3
+  say i s[i]
+end
+.K~inherit(.M3, .Object)
+s = .K~superClasses
+do i = 1 to 4
+  say i s[i]
+end
+
+::class M1 mixinclass Object
+::class M2 mixinclass Object
+::class M3 mixinclass Object
+::class K

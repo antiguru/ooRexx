@@ -1,0 +1,10 @@
+/* Task 21: the mutator argument refusals. One row, because a program can
+   only fail once and this file's own row is the last one -- the four `say`s
+   above it are the successful shapes the refusal is read against. */
+say .K~method("M")
+.K~delete("M")
+say .K~superClasses
+.K~uninherit('abc')
+
+::class K
+::method m

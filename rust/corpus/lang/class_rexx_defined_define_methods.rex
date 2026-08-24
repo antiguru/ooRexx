@@ -1,0 +1,5 @@
+/* Task 21: the REXX_DEFINED lock under DEFINEMETHODS. */
+.Array~defineMethods(.methods)
+
+::method z
+  say "hi"

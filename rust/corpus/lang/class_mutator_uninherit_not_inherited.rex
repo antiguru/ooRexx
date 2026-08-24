@@ -1,0 +1,10 @@
+/* Task 21: `~uninherit` of a mixin the class does not inherit. The class
+   below inherits `.M1` and not `.M2`, so the refusal names the one that is
+   missing rather than the one that is there. */
+.K~inherit(.M1)
+say .K~superClasses
+.K~uninherit(.M2)
+
+::class M1 mixinclass Object
+::class M2 mixinclass Object
+::class K
