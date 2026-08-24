@@ -195,10 +195,11 @@ fn read_rows() -> Vec<Row> {
 ///
 /// * `docs/superpowers/plans/2026-08-17-phase-5a.md`'s handover section hands
 ///   `::OPTIONS`, `::RESOURCE`, `::REQUIRES`'s `LIBRARY` and `NAMESPACE`, and
-///   `::ROUTINE`'s option surface to **5c**, along with the readback of an
-///   `::ANNOTATE ROUTINE`. Installing an `::ANNOTATE` target is 5a's, which is
-///   what a row of this table measures, so the `ROUTINE` row is 5a and only
-///   its readback is 5c's.
+///   `::ROUTINE`'s option surface to **5c**. Every `::ANNOTATE` row is 5a's:
+///   what a row of this table measures is the install, and the readback of
+///   each of the six targets is 5a's too -- `.routines~r~annotation(...)` is
+///   the `ROUTINE` one and `corpus/lang/directive_annotate_targets.rex`
+///   carries it beside the other five.
 /// * The same plan puts `DELEGATE` in **5b**, because `dire.xml` defines it as
 ///   `expose` plus `forward to()` and `FORWARD` is 5b's.
 /// * `::ROUTINE ... EXTERNAL` naming a real shared library is **Phase 7's** and
