@@ -1141,10 +1141,14 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/class_native_removal_sort.rex",
     "lang/class_native_removal_make_string.rex",
     // Task 21: the Package object -- `RexxContext~package`, the two class
-    // tables, and the refusal the REXX package gives an addition.
+    // tables, and the refusal the REXX package gives an addition. Beside them
+    // the context object's own rows, which pin that object's identity rather
+    // than the package's: one per activation, surviving a forced collection
+    // while running, and surviving one while parked by a REPLY.
     "lang/class_context_package.rex",
     "lang/class_context_identity.rex",
     "lang/class_context_gc.rex",
+    "lang/class_context_reply.rex",
     "lang/class_package_classes.rex",
     "lang/class_package_addition_refused.rex",
 ];
