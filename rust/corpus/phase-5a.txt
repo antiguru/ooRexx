@@ -576,3 +576,16 @@ lang/class_directive_names_are_their_own_table.rex
 lang/class_constant_instance_method.rex
 lang/class_constant_expression_self.rex
 lang/class_constant_expression_method_failure.rex
+
+# Phase 5a (2026-08-17 plan) Task 20: ::ANNOTATE's six targets and the readback.
+#
+# The six targets in one file, each read back through the handle a program has
+# on what it annotated -- a class object, a Method object out of ~method, a
+# Routine object out of .ROUTINES, and the Package object a class answers.
+# Then the property that makes ~annotations more than a rendering: the table is
+# the one the annotated thing owns, so an addition through it is visible to
+# ~annotation afterwards. Then the refusal, whose target is declared below the
+# ::ANNOTATE rather than absent, so it witnesses the resolution order.
+lang/directive_annotate_targets.rex
+lang/directive_annotate_table_is_live.rex
+lang/directive_annotate_missing_target.rex

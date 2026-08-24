@@ -170,11 +170,11 @@ fn is_admitted_directive_kind(kind: &DirectiveKind) -> bool {
         | DirectiveKind::Class(_)
         | DirectiveKind::Method(_)
         | DirectiveKind::Attribute(_)
-        | DirectiveKind::Constant(_) => true,
-        DirectiveKind::Annotate(_)
-        | DirectiveKind::Options(_)
-        | DirectiveKind::Requires(_)
-        | DirectiveKind::Resource(_) => false,
+        | DirectiveKind::Constant(_)
+        | DirectiveKind::Annotate(_) => true,
+        DirectiveKind::Options(_) | DirectiveKind::Requires(_) | DirectiveKind::Resource(_) => {
+            false
+        }
     }
 }
 
@@ -217,7 +217,7 @@ fn assert_program_has_only_admitted_directives(path: &Path, p: &Program) {
 #[test]
 fn every_directive_keyword_is_correctly_admitted_or_refused() {
     let cases: &[(&str, &str, bool)] = &[
-        ("::annotate package\n", "ANNOTATE", false),
+        ("::annotate package\n", "ANNOTATE", true),
         ("::attribute a\n", "ATTRIBUTE", true),
         ("::class c\n", "CLASS", true),
         ("::constant k 1\n", "CONSTANT", true),
@@ -1106,6 +1106,12 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/class_constant_instance_method.rex",
     "lang/class_constant_expression_self.rex",
     "lang/class_constant_expression_method_failure.rex",
+    // Task 20: ::ANNOTATE's six targets and the readback -- the targets and
+    // their handles, the live annotation table, and the refusal whose target
+    // is declared below the ::ANNOTATE.
+    "lang/directive_annotate_targets.rex",
+    "lang/directive_annotate_table_is_live.rex",
+    "lang/directive_annotate_missing_target.rex",
 ];
 
 #[test]

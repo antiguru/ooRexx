@@ -1,0 +1,51 @@
+/* All six ::ANNOTATE targets in one file, each read back through the handle a
+   program has on the thing it annotated. The six readbacks reach four
+   different C++ implementations: RexxClass::getAnnotation for the class
+   (classes/ClassClass.cpp:357), BaseExecutable::getAnnotation for the method,
+   attribute, constant and routine (execution/BaseExecutable.cpp:411) and
+   PackageClass::getAnnotation for the package (classes/PackageClass.cpp:1791).
+
+   The value each target carries is its own keyword, so a build that resolved
+   an ::ANNOTATE to the wrong directive answers with the wrong word rather
+   than with nothing: the ATTRIBUTE pair is what that catches most directly,
+   because both halves of the accessor answer and the getter is also reachable
+   under the METHOD target, which annotates the getter alone.
+
+   ~annotation upcases the name it is given, because getAnnotation reads
+   annotations->entry(name) and StringHashCollection::entry upcases the index
+   (classes/support/HashCollection.cpp:824); the lower-case row is what says
+   so. A name no ::ANNOTATE recorded is .nil rather than an error, which is
+   resultOrNil in each of the three Rexx stubs.
+
+   ~class on a Method and on a Routine object is here because it is the
+   cheapest witness that the two are distinct receivers: a build folding both
+   onto one class answers the same line twice. */
+say .K~annotation("AUTHOR")
+say .K~annotation("author")
+say .K~method("M")~annotation("AUTHOR")
+say .K~method("A")~annotation("AUTHOR")
+say .K~method("A=")~annotation("AUTHOR")
+say .K~method("C")~annotation("AUTHOR")
+say .routines["R"]~annotation("AUTHOR")
+say .routines~r~annotation("AUTHOR")
+say .K~package~annotation("AUTHOR")
+say .K~annotation("NOSUCHNAME")
+say .K~annotations
+say .K~method("M")~class
+say .routines~r~class
+
+::class K
+::annotate class K author "from the class"
+::method m
+  return 1
+::annotate method m author "from the method"
+::attribute a
+::annotate attribute a author "from the attribute"
+::constant c 5
+::annotate constant c author "from the constant"
+
+::routine r
+  return 2
+::annotate routine r author "from the routine"
+
+::annotate package author "from the package"
