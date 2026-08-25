@@ -261,6 +261,12 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/expose_outside_a_method.rex",
     "lang/if_else_chain.rex",
     "lang/iterate_from_select.rex",
+    // A condition raised inside a library method. The traceback frame is a
+    // catalogue message rendered into a `Vec<u8>` on the reporting path, and
+    // the reported package name is a `&'static [u8]`, so neither of the two
+    // lines this pair exists for asks the arena for anything.
+    "lang/library_method_traceback.rex",
+    "lang/library_method_traceback_nested.rex",
     "lang/message_assignment_form.rex",
     "lang/message_instruction.rex",
     "lang/message_send_argument_not_a_string.rex",
