@@ -361,6 +361,17 @@ impl ClassRegistry {
             .has_scope_at(self.graph.class_behaviour_handle(class), scope)
     }
 
+    /// True once `scope` is folded into `class`'s current instance
+    /// behaviour -- the instance-side twin of
+    /// [`Self::class_behaviour_has_scope`], and what
+    /// `RexxObject::validateScopeOverride` (`classes/ObjectClass.cpp:1950`)
+    /// asks of an ordinary receiver before a `target~name:scope` send may
+    /// start its lookup at `scope`.
+    pub fn instance_behaviour_has_scope(&self, class: ObjRef, scope: ObjRef) -> bool {
+        self.graph
+            .has_scope_at(self.graph.instance_behaviour_handle(class), scope)
+    }
+
     /// An ordinary (unscoped) message resolution against `class`'s current
     /// instance behaviour: the scope the winning entry came from, and the
     /// method it names -- oracle's `RexxBehaviour::methodLookup`, which

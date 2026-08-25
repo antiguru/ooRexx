@@ -1183,6 +1183,31 @@ impl Interp {
         Some(Resolution { scope, method })
     }
 
+    /// `RexxObject::validateScopeOverride` (`classes/ObjectClass.cpp:1950`):
+    /// whether `scope` was folded into the behaviour this receiver resolves
+    /// against, which is `behaviour->hasScope(scope)`.
+    ///
+    /// **The behaviour is the receiver's own, so a class object asks its
+    /// class side.** `.k~tag:.Array` and `'abc'~length:.Array` are both
+    /// 93.957 and reach that answer through different dictionaries.
+    ///
+    /// A receiver whose class this phase does not build answers `false`, so
+    /// the send is refused with the oracle's own 93.957 rather than
+    /// resolving from a scope nothing here can search. Every receiver
+    /// [`Interp::receiver_kind`] rejects is already refused by
+    /// [`Interp::send_message`] before the message name is looked up.
+    fn receiver_has_scope(&mut self, receiver: ObjRef, scope: ObjRef) -> bool {
+        match self.receiver_behaviour(receiver) {
+            Ok(Behaviour::Instance(class)) => {
+                self.classes().instance_behaviour_has_scope(class, scope)
+            }
+            Ok(Behaviour::ClassSide(class)) => {
+                self.classes().class_behaviour_has_scope(class, scope)
+            }
+            Err(_) => false,
+        }
+    }
+
     /// The scope a name would resolve to on this receiver, for a caller that
     /// reports what a send it is not making would have failed with.
     ///
@@ -2261,33 +2286,34 @@ impl Interp {
         let receiver = self.eval(code, target)?;
         self.roots.push_temp(receiver);
 
-        if let Some(super_class) = super_class {
-            // Evaluated for its own trace lines and its own failures before
-            // the refusal below, which is the oracle's order.
-            let scope = self.eval(code, super_class)?;
-            self.roots.push_temp(scope);
-            // `RexxExpressionMessage::evaluate`'s
-            // `_super->isInstanceOf(TheClassClass)`. A value that is **not**
-            // a class object gets the oracle's own 88.914, and one that is
-            // gets a refusal: the override needs the receiver's own scope
-            // chain checked against `scope` (93.957, `Target object "abc" is
-            // not a subclass of the message override scope (The Array
-            // class).`) before `Interp::resolve`'s start-scope argument may
-            // be used, and this phase implements neither that check nor the
-            // `SUPER` sends that would want it.
-            return Err(if scope.class_id().is_some() {
-                Loud::scope_override(&String::from_utf8_lossy(self.class_default_name(scope)))
-                    .into()
-            } else {
-                Raised::scope_override_not_a_class().into()
-            });
-        }
+        let start_scope = match super_class {
+            None => None,
+            Some(super_class) => {
+                // Evaluated for its own trace lines and its own failures
+                // before either check below, which is the oracle's order.
+                let scope = self.eval(code, super_class)?;
+                self.roots.push_temp(scope);
+                // `RexxExpressionMessage::evaluate`'s
+                // `_super->isInstanceOf(TheClassClass)`, then
+                // `_target->validateScopeOverride(_super)`. Both run before
+                // the arguments are evaluated.
+                if scope.class_id().is_none() {
+                    return Err(Raised::scope_override_not_a_class().into());
+                }
+                if !self.receiver_has_scope(receiver, scope) {
+                    let target = self.string_value_text(receiver);
+                    let named = self.string_value_text(scope);
+                    return Err(Raised::scope_override_not_a_scope(&target, &named).into());
+                }
+                Some(scope)
+            }
+        };
 
         let mut values = self.take_value_buffer();
         let evaluated = self.evaluate_message_arguments(code, args, assigned, &mut values);
         let caller = self.caller();
-        let result =
-            evaluated.and_then(|()| self.send_message(receiver, name, None, &values, caller));
+        let result = evaluated
+            .and_then(|()| self.send_message(receiver, name, start_scope, &values, caller));
         self.give_value_buffer(values);
         let sent = result?;
 
@@ -4321,12 +4347,14 @@ mod tests {
         );
     }
 
-    /// **The start-scope argument, which no program can reach yet.**
+    /// **The start-scope argument, at the seam rather than through a
+    /// program.**
     ///
-    /// `target~name:scope` needs a class object as a value and this phase
-    /// produces none, so every scope override a program can write is refused
-    /// at 88.914 before `resolve` is called. This is the test that exercises
-    /// the argument itself.
+    /// `Interp::message_term` is what a `target~name:scope` send goes
+    /// through, and it validates the scope against the receiver's own
+    /// behaviour first, so a program cannot ask `resolve` about a start
+    /// scope the receiver does not hold. This test calls `resolve`
+    /// directly and can.
     ///
     /// The pair is what makes it mean something. `findSuperMethod` searches
     /// the starting scope itself plus the scopes folded in **ahead of** it,
@@ -5198,31 +5226,41 @@ mod tests {
         );
     }
 
-    /// A `target~name:scope` override is **loud when the scope really is a
-    /// class object** and the oracle's own 88.914 when it is not.
+    /// A `target~name:scope` override answers **when the scope is a class
+    /// object the receiver's behaviour holds**, is 88.914 when the scope is
+    /// not a class object at all, and is 93.957 when it is a class the
+    /// receiver's behaviour was never given.
     ///
-    /// The pair is what keeps the refusal from swallowing the condition:
-    /// before Task 6 made `.NAME` resolve, no value was a class object and
-    /// 88.914 was the only answer this term could give -- so
-    /// `'abc'~length:.String`, which the oracle answers `3` at rc 0, was a
-    /// Rexx condition a program could trap where the oracle succeeded.
+    /// The three together are what keep each refusal from swallowing the
+    /// next: 88.914 is `RexxExpressionMessage::evaluate`'s own
+    /// `isInstanceOf(TheClassClass)` test (`ExpressionMessage.cpp:166`) and
+    /// 93.957 is `validateScopeOverride`'s, and a version raising either for
+    /// both cases passes half of this.
+    ///
+    /// Oracle-measured, all three: `'abc'~length:.String` is `3` at rc 0,
+    /// `'abc'~length:super` outside a method is 88.914 at rc 168 because
+    /// `SUPER` is then an ordinary uninitialised variable, and
+    /// `'abc'~length:.Array` is 93.957 at rc 163.
     #[test]
-    fn a_scope_override_is_loud_on_a_class_object_and_88_914_on_anything_else() {
+    fn a_scope_override_answers_and_has_one_refusal_for_each_bad_scope() {
         assert_eq!(
             both_engines("say 'abc'~length:.String\n"),
-            (
-                crate::NOT_IMPLEMENTED_EXIT,
-                String::new(),
-                "rexx-exec: a message scope override on \"The String class\" is not \
-                 implemented (Phase 5)\n"
-                    .to_string()
-            )
+            (0, "3\n".to_string(), String::new())
         );
         let (code, stdout, stderr) = both_engines("say 'abc'~length:super\n");
         assert_eq!((code, stdout.as_str()), (168, ""));
         assert!(
             stderr.contains("Error 88.914:"),
             "a non-class scope must keep the oracle's own condition, got {stderr:?}"
+        );
+        let (code, stdout, stderr) = both_engines("say 'abc'~length:.Array\n");
+        assert_eq!((code, stdout.as_str()), (163, ""));
+        assert!(
+            stderr.contains(
+                "Error 93.957:  Target object \"abc\" is not a subclass of the message \
+                 override scope (The Array class)."
+            ),
+            "a class the receiver's behaviour does not hold must be 93.957, got {stderr:?}"
         );
     }
 

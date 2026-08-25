@@ -914,27 +914,6 @@ impl Loud {
         }
     }
 
-    /// A `target~name:scope` override whose scope really is a class object.
-    ///
-    /// Loud rather than answered, because the oracle does two things here
-    /// this phase has neither of: it checks the receiver against the
-    /// override's scope (measured, `'abc'~length:.Array` is 93.957, `Target
-    /// object "abc" is not a subclass of the message override scope (The
-    /// Array class).`), and it then starts the lookup at that scope. Answering
-    /// the un-overridden method instead would be a silent wrong answer for
-    /// exactly the sends the override exists to redirect.
-    ///
-    /// A scope that is **not** a class object never reaches here: that is the
-    /// oracle's own 88.914 and this crate raises it.
-    fn scope_override(scope: &str) -> Loud {
-        Loud {
-            message: owned_message(
-                &format!("a message scope override on \"{scope}\""),
-                Some("Phase 5"),
-            ),
-        }
-    }
-
     /// `EXPOSE` in a method whose receiver is not a class object.
     ///
     /// **The gap is the root, not the storage.** An instance keeps its pools

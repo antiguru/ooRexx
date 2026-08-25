@@ -1574,6 +1574,21 @@ impl Raised {
         Raised::syntax(88, 914, vec![b"SCOPE".to_vec(), b"Class".to_vec()])
     }
 
+    /// 93.957: a `target~name:scope` override whose scope is a class object
+    /// the receiver's own behaviour was never given.
+    ///
+    /// `RexxObject::validateScopeOverride` raises it as
+    /// `reportException(Error_Incorrect_method_array_noclass, this, scope)`
+    /// (`classes/ObjectClass.cpp:1957`), so both substitutions are objects
+    /// rendered by `stringValue()`. Measured at rc 163:
+    /// `'abc'~length:.Array` reports `Target object "abc" is not a subclass
+    /// of the message override scope (The Array class).`, and
+    /// `.k~tag:.Array` on a class object reports `Target object "The K
+    /// class" ...`.
+    pub(crate) fn scope_override_not_a_scope(target: &[u8], scope: &[u8]) -> Raised {
+        Raised::syntax(93, 957, vec![target.to_vec(), scope.to_vec()])
+    }
+
     /// 88.914: an argument the method requires to be a class object is not
     /// one. `argument` is the name the raise site substitutes.
     ///

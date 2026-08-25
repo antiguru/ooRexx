@@ -1165,6 +1165,8 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/directive_method_external_before_duplicate.rex",
     "lang/directive_method_external_not_a_staged_gap.rex",
     "gate-tables/directives/method__external__subkeyword.rex",
+    "lang/message_send_scope_override_chain.rex",
+    "lang/message_send_scope_override_not_a_scope.rex",
 ];
 
 #[test]

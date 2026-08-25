@@ -1,0 +1,18 @@
+count 17
+/* target~name:scope refuses a class object that is not one of the receiver's
+ * own scopes, before the arguments are evaluated -- RexxObject::
+ * validateScopeOverride (classes/ObjectClass.cpp:1950), whose test is
+ * behaviour->hasScope(scope). Phase 5a Task 23.
+ *
+ * The two lines that run first are the pair that makes the refusal specific:
+ * a scope the receiver does have answers, and a scope it has on the other
+ * side of the class/instance split does not.
+ */
+
+say 'abc'~length:.String
+say .K~id:.Class
+
+/* .Object is a scope of 'abc' and of .K, and .Array is a scope of neither. */
+say 'abc'~length:.Array
+
+::class K

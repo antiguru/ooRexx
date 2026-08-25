@@ -670,3 +670,13 @@ lang/directive_method_external_source_order.rex
 lang/directive_method_external_before_duplicate.rex
 lang/directive_method_external_not_a_staged_gap.rex
 gate-tables/directives/method__external__subkeyword.rex
+# Task 23: the message scope override send, `target~name:scope`. `_chain` is
+# the answering half -- SUPER inside a body, an ancestor named outright, the
+# receiver's own scope, a scope folded in by INHERIT, an override that itself
+# chains, a native method, a scope merged from the metaclass, the `~~` form,
+# and the UNKNOWN a scoped miss reaches. `_not_a_scope` is
+# `validateScopeOverride`'s own refusal, with the two answering lines above it
+# that make the refused scope the variable. The 88.914 that a scope which is
+# not a class object gets is `message_send_scope_override.rex`, above.
+lang/message_send_scope_override_chain.rex
+lang/message_send_scope_override_not_a_scope.rex
