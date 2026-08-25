@@ -7884,10 +7884,11 @@ say 1
     /// `REXX_DEFINED`** -- asserted over the set the bootstrap leaves behind
     /// rather than on the classes a corpus row happens to name.
     ///
-    /// A corpus row can only reach a public one. The route to a class a
-    /// `::CLASS` without `PUBLIC` declares is `~package~classes`, which is
-    /// refused here, so `SetMixin` and its neighbours have no differential
-    /// witness in this phase and this is the only instrument that sees them.
+    /// A corpus row can only reach a public one. The routes to a class a
+    /// `::CLASS` without `PUBLIC` declares are `~package~classes` and
+    /// `~package~findClass`, both refused here, so `SetMixin` and its
+    /// neighbours have no differential witness in this phase and this is the
+    /// only instrument that sees them.
     /// The names below are read out of the table rather than listed, so a
     /// `::CLASS` added upstream is covered without an edit here.
     #[test]

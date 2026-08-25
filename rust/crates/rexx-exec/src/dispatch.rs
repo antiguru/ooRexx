@@ -1042,8 +1042,7 @@ impl Interp {
     ///
     /// An **array** answers, because `~superClasses` puts one in a program's
     /// hands. A name `.Array`'s behaviour here does not hold is the oracle's
-    /// 97.1, which is the same answer a `String` receiver gets for a name a
-    /// mixin the prologue inherits declares. `CoreClasses.orx:93` and `:97`
+    /// 97.1. `CoreClasses.orx:93` and `:97`
     /// are the same `~inherit` and both run: measured, `.String~superClasses`
     /// names `Comparable` and `.Array~superClasses` names
     /// `OrderedCollection` on this crate and on the oracle alike. What is
@@ -3343,9 +3342,9 @@ fn native_method(
 /// have to name a class from each half of what carries the flag: the classes
 /// `Setup.cpp` builds and the classes the interpreter's own Rexx-written
 /// library declares. A build that dropped the check would let
-/// `.Array~define(...)` and `.Alarm~inherit()` succeed at rc 0 where the
-/// oracle raises -- a divergence a differential row sees, unlike a refusal
-/// the oracle does not share.
+/// `.Array~define(...)` succeed at rc 0 where the oracle raises -- a
+/// divergence a differential row sees, unlike a refusal the oracle does not
+/// share.
 ///
 /// Whether the flag is *set* on the library's half is a different question,
 /// and a corpus row can only ask it of a class a program can name.
