@@ -1,0 +1,43 @@
+/* The state the interpreter's own Rexx-written library leaves behind, asked
+ * by a program that did nothing to produce it. Phase 5a Task 23.
+ *
+ * `CoreClasses.orx` and `StreamClasses.orx` install at interpreter start and
+ * `CoreClasses.orx`'s prologue runs to its `exit`, so every row below is
+ * about work no clause in this file did.
+ *
+ * Each kind of row answers something a different half of the bootstrap
+ * decides:
+ *
+ *   - a class the prologue put in `.environment`, which is the only thing
+ *     connecting the two files' packages to a program's own name lookup;
+ *   - `~superClasses` on a native class the prologue mutated, which no
+ *     `::CLASS` in either file names;
+ *   - a method set on a class `inheritInstanceMethods` donated to, which a
+ *     class-graph assertion cannot see -- `.Supplier~superClasses` is `The
+ *     Object class` alone on both sides and the donation is invisible there;
+ *   - `.TraceObject~option`, which is assigned by a class-side `ACTIVATE`
+ *     one line after a message scope override, so it separates a bootstrap
+ *     that ran the install pass from one that did not.
+ *
+ * `~package~name` is here because the classes belong to the REXX package and
+ * not to the program whose directives installed them.
+ */
+
+say .Alarm~id .Stream~id .File~id .Comparable~id .Monitor~id
+say .Alarm~package~name
+say .TraceObject~option
+
+say .String~superClasses
+say .Queue~superClasses
+say .Stem~superClasses
+say .Bag~superClasses
+
+say .Supplier~superClasses
+say .Supplier~method("ALLITEMS")
+say .Set~method("SUBSET")
+say .Bag~method("UNION")
+say .Relation~method("ALLINDEX")
+
+say .String~nl~length .String~tab~length
+say .String~digit
+say .String~hasMethod("DEFINECLASSMETHOD") .Supplier~hasMethod("INHERITINSTANCEMETHODS") .Class~hasMethod("DEFINE")

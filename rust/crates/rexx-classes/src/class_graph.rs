@@ -880,6 +880,29 @@ impl ClassGraph {
     /// C++ source alone; its *effect* is what `.Supplier`, `.Set` and
     /// `.Bag` let a running script measure, and `tests/behaviour_wiring.rs`
     /// is built around exactly that distinction.
+    /// `Setup.cpp`'s `InheritInstanceMethods(source)` macro, which is
+    /// `RexxBehaviour::inheritInstanceMethods` (`RexxBehaviour.cpp:350`):
+    /// copy the donor's own methods into this class's dictionary under this
+    /// class's scope, **leaving the donor alone**.
+    ///
+    /// [`MethodDict::replace_methods_from`] carries why this is a different
+    /// operation from [`Self::inherit_instance_methods`] beside it, which is
+    /// the Rexx-level method of the same name and does rewrite the donor.
+    pub fn donate_instance_methods(&mut self, class: ObjRef, donor: ObjRef) {
+        let donor_methods = self
+            .classes
+            .get(&donor)
+            .expect("donate_instance_methods: unknown donor class")
+            .own_instance_methods
+            .clone();
+        self.classes
+            .get_mut(&class)
+            .expect("donate_instance_methods: unknown recipient class")
+            .own_instance_methods
+            .replace_methods_from(&donor_methods, donor, class);
+        self.rebuild_behaviour(class, Side::Instance);
+    }
+
     pub fn inherit_instance_methods(&mut self, class: ObjRef, donor: ObjRef) {
         let mut donor_methods = std::mem::take(
             &mut self

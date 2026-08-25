@@ -486,6 +486,18 @@ impl ClassRegistry {
         method
     }
 
+    /// `defineClassMethod`'s dictionary half: a class-side entry under
+    /// `name` naming a [`MethodId`] the caller already holds --
+    /// `RexxClass::defineClassMethod` (`classes/ClassClass.cpp:883`), which
+    /// writes both the class behaviour and `classMethodDictionary`.
+    ///
+    /// [`Self::add_class_method`] beside it mints its own id, which is what
+    /// `Setup.cpp`'s `AddClassMethod` wants and what a caller installing a
+    /// method object of its own must not have.
+    pub fn define_class_method(&mut self, class: ObjRef, name: &str, method: MethodId) {
+        self.graph.class_define(class, name, method);
+    }
+
     /// `~inherit` -- see [`ClassGraph::inherit`]. Exposed here because R6's
     /// `mixinclass class` probe needs it: `inheritInstanceMethods` (below)
     /// never adds a superclass edge, so it cannot reach the metaclass side
@@ -582,6 +594,13 @@ impl ClassRegistry {
     /// `Relation` and `Bag`.
     pub fn inherit_instance_methods(&mut self, class: ObjRef, source: ObjRef) {
         self.graph.inherit_instance_methods(class, source);
+    }
+
+    /// `Setup.cpp`'s `InheritInstanceMethods` macro -- see
+    /// [`ClassGraph::donate_instance_methods`], which carries why it is not
+    /// [`Self::inherit_instance_methods`].
+    pub fn donate_instance_methods(&mut self, class: ObjRef, source: ObjRef) {
+        self.graph.donate_instance_methods(class, source);
     }
 
     /// See [`ClassGraph::refresh_class_behaviour`] for what it is for.

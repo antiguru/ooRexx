@@ -1,0 +1,49 @@
+/* The two methods the image build puts on `.Class` and `removeSetupMethods`
+ * strips (`memory/Setup.cpp:1809`). Phase 5a Task 23.
+ *
+ * They exist while the interpreter's own library runs -- `.String~nl` is
+ * there because `CoreClasses.orx:73` sent `defineClassMethod`, and
+ * `.Supplier`'s donated methods because its prologue sent
+ * `inheritInstanceMethods` -- and a program can reach neither.
+ *
+ * The rows above the refusal are what stop "refuse every send to .Class"
+ * from passing: `~define` is a mutator the same block declares and it is
+ * still there, and the work the two stripped methods did is still visible.
+ *
+ * The `REXX_DEFINED` lock is the same shape: the library's own prologue
+ * runs a whole run of `~inherit` clauses against these classes and a
+ * program's first one is 98.985.
+ *
+ * The last send is untrapped, so its 97.1 text and its frame line are
+ * compared as bytes. rc 159.
+ */
+
+say .Class~hasMethod("DEFINE") .String~hasMethod("DEFINECLASSMETHOD") .Supplier~hasMethod("INHERITINSTANCEMETHODS")
+say .String~nl~length
+say .Supplier~method("ALLITEMS")
+
+signal on syntax name trapped
+n = 0
+
+next:
+n = n + 1
+select
+  when n = 1 then say n 'answered' .Supplier~inheritInstanceMethods(.Object)
+  when n = 2 then say n 'answered' .String~inherit(.Comparable)
+  when n = 3 then say n 'answered' .String~delete("LENGTH")
+  when n = 4 then say n 'answered' .String~hasMethod("LENGTH")
+  otherwise signal done
+end
+signal next
+
+trapped:
+say n 'raised' rc'.'condition('E')
+signal on syntax name trapped
+signal next
+
+done:
+signal off syntax
+say .String~defineClassMethod("ZZ", .methods~m)
+
+::method m
+  return 1

@@ -914,6 +914,36 @@ impl Loud {
         }
     }
 
+    /// One of the interpreter's own embedded `.orx` sources will not parse.
+    ///
+    /// `rexx-lib` pins each file's sha256, so the bytes are the tracked
+    /// ones; this is a construct in them this crate's parser does not yet
+    /// take, and it stops the interpreter rather than a program.
+    fn library_source(name: &str, error: &str) -> Loud {
+        Loud {
+            message: owned_message(
+                &format!("{name} does not parse here: {error}"),
+                Some("Phase 5"),
+            ),
+        }
+    }
+
+    /// One of the two methods `Setup.cpp` puts on `.Class` for the image
+    /// build and `removeSetupMethods` deletes, given something it cannot
+    /// use.
+    ///
+    /// **Loud rather than a Rexx condition, and there is no third option.**
+    /// Neither method exists in any shipped interpreter, so no oracle run
+    /// can say what either does with a bad argument -- a plausible
+    /// condition here would be a wrong answer nobody could check. Only the
+    /// interpreter's own library can reach either, so a refusal ends the
+    /// bootstrap rather than a program.
+    fn setup_method(what: &str) -> Loud {
+        Loud {
+            message: owned_message(what, Some("Phase 5")),
+        }
+    }
+
     /// `EXPOSE` in a method whose receiver is not a class object.
     ///
     /// **The gap is the root, not the storage.** An instance keeps its pools
@@ -3086,6 +3116,43 @@ struct Interp {
     /// immediately after each mint a directive makes, and asserts the key is
     /// fresh.
     method_bodies: HashMap<MethodId, InstalledMethodBody>,
+    /// Whether the interpreter's own Rexx-written library is running.
+    ///
+    /// **What it opens, and each is closed again the moment the prologue
+    /// reaches its `exit`.** `Setup.cpp` builds the image in a state no
+    /// shipped interpreter is ever in: `.Class` carries the two setup
+    /// methods `removeSetupMethods` later strips, and the `REXX_DEFINED`
+    /// lock every class carries does not refuse the mutators, because the
+    /// library's own prologue is what does the mutating -- `.string~inherit
+    /// (.Comparable)` and the `~inherit` clauses after it are `98.985 User
+    /// additions are not allowed to the REXX language classes` for a program
+    /// and are the whole point of `CoreClasses.orx:88` onwards.
+    ///
+    /// **No user program can see either.** The bootstrap runs to completion
+    /// before the program's first clause, so this is false for every clause
+    /// a program executes and for every directive it installs.
+    library_bootstrap: bool,
+    /// How many collections the heap had performed when the library
+    /// bootstrap finished, which is what `Outcome::collections` is counted
+    /// from -- see `Interp::bootstrap_library` for why the boundary is
+    /// there and not at process start.
+    collections_before_program: u64,
+    /// The programs the library bootstrap loaded, in load order.
+    ///
+    /// Read by `Interp::record_package_class`, so a class the library
+    /// installed answers `REXX` for its package rather than the running
+    /// program's path.
+    library_programs: Vec<ProgramId>,
+    /// Which directive is the body of a `Method` object this crate handed
+    /// out through `.METHODS`, for the one caller that installs such an
+    /// object where it can be sent to: `Class~defineClassMethod`.
+    ///
+    /// Keyed by the object rather than by a [`MethodId`], because a
+    /// `.METHODS` entry has no dictionary entry and so no id: it is a
+    /// directive the package filed under a name and nothing more. Written
+    /// only for a written `::METHOD`; `environment.rs`'s `written_method`
+    /// carries why an `::ATTRIBUTE` or `::CONSTANT` accessor is absent.
+    table_method_bodies: HashMap<ObjRef, InstalledMethodBody>,
     /// The methods a directive implements itself -- see [`GeneratedMethod`]
     /// for why these are not rows of [`method_bodies`], which is a
     /// measurement rather than a taxonomy.
@@ -4154,7 +4221,11 @@ impl Interp {
             constant_values: HashMap::new(),
             annotations: HashMap::new(),
             method_objects: HashMap::new(),
+            library_bootstrap: false,
+            collections_before_program: 0,
+            library_programs: Vec::new(),
             method_bodies: HashMap::new(),
+            table_method_bodies: HashMap::new(),
             generated_methods: HashMap::new(),
             native_externals: HashMap::new(),
             special_methods: Vec::new(),
@@ -4211,7 +4282,116 @@ impl Interp {
         let program = Rc::new(program);
         let program_id = ProgramId(self.programs.len());
         self.programs.push(Rc::clone(&program));
+        self.run_loaded(program, program_id)
+    }
 
+    /// Runs the interpreter's own Rexx-written library -- `Setup.cpp:1786`'s
+    /// `resolveProgramName(BASEIMAGELOAD)` and the `runProgram` at `:1795`,
+    /// which hands the entry program `TheRexxPackage` as its one argument.
+    ///
+    /// **At interpreter start, before the program's first clause and before
+    /// its directives install.** D26 builds no image, so this is what a
+    /// saved image would
+    /// otherwise have been: the classes `CoreClasses.orx` and
+    /// `StreamClasses.orx` declare are most of the documented class set, and
+    /// a program that never asked for them still has to find `.Alarm` in
+    /// `.environment`.
+    ///
+    /// **The argument is the entry program's own package object**, where the
+    /// C++ hands a distinct `TheRexxPackage`. The two answer the same
+    /// questions here: the prologue reads `~publicClasses` off `.context
+    /// ~package` and writes through `~addClass`/`~addPublicClass` and
+    /// `~objectname=`, and `Interp::record_package_class` is what makes a
+    /// class the library installed answer `REXX` for `~package` rather than
+    /// this object. Cost if that is wrong: a program that could reach this
+    /// object would see a `~name` of the running program's path. Nothing
+    /// hands it out -- a program's own `.context~package` is its own.
+    ///
+    /// The state this opens is closed here rather than by the prologue:
+    /// [`Interp::library_bootstrap`] carries what it opens, and
+    /// `rexx_classes::remove_setup_methods` is `Setup.cpp:1809`.
+    pub(crate) fn bootstrap_library(&mut self) -> Result<(), Failure> {
+        debug_assert!(
+            self.object_model.is_none(),
+            "the library bootstrap must build the object model, so nothing may have forced \
+             the shipped one before it runs"
+        );
+        self.object_model = Some(dispatch::ObjectModel::bootstrap_for_library());
+        self.library_bootstrap = true;
+        #[cfg(test)]
+        ir::drive::suspend_counters();
+        let entry = rexx_lib::lookup(rexx_lib::ENTRY)
+            .unwrap_or_else(|| panic!("{} is embedded", rexx_lib::ENTRY));
+        let outcome = self.enter_library_program(entry, None);
+        self.library_bootstrap = false;
+        rexx_classes::remove_setup_methods(self.classes());
+        // **Every per-run instrument reads from here, not from process
+        // start.** `Outcome::collections` and `Outcome::chunks_refused`
+        // answer a question about the program, and so do the compiled
+        // engine's own counters; the bootstrap is the interpreter starting
+        // up. Without this, `run_program_collect_every_alloc`'s
+        // "collections non-zero" criterion is met by the library allocating
+        // rather than by the program, which is the criterion measuring
+        // nothing.
+        self.collections_before_program = self.heap.collections_performed();
+        self.chunks_refused = 0;
+        #[cfg(test)]
+        ir::drive::resume_counters();
+        outcome.map(|_| ())
+    }
+
+    /// Parses one embedded library program, registers it, and runs its body
+    /// with `arguments` as its calling convention.
+    ///
+    /// `None` is the entry point, whose one argument this builds: it is the
+    /// package object of the program itself, which cannot exist before the
+    /// program has an id.
+    fn enter_library_program(
+        &mut self,
+        program: &'static rexx_lib::Program,
+        arguments: Option<Vec<Option<Argument>>>,
+    ) -> Result<Option<ObjRef>, Failure> {
+        let parsed = match parse_program(program.source.to_vec()) {
+            Ok(parsed) => parsed,
+            // A parse failure here is the embedded source, not a program's:
+            // `rexx-lib` pins each file's sha256, so this can only fire on a
+            // file this crate cannot yet parse.
+            Err(error) => {
+                return Err(Loud::library_source(program.name, &format!("{error}")).into());
+            }
+        };
+        let parsed = Rc::new(parsed);
+        let program_id = ProgramId(self.programs.len());
+        self.programs.push(Rc::clone(&parsed));
+        self.library_programs.push(program_id);
+        let arguments = arguments.unwrap_or_else(|| {
+            let package = self.package_object(Package::Program(program_id));
+            // Rooted for the whole of the bootstrap: `call_context` is not
+            // walked by the collector, and the prologue allocates before it
+            // reads `rexxPackage`.
+            self.roots.push_temp(package);
+            vec![Some(Argument::Value(package))]
+        });
+        let saved = std::mem::replace(
+            &mut self.call_context,
+            CallContext {
+                name: program.name.as_bytes().to_vec(),
+                arguments,
+                receiver: None,
+            },
+        );
+        let outcome = self.run_loaded(parsed, program_id);
+        self.call_context = saved;
+        outcome
+    }
+
+    /// Installs `program`'s directives and runs its main body, for a program
+    /// already registered under `program_id`.
+    fn run_loaded(
+        &mut self,
+        program: Rc<Program>,
+        program_id: ProgramId,
+    ) -> Result<Option<ObjRef>, Failure> {
         // **Before the first clause, and its failures print nothing on
         // stdout.** That is the oracle's own shape rather than a choice
         // here: measured, `say 'main ran'` followed by `::requires
@@ -5290,16 +5470,13 @@ impl Interp {
                 Some(id) => Ok(*id),
                 None => Err(Loud::missing_body().into()),
             },
-            None => {
-                let name = String::from_utf8_lossy(&target.name).into_owned();
-                match self.classes().lookup(&name) {
-                    Some(id) => Ok(id),
-                    None => {
-                        self.blame_directive(program, directive);
-                        Err(not_found(&target.name).into())
-                    }
+            None => match self.directive_class(&target.name) {
+                Some(id) => Ok(id),
+                None => {
+                    self.blame_directive(program, directive);
+                    Err(not_found(&target.name).into())
                 }
-            }
+            },
         }
     }
 
@@ -6483,21 +6660,36 @@ fn execute(
     let (argument, program_input, engine) = invocation.into_parts();
     interp.input = Input::new(program_input);
     interp.engine = engine;
-    if let Some(argument) = argument {
-        let value = interp.text(&argument);
-        // Rooted with a `push_temp` taken before `run`, which is what makes it
-        // outlive every clause: `step_in_temps_frame` truncates the
-        // temporaries stack back to a watermark it takes on entry, and every
-        // such watermark sits above this push. This is the same mechanism
-        // `Interp::invoke_call` uses to keep a call's own arguments reachable
-        // (`run.rs`, the `push_temp(argument.value())` beside the argument
-        // list it builds); `call_context` itself is not walked by the
-        // collector, so without this the value is unreachable the first time
-        // anything allocates.
-        interp.roots.push_temp(value);
-        interp.call_context.arguments = vec![Some(Argument::Value(value))];
-    }
-    let result = interp.run(program);
+    // **The library bootstrap runs before the command line's own program is
+    // installed or run, and before its argument string exists.** The program
+    // has already been *parsed* above, which is where a syntax error is
+    // reported from and is why that report does not wait on this. The
+    // library's classes have to be
+    // in `.environment` by the time the program's first clause runs --
+    // `Interp::bootstrap_library` carries why that is at start rather than on
+    // demand -- and running it first leaves nothing of this program's to keep
+    // reachable across the allocation it does.
+    //
+    // A bootstrap failure takes the same reporting path a program's own does,
+    // which is what `and_then` buys: it is a `Failure` like any other and the
+    // only thing this crate can do with it is say so.
+    let result = interp.bootstrap_library().and_then(|()| {
+        if let Some(argument) = argument {
+            let value = interp.text(&argument);
+            // Rooted with a `push_temp` taken before `run`, which is what makes it
+            // outlive every clause: `step_in_temps_frame` truncates the
+            // temporaries stack back to a watermark it takes on entry, and every
+            // such watermark sits above this push. This is the same mechanism
+            // `Interp::invoke_call` uses to keep a call's own arguments reachable
+            // (`run.rs`, the `push_temp(argument.value())` beside the argument
+            // list it builds); `call_context` itself is not walked by the
+            // collector, so without this the value is unreachable the first time
+            // anything allocates.
+            interp.roots.push_temp(value);
+            interp.call_context.arguments = vec![Some(Argument::Value(value))];
+        }
+        interp.run(program)
+    });
     // The whole echo stack, innermost first: the levels `seal_site_level`
     // already closed, then the level that was still unwinding when the
     // condition reached the top. See `Interp::failure_sites` for why the two
@@ -6591,7 +6783,7 @@ fn execute(
     // inside one is counted: `run_program_collect_every_alloc` decides that its
     // mode ran from `collections`, and a resumed body allocates like any other.
     let stack = interp.stack_span();
-    let collections = interp.heap.collections_performed();
+    let collections = interp.heap.collections_performed() - interp.collections_before_program;
     let chunks_refused = interp.chunks_refused;
 
     Outcome {

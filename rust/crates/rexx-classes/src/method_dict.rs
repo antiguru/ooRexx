@@ -259,8 +259,52 @@ impl MethodDict {
         }
     }
 
+    /// Copy `source`'s entries **defined at `filter`** into this dictionary
+    /// under `scope`, leaving `source` untouched -- the oracle's
+    /// `MethodDictionary::replaceMethods(source, filterScope, scope)`
+    /// (`behaviour/MethodDictionary.cpp:251`).
+    ///
+    /// **This is `Setup.cpp`'s `InheritInstanceMethods` macro and not
+    /// `Class~inheritInstanceMethods`**, which are two different functions
+    /// in the C++ with the same name. The macro is
+    /// `RexxBehaviour::inheritInstanceMethods` (`RexxBehaviour.cpp:350`) and
+    /// reaches this; the Rexx method is `RexxClass::inheritInstanceMethods`
+    /// (`ClassClass.cpp:558`) and reaches [`Self::set_method_scope`], which
+    /// rewrites the donor. Conflating them leaves the donor's own entries
+    /// carrying the recipient's scope: measured, with `Queue`'s
+    /// `InheritInstanceMethods(Array)` taking the mutating route,
+    /// `.array~at('x')` reports `Compiled method "AT" with scope "Queue".`
+    /// the moment anything rebuilds `.Array`'s behaviour, where the oracle
+    /// says `"Array"`.
+    ///
+    /// **The filter selects nothing on the input this crate passes**, and
+    /// that is worth saying rather than leaving to be discovered: the C++
+    /// donates from the donor's *merged* behaviour, where filtering is what
+    /// takes only the donor's own rows, and `ClassGraph::donate_instance_
+    /// methods` passes the donor's own dictionary, every row of which is
+    /// already at the donor's scope. It is kept because it is the C++'s own
+    /// guard and because it is what a merged source would need.
+    ///
+    /// A tombstone is copied whatever the filter says, matching
+    /// `replaceMethods`' `isMethod(method)` test: a `.nil` entry carries no
+    /// scope to compare.
+    pub fn replace_methods_from(&mut self, source: &MethodDict, filter: ObjRef, scope: ObjRef) {
+        for (name, list) in &source.entries {
+            for entry in list.iter().rev() {
+                match *entry {
+                    MethodSlot::Defined {
+                        scope: defined_at,
+                        method,
+                    } if defined_at == filter => self.add_method(name, scope, method),
+                    MethodSlot::Defined { .. } => {}
+                    MethodSlot::Hidden => self.add_hidden(name),
+                }
+            }
+        }
+    }
+
     /// Rewrite every entry's scope to `scope` -- the oracle's
-    /// `MethodDictionary::setMethodScope`, what `inheritInstanceMethods`
+    /// `MethodDictionary::setMethodScope`, what `Class~inheritInstanceMethods`
     /// uses to make a donor's methods present under the recipient's own
     /// identity rather than the donor's.
     pub fn set_method_scope(&mut self, scope: ObjRef) {

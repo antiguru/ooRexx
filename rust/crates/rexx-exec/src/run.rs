@@ -377,6 +377,16 @@ pub(crate) enum Resolved {
     /// A `::ROUTINE` this program installed. `InstalledRoutine::directive` is
     /// the same integer `Activation::body` and `BodyKey::directive` carry.
     Routine(InstalledRoutine),
+    /// One of the interpreter's own embedded `.orx` sources, named by a
+    /// `CALL` inside the library bootstrap -- `CoreClasses.orx:122` and
+    /// `:124`.
+    ///
+    /// **Reachable only while the bootstrap runs.** The name resolution that
+    /// produces this variant is gated on
+    /// [`Interp::library_bootstrap`](crate::Interp), so a program writing
+    /// `call 'StreamClasses.orx'` gets the 43.1 it gets today rather than
+    /// running the interpreter's own library a second time.
+    Library(&'static rexx_lib::Program),
 }
 
 /// Which of the two activation-pushing outcomes a resolved call took, kept
@@ -804,15 +814,20 @@ enum LoopState {
     /// these is ever built): binds `control` to each of `items` in turn.
     ///
     /// `items` is `requestArray`'s answer, which [`Interp::over_items`]
-    /// computes: an array's own non-empty slots, and otherwise the target
-    /// itself as a list of one -- measured, `do e over 'abc'` iterates once
-    /// yielding `abc`.
+    /// computes: an array's own non-empty slots, a `StringTable`'s own
+    /// indexes, and otherwise the target itself as a list of one -- measured,
+    /// `do e over 'abc'` iterates once yielding `abc`.
     ///
-    /// **Rooted by the header, not by this state.** `eval_loop_header`
-    /// `push_temp`s the target and the loop runs inside that clause, so the
-    /// array outlives every pass; each handle here is one of its own slots and
-    /// is reachable through it. Nothing in this phase can put a slot of a live
-    /// array out of reach, because `.Array` answers no method that writes one.
+    /// **Rooted by the header, not by this state**, and the two kinds of item
+    /// reach that rooting differently. `eval_loop_header` `push_temp`s the
+    /// target and the loop runs inside that clause, so the target outlives
+    /// every pass. An array's items are its own slots and are reachable
+    /// through it; nothing in this phase can put a slot of a live array out of
+    /// reach, because `.Array` answers no method that writes one. A
+    /// `StringTable`'s items are **freshly built index strings that the
+    /// table does not hold**, so [`Interp::over_items`] `push_temp`s each
+    /// one as it builds it, at the same level and therefore with the same
+    /// lifetime as the target.
     ///
     /// `remaining` is `FOR`'s own budget, already validated, independent of
     /// how many items are left.
@@ -5229,6 +5244,18 @@ impl Interp {
             }
             None => match self.routines.get(&name.to_ascii_uppercase()[..]).copied() {
                 Some(installed) => Resolved::Routine(installed),
+                // **Ahead of the external file search, which is Phase 7's,
+                // and behind everything above it.** `Setup.cpp` resolves
+                // `CoreClasses.orx`'s two `CALL`s against the interpreter's
+                // own directory, which is neither a label, a builtin nor a
+                // `::ROUTINE`; this crate embeds those files instead. Gated
+                // on the bootstrap running, so the names mean nothing to a
+                // program.
+                None if self.library_bootstrap
+                    && let Some(program) = rexx_lib::lookup(&String::from_utf8_lossy(name)) =>
+                {
+                    Resolved::Library(program)
+                }
                 // **43.1, not this crate's loud gap**, and the difference is
                 // one search: the oracle looks for an external Rexx file
                 // named for the target before answering, and this crate does
@@ -5553,11 +5580,26 @@ impl Interp {
         // allocation a builtin's result costs happens with the inputs
         // reachable, and the value handed back is rooted by whichever caller
         // receives it exactly as a callee's `RETURN` value already is.
+        // **The library outcome ends here too**, and for a reason unlike the
+        // builtin's: an embedded `.orx` source is a whole program, with its
+        // own directives to install and its own `ProgramId`, so it is
+        // entered the way the command line's program is rather than the way
+        // a routine is. `Entered` has no arm for it because none of the
+        // decisions that enum exists to carry -- `SIGL`, the callee's pool,
+        // the indent, the calling convention's receiver -- is a question
+        // about it.
+        if let Resolved::Library(program) = resolved {
+            return self
+                .enter_library_program(program, Some(arguments))
+                .map(Ended::Returned);
+        }
+
         let entered = match resolved {
             // Answered above, before the loop that just ran.
             Resolved::Builtin(_) => unreachable!("the builtin path returns before this"),
             Resolved::Label(target) => Entered::Label(target),
             Resolved::Routine(installed) => Entered::Routine(installed),
+            Resolved::Library(_) => unreachable!("the library path returns just above"),
         };
 
         // The caller's own program and body selector, which a label callee
@@ -7636,19 +7678,43 @@ impl Interp {
     /// A `DO OVER` target this crate cannot hand to `requestArray`, naming its
     /// own shape, or `None` for one it can.
     ///
-    /// [`Interp::operator_operand_gap`]'s set minus the arrays, which are the
-    /// one shape in it `requestArray` answers without a message send at all:
+    /// [`Interp::operator_operand_gap`]'s set minus an array and a
+    /// `StringTable`. An **array**
+    /// is the one `requestArray` answers without a message send at all:
     /// `OverLoop::setup` tests `isArray(result)` and calls `makeArray()`
-    /// directly (`instructions/DoBlockComponents.cpp:233`-`:236`). Everything
-    /// else in that set reaches `result->requestArray()` and either iterates
-    /// entries this crate does not build or raises 98.913, which is what the
-    /// refusal covers.
-    fn over_target_gap(&self, value: ObjRef) -> Option<&'static str> {
+    /// directly (`instructions/DoBlockComponents.cpp:233`-`:236`). A
+    /// **`StringTable`** answers its own indexes -- see
+    /// [`Interp::hash_collection_indexes`]. Everything else in that set
+    /// reaches `result->requestArray()` and either iterates entries this crate
+    /// does not build or raises 98.913, which is what the refusal covers:
+    /// measured, `do e over .context~package` is 98.913 at rc 158, `Unable to
+    /// convert object "a Package" to a single-dimensional array value.`, and
+    /// so are a `Method` object, a `RexxContext` and a class object.
+    fn over_target_gap(&mut self, value: ObjRef) -> Option<&'static str> {
         let kind = self.operator_operand_gap(value)?;
+        if self.is_hash_collection(value) {
+            return None;
+        }
         match self.heap.get(value).map(|object| &object.body) {
             Some(Body::Array(_)) => None,
             _ => Some(kind),
         }
+    }
+
+    /// Whether `value` is a `StringTable` -- `.methods`, `.routines`,
+    /// `.resources`, or a package's `~publicClasses`.
+    ///
+    /// Asked of the object's own class rather than of its `Body`, because
+    /// every one of the interpreter's own objects is a `Body::Native` and the
+    /// ones that are not iterable here must keep refusing.
+    /// [`ObjectModel::iterable_collection_class`] carries why `Directory` is
+    /// not in this set.
+    fn is_hash_collection(&mut self, value: ObjRef) -> bool {
+        let Some(Body::Native(native)) = self.heap.get(value).map(|object| &object.body) else {
+            return false;
+        };
+        let class = native.class();
+        class == self.object_model().iterable_collection_class()
     }
 
     /// `requestArray`'s answer for a `DO OVER` target, as the list of values
@@ -7660,13 +7726,74 @@ impl Interp {
     /// and `3` where `do e over (1,.nil,3)` yields `1`, `The NIL object` and
     /// `3` -- an explicit `.nil` is an item and an empty slot is not.
     ///
+    /// A `StringTable` answers its own **indexes**, not its values:
+    /// `HashCollection::makeArray` is `allIndexes()`. Measured, `do e over
+    /// .methods` prints the unattached methods' names.
+    ///
     /// Everything else answers itself, as a list of one. Measured,
     /// `do i over 'abc'` prints `abc` once.
-    fn over_items(&self, value: ObjRef) -> Vec<ObjRef> {
+    fn over_items(&mut self, value: ObjRef) -> Vec<ObjRef> {
+        if self.is_hash_collection(value) {
+            return self.hash_collection_indexes(value);
+        }
         match self.heap.get(value).map(|object| &object.body) {
             Some(Body::Array(slots)) => slots.iter().flatten().copied().collect(),
             _ => vec![value],
         }
+    }
+
+    /// A `StringTable`'s indexes, as the values a `DO OVER` binds in turn.
+    ///
+    /// **The order is this crate's and not the oracle's, and that is a
+    /// divergence a program can see.** The oracle iterates its `HashContents`
+    /// bucket-ascending (`classes/support/HashContents.cpp:489`), the bucket
+    /// being `key->getHashValue() % bucketSize`. Sorted key order is chosen
+    /// instead because it is deterministic and because every use inside the
+    /// interpreter's own bootstrap is order-insensitive: `CoreClasses.orx:63`
+    /// and `StreamClasses.orx:45` each put one distinct key into
+    /// `.environment` and one into the package per pass, so the state they
+    /// leave is the same under any permutation, and neither prints.
+    ///
+    /// **What closing it would take is not one answer, because the oracle's
+    /// order is only reproducible for some keys.** A string's
+    /// `getHashValue` is `31*h + byte` over its own content
+    /// (`classes/StringClass.hpp:328`) and a number's delegates to its string
+    /// value, so for a **string-keyed** table the order is fixed -- measured,
+    /// ten oracle runs of one eight-key `StringTable` give one output -- and
+    /// reproducing it needs `HashContents` modelled *and* this crate's
+    /// insertion sequence matching the oracle's for that table, which holds
+    /// for a package's public classes and not for `.environment`. Every other
+    /// key's `getHashValue` is `RexxObject::identityHash`, `((uintptr_t)this)
+    /// ^ UINTPTR_MAX` (`classes/ObjectClass.hpp:340`), so its bucket is an
+    /// address: measured, ten oracle runs of one eight-object
+    /// `IdentityTable` give **five** distinct orders, each a rotation of one
+    /// cyclic sequence as ASLR shifts every index by the same delta.
+    /// **For those the oracle does not match itself and there is nothing to
+    /// match.**
+    ///
+    /// **What that costs**: a program that iterates a table and prints its
+    /// indexes gets this crate's order rather than the oracle's. No corpus
+    /// program does, and `corpus/README.md`'s determinism rule is where the
+    /// prohibition on adding one lives -- an object-keyed collection's order
+    /// is not merely unmatched there but unmatchable.
+    ///
+    /// Each index is rooted as it is built, for the reason
+    /// [`LoopState::OverItems`] gives: they are fresh strings the collection
+    /// itself does not hold, so nothing else keeps them reachable across the
+    /// allocation of the next one.
+    fn hash_collection_indexes(&mut self, table: ObjRef) -> Vec<ObjRef> {
+        let Some(Body::Native(native)) = self.heap.get(table).map(|object| &object.body) else {
+            return Vec::new();
+        };
+        let mut keys = native.keys();
+        keys.sort_unstable();
+        let mut items = Vec::with_capacity(keys.len());
+        for key in &keys {
+            let item = self.text(key);
+            self.roots.push_temp(item);
+            items.push(item);
+        }
+        items
     }
 
     /// One controlled-loop header value as the `Number` the loop runs on:

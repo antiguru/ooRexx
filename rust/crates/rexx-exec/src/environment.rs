@@ -358,11 +358,18 @@ pub(crate) enum PackageTable {
 /// `.methods~z` and `.routines~r` render `a Method` and `a Routine`, and
 /// `.resources~x~class` is `The Array class`.
 enum TableValue {
-    /// A `Method` or a `Routine`: the class it answers to and the annotations
-    /// it carries. Nothing here dispatches a `::METHOD` body through
+    /// A `Method` or a `Routine`: the class it answers to, the annotations
+    /// it carries, and -- for a `Method` -- which directive of this package
+    /// is its body. Nothing here dispatches a `::METHOD` body through
     /// `.METHODS`, and a message neither the class's dictionary nor
     /// `NATIVE_METHODS` holds is 97.1 on either side.
-    Instance(&'static str, Annotated),
+    ///
+    /// **The directive is carried for `Class~defineClassMethod`**, which is
+    /// the one caller that takes an object out of `.METHODS` and installs it
+    /// where it can be sent to: `CoreClasses.orx:73` hands
+    /// `.methods[("string_cls_" || name)~upper]` to `.String`. Nothing else
+    /// reads it.
+    Instance(&'static str, Annotated, Option<(ProgramId, usize)>),
     /// A `::RESOURCE`'s own body lines, which is what `.RESOURCES` holds --
     /// `resources->put(resource, internalname)` over an `ArrayClass`
     /// (`parser/DirectiveParser.cpp:2344`). Measured, a two-line resource's
@@ -514,14 +521,10 @@ impl Interp {
             return Ok(found);
         }
 
-        // **The one place either directory is read.** The loop is what keeps
-        // the chokepoint singular while still asking once per directory, which
-        // is what the oracle's own per-directory manager calls do.
-        for scope in [EnvScope::Local, EnvScope::Environment] {
-            let admitted = env_seam::admit(self, scope, bare)?;
-            if let Some(found) = self.directory_entry(admitted, scope, bare) {
-                return Ok(found);
-            }
+        if let Some(found) =
+            self.directory_lookup(&[EnvScope::Local, EnvScope::Environment], bare)?
+        {
+            return Ok(found);
         }
 
         if let Some(found) = self.rexx_variable(bare) {
@@ -536,6 +539,67 @@ impl Interp {
         // (`expression/ExpressionDotVariable.cpp:167`, and `:218` for the
         // route `VALUE` takes).
         Ok(self.text(dotted))
+    }
+
+    /// The class a `::CLASS` directive's `SUBCLASS`, `INHERIT` or `METACLASS`
+    /// keyword names, when the file's own directives do not declare it.
+    ///
+    /// `PackageClass::findClass`'s order, which is `.NAME`'s own
+    /// ([`Interp::dot_variable`]) minus the reflection names: the running
+    /// package's installed classes, then `.environment`, then the native
+    /// name table.
+    ///
+    /// **`.environment` is the step the interpreter's own library needs and a
+    /// program rarely does.** `StreamClasses.orx:506` inherits `Comparable`,
+    /// which `CoreClasses.orx` declares and whose prologue puts in
+    /// `.environment`; the two are separate packages, so nothing but that
+    /// directory connects them. Before the bootstrap ran, every class in
+    /// `.environment` was one the native name table already answered, so this
+    /// step changed no answer a program could get.
+    ///
+    /// A directory entry that is not a class object is stepped over rather
+    /// than returned, so a `::CLASS K SUBCLASS ENDOFLINE` still gets its
+    /// 98.909 rather than a class-shaped failure further on.
+    pub(crate) fn directive_class(&mut self, upper: &[u8]) -> Option<ObjRef> {
+        if let Some(found) = self.installed_class(upper) {
+            return Some(found);
+        }
+        // `.environment` alone, not `.NAME`'s pair: `ClassDirective`'s own
+        // search is the package's classes and then the environment
+        // directory, and `.local` is not in it.
+        if let Ok(Some(found)) = self.directory_lookup(&[EnvScope::Environment], upper)
+            && found.class_id().is_some()
+        {
+            return Some(found);
+        }
+        // A name that answers something which is not a class, and a name
+        // whose directory entry this crate has not built, both fall through
+        // to the native table -- which is where a `::CLASS` target was
+        // resolved before `.environment` was ever consulted, so a miss is the
+        // same 98.909 it was.
+        self.classes().lookup(&String::from_utf8_lossy(upper))
+    }
+
+    /// The first of `scopes` whose directory holds `bare`, or the refusal an
+    /// unbuilt entry carries.
+    ///
+    /// **The one place either directory is read.** The loop is what keeps
+    /// the chokepoint singular while still asking once per directory, which
+    /// is what the oracle's own per-directory manager calls do, and
+    /// `tests/environment_seam.rs` asserts that `env_seam::admit` has this
+    /// one call site.
+    fn directory_lookup(
+        &mut self,
+        scopes: &[EnvScope],
+        bare: &[u8],
+    ) -> Result<Option<ObjRef>, Failure> {
+        for &scope in scopes {
+            let admitted = env_seam::admit(self, scope, bare)?;
+            if let Some(found) = self.directory_entry(admitted, scope, bare) {
+                return Ok(Some(found));
+            }
+        }
+        Ok(None)
     }
 
     /// A class the running package's own directives installed, under its
@@ -635,13 +699,17 @@ impl Interp {
         let frame = self.roots.push_frame();
         for (name, value) in entries {
             let value = match value {
-                TableValue::Instance(id, site) => {
+                TableValue::Instance(id, site, body) => {
                     let class = self
                         .classes()
                         .lookup(id)
                         .expect("every TableValue::Instance names a native class");
                     let object = self.native_instance(class);
                     self.attach_annotations(object, site);
+                    if let Some((program, directive)) = body {
+                        self.table_method_bodies
+                            .insert(object, crate::InstalledMethodBody { program, directive });
+                    }
                     object
                 }
                 TableValue::Lines(lines) => self.line_array(&lines),
@@ -876,7 +944,14 @@ impl Interp {
                 .or_default()
                 .insert(name.to_ascii_uppercase().into(), class);
         }
-        self.class_packages.insert(class, program);
+        // **A class the interpreter's own library installed belongs to the
+        // `REXX` package, not to the program whose directives installed it.**
+        // Leaving it out of this table is what `Interp::package_object_for`
+        // reads as `Package::Rexx`, which is the oracle's answer: measured
+        // on both engines and the oracle, `.Alarm~package~name` is `REXX`.
+        if !self.library_programs.contains(&program) {
+            self.class_packages.insert(class, program);
+        }
     }
 
     /// `Package~addClass` and `Package~addPublicClass`, which differ only in
@@ -925,9 +1000,11 @@ impl Interp {
     /// 0, `p~publicClasses == p~publicClasses` is `0` where
     /// `.context~package == .context~package` is `1`.
     ///
-    /// The table is filled in sorted name order. The order is not observable
-    /// -- a `StringTable` answers by name -- and sorting is what keeps the
-    /// allocation sequence the same from run to run.
+    /// The table is filled in sorted name order, and **that order is
+    /// observable**: `DO OVER` a `StringTable` iterates its indexes, and
+    /// `Interp::hash_collection_indexes` carries what this crate's order
+    /// costs against the oracle's. Sorting is also what keeps the allocation
+    /// sequence the same from run to run.
     pub(crate) fn public_classes_table(&mut self, program: ProgramId) -> ObjRef {
         let class = self.environment_model().string_table;
         let table = self.native_instance(class);
@@ -1125,6 +1202,34 @@ impl Interp {
         let method = self.classes().mint_method_id();
         self.classes()
             .define_instance_method(class, &String::from_utf8_lossy(name), method);
+        self.hold_method_object(class, name, object);
+        Some(())
+    }
+
+    /// `defineClassMethod`: the same shape as [`Interp::define_method_object`]
+    /// on the class side, plus the row that makes the installed method
+    /// runnable.
+    ///
+    /// **The body row is the difference and it is load-bearing.** `~define`
+    /// mints an id and stores the object; a send to that id finds no body,
+    /// which is right there because the oracle's `~define` reaches an
+    /// instance side no class object answers from. `defineClassMethod`
+    /// installs where a send *does* land -- `.String~NL` after
+    /// `CoreClasses.orx:73` -- so the minted id has to name the directive the
+    /// object came from. `None` is a method object this crate handed out
+    /// with no directive behind it, which the caller refuses.
+    pub(crate) fn define_class_method_object(
+        &mut self,
+        class: ObjRef,
+        name: &[u8],
+        source: ObjRef,
+    ) -> Option<()> {
+        let body = self.table_method_bodies.get(&source).copied()?;
+        let object = self.method_new_scope(source, class)?;
+        let method = self.classes().mint_method_id();
+        self.classes()
+            .define_class_method(class, &String::from_utf8_lossy(name), method);
+        self.method_bodies.insert(method, body);
         self.hold_method_object(class, name, object);
         Some(())
     }
@@ -1405,8 +1510,22 @@ fn package_table_entries(
     program: &rexx_parse::Program,
     kind: PackageTable,
 ) -> Vec<(Vec<u8>, TableValue)> {
-    let method_value =
-        |name: &[u8]| TableValue::Instance("Method", Annotated::Unattached(id, name.into()));
+    // The body is carried for a written `::METHOD` alone. An `::ATTRIBUTE`
+    // and a `::CONSTANT` file generated accessors, whose bodies are
+    // `Interp::generated_methods` rather than `Interp::method_bodies`, and
+    // handing one of those to `Class~defineClassMethod` would install a row
+    // naming a body of the wrong kind. Nothing in the interpreter's own
+    // library does that -- `CoreClasses.orx:73` hands it plain `::METHOD`s --
+    // so the absence is a refusal there rather than a gap here.
+    let written_method = |name: &[u8], index: usize| {
+        TableValue::Instance(
+            "Method",
+            Annotated::Unattached(id, name.into()),
+            Some((id, index)),
+        )
+    };
+    let generated_method =
+        |name: &[u8]| TableValue::Instance("Method", Annotated::Unattached(id, name.into()), None);
     let mut entries = Vec::new();
     let mut seen_class = false;
     for (index, directive) in program.directives.iter().enumerate() {
@@ -1427,10 +1546,10 @@ fn package_table_entries(
                 // `addMethod` calls are at `:2418` and `:2474`.
                 if method.attribute {
                     let setter = crate::accessor_setter_name(&upper);
-                    let value = method_value(&setter);
+                    let value = generated_method(&setter);
                     entries.push((setter, value));
                 }
-                let value = method_value(&upper);
+                let value = written_method(&upper, index);
                 entries.push((upper, value));
             }
             rexx_parse::DirectiveKind::Attribute(attribute)
@@ -1446,17 +1565,17 @@ fn package_table_entries(
                 // set` puts `ZZ=` alone.
                 match attribute.style {
                     rexx_parse::AttributeStyle::Both => {
-                        let getter_value = method_value(&upper);
-                        let setter_value = method_value(&setter);
+                        let getter_value = generated_method(&upper);
+                        let setter_value = generated_method(&setter);
                         entries.push((upper, getter_value));
                         entries.push((setter, setter_value));
                     }
                     rexx_parse::AttributeStyle::Get => {
-                        let value = method_value(&upper);
+                        let value = generated_method(&upper);
                         entries.push((upper, value));
                     }
                     rexx_parse::AttributeStyle::Set => {
-                        let value = method_value(&setter);
+                        let value = generated_method(&setter);
                         entries.push((setter, value));
                     }
                 }
@@ -1469,7 +1588,7 @@ fn package_table_entries(
                 // (`parser/DirectiveParser.cpp:2536`). Measured,
                 // `::constant sep '/'` leaves `.methods~items` `1`.
                 let upper = constant.name.to_ascii_uppercase();
-                let value = method_value(&upper);
+                let value = generated_method(&upper);
                 entries.push((upper, value));
             }
             rexx_parse::DirectiveKind::Routine(routine) if kind == PackageTable::Routines => {
@@ -1480,7 +1599,7 @@ fn package_table_entries(
                 // leaves `.routines~items` `2`.
                 entries.push((
                     routine.name.to_ascii_uppercase(),
-                    TableValue::Instance("Routine", Annotated::Routine(id, index)),
+                    TableValue::Instance("Routine", Annotated::Routine(id, index), None),
                 ));
             }
             rexx_parse::DirectiveKind::Resource(resource) if kind == PackageTable::Resources => {

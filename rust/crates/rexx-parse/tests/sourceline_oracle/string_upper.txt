@@ -1,0 +1,66 @@
+count 65
+/* `String~upper([n [, length]])` -- `RexxString::upperRexx`
+ * (`classes/StringClass.cpp:1765`), bound at `memory/Setup.cpp:681` with a
+ * declared count of 2. Phase 5a Task 23.
+ *
+ * The rows that answer come first and the ladder of refusals follows, because
+ * the no-op cases are what separate this from a range check that refuses: a
+ * start past the end, a zero-length range, and a range capped at what is left
+ * all answer the receiver unchanged.
+ *
+ * An omitted first argument takes the default rather than shifting the second.
+ * The receiver is a string by dispatch, so a number answers its own text.
+ * The `'e9'x` row is a comparison rather than a `SAY` of the byte, so that
+ * every byte of this file stays ASCII: what it asks is that the fold is
+ * `Utilities::toUpper` and leaves a byte outside `a`-`z` alone.
+ *
+ * The refusals are 93.924 for a position and 93.923 for a length, and `found`
+ * is the argument object's own string value rather than the converted number
+ * -- which is where these part from the identically-numbered conditions the
+ * `UPPER` builtin raises. The last send is untrapped so its text and its
+ * frame line are compared as bytes. rc 163.
+ */
+
+say 'abcdef'~upper
+say 'abcdef'~upper(3)
+say 'abcdef'~upper(3,2)
+say 'abcdef'~upper(9)
+say 'abcdef'~upper(3,0)
+say 'abcdef'~upper(,2)
+say 'abcdef'~upper(1,99)
+say 'abcdef'~upper('3')
+say 'abcdef'~upper(' 3 ')
+say 1234~upper
+say ''~upper
+say ('e9'x~upper == 'e9'x)
+
+signal on syntax name trapped
+n = 0
+
+next:
+n = n + 1
+select
+  when n = 1 then say n 'answered' 'abcdef'~upper(0)
+  when n = 2 then say n 'answered' 'abcdef'~upper(-1)
+  when n = 3 then say n 'answered' 'abcdef'~upper(1.5)
+  when n = 4 then say n 'answered' 'abcdef'~upper('0.0')
+  when n = 5 then say n 'answered' 'abcdef'~upper(' -1 ')
+  when n = 6 then say n 'answered' 'abcdef'~upper('x')
+  when n = 7 then say n 'answered' 'abcdef'~upper(.array)
+  when n = 8 then say n 'answered' 'abcdef'~upper(1,-1)
+  when n = 9 then say n 'answered' 'abcdef'~upper(1,'-1.0')
+  when n = 10 then say n 'answered' 'abcdef'~upper(1,'y')
+  when n = 11 then say n 'answered' 'abcdef'~upper(1,2,3)
+  when n = 12 then say n 'answered' 'abcdef'~upper(1,2)
+  otherwise signal done
+end
+signal next
+
+trapped:
+say n 'raised' rc'.'condition('E')
+signal on syntax name trapped
+signal next
+
+done:
+signal off syntax
+say 'abcdef'~upper(0)

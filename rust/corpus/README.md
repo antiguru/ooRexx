@@ -9,6 +9,33 @@ A program here must produce byte-identical output on every run of the *same*
 interpreter. No `DATE()`, no `TIME()`, no process IDs, no file system state, no
 directory listings, no addresses, no iteration over an unordered collection.
 
+**The case that joins those last two, because nothing about the program says
+so.** The order `DO OVER` yields a hash collection's indexes in is the order of
+the oracle's own hash table: bucket `key->getHashValue() % bucketSize`,
+iterated bucket-ascending. **Whether that reproduces from run to run depends on
+what the keys are, not on which collection class it is.** A string's
+`getHashValue` is `31*h + byte` over its own content
+(`classes/StringClass.hpp:328`), and a number's delegates to its string value.
+Every other object's is `RexxObject::identityHash`, which is
+`((uintptr_t)this) ^ UINTPTR_MAX` (`classes/ObjectClass.hpp:340`) -- the
+address. ASLR moves every address, and therefore every bucket index, by the
+same delta on each run.
+
+Measured, ten oracle runs each: a program filling an `IdentityTable` with eight
+fresh `.Object`s and printing their values in iteration order gives **five
+distinct outputs**, each a rotation of one cyclic sequence. The same program
+over a `StringTable` of eight string keys gives **one** output in ten.
+
+So **no program here may print the iteration order of a collection whose keys
+are objects rather than strings or numbers**. That covers an `IdentityTable`
+outright and covers a `Table`, `Set`, `Bag` or `Relation` whenever what went
+into it was not a string. It is not a gap this project could close by working
+harder: the oracle does not agree with itself, so a differential has nothing to
+compare against and such a row would land as an intermittent red rather than as
+an honest gap. Iterating a **string**-keyed table and printing something
+order-independent -- a count, or a lookup of each index against the table --
+is fine, and is what `lang/do_over_string_table.rex` does.
+
 When the self-test (`--cpp X --rs X`, the same binary twice) reports a
 divergence, the corpus is at fault, not the differ. **Fix the program; never
 loosen `normalize` to make it pass** — everything normalisation strips is a

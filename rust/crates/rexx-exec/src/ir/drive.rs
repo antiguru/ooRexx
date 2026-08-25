@@ -2771,12 +2771,52 @@ thread_local! {
 
 #[cfg(test)]
 fn count_run_chunk_entry() {
+    if !counting() {
+        return;
+    }
     RUN_CHUNK_ENTRIES.with(|entries| entries.set(entries.get() + 1));
 }
 
 #[cfg(test)]
 pub(crate) fn run_chunk_entries() -> usize {
     RUN_CHUNK_ENTRIES.with(std::cell::Cell::get)
+}
+
+// Whether the counters above and below are recording.
+//
+// **Off while the library bootstrap runs**, so that each of them answers a
+// question about the program rather than about the interpreter starting up.
+// `execute` now runs `CoreClasses.orx` and `StreamClasses.orx` before the
+// program's first clause; without this, "the IR engine drove 3 chunks"
+// becomes a fact about the interpreter's own library that moves whenever
+// that library does.
+//
+// **Suspending rather than zeroing at the boundary**, which is what keeps
+// every test in this file reading the delta it already reads: each takes its
+// own `before` outside `execute`, and a counter zeroed inside it would make
+// that subtraction meaningless.
+#[cfg(test)]
+thread_local! {
+    static COUNTING: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
+}
+
+#[cfg(test)]
+fn counting() -> bool {
+    COUNTING.with(std::cell::Cell::get)
+}
+
+/// Stops the counters recording until [`resume_counters`]. `Interp::
+/// bootstrap_library` is the only caller and both are `#[cfg(test)]`, so
+/// neither exists in a release build.
+#[cfg(test)]
+pub(crate) fn suspend_counters() {
+    COUNTING.with(|on| on.set(false));
+}
+
+/// The other half of [`suspend_counters`].
+#[cfg(test)]
+pub(crate) fn resume_counters() {
+    COUNTING.with(|on| on.set(true));
 }
 
 // Test-only instrumentation: how many clauses this thread has stepped from a
@@ -2802,6 +2842,9 @@ thread_local! {
 
 #[cfg(test)]
 fn count_clause_op_entry() {
+    if !counting() {
+        return;
+    }
     CLAUSE_OP_ENTRIES.with(|entries| entries.set(entries.get() + 1));
 }
 
@@ -2835,6 +2878,9 @@ thread_local! {
 
 #[cfg(test)]
 fn count_trace_op_echo() {
+    if !counting() {
+        return;
+    }
     TRACE_OP_ECHOES.with(|echoes| echoes.set(echoes.get() + 1));
 }
 
@@ -2866,6 +2912,9 @@ thread_local! {
 
 #[cfg(test)]
 fn count_arith_hint_skip() {
+    if !counting() {
+        return;
+    }
     ARITH_HINT_SKIPS.with(|skips| skips.set(skips.get() + 1));
 }
 
@@ -2894,6 +2943,9 @@ thread_local! {
 
 #[cfg(test)]
 fn count_call_site_hit() {
+    if !counting() {
+        return;
+    }
     CALL_SITE_HITS.with(|hits| hits.set(hits.get() + 1));
 }
 
@@ -2928,6 +2980,9 @@ thread_local! {
 
 #[cfg(test)]
 fn count_const_build() {
+    if !counting() {
+        return;
+    }
     CONST_BUILDS.with(|builds| builds.set(builds.get() + 1));
 }
 
@@ -2945,6 +3000,9 @@ thread_local! {
 
 #[cfg(test)]
 fn count_load_constant_build() {
+    if !counting() {
+        return;
+    }
     LOAD_CONSTANT_BUILDS.with(|builds| builds.set(builds.get() + 1));
 }
 
@@ -2977,6 +3035,9 @@ thread_local! {
 
 #[cfg(test)]
 fn record_frame_floor(base: usize) {
+    if !counting() {
+        return;
+    }
     FRAME_FLOOR_HIGH_WATER.with(|floor| floor.set(floor.get().max(base)));
 }
 

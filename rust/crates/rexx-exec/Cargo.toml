@@ -31,6 +31,12 @@ rexx-inventory = { path = "../rexx-inventory" }
 # of the same thing.
 rexx-classes = { path = "../rexx-classes" }
 
+# The interpreter's own `.orx` library sources, embedded with a sha256 pin.
+# `Interp::bootstrap_library` runs them at interpreter start;
+# `tests/bootstrap_install_oracle.rs` reads the same bytes to compose its own
+# differential.
+rexx-lib = { path = "../rexx-lib" }
+
 [dev-dependencies]
 # Case tables as data files rather than `const` arrays in Rust sources, for
 # tables written from Task 6 onward (the plan's Tech Stack section). Test-only,
@@ -44,11 +50,6 @@ datadriven = { version = "0.9.0", default-features = false }
 # consumes an `AssertionRow`.
 rexx-extract = { path = "../rexx-extract" }
 
-# The interpreter's own `.orx` library sources, embedded with a sha256 pin.
-# Test-only until the bootstrap driver lands: `tests/bootstrap_install_oracle.rs`
-# composes the two files' directive sections into one program and runs it
-# against the oracle.
-rexx-lib = { path = "../rexx-lib" }
 
 [lints]
 workspace = true

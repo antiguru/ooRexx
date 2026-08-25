@@ -1167,6 +1167,10 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "gate-tables/directives/method__external__subkeyword.rex",
     "lang/message_send_scope_override_chain.rex",
     "lang/message_send_scope_override_not_a_scope.rex",
+    "lang/library_bootstrap_state.rex",
+    "lang/library_bootstrap_setup_methods_gone.rex",
+    "lang/do_over_string_table.rex",
+    "lang/string_upper.rex",
 ];
 
 #[test]

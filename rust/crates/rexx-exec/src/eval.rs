@@ -3610,11 +3610,19 @@ mod object_operand_tests {
     /// `stringValue()` nor an operator, so it falls outside every boundary the
     /// two tests above draw.
     ///
-    /// Measured: `do e over .array` is 98.913 at rc 158, and a directory or a
-    /// string table iterates its own entries -- `do e over .environment`
-    /// prints `INPUTOUTPUTSTREAM` first. Binding the target once and yielding
-    /// the object's rendering would be a single wrong line at rc 0 for each,
+    /// Measured: `do e over .array` is 98.913 at rc 158, and a directory
+    /// iterates its own entries -- `do e over .environment` prints
+    /// `INPUTOUTPUTSTREAM` first. Binding the target once and yielding the
+    /// object's rendering would be a single wrong line at rc 0 for each,
     /// which is why the refusal is here and not in `Interp::over_items`.
+    ///
+    /// **A `Directory` and not a `StringTable`**, which is the split
+    /// `ObjectModel::iterable_collection_class` carries: a `StringTable`
+    /// iterates here, and `corpus/lang/do_over_string_table.rex` is that
+    /// half. `.environment` and `.local` keep the refusal because this
+    /// crate models them as a subset of the oracle's, so iterating one
+    /// would differ in *membership* and not only in order -- measured,
+    /// `.local` iterates ten entries on the oracle and none here.
     #[test]
     fn an_object_as_a_do_over_target_is_loud() {
         let cases: &[(&[u8], &str)] = &[
@@ -3644,6 +3652,17 @@ mod object_operand_tests {
                 String::from_utf8_lossy(source)
             );
         }
+        // The adjacent success, which is what makes the refusals above about
+        // the *directories* rather than about `Body::Native`: the one
+        // collection this crate does iterate is a `StringTable`, and the
+        // count is order-independent for the reason
+        // `Interp::hash_collection_indexes` gives.
+        assert_eq!(
+            both_engines(
+                b"n = 0\ndo e over .methods\n  n = n + 1\nend\nsay n\n::method a\n::method b\n"
+            ),
+            (0, "2\n".to_string(), String::new())
+        );
     }
 
     /// **A stem redirects to its default, and every check has to follow.**

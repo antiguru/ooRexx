@@ -88,23 +88,16 @@ mod tests {
         assert!(lookup(ENTRY).is_some(), "{ENTRY} is not embedded");
     }
 
-    /// `CoreClasses.orx`'s two `CALL`s name the other two rows.
-    ///
-    /// Derived from the embedded bytes rather than written down, so a file
-    /// whose `CALL` target changed upstream reddens here instead of leaving
-    /// the bootstrap to answer 43.1 at run time.
-    #[test]
-    fn the_entry_program_calls_exactly_the_other_embedded_programs() {
-        let entry = lookup(ENTRY).expect("the entry point is embedded");
-        let text = String::from_utf8(entry.source.to_vec()).expect("the source is UTF-8");
-        let mut called: Vec<String> = Vec::new();
+    /// Every quoted `CALL` target in `program`, in source order.
+    fn quoted_call_targets(program: &Program) -> Vec<String> {
+        let text = String::from_utf8(program.source.to_vec()).expect("the source is UTF-8");
+        let mut called = Vec::new();
         for line in text.lines() {
             let trimmed = line.trim_start();
             let Some(rest) = trimmed.strip_prefix("call ") else {
                 continue;
             };
-            let rest = rest.trim_start();
-            let Some(quoted) = rest.strip_prefix('\'') else {
+            let Some(quoted) = rest.trim_start().strip_prefix('\'') else {
                 continue;
             };
             let Some(end) = quoted.find('\'') else {
@@ -112,6 +105,25 @@ mod tests {
             };
             called.push(quoted[..end].to_string());
         }
+        called
+    }
+
+    /// `CoreClasses.orx`'s two `CALL`s name the other two rows, and neither
+    /// of those two calls anything embedded.
+    ///
+    /// Derived from the embedded bytes rather than written down, so a file
+    /// whose `CALL` target changed upstream reddens here instead of leaving
+    /// the bootstrap to answer 43.1 at run time.
+    ///
+    /// **The second half is what makes the run-time recursion guard
+    /// unnecessary rather than forgotten**: `Interp::enter_library_program`
+    /// takes no activation-depth check, and this is what says the embedded
+    /// set has no cycle to need one. Measured, neither non-entry file
+    /// contains the word `call` at all.
+    #[test]
+    fn the_entry_program_calls_exactly_the_other_embedded_programs() {
+        let entry = lookup(ENTRY).expect("the entry point is embedded");
+        let mut called = quoted_call_targets(entry);
         called.sort();
         let mut expected: Vec<String> = PROGRAMS
             .iter()
@@ -120,5 +132,16 @@ mod tests {
             .collect();
         expected.sort();
         assert_eq!(called, expected);
+
+        for program in PROGRAMS.iter().filter(|p| p.name != ENTRY) {
+            for target in quoted_call_targets(program) {
+                assert!(
+                    lookup(&target).is_none(),
+                    "{} calls the embedded {target}, so the bootstrap can recurse and \
+                     `enter_library_program` needs a depth guard it does not have",
+                    program.name
+                );
+            }
+        }
     }
 }

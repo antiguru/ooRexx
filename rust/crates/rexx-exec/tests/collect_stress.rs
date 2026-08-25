@@ -180,12 +180,11 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     // substitution is rendered by the reporting path rather than built as a
     // value here.
     "lang/class_mutator_define_methods_supplier.rex",
-    // These run rather than refusing, and still allocate nothing: every
-    // value they say is either a class method's short literal result or a
+    // This runs rather than refusing, and still allocates nothing: every
+    // value it says is either a class method's short literal result or a
     // class object's own `~defaultName`, which is rendered out of the
     // registry rather than built as a value.
     "lang/class_inherit_order.rex",
-    "lang/class_mixinclass.rex",
     // These reach their first clause and raise 97.1 from the send in it. The
     // report substitutes the receiver's `~defaultName` and the message name,
     // both rendered out of the registry and the plan rather than built as
@@ -198,6 +197,11 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     // `class_method_own_dictionary.rex` does, because the rows before its own
     // refusal each build a `Method` object.
     "lang/class_method_class_side_raises.rex",
+    // The `REXX_DEFINED` refusal is reached before the mutator's arguments
+    // are converted, so nothing is allocated on the way to it.
+    "lang/class_rexx_defined_delete.rex",
+    "lang/class_rexx_defined_inherit.rex",
+    "lang/class_rexx_defined_uninherit.rex",
     // A class-side `ACTIVATE` raising 42.3 before the main body's first
     // clause, which is the same shape as the class-directive refusals above
     // once the divide has run: the operands are canonical small integers and
@@ -250,12 +254,6 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/directive_method_external_not_a_staged_gap.rex",
     "lang/directive_method_external_source_order.rex",
     "lang/do_loop_forms.rex",
-    // Both resolve every name they read out of the running package's own
-    // class table, which is consulted ahead of `.environment` and so never
-    // builds it -- the two directory objects are the only allocation a
-    // `.NAME` makes.
-    "lang/environment_package_class.rex",
-    "lang/environment_special_dot_variables_are_not_resolved.rex",
     "lang/exit_no_value.rex",
     "lang/exit_with_value.rex",
     // Every value it names is short enough to live in the handle, so the run
@@ -268,6 +266,9 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/message_send_argument_not_a_string.rex",
     "lang/message_send_missing_argument.rex",
     "lang/message_send_scope_override.rex",
+    // `validateScopeOverride`'s own refusal is raised from handles the term
+    // already held.
+    "lang/message_send_scope_override_not_a_scope.rex",
     "lang/message_send_too_many_arguments.rex",
     "lang/message_send_unknown_method.rex",
     "lang/message_send_unknown_method_on_a_number.rex",
@@ -307,7 +308,6 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/method_trace_nested.rex",
     "lang/mutation_controlled_order.rex",
     "lang/no_trailing_newline.rex",
-    "lang/prefix_dotvar_logical_over_label.rex",
     "lang/raise_array_substitution.rex",
     // Phase 5a (2026-08-17 plan) Task 14: the programs whose whole purpose is a
     // condition raised inside a `makeString` reached through the

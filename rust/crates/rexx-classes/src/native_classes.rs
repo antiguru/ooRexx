@@ -215,35 +215,60 @@ fn definition_for(block_name: &str) -> &'static ClassDefinition {
 
 /// `Setup.cpp:1809`'s `TheClassClass->removeSetupMethods()`: `TheClassClass`
 /// specifically, applied at image-save time to delete exactly the names
-/// below from `.Class`'s own instance methods (D39). This bootstrap
-/// reproduces the *deleted* state by never adding them, which is the same
-/// final answer `removeSetupMethods` leaves and is reached in one step
-/// rather than three. `removeSetupMethods` needs the other two because a
-/// name it deletes from `.Class`'s dictionary is already in every class
-/// object's class behaviour by then, through the metaclass merge
-/// ([`crate::ClassGraph::bootstrap_root_class_behaviour`] is where `.Object`'s
-/// picks `.Class`'s instance methods up here), so it walks `.Object`'s
-/// whole subclass tree deleting from each behaviour as well
-/// (`ClassClass.cpp:923`-`:941`). [`ClassRegistry::delete_instance_method`]
-/// cascades over the *instance* side alone, matching
-/// `RexxClass::deleteMethod`, so it is not that walk. Measured: the live
-/// oracle's
-/// `.class~instancemethods(.class)` does not include either name; keeping
-/// them would be the exact corpus-visible divergence D39 warns about. Scoped
-/// to the `"Class"` block alone in [`replay`], matching `removeSetupMethods`
-/// being `TheClassClass`'s own method, not a blanket rule -- harmless today
-/// either way, since no other block's `AddMethod` list names either string,
-/// but scoping it is what keeps that true rather than assuming it.
+/// below from `.Class`'s own instance methods (D39).
+///
+/// **Two registries are built from this list and each reaches the same final
+/// state a different way.** [`native_classes`] never adds these names, which
+/// is what every consumer but one wants: the shipped image does not have
+/// them, and measured, the live oracle's `.class~instancemethods(.class)`
+/// includes neither. [`native_classes_for_bootstrap`] adds them and
+/// [`remove_setup_methods`] deletes them when the library's prologue is
+/// done, which is the C++'s own three steps.
+///
+/// The deletion needs a walk as well as the delete, because a name taken out
+/// of `.Class`'s dictionary is already in every class object's class
+/// behaviour by then, through the metaclass merge
+/// ([`crate::ClassGraph::bootstrap_root_class_behaviour`] is where
+/// `.Object`'s picks `.Class`'s instance methods up here). That is why the
+/// oracle walks `.Object`'s whole subclass tree deleting from each behaviour
+/// as well (`ClassClass.cpp:923`-`:941`), and
+/// [`ClassRegistry::delete_instance_method`] cascades over the *instance*
+/// side alone, matching `RexxClass::deleteMethod`.
+///
+/// Scoped to the `"Class"` block alone in [`replay`], matching
+/// `removeSetupMethods` being `TheClassClass`'s own method, not a blanket
+/// rule -- harmless today either way, since no other block's `AddMethod`
+/// list names either string, but scoping it is what keeps that true rather
+/// than assuming it.
 const REMOVED_BY_IMAGE_SAVE: &[&str] = &["DefineClassMethod", "InheritInstanceMethods"];
 
-fn replay(registry: &mut ClassRegistry, class: rexx_core::ObjRef, def: &ClassDefinition) {
+/// The names [`remove_setup_methods`] deletes, in the spelling a dictionary
+/// is keyed by. `Setup.cpp` writes them mixed-case and every lookup upcases,
+/// so a caller registering an implementation for one needs this spelling and
+/// not [`REMOVED_BY_IMAGE_SAVE`]'s.
+pub fn setup_method_names() -> Vec<String> {
+    REMOVED_BY_IMAGE_SAVE
+        .iter()
+        .map(|name| name.to_ascii_uppercase())
+        .collect()
+}
+
+fn replay(
+    registry: &mut ClassRegistry,
+    class: rexx_core::ObjRef,
+    def: &ClassDefinition,
+    keep_setup_methods: bool,
+) {
     for op in def.ops {
         match op {
             Op::AddClassMethod(name) => {
                 registry.add_class_method(class, name);
             }
             Op::AddInstanceMethod(name) => {
-                if def.name == "Class" && REMOVED_BY_IMAGE_SAVE.contains(name) {
+                if !keep_setup_methods
+                    && def.name == "Class"
+                    && REMOVED_BY_IMAGE_SAVE.contains(name)
+                {
                     continue;
                 }
                 registry.add_instance_method(class, name);
@@ -252,7 +277,7 @@ fn replay(registry: &mut ClassRegistry, class: rexx_core::ObjRef, def: &ClassDef
                 let source_id = registry.lookup(source).unwrap_or_else(|| {
                     panic!("InheritInstanceMethods({source}) before {source} was built")
                 });
-                registry.inherit_instance_methods(class, source_id);
+                registry.donate_instance_methods(class, source_id);
             }
             Op::RemoveInstanceMethod(name) => {
                 registry.delete_instance_method(class, name);
@@ -276,6 +301,22 @@ fn replay(registry: &mut ClassRegistry, class: rexx_core::ObjRef, def: &ClassDef
 /// (`ClassClass.cpp:654-748`/`:1854-1870`) rather than the ordinary
 /// `subclass()` path every other primitive class goes through).
 pub fn native_classes() -> ClassRegistry {
+    build(false)
+}
+
+/// [`native_classes`] with the two methods `removeSetupMethods` deletes
+/// still present -- the state the C++ image build runs `CoreClasses.orx` in,
+/// before `Setup.cpp:1809` strips them.
+///
+/// **The only caller is the library bootstrap**, which needs
+/// `.String~defineClassMethod` and `.supplier~inheritInstanceMethods` to
+/// resolve while it runs and calls [`remove_setup_methods`] when it is done.
+/// Every other consumer wants [`native_classes`], which is the shipped state.
+pub fn native_classes_for_bootstrap() -> ClassRegistry {
+    build(true)
+}
+
+fn build(keep_setup_methods: bool) -> ClassRegistry {
     let mut registry = ClassRegistry::new();
 
     let class_id = registry.reserve_id();
@@ -294,8 +335,18 @@ pub fn native_classes() -> ClassRegistry {
     // below inherits it is `ClassGraph::define_class`'s decision, read off
     // the superclass each is given here.
     registry.bootstrap_metaclass(class_id);
-    replay(&mut registry, object_id, definition_for("Object"));
-    replay(&mut registry, class_id, definition_for("Class"));
+    replay(
+        &mut registry,
+        object_id,
+        definition_for("Object"),
+        keep_setup_methods,
+    );
+    replay(
+        &mut registry,
+        class_id,
+        definition_for("Class"),
+        keep_setup_methods,
+    );
     // `.Class`'s own class-behaviour self-merge (D44's self-reference) ran
     // once already, inside `define_reserved`'s initial cascade, against its
     // *own* still-empty instance methods -- see
@@ -337,7 +388,7 @@ pub fn native_classes() -> ClassRegistry {
             continue;
         }
         let id = registry.define_class(def.name, Some(object_id), ClassKind::Regular, class_id);
-        replay(&mut registry, id, def);
+        replay(&mut registry, id, def, keep_setup_methods);
         // `RexxClass::liveGeneral` sets `REXX_DEFINED` on every class it
         // reaches while the image is being prepared
         // (`ClassClass.cpp:136`-`:142`), which is every class this function
@@ -349,6 +400,50 @@ pub fn native_classes() -> ClassRegistry {
     }
 
     registry
+}
+
+/// `RexxClass::removeSetupMethods` (`classes/ClassClass.cpp:923`-`:941`):
+/// delete [`REMOVED_BY_IMAGE_SAVE`]'s names from `.Class`'s own instance
+/// dictionary, and from every behaviour that merged them.
+///
+/// **Both halves, because deleting from `.Class` alone does not reach them.**
+/// A name in `.Class`'s instance dictionary is already in every class
+/// object's *class* behaviour by this point, through the metaclass merge, and
+/// `ClassRegistry::delete_instance_method` cascades over the instance side
+/// alone -- which is `RexxClass::deleteMethod` and is exactly why the oracle
+/// walks `.Object`'s whole subclass tree as a second step. The walk here is
+/// that tree, from `.Object` down, so it visits the classes a `::CLASS`
+/// directive installed as well as the ones this file built.
+pub fn remove_setup_methods(registry: &mut ClassRegistry) {
+    let class = registry
+        .lookup("Class")
+        .expect("the registry always holds .Class");
+    let object = registry
+        .lookup("Object")
+        .expect("the registry always holds .Object");
+    for name in &setup_method_names() {
+        registry.delete_instance_method(class, name);
+    }
+    // The same three steps [`build`] wires the two bootstrap classes with,
+    // in the same order, because the walk in the middle passes through both
+    // of them and the ordinary cascade is wrong for each: `.Class`'s class
+    // behaviour is its own instance behaviour merged into itself, and
+    // `.Object`'s needs the root merge the cascade's is-this-the-root guard
+    // deliberately withholds. Measured, with the root merge left out:
+    // `.Object~superClass` is 97.1 `does not understand message
+    // "SUPERCLASS"` where the oracle answers `The NIL object`.
+    registry.refresh_class_behaviour(class);
+    let mut pending = vec![object];
+    let mut seen = Vec::new();
+    while let Some(next) = pending.pop() {
+        if seen.contains(&next) {
+            continue;
+        }
+        seen.push(next);
+        pending.extend_from_slice(registry.subclasses(next));
+        registry.refresh_class_behaviour(next);
+    }
+    registry.bootstrap_root_class_behaviour(object, class);
 }
 
 #[cfg(test)]

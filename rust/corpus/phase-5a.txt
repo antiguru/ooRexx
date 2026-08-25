@@ -680,3 +680,19 @@ gate-tables/directives/method__external__subkeyword.rex
 # not a class object gets is `message_send_scope_override.rex`, above.
 lang/message_send_scope_override_chain.rex
 lang/message_send_scope_override_not_a_scope.rex
+# Task 23 attempt 2: the interpreter's own Rexx-written library, running at
+# start. `_state` asks the post-bootstrap state four ways -- a class the
+# prologue put in `.environment`, `~superClasses` on a native class it
+# mutated, a method set `inheritInstanceMethods` donated (which no class-graph
+# assertion can see), and `.TraceObject~option`, which a bootstrap that
+# skipped the install pass leaves at `OPTION`. `_setup_methods_gone` is the
+# other side: the two methods the image build puts on `.Class` are gone and
+# the `REXX_DEFINED` lock is closed again, with the work they did still
+# visible above the refusal. `do_over_string_table` is the iteration the
+# prologue's own loop needs, every row of it order-independent because this
+# crate's index order is not the oracle's. `string_upper` is the method
+# `CoreClasses.orx:73` needs twice in one clause.
+lang/library_bootstrap_state.rex
+lang/library_bootstrap_setup_methods_gone.rex
+lang/do_over_string_table.rex
+lang/string_upper.rex

@@ -229,8 +229,11 @@ enum Arity {
     Counted,
 }
 
-/// The primitive methods this phase implements, as (class id, method name,
-/// declared parameter count, implementation).
+/// The primitive methods every run of this crate implements, as (class id,
+/// method name, declared parameter count, implementation).
+///
+/// [`SETUP_METHODS`] is the other table and is registered only while the
+/// interpreter's own library is being run.
 ///
 /// The class id is the `~id` string `rexx_classes::native_classes` registers,
 /// and the method name is looked up in that class's **own** dictionary, so a
@@ -413,6 +416,7 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         native_string_make_string,
     ),
     ("String", "REVERSE", Arity::Fixed(0), native_reverse),
+    ("String", "UPPER", Arity::Fixed(2), native_string_upper),
     // `.methods`, `.routines` and `.resources`. The same functions the
     // `Directory` rows above name, because the C++ is the same code reached
     // through the same donation: `StringTable` takes `[]`, `At` and `Put` from
@@ -426,6 +430,36 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         "UNKNOWN",
         Arity::Fixed(2),
         native_hash_unknown,
+    ),
+];
+
+/// The two methods `Setup.cpp` puts on `.Class` for the image build and
+/// `removeSetupMethods` deletes before the image is saved (D39).
+///
+/// **Registered only when the model is built for the library bootstrap**
+/// ([`ObjectModel::bootstrap_for_library`]), because the class dictionary
+/// only holds their names then: `rexx_classes::native_classes` leaves them
+/// out and `native_classes_for_bootstrap` puts them in, and a row here
+/// naming a method the registry does not answer is a panic at model-build
+/// time.
+///
+/// **Neither has an oracle transcript** and neither can get one: they do not
+/// exist in any shipped interpreter, so every refusal below is this crate's
+/// own judgement rather than a measurement. Each is [`Loud`] for that
+/// reason -- a plausible Rexx condition here would be a wrong answer nobody
+/// could check.
+static SETUP_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
+    (
+        "Class",
+        "DEFINECLASSMETHOD",
+        Arity::Fixed(2),
+        native_define_class_method,
+    ),
+    (
+        "Class",
+        "INHERITINSTANCEMETHODS",
+        Arity::Fixed(1),
+        native_inherit_instance_methods,
     ),
 ];
 
@@ -488,6 +522,23 @@ pub(crate) struct ObjectModel {
 }
 
 impl ObjectModel {
+    /// The hash-collection class a `DO OVER` target may be, for a caller
+    /// asking whether an object is one.
+    ///
+    /// **`StringTable` and not `Directory`**, which is a narrowing rather
+    /// than an omission and is measured. A `StringTable` this crate hands out
+    /// -- `.methods`, `.routines`, `.resources`, a package's
+    /// `~publicClasses` -- holds exactly what the running program's own
+    /// directives and sends put in it, so its membership is the oracle's:
+    /// measured, a file with three unattached `::METHOD`s answers `3` for
+    /// both. `.environment` and `.local` are `Directory`s this crate models
+    /// as a subset of the oracle's, so iterating one would differ in
+    /// *membership* and not only in order: measured, `.local` iterates ten
+    /// entries on the oracle and none here.
+    pub(crate) fn iterable_collection_class(&self) -> ObjRef {
+        self.string_table
+    }
+
     /// `Setup.cpp`'s native class set, plus the lookup from each implemented
     /// method's minted identity to its code.
     ///
@@ -495,9 +546,23 @@ impl ObjectModel {
     /// per build, which every program that never sends a message and
     /// declares no class would otherwise pay.
     fn bootstrap() -> ObjectModel {
-        let classes = rexx_classes::native_classes();
+        ObjectModel::build(rexx_classes::native_classes(), &[])
+    }
+
+    /// [`ObjectModel::bootstrap`] with the two setup-only methods present --
+    /// the state the interpreter's own library runs in, and the one
+    /// `Interp::bootstrap_library` closes with
+    /// `rexx_classes::remove_setup_methods`.
+    pub(crate) fn bootstrap_for_library() -> ObjectModel {
+        ObjectModel::build(rexx_classes::native_classes_for_bootstrap(), SETUP_METHODS)
+    }
+
+    fn build(
+        classes: rexx_classes::ClassRegistry,
+        extra: &[(&str, &str, Arity, NativeMethod)],
+    ) -> ObjectModel {
         let mut natives = HashMap::new();
-        for (class_id, method_name, arity, run) in NATIVE_METHODS {
+        for (class_id, method_name, arity, run) in NATIVE_METHODS.iter().chain(extra) {
             let class = classes.lookup(class_id).unwrap_or_else(|| {
                 panic!("NATIVE_METHODS names class {class_id:?}, which is not in the registry")
             });
@@ -3271,7 +3336,14 @@ fn native_method(
 /// divergence a differential row sees, unlike a refusal the oracle does not
 /// share.
 fn rexx_defined_lock(interp: &mut Interp, class: ObjRef) -> Result<(), Failure> {
-    if interp.classes().is_rexx_defined(class) {
+    // **Open while the interpreter's own library runs**, which is the state
+    // `Setup.cpp` builds the image in: `CoreClasses.orx:88` onwards is a run
+    // of `~inherit` clauses against exactly the classes this flag guards,
+    // and the C++ sets `REXX_DEFINED` on them at image-save time
+    // (`RexxClass::liveGeneral`, `ClassClass.cpp:136`-`:142`) rather than
+    // before. See `Interp::library_bootstrap` for what else the same flag
+    // opens and for why no program can be inside it.
+    if !interp.library_bootstrap && interp.classes().is_rexx_defined(class) {
         return Err(Raised::rexx_defined_class().into());
     }
     Ok(())
@@ -3485,6 +3557,74 @@ fn native_class_inherit(
         Ok(()) => Ok(None),
         Err(refusal) => Err(inherit_refusal(interp, class, mixin, refusal)),
     }
+}
+
+/// `Class~defineClassMethod(name, method)`: install `method` as a class-side
+/// method of the receiver -- `RexxClass::defineClassMethod`
+/// (`classes/ClassClass.cpp:883`), which writes the class behaviour and
+/// `classMethodDictionary` from one `newScope` copy.
+///
+/// **No `REXX_DEFINED` lock**, and that is the C++: every mutator
+/// [`rexx_defined_lock`] guards opens with `isRexxDefined()` and this one
+/// does not, which is what lets `CoreClasses.orx:73` put its string
+/// constants on `.String`.
+///
+/// **Deleted from every shipped image**, so nothing here can be measured
+/// against the oracle: `removeSetupMethods` strips it (D39). The refusals
+/// are loud for that reason -- see [`SETUP_METHODS`].
+fn native_define_class_method(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    let name = method_name_argument(interp, args)?;
+    let Some(Some(source)) = args.get(1).copied() else {
+        return Err(Loud::setup_method("defineClassMethod with no method object").into());
+    };
+    if interp.receiver_kind(source) != Ok(Primitive::Method) {
+        return Err(
+            Loud::setup_method("defineClassMethod with a value that is not a method").into(),
+        );
+    }
+    interp
+        .define_class_method_object(class, &name, source)
+        .ok_or_else(|| {
+            Failure::from(Loud::setup_method(
+                "defineClassMethod with a method object whose body this crate did not record",
+            ))
+        })?;
+    Ok(None)
+}
+
+/// `Class~inheritInstanceMethods(source)`: copy `source`'s own instance
+/// methods into the receiver's dictionary at the receiver's scope, with no
+/// superclass edge added -- `RexxClass::inheritInstanceMethods`
+/// (`classes/ClassClass.cpp:558`), the "phony inherit" `CoreClasses.orx:78`
+/// names in its own comment.
+///
+/// **No `REXX_DEFINED` lock**, for the reason
+/// [`native_define_class_method`] gives, and no oracle transcript either.
+fn native_inherit_instance_methods(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    let Some(Some(argument)) = args.first().copied() else {
+        return Err(Loud::setup_method("inheritInstanceMethods with no source class").into());
+    };
+    let Some(source) = argument.class_id().map(|_| argument) else {
+        return Err(
+            Loud::setup_method("inheritInstanceMethods with a value that is not a class").into(),
+        );
+    };
+    let source = class_receiver(interp, source)?;
+    interp.classes().inherit_instance_methods(class, source);
+    interp.classes().check_uninit(class);
+    Ok(None)
 }
 
 /// `Class~uninherit(mixin)`: take a mixin back out of the receiver's
@@ -4214,6 +4354,139 @@ fn native_string_make_string(
     Ok(Some(receiver))
 }
 
+/// `String~upper([n [, length]])`: the receiver with a range of it
+/// uppercased -- `RexxString::upperRexx` (`classes/StringClass.cpp:1765`),
+/// bound at `memory/Setup.cpp:681` with a declared count of 2.
+///
+/// The body is `upperRexx`'s, and the no-op cases are its own: a start past
+/// the end of the string, a zero-length range, and a range capped at what is
+/// left. Measured, oracle rc 0: `'abcdef'~upper` is `ABCDEF`,
+/// `'abcdef'~upper(3)` is `abCDEF`, `'abcdef'~upper(3,2)` is `abCDef`,
+/// `'abcdef'~upper(9)` and `'abcdef'~upper(3,0)` are both `abcdef` unchanged,
+/// and `'abcdef'~upper(,2)` is `ABcdef` -- an omitted first argument takes the
+/// default rather than shifting the second.
+///
+/// **`to_ascii_uppercase` and not a locale fold**, which is `Utilities::
+/// toUpper`: measured, `'e9'x~upper` answers its own byte back.
+///
+/// The receiver is a string by dispatch -- this row is in `String`'s own
+/// dictionary -- so `to_text` is its value and no required-string protocol
+/// runs. Measured, `1234~upper` is `1234`.
+fn native_string_upper(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let start = match whole_method_argument(interp, args, 0, Raised::invalid_position)? {
+        Some(value) if value > 0 => {
+            usize_or_refuse(interp, args, 0, value, Raised::invalid_position)?
+        }
+        Some(_) => {
+            return Err(refuse_method_argument(
+                interp,
+                args,
+                0,
+                Raised::invalid_position,
+            ));
+        }
+        None => 1,
+    } - 1;
+    let text = interp.to_text(receiver).into_owned();
+    let range = match whole_method_argument(interp, args, 1, Raised::invalid_length)? {
+        Some(value) if value >= 0 => {
+            usize_or_refuse(interp, args, 1, value, Raised::invalid_length)?
+        }
+        Some(_) => {
+            return Err(refuse_method_argument(
+                interp,
+                args,
+                1,
+                Raised::invalid_length,
+            ));
+        }
+        None => text.len(),
+    };
+    if start >= text.len() {
+        return Ok(Some(interp.text(&text)));
+    }
+    let range = range.min(text.len() - start);
+    if range == 0 {
+        return Ok(Some(interp.text(&text)));
+    }
+    let mut result = text;
+    for byte in &mut result[start..start + range] {
+        *byte = byte.to_ascii_uppercase();
+    }
+    Ok(Some(interp.text_built(result)))
+}
+
+/// One `optionalPositionArgument`/`optionalLengthArgument` conversion: the
+/// argument at `index` as a whole number, `None` for an omitted or absent
+/// position, and `raise`'s own condition for anything that is not one.
+///
+/// **The 93.9xx families a *method* raises name the object's own
+/// `stringValue()`, never the converted value**, which is where they part
+/// from the identically-numbered conditions the builtin layer raises.
+/// Measured on the oracle, three descriptors: `'abcdef'~upper('0.0')` reports
+/// `found "0.0"` and `'abcdef'~upper(' -1 ')` reports `found " -1 "`, where
+/// `substr('abc','0.0')` reports the converted `found "0"`. A non-string
+/// object is rendered the same way -- `'abcdef'~upper(.array)` reports
+/// `found "The Array class"`.
+fn whole_method_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    index: usize,
+    raise: fn(&[u8]) -> Raised,
+) -> Result<Option<i64>, Failure> {
+    let Some(Some(value)) = args.get(index).copied() else {
+        return Ok(None);
+    };
+    match interp.to_number(value) {
+        Ok(number) => match number.whole_value(METHOD_ARGUMENT_DIGITS) {
+            Some(whole) => Ok(Some(whole)),
+            None => Err(refuse_method_argument(interp, args, index, raise)),
+        },
+        Err(_) => Err(refuse_method_argument(interp, args, index, raise)),
+    }
+}
+
+/// [`whole_method_argument`]'s refusal, split out because the range checks
+/// after it raise the identical condition about the identical object.
+fn refuse_method_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    index: usize,
+    raise: fn(&[u8]) -> Raised,
+) -> Failure {
+    let found = match args.get(index).copied().flatten() {
+        Some(value) => interp.string_value_text(value),
+        None => Vec::new(),
+    };
+    raise(&found).into()
+}
+
+/// A converted argument narrowed to a `usize`, or the same refusal a bad
+/// range gets. `i64` values wider than a `usize` cannot arise on the
+/// platforms this builds for, and answering the refusal rather than
+/// truncating is what keeps that from being an assumption.
+fn usize_or_refuse(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    index: usize,
+    value: i64,
+    raise: fn(&[u8]) -> Raised,
+) -> Result<usize, Failure> {
+    usize::try_from(value).map_err(|_| refuse_method_argument(interp, args, index, raise))
+}
+
+/// `Numerics::ARGUMENT_DIGITS`, the precision every method-argument
+/// conversion runs at -- `builtin.rs`'s own constant of the same value, kept
+/// separate because the two layers reach it through different call paths and
+/// a shared one would tie them together for no reason beyond the number
+/// agreeing today.
+const METHOD_ARGUMENT_DIGITS: usize = 18;
+
 /// `Object~isNil`: `1` for `.nil` and `0` for everything else.
 fn native_is_nil(
     interp: &mut Interp,
@@ -4399,16 +4672,35 @@ mod tests {
     /// A name the class answers with no implementation here is **loud**, and
     /// a name it does not answer is the oracle's own 97.1. The two are
     /// different answers and the pair is what keeps them apart: a build that
-    /// raised for both would let a program expecting the oracle's working
-    /// `~upper` pass against a gap.
+    /// raised for both would let a program expecting a working `String`
+    /// method pass against a gap.
+    ///
+    /// **The loud name is chosen from the registry rather than written
+    /// down**, so that implementing any one `String` method does not retire
+    /// this test by making its example answer. The assertion that one was
+    /// found is what stops it going vacuous the day the last row lands: it
+    /// fails then, which is when it wants rewriting.
     #[test]
     fn an_unimplemented_method_is_loud_where_an_unknown_one_is_a_condition() {
         let mut interp = Interp::new();
         let receiver = interp.text(b"abc");
-        assert!(matches!(
-            interp.send_message(receiver, b"UPPER", None, &[], no_caller()),
-            Err(Failure::Loud(_))
-        ));
+        let string = interp.classes().lookup("String").expect("String is native");
+        let answered = interp.classes().instance_method_names(string);
+        let mut unimplemented = None;
+        for name in &answered {
+            if matches!(
+                interp.send_message(receiver, name.as_bytes(), None, &[], no_caller()),
+                Err(Failure::Loud(_))
+            ) {
+                unimplemented = Some(name.clone());
+                break;
+            }
+        }
+        assert!(
+            unimplemented.is_some(),
+            "every name .String's behaviour answers now has an implementation, so this test \
+             has no subject left and its pair has to be rebuilt on something else"
+        );
         assert!(matches!(
             interp.send_message(receiver, b"NOSUCHMETHOD", None, &[], no_caller()),
             Err(Failure::Raised(_))
@@ -5563,10 +5855,17 @@ mod tests {
     /// from passing, and the `~put` row is what stops one that refuses by name
     /// alone: an entry a program stored answers even under a name the unbuilt
     /// table holds.
+    ///
+    /// `REXXINFO` rather than a class name: the library bootstrap fills
+    /// `.environment` with the classes `CoreClasses.orx` and
+    /// `StreamClasses.orx` declare, so almost every entry in the unbuilt
+    /// table now answers. What is left is `Setup.cpp`'s own non-class
+    /// additions -- `ENDOFLINE` and this one, which is a pre-built
+    /// `RexxInfo` *instance* rather than a class (`Setup.cpp:1737`).
     #[test]
     fn a_directory_entry_the_oracle_has_and_this_crate_does_not_is_loud() {
         for (source, owner) in [
-            ("say .environment['ALARM']\n", "Phase 5"),
+            ("say .environment['REXXINFO']\n", "Phase 5"),
             ("say .local['STDOUT']\n", "Phase 7"),
         ] {
             let (code, stdout, stderr) = both_engines(source);

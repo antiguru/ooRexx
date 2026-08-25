@@ -337,13 +337,15 @@ struct ExemptRow {
 /// -verified against the source (`Literals.testGroup`), not hand-guessed --
 /// see `task-15b-report.md` for the method.
 ///
-/// All 35 are `"Phase 5"`: `test_hexadecimal`/`test_binary` both open with
-/// `tab = .String~tab` (or the corresponding prelude line), a message
-/// send, so *every* row in either method blocks there regardless of its
-/// own `expr`/`expected` text; `test_string_range` opens with `all =
-/// xrange()` (a function call, first-blocked as 4b's) but its very next
-/// prelude line is a message send, so implementing 4b's `Call` would not
-/// make either of its two rows pass either.
+/// Every row here is `"Phase 5"`. `test_hexadecimal`/`test_binary` both
+/// open with `tab = .String~tab`, and the rows still listed are the ones
+/// whose own `expr`/`expected` text carries a `self~` send of its own --
+/// their prelude line answers now that the library bootstrap installs
+/// `.String~tab`, and the rows that needed nothing but the prelude left
+/// this list when it did. `test_string_range` opens with `all = xrange()`
+/// (a function call, first-blocked as 4b's) but its very next prelude line
+/// is a message send, so implementing 4b's `Call` would not make either of
+/// its two rows pass either.
 const EXEMPT: &[ExemptRow] = &[
     ExemptRow {
         group: "Literals",
@@ -359,30 +361,6 @@ const EXEMPT: &[ExemptRow] = &[
         occurrence: 2,
         expr: "all",
         expected: "self~runDynamicSource(\"return\" self~q(all~changeStr('\"', '\"\"')))",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_hexadecimal",
-        occurrence: 1,
-        expr: "\"AB\"",
-        expected: "\"41 42\"x",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_hexadecimal",
-        occurrence: 2,
-        expr: "\"AB\"",
-        expected: "\"41  42\"x",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_hexadecimal",
-        occurrence: 3,
-        expr: "\"AB\"",
-        expected: "\"41   42\"x",
         unblocked_by: "Phase 5",
     },
     ExemptRow {
@@ -428,81 +406,9 @@ const EXEMPT: &[ExemptRow] = &[
     ExemptRow {
         group: "Literals",
         method: "test_hexadecimal",
-        occurrence: 9,
-        expr: "'04'x",
-        expected: "\"4\"x",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_hexadecimal",
-        occurrence: 10,
-        expr: "\"A\"",
-        expected: "\"41\"x",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_hexadecimal",
-        occurrence: 11,
-        expr: "'00'x || \"A\"",
-        expected: "\"041\"x",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_hexadecimal",
-        occurrence: 12,
-        expr: "\"AB\"",
-        expected: "\"4142\"x",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_hexadecimal",
-        occurrence: 13,
-        expr: "'04'x || \"AB\"",
-        expected: "\"441 42\"x",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_hexadecimal",
-        occurrence: 14,
-        expr: "\"ABC\"",
-        expected: "\"414243\"x",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_hexadecimal",
         occurrence: 15,
         expr: ".String~xdigit~x2c",
         expected: "'0123456789ABCDEFabcdef'x",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_binary",
-        occurrence: 1,
-        expr: "\"A\"",
-        expected: "\"0100 0001\"b",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_binary",
-        occurrence: 2,
-        expr: "\"A\"",
-        expected: "\"0100  0001\"b",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_binary",
-        occurrence: 3,
-        expr: "\"A\"",
-        expected: "\"0100   0001\"b",
         unblocked_by: "Phase 5",
     },
     ExemptRow {
@@ -543,86 +449,6 @@ const EXEMPT: &[ExemptRow] = &[
         occurrence: 8,
         expr: "\"A\"",
         expected: "self~runDynamicSource(\"return\" self~bin(\"0100\" || tab || \" 0001\"))",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_binary",
-        occurrence: 9,
-        expr: "\"AB\"",
-        expected: "\"0100 0001 0100 0010\"b",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_binary",
-        occurrence: 10,
-        expr: "\"AB\"",
-        expected: "\"0100 0001  01000010\"b",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_binary",
-        occurrence: 11,
-        expr: "\"AB\"",
-        expected: "\"0100 00010100  0010\"b",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_binary",
-        occurrence: 12,
-        expr: "\"AB\"",
-        expected: "\"0100   000101000010\"b",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_binary",
-        occurrence: 13,
-        expr: "\"AB\"",
-        expected: "\"01000001 0100 0010\"b",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_binary",
-        occurrence: 14,
-        expr: "\"AB\"",
-        expected: "\"01000001  01000010\"b",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_binary",
-        occurrence: 15,
-        expr: "\"AB\"",
-        expected: "\"010000010100  0010\"b",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_binary",
-        occurrence: 16,
-        expr: "0",
-        expected: "\"00110000\"b",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_binary",
-        occurrence: 17,
-        expr: "0",
-        expected: "\"0110000\"b",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_binary",
-        occurrence: 18,
-        expr: "0",
-        expected: "\"110000\"b",
         unblocked_by: "Phase 5",
     },
 ];
