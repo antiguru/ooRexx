@@ -13,13 +13,14 @@
 //!
 //! # The half the compiler enforces
 //!
-//! `dispatch::seam::Cleared` is a struct with a private field, and both
-//! things a resolved method can be take one by value: `dispatch::NativeMethod`
-//! is the signature of a primitive method, and `Interp::enter_method_body` is
-//! the one function that runs a `::METHOD` directive's Rexx body. It is
-//! neither `Copy` nor `Clone` and has no other constructor. So **neither kind
-//! of method can be called at all without a value produced inside `mod
-//! seam`** -- measured, not argued: writing `native_length(interp,
+//! `dispatch::seam::Cleared` is a struct with a private field, and every
+//! function that runs a resolved method takes one by value:
+//! `dispatch::NativeMethod` is the signature of a primitive method and of a
+//! bound `LIBRARY REXX` entry point, `Interp::enter_method_body` runs a
+//! `::METHOD` directive's Rexx body, and the generated accessors take one in
+//! their parameter lists. It is neither `Copy` nor `Clone` and has no other
+//! constructor. So **no resolved method runs without a value produced inside
+//! `mod seam`** -- measured, not argued: writing `native_length(interp,
 //! Cleared(()), ..)` anywhere else in the crate is `error[E0423]: cannot
 //! initialize a tuple struct which contains private fields`.
 //!

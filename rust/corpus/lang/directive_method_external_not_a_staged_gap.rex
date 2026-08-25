@@ -1,4 +1,4 @@
-/* A bound ::METHOD EXTERNAL is not a gap, so it no longer preempts an
+/* A bound ::METHOD EXTERNAL is not a gap, so it does not preempt an
    install-time failure standing above it: the ::CONSTANT's own divide is what
    answers. The same file with a ::ROUTINE EXTERNAL in that position is
    refused here instead, which is the cost staged_gap's doc records. */

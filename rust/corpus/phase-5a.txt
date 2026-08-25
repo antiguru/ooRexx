@@ -658,7 +658,7 @@ lang/class_package_addition_refused.rex
 # where the resolution sits in the install walk, from either side of it, with
 # `_before_duplicate` the reverse of `_duplicate_wins` and the differential
 # that makes the reverse order evidence for that placement.
-# `_not_a_staged_gap` is what a bound `::METHOD EXTERNAL` no longer preempts:
+# `_not_a_staged_gap` is what a bound `::METHOD EXTERNAL` does not preempt:
 # an install-time failure standing above it. The last row is gate table D's
 # `::METHOD EXTERNAL` probe, which stays in `gate-tables/directives/` because
 # that table's row set still names it.

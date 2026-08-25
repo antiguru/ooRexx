@@ -2130,14 +2130,13 @@ fn annotation_target<'a>(
 /// `DELEGATE` is what is left: measured, `.K~m` on
 /// `::method m class delegate p` is 97.1 at rc 159 naming `"P"`, because the
 /// message is forwarded to the delegate property's value, and `FORWARD` is
-/// 5b's. **`EXTERNAL` never reaches this function either, and no longer for
-/// one reason.** The `::METHOD ... EXTERNAL 'LIBRARY REXX name'` form does
-/// reach a send, and `Interp::invocable` answers it out of
-/// [`Interp::native_externals`] before it looks in
-/// [`Interp::method_bodies`], so no `InstalledMethodBody` is ever minted for
-/// it. The other `EXTERNAL` forms still stop at [`directive_gap`] while the
-/// package is installing. Either way the third arm below covers them rather
-/// than an arm of its own.
+/// 5b's. **`EXTERNAL` never reaches this function either.** The
+/// `::METHOD ... EXTERNAL 'LIBRARY REXX name'` form does reach a send, and
+/// `Interp::invocable` answers it out of [`Interp::native_externals`] before
+/// it looks in [`Interp::method_bodies`], so no `InstalledMethodBody` is ever
+/// minted for it. The other `EXTERNAL` forms stop at [`directive_gap`] while
+/// the package is installing. Either way the third arm below covers them
+/// rather than an arm of its own.
 ///
 /// **An access scope is not a reason to refuse a body**, and that is the one
 /// row this table lost. `PRIVATE` is decided at the send, by

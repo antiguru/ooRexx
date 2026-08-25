@@ -1416,11 +1416,14 @@ impl Interp {
     /// before `method->run`, and the count check is part of the method's own
     /// entry (`NativeActivation::run`), not of the send.
     ///
-    /// **`None` is a send that produced no value**, and either kind can do it.
-    /// Measured, `::method m class` ending in a bare `return`: as a whole
-    /// clause it drops `RESULT` at rc 0, and in an expression it is 91.999 at
-    /// rc 165. `.environment~put('v','q')` answers the identical pair from a
-    /// [`NativeMethod`].
+    /// **`None` is a send that produced no value**, and it is not one
+    /// [`Invocable`] kind's property. Measured, `::method m class` ending in a
+    /// bare `return`: as a whole clause it drops `RESULT` at rc 0, and in an
+    /// expression it is 91.999 at rc 165. `.environment~put('v','q')` answers
+    /// the identical pair from a [`NativeMethod`], and so does a generated
+    /// setter -- `.k~a = 5` on `::attribute a class` is rc 0 as a whole clause
+    /// and `say .k~'A='(5)` is `91.999 Message "A=" did not return a result.`
+    /// at rc 165, oracle and both engines.
     pub(crate) fn invoke(
         &mut self,
         resolution: Resolution,
