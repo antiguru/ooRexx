@@ -476,19 +476,19 @@ mod tests {
                         }
                     }
                     // `::ROUTINE` and `::ATTRIBUTE` carry an `EXTERNAL` too
-                    // and stay Phase 7's, so a bootstrap file declaring one of
-                    // those would be refused at install whatever this registry
-                    // holds. Asserted rather than written down, because "the
+                    // and this phase refuses both, so a bootstrap file
+                    // declaring one of those would be refused at install
+                    // whatever this registry holds. Asserted rather than written down, because "the
                     // bootstrap uses only the `::METHOD` form" is the premise
                     // this registry's scope rests on.
                     DirectiveKind::Routine(routine) => assert!(
                         routine.external.is_none(),
-                        "{} declares a ::ROUTINE EXTERNAL, which stays Phase 7's",
+                        "{} declares a ::ROUTINE EXTERNAL, which this phase refuses",
                         path.display()
                     ),
                     DirectiveKind::Attribute(attribute) => assert!(
                         attribute.external.is_none(),
-                        "{} declares a ::ATTRIBUTE EXTERNAL, which stays Phase 7's",
+                        "{} declares a ::ATTRIBUTE EXTERNAL, which this phase refuses",
                         path.display()
                     ),
                     _ => {}

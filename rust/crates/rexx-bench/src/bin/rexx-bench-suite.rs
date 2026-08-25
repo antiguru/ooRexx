@@ -132,9 +132,10 @@ enum Role {
     /// own loop bound.
     Loop,
     /// Timed on both sides and reported as the fixed per-process offset
-    /// rather than as an axis. Its two sides are **not** comparable: this
-    /// crate has no `CoreClasses.orx` bootstrap yet, so it starts fast by not
-    /// doing the work the oracle does at startup.
+    /// rather than as an axis. Its two sides **are** comparable: each pays
+    /// the startup cost of the same Rexx-written library, the oracle by
+    /// restoring its saved image and this crate by parsing and installing
+    /// the `.orx` sources that image was built from.
     Offset,
     /// This crate cannot run it. Reported with the exit status and message it
     /// actually produced, never omitted -- an axis that quietly leaves the
@@ -871,10 +872,11 @@ fn write_offset(report: &mut String, name: &str, paired: &Paired) {
     let _ = writeln!(report, "### Fixed per-process offset (`{name}.rex`)\n");
     let _ = writeln!(
         report,
-        "**Not comparable, and not a pass.** This crate has no `CoreClasses.orx` bootstrap yet \
-         (Phase 5), so it starts fast by not doing the work the oracle does at startup. The two \
-         numbers below are each side's own fixed cost, reported so every axis above can be read \
-         net of it -- not as a result about which interpreter starts faster.\n"
+        "**Comparable, and the difference is a result about startup.** Both sides pay a fixed \
+         cost for the same Rexx-written library before a program's first clause: the oracle \
+         restores its saved image, this crate parses and installs the `.orx` sources that image \
+         was built from. The two numbers below are each side's own fixed cost, reported so every \
+         axis above can be read net of it.\n"
     );
     let _ = writeln!(
         report,

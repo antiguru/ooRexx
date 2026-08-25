@@ -542,9 +542,10 @@ impl ObjectModel {
     /// `Setup.cpp`'s native class set, plus the lookup from each implemented
     /// method's minted identity to its code.
     ///
-    /// **Built on first use and not in `Interp::new`.** Measured at 5.5 ms
-    /// per build, which every program that never sends a message and
-    /// declares no class would otherwise pay.
+    /// **Built on first use and not in `Interp::new`**, through
+    /// `Interp::object_model`'s `get_or_insert_with`, which is its only
+    /// caller. `Interp::bootstrap_library` assigns the model itself, so what
+    /// this builds is the model of an `Interp` that never ran the bootstrap.
     fn bootstrap() -> ObjectModel {
         ObjectModel::build(rexx_classes::native_classes(), &[])
     }
@@ -1041,10 +1042,14 @@ impl Interp {
     ///
     /// An **array** answers, because `~superClasses` puts one in a program's
     /// hands. A name `.Array`'s behaviour here does not hold is the oracle's
-    /// 97.1, which is the same answer a `String` receiver already gets for a
-    /// name the prologue donates and this crate has not: `CoreClasses.orx:93`
-    /// and `:97` are the same `~inherit` and the gap belongs to whichever task
-    /// runs that file, not to one value kind.
+    /// 97.1, which is the same answer a `String` receiver gets for a name a
+    /// mixin the prologue inherits declares. `CoreClasses.orx:93` and `:97`
+    /// are the same `~inherit` and both run: measured, `.String~superClasses`
+    /// names `Comparable` and `.Array~superClasses` names
+    /// `OrderedCollection` on this crate and on the oracle alike. What is
+    /// missing is the mixin's own methods and not the edge -- measured,
+    /// `'abc'~compareTo('abd')` is `-1` on the oracle and a Phase 5 refusal
+    /// here.
     fn receiver_kind(&self, receiver: ObjRef) -> Result<Primitive, &'static str> {
         match receiver.decode() {
             Decoded::Nil => Ok(Primitive::Object),
@@ -1413,10 +1418,15 @@ impl Interp {
     /// translated in, which is what `MethodClass::isSamePackage` compares
     /// against the caller's.
     ///
-    /// **The refusing arm needs a second package and so is not reachable in
-    /// this phase**: a caller in another package needs `::REQUIRES`, which is
-    /// refused here. The same-package arm is what a program can run, and an
-    /// in-crate test is the whole instrument for the other.
+    /// **The cross-package refusal is not reachable in this phase**, and a
+    /// second package existing does not change that: only `Access::Package`
+    /// reaches this check, so a `::METHOD ... PACKAGE` has to have declared
+    /// the method, and no embedded library file declares one -- measured,
+    /// `/bin/grep -acinE "^\s*::method[^;]*\bpackage\b"` answers 0 for each
+    /// of the three. A program's own `::METHOD ... PACKAGE` is in the
+    /// caller's package by construction. The same-package arm is what a
+    /// program can run, and an in-crate test is the whole instrument for the
+    /// other.
     fn check_package(method_package: Package, caller: Caller) -> Result<(), Miss> {
         match caller.package() {
             // No calling activation at all (`:665`-`:669`).
@@ -3329,20 +3339,30 @@ fn native_method(
 /// which is measured: `.Array~inherit()` reports 98.985 where the same send
 /// to a class a `::CLASS` declared reports 88.901.
 ///
-/// **The only instrument that can catch a regression here is the corpus.**
-/// Every class in `.environment` carries the flag and every `::CLASS` a
-/// program declares does not, so a build that dropped this check would let
-/// `.Array~define(...)` succeed at rc 0 where the oracle raises -- a
-/// divergence a differential row sees, unlike a refusal the oracle does not
-/// share.
+/// **The corpus is what catches a regression in this check**, and its rows
+/// have to name a class from each half of what carries the flag: the classes
+/// `Setup.cpp` builds and the classes the interpreter's own Rexx-written
+/// library declares. A build that dropped the check would let
+/// `.Array~define(...)` and `.Alarm~inherit()` succeed at rc 0 where the
+/// oracle raises -- a divergence a differential row sees, unlike a refusal
+/// the oracle does not share.
+///
+/// Whether the flag is *set* on the library's half is a different question,
+/// and a corpus row can only ask it of a class a program can name.
+/// `every_class_the_library_declares_carries_the_rexx_defined_flag` asks it
+/// over the whole table the bootstrap leaves behind, which is where the
+/// classes declared without `PUBLIC` are.
 fn rexx_defined_lock(interp: &mut Interp, class: ObjRef) -> Result<(), Failure> {
     // **Open while the interpreter's own library runs**, which is the state
     // `Setup.cpp` builds the image in: `CoreClasses.orx:93` onwards is a run
     // of `~inherit` clauses against exactly the classes this flag guards,
     // and the C++ sets `REXX_DEFINED` on them at image-save time
     // (`RexxClass::liveGeneral`, `ClassClass.cpp:136`-`:142`) rather than
-    // before. See `Interp::library_bootstrap` for what else the same flag
-    // opens and for why no program can be inside it.
+    // before. This crate flags each library class as `Interp::install_class`
+    // creates it, so the bypass is not a convenience: it is what lets the
+    // prologue's own `~inherit` clauses run at all. See
+    // `Interp::library_bootstrap` for what else the same flag opens and for
+    // why no program can be inside it.
     if !interp.library_bootstrap && interp.classes().is_rexx_defined(class) {
         return Err(Raised::rexx_defined_class().into());
     }

@@ -7674,10 +7674,11 @@ fn every_directive_this_crate_can_install_leaves_the_program_alone() {
 ///
 /// The measured oracle answer for each, rc 0 unless stated:
 ///
-/// * `.Array~package~publicClasses` is `a StringTable`, and
-///   `["ORDEREDCOLLECTION"]` on it is `The OrderedCollection class` -- a
-///   name no class this crate registers carries, which is why the partial
-///   table is refused rather than answered.
+/// * `.Array~package~publicClasses` is `a StringTable`, and `["ARRAY"]` on
+///   it is `The Array class` -- a name no table this crate could answer from
+///   holds, which is why the partial table is refused rather than answered.
+///   See `Loud::rexx_package_classes` for where the two halves of the
+///   oracle's one table live here.
 /// * `.K~define("SRC", "say 'x'")` installs a compiled method, and
 ///   `.K~method("SRC")` then prints `a Method`.
 /// * `.K~defineMethods(.local)` is **rc 163**, `93.974`: the oracle reads

@@ -202,6 +202,13 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/class_rexx_defined_delete.rex",
     "lang/class_rexx_defined_inherit.rex",
     "lang/class_rexx_defined_uninherit.rex",
+    // The same refusal on a class the library declares, which reaches the
+    // arena no differently. `_no_mutation` runs a SYNTAX handler after it and
+    // still asks for nothing: the handler's one clause sends `~isA` to a
+    // class object and says a canonical small integer.
+    "lang/class_rexx_defined_library_define.rex",
+    "lang/class_rexx_defined_library_inherit.rex",
+    "lang/class_rexx_defined_library_no_mutation.rex",
     // A class-side `ACTIVATE` raising 42.3 before the main body's first
     // clause, which is the same shape as the class-directive refusals above
     // once the divide has run: the operands are canonical small integers and

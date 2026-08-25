@@ -225,17 +225,18 @@ struct ClassDef {
     /// This class may not be altered from Rexx -- oracle's `REXX_DEFINED`
     /// class flag. `RexxClass::liveGeneral` sets it on every class in the
     /// image under `PREPARINGIMAGE` (`ClassClass.cpp:136`-`:142`), which is
-    /// why every class a program can reach through `.environment` carries
-    /// it and a `::CLASS` a program declares does not.
+    /// every class the image holds: the ones `Setup.cpp` builds and the ones
+    /// the interpreter's own Rexx-written library declares alike. A `::CLASS`
+    /// a program declares does not carry it.
     ///
     /// **The five methods that read it are the five that mutate a class**:
     /// `defineMethod` (`:823`), `defineMethodsRexx` (`:522`), `deleteMethod`
     /// (`:955`), `inherit` (`:1290`) and `uninherit` (`:1382`), each raising
-    /// 98.985 before it validates anything else. Nothing inside this crate
-    /// reads it: the bootstrap replays `Setup.cpp` through the same graph
-    /// operations after the flag is set, exactly as the oracle's own image
-    /// build does, and the check lives where the oracle puts it -- in the
-    /// method a program sends.
+    /// 98.985 before it validates anything else. The check lives where the
+    /// oracle puts it, in the method a program sends -- `rexx-exec`'s
+    /// `dispatch::rexx_defined_lock`, which is open while the library
+    /// bootstrap is running so that the library's own prologue can mutate the
+    /// classes it has itself flagged.
     rexx_defined: bool,
 }
 

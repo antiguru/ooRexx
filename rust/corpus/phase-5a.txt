@@ -702,3 +702,13 @@ lang/string_upper.rex
 # is the two-frame case, which is what says the frame is built per activation.
 lang/library_method_traceback.rex
 lang/library_method_traceback_nested.rex
+# Task 23 fix round 3: the same `REXX_DEFINED` lock on the other half of what
+# carries it. The `class_rexx_defined_*` rows above are each `.Array`, a class
+# `Setup.cpp` builds, and none of them can see whether the classes the
+# library's own `::CLASS` directives declare carry the flag. `_inherit` is the
+# argumentless discriminator on a `CoreClasses.orx` class, `_define` a second
+# mutator on a `StreamClasses.orx` one, and `_no_mutation` reads the class
+# back after the refusal, which the other two cannot: both halt on it.
+lang/class_rexx_defined_library_inherit.rex
+lang/class_rexx_defined_library_define.rex
+lang/class_rexx_defined_library_no_mutation.rex

@@ -1173,6 +1173,12 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/string_upper.rex",
     "lang/library_method_traceback.rex",
     "lang/library_method_traceback_nested.rex",
+    // Task 23 fix round 3: the `REXX_DEFINED` lock on the classes the library
+    // declares. The `class_rexx_defined_*` rows above are each `.Array`, a
+    // class `Setup.cpp` builds, so they see one half of the flagged set.
+    "lang/class_rexx_defined_library_inherit.rex",
+    "lang/class_rexx_defined_library_define.rex",
+    "lang/class_rexx_defined_library_no_mutation.rex",
 ];
 
 #[test]

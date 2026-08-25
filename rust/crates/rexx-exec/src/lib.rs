@@ -859,12 +859,15 @@ impl Loud {
     /// `~publicClasses` sent to the package the primitive classes belong to.
     ///
     /// `completeSystemClass` files every `Setup.cpp` class in that package as
-    /// a public class (`memory/Setup.cpp:205`), so this crate has most of the
-    /// table -- and the shipped image's own is larger, because
-    /// `CoreClasses.orx` installs into the same package. Measured, oracle
-    /// rc 0: `.Array~package~publicClasses["ORDEREDCOLLECTION"]` is `The
-    /// OrderedCollection class`, a name no class this crate registers
-    /// carries. Answering the partial table would make that read `The NIL
+    /// a public class (`memory/Setup.cpp:205`), and the library's own
+    /// `::CLASS ... PUBLIC` directives install into the same package, so the
+    /// oracle's table holds both sets. **This crate keeps them apart**: a
+    /// class the library declares is filed in the declaring program's own
+    /// table by `Interp::record_package_class`, and a `Setup.cpp` class is in
+    /// `ClassRegistry` and in no package table at all. Measured, oracle
+    /// rc 0: `.Array~package~publicClasses["ARRAY"]` is `The Array class`,
+    /// and `ARRAY` is a name no table this crate could answer from holds.
+    /// Answering from what it has would make that read `The NIL
     /// object`, which is the shape of wrong answer a `StringTable` cannot
     /// refuse its way out of: `.environment` reaches the same names through
     /// [`Loud::environment_entry`] because a `Directory` this crate builds is
@@ -3129,11 +3132,16 @@ struct Interp {
     /// reaches its `exit`.** `Setup.cpp` builds the image in a state no
     /// shipped interpreter is ever in: `.Class` carries the two setup
     /// methods `removeSetupMethods` later strips, and the `REXX_DEFINED`
-    /// lock every class carries does not refuse the mutators, because the
-    /// library's own prologue is what does the mutating -- `.string~inherit
-    /// (.Comparable)` and the `~inherit` clauses after it are `98.985 User
-    /// additions are not allowed to the REXX language classes` for a program
-    /// and are the whole point of `CoreClasses.orx:93` onwards.
+    /// lock every class in the image carries does not refuse the mutators,
+    /// because the library's own prologue is what does the mutating --
+    /// `.string~inherit(.Comparable)` and the `~inherit` clauses after it are
+    /// `98.985 User additions are not allowed to the REXX language classes`
+    /// for a program and are the whole point of `CoreClasses.orx:93` onwards.
+    ///
+    /// **The library's own `::CLASS` directives are in that image too**, and
+    /// `Interp::install_class` flags each as it creates it, so the prologue
+    /// mutates classes that already carry the lock and a program that names
+    /// one of them meets the same 98.985 it meets on `.Array`.
     ///
     /// **No user program can see either.** The bootstrap runs to completion
     /// before the program's first clause, so this is false for every clause
@@ -5233,6 +5241,22 @@ impl Interp {
         let id = self
             .classes()
             .define_unregistered_class(&name, Some(superclass), kind, metaclass);
+        // **A class the interpreter's own library declares is a class in the
+        // image**, and `RexxClass::liveGeneral` sets `REXX_DEFINED` on every
+        // class in the image under `PREPARINGIMAGE` (`ClassClass.cpp:136`-
+        // `:142`). Measured: the oracle refuses `.Alarm~inherit(.Comparable)`
+        // with 98.985, the same refusal it gives `.Array~inherit()`.
+        //
+        // Set as each class is created rather than by a sweep once the
+        // bootstrap closes, for the reason `native_classes::build` gives for
+        // setting it beside each `define_class`: a sweep's only source of
+        // classes is a `HashMap`, and `Interp::package_classes` is one too.
+        // `Interp::library_bootstrap` is still true here and
+        // `dispatch::rexx_defined_lock` is open while it is, so the prologue's
+        // own `~inherit` clauses still run against a class that carries it.
+        if self.library_bootstrap {
+            self.classes().set_rexx_defined(id);
+        }
         // The package's own installed-class table, which is what `.NAME`
         // resolution reads first -- see `environment.rs`'s
         // `record_package_class` for why the registry's flat table is not
@@ -7854,5 +7878,66 @@ say 1
         assert_eq!(interp.method_bodies[&bar].directive, index_of(b"BAR"));
         assert_eq!(interp.method_bodies[&baz].program, ProgramId(0));
         assert_eq!(interp.method_bodies[&baz].directive, index_of(b"BAZ"));
+    }
+
+    /// **Every class the interpreter's own library declares carries
+    /// `REXX_DEFINED`** -- asserted over the set the bootstrap leaves behind
+    /// rather than on the classes a corpus row happens to name.
+    ///
+    /// A corpus row can only reach a public one. The route to a class a
+    /// `::CLASS` without `PUBLIC` declares is `~package~classes`, which is
+    /// refused here, so `SetMixin` and its neighbours have no differential
+    /// witness in this phase and this is the only instrument that sees them.
+    /// The names below are read out of the table rather than listed, so a
+    /// `::CLASS` added upstream is covered without an edit here.
+    #[test]
+    fn every_class_the_library_declares_carries_the_rexx_defined_flag() {
+        let mut interp = Interp::new();
+        interp
+            .bootstrap_library()
+            .expect("the library bootstrap runs");
+        let programs = interp.library_programs.clone();
+        let mut open: Vec<String> = Vec::new();
+        let mut checked = 0;
+        let mut non_public = 0;
+        for program in programs {
+            // `get`, not an index: an embedded file declaring no `::CLASS`
+            // has no table at all, which `PlatformObjects.orx` is.
+            let Some(table) = interp.package_classes.get(&program) else {
+                continue;
+            };
+            let classes: Vec<(Vec<u8>, rexx_core::ObjRef)> = table
+                .iter()
+                .map(|(name, id)| (name.to_vec(), *id))
+                .collect();
+            let public = interp
+                .package_public_classes
+                .get(&program)
+                .cloned()
+                .unwrap_or_default();
+            for (name, id) in classes {
+                checked += 1;
+                if !public.contains_key(name.as_slice()) {
+                    non_public += 1;
+                }
+                if !interp.classes().is_rexx_defined(id) {
+                    open.push(String::from_utf8_lossy(&name).into_owned());
+                }
+            }
+        }
+        open.sort_unstable();
+        assert!(
+            open.is_empty(),
+            "the library declared classes a program can still mutate: {open:?}"
+        );
+        // Anti-vacuity, both halves. An empty table, or a bootstrap that
+        // installed only public classes, would pass the loop above by
+        // having nothing in it to fail.
+        assert!(checked > 0, "the library declared no classes at all");
+        assert!(
+            non_public > 0,
+            "no class without PUBLIC was seen, so the half the corpus cannot \
+             reach is not what this test read"
+        );
     }
 }

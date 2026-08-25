@@ -380,9 +380,9 @@ enum TableValue {
 impl Interp {
     /// The directory model, built on first use.
     ///
-    /// Built here rather than in `Interp::new` for the reason
-    /// `dispatch::ObjectModel::bootstrap` is: it forces the native class set,
-    /// which a program that never names a `.NAME` must not pay for.
+    /// What is deferred is this model and not the class set it reads: the
+    /// classes are already built by the time any program clause runs, since
+    /// `Interp::bootstrap_library` builds them before the first one.
     fn environment_model(&mut self) -> &EnvironmentModel {
         if self.environment.is_none() {
             let model = self.build_environment();
