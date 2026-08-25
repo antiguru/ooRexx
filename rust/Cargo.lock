@@ -452,6 +452,7 @@ dependencies = [
  "rexx-core",
  "rexx-extract",
  "rexx-inventory",
+ "rexx-lib",
  "rexx-num",
  "rexx-parse",
 ]
@@ -466,6 +467,10 @@ version = "0.1.0"
 dependencies = [
  "quick-xml",
 ]
+
+[[package]]
+name = "rexx-lib"
+version = "0.1.0"
 
 [[package]]
 name = "rexx-num"

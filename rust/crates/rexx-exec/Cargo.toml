@@ -44,5 +44,11 @@ datadriven = { version = "0.9.0", default-features = false }
 # consumes an `AssertionRow`.
 rexx-extract = { path = "../rexx-extract" }
 
+# The interpreter's own `.orx` library sources, embedded with a sha256 pin.
+# Test-only until the bootstrap driver lands: `tests/bootstrap_install_oracle.rs`
+# composes the two files' directive sections into one program and runs it
+# against the oracle.
+rexx-lib = { path = "../rexx-lib" }
+
 [lints]
 workspace = true
