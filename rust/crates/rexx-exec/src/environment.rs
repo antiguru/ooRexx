@@ -548,11 +548,15 @@ impl Interp {
     /// **with the steps this crate has nothing to consult named rather than
     /// skipped silently**: installed classes, then the package's imported
     /// public classes, then `TheRexxPackage`'s public classes, then the
-    /// package local, then the directories. The two public-class steps need
-    /// `::REQUIRES`, which is Phase 5c's, and the package local needs
-    /// `Package~local`, which nothing here builds; what is left is the
-    /// running package's installed classes, then `.environment`, then the
-    /// native name table.
+    /// package local, then the directories. The **imported** public classes
+    /// need `::REQUIRES`, which is Phase 5c's, and the package local needs
+    /// `Package~local`, which nothing here builds. **`TheRexxPackage`'s
+    /// public classes are substituted for rather than skipped**:
+    /// `MemoryObject::completeSystemClass` (`memory/Setup.cpp:199`-`:206`)
+    /// puts every system class into `TheEnvironment` *and* into
+    /// `TheRexxPackage` in the same two lines, so the `.environment` step
+    /// answers what that one would. What is left is the running package's
+    /// installed classes, then `.environment`, then the native name table.
     ///
     /// **No program can see the difference today**: measured, a two-file
     /// probe -- `::requires 'dep.rex'` with a public `::class Comparable` in

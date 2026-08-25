@@ -1807,11 +1807,14 @@ impl Raised {
     /// The same for an activation that is a whole program rather than a
     /// method -- `formatSourcelessTraceLine`'s `else` arm.
     ///
-    /// **Its `isRoutine()` sibling (101.25) is not built**, and that is
-    /// checked rather than assumed: neither embedded `.orx` file declares a
-    /// `::ROUTINE` (`/bin/grep -acE "^::[Rr][Oo][Uu][Tt][Ii][Nn][Ee]"`
-    /// answers 0 for both), so no activation this crate can put in a
-    /// sourceless package is a routine.
+    /// **Its `isRoutine()` sibling (101.25) is not built.** `isRoutine()` is
+    /// `activationContext == EXTERNALCALL` (`execution/RexxActivation.hpp:171`),
+    /// which an ordinary `CALL 'file'` runs under
+    /// (`instructions/CallInstruction.cpp:459`), so the arm the oracle would
+    /// take for a failure inside `CoreClasses.orx:122`'s or `:124`'s callee
+    /// is that one and this crate would answer 101.26. Both are bounded the
+    /// same way: reachable only if the bootstrap itself fails, which ends
+    /// the interpreter.
     pub(crate) fn sourceless_program_line(package: &[u8]) -> Vec<u8> {
         match rexx_inventory::errors::lookup(101, 26) {
             Some(entry) => substitute(entry.text, &[package.to_vec()]),

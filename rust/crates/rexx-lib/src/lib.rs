@@ -92,13 +92,11 @@ mod tests {
     ///
     /// **Case-insensitive and not anchored to the start of a line**, because
     /// Rexx is case-insensitive and a `CALL` may be indented or follow a
-    /// `;`. Case is the half that was actually missing: a scan matching
-    /// `"call "` alone answers nothing for `CALL 'CoreClasses.orx'` and this
-    /// one answers it, checked both ways. The windows
-    /// `PlatformObjects.orx` this crate declines to embed is the reason the
-    /// guard below has to hold at all -- it carries a real
-    /// `  call 'orexxole.cls'` -- and an indented `call` was already
-    /// matched before this widening.
+    /// `;`. Both halves matter: a scan matching `"call "` alone answers
+    /// nothing for `CALL 'CoreClasses.orx'`, and the windows
+    /// `PlatformObjects.orx` this crate declines to embed carries a real
+    /// `  call 'orexxole.cls'` at its line 2, which is why the guard below
+    /// has to hold at all.
     ///
     /// Over-matching is the safe direction here: a `call '...'` inside a
     /// comment would be reported as a target, and the assertion it feeds
@@ -133,11 +131,9 @@ mod tests {
     /// **The second half is what makes the run-time recursion guard
     /// unnecessary rather than forgotten**: `Interp::enter_library_program`
     /// takes no activation-depth check, and this is what says the embedded
-    /// set has no cycle to need one. The check is the assertion and not a
-    /// measurement of the files -- `/bin/grep -in call` on
-    /// `StreamClasses.orx` answers 2, both inside comments, so "neither file
-    /// contains the word" would have been false evidence for a true
-    /// property.
+    /// set has no cycle to need one. The check is the assertion below and
+    /// not a measurement of the files: `/bin/grep -in call` on
+    /// `StreamClasses.orx` answers 2, both inside comments.
     #[test]
     fn the_entry_program_calls_exactly_the_other_embedded_programs() {
         let entry = lookup(ENTRY).expect("the entry point is embedded");

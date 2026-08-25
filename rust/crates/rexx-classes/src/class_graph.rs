@@ -879,7 +879,7 @@ impl ClassGraph {
     /// takes `donor`'s own instance-method dictionary **by pointer and
     /// rewrites it in place** (`MethodDictionary *sourceMethods =
     /// source->instanceMethodDictionary; sourceMethods->setMethodScope(this);`,
-    /// `:560`-`:562`), folds it into `class`'s own instance dictionary, then
+    /// `:560`-`:563`), folds it into `class`'s own instance dictionary, then
     /// rebuilds `class`'s instance behaviour in place -- **no superclass
     /// edge** (`class`'s `superclasses` is untouched) and **no cascade** to
     /// `class`'s own subclasses (unlike [`Self::define`] and

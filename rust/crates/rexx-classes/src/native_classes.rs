@@ -114,8 +114,8 @@
 //! `RexxClass::inheritInstanceMethods`, the Rexx-callable method of the same
 //! name. The two differ in whether the donor's own dictionary is rewritten,
 //! and [`crate::MethodDict::replace_methods_from`] carries what conflating
-//! them costs. `Table`, `StringTable`, `Set`, `Directory`, `Relation` and
-//! `Bag` are the `InheritInstanceMethods` users.
+//! them costs. The `InheritInstanceMethods` users are the blocks
+//! `CLASS_DEFINITIONS` carries an `Op::InheritInstanceMethods` for.
 
 use crate::class_graph::ClassKind;
 use crate::registry::ClassRegistry;
@@ -368,7 +368,7 @@ fn build(keep_setup_methods: bool) -> ClassRegistry {
     // from the checklist's `createInstance()` order (`TableClass` precedes
     // `IdentityTable` there, but `IdentityTable`'s block precedes `Table`'s
     // -- `Table` donates from it). Replaying in checklist order instead
-    // would call `inherit_instance_methods` against a donor not yet built.
+    // would call `donate_instance_methods` against a donor not yet built.
     for def in CLASS_DEFINITIONS {
         if def.name == "Object" || def.name == "Class" {
             continue; // already bootstrapped above
