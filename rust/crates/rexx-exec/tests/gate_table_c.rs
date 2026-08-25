@@ -739,8 +739,29 @@ fn check_entry_present(
 /// The documented claim is that the parent is **present in** the child's
 /// `~superClasses`, never that it is the whole answer: the hierarchy list
 /// gives one edge per class by construction and says so in its own prose. So
-/// the probe asks `~hasItem` and prints the whole list beside it for the
-/// report, and no line of it asserts the list's length.
+/// the probe walks that list, prints whether the parent is on it, prints the
+/// whole list beside that for the report, and no line of it asserts the
+/// list's length.
+///
+/// **The walk compares `~id`, not the objects themselves, and that is the
+/// fidelity the rest of the row already has.** `~superClasses~makeString`
+/// renders each member as its `~id` inside `The ... class`, and the class
+/// wiring row for either endpoint asks `~id` directly, so nothing in this
+/// family distinguishes two class objects that answer the same `~id`.
+/// Asking membership by identity instead would put a **different**
+/// mechanism inside a wiring row: whether two class objects are one object,
+/// which is `==` sent to a class object. Measured, this crate refuses that
+/// one loudly, at rc 120 naming the operator and the operand's shape, and
+/// `crates/rexx-exec/src/eval.rs`'s
+/// `an_operator_sent_to_an_object_is_loud` is what pins the refusal. A
+/// wiring row phrased over it could not be answered until that mechanism
+/// lands, which would make this phase's class-set criterion wait on a later
+/// phase.
+///
+/// What the walk therefore cannot see: a `~superClasses` holding some other
+/// object whose `~id` is the documented parent's. The `superclasses` line is
+/// what stands behind it, the whole list rendered and compared byte for byte
+/// against the oracle's.
 fn edge_probe_text(child: &str, parent: &str) -> String {
     let mut text = format!(
         "/* Table C wiring row: provide.xml's class hierarchy list indents\n\
@@ -752,10 +773,17 @@ fn edge_probe_text(child: &str, parent: &str) -> String {
     );
     text.push_str(&format!("say 'child' .{child}~id\n"));
     text.push_str(&format!("say 'parent' .{parent}~id\n"));
+    text.push_str(&format!("supers = .{child}~superClasses\n"));
+    text.push_str("edge = 0\n");
+    text.push_str("do at = 1 to supers~items\n");
+    text.push_str(&format!(
+        "  if supers[at]~id == .{parent}~id then edge = 1\n"
+    ));
+    text.push_str("end\n");
     // The marker is spelled once, in `DOCUMENTED_EDGE_MARKER`, because
     // `check_documented_edge` reads the oracle's answer back by it.
     text.push_str(&format!(
-        "say '{}' .{child}~superClasses~hasItem(.{parent})\n",
+        "say '{}' edge\n",
         DOCUMENTED_EDGE_MARKER.trim_end()
     ));
     text.push_str(&format!(

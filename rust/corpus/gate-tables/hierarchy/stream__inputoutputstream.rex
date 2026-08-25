@@ -6,5 +6,10 @@
    every run and compares it in both directions. */
 say 'child' .Stream~id
 say 'parent' .InputOutputStream~id
-say 'documented-edge' .Stream~superClasses~hasItem(.InputOutputStream)
+supers = .Stream~superClasses
+edge = 0
+do at = 1 to supers~items
+  if supers[at]~id == .InputOutputStream~id then edge = 1
+end
+say 'documented-edge' edge
 say 'superclasses' .Stream~superClasses~makeString('L', ' ')

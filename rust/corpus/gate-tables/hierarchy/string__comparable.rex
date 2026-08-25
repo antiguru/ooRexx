@@ -6,5 +6,10 @@
    every run and compares it in both directions. */
 say 'child' .String~id
 say 'parent' .Comparable~id
-say 'documented-edge' .String~superClasses~hasItem(.Comparable)
+supers = .String~superClasses
+edge = 0
+do at = 1 to supers~items
+  if supers[at]~id == .Comparable~id then edge = 1
+end
+say 'documented-edge' edge
 say 'superclasses' .String~superClasses~makeString('L', ' ')

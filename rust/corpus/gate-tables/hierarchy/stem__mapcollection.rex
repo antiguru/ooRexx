@@ -6,5 +6,10 @@
    every run and compares it in both directions. */
 say 'child' .Stem~id
 say 'parent' .MapCollection~id
-say 'documented-edge' .Stem~superClasses~hasItem(.MapCollection)
+supers = .Stem~superClasses
+edge = 0
+do at = 1 to supers~items
+  if supers[at]~id == .MapCollection~id then edge = 1
+end
+say 'documented-edge' edge
 say 'superclasses' .Stem~superClasses~makeString('L', ' ')

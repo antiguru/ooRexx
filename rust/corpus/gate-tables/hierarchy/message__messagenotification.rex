@@ -6,5 +6,10 @@
    every run and compares it in both directions. */
 say 'child' .Message~id
 say 'parent' .MessageNotification~id
-say 'documented-edge' .Message~superClasses~hasItem(.MessageNotification)
+supers = .Message~superClasses
+edge = 0
+do at = 1 to supers~items
+  if supers[at]~id == .MessageNotification~id then edge = 1
+end
+say 'documented-edge' edge
 say 'superclasses' .Message~superClasses~makeString('L', ' ')

@@ -6,5 +6,10 @@
    every run and compares it in both directions. */
 say 'child' .Routine~id
 say 'parent' .Object~id
-say 'documented-edge' .Routine~superClasses~hasItem(.Object)
+supers = .Routine~superClasses
+edge = 0
+do at = 1 to supers~items
+  if supers[at]~id == .Object~id then edge = 1
+end
+say 'documented-edge' edge
 say 'superclasses' .Routine~superClasses~makeString('L', ' ')

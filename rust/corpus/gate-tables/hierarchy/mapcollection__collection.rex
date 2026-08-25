@@ -6,5 +6,10 @@
    every run and compares it in both directions. */
 say 'child' .MapCollection~id
 say 'parent' .Collection~id
-say 'documented-edge' .MapCollection~superClasses~hasItem(.Collection)
+supers = .MapCollection~superClasses
+edge = 0
+do at = 1 to supers~items
+  if supers[at]~id == .Collection~id then edge = 1
+end
+say 'documented-edge' edge
 say 'superclasses' .MapCollection~superClasses~makeString('L', ' ')

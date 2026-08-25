@@ -6,5 +6,10 @@
    every run and compares it in both directions. */
 say 'child' .CaselessComparator~id
 say 'parent' .Comparator~id
-say 'documented-edge' .CaselessComparator~superClasses~hasItem(.Comparator)
+supers = .CaselessComparator~superClasses
+edge = 0
+do at = 1 to supers~items
+  if supers[at]~id == .Comparator~id then edge = 1
+end
+say 'documented-edge' edge
 say 'superclasses' .CaselessComparator~superClasses~makeString('L', ' ')

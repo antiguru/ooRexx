@@ -6,5 +6,10 @@
    every run and compares it in both directions. */
 say 'child' .Collection~id
 say 'parent' .Object~id
-say 'documented-edge' .Collection~superClasses~hasItem(.Object)
+supers = .Collection~superClasses
+edge = 0
+do at = 1 to supers~items
+  if supers[at]~id == .Object~id then edge = 1
+end
+say 'documented-edge' edge
 say 'superclasses' .Collection~superClasses~makeString('L', ' ')

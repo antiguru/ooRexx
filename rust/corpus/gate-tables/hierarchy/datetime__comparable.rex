@@ -6,5 +6,10 @@
    every run and compares it in both directions. */
 say 'child' .DateTime~id
 say 'parent' .Comparable~id
-say 'documented-edge' .DateTime~superClasses~hasItem(.Comparable)
+supers = .DateTime~superClasses
+edge = 0
+do at = 1 to supers~items
+  if supers[at]~id == .Comparable~id then edge = 1
+end
+say 'documented-edge' edge
 say 'superclasses' .DateTime~superClasses~makeString('L', ' ')

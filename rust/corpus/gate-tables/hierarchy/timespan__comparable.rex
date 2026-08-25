@@ -6,5 +6,10 @@
    every run and compares it in both directions. */
 say 'child' .TimeSpan~id
 say 'parent' .Comparable~id
-say 'documented-edge' .TimeSpan~superClasses~hasItem(.Comparable)
+supers = .TimeSpan~superClasses
+edge = 0
+do at = 1 to supers~items
+  if supers[at]~id == .Comparable~id then edge = 1
+end
+say 'documented-edge' edge
 say 'superclasses' .TimeSpan~superClasses~makeString('L', ' ')

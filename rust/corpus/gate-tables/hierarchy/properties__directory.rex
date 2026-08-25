@@ -6,5 +6,10 @@
    every run and compares it in both directions. */
 say 'child' .Properties~id
 say 'parent' .Directory~id
-say 'documented-edge' .Properties~superClasses~hasItem(.Directory)
+supers = .Properties~superClasses
+edge = 0
+do at = 1 to supers~items
+  if supers[at]~id == .Directory~id then edge = 1
+end
+say 'documented-edge' edge
 say 'superclasses' .Properties~superClasses~makeString('L', ' ')
