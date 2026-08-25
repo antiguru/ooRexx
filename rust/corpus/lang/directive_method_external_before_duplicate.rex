@@ -1,0 +1,11 @@
+/* The reverse of _duplicate_wins: the entry point is resolved in source order
+   in the same walk as the duplicate check, so the ::METHOD standing first
+   answers even though the pair below it is a duplicate. */
+say 'main ran'
+
+::class k
+
+::method m external 'LIBRARY REXX no_such_entry_point_xyz'
+
+::method m
+  return 1

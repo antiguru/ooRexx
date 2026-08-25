@@ -655,12 +655,18 @@ lang/class_package_addition_refused.rex
 # `_missing` is the eager bind's failure, whose empty stdout is what a lazy
 # bind would fill. `_arguments` is the entry point's own argument check, whose
 # major line names no source line. `_duplicate_wins` and `_source_order` pin
-# where the resolution sits in the install walk, from either side of it. The
-# last row is gate table D's `::METHOD EXTERNAL` probe, which stays in
-# `gate-tables/directives/` because that table's row set still names it.
+# where the resolution sits in the install walk, from either side of it, with
+# `_before_duplicate` the reverse of `_duplicate_wins` and the differential
+# that makes the reverse order evidence for that placement.
+# `_not_a_staged_gap` is what a bound `::METHOD EXTERNAL` no longer preempts:
+# an install-time failure standing above it. The last row is gate table D's
+# `::METHOD EXTERNAL` probe, which stays in `gate-tables/directives/` because
+# that table's row set still names it.
 lang/directive_method_external_bind.rex
 lang/directive_method_external_missing.rex
 lang/directive_method_external_arguments.rex
 lang/directive_method_external_duplicate_wins.rex
 lang/directive_method_external_source_order.rex
+lang/directive_method_external_before_duplicate.rex
+lang/directive_method_external_not_a_staged_gap.rex
 gate-tables/directives/method__external__subkeyword.rex

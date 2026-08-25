@@ -13,7 +13,7 @@
 //! package exports, and what a send to a `::METHOD` bound to one of them
 //! runs.
 //!
-//! # Exactly one of the three `EXTERNAL` forms binds here
+//! # Which `EXTERNAL` form binds here
 //!
 //! A `::METHOD` whose `EXTERNAL` names the library `REXX` and carries no
 //! `ATTRIBUTE` keyword. [`method_external`] is the one place that decides it,
@@ -125,10 +125,10 @@ impl Family {
     /// on the activity the `REPLY` split off, and this crate already refuses
     /// the `REPLY` forms that would create one with `(Phase 6)`.
     ///
-    /// **The other three are Phase 7's**, each by a decision the roadmap
-    /// states rather than by the file they sit in: D11 puts `.File` and the
-    /// file-system surface there, the Phase 7 notes put the stream model
-    /// there, and D7 puts external queues there
+    /// **Stream, queue and file are Phase 7's**, each by a decision the
+    /// roadmap states rather than by the file they sit in: D11 puts `.File`
+    /// and the file-system surface there, the Phase 7 notes put the stream
+    /// model there, and D7 puts external queues there
     /// (`docs/superpowers/plans/2026-07-27-rust-rewrite.md`).
     pub(crate) fn owner(self) -> &'static str {
         match self {
@@ -430,13 +430,24 @@ mod tests {
             .collect()
     }
 
-    /// Every `EXTERNAL` the three bootstrap files declare is the one form this
-    /// phase binds, and every one of them resolves.
+    /// Every `EXTERNAL` the bootstrap files declare is the form this phase
+    /// binds, and every one of them resolves.
     ///
     /// **This is the "no unresolved external" half of the bootstrap, checkable
     /// before the bootstrap runs.** Installing the files needs everything else
     /// Phase 5a builds; resolving their entry points needs only this table, so
-    /// it is asked here rather than left for the task that drives them.
+    /// it is asked here rather than left for whatever drives them.
+    ///
+    /// **The `reached` guard is global, and it cannot be made per file.**
+    /// `PlatformObjects.orx` declares no `EXTERNAL` at all, so it contributes
+    /// nothing to the walk and a per-file bound on it would be a bound of
+    /// zero. Nor can this test check that [`bootstrap_files`] still names the
+    /// files it should: that list is the only statement of which files those
+    /// are, so comparing the walk against it compares a list with itself.
+    /// What does catch a file dropping out is
+    /// [`the_bootstrap_files_and_the_registry_name_the_same_entry_points`],
+    /// through the names the file contributes -- which is why the file that
+    /// contributes none is the one nothing here can speak for.
     #[test]
     fn every_bootstrap_external_binds_to_an_entry_point_this_registry_holds() {
         let mut reached = 0usize;
@@ -464,12 +475,12 @@ mod tests {
                             ),
                         }
                     }
-                    // The other two `EXTERNAL`-bearing directives stay Phase
-                    // 7's, so a bootstrap file declaring one would be refused
-                    // at install whatever this registry holds. Asserted rather
-                    // than written down, because "the bootstrap uses only the
-                    // `::METHOD` form" is the premise the scope of this task
-                    // rests on.
+                    // `::ROUTINE` and `::ATTRIBUTE` carry an `EXTERNAL` too
+                    // and stay Phase 7's, so a bootstrap file declaring one of
+                    // those would be refused at install whatever this registry
+                    // holds. Asserted rather than written down, because "the
+                    // bootstrap uses only the `::METHOD` form" is the premise
+                    // this registry's scope rests on.
                     DirectiveKind::Routine(routine) => assert!(
                         routine.external.is_none(),
                         "{} declares a ::ROUTINE EXTERNAL, which stays Phase 7's",

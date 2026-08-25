@@ -239,9 +239,16 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     // `directive_method_external_bind.rex` and
     // `directive_method_external_arguments.rex` are not here, because both
     // reach their main body and build values in it.
+    "lang/directive_method_external_before_duplicate.rex",
     "lang/directive_method_external_duplicate_wins.rex",
     "lang/directive_method_external_missing.rex",
     "lang/directive_method_external_source_order.rex",
+    // Not a refusal at all: the bound `::METHOD EXTERNAL` installs and the
+    // `::CONSTANT`'s own divide is what fails. It allocates nothing for the
+    // reason `directive_constant_expression_fails.rex` above does -- the
+    // operands are canonical small integers and the report substitutes
+    // nothing.
+    "lang/directive_method_external_not_a_staged_gap.rex",
     "lang/do_loop_forms.rex",
     // Both resolve every name they read out of the running package's own
     // class table, which is consulted ahead of `.environment` and so never

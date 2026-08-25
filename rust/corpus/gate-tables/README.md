@@ -2,12 +2,12 @@
 
 **Not a differential corpus.** Almost every program here is the probe for one
 row of a Phase 5 gate table -- `native-entries/` is the exception and has a
-section of its own below -- and most of them diverge from the C++ oracle today
---
-that is what the row records. Nothing here belongs in `phase-*.txt`, whose
-entries mean "agrees with the oracle byte for byte"; a probe moves into a
-phase subset file in the task that makes its row agree, and stays here as
-well only if some row still needs it.
+section of its own below -- and most of them diverge from the C++ oracle
+today, which is what the row records. A program here earns a line in
+`phase-*.txt`, whose entries mean "agrees with the oracle byte for byte", only
+once its row agrees: it moves into a phase subset file in the task that makes
+it agree, and stays here as well while some row still needs it.
+`gate-tables/directives/method__external__subkeyword.rex` is one that has.
 
 ## `directives/`
 
@@ -107,7 +107,7 @@ output on every run of the same interpreter, exactly as `../README.md`
 requires -- `rexx-diff`'s self-test (`--cpp X --rs X`) walks `corpus/`
 recursively and reads every `.rex` under it, including these, so a
 non-deterministic probe would break it. Measured with this subtree in place,
-2026-08-25: 575 programs, 0 divergences, exit 0.
+2026-08-25: 577 programs, 0 divergences, exit 0.
 
 **Agreement between the two interpreters does not apply**, which is the whole
 difference. `rexx-diff --cpp <c++> --rs <rust>` over `corpus/` reports these

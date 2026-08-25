@@ -1620,18 +1620,19 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
 ///
 /// ```text
 /// ::class a / ::constant kk (1/0) / ::requires 'helper.rex', present    42.3 rc 214
-/// an EXTERNAL directive whose library loads, in any such shape        REASONED, NOT PROBED
+/// ::class a / ::constant kk (1/0) / ::routine r external
+///                              'LIBRARY REXX Filespec'                 42.3 rc 214
 /// ```
 ///
-/// The second row is **reasoned rather than probed**: it follows the same
-/// code path as the row above it, but no library in this tree loads, so
-/// nothing here has measured it and it must not be read as a measurement.
+/// Both rows are probes, both engines, three descriptors: the oracle installs
+/// the directive and reaches the `::CONSTANT`'s own divide, and this crate
+/// answers rc 120 instead. `::ROUTINE` is what keeps the second row a loss --
+/// [`directive_gap`] refuses that directive whatever library it names --
+/// where `corpus/lang/directive_method_external_not_a_staged_gap.rex`, the
+/// same file with a `::METHOD` in that position, is answered here.
 ///
 /// The rows put the gap **after** the failing directive, which is what makes
 /// them losses: with the gap first this crate refuses whatever the staging.
-/// Telling the installable case from the failing one means opening the file
-/// and loading the library, which is the work Phase 5 and Phase 7 own; until
-/// then a refusal is the answer that cannot be wrong.
 ///
 /// **A resolvable `::ANNOTATE` target is not one of them**, because this
 /// crate resolves one against the accumulated package. Measured, each
@@ -4734,13 +4735,20 @@ impl Interp {
     /// `::method m external "LIBRARY nosuchlib nosuchfn"` is 99.902 at rc 157,
     /// byte for byte on both engines.
     ///
-    /// **The reverse order is not evidence for that placement and is not
-    /// offered as any**, because this crate never answers it the way the
-    /// oracle does: measured, the same pair with the `EXTERNAL` first is the
-    /// oracle's own 98.903 at rc 158 and this crate's `::METHOD EXTERNAL is
-    /// not implemented (Phase 7)` at rc 120, on both engines. Whichever of
-    /// the two checks the walk reached first, that file is refused here by
-    /// [`directive_gap`], which is a Phase 7 gap and not a duplicate.
+    /// **The reverse order is evidence for that placement too, on the
+    /// `LIBRARY REXX` form.** Measured, `::method m external "LIBRARY REXX
+    /// no_such_entry_point_xyz"` above a plain `::method m`: 90.998 at rc 166
+    /// echoing the `EXTERNAL` directive, oracle and both engines, so source
+    /// order decides and this check does not run ahead of it.
+    /// `corpus/lang/directive_method_external_before_duplicate.rex` is that
+    /// program.
+    ///
+    /// **The same pair with a library nothing can load is not evidence and is
+    /// not offered as any**, because this crate never answers it the way the
+    /// oracle does: measured, `::method m external "LIBRARY nosuchlib
+    /// nosuchfn"` first is the oracle's own 98.903 at rc 158 and a refusal
+    /// here at rc 120, on both engines, because [`directive_gap`] refuses
+    /// that form whichever check the walk reached first.
     ///
     /// **Per side, so a class method and an instance method may share a
     /// name**: measured, oracle rc 0 on `::CLASS A` carrying `::METHOD m` and
@@ -5416,7 +5424,7 @@ impl Interp {
             debug_assert!(
                 native.is_none() || generated.is_none(),
                 "a ::METHOD bound to a LIBRARY REXX entry point also generated a method \
-                 for {}, so one of the two is lost",
+                 for {}, so one of them is lost",
                 String::from_utf8_lossy(&name)
             );
             let body = match (generated, native) {
@@ -6261,37 +6269,6 @@ impl Interp {
 /// itself: this crate has one front door, and a second one is a second thing
 /// for every future caller to choose between. Widening the parameter list once
 /// costs a mechanical edit at every existing call site and nothing afterward.
-/// One row of the `LIBRARY REXX` entry-point registry (D37), for a caller
-/// that walks it.
-///
-/// **A flattened copy rather than the registry's own row.** A row's body is a
-/// function taking `dispatch`'s security-seam token, which nothing outside
-/// that module can name, so handing out the row itself would mean widening
-/// the seam. `render_ir` and [`run_program_collect_every_alloc`] are the same
-/// shape of surface: a projection this crate computes for a test to read.
-pub struct NativeEntryPoint {
-    /// The name the `REXX` package exports the entry point under, spelled as
-    /// `interpreter/runtime/NativeMethods.h` spells it. The lookup that
-    /// matches it is caseless.
-    pub entry: &'static str,
-    /// The family it belongs to, lower case: the interpreter subsystem whose
-    /// C++ translation unit defines it.
-    pub family: &'static str,
-    /// The phase that owes the family a body, spelled as every other owner
-    /// string in this crate is.
-    pub owner: &'static str,
-    /// Whether this phase runs the entry point rather than refusing a send to
-    /// it. A bind succeeds either way -- what it decides is whether the
-    /// declaring *file* installs.
-    pub implemented: bool,
-}
-
-/// Every entry point a `::METHOD ... EXTERNAL 'LIBRARY REXX name'` can bind
-/// to. See [`NativeEntryPoint`].
-pub fn native_entry_points() -> Vec<NativeEntryPoint> {
-    dispatch::native::entry_points().collect()
-}
-
 pub fn run_program(path: &str, text: Vec<u8>, invocation: Invocation) -> Outcome {
     let path = path.to_string();
     on_interpreter_thread(move || execute(&path, text, false, invocation))
@@ -6378,6 +6355,39 @@ pub fn render_ir(text: Vec<u8>, setting: &[u8]) -> Result<String, String> {
         }
     }
     Ok(out)
+}
+
+// ---- the registry projection ----
+
+/// One row of the `LIBRARY REXX` entry-point registry (D37), for a caller
+/// that walks it.
+///
+/// **A flattened copy rather than the registry's own row.** A row's body is a
+/// function taking `dispatch`'s security-seam token, which nothing outside
+/// that module can name, so handing out the row itself would mean widening
+/// the seam. `render_ir` and [`run_program_collect_every_alloc`] are the same
+/// shape of surface: a projection this crate computes for a test to read.
+pub struct NativeEntryPoint {
+    /// The name the `REXX` package exports the entry point under, spelled as
+    /// `interpreter/runtime/NativeMethods.h` spells it. The lookup that
+    /// matches it is caseless.
+    pub entry: &'static str,
+    /// The family it belongs to, lower case: the interpreter subsystem whose
+    /// C++ translation unit defines it.
+    pub family: &'static str,
+    /// The phase that owes the family a body, spelled as every other owner
+    /// string in this crate is.
+    pub owner: &'static str,
+    /// Whether this phase runs the entry point rather than refusing a send to
+    /// it. A bind succeeds either way -- what it decides is whether the
+    /// declaring *file* installs.
+    pub implemented: bool,
+}
+
+/// Every entry point a `::METHOD ... EXTERNAL 'LIBRARY REXX name'` can bind
+/// to. See [`NativeEntryPoint`].
+pub fn native_entry_points() -> Vec<NativeEntryPoint> {
+    dispatch::native::entry_points().collect()
 }
 
 /// Every body [`render_ir`] compiles, in source order, each with the name it is

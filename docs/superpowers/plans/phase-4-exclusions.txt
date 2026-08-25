@@ -485,19 +485,22 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
 
     ::class a / ::constant kk (1/0) / ::requires 'helper.rex', present
                                                           42.3 rc 214
+    ::class a / ::constant kk (1/0) / ::routine r external
+                              'LIBRARY REXX Filespec'     42.3 rc 214
 
-  That row puts the gap AFTER the failing directive, which is what makes it a
-  loss: with the gap first, this crate refused at 62de43c0f too. THE SAME
-  SHAPE WITH AN EXTERNAL DIRECTIVE WHOSE LIBRARY LOADS IS REASONED, NOT
-  PROBED -- it follows the same code path, but no shared library in this tree
-  loads, so nothing has measured it and it must not be read as a measurement.
-  `LIBRARY REXX` is not a counterexample: it is compiled into the interpreter
-  rather than loaded, and since Task 22 the `::METHOD` form of it is not a gap
-  here at all, so it never reaches the staged check this paragraph is about.
-  Telling the installable case from the failing one means opening the file and
-  loading the library. OWNER: Phase 5 for the rest of ::REQUIRES, and Phase 7
-  for EXTERNAL. The ::ANNOTATE shapes this paragraph used to carry are in
-  CLOSED DEFECTS.
+  Those rows put the gap AFTER the failing directive, which is what makes them
+  losses: with the gap first, this crate refused at 62de43c0f too. THE SECOND
+  ROW WAS "REASONED, NOT PROBED" UNTIL 2026-08-25, ON THE GROUND THAT NO
+  LIBRARY IN THIS TREE LOADS. Two do. `LIBRARY REXX` is compiled into the
+  interpreter, and `::ROUTINE EXTERNAL` naming it is still a gap here, so the
+  shape is runnable and now measured -- oracle rc 214 at the ::CONSTANT's own
+  divide, crate rc 120 on both engines. And a shared library does load, which
+  the ground rules out on its face: `::method m external 'LIBRARY rexxutil
+  SysFileTree'` is 90.998 rc 166, the entry-point error, where the same line
+  spelled `LIBRARY REXXUTIL` is 98.903 rc 158 -- so `librexxutil` opens and
+  the library name reaches `dlopen` in the case it was written in. OWNER: Phase 5 for the rest of
+  ::REQUIRES, and Phase 7 for EXTERNAL. The ::ANNOTATE shapes this paragraph
+  used to carry are in CLOSED DEFECTS.
 
   CLOSED BY R33, AND IT WAS RECORDED HERE FIRST AS UNFIXED. The oracle walks
   the directive list once, in source order, and takes whichever of an

@@ -128,7 +128,7 @@ pub(crate) struct Delivery {
     /// name, and no ` line <n>` after it.
     ///
     /// **Not a narrower [`Delivery::positionless`]** -- that one drops the
-    /// program name too. `Activity::displayCondition` adds ` line <n>` only
+    /// program name too. `Activity::display` adds ` line <n>` only
     /// when the condition object carries a `POSITION`
     /// (`concurrency/Activity.cpp:1453`-`:1459`), and a raise from inside a
     /// native method's own activation carries none, because the native body

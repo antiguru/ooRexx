@@ -1456,8 +1456,8 @@ pub struct ExternalSpec {
     ///   (`DirectiveParser.cpp:2664`).
     /// * A `::METHOD` uses the method's UPCASED lookup name
     ///   (`DirectiveParser.cpp:1406`).
-    /// * A `::METHOD ATTRIBUTE` or `::ATTRIBUTE` resolves two entry points,
-    ///   one per accessor, each **prefixed** with `GET` or `SET`
+    /// * A `::METHOD ATTRIBUTE` or `::ATTRIBUTE` resolves an entry point per
+    ///   accessor, each **prefixed** with `GET` or `SET`
     ///   (`DirectiveParser.cpp:867`-`868`, `:1678`-`1679`). The prefix goes
     ///   in front because `concatToCstring` appends the receiver to its
     ///   argument (`StringClass.cpp:1405`-`:1416`), and what it is prefixed

@@ -219,7 +219,7 @@ fn read_rows() -> Vec<Row> {
 ///   external 'LIBRARY REXX Filespec'` is rc 0 and the routine runs, and this
 ///   crate refuses it at rc 120 -- a divergence no row of this table sees,
 ///   because the probe names a shared library instead. Closing it needs the
-///   row set to distinguish the two forms, which is
+///   row set to distinguish those forms, which is
 ///   `corpus/docs/directive-options.txt`'s shape and not this file's, and
 ///   Phase 7 is where the behaviour it would gate lands.
 /// * `::CLASS CLASS` and `::RESOURCE LIBRARY` are the row set's two

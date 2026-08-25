@@ -1162,6 +1162,8 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/directive_method_external_arguments.rex",
     "lang/directive_method_external_duplicate_wins.rex",
     "lang/directive_method_external_source_order.rex",
+    "lang/directive_method_external_before_duplicate.rex",
+    "lang/directive_method_external_not_a_staged_gap.rex",
     "gate-tables/directives/method__external__subkeyword.rex",
 ];
 

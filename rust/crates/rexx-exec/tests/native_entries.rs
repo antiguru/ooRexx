@@ -22,12 +22,12 @@
 //! row, so the corpus gate cannot see one of these turn into a wrong answer
 //! and this file is the instrument that can. The bind itself *is* a
 //! differential row -- `corpus/lang/directive_method_external_missing.rex`
-//! and the four beside it -- and that half is gated there.
+//! and its siblings under the same stem -- and that half is gated there.
 //!
 //! # What each program shows that the message alone does not
 //!
 //! Every program prints one line **before** the send. So `stdout` holding it
-//! separates the two failures that would otherwise look alike: an install
+//! separates the failures that would otherwise look alike: an install
 //! that refused the directive prints nothing, and a bind that succeeded
 //! before a send that refused prints the line. Without that, a regression
 //! moving the refusal back to install time would leave this file green.

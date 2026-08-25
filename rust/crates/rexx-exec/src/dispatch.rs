@@ -60,12 +60,10 @@
 //! checks.
 //!
 //! **What the type system carries**: [`seam::Cleared`] has a private field
-//! and is neither `Copy` nor `Clone`, and both invocable kinds take one by
-//! value -- a [`NativeMethod`] by its signature and
-//! [`Interp::enter_method_body`] by its parameter list -- so neither runs
-//! without a value produced inside [`mod seam`](seam). The compiler refuses
-//! the token's tuple-struct constructor written anywhere else,
-//! `error[E0423]`.
+//! and is neither `Copy` nor `Clone`, and every function that runs a resolved
+//! method takes one by value, so none of them runs without a value produced
+//! inside [`mod seam`](seam). The compiler refuses the token's tuple-struct
+//! constructor written anywhere else, `error[E0423]`.
 //!
 //! **What it does not carry** is how many producers that module holds: a
 //! second `fn` inside it is as legal as the first. `tests/dispatch_seam.rs`
@@ -84,14 +82,15 @@
 //!
 //! # The invocable kinds, and the one clearance
 //!
-//! A resolved [`rexx_classes::MethodId`] names either a [`NativeMethod`] or a
-//! `::METHOD` directive's own Rexx body ([`Interp::method_bodies`]).
-//! [`Interp::invoke`] picks between them **after** the seam has been passed,
-//! and both entry points take the [`Cleared`] token by value, so neither can
-//! run without one. [`Interp::enter_method_body`] is written here rather than
-//! beside the other activation machinery in `run.rs` for exactly that reason:
-//! `Cleared` is private to this module, so a function that takes one has to
-//! live here.
+//! [`Invocable`] is what a resolved [`rexx_classes::MethodId`] names, one
+//! variant per table [`Interp::invocable`] reads, and its own doc says what
+//! separates them. [`Interp::invoke`] picks between them **after** the seam
+//! has been passed: a kind with a body of its own takes the [`Cleared`] token
+//! by value, and a kind `invoke` answers inline is answered by a function
+//! that already holds one. [`Interp::enter_method_body`] is written here
+//! rather than beside the other activation machinery in `run.rs` for exactly
+//! that reason: `Cleared` is private to this module, so a function that takes
+//! one has to live here.
 
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -125,16 +124,17 @@ mod seam {
     pub(super) struct Cleared(());
 
     /// **The dispatch chokepoint (D45, site one).** Every method invocation
-    /// passes here, native or Rexx-bodied, and a manager installed in a later
-    /// phase gets its hook in this function's body.
+    /// passes here, whatever kind [`super::Invocable`] finds it to be, and a
+    /// manager installed in a later phase gets its hook in this function's
+    /// body.
     ///
     /// The oracle asks its manager only for a *protected* method:
     /// `RexxObject::messageSend` routes one through
     /// `processProtectedMethod` (`classes/ObjectClass.cpp:886`-`:889`), and
     /// every other method reaches `method->run` with nothing asked
     /// (`:896`-`:899`). So the question is asked here, which is the one place
-    /// both invocable kinds pass, and [`Interp::check_protected_method`] is
-    /// the manager's own half of it.
+    /// every invocation passes, and [`Interp::check_protected_method`] is the
+    /// manager's own half of it.
     ///
     /// `PRIVATE` and `PACKAGE` are **not** asked here, and that is measured
     /// rather than chosen: they refuse the *lookup* and fall through to the
@@ -204,14 +204,21 @@ struct NativeEntry {
     run: NativeMethod,
 }
 
-/// How many arguments a primitive method's own entry admits, which is the
-/// second half of every `AddMethod` row in `memory/Setup.cpp`.
+/// How many arguments an entry admits.
+///
+/// **Where the count comes from differs by entry kind.**
+/// For a [`NativeEntry`] it is the second half of that method's `AddMethod`
+/// row in `memory/Setup.cpp`; for a `native::NativeExternal` it is the `N` of
+/// the `RexxMethod<N>` that defines the entry point, and the refusal is
+/// 88.922 from inside `NativeActivation` rather than the 93.902 named below.
+/// [`Raised::too_many_external_arguments`] carries that pair measured.
 #[derive(Copy, Clone)]
 enum Arity {
-    /// A numeric count. `CPPCode::run` refuses more than this with 93.902
-    /// before the body is entered (`execution/CPPCode.cpp:151`-`:154`) and
-    /// pads a shorter list out with nulls -- measured, `'abc'~length(1)` is
-    /// `0 expected` and `'abc'~hasMethod('a','b')` is `1 expected`.
+    /// A numeric count. For a primitive method `CPPCode::run` refuses more
+    /// than this with 93.902 before the body is entered
+    /// (`execution/CPPCode.cpp:151`-`:154`) and pads a shorter list out with
+    /// nulls -- measured, `'abc'~length(1)` is `0 expected` and
+    /// `'abc'~hasMethod('a','b')` is `1 expected`.
     Fixed(usize),
     /// `A_COUNT` (`execution/CPPCode.hpp:48`), which hands the body the whole
     /// argument list and count and refuses nothing here
@@ -1437,8 +1444,11 @@ impl Interp {
                 }
                 outcome
             }
-            // **No `blame_native_method` below this arm**, measured twice
-            // over. An untrapped `1/0` inside a `::METHOD` body reports
+            // **Neither this arm nor `Generated` blames the method**,
+            // measured twice over -- a claim about those arms and not
+            // about their position, since `External`'s implemented half sits
+            // between them and does blame.
+            // An untrapped `1/0` inside a `::METHOD` body reports
             // the method's own failing clause and then the sending clause,
             // with no `Compiled method` line between them, and
             // [`Interp::enter_method_body`] seals its own level for that,
