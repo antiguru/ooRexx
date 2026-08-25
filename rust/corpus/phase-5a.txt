@@ -696,3 +696,9 @@ lang/library_bootstrap_state.rex
 lang/library_bootstrap_setup_methods_gone.rex
 lang/do_over_string_table.rex
 lang/string_upper.rex
+# Task 23 fix round 1: a condition raised inside the interpreter's own
+# library. The oracle runs those methods out of an image with no source and
+# says so; this crate has the text and has to answer the same bytes. `_nested`
+# is the two-frame case, which is what says the frame is built per activation.
+lang/library_method_traceback.rex
+lang/library_method_traceback_nested.rex

@@ -1171,6 +1171,8 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/library_bootstrap_setup_methods_gone.rex",
     "lang/do_over_string_table.rex",
     "lang/string_upper.rex",
+    "lang/library_method_traceback.rex",
+    "lang/library_method_traceback_nested.rex",
 ];
 
 #[test]

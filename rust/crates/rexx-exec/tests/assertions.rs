@@ -338,11 +338,10 @@ struct ExemptRow {
 /// see `task-15b-report.md` for the method.
 ///
 /// Every row here is `"Phase 5"`. `test_hexadecimal`/`test_binary` both
-/// open with `tab = .String~tab`, and the rows still listed are the ones
-/// whose own `expr`/`expected` text carries a `self~` send of its own --
-/// their prelude line answers now that the library bootstrap installs
-/// `.String~tab`, and the rows that needed nothing but the prelude left
-/// this list when it did. `test_string_range` opens with `all = xrange()`
+/// open with `tab = .String~tab`, which the library bootstrap installs, so
+/// the prelude line is not what blocks a row in either method; the rows
+/// still listed are the ones whose own `expr`/`expected` text carries a
+/// `self~` send of its own. `test_string_range` opens with `all = xrange()`
 /// (a function call, first-blocked as 4b's) but its very next prelude line
 /// is a message send, so implementing 4b's `Call` would not make either of
 /// its two rows pass either.

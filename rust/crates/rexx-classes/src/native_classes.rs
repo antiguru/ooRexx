@@ -107,16 +107,15 @@
 //! referentially) -- `buildFinalClassBehaviour`'s own unconditional
 //! `metaClass = TheClassClass` and `superClasses->addLast(TheObjectClass)`
 //! (`ClassClass.cpp:713`, `:725`), the single bootstrap path every native
-//! class goes through. `InheritInstanceMethods(source)`
-//! operations replay through [`crate::ClassRegistry::inherit_instance_methods`]
-//! (`RexxClass::inheritInstanceMethods`'s donate-by-own-dictionary
-//! semantics) rather than `RexxBehaviour::inheritInstanceMethods`'s
-//! bootstrap-only donate-by-flattened-behaviour semantics
-//! (`RexxBehaviour.cpp:350-361`, what `Setup.cpp`'s macro actually calls) --
-//! see [`crate::ClassRegistry::inherit_instance_methods`]'s own doc comment
-//! for why the two agree on every name this task's probes check. `Table`,
-//! `StringTable`, `Set`, `Directory`, `Relation` and `Bag` are the actual
-//! `InheritInstanceMethods` users now that R8 lifted their deferral.
+//! class goes through. `InheritInstanceMethods(source)` operations replay
+//! through [`crate::ClassRegistry::donate_instance_methods`], which is
+//! `RexxBehaviour::inheritInstanceMethods` (`RexxBehaviour.cpp:350`) --
+//! what the macro actually calls, and **not**
+//! `RexxClass::inheritInstanceMethods`, the Rexx-callable method of the same
+//! name. The two differ in whether the donor's own dictionary is rewritten,
+//! and [`crate::MethodDict::replace_methods_from`] carries what conflating
+//! them costs. `Table`, `StringTable`, `Set`, `Directory`, `Relation` and
+//! `Bag` are the `InheritInstanceMethods` users.
 
 use crate::class_graph::ClassKind;
 use crate::registry::ClassRegistry;

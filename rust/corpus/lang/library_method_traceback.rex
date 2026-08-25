@@ -1,0 +1,29 @@
+/* A condition raised inside the interpreter's own library. Phase 5a Task 23.
+ *
+ * The oracle runs these methods out of a saved image, which carries no
+ * source, so `PackageClass::traceBack` cannot echo a clause and calls
+ * `RexxActivation::formatSourcelessTraceLine` instead
+ * (`classes/PackageClass.cpp:589`). This crate has the library's text --
+ * it runs the file rather than loading an image -- and has to answer the
+ * same bytes anyway.
+ *
+ * Two lines are the whole of it, and each fails a different way if only the
+ * other is built:
+ *
+ *   - the frame is the catalogue's 101.24, `Method &1 with scope "&2" in
+ *     package "&3" (no source available).`, under the method's own line
+ *     number and at the same indent the clause would have had;
+ *   - the report names the **package** and not a file, because the innermost
+ *     frame with a line is the library's.
+ *
+ * The clause that made the call is still echoed under its own line, which is
+ * what says the rule is per frame rather than per run.
+ *
+ * `.Validate~number` raises its 88.902 outright, which is why it is the
+ * subject: every library method that reaches its condition through `USE
+ * STRICT ARG` instead is 40.3/40.4 here against the oracle's 93.901/93.902,
+ * a defect that predates this task and reproduces on a purely user-declared
+ * class method. rc 168.
+ */
+
+say .Validate~number('LENGTH', 'abc')

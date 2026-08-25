@@ -544,10 +544,21 @@ impl Interp {
     /// The class a `::CLASS` directive's `SUBCLASS`, `INHERIT` or `METACLASS`
     /// keyword names, when the file's own directives do not declare it.
     ///
-    /// `PackageClass::findClass`'s order, which is `.NAME`'s own
-    /// ([`Interp::dot_variable`]) minus the reflection names: the running
-    /// package's installed classes, then `.environment`, then the native
-    /// name table.
+    /// `PackageClass::findClass`'s order (`classes/PackageClass.cpp:1081`),
+    /// **with the steps this crate has nothing to consult named rather than
+    /// skipped silently**: installed classes, then the package's imported
+    /// public classes, then `TheRexxPackage`'s public classes, then the
+    /// package local, then the directories. The two public-class steps need
+    /// `::REQUIRES`, which is Phase 5c's, and the package local needs
+    /// `Package~local`, which nothing here builds; what is left is the
+    /// running package's installed classes, then `.environment`, then the
+    /// native name table.
+    ///
+    /// **No program can see the difference today**: measured, a two-file
+    /// probe -- `::requires 'dep.rex'` with a public `::class Comparable` in
+    /// the dependency and `::class K subclass Comparable` in the main file
+    /// -- is `rexx-exec: ::REQUIRES is not implemented (Phase 5)` here where
+    /// the oracle resolves through the imported class.
     ///
     /// **`.environment` is the step the interpreter's own library needs and a
     /// program rarely does.** `StreamClasses.orx:506` inherits `Comparable`,
@@ -1417,9 +1428,21 @@ impl Interp {
     /// caller can refuse loudly.
     pub(crate) fn package_name(&self, package: ObjRef) -> Option<Vec<u8>> {
         Some(match self.which_package(package)? {
-            Package::Rexx => b"REXX".to_vec(),
-            // A program's own package. This phase loads one program, so its
-            // path is the running program's.
+            Package::Rexx => crate::LIBRARY_PACKAGE_NAME.to_vec(),
+            // A program's own package, answered as the *running* program's
+            // path and not as that program's own.
+            //
+            // **A run loads more than one program**: the interpreter's own
+            // library is three of them, and each has a package object of its
+            // own. What keeps that from being a wrong answer is that none of
+            // those objects is reachable from a program -- a program's
+            // `.context~package` is its own, and a class the library
+            // installed answers `Package::Rexx` because
+            // `Interp::record_package_class` leaves it out of
+            // `class_packages`. The `ProgramId` is discarded here rather
+            // than looked up because `Interp::programs` holds no path per
+            // program; the day one of those objects becomes reachable, this
+            // is the line that has to grow one.
             Package::Program(_) => self.program_path.clone().into_bytes(),
         })
     }

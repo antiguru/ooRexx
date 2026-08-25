@@ -3337,7 +3337,7 @@ fn native_method(
 /// share.
 fn rexx_defined_lock(interp: &mut Interp, class: ObjRef) -> Result<(), Failure> {
     // **Open while the interpreter's own library runs**, which is the state
-    // `Setup.cpp` builds the image in: `CoreClasses.orx:88` onwards is a run
+    // `Setup.cpp` builds the image in: `CoreClasses.orx:93` onwards is a run
     // of `~inherit` clauses against exactly the classes this flag guards,
     // and the C++ sets `REXX_DEFINED` on them at image-save time
     // (`RexxClass::liveGeneral`, `ClassClass.cpp:136`-`:142`) rather than
@@ -3601,7 +3601,7 @@ fn native_define_class_method(
 /// `Class~inheritInstanceMethods(source)`: copy `source`'s own instance
 /// methods into the receiver's dictionary at the receiver's scope, with no
 /// superclass edge added -- `RexxClass::inheritInstanceMethods`
-/// (`classes/ClassClass.cpp:558`), the "phony inherit" `CoreClasses.orx:78`
+/// (`classes/ClassClass.cpp:558`), the "phony inherit" `CoreClasses.orx:77`
 /// names in its own comment.
 ///
 /// **No `REXX_DEFINED` lock**, for the reason

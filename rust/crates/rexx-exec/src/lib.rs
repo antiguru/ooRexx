@@ -160,6 +160,13 @@ mod environment;
 /// one. This constant remains the single place to change it.
 pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 
+/// The name the interpreter's own package answers to -- `PackageClass::
+/// getProgramName`'s answer for internal code (`classes/PackageClass.hpp:147`).
+///
+/// Read as a package's `~name`, and as the name a traceback frame inside one
+/// reports where a program reports its path.
+pub(crate) const LIBRARY_PACKAGE_NAME: &[u8] = b"REXX";
+
 /// The interpreter thread's stack, in bytes.
 ///
 /// Chosen from a measurement rather than from taste, and the measurement is in
@@ -3126,7 +3133,7 @@ struct Interp {
     /// library's own prologue is what does the mutating -- `.string~inherit
     /// (.Comparable)` and the `~inherit` clauses after it are `98.985 User
     /// additions are not allowed to the REXX language classes` for a program
-    /// and are the whole point of `CoreClasses.orx:88` onwards.
+    /// and are the whole point of `CoreClasses.orx:93` onwards.
     ///
     /// **No user program can see either.** The bootstrap runs to completion
     /// before the program's first clause, so this is false for every clause
@@ -3139,9 +3146,12 @@ struct Interp {
     collections_before_program: u64,
     /// The programs the library bootstrap loaded, in load order.
     ///
-    /// Read by `Interp::record_package_class`, so a class the library
+    /// Read twice: by `Interp::record_package_class`, so a class the library
     /// installed answers `REXX` for its package rather than the running
-    /// program's path.
+    /// program's path, and by `Interp::sourceless_site`, so a traceback
+    /// frame inside one renders the way a frame in an image-saved package
+    /// does.
+    ///
     library_programs: Vec<ProgramId>,
     /// Which directive is the body of a `Method` object this crate handed
     /// out through `.METHODS`, for the one caller that installs such an

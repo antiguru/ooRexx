@@ -1783,6 +1783,42 @@ impl Raised {
         Raised::syntax(91, 999, vec![name.to_vec()])
     }
 
+    /// The traceback line a method activation contributes when its package
+    /// carries no source -- `RexxActivation::formatSourcelessTraceLine`'s
+    /// `isMethod()` arm (`execution/RexxActivation.cpp:5057`), reached from
+    /// `PackageClass::traceBack` (`classes/PackageClass.cpp:589`) when
+    /// `source->extract` answers nothing.
+    ///
+    /// **Unlike [`Raised::compiled_method_line`] this is the clause text
+    /// alone**, with no line-number field and no `*-*` marker: an image-saved
+    /// package still knows which *line* the method was on, so the oracle
+    /// formats the line number and the marker around this exactly as it does
+    /// around a source clause. Measured, the prefix `  3700 *-*       ` is
+    /// byte-identical between the oracle's sourceless frame and this crate's
+    /// echo of the same clause.
+    pub(crate) fn sourceless_method_line(name: &[u8], scope: &str, package: &[u8]) -> Vec<u8> {
+        let substitutions = vec![name.to_vec(), scope.as_bytes().to_vec(), package.to_vec()];
+        match rexx_inventory::errors::lookup(101, 24) {
+            Some(entry) => substitute(entry.text, &substitutions),
+            None => b"<no message 101.24 in the catalogue>".to_vec(),
+        }
+    }
+
+    /// The same for an activation that is a whole program rather than a
+    /// method -- `formatSourcelessTraceLine`'s `else` arm.
+    ///
+    /// **Its `isRoutine()` sibling (101.25) is not built**, and that is
+    /// checked rather than assumed: neither embedded `.orx` file declares a
+    /// `::ROUTINE` (`/bin/grep -acE "^::[Rr][Oo][Uu][Tt][Ii][Nn][Ee]"`
+    /// answers 0 for both), so no activation this crate can put in a
+    /// sourceless package is a routine.
+    pub(crate) fn sourceless_program_line(package: &[u8]) -> Vec<u8> {
+        match rexx_inventory::errors::lookup(101, 26) {
+            Some(entry) => substitute(entry.text, &[package.to_vec()]),
+            None => b"<no message 101.26 in the catalogue>".to_vec(),
+        }
+    }
+
     /// The traceback line a native (C++-implemented, here Rust-implemented)
     /// method activation contributes, rendered whole.
     ///
@@ -2221,6 +2257,23 @@ pub(crate) enum FailureSite {
         /// stateful to desync.
         indent: usize,
     },
+    /// A level whose **package** carries no source, so its echo is a
+    /// catalogue message where a clause's text would be --
+    /// `PackageClass::traceBack`'s `source->extract` miss
+    /// (`classes/PackageClass.cpp:575`-`:589`).
+    ///
+    /// **It still has a line and an indent**, unlike [`FailureSite::
+    /// Rendered`]: an image-saved package knows which line the method was
+    /// on, and the oracle formats the number and the `*-*` marker around the
+    /// message exactly as around a source clause. `package` is what the
+    /// report's own `running <name> line <n>` span carries in place of a
+    /// path, which is the other half of the same divergence.
+    Sourceless {
+        line: usize,
+        indent: usize,
+        text: Vec<u8>,
+        package: Vec<u8>,
+    },
     /// A level with no source clause of its own: a native method
     /// activation, whose whole echo line is a catalogue entry
     /// ([`Raised::compiled_method_line`]) carrying its own blank
@@ -2237,8 +2290,20 @@ impl FailureSite {
     /// no clause of its own.
     pub(crate) fn line(&self) -> Option<usize> {
         match self {
-            FailureSite::Clause { line, .. } => Some(*line),
+            FailureSite::Clause { line, .. } | FailureSite::Sourceless { line, .. } => Some(*line),
             FailureSite::Rendered(_) => None,
+        }
+    }
+
+    /// The package a [`FailureSite::Sourceless`] reports in place of a
+    /// path, or `None` for a site whose level has a file of its own.
+    ///
+    /// Asked only of the entry [`FailureSite::line`] answered for, since the
+    /// report names one level's line and that level's name together.
+    pub(crate) fn package(&self) -> Option<&[u8]> {
+        match self {
+            FailureSite::Sourceless { package, .. } => Some(package),
+            FailureSite::Clause { .. } | FailureSite::Rendered(_) => None,
         }
     }
 
@@ -2251,7 +2316,7 @@ impl FailureSite {
     #[cfg(test)]
     pub(crate) fn text(&self) -> &[u8] {
         match self {
-            FailureSite::Clause { text, .. } => text,
+            FailureSite::Clause { text, .. } | FailureSite::Sourceless { text, .. } => text,
             FailureSite::Rendered(bytes) => bytes,
         }
     }
@@ -2263,7 +2328,9 @@ impl FailureSite {
     #[cfg(test)]
     pub(crate) fn indent(&self) -> Option<usize> {
         match self {
-            FailureSite::Clause { indent, .. } => Some(*indent),
+            FailureSite::Clause { indent, .. } | FailureSite::Sourceless { indent, .. } => {
+                Some(*indent)
+            }
             FailureSite::Rendered(_) => None,
         }
     }
@@ -2371,7 +2438,10 @@ impl Raised {
         // only the order.
         for entry in site.sites {
             match entry {
-                FailureSite::Clause { line, text, indent } => {
+                FailureSite::Clause { line, text, indent }
+                | FailureSite::Sourceless {
+                    line, text, indent, ..
+                } => {
                     crate::trace::push_clause(&mut out, *line, *indent, text);
                 }
                 // Already a whole line, `*-*` marker and blank line-number
@@ -2389,7 +2459,23 @@ impl Raised {
         // the error path. A `Rendered` entry is skipped rather than counted:
         // it has no line of its own, and the oracle reports the sending
         // clause's line above it.
-        let line = site.sites.iter().find_map(FailureSite::line).unwrap_or(0);
+        // **The innermost line-bearing entry decides the name as well as the
+        // number.** A frame in a package with no source reports that
+        // package where a program reports its path -- measured, `say
+        // .Validate~number('LENGTH', 'abc')` is `Error 88 running REXX line
+        // 3700` on the oracle where the same failure in a program's own
+        // clause names the program's file. A `Rendered` entry decides
+        // neither, for the reason its own doc gives.
+        let innermost = site.sites.iter().find(|entry| entry.line().is_some());
+        let line = innermost.and_then(FailureSite::line).unwrap_or(0);
+        let named = match innermost.and_then(FailureSite::package) {
+            Some(package) => String::from_utf8_lossy(package).into_owned(),
+            None => site.path.to_string(),
+        };
+        let site = &ClauseSite {
+            path: &named,
+            sites: site.sites,
+        };
         // `RAISE PROPAGATE` drops the position span and nothing else
         // (`Delivery::positionless`). Measured against the same program with
         // and without the `raise propagate`: the echo lines, the sub line and

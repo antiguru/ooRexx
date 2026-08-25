@@ -50,6 +50,5 @@ datadriven = { version = "0.9.0", default-features = false }
 # consumes an `AssertionRow`.
 rexx-extract = { path = "../rexx-extract" }
 
-
 [lints]
 workspace = true

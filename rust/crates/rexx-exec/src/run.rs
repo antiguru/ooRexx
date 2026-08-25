@@ -6868,8 +6868,60 @@ impl Interp {
             return;
         }
         if let Some((line, text)) = self.clause_site(source, blame) {
-            self.failure_site = Some(FailureSite::Clause { line, text, indent });
+            self.failure_site = Some(match self.sourceless_site(line, indent) {
+                Some(site) => site,
+                None => FailureSite::Clause { line, text, indent },
+            });
         }
+    }
+
+    /// The frame a level in the interpreter's own library contributes, or
+    /// `None` for a level in a program's own package.
+    ///
+    /// **An image-saved package carries no source and the oracle says so
+    /// rather than echoing a clause**: `PackageClass::traceBack` asks
+    /// `source->extract(location)` first and falls to
+    /// `RexxActivation::formatSourcelessTraceLine` when it answers nothing
+    /// (`classes/PackageClass.cpp:575`-`:589`). This crate keeps the
+    /// library's text -- it has to, since it runs the file rather than
+    /// loading an image -- so the same question is asked of the *program*
+    /// instead: a frame in a program `Interp::bootstrap_library` loaded is a
+    /// frame in a package the oracle saved.
+    ///
+    /// Measured, oracle and both engines, `say .Validate~number('LENGTH',
+    /// 'abc')`: `  3700 *-*       Method NUMBER with scope "Validate" in
+    /// package "REXX" (no source available).` and `Error 88 running REXX
+    /// line 3700`.
+    fn sourceless_site(&mut self, line: usize, indent: usize) -> Option<FailureSite> {
+        let program_id = self.running_activation()?.program_id;
+        if !self.library_programs.contains(&program_id) {
+            return None;
+        }
+        // Copied out rather than borrowed: the scope's `~id` is read through
+        // `self.classes()`, which takes `&mut self`.
+        let identity = self
+            .activation()
+            .method_identity
+            .as_ref()
+            .map(|identity| (identity.name.to_vec(), identity.scope));
+        let text = match identity {
+            Some((name, scope)) => {
+                let scope = self.classes().id_string(scope).to_string();
+                Raised::sourceless_method_line(&name, &scope, crate::LIBRARY_PACKAGE_NAME)
+            }
+            // The library's own prologue, which is a program rather than a
+            // method. Reachable only if the bootstrap itself fails, which
+            // ends the interpreter -- rendered rather than left to the
+            // clause echo so that path does not print a library source line
+            // the oracle would not.
+            None => Raised::sourceless_program_line(crate::LIBRARY_PACKAGE_NAME),
+        };
+        Some(FailureSite::Sourceless {
+            line,
+            indent,
+            text,
+            package: crate::LIBRARY_PACKAGE_NAME.to_vec(),
+        })
     }
 
     /// Captures a `LEAVE`/`ITERATE` instruction's own clause site and static

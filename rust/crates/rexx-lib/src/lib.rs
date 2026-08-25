@@ -89,15 +89,30 @@ mod tests {
     }
 
     /// Every quoted `CALL` target in `program`, in source order.
+    ///
+    /// **Case-insensitive and not anchored to the start of a line**, because
+    /// Rexx is case-insensitive and a `CALL` may be indented or follow a
+    /// `;`. Case is the half that was actually missing: a scan matching
+    /// `"call "` alone answers nothing for `CALL 'CoreClasses.orx'` and this
+    /// one answers it, checked both ways. The windows
+    /// `PlatformObjects.orx` this crate declines to embed is the reason the
+    /// guard below has to hold at all -- it carries a real
+    /// `  call 'orexxole.cls'` -- and an indented `call` was already
+    /// matched before this widening.
+    ///
+    /// Over-matching is the safe direction here: a `call '...'` inside a
+    /// comment would be reported as a target, and the assertion it feeds
+    /// would then fail loudly rather than pass over a real one.
     fn quoted_call_targets(program: &Program) -> Vec<String> {
         let text = String::from_utf8(program.source.to_vec()).expect("the source is UTF-8");
+        let lower = text.to_ascii_lowercase();
         let mut called = Vec::new();
-        for line in text.lines() {
-            let trimmed = line.trim_start();
-            let Some(rest) = trimmed.strip_prefix("call ") else {
-                continue;
-            };
-            let Some(quoted) = rest.trim_start().strip_prefix('\'') else {
+        let mut at = 0usize;
+        while let Some(found) = lower[at..].find("call ") {
+            let after = at + found + "call ".len();
+            at = after;
+            let rest = text[after..].trim_start();
+            let Some(quoted) = rest.strip_prefix('\'') else {
                 continue;
             };
             let Some(end) = quoted.find('\'') else {
@@ -118,8 +133,11 @@ mod tests {
     /// **The second half is what makes the run-time recursion guard
     /// unnecessary rather than forgotten**: `Interp::enter_library_program`
     /// takes no activation-depth check, and this is what says the embedded
-    /// set has no cycle to need one. Measured, neither non-entry file
-    /// contains the word `call` at all.
+    /// set has no cycle to need one. The check is the assertion and not a
+    /// measurement of the files -- `/bin/grep -in call` on
+    /// `StreamClasses.orx` answers 2, both inside comments, so "neither file
+    /// contains the word" would have been false evidence for a true
+    /// property.
     #[test]
     fn the_entry_program_calls_exactly_the_other_embedded_programs() {
         let entry = lookup(ENTRY).expect("the entry point is embedded");

@@ -568,30 +568,27 @@ impl ClassRegistry {
         self.graph.set_rexx_defined(class);
     }
 
-    /// `inheritInstanceMethods` by name -- oracle's `Setup.cpp` bootstrap
-    /// macro `InheritInstanceMethods(source)`. The oracle macro donates from
-    /// `source`'s already-*flattened* instance behaviour, re-scoped to the
-    /// recipient (`RexxBehaviour::inheritInstanceMethods`,
-    /// `RexxBehaviour.cpp:350-361`) -- a bootstrap-only mechanism distinct
-    /// from `RexxClass::inheritInstanceMethods` (the one
-    /// [`ClassGraph::inherit_instance_methods`] models, which donates from
-    /// `source`'s own *unflattened* dictionary). This crate has no reason to
-    /// build a second donation mechanism: every donor a `Setup.cpp` class
-    /// uses `InheritInstanceMethods` on (`Array`, donating to `Queue` at
-    /// `Setup.cpp:775`; `IdentityTable`, donating to `StringTable` at
-    /// `:881` and to `Table`/`Set`/`Relation` at `:861,908,958`;
-    /// `StringTable`, donating to `Directory` at `:933`;
-    /// `Relation`, donating to `Bag` at `:988`) is itself a **direct**
-    /// subclass of `.Object`, so its own flattened instance set is exactly
-    /// "Object's methods plus its own" -- and the recipient already gets
-    /// Object's methods through its *own* ordinary ancestor cascade
-    /// regardless of the donation. The two mechanisms therefore agree on
-    /// the resulting **name set** (what this task's probes check) even
-    /// though they disagree on which class a donated name's scope is
-    /// attributed to (invisible to those probes, and not queryable through
-    /// this crate's own public API either). `native_classes.rs`'s replay
-    /// loop calls this for `Table`, `StringTable`, `Set`, `Directory`,
-    /// `Relation` and `Bag`.
+    /// `Class~inheritInstanceMethods`, the Rexx-callable method -- oracle's
+    /// `RexxClass::inheritInstanceMethods` (`ClassClass.cpp:558`), which
+    /// donates from `source`'s own *unflattened* dictionary and rewrites
+    /// that dictionary's scopes as it goes. See
+    /// [`ClassGraph::inherit_instance_methods`].
+    ///
+    /// **`Setup.cpp`'s `InheritInstanceMethods(source)` macro is a different
+    /// C++ function** -- `RexxBehaviour::inheritInstanceMethods`
+    /// (`RexxBehaviour.cpp:350`), which donates from `source`'s already
+    /// *flattened* behaviour filtered to `source`'s own scope and leaves the
+    /// donor alone. `native_classes.rs`'s replay loop calls
+    /// [`Self::donate_instance_methods`] for it, and
+    /// [`MethodDict::replace_methods_from`] carries what conflating the two
+    /// costs: the donor's own entries end up carrying the recipient's scope,
+    /// which is invisible until something rebuilds the donor's behaviour and
+    /// is then a wrong scope in a traceback frame.
+    ///
+    /// The `Setup.cpp` donors are `Array` -> `Queue` (`:775`),
+    /// `IdentityTable` -> `Table`/`StringTable`/`Set`/`Relation` (`:861`,
+    /// `:881`, `:908`, `:958`), `StringTable` -> `Directory` (`:933`) and
+    /// `Relation` -> `Bag` (`:988`).
     pub fn inherit_instance_methods(&mut self, class: ObjRef, source: ObjRef) {
         self.graph.inherit_instance_methods(class, source);
     }

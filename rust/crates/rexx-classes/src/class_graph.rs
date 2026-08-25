@@ -851,35 +851,6 @@ impl ClassGraph {
         Ok(())
     }
 
-    /// `inheritInstanceMethods`. Oracle's `RexxClass::inheritInstanceMethods`
-    /// (`:558-586`) takes `donor`'s own instance-method dictionary **by
-    /// pointer and rewrites it in place** (`MethodDictionary *sourceMethods
-    /// = source->instanceMethodDictionary; sourceMethods->setMethodScope(this);`,
-    /// `:560-562`), folds it into `class`'s own instance dictionary, then
-    /// rebuilds `class`'s instance behaviour in place -- **no superclass
-    /// edge** (`class`'s `superclasses` is untouched) and **no cascade**
-    /// to `class`'s own subclasses (unlike [`Self::define`] and
-    /// [`Self::inherit`], the oracle function's body has no call to either
-    /// `updateSubClasses` or `updateInstanceSubClasses`).
-    ///
-    /// This crate does the identical in-place rewrite, not a clone: `donor`
-    /// really is left with its own instance methods bearing `class`'s scope
-    /// afterward, matching the oracle's aliasing exactly rather than a
-    /// behaviourally-similar approximation of it. (There is no accessor in
-    /// this crate's public API that can observe `donor`'s own dictionary
-    /// directly after the call -- only the flattened behaviours are
-    /// queryable -- so this fidelity is not independently exercised by a
-    /// test; it is verified by matching the C++ line by line.)
-    ///
-    /// This exact method cannot be oracle-probed by running a script:
-    /// `removeSetupMethods` (`:923`) deletes `~inheritInstanceMethods` from
-    /// every saved image before it ships (D39), so no program that loads
-    /// the built oracle can ever send it -- measured, `Error 97.1: Object
-    /// "The Target class" does not understand message
-    /// "INHERITINSTANCEMETHODS"`. This method's shape is read from the
-    /// C++ source alone; its *effect* is what `.Supplier`, `.Set` and
-    /// `.Bag` let a running script measure, and `tests/behaviour_wiring.rs`
-    /// is built around exactly that distinction.
     /// `Setup.cpp`'s `InheritInstanceMethods(source)` macro, which is
     /// `RexxBehaviour::inheritInstanceMethods` (`RexxBehaviour.cpp:350`):
     /// copy the donor's own methods into this class's dictionary under this
@@ -903,6 +874,36 @@ impl ClassGraph {
         self.rebuild_behaviour(class, Side::Instance);
     }
 
+    /// `Class~inheritInstanceMethods`. Oracle's
+    /// `RexxClass::inheritInstanceMethods` (`ClassClass.cpp:558`-`:586`)
+    /// takes `donor`'s own instance-method dictionary **by pointer and
+    /// rewrites it in place** (`MethodDictionary *sourceMethods =
+    /// source->instanceMethodDictionary; sourceMethods->setMethodScope(this);`,
+    /// `:560`-`:562`), folds it into `class`'s own instance dictionary, then
+    /// rebuilds `class`'s instance behaviour in place -- **no superclass
+    /// edge** (`class`'s `superclasses` is untouched) and **no cascade** to
+    /// `class`'s own subclasses (unlike [`Self::define`] and
+    /// [`Self::inherit`], the oracle function's body has no call to either
+    /// `updateSubClasses` or `updateInstanceSubClasses`).
+    ///
+    /// This crate does the identical in-place rewrite, not a clone: `donor`
+    /// really is left with its own instance methods bearing `class`'s scope
+    /// afterward, matching the oracle's aliasing rather than a
+    /// behaviourally-similar approximation of it.
+    ///
+    /// **`Setup.cpp`'s macro of the same name is a different C++ function**
+    /// and reaches [`Self::donate_instance_methods`] above --
+    /// [`MethodDict::replace_methods_from`] carries the distinction and what
+    /// conflating the two costs.
+    ///
+    /// This exact method cannot be oracle-probed by running a script:
+    /// `removeSetupMethods` (`:923`) deletes `~inheritInstanceMethods` from
+    /// every saved image before it ships (D39), so no program that loads the
+    /// built oracle can ever send it -- measured, `Error 97.1: Object "The
+    /// Target class" does not understand message "INHERITINSTANCEMETHODS"`.
+    /// This method's shape is read from the C++ source alone; its *effect* is
+    /// what `.Supplier`, `.Set` and `.Bag` let a running script measure, and
+    /// `tests/behaviour_wiring.rs` is built around exactly that distinction.
     pub fn inherit_instance_methods(&mut self, class: ObjRef, donor: ObjRef) {
         let mut donor_methods = std::mem::take(
             &mut self
