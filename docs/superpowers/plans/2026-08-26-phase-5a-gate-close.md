@@ -119,14 +119,39 @@ message rather than by directive -- the same protocol `::CLASS` installs through
 previous plan's enumeration filed them at 5a. Both send `INIT` to the class they build
 (`classes/ClassClass.cpp:1631`).
 
+**Both take three arguments and the row uses one, so the row does not size the task.** `Setup.cpp`
+declares each at 3 (`:470`, `:474`) and each extra argument is reachable and observable from a Rexx
+program this crate can already run. Measured at `637d0dd64`, oracle:
+
+* the **metaclass** is argument 2, defaulting to the receiver's own, and its test runs *before* the
+  class id's -- `.object~subclass(, .Object)` is 99.927 and not the 88.901 its omitted id would earn,
+  while `.object~subclass(, .Class)` is that 88.901. A supplied `.nil` is not an omission and is its
+  own 99.927;
+* the **enhancing class methods** are argument 3, reachable through `.methods`, merged into the class
+  method dictionary before the `INIT` send -- so an enhancing `INIT` is the one that runs;
+* the class id's own refusals are raised **inside a `NEW` send to the metaclass**
+  (`classes/ClassClass.cpp:1576`), so their reports carry two traceback frames:
+  `Compiled method "NEW" with scope "Class".` above `Compiled method "SUBCLASS" with scope "Class".`
+  A metaclass carrying its own `NEW` intercepts the construction entirely, which is a class this
+  crate has no `NEW` to build.
+
 **Two things to decide and record**, because a class built at run time meets machinery built for
 directive-installed ones: **which package** the new class belongs to, and **whether the REXX_DEFINED
 lock applies to it**. Measure both against the oracle rather than reasoning: a user program can ask
 `~package~name`, and can try to mutate what it just built.
 
 **Done when** the row agrees on both engines, the two decisions above are measured and recorded, and
-a control is recorded: defaulting the superclass to something other than `.Object` reddens
-`default-superclass`.
+a control is recorded that reddens the row.
+
+**The control this task shipped with was wrong about which line it reddens, and the measurement
+replaces it.** It read "defaulting the superclass to something other than `.Object` reddens
+`default-superclass`". The mutation that phrase describes -- build the class under `.Object` rather
+than under the receiver, which is also gate table C's own registered control for this row -- leaves
+`default-superclass` **green**, because the row asks that line of `.object~subclass("plain")`, whose
+receiver already is `.Object`. Measured at `REXX_ENGINE=ir`: it reddens `subclass-of` and
+`superclasses` and the row reads `diverge-stdout`. Building the class under its *metaclass* is what
+reddens all four lines, `default-superclass` among them. `~subclass` has no superclass default to
+change: the superclass is the receiver.
 
 ---
 
