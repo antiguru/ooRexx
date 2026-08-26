@@ -1124,13 +1124,25 @@ impl Interp {
     /// Rooted as a global for the reason a package object is: it outlives
     /// every send that reaches it and is reachable from no other object
     /// between two of them.
-    pub(crate) fn method_object(&mut self, class: ObjRef, name: &[u8]) -> ObjRef {
+    ///
+    /// `scope` is the scope the dictionary entry was defined at, which is
+    /// what `Method~scope` answers -- see [`Interp::method_scope`]. The
+    /// caller supplies it rather than this function assuming `class`,
+    /// because `MethodDictionary::setMethodScope` rewrites a dictionary's
+    /// entries to another class's scope and `~inheritInstanceMethods` runs it
+    /// over the donor's own dictionary (`classes/ClassClass.cpp:560`-`:563`).
+    pub(crate) fn method_object(&mut self, class: ObjRef, name: &[u8], scope: ObjRef) -> ObjRef {
         let key = (class, Box::<[u8]>::from(name));
         if let Some(found) = self.method_objects.get(&key).copied() {
             return found;
         }
         let method_class = self.method_class();
         let object = self.native_instance(method_class);
+        let held = self.heap.get_mut(object).expect("just allocated");
+        let Body::Native(native) = &mut held.body else {
+            unreachable!("allocated as Body::Native by native_instance")
+        };
+        native.set_scope(scope);
         self.roots
             .add_global(&method_object_root_key(class, name), object);
         self.method_objects.insert(key, object);
@@ -1416,6 +1428,28 @@ impl Interp {
             _ => None,
         }
         .ok_or_else(|| Loud::receiver_class("a value that carries no annotations").into())
+    }
+
+    /// `Method~scope`: the class the method object was defined at, and `.nil`
+    /// for one that was defined at no class.
+    ///
+    /// `MethodClass::getScopeRexx` (`classes/MethodClass.cpp:361`) is
+    /// `resultOrNil(getScope())`, bound at `Method` by `memory/Setup.cpp:1113`,
+    /// so the absent scope is an answer and not a raise. Measured, oracle
+    /// rc 0: an unattached `::METHOD z` reached through `.methods~z~scope`
+    /// prints `The NIL object`, and the same object answers `K2` once
+    /// `.K2~define("Y", ...)` has taken it.
+    ///
+    /// Every route this crate has into a class's own instance dictionary
+    /// leaves the scope reachable through `Class~method`, so the refusal is
+    /// an internal inconsistency rather than a program's doing: the receiver
+    /// resolved `SCOPE` at `Method`, and every object this crate gives that
+    /// behaviour is a `Body::Native`.
+    pub(crate) fn method_scope(&self, receiver: ObjRef) -> Result<ObjRef, Failure> {
+        match self.heap.get(receiver).map(|held| &held.body) {
+            Some(Body::Native(native)) => Ok(native.scope().unwrap_or(ObjRef::NIL)),
+            _ => Err(Loud::receiver_class("a value that carries no method scope").into()),
+        }
     }
 
     /// `Package~name`'s answer for a package object this crate built, or

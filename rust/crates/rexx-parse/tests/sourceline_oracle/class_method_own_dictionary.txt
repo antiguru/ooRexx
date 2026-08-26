@@ -1,4 +1,4 @@
-count 112
+count 82
 /* ~method reads the class's own instance dictionary and nothing else
  * (RexxClass::method, classes/ClassClass.cpp:984, which retrieves from
  * instanceMethodDictionary directly).
@@ -68,36 +68,6 @@ signal on syntax name trapped
 signal next
 
 done:
-/* WHAT A METHOD OBJECT DOES NOT DO, measured against the oracle on both
-   engines, three descriptors, and recorded here because a divergence nobody
-   writes down is one nobody finds twice.
-
-     .Array~method('APPEND')~class        oracle `The Method class`, rc 0
-     .Array~method('APPEND')~class~id     oracle `Method`, rc 0
-     .Array~method('APPEND')~isA(.Method) oracle `1`, rc 0
-     .Array~method('APPEND')~scope        oracle `The Array class`, rc 0
-
-   Every row above is rc 120 here, `a message send to one of the interpreter's
-   own objects is not implemented (Phase 5)`: dispatch.rs's `receiver_kind`
-   admits a package object among the interpreter's own objects and not a
-   method object, because `~package~name` is what this file's own sibling
-   class_package.rex asks of one and nothing asks more. ~class, ~class~id and
-   ~isA are this file's own protocol reaching a receiver it does not yet
-   reach; ~scope, and the rest of .Method's own protocol, are table C method
-   rows, which the table files under 5c.
-
-   AND THE OBJECT'S IDENTITY. `(.Array~method('APPEND') ==
-   .Array~method('APPEND'))` is `1` on the oracle -- RexxClass::method returns
-   the MethodClass the instance dictionary already holds
-   (classes/ClassClass.cpp:991) -- where `native_method` mints a fresh object
-   per send. Here that send is rc 120 on the `==` rather than a wrong answer,
-   so nothing silently disagrees today. Making it `1` needs the dictionary to
-   hold method objects rather than the MethodId rexx-classes' MethodDict
-   holds, which is the same thing .Method's own protocol needs, so it belongs
-   to whichever task implements that: 5c, with the method rows. It is not
-   deviation 4's, and reading it as identity semantics would file it wrongly
-   -- the oracle's `1` is the dictionary handing back one object, not an
-   identity model. */
 say 'hasmethod-string' .Array~hasMethod('STRING')
 say 'hasmethod-id' .Array~hasMethod('ID')
 say 'hasmethod-side' .K~hasMethod('SIDE')

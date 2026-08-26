@@ -340,6 +340,11 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("Directory", "UNKNOWN", Arity::Fixed(2), native_hash_unknown),
     ("Method", "ANNOTATION", Arity::Fixed(1), native_annotation),
     ("Method", "ANNOTATIONS", Arity::Fixed(0), native_annotations),
+    // `MethodClass::getScopeRexx`, `memory/Setup.cpp:1113`. `Routine` and
+    // `Package` carry no such row: `Setup.cpp` binds `Scope` at `Method`
+    // alone, and the scope is a `MethodClass` field rather than a
+    // `BaseExecutable` one (`classes/MethodClass.hpp:168`).
+    ("Method", "SCOPE", Arity::Fixed(0), native_scope),
     ("Object", "CLASS", Arity::Fixed(0), native_class),
     ("Object", "HASMETHOD", Arity::Fixed(1), native_has_method),
     (
@@ -3325,8 +3330,29 @@ fn native_method(
             Err(Raised::no_method(&target, &name).into())
         }
         Some(MethodSlot::Hidden) => Ok(Some(ObjRef::NIL)),
-        Some(MethodSlot::Defined { .. }) => Ok(Some(interp.method_object(class, &name))),
+        Some(MethodSlot::Defined { scope, .. }) => {
+            Ok(Some(interp.method_object(class, &name, scope)))
+        }
     }
+}
+
+/// `Method~scope`: the class the method object was defined at, `.nil` for a
+/// method object no class has taken -- [`Interp::method_scope`] carries the
+/// C++ and the measurements.
+///
+/// **The scope is not the class the send went to**, which is the whole point
+/// of the answer: measured, oracle rc 0, with `::method m` under a
+/// `::class base` and an overriding `::method m` under `::class sub subclass
+/// base`, `.base~method("M")~scope~id` is `BASE` and `.sub~method("M")~scope~id`
+/// is `SUB`, so a reader that walked to the ancestor defining the name would
+/// answer `BASE` twice. `corpus/gate-tables/concepts/xscope.rex` is that pair.
+fn native_scope(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    Ok(Some(interp.method_scope(receiver)?))
 }
 
 /// The `REXX_DEFINED` refusal every class mutator opens with --

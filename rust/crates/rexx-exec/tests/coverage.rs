@@ -1189,6 +1189,9 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/directive_attribute_external_arguments.rex",
     "lang/directive_method_attribute_external_missing.rex",
     "gate-tables/directives/attribute__external__subkeyword.rex",
+    // `Method~scope` on every route to a method object that is not the
+    // directive pair `gate-tables/concepts/xscope.rex` already asks.
+    "lang/method_scope.rex",
 ];
 
 #[test]
