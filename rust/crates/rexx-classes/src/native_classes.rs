@@ -38,20 +38,29 @@
 //! does not build natively, and why. None for "not needed yet" -- each
 //! names a concrete missing mechanism:
 //!
-//! * `RexxInteger`, `NumberString`, `RexxInfo` -- **not reachable through
-//!   this registry's own `.NAME` lookup at all**, measured directly:
-//!   `value('.INTEGER')` and `value('.NUMBERSTRING')` both return the
-//!   literal string `".INTEGER"`/`".NUMBERSTRING"` (an unresolved
-//!   environment symbol), and `value('.REXXINFO')` returns a live
-//!   `RexxInfo` *instance*, not a class. `RexxInteger`/`NumberString` are
-//!   built via `CLASS_CREATE_SPECIAL` and registered with `addToSystem`
-//!   (`IntegerClass.cpp:2066`, `NumberStringClass.cpp:74` -- the latter's
-//!   own comment: "the number string class lies about its identity";
-//!   `12345~class~id` and `(1.5)~class~id` both answer `"String"`).
-//!   `RexxInfo` is also `addToSystem`-only (`EndSpecialClassDefinition`);
-//!   only a pre-built *instance* is `addToEnvironment`'d
-//!   (`Setup.cpp:1737`). This registry models environment-reachable class
-//!   objects; none of the classes above is one.
+//! * `RexxInteger`, `NumberString` -- each **masquerades as another class
+//!   for `~class`**, measured: `CLASS_CREATE_SPECIAL(Integer, "String",
+//!   RexxIntegerClass)` and the same for `NumberString`
+//!   (`IntegerClass.cpp:2066`, `NumberStringClass.cpp:74`, whose own comment
+//!   is "the number string class lies about its identity"), so
+//!   `12345~class~id` and `(1.5)~class~id` both answer `"String"`. That
+//!   needs a per-value class-identity override this registry does not build.
+//!   Neither is `.NAME`-reachable either: measured, `value('.INTEGER')` and
+//!   `value('.NUMBERSTRING')` both return the literal string
+//!   `".INTEGER"`/`".NUMBERSTRING"`, an unresolved environment symbol.
+//!
+//! **A class `.NAME` cannot reach is still built.** `EndSpecialClassDefinition`
+//! registers with `addToSystem` rather than `completeSystemClass`, which is
+//! the kernel directory instead of `.environment`, and
+//! [`ClassRegistry::define_system_class`] is that directory here: such a
+//! class answers [`ClassRegistry::system_lookup`] and is absent from
+//! [`ClassRegistry::registered`], so `.environment` never gains its name.
+//! `RexxInfo` is the case with an instance in a program's hands -- measured,
+//! `.RexxInfo` renders as `a RexxInfo` and `.RexxInfo~class~id` is
+//! `RexxInfo`, while `::CLASS K SUBCLASS RexxInfo` is `99.949 "REXXINFO" is
+//! not a valid class` -- and which blocks take this route is read off
+//! `Setup.cpp`'s own closing macro (`ClassDefinition::system_only`), never
+//! listed here.
 //!
 //! **`Queue`, `Stem` and `VariableReference` are the classes that need
 //! [`Op::RemoveInstanceMethod`] and [`Op::HideInstanceMethod`]**, the two
@@ -171,27 +180,15 @@ const CHECKLIST_TO_DEFINITION: &[(&str, &str)] = &[
 const DEFERRALS: &[Deferral] = &[
     Deferral {
         setup_class: "RexxInteger",
-        reason: "not .NAME-reachable: value('.INTEGER') returns the literal string \
-                 \".INTEGER\" (unresolved environment symbol), measured. Also \
-                 CLASS_CREATE_SPECIAL(Integer, \"String\", RexxIntegerClass): an Integer \
+        reason: "CLASS_CREATE_SPECIAL(Integer, \"String\", RexxIntegerClass): an Integer \
                  value's ~class answers \"String\", not \"Integer\" (measured, 12345~class~id). \
                  Needs a per-value class-identity override this registry does not build.",
     },
     Deferral {
         setup_class: "NumberString",
-        reason: "not .NAME-reachable: value('.NUMBERSTRING') returns the literal string \
-                 \".NUMBERSTRING\" (unresolved environment symbol), measured. Also \
-                 CLASS_CREATE_SPECIAL(NumberString, \"String\", RexxClass), same masquerade \
+        reason: "CLASS_CREATE_SPECIAL(NumberString, \"String\", RexxClass), same masquerade \
                  (measured, (1.5)~class~id answers \"String\"); own C++ comment: \"the number \
                  string class lies about its identity\". Same missing mechanism as RexxInteger.",
-    },
-    Deferral {
-        setup_class: "RexxInfo",
-        reason: "not .NAME-reachable: value('.REXXINFO') returns a live RexxInfo INSTANCE, not \
-                 the class (measured; .rexxinfo~id raises 97.1, \"a RexxInfo does not \
-                 understand ID\"). Registered via addToSystem, not addToEnvironment; only a \
-                 pre-built instance is addToEnvironment'd under REXXINFO (Setup.cpp:1737). This \
-                 registry has no dot-variable path to the class object itself to model.",
     },
 ];
 
@@ -386,7 +383,15 @@ fn build(keep_setup_methods: bool) -> ClassRegistry {
         if DEFERRALS.iter().any(|d| d.setup_class == setup_class) {
             continue;
         }
-        let id = registry.define_class(def.name, Some(object_id), ClassKind::Regular, class_id);
+        // `def.system_only` is which closing macro `Setup.cpp` used, and it
+        // decides the directory alone: a system class is built, wired and
+        // `REXX_DEFINED` exactly like every other entry here, and differs
+        // only in answering `system_lookup` where the rest answer `lookup`.
+        let id = if def.system_only {
+            registry.define_system_class(def.name, Some(object_id), ClassKind::Regular, class_id)
+        } else {
+            registry.define_class(def.name, Some(object_id), ClassKind::Regular, class_id)
+        };
         replay(&mut registry, id, def, keep_setup_methods);
         // `RexxClass::liveGeneral` sets `REXX_DEFINED` on every class it
         // reaches while the image is being prepared
@@ -513,18 +518,56 @@ mod tests {
     }
 
     /// `native_classes()` actually builds exactly the checklist entries this
-    /// module claims to build -- not the deferred ones, and nothing extra.
+    /// module claims to build, **in the directory `Setup.cpp`'s own closing
+    /// macro puts each in** -- not the deferred ones, and nothing extra.
+    ///
+    /// Asserted as one of exactly three states per entry rather than as two
+    /// booleans, because the failure this replaces is a class landing in
+    /// *both* tables or in neither: a system class that also answered
+    /// `lookup` would put its name into `.environment` and make `.RexxInfo`
+    /// render as `The RexxInfo class`, which is measurably not what the
+    /// oracle prints.
     #[test]
-    fn native_classes_registers_exactly_the_undeferred_checklist_entries() {
+    fn every_checklist_entry_is_registered_in_the_directory_setup_cpp_names() {
         let registry = native_classes();
         for (token, block_name) in CHECKLIST_TO_DEFINITION {
-            let deferred = DEFERRALS.iter().any(|d| d.setup_class == *token);
-            let registered = registry.lookup(&block_name.to_ascii_uppercase()).is_some();
+            let upper = block_name.to_ascii_uppercase();
+            let environment = registry.lookup(&upper).is_some();
+            let system = registry.system_lookup(&upper).is_some();
+            let want = if DEFERRALS.iter().any(|d| d.setup_class == *token) {
+                (false, false)
+            } else if definition_for(block_name).system_only {
+                (false, true)
+            } else {
+                (true, false)
+            };
             assert_eq!(
-                registered, !deferred,
-                "{token:?} (block {block_name:?}): registered={registered}, deferred={deferred} -- \
-                 must be exactly one of the two"
+                (environment, system),
+                want,
+                "{token:?} (block {block_name:?}) is in the wrong directory: \
+                 (environment, system) reads {:?}",
+                (environment, system)
             );
         }
+    }
+
+    /// The three-state test above is only as good as `system_only` telling
+    /// blocks apart, so this is the discriminator's own witness: a class
+    /// closed by `EndSpecialClassDefinition` and one closed by
+    /// `EndClassDefinition`, read off the derived table.
+    ///
+    /// Without it, a `system_only` that answered `false` everywhere would
+    /// leave every assertion above satisfied by the same arm it took before
+    /// the split existed.
+    #[test]
+    fn system_only_separates_the_two_closing_macros() {
+        assert!(
+            definition_for("RexxInfo").system_only,
+            "Setup.cpp:1285 closes the RexxInfo block with EndSpecialClassDefinition"
+        );
+        assert!(
+            !definition_for("StackFrame").system_only,
+            "Setup.cpp closes the StackFrame block with EndClassDefinition"
+        );
     }
 }

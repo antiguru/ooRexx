@@ -537,6 +537,11 @@ pub(crate) struct ObjectModel {
     directory: ObjRef,
     string_table: ObjRef,
     context: ObjRef,
+    /// The class `Setup.cpp` registers with `addToSystem` and whose
+    /// *instance* `.RexxInfo` answers -- see [`Primitive::RexxInfo`].
+    /// Reached through `ClassRegistry::system_lookup`, since no `.NAME`
+    /// resolves to it.
+    rexx_info: ObjRef,
 }
 
 impl ObjectModel {
@@ -621,6 +626,9 @@ impl ObjectModel {
         let context = classes
             .lookup("RexxContext")
             .expect("RexxContext is a native class");
+        let rexx_info = classes
+            .system_lookup("RexxInfo")
+            .expect("RexxInfo is a native class in the kernel directory");
         ObjectModel {
             classes,
             natives,
@@ -634,6 +642,7 @@ impl ObjectModel {
             directory,
             string_table,
             context,
+            rexx_info,
         }
     }
 }
@@ -710,6 +719,26 @@ enum Primitive {
     /// A `Body::Native` whose class is `.RexxContext` -- what `.context`
     /// answers. Measured, `.context~class` is `The RexxContext class`.
     Context,
+    /// A `Body::Native` whose class is the `RexxInfo` one -- the single
+    /// pre-built instance `.RexxInfo` answers (`Setup.cpp:1735`-`:1737`).
+    /// Measured, `.RexxInfo~class~id` is `RexxInfo` and
+    /// `.RexxInfo~isA(.Class)` is `0`.
+    ///
+    /// **The class object itself takes [`Primitive::Class`] and not this
+    /// arm**, whatever route puts it in a program's hands:
+    /// [`Interp::receiver_kind`] asks `ObjRef::class_id` before it reaches
+    /// the arena at all, so a class handle never gets as far as the
+    /// `Body::Native` guards below.
+    ///
+    /// `RexxInfo`'s instance behaviour here is `Setup.cpp`'s whole set, the
+    /// position `.Package` above is in: a name it does not hold is a name
+    /// the running oracle does not hold either, so 97.1 is the answer and
+    /// not a guess -- measured, `.RexxInfo~id` is
+    /// `97.1 Object "a RexxInfo" does not understand message "ID"`. A name
+    /// it *does* hold with no [`NativeMethod`] behind it is this crate's own
+    /// gap and refuses loudly, because the oracle answers those: measured,
+    /// `.RexxInfo~digits` is `9` and `.RexxInfo~languageLevel` is `6.06`.
+    RexxInfo,
     /// The receiver **is** a class object, so its messages resolve against
     /// that class's own class behaviour rather than against any class's
     /// instance behaviour. Measured, `::class K` plus `::method m class`:
@@ -1153,6 +1182,16 @@ impl Interp {
                     {
                         Ok(Primitive::Context)
                     }
+                    // `.RexxInfo`. Its class is in the registry's kernel
+                    // directory rather than the environment one, which
+                    // changes nothing about the behaviour a send resolves
+                    // against -- the position `.Package` above is in.
+                    Body::Native(native)
+                        if self.object_model.as_ref().map(|model| model.rexx_info)
+                            == Some(native.class()) =>
+                    {
+                        Ok(Primitive::RexxInfo)
+                    }
                     // A `Body::Native` of a class this crate builds no
                     // receiver arm for. Nothing constructs one today; loud
                     // rather than answered, this crate's rule for an internal
@@ -1185,6 +1224,7 @@ impl Interp {
             Primitive::Directory => Behaviour::Instance(model.directory),
             Primitive::StringTable => Behaviour::Instance(model.string_table),
             Primitive::Context => Behaviour::Instance(model.context),
+            Primitive::RexxInfo => Behaviour::Instance(model.rexx_info),
             Primitive::Class(class) => Behaviour::ClassSide(class),
         })
     }
@@ -3197,6 +3237,7 @@ fn native_class(
         Primitive::Directory => model.directory,
         Primitive::StringTable => model.string_table,
         Primitive::Context => model.context,
+        Primitive::RexxInfo => model.rexx_info,
         Primitive::Class(class) => model.classes.class_of(class),
     }))
 }
@@ -4514,7 +4555,8 @@ fn native_object_name(
         | Primitive::Routine
         | Primitive::Directory
         | Primitive::StringTable
-        | Primitive::Context => interp.string_value_text(receiver),
+        | Primitive::Context
+        | Primitive::RexxInfo => interp.string_value_text(receiver),
     };
     Ok(Some(interp.text_built(name)))
 }
@@ -4557,7 +4599,8 @@ fn native_object_name_set(
         | Primitive::Routine
         | Primitive::Directory
         | Primitive::StringTable
-        | Primitive::Context => {
+        | Primitive::Context
+        | Primitive::RexxInfo => {
             let Some(object) = interp.heap.get_mut(receiver) else {
                 return Err(Loud::receiver_class("a value whose object is no longer live").into());
             };
@@ -6188,16 +6231,17 @@ mod tests {
     /// alone: an entry a program stored answers even under a name the unbuilt
     /// table holds.
     ///
-    /// `REXXINFO` rather than a class name: the library bootstrap fills
+    /// `ENDOFLINE` rather than a class name: the library bootstrap fills
     /// `.environment` with the classes `CoreClasses.orx` and
     /// `StreamClasses.orx` declare, so almost every entry in the unbuilt
     /// table now answers. What is left is `Setup.cpp`'s own non-class
-    /// additions -- `ENDOFLINE` and this one, which is a pre-built
-    /// `RexxInfo` *instance* rather than a class (`Setup.cpp:1737`).
+    /// additions, of which this is one -- the line terminator read off the
+    /// `RexxInfo` instance (`Setup.cpp:1741`), measured a bare newline on
+    /// the oracle.
     #[test]
     fn a_directory_entry_the_oracle_has_and_this_crate_does_not_is_loud() {
         for (source, owner) in [
-            ("say .environment['REXXINFO']\n", "Phase 5"),
+            ("say .environment['ENDOFLINE']\n", "Phase 5"),
             ("say .local['STDOUT']\n", "Phase 7"),
         ] {
             let (code, stdout, stderr) = both_engines(source);

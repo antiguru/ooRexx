@@ -23,6 +23,10 @@
 //!   its C++ type name with a trailing `Class` stripped, or identical when
 //!   there is none). `rexx-classes/src/native_classes.rs` carries that
 //!   correspondence explicitly and asserts it against both derived lists.
+//!   Each block also carries which of the two closing macros ended it, as
+//!   `system_only`: `EndSpecialClassDefinition` registers the class with
+//!   `addToSystem` and `EndClassDefinition` with `completeSystemClass`,
+//!   which is whether `.environment` answers its name.
 
 use std::path::{Path, PathBuf};
 
@@ -67,6 +71,11 @@ fn generate(src: &str) -> String {
          pub struct ClassDefinition {\n\
          \x20   pub name: &'static str,\n\
          \x20   pub ops: &'static [Op],\n\
+         \x20   /// Closed by `EndSpecialClassDefinition` rather than\n\
+         \x20   /// `EndClassDefinition`, so the class object goes to\n\
+         \x20   /// `addToSystem`'s kernel directory and never to\n\
+         \x20   /// `completeSystemClass`'s `.environment`.\n\
+         \x20   pub system_only: bool,\n\
          }\n\n\
          /// Every `X::createInstance();` call in `MemoryObject::createImage`,\n\
          /// in file order -- the C++ type name, not the Rexx id string.\n\
@@ -92,7 +101,7 @@ fn generate(src: &str) -> String {
             out.push_str(&rendered);
             out.push_str(",\n");
         }
-        out.push_str("    ]},\n");
+        out.push_str(&format!("    ], system_only: {} }},\n", def.system_only));
     }
     out.push_str("];\n");
     out
@@ -120,6 +129,7 @@ enum Op {
 struct ClassDef {
     name: String,
     ops: Vec<Op>,
+    system_only: bool,
 }
 
 /// Extract the class-method/instance-method distinction and the operation
@@ -140,13 +150,23 @@ fn parse_definitions(src: &str) -> Vec<ClassDef> {
             current = Some(ClassDef {
                 name,
                 ops: Vec::new(),
+                system_only: false,
             });
             continue;
         }
-        if let Some(name) = macro_arg(line, "EndClassDefinition")
-            .or_else(|| macro_arg(line, "EndSpecialClassDefinition"))
-        {
-            let def = current
+        // Which of the two closing macros ran is the whole of the
+        // registration difference: `EndClassDefinition` expands to
+        // `completeSystemClass`, which puts the class into `.environment`
+        // under its own name, and `EndSpecialClassDefinition` expands to
+        // `addToSystem`, which puts it into the kernel directory no `.NAME`
+        // reaches (`Setup.cpp:390`-`:398`). Read off the source rather than
+        // listed in `native_classes.rs`, so a block that changes which macro
+        // closes it changes the registry with it.
+        let closing = macro_arg(line, "EndClassDefinition")
+            .map(|name| (name, false))
+            .or_else(|| macro_arg(line, "EndSpecialClassDefinition").map(|name| (name, true)));
+        if let Some((name, system_only)) = closing {
+            let mut def = current
                 .take()
                 .unwrap_or_else(|| panic!("End...Definition({name}) with no matching Start"));
             assert_eq!(
@@ -154,6 +174,7 @@ fn parse_definitions(src: &str) -> Vec<ClassDef> {
                 "StartClassDefinition({}) closed by a block named {name}",
                 def.name
             );
+            def.system_only = system_only;
             result.push(def);
             continue;
         }

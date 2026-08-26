@@ -185,11 +185,19 @@ fn block_name_for(token: &str) -> &str {
 }
 
 /// Every checklist entry not in the deferral table, resolved to its
-/// registered `ClassRegistry` identity. Panics (failing the test that calls
-/// it) if a name claims to be native but is not actually registered, or
-/// vice versa -- which is also exactly what
-/// `native_classes_registers_exactly_the_undeferred_checklist_entries`
+/// `ClassRegistry` identity. Panics (failing the test that calls it) if a
+/// name claims to be native but is registered in neither directory, or vice
+/// versa -- which is also exactly what
+/// `every_checklist_entry_is_registered_in_the_directory_setup_cpp_names`
 /// (`native_classes.rs`'s own internal test) checks from the other side.
+///
+/// **Either directory answers here**, because the split between them is
+/// which name `.environment` gains and nothing about the class object: a
+/// class `addToSystem` registered is wired, cascaded and `REXX_DEFINED`
+/// exactly like the rest, and every property the callers assert holds of it.
+/// Measured on the oracle, `.RexxInfo~class~metaClass` is `The Class class`
+/// and `.RexxInfo~class~superClass` is `The Object class`, the same pair
+/// every environment-registered class answers.
 fn native_class_ids(r: &ClassRegistry) -> Vec<(&'static str, ObjRef)> {
     let deferred = deferred_classes();
     setup_class_names()
@@ -197,8 +205,10 @@ fn native_class_ids(r: &ClassRegistry) -> Vec<(&'static str, ObjRef)> {
         .filter(|token| !deferred.iter().any(|d| d.setup_class == **token))
         .map(|&token| {
             let block_name = block_name_for(token);
+            let upper = block_name.to_ascii_uppercase();
             let id = r
-                .lookup(&block_name.to_ascii_uppercase())
+                .lookup(&upper)
+                .or_else(|| r.system_lookup(&upper))
                 .unwrap_or_else(|| panic!("{token} (block {block_name:?}) should be native"));
             // `block_name` borrows from `token`, which borrows from the
             // `'static` `SETUP_CLASSES`/`CHECKLIST_TO_DEFINITION` tables, so
@@ -1071,6 +1081,88 @@ fn every_untouched_class_matches_its_recorded_own_instance_method_set() {
     }
 }
 
+/// `RexxInfo`'s own instance methods, exact -- the class the environment
+/// reaches only through an instance, so its dictionary is what decides
+/// whether a message to `.RexxInfo` resolves at all.
+///
+/// Measured on the oracle at rc 0 with
+/// `do idx over .RexxInfo~class~methods(.nil)~allIndexes~sort; say idx; end`.
+/// The scope-exact `methods(.RexxInfo~class)` answered the identical set on
+/// the same run, so what the live, fully-booted oracle holds for this class
+/// is what `Setup.cpp` alone put there.
+///
+/// **The absences are the point, and each is a measured oracle answer**:
+/// `ID` is absent, which is why `.RexxInfo~id` raises 97.1 and why
+/// the class wiring row ends at rc 159, and `FILESEPARATOR` is absent while
+/// the documented spellings `PATHSEPARATOR` and `DIRECTORYSEPARATOR` are
+/// present. Measured, `.RexxInfo~hasMethod('ID')` and
+/// `.RexxInfo~hasMethod('FILESEPARATOR')` are both `0` where every other
+/// name below answers `1`.
+#[test]
+fn rexxinfos_own_instance_methods_are_setup_cpps_and_carry_no_id() {
+    let r = native_classes();
+    let rexx_info = r.system_lookup("REXXINFO").expect("RexxInfo is native");
+    assert_eq!(
+        r.own_instance_method_names(rexx_info),
+        set(&[
+            "ARCHITECTURE",
+            "CASESENSITIVEFILES",
+            "COPY",
+            "DATE",
+            "DEBUG",
+            "DIGITS",
+            "DIRECTORYSEPARATOR",
+            "ENDOFLINE",
+            "EXECUTABLE",
+            "FORM",
+            "FUZZ",
+            "INTERNALDIGITS",
+            "INTERNALMAXNUMBER",
+            "INTERNALMINNUMBER",
+            "LANGUAGELEVEL",
+            "LIBRARYPATH",
+            "MAJORVERSION",
+            "MAXARRAYSIZE",
+            "MAXEXPONENT",
+            "MAXPATHLENGTH",
+            "MINEXPONENT",
+            "MODIFICATION",
+            "NAME",
+            "PACKAGE",
+            "PATHSEPARATOR",
+            "PLATFORM",
+            "RELEASE",
+            "REVISION",
+            "VERSION",
+        ])
+    );
+}
+
+/// The kernel directory keeps `RexxInfo` out of the environment one, which
+/// is what makes `.RexxInfo` an instance entry rather than a class entry.
+///
+/// **Both directions**, because either alone is satisfied by a degenerate
+/// registry: absent from `lookup` alone is what a class nobody built looks
+/// like, and present in `system_lookup` alone says nothing about whether
+/// `registered()` will hand the name to `.environment` as well.
+#[test]
+fn a_system_class_is_absent_from_the_environment_registration() {
+    let r = native_classes();
+    assert!(r.system_lookup("REXXINFO").is_some());
+    assert_eq!(r.lookup("REXXINFO"), None);
+    assert!(
+        !r.registered().any(|(name, _)| name == "REXXINFO"),
+        "registered() is what `.environment` is populated from, so a name on \
+         it makes `.RexxInfo` render as `The RexxInfo class`"
+    );
+    // The adjacent success: a class the other closing macro registered is on
+    // both the lookup and the `registered()` side, so the assertions above
+    // are about this class and not about a registry that lost every name.
+    assert!(r.lookup("STACKFRAME").is_some());
+    assert!(r.registered().any(|(name, _)| name == "STACKFRAME"));
+    assert_eq!(r.system_lookup("STACKFRAME"), None);
+}
+
 /// Removal and hiding read back differently through the class's own
 /// dictionary, which is the whole reason they are two operations and not
 /// one. Measured on the shipped oracle at rc 0: `.Queue~method("SORT")`
@@ -1295,9 +1387,14 @@ fn every_native_class_matches_its_recorded_own_class_method_set() {
         "StackFrame",
         "Stem",
         "VariableReference",
+        "RexxInfo",
     ];
     for name in new_only {
-        let id = r.lookup(&name.to_ascii_uppercase()).unwrap();
+        let upper = name.to_ascii_uppercase();
+        let id = r
+            .lookup(&upper)
+            .or_else(|| r.system_lookup(&upper))
+            .unwrap();
         assert_eq!(
             r.own_class_method_names(id),
             set(&["NEW"]),
@@ -1735,10 +1832,14 @@ fn every_setup_class_is_native_or_deferred_with_a_reason() {
                 );
             }
             None => {
-                // Not deferred -- must actually be registered.
+                // Not deferred -- must actually be registered, in one
+                // directory or the other. Which of the two is
+                // `native_classes.rs`'s own internal test, since it is the
+                // side that can read `Setup.cpp`'s closing macro.
                 let block_name = block_name_for(token);
+                let upper = block_name.to_ascii_uppercase();
                 assert!(
-                    r.lookup(&block_name.to_ascii_uppercase()).is_some(),
+                    r.lookup(&upper).is_some() || r.system_lookup(&upper).is_some(),
                     "{token:?} is neither deferred nor registered as {block_name:?}"
                 );
             }

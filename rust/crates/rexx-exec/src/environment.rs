@@ -443,12 +443,38 @@ impl Interp {
         // answers the same object.
         let true_value = self.text(b"1");
         let false_value = self.text(b"0");
-        let extras: [(&[u8], ObjRef); 5] = [
+        // `Setup.cpp:1736`-`:1737`: `REXXINFO` is a pre-built *instance* of a
+        // class no environment name reaches, which is why the entry renders
+        // as `a RexxInfo` and answers `~class~id` `RexxInfo` where every
+        // other entry built from a class renders as `The X class`. Measured
+        // on the oracle at rc 0, `.RexxInfo~isA(.Class)` is `0` and
+        // `.RexxInfo~class~superClass` is `The Object class`.
+        //
+        // **Allocated after every other allocation this function makes**, so
+        // that nothing between this line and the `set_entry` below can
+        // collect it: the environment is the only root it has, and
+        // `alloc_with` collects before it allocates.
+        //
+        // The other direction is safe for a reason of its own rather than by
+        // ordering: `true_value` and `false_value` are held in locals across
+        // this allocation, and `Interp::text` answers `ObjRef::inline_text`
+        // for a one-byte slice, so neither names an arena slot for a
+        // collection here to sweep.
+        let rexx_info_class = self
+            .classes()
+            .system_lookup("RexxInfo")
+            .expect("RexxInfo is a native class in the kernel directory");
+        let rexx_info = self.alloc_with(
+            BehaviourId::OBJECT,
+            Body::Native(Box::new(NativeObject::new(rexx_info_class, b"a RexxInfo"))),
+        );
+        let extras: [(&[u8], ObjRef); 6] = [
             (b"ENVIRONMENT", environment),
             (b"LOCAL", local),
             (b"NIL", ObjRef::NIL),
             (b"TRUE", true_value),
             (b"FALSE", false_value),
+            (b"REXXINFO", rexx_info),
         ];
 
         let object = self

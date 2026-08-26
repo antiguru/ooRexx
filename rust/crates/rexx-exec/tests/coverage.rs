@@ -1196,6 +1196,9 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     // the argument ladder whose order puts the metaclass before the class id.
     "lang/class_subclass_factory.rex",
     "lang/class_subclass_refusals.rex",
+    // `.RexxInfo`: the environment entry that is an instance, and the class
+    // object behind it that no environment name reaches.
+    "lang/rexxinfo_entry.rex",
 ];
 
 #[test]

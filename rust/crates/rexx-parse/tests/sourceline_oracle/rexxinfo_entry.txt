@@ -1,0 +1,79 @@
+count 78
+/* .RexxInfo: the one `.environment` entry that is a pre-built instance
+ * rather than a class object.
+ *
+ * `addToEnvironment("REXXINFO", info)` puts the instance there
+ * (Setup.cpp:1737) while `EndSpecialClassDefinition(RexxInfo)` routes the
+ * class itself to `addToSystem` (Setup.cpp:1285), so no environment name
+ * reaches the class. That split is what rows 1 to 4 read: the entry renders
+ * as `a RexxInfo` and not as `The RexxInfo class`, and `~isA(.Class)` is 0.
+ *
+ * Rows 5 to 14 are the class object, reached only through `~class`. Every
+ * answer is the one every other native class gives -- metaclass `.Class`,
+ * superclass `.Object`, `~package` the REXX one -- which is what says the
+ * class was built by the same path as the rest and merely registered in the
+ * other directory.
+ *
+ * `~id` and `~new` raise 97.1 because the instance's behaviour genuinely
+ * holds neither name; `hasMethod` reads that same dictionary, and the ID and
+ * FILESEPARATOR rows are the absences that decide it. A name Setup.cpp adds
+ * to the RexxInfo block answers 1 on the instance and 0 on the class object,
+ * and the ID and NEW rows run the other way for a reason each: NEW is the
+ * block's class method, and ID is .Class's own instance method, which every
+ * class object answers and this instance does not.
+ *
+ * The rename at the end is on the singleton and is not undone, so the
+ * untrapped `~id` after it quotes the new name: 97.1 reports the receiver
+ * through `stringValue()`, and `~objectName=` is what that reads. rc 159.
+ */
+
+signal on syntax name trapped
+n = 0
+
+next:
+n = n + 1
+select
+  when n = 1  then say n 'entry' .RexxInfo
+  when n = 2  then say n 'string' .RexxInfo~string
+  when n = 3  then say n 'objectname' .RexxInfo~objectName
+  when n = 4  then say n 'isa-class' .RexxInfo~isA(.Class) .RexxInfo~isA(.Object)
+  when n = 5  then say n 'class' .RexxInfo~class
+  when n = 6  then say n 'class-id' .RexxInfo~class~id
+  when n = 7  then say n 'class-class' .RexxInfo~class~class
+  when n = 8  then say n 'class-super' .RexxInfo~class~superClass
+  when n = 9  then say n 'class-supers' .RexxInfo~class~superClasses~makeString('L', ' ')
+  when n = 10 then say n 'class-meta' .RexxInfo~class~metaClass
+  when n = 11 then say n 'class-base' .RexxInfo~class~baseClass
+  when n = 12 then say n 'class-isa' .RexxInfo~class~isA(.Class) .RexxInfo~class~isSubclassOf(.Object)
+  when n = 13 then say n 'class-package' .RexxInfo~class~package
+  when n = 14 then say n 'class-objectname' .RexxInfo~class~objectName
+  when n = 15 then say n 'entry-index' .environment['REXXINFO'] .environment~at('REXXINFO')
+  when n = 16 then say n 'isnil' .RexxInfo~isNil
+  when n = 17 then say n 'has-digits' .RexxInfo~hasMethod('DIGITS') .RexxInfo~class~hasMethod('DIGITS')
+  when n = 18 then say n 'has-version' .RexxInfo~hasMethod('VERSION') .RexxInfo~hasMethod('LANGUAGELEVEL')
+  when n = 19 then say n 'has-separators' .RexxInfo~hasMethod('PATHSEPARATOR') .RexxInfo~hasMethod('DIRECTORYSEPARATOR')
+  when n = 20 then say n 'has-filesep' .RexxInfo~hasMethod('FILESEPARATOR')
+  when n = 21 then say n 'has-id' .RexxInfo~hasMethod('ID') .RexxInfo~class~hasMethod('ID')
+  when n = 22 then say n 'has-new' .RexxInfo~hasMethod('NEW') .RexxInfo~class~hasMethod('NEW')
+  when n = 23 then say n 'has-object' .RexxInfo~hasMethod('STRING') .RexxInfo~hasMethod('OBJECTNAME')
+  when n = 24 then say n 'request-array' .RexxInfo~request('ARRAY')
+  when n = 25 then say n 'request-string' .RexxInfo~request('STRING')
+  when n = 26 then say n 'request-self' .RexxInfo~request('REXXINFO')
+  when n = 27 then say n 'class-method' .RexxInfo~class~method('DIGITS')
+  when n = 28 then say n 'id' .RexxInfo~id
+  when n = 29 then say n 'new' .RexxInfo~new
+  when n = 30 then say n 'class-method-id' .RexxInfo~class~method('ID')
+  otherwise signal done
+end
+signal next
+
+trapped:
+say n 'raised' rc'.'condition('E')
+signal on syntax name trapped
+signal next
+
+done:
+signal off syntax
+.RexxInfo~objectName = 'renamed info'
+say 'renamed' .RexxInfo .RexxInfo~objectName
+say .RexxInfo~id

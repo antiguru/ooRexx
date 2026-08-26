@@ -748,3 +748,11 @@ lang/method_scope.rex
 # 88.901 whose report carries `NEW`'s traceback frame under `SUBCLASS`'s.
 lang/class_subclass_factory.rex
 lang/class_subclass_refusals.rex
+
+# `.RexxInfo`: the environment entry that is a pre-built instance rather than
+# a class object, and the class object behind it that no environment name
+# reaches. The entry's rendering and `~isA(.Class)` are what separate the two,
+# the class-side rows say it was built by the same path as every other native
+# class, and the `hasMethod` rows read the dictionary whose absences -- `ID`
+# and `FILESEPARATOR` -- decide the 97.1 the file ends on.
+lang/rexxinfo_entry.rex

@@ -52,6 +52,10 @@ pub struct ClassRegistry {
     /// Uppercased name -> identity, the registry's own lookup direction --
     /// oracle's `TheEnvironment->put(classObj, getUpperGlobalName(name))`.
     by_name: HashMap<String, ObjRef>,
+    /// The same direction for the kernel directory -- oracle's
+    /// `addToSystem(name, classObj)`, a second table `.NAME` never reaches.
+    /// See [`ClassRegistry::define_system_class`].
+    by_system_name: HashMap<String, ObjRef>,
 }
 
 impl Default for ClassRegistry {
@@ -70,6 +74,7 @@ impl ClassRegistry {
             default_names: HashMap::new(),
             object_names: HashMap::new(),
             by_name: HashMap::new(),
+            by_system_name: HashMap::new(),
         }
     }
 
@@ -153,12 +158,55 @@ impl ClassRegistry {
         id
     }
 
+    /// Allocate a fresh identity and give it an id string, registered in the
+    /// **kernel** directory rather than the environment one -- oracle's
+    /// `addToSystem(name, currentClass)`, which is what
+    /// `EndSpecialClassDefinition` expands to (`Setup.cpp:396`-`:398`).
+    ///
+    /// A class registered here answers [`Self::system_lookup`] and neither
+    /// [`Self::lookup`] nor [`Self::registered`], which is the difference a
+    /// program can see: measured on the oracle, `.RexxInfo` renders as `a
+    /// RexxInfo` (the instance `addToEnvironment` put there, not the class),
+    /// and `::CLASS K SUBCLASS RexxInfo` is `99.949 "REXXINFO" is not a
+    /// valid class` at rc 157.
+    ///
+    /// Distinct from [`Self::define_unregistered_class`], which is a
+    /// `::CLASS` directive's class: that one is filed against a package and
+    /// this one against a directory, so a later phase that models either
+    /// table has each of them in exactly one place.
+    pub fn define_system_class(
+        &mut self,
+        name: &str,
+        superclass: Option<ObjRef>,
+        kind: ClassKind,
+        metaclass: ObjRef,
+    ) -> ObjRef {
+        let id = self.reserve_id();
+        self.graph.define_class(id, superclass, kind, metaclass);
+        self.names.insert(id, name.to_string());
+        self.default_names.insert(id, format!("The {name} class"));
+        self.by_system_name.insert(name.to_ascii_uppercase(), id);
+        id
+    }
+
     /// `.NAME` resolution's terminal step: an uppercased lookup against this
     /// flat table. `None` for anything not in this registry -- deferred
     /// classes included, since deferring one is exactly declining to add it
-    /// here.
+    /// here, and a system class, which is registered in the other table.
     pub fn lookup(&self, name: &str) -> Option<ObjRef> {
         self.by_name.get(&name.to_ascii_uppercase()).copied()
+    }
+
+    /// The kernel directory's own lookup: what [`Self::define_system_class`]
+    /// registered, and nothing [`Self::lookup`] answers.
+    ///
+    /// **No `.NAME` reaches this**, which is the whole reason the two tables
+    /// are separate: this answers a bootstrap that needs a system class's
+    /// identity to build something out of it -- an instance of it in
+    /// `.environment` -- and never a name resolution, which reads
+    /// [`Self::lookup`] alone.
+    pub fn system_lookup(&self, name: &str) -> Option<ObjRef> {
+        self.by_system_name.get(&name.to_ascii_uppercase()).copied()
     }
 
     /// `~id` -- the string a class was declared with, unmodified case.

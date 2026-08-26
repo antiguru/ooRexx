@@ -166,13 +166,20 @@ change: the superclass is the receiver.
 `.RexxInfo~class~superClass~id` is `Object`, and `.RexxInfo~string` is `a RexxInfo`.
 
 So the row needs a `RexxInfo` **class object that no environment symbol reaches**, and a pre-built
-**instance** of it under `.RexxInfo` -- which is exactly what the spec says twice and what
-`native_classes.rs`'s `DEFERRALS` records: `RexxInfo` is `addToSystem`-only
-(`EndSpecialClassDefinition`), and only the instance is `addToEnvironment`'d (`memory/Setup.cpp:1737`).
+**instance** of it under `.RexxInfo` -- which is exactly what the spec says twice: `RexxInfo` is
+`addToSystem`-only (`EndSpecialClassDefinition`), and only the instance is `addToEnvironment`'d
+(`memory/Setup.cpp:1737`).
 
 **Build.** The class, off the registry's environment-reachable path; the instance in `.environment`;
-and nothing else. The instance answers `~class` and `~string` and refuses everything else with the
-oracle's own 97.1.
+and nothing else.
+
+**The instance's unbuilt surface refuses LOUDLY, at rc 120, and never with 97.1.** The oracle
+understands most of what this task does not build: measured, oracle rc 0, `.RexxInfo~digits` is `9`,
+`.RexxInfo~languageLevel` is `6.06`, `.RexxInfo~form` is `SCIENTIFIC`, `.RexxInfo~fuzz` is `0`,
+`.RexxInfo~internalDigits` is `18` and `.RexxInfo~objectName` is `a RexxInfo`; of that list only `ID`
+and `FILESEPARATOR` answer `hasMethod` `0`. So a 97.1 for `~version` or `~digits` would be a silent
+wrong answer about the language, which is the worst defect class here and one no gate sees. `~id`
+keeps its genuine 97.1, because there the oracle really does not understand the message.
 
 **Done when** the row agrees on both engines, `DEFERRALS`' `RexxInfo` entry is retired or narrowed to
 what still stands, and a control is recorded: registering the class under `.RexxInfo` instead of the
