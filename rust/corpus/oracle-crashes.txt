@@ -234,3 +234,36 @@ that task's review round. **No upstream ticket.** The block is what
 `GUARD ... WHEN` is specified to do, and whether an interpreter should detect
 that no other activity can ever satisfy a particular wait is a design question
 this project has not put to the maintainers.
+
+## 8. A metaclass whose `NEW` answers something that is not a class
+
+    say .object~subclass("k", .MyMeta)~id
+
+    ::CLASS MyMeta SUBCLASS Class
+    ::METHOD new CLASS
+      return 'x'
+
+Effect: SIGSEGV, rc 139, deterministic (measured 3 runs of 3), stdout and
+stderr both empty.
+
+Cause: `RexxClass::subclass` builds the class object by sending `NEW` to the
+metaclass and casts the answer without checking it --
+`RexxClass *new_class = (RexxClass *)meta_class->sendMessage(GlobalNames::NEW,
+class_id, p);` (`classes/ClassClass.cpp:1579`), and the very next statement
+dereferences it, `new_class->setPackage(package)` (`:1582`). A metaclass may
+carry its own `NEW`, and nothing constrains what that method returns, so a
+`RexxString` reaches a `RexxClass` field write.
+
+The neighbour that bounds it: the same metaclass whose `NEW` forwards
+(`forward class (super)`) answers rc 0 and builds the class, and the same
+`::METHOD new CLASS` reached *directly* -- `.MyMeta~new("k")~id` -- is a clean
+`Error 97.1: Object "x" does not understand message "ID".` at rc 159. So it is
+the cast inside `subclass`, not the overridden `NEW` itself, and a reader
+shortening this program to the direct send measures the wrong thing.
+
+Consequence for this crate: none to match. `rexx-exec` refuses a metaclass
+whose `NEW` resolves anywhere other than `.Class` at rc 120 before it builds
+anything -- `dispatch.rs`'s `factory_metaclass`, whose doc carries the reason
+-- so the crashing shape is one this crate cannot reach.
+
+Found 2026-08-26 while building `Class~subclass`. **No upstream ticket.**

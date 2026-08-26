@@ -1192,6 +1192,10 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     // `Method~scope` on the routes to a method object beyond the directive
     // pair `gate-tables/concepts/xscope.rex` asks about.
     "lang/method_scope.rex",
+    // `Class~subclass` and `Class~mixinClass`: what the factory builds, and
+    // the argument ladder whose order puts the metaclass before the class id.
+    "lang/class_subclass_factory.rex",
+    "lang/class_subclass_refusals.rex",
 ];
 
 #[test]

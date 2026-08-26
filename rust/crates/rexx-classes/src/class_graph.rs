@@ -394,15 +394,16 @@ impl ClassGraph {
     /// superclass list.
     ///
     /// **The oracle has no such function, and this one recomputes an answer
-    /// its only caller already has.** `RexxClass::subclass` propagates the
+    /// its callers already have.** `RexxClass::subclass` propagates the
     /// flag inline (`ClassClass.cpp:1634`-`:1637`), reading the parent it is
     /// deriving from; [`ClassGraph::define_class`] asks `uninit_reaches` of
-    /// that same parent, and `rexx-exec`'s directive install calls this
-    /// straight afterwards, with the superclass list still holding the one
-    /// entry `define_class` read -- the `INHERIT` sends that would push more
-    /// run later, and [`ClassGraph::inherit`] propagates the flag itself at
-    /// its own tail. So the two agree under every input, not only under the
-    /// ones a corpus builds.
+    /// that same parent, and `rexx-exec` calls this straight afterwards from
+    /// both routes into that function -- a `::CLASS` directive's install and
+    /// a `~subclass` or `~mixinClass` send -- with the superclass list still
+    /// holding the one entry `define_class` read. The `INHERIT` sends that
+    /// would push more run later, and [`ClassGraph::inherit`] propagates the
+    /// flag itself at its own tail. So the two agree under every input, not
+    /// only under the ones a corpus builds.
     ///
     /// **Nothing witnesses the call**: deleting it leaves the whole gated
     /// suite green, measured. It is kept because it stands where

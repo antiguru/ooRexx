@@ -618,11 +618,18 @@ impl Raised {
     /// although deriving from `.Class` overrides the `METACLASS` the
     /// directive names (`ClassGraph::define_class`).
     ///
-    /// **No `Compiled method` frame**, measured, although
-    /// `RexxClass::subclass` is the body of the `~subclass` *method*: a
-    /// directive calls it rather than sending it, so no activation of it is
-    /// on the stack to contribute a frame. `Interp::inherit_mixin`'s
-    /// `INHERIT` is the contrasting case in the same install.
+    /// **A `::CLASS` directive's own 99.927 carries no `Compiled method`
+    /// frame**, measured, although `RexxClass::subclass` is the body of the
+    /// `~subclass` *method*: a directive calls it rather than sending it, so
+    /// no activation of it is on the stack to contribute a frame.
+    /// `Interp::inherit_mixin`'s `INHERIT` is the contrasting case in the
+    /// same install.
+    ///
+    /// **The same error reached by a send carries one**, and that is the pair
+    /// which says the frame follows the route rather than the error. Measured
+    /// at rc 157: `.object~subclass("k", .Object)` reports `       *-*
+    /// Compiled method "SUBCLASS" with scope "Class".` above the sending
+    /// clause, and `Interp::invoke` is what puts it there.
     pub(crate) fn bad_metaclass(metaclass: &[u8]) -> Raised {
         Raised::syntax(99, 927, vec![metaclass.to_vec()])
     }

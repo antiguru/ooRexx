@@ -60,12 +60,11 @@ pub(crate) struct ProgramId(pub(crate) usize);
 /// (`classes/ObjectClass.cpp:665`-`:669`).
 ///
 /// **`Interp::class_packages` does not key on this and wants no variant.** It
-/// maps a class handle to the [`ProgramId`] whose directives installed that
-/// class, so a class the bootstrap registered is simply absent from it, and
-/// `Interp::package_object_for` is the one reader that turns the absence into
-/// `Package::Rexx`. Putting a `Package` in there would give one state two
-/// spellings -- absent, and present as `Rexx` -- which is the shape this enum
-/// exists to remove.
+/// maps a class handle to a [`ClassPackage`], so a class the bootstrap
+/// registered is simply absent from it, and `Interp::package_object_for` is
+/// the one reader that turns the absence into `Package::Rexx`. Putting a
+/// `Package` in there would give one state two spellings -- absent, and
+/// present as `Rexx` -- which is the shape this enum exists to remove.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum Package {
     /// The package the interpreter's own classes belong to. `PackageClass::
@@ -73,6 +72,27 @@ pub(crate) enum Package {
     Rexx,
     /// The package a loaded program's own directives install into.
     Program(ProgramId),
+}
+
+/// What a class object's own `package` field holds -- `RexxClass::setPackage`,
+/// the write `RexxClass::subclass` makes before it builds anything
+/// (`classes/ClassClass.cpp:1582`).
+///
+/// **Three states, one spelling each**, and the third is why this type is not
+/// [`ProgramId`]. Absent from `Interp::class_packages` is a class the
+/// bootstrap registered, whose `~package` is the `REXX` one; `Program` is a
+/// class a `::CLASS` directive installed, whose `~package` is that program's;
+/// `Null` is a class built by message, whose `~package` is `.nil`. Measured,
+/// oracle rc 159: `k = .object~subclass("k")` then `say k~package~name`
+/// reports `Object "The NIL object" does not understand message "NAME".`
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+pub(crate) enum ClassPackage {
+    /// `ClassDirective::install` passes the installing package
+    /// (`instructions/ClassDirective.cpp:200`, `:205`).
+    Program(ProgramId),
+    /// `OREF_NULL`, which is what `subclassRexx` and `mixinClassRexx` forward
+    /// (`classes/ClassClass.cpp:1546`, `:1496`).
+    Null,
 }
 
 /// Which code body of which loaded program a cached plan belongs to (D16).

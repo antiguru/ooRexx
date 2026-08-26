@@ -76,7 +76,7 @@ use input::Input;
 // plan cache, and the full name-resolution order (plan, then `extra`, then
 // growth).
 mod plan;
-use plan::{BodyKey, CompoundName, Package, Plan, ProgramId};
+use plan::{BodyKey, ClassPackage, CompoundName, Package, Plan, ProgramId};
 
 // One activation: everything about the frame currently executing (D16).
 mod activation;
@@ -3071,10 +3071,13 @@ struct Interp {
     ///
     /// A class absent here came from `rexx_classes::native_classes` and
     /// belongs to the `REXX` package; `Interp::record_package_class` fills both
-    /// tables, so a class cannot be in one and not the other.
+    /// tables, so a class a directive installed cannot be in one and not the
+    /// other. A class built by `~subclass` or `~mixinClass` is in this table
+    /// alone, under [`crate::plan::ClassPackage::Null`], because no directive
+    /// installed it into any package.
     ///
     /// [`package_classes`]: Interp::package_classes
-    class_packages: HashMap<ObjRef, ProgramId>,
+    class_packages: HashMap<ObjRef, ClassPackage>,
     /// The package objects `~package` answers, keyed by the package itself
     /// -- see [`crate::plan::Package`] for why the interpreter's own is a
     /// variant rather than an absent program id.

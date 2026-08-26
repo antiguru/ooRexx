@@ -1,0 +1,74 @@
+/* Class~subclass and Class~mixinClass: the class factory a program reaches by
+ * message rather than by directive (RexxClass::subclassRexx and
+ * mixinClassRexx, classes/ClassClass.cpp:1543 and :1493, each forwarding
+ * OREF_NULL where ClassDirective::install passes its package).
+ *
+ * What a class built this way answers where a directive-installed one answers
+ * otherwise, and what a build that shared one path with the directive would
+ * get wrong:
+ *
+ *   - ~package is .nil, because the forward passes no package. The row reads
+ *     that beside the other answers: the running program's for a ::CLASS, and
+ *     REXX for a class Setup.cpp built.
+ *   - The REXX_DEFINED lock does not reach it, so ~inherit, ~uninherit,
+ *     ~define and ~defineMethods all succeed on what it just built.
+ *     corpus/lang/class_rexx_defined_inherit.rex is the other half of that
+ *     pair: the same send to .Array is 98.985.
+ *
+ * Beside them the shape of what gets built. The id keeps the spelling it was
+ * given; a MIXINCLASS answers the receiver's base class where a SUBCLASS
+ * answers itself; the superclass is the receiver and not a default; the
+ * metaclass argument is optional and is the receiver's own when omitted; and
+ * the class-side methods of a third argument are merged before the INIT send,
+ * so the INIT an enhancing table supplies is the one that runs.
+ *
+ * The inherited class-side INIT printing twice is what says the send at
+ * ClassClass.cpp:1631 happened at all: once for the ::CLASS install, once for
+ * the class ~subclass built under it.
+ *
+ * rc 0.
+ */
+
+p = .object~mixinclass("Persist")
+k = .array~subclass("Kay")
+say 'ids' k~id p~id
+say 'render' k p
+say 'base' k~baseClass~id p~baseClass~id
+say 'super' k~superClass~id p~superClass~id
+say 'supers' k~superClasses~makeString('L', ' ')
+say 'meta' k~metaClass~id 'class' k~class~id
+say 'isa' k~isA(.Class) k~isSubclassOf(.Array) k~isSubclassOf(.Object)
+
+say 'package' k~package
+say 'package-is-rexx' (.Base~package~name == 'REXX') (.Array~package~name == 'REXX')
+
+k~inherit(p)
+say 'inherited' k~superClasses~makeString('L', ' ')
+k~uninherit(p)
+say 'uninherited' k~superClasses~makeString('L', ' ')
+k~define('Zed', .methods~z)
+say 'define-scope' k~method('Zed')~scope~id
+k~defineMethods(.methods)
+say 'define-methods-scope' k~method('Z')~scope~id
+
+kid = .Base~subclass("Kid")
+say 'kid' kid~id kid~superClass~id kid~metaClass~id
+
+grand = kid~mixinclass("Grand")
+say 'grand' grand~id grand~superClass~id grand~baseClass~id
+
+say 'explicit-meta' .object~subclass("Meta1", .Class)~metaClass~id
+say 'omitted-meta' .Holder~subclass("Held")~metaClass~id
+say 'enhanced' .object~subclass("Enh", .Class, .methods)~z
+
+::METHOD z
+  return 'z answered by' self~id
+::METHOD init
+  say 'enhancing init on' self~id
+
+::CLASS Base
+::METHOD init CLASS
+  say 'init on' self~id
+
+::CLASS MetaSrc SUBCLASS Class
+::CLASS Holder METACLASS MetaSrc

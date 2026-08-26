@@ -95,7 +95,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use rexx_classes::{ClassRegistry, InheritRefusal, MethodId, MethodSlot};
+use rexx_classes::{ClassKind, ClassRegistry, InheritRefusal, MethodId, MethodSlot};
 use rexx_core::{BehaviourId, Body, Decoded, ObjRef};
 use rexx_parse::{Access, Expr};
 
@@ -314,7 +314,20 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     ("Class", "METACLASS", Arity::Fixed(0), native_metaclass),
     ("Class", "METHOD", Arity::Fixed(1), native_method),
+    // `RexxClass::mixinClassRexx` and `RexxClass::subclassRexx`
+    // (`memory/Setup.cpp:470`, `:474`), the class factory a program reaches
+    // by message. Neither carries the `REXX_DEFINED` refusal the mutators
+    // above open with: `RexxClass::subclass` does not test the flag, and what
+    // it builds does not carry it either -- measured, oracle rc 0,
+    // `.object~subclass("k")~inherit(.object~mixinclass("mx"))`.
+    (
+        "Class",
+        "MIXINCLASS",
+        Arity::Fixed(3),
+        native_mixin_class_factory,
+    ),
     ("Class", "PACKAGE", Arity::Fixed(0), native_package),
+    ("Class", "SUBCLASS", Arity::Fixed(3), native_subclass),
     ("Class", "SUPERCLASS", Arity::Fixed(0), native_superclass),
     (
         "Class",
@@ -3072,7 +3085,11 @@ fn class_argument(args: &[Option<ObjRef>]) -> Result<ObjRef, Failure> {
 /// `Class~id`: the name the class was declared with, case unmodified --
 /// `RexxClass::getId` (`classes/ClassClass.cpp:385`).
 ///
-/// Measured, `.array~id` is `Array` and `::class Foo` makes `.Foo~id` `Foo`.
+/// Measured, `.array~id` is `Array`, `::class "Foo"` makes `.Foo~id` `Foo`
+/// and `::class Foo` makes it `FOO` -- an unquoted directive name is upcased
+/// with every other symbol before the id is taken, and a quoted one is not.
+/// `.object~subclass("Foo")~id` is `Foo`, because that id is a string
+/// argument and no tokenizer sees it.
 fn native_id(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -3549,6 +3566,235 @@ fn supplier_refusal(interp: &mut Interp, table: ObjRef) -> Failure {
             Raised::no_method(&target, b"SUPPLIER").into()
         }
     }
+}
+
+/// `Class~subclass(id, metaclass, classMethods)`: build a class derived from
+/// the receiver and answer it -- `RexxClass::subclassRexx`
+/// (`classes/ClassClass.cpp:1543`), which forwards to the same
+/// `RexxClass::subclass` a `::CLASS` directive calls, with `OREF_NULL` where
+/// the directive passes its package (`:1546`).
+fn native_subclass(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    class_factory(interp, receiver, args, ClassKind::Regular)
+}
+
+/// `Class~mixinClass(id, metaclass, classMethods)`: the same factory, marking
+/// what it builds a mixin -- `RexxClass::mixinClassRexx`
+/// (`classes/ClassClass.cpp:1493`).
+///
+/// **`RexxClass::mixinClass` is `subclass` under the mixin flag** (`:1519`)
+/// **and the base class taken from the receiver's own** (`:1522`) rather than
+/// from the class being built. [`rexx_classes::ClassGraph::define_class`]
+/// makes both from [`ClassKind::Mixin`], which is why one factory serves both
+/// messages. Measured, oracle rc 0: `.array~mixinclass("mx")~baseClass`
+/// is `The Array class` where `.array~subclass("s")~baseClass` is `The s
+/// class`.
+fn native_mixin_class_factory(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    class_factory(interp, receiver, args, ClassKind::Mixin)
+}
+
+/// `RexxClass::subclass` (`classes/ClassClass.cpp:1562`), in its own order.
+///
+/// **The order is observable and each boundary is measured**, oracle, stdout
+/// empty: the metaclass is resolved and tested first, so
+/// `.object~subclass(, .Object)` is 99.927 and not the 88.901 its omitted id
+/// would earn, while `.object~subclass(, .Class)` is that 88.901. The
+/// enhancing methods are merged before the `INIT` send, so an enhancing
+/// `INIT` is the one that runs -- measured, `::METHOD init` in `.methods`
+/// prints from inside `.object~subclass("k", .Class, .methods)`.
+///
+/// **Nothing here consults `REXX_DEFINED` and nothing sets it.** The C++ is
+/// the reason on both halves: no mutator [`rexx_defined_lock`] guards has its
+/// `isRexxDefined()` test inside this function, and the flag is written by
+/// `RexxClass::liveGeneral` at image-save time (`:136`-`:142`) rather than by
+/// any constructor. Measured, oracle rc 0: `k = .object~subclass("k")` then
+/// `k~inherit(.object~mixinclass("mx"))` answers `The Object class The mx
+/// class`, where `.array~inherit(.object)` is 98.985.
+///
+/// The id string is `String::from_utf8_lossy`'d for the reason
+/// [`Interp::install_class`] gives about a `::CLASS` name that is not UTF-8.
+fn class_factory(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    kind: ClassKind,
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    let metaclass = factory_metaclass(interp, class, args)?;
+    let name = class_id_argument(interp, args)?;
+    let id = interp.classes().define_unregistered_class(
+        &String::from_utf8_lossy(&name),
+        Some(class),
+        kind,
+        metaclass,
+    );
+    interp.record_packageless_class(id);
+    if let Some(enhancing) = args.get(2).copied().flatten() {
+        enhance_class_methods(interp, id, enhancing)?;
+    }
+    // `RexxClass::subclass`'s own tail, in its order (`:1615`-`:1637`), which
+    // is the same sequence `Interp::install_class_at` makes for a directive.
+    interp.classes().check_uninit(id);
+    let caller = interp.caller();
+    interp.send_message(id, INIT, None, &[], caller)?;
+    interp.classes().refresh_parent_has_uninit(id);
+    Ok(Some(id))
+}
+
+/// The metaclass a class factory builds from: the second argument, or the
+/// receiver's own where the send omits it (`classes/ClassClass.cpp:1566`-
+/// `:1569`).
+///
+/// **`.nil` is not an omission**, measured: `.object~subclass("k", .nil)` is
+/// 99.927 naming `The NIL object`, where `.object~subclass("k")` builds. The
+/// C++ tests `meta_class == OREF_NULL`, which an omitted argument is and a
+/// supplied `.nil` is not.
+///
+/// **The test is `!isInstanceOf(TheClassClass) || !isMetaClass()`** (`:1572`),
+/// so a value that is not a class object gets the same 99.927 with its own
+/// rendering: measured, `.object~subclass("k", "abc")` reports `"abc" is not
+/// a valid metaclass.`
+fn factory_metaclass(
+    interp: &mut Interp,
+    class: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    let metaclass = match args.get(1).copied().flatten() {
+        None => interp.classes().metaclass(class),
+        Some(named) => named,
+    };
+    let is_class = matches!(interp.receiver_kind(metaclass), Ok(Primitive::Class(_)));
+    if !is_class || !interp.classes().is_metaclass(metaclass) {
+        let shown = interp.string_value_text(metaclass);
+        return Err(Raised::bad_metaclass(&shown).into());
+    }
+    // **The class object itself is built by a `NEW` send to the metaclass**
+    // (`:1579`), so a metaclass carrying its own `NEW` decides what gets
+    // built and what its arguments mean. This crate implements no `NEW` at
+    // all; what it models is the one `.Class` declares, by constructing the
+    // class in `class_factory` instead of sending. A resolution landing
+    // anywhere else is a class this crate cannot build, and it refuses rather
+    // than build the one `.Class` would have -- measured, oracle rc 0:
+    // `::CLASS MyMeta SUBCLASS Class` with `::METHOD new CLASS` runs that
+    // body for `.object~subclass("k", .MyMeta)`.
+    let modelled = interp.object_model().metaclass;
+    let resolved = interp
+        .classes()
+        .lookup_class_method(metaclass, "NEW")
+        .map(|(scope, _)| scope);
+    if resolved != Some(modelled) {
+        let scope = interp.classes().id_string(metaclass).to_string();
+        return Err(Loud::native_method(b"NEW", &scope).into());
+    }
+    Ok(metaclass)
+}
+
+/// The `class id` argument, and the traceback frame the oracle's own `NEW`
+/// activation contributes when it refuses.
+///
+/// `RexxClass::newRexx` is where the checks live
+/// (`classes/ClassClass.cpp:1786`, `stringArgument(class_id, "class id")`),
+/// because `subclass` reaches it by
+/// `meta_class->sendMessage(GlobalNames::NEW, class_id, p)` (`:1579`) -- so
+/// the frame is
+/// owed for the same reason [`Interp::blame_request`]'s is, and the method's
+/// own frame goes above it from [`Interp::invoke`]. Measured, oracle rc 168:
+/// `.object~subclass()` reports `Compiled method "NEW" with scope "Class".`
+/// then `Compiled method "SUBCLASS" with scope "Class".` then the sending
+/// clause, and `88.901 Missing argument; argument class id is required.`;
+/// `.object~subclass(.environment)` is `88.909 Argument class id must have a
+/// string value.` under the same pair.
+fn class_id_argument(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<Vec<u8>, Failure> {
+    let outcome = required_class_id(interp, args);
+    if outcome.is_err() {
+        interp.blame_native_method(b"NEW", "Class");
+    }
+    outcome
+}
+
+/// [`class_id_argument`] without the frame, so that every way of failing
+/// takes it.
+///
+/// **The id keeps the spelling it was given**, unlike a method name, which
+/// [`method_name_argument`] upcases: measured, `.object~subclass("k")~id` is
+/// `k` and `~string` is `The k class`.
+fn required_class_id(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<Vec<u8>, Failure> {
+    let Some(Some(argument)) = args.first().copied() else {
+        return Err(Raised::missing_named_argument("class id").into());
+    };
+    let argument = required_string_named_argument(interp, argument, "class id")?;
+    Ok(interp.to_text(argument).to_vec())
+}
+
+/// The third argument: class-side methods the new class is built with --
+/// `createMethodDictionary(enhancing_methods, new_class)` merged into
+/// `classMethodDictionary` (`classes/ClassClass.cpp:1602`-`:1608`).
+///
+/// **The class side and not the instance side**, measured, oracle rc 0: with
+/// `::METHOD z` unattached, `k = .object~subclass("k", .Class, .methods)`
+/// answers `k~z` and `k~hasMethod('Z')` is `1`, while `k~method('Z')` raises
+/// 97.1 -- `~method` reads the instance dictionary and nothing was put there.
+///
+/// The argument is read the way [`native_define_methods`] reads its own, for
+/// the reason that function gives: the oracle walks it by sending `SUPPLIER`,
+/// so what a value with no such method gets is 97.1 naming that message.
+fn enhance_class_methods(
+    interp: &mut Interp,
+    class: ObjRef,
+    enhancing: ObjRef,
+) -> Result<(), Failure> {
+    if !matches!(
+        interp.receiver_kind(enhancing),
+        Ok(Primitive::Directory | Primitive::StringTable)
+    ) {
+        return Err(supplier_refusal(interp, enhancing));
+    }
+    if let Some(owner) = interp.unbuilt_collection_owner(enhancing) {
+        return Err(Loud::unreadable_collection(owner).into());
+    }
+    let mut names = interp.native_keys(enhancing);
+    names.sort();
+    // One frame around the whole walk, for the reason
+    // [`Interp::define_method_table`] has one: each entry allocates the copy
+    // `newScope` makes, and the temporary rooting that copy carries until
+    // `hold_method_object` roots it as a global has to be released somewhere.
+    let frame = interp.roots.push_frame();
+    let installed = install_enhancing_methods(interp, class, enhancing, &names);
+    interp.roots.pop_frame(frame);
+    installed
+}
+
+/// [`enhance_class_methods`]'s walk, split out so the root frame it runs
+/// inside is released on the failure path too.
+fn install_enhancing_methods(
+    interp: &mut Interp,
+    class: ObjRef,
+    enhancing: ObjRef,
+    names: &[Box<[u8]>],
+) -> Result<(), Failure> {
+    for name in names {
+        let value = interp.native_entry(enhancing, name).unwrap_or(ObjRef::NIL);
+        if interp.receiver_kind(value) != Ok(Primitive::Method) {
+            return Err(Loud::method_from_source().into());
+        }
+        interp
+            .define_class_method_object(class, name, value)
+            .ok_or_else(|| {
+                Failure::from(Loud::receiver_class(
+                    "a method object this crate did not build",
+                ))
+            })?;
+    }
+    Ok(())
 }
 
 /// `Class~delete(name)`: take one instance method back off the receiver --
@@ -5814,6 +6060,47 @@ mod tests {
                  say .MYTHING\n"
             ),
             (0, "v\nw\n".to_string(), String::new())
+        );
+    }
+
+    /// **A metaclass carrying its own `NEW` decides what `~subclass` builds**,
+    /// and this crate has no `NEW` to run -- see [`factory_metaclass`] for why
+    /// that is a loud refusal rather than a class built from `.Class`'s path.
+    ///
+    /// The only instrument. The oracle answers this shape at rc 0, so no
+    /// corpus row can carry a refusal for it; and a build that dropped the
+    /// check would answer at rc 0 as well, with a class the metaclass's own
+    /// `NEW` never saw. That is a silent wrong answer, which is the outcome
+    /// nothing else here catches.
+    ///
+    /// **The answering row beside it is the point.** The same metaclass with
+    /// no `NEW` of its own builds and answers `id k`, matching the oracle, so
+    /// a build that refused every named metaclass fails that row rather than
+    /// passing this one.
+    ///
+    /// The `FORWARD` body is deliberate and is not reached: a `::METHOD new
+    /// CLASS` that returns anything which is not a class object crashes the
+    /// oracle, `corpus/oracle-crashes.txt` entry 8, and a program in this
+    /// file is a program someone will eventually run against it.
+    #[test]
+    fn a_metaclass_with_its_own_new_is_loud() {
+        let (code, stdout, stderr) = both_engines(
+            "say 'id' .object~subclass(\"k\", .MyMeta)~id\n\
+             ::CLASS MyMeta SUBCLASS Class\n\
+             ::METHOD new CLASS\n\
+             forward class (super)\n",
+        );
+        assert_eq!((code, stdout.as_str()), (120, ""));
+        assert_eq!(
+            stderr,
+            "rexx-exec: method \"NEW\" of class \"MYMETA\" is not implemented (Phase 5)\n"
+        );
+        assert_eq!(
+            both_engines(
+                "say 'id' .object~subclass(\"k\", .MyMeta)~id\n\
+                 ::CLASS MyMeta SUBCLASS Class\n"
+            ),
+            (0, "id k\n".to_string(), String::new())
         );
     }
 

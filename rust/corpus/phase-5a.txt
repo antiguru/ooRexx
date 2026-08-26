@@ -738,3 +738,13 @@ gate-tables/directives/attribute__external__subkeyword.rex
 # name. It ends untrapped on the argument refusal, whose frame line names the
 # scope the native method resolved at.
 lang/method_scope.rex
+# `Class~subclass` and `Class~mixinClass`: the class factory reached by
+# message rather than by directive. `_factory` is what gets built -- the two
+# answers a runtime-built class gives that a directive-installed one does not
+# (`~package` is `.nil`, and the `REXX_DEFINED` lock does not reach it), the
+# id, the base class each kind answers, the optional metaclass, the enhancing
+# class methods and the inherited `INIT`. `_refusals` is the argument ladder,
+# whose order is the metaclass before the class id, ending untrapped on the
+# 88.901 whose report carries `NEW`'s traceback frame under `SUBCLASS`'s.
+lang/class_subclass_factory.rex
+lang/class_subclass_refusals.rex

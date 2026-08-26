@@ -71,7 +71,7 @@ use std::collections::{HashMap, HashSet};
 
 use rexx_core::{BehaviourId, Body, NativeObject, ObjRef};
 
-use crate::plan::{Package, ProgramId};
+use crate::plan::{ClassPackage, Package, ProgramId};
 use crate::{Failure, Interp, Loud};
 
 /// Which directory a lookup is reading.
@@ -965,8 +965,22 @@ impl Interp {
         // reads as `Package::Rexx`, which is the oracle's answer: measured
         // on both engines and the oracle, `.Alarm~package~name` is `REXX`.
         if !self.library_programs.contains(&program) {
-            self.class_packages.insert(class, program);
+            self.class_packages
+                .insert(class, ClassPackage::Program(program));
         }
+    }
+
+    /// Records a class `Class~subclass` or `Class~mixinClass` built, whose
+    /// own `package` field the oracle leaves null
+    /// (`classes/ClassClass.cpp:1546`, `:1496`, then `:1582`).
+    ///
+    /// Separate from [`Interp::record_package_class`] because the two write
+    /// different tables: a class built by message goes into no package's
+    /// class table at all. Measured, oracle rc 0:
+    /// `.context~package~classes~items` is `0` both before and after
+    /// `k = .object~subclass("k")`.
+    pub(crate) fn record_packageless_class(&mut self, class: ObjRef) {
+        self.class_packages.insert(class, ClassPackage::Null);
     }
 
     /// `Package~addClass` and `Package~addPublicClass`, which differ only in
@@ -1042,18 +1056,27 @@ impl Interp {
         table
     }
 
-    /// The package object `class~package` answers, built on first use.
+    /// The package object `class~package` answers, or `.nil` for a class that
+    /// belongs to no package.
     ///
     /// A class this crate's own bootstrap registered belongs to the `REXX`
     /// package; one a `::CLASS` installed belongs to its program's. Measured,
     /// `(.K~package == .Array~package)` is `0` for a `::class K`.
+    ///
+    /// **`.nil` is the third answer and it is the oracle's**, for a class
+    /// `~subclass` or `~mixinClass` built: those forward `OREF_NULL` as the
+    /// package (`classes/ClassClass.cpp:1546`, `:1496`) and `getPackage`
+    /// answers `resultOrNil` of the field. Measured, oracle rc 159 with
+    /// stdout empty: `k = .object~subclass("k")` then `say k~package~name`
+    /// reports `Object "The NIL object" does not understand message "NAME".`
     pub(crate) fn package_object_for(&mut self, class: ObjRef) -> ObjRef {
         // A class this crate's own bootstrap registered is in no program's
         // table, and that absence is what `Package::Rexx` names -- the
         // distinction the enum exists to keep out of an `Option`.
         let package = match self.class_packages.get(&class).copied() {
             None => Package::Rexx,
-            Some(program) => Package::Program(program),
+            Some(ClassPackage::Null) => return ObjRef::NIL,
+            Some(ClassPackage::Program(program)) => Package::Program(program),
         };
         self.package_object(package)
     }
