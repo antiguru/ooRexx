@@ -712,3 +712,22 @@ lang/library_method_traceback_nested.rex
 lang/class_rexx_defined_library_inherit.rex
 lang/class_rexx_defined_library_define.rex
 lang/class_rexx_defined_library_no_mutation.rex
+# `::ATTRIBUTE ... EXTERNAL 'LIBRARY REXX name'` and the `::METHOD ...
+# ATTRIBUTE EXTERNAL` spelling of it. `_bind` is the resolving half, one
+# accessor per directive with a GET and a SET style in one class. What each
+# other row pins is the name the 90.998 report carries: `_missing` is the
+# prefix standing in front of the procedure rather than behind the method
+# name, `_get_third_word` is the style that resolves its third word unchanged,
+# `_set_default` is the spelling that makes an explicit third word the default
+# one again, and `directive_method_attribute_external_missing` is the
+# `::METHOD` keyword reaching the same code with no style to choose.
+# `_arguments` is a bound setter's own argument check. The last row is gate
+# table D's `::ATTRIBUTE EXTERNAL` probe, which stays in
+# `gate-tables/directives/` because that table's row set still names it.
+lang/directive_attribute_external_bind.rex
+lang/directive_attribute_external_missing.rex
+lang/directive_attribute_external_get_third_word.rex
+lang/directive_attribute_external_set_default.rex
+lang/directive_attribute_external_arguments.rex
+lang/directive_method_attribute_external_missing.rex
+gate-tables/directives/attribute__external__subkeyword.rex

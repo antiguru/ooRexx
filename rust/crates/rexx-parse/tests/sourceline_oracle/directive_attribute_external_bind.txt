@@ -1,0 +1,21 @@
+count 20
+/* ::ATTRIBUTE ... EXTERNAL 'LIBRARY REXX name' binds one accessor per
+   directive to the REXX package's own method table (D37). A GET or SET style
+   resolves its third word unchanged, which is why these directives name entry
+   points that package really exports; the procedure that takes a GET or SET
+   prefix is the default one, and directive_attribute_external_missing.rex
+   carries that half. */
+say 'prolog ran'
+say 'get       [' || .k~at || ']'
+say 'other     [' || .k~other || ']'
+say 'caseless  [' || .k~up || ']'
+say 'hasMethod AT    ' .k~hasMethod('AT')
+say 'hasMethod AT=   ' .k~hasMethod('AT=')
+say 'hasMethod GETAT ' .k~hasMethod('GETAT')
+
+::class k
+
+::attribute at    get class external 'LIBRARY REXX file_separator'
+::attribute other get class external 'LIBRARY REXX file_path_separator'
+::attribute up    get class external 'LIBRARY REXX FILE_SEPARATOR'
+::attribute at    set class external 'LIBRARY REXX file_separator'

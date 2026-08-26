@@ -54,8 +54,17 @@ and the `SET` half after it. `::METHOD ... ATTRIBUTE EXTERNAL` is the same mecha
 
 **The registry exports no `GET*`/`SET*` entry at all** -- measured,
 `/bin/grep -n "INTERNAL_METHOD(GET" interpreter/runtime/NativeMethods.h` matches nothing, and the
-`SET` form likewise -- so **every** `::ATTRIBUTE ... EXTERNAL 'LIBRARY REXX x'` raises 90.998 on both
-sides. That makes the work small and complete rather than partial.
+`SET` form likewise.
+
+**That does not make every `::ATTRIBUTE ... EXTERNAL 'LIBRARY REXX x'` a 90.998, and this paragraph
+used to say it did.** The prefix is unconditional only for `ATTRIBUTE_BOTH` and for the `::METHOD`
+spelling. A `::ATTRIBUTE ... GET` or `... SET` prepends only where the decoded procedure IS the
+default -- the C++ asks `internalname == procedure` over two strings `commonString` interned
+(`parser/DirectiveParser.cpp:1737`, `:1802`) -- so an explicit third word that differs from the
+upcased name resolves unchanged. Measured, oracle: `::attribute at get external 'LIBRARY REXX
+file_separator'` is **rc 0**, and with `class` on it `.k~at` answers `/`. Task 1 binds those forms
+too, through the machinery the `::METHOD` form already used, so the resolving half is answered
+rather than left a refusal.
 
 **Done when** the row agrees on both engines, `::METHOD ... ATTRIBUTE EXTERNAL` agrees too, and a
 control is recorded: appending `GET` instead of prepending it names `zzz_no_entryGET` and the row

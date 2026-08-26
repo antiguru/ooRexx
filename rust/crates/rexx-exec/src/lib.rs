@@ -1502,23 +1502,20 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
         DirectiveKind::Routine(routine) if routine.external.is_some() => {
             gap("::ROUTINE EXTERNAL", "Phase 7")
         }
-        // **The one `EXTERNAL` form this phase binds is a `::METHOD` whose
-        // library is `REXX` and which carries no `ATTRIBUTE` keyword**, and
-        // `dispatch::native::method_external` is what decides that -- read
-        // here and again by `Interp::install_directives`, so the form that
-        // binds and the forms that are refused cannot come apart. An entry
-        // point the `REXX` package does not export is 90.998 in that walk and
-        // not a gap here: the oracle answers it, so it is a differential row
-        // rather than a refusal.
+        // **The `EXTERNAL` forms this phase binds are the ones whose library
+        // is `REXX`**, and `dispatch::native::method_external` and its
+        // `::ATTRIBUTE` half are what decide that -- read here and again by
+        // `Interp::install_directives`, so the forms that bind and the forms
+        // that are refused cannot come apart. An entry point the `REXX`
+        // package does not export is 90.998 in that walk and not a gap here:
+        // the oracle answers it, so it is a differential row rather than a
+        // refusal.
         DirectiveKind::Method(method) => match dispatch::native::method_external(method) {
-            None | Some(dispatch::native::MethodExternal::LibraryRexx(_)) => None,
-            // The `::ATTRIBUTE` mechanism under a `::METHOD` keyword, and it
-            // stays with `::ATTRIBUTE EXTERNAL` because it is the same code:
-            // both build `GET`- and `SET`-prefixed procedure names and
-            // resolve a method for each. See `MethodExternal::Attribute`.
-            Some(dispatch::native::MethodExternal::Attribute) => {
-                gap("::METHOD ATTRIBUTE EXTERNAL", "Phase 7")
-            }
+            None
+            | Some(
+                dispatch::native::MethodExternal::LibraryRexx(_)
+                | dispatch::native::MethodExternal::Attribute(_),
+            ) => None,
             // Loads a shared library, which is Phase 7's, exactly as
             // `::ROUTINE EXTERNAL` above does.
             Some(dispatch::native::MethodExternal::OtherLibrary) => gap(
@@ -1526,8 +1523,14 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
                 "Phase 7",
             ),
         },
-        DirectiveKind::Attribute(attribute) if attribute.external.is_some() => {
-            gap("::ATTRIBUTE EXTERNAL", "Phase 7")
+        DirectiveKind::Attribute(attribute) => {
+            match dispatch::native::attribute_external(attribute) {
+                Some(dispatch::native::MethodExternal::OtherLibrary) => gap(
+                    "::ATTRIBUTE EXTERNAL naming a library other than REXX",
+                    "Phase 7",
+                ),
+                _ => None,
+            }
         }
         // Loads a file and **runs its prolog** before `main`: measured, a
         // helper whose first clause is `say 'PROLOG RAN'` prints that line
@@ -1557,12 +1560,27 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
             gap("::CLASS naming a namespace", "Phase 5")
         }
         DirectiveKind::Annotate(_)
-        | DirectiveKind::Attribute(_)
         | DirectiveKind::Class(_)
         | DirectiveKind::Constant(_)
         | DirectiveKind::Resource(_)
         | DirectiveKind::Routine(_) => None,
     }
+}
+
+/// The `LIBRARY REXX` entry point a directive's `EXTERNAL` names and the
+/// `REXX` package does not export -- the one the oracle reports 90.998 for --
+/// or `None` for a directive whose `EXTERNAL` resolves and for one carrying
+/// none.
+///
+/// Both directives that can carry a binding `EXTERNAL` are asked here, so
+/// [`Interp::install_directives`]' walk puts one question to each.
+fn unresolved_external(kind: &DirectiveKind) -> Option<Vec<u8>> {
+    let external = match kind {
+        DirectiveKind::Method(method) => dispatch::native::method_external(method),
+        DirectiveKind::Attribute(attribute) => dispatch::native::attribute_external(attribute),
+        _ => None,
+    };
+    dispatch::native::unresolved_entry(external.as_ref()).map(<[u8]>::to_vec)
 }
 
 /// The refusal a directive stage owes, or `None` when every directive the
@@ -1593,12 +1611,14 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
 /// ```
 ///
 /// **Every `EXTERNAL` row above names a shared library.** `LIBRARY REXX` is
-/// not one, and the `::METHOD` form of it is not a gap at all: `dispatch::native`
-/// binds it and [`Interp::install_directives`] resolves it in the same first
-/// walk, so it never reaches a stage. Measured, oracle:
-/// `::method m external "LIBRARY REXX nosuch"` is 90.998 rc 166, which is a
-/// differential row rather than a refusal, and it still wins over a duplicate
-/// `::ROUTINE` pair standing later in the file.
+/// not one, and the `::METHOD` and `::ATTRIBUTE` forms of it are not gaps at
+/// all: `dispatch::native` binds them and [`Interp::install_directives`]
+/// resolves them in the same first walk, so neither reaches a stage.
+/// Measured, oracle: `::method m external "LIBRARY REXX nosuch"` is 90.998
+/// rc 166, which is a differential row rather than a refusal, and it still
+/// wins over a duplicate `::ROUTINE` pair standing later in the file; and
+/// `::attribute at external 'LIBRARY REXX zzz_no_entry'` is the same 90.998
+/// rc 166 whichever side of `::class a subclass zzznotaclass` it stands on.
 ///
 /// So the oracle walks the directive list once, in source order, resolving
 /// `::ANNOTATE` targets, `LIBRARY REXX` entry points and the libraries the
@@ -2149,13 +2169,13 @@ fn annotation_target<'a>(
 /// `DELEGATE` is what is left: measured, `.K~m` on
 /// `::method m class delegate p` is 97.1 at rc 159 naming `"P"`, because the
 /// message is forwarded to the delegate property's value, and `FORWARD` is
-/// 5b's. **`EXTERNAL` never reaches this function either.** The
-/// `::METHOD ... EXTERNAL 'LIBRARY REXX name'` form does reach a send, and
-/// `Interp::invocable` answers it out of [`Interp::native_externals`] before
-/// it looks in [`Interp::method_bodies`], so no `InstalledMethodBody` is ever
-/// minted for it. The other `EXTERNAL` forms stop at [`directive_gap`] while
-/// the package is installing. Either way the third arm below covers them
-/// rather than an arm of its own.
+/// 5b's. **`EXTERNAL` never reaches this function either.** A form bound to a
+/// `LIBRARY REXX` entry point does reach a send, and `Interp::invocable`
+/// answers it out of [`Interp::native_externals`] before it looks in
+/// [`Interp::method_bodies`], so no `InstalledMethodBody` is ever minted for
+/// it. The forms naming another library stop at [`directive_gap`] while the
+/// package is installing. Either way the third arm below covers them rather
+/// than an arm of its own.
 ///
 /// **An access scope is not a reason to refuse a body**, and that is the one
 /// row this table lost. `PRIVATE` is decided at the send, by
@@ -4695,10 +4715,7 @@ impl Interp {
             // 99.902 at rc 157, which `check_member_keys` answers at the top
             // of this loop; and a file whose `::METHOD EXTERNAL` precedes a
             // duplicate `::ROUTINE` pair is 90.998, which source order gives.
-            if let DirectiveKind::Method(method) = &directive.kind
-                && let Some(dispatch::native::MethodExternal::LibraryRexx(Err(missing))) =
-                    dispatch::native::method_external(method)
-            {
+            if let Some(missing) = unresolved_external(&directive.kind) {
                 self.blame_directive(program, directive);
                 return Err(Raised::external_method_not_found(&missing).into());
             }
@@ -5601,15 +5618,12 @@ impl Interp {
         // The bind `Interp::install_directives`' walk already resolved, asked
         // again rather than staged: `method_external` is a pure function of
         // the directive, and a staging map keyed by directive index would be
-        // a second place for the answer to live.
-        let native = match dispatch::native::method_external(method) {
-            Some(dispatch::native::MethodExternal::LibraryRexx(Ok(entry))) => Some(entry),
-            // `Err` cannot arrive: that walk returned 90.998 and this install
-            // never ran. The other arms are the forms `directive_gap`
-            // refuses, which never reach an install either.
-            _ => None,
-        };
+        // a second place for the answer to live. Every entry point it names
+        // resolved, because that walk returned 90.998 for the first that did
+        // not and this install never ran.
+        let external = dispatch::native::method_external(method);
         for (name, generated) in method_dictionary_keys(method) {
+            let native = dispatch::native::bound_entry(external.as_ref(), &name);
             debug_assert!(
                 native.is_none() || generated.is_none(),
                 "a ::METHOD bound to a LIBRARY REXX entry point also generated a method \
@@ -5658,7 +5672,19 @@ impl Interp {
         class: ObjRef,
         attribute: &AttributeDirective,
     ) {
+        // Read for the reason `Interp::install_method`'s is, and asked per
+        // dictionary key because the two accessors of an `EXTERNAL` attribute
+        // name two different procedures.
+        let external = dispatch::native::attribute_external(attribute);
         for (name, generated) in attribute_dictionary_keys(attribute) {
+            let body = match (
+                generated,
+                dispatch::native::bound_entry(external.as_ref(), &name),
+            ) {
+                (Some(kind), _) => InstallBody::Generated(kind),
+                (None, Some(entry)) => InstallBody::Native(entry),
+                (None, None) => InstallBody::Written,
+            };
             // Both accessors of a `Both`-style attribute carry the
             // directive's own access scope, which is the oracle's own shape:
             // `attributeDirective` builds the getter and the setter and calls
@@ -5669,10 +5695,7 @@ impl Interp {
                 directive,
                 class,
                 &name,
-                match generated {
-                    Some(kind) => InstallBody::Generated(kind),
-                    None => InstallBody::Written,
-                },
+                body,
                 attribute.class_method,
                 attribute.access,
                 attribute.protection,

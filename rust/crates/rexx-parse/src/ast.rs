@@ -1457,14 +1457,17 @@ pub struct ExternalSpec {
     /// * A `::METHOD` uses the method's UPCASED lookup name
     ///   (`DirectiveParser.cpp:1406`).
     /// * A `::METHOD ATTRIBUTE` or `::ATTRIBUTE` resolves an entry point per
-    ///   accessor, each **prefixed** with `GET` or `SET`
-    ///   (`DirectiveParser.cpp:867`-`868`, `:1678`-`1679`). The prefix goes
-    ///   in front because `concatToCstring` appends the receiver to its
+    ///   accessor, and a `GET` or a `SET` is **prefixed** to the procedure to
+    ///   name it (`DirectiveParser.cpp:867`-`868`, `:1678`-`1679`). The prefix
+    ///   goes in front because `concatToCstring` appends the receiver to its
     ///   argument (`StringClass.cpp:1405`-`:1416`), and what it is prefixed
     ///   to is the *procedure*, so the upcased method name is what gets
-    ///   prefixed only where there was no third word. Measured, oracle:
+    ///   prefixed where there was no third word. Measured, oracle:
     ///   `::attribute a external "LIBRARY REXX file_separator"` is
     ///   `90.998 Unable to find external method "GETfile_separator"`.
+    ///   Whether a `::ATTRIBUTE`'s `GET` or `SET` style prefixes at all
+    ///   depends on the procedure that was decoded (`:1737`, `:1802`), which
+    ///   is one more reason resolving one is not this node's.
     ///
     /// Resolving those is the caller's, along with loading the library, so
     /// filling one in here would be picking one of the three arbitrarily.

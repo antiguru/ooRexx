@@ -222,21 +222,14 @@ fn read_rows() -> Vec<Row> {
 ///   row set to distinguish those forms, which is
 ///   `corpus/docs/directive-options.txt`'s shape and not this file's, and
 ///   Phase 7 is where the behaviour it would gate lands.
-/// * The 5a arm carries a boundary row of its own, `::ATTRIBUTE EXTERNAL`.
-///   The plan files it to Task 22, a 5a task, and Task 24 declined to re-file
-///   it to Phase 7 because that closes a gate row by narrowing what the gate
-///   covers. **The interpreter's own refusal says Phase 7** -- `rexx-exec:
-///   ::ATTRIBUTE EXTERNAL is not implemented (Phase 7)`, from
-///   `rexx_exec`'s `directive_gap`. The two disagree because one refusal
-///   covers both forms of `EXTERNAL`, the way `::ROUTINE EXTERNAL` above
-///   does. **This filing is the right half.** The row's probe is
-///   `::attribute at external 'LIBRARY REXX zzz_no_entry'`, and measured, the
-///   oracle answers it with a Rexx condition rather than a library load:
-///   rc 166, `90.998 Unable to find external method "GETzzz_no_entry"` --
-///   the mechanism Task 22 landed for `::METHOD ... EXTERNAL 'LIBRARY REXX
-///   name'`. The message names the phase of the other form, the one whose
-///   `EXTERNAL` loads a shared library; narrowing it is a behaviour change
-///   and not this file's to make.
+/// * `::ATTRIBUTE EXTERNAL` spans the same boundary the `::ROUTINE` row does
+///   and is filed the other way, because its probe picks the other side of
+///   it: `::attribute at external 'LIBRARY REXX zzz_no_entry'` names the
+///   library this crate binds, and measured, the oracle answers it with a
+///   Rexx condition rather than a library load -- rc 166, `90.998 Unable to
+///   find external method "GETzzz_no_entry"`. The spelling that loads a
+///   shared library shares the row and is Phase 7's, and what that costs is
+///   a reported behaviour rather than a gated one, exactly as above.
 /// * `::CLASS CLASS` and `::RESOURCE LIBRARY` are the row set's two
 ///   `cross-reference` rows: the section documents the name and the
 ///   directive's own parser has no arm for it, so both interpreters refuse
