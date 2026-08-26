@@ -156,8 +156,10 @@ const SUBSET_FILES: &[&str] = &[
 /// A program belongs here because of what it contains, not because it was
 /// inconvenient -- see the both-directions assertion at the use site.
 const NO_ALLOCATION_PROGRAMS: &[&str] = &[
-    // Gate table D's `::METHOD EXTERNAL` probe, which is a subset row as
-    // well as a table-D probe. Its shape is the `_missing` refusal below.
+    // Gate table D's `::ATTRIBUTE EXTERNAL` and `::METHOD EXTERNAL` probes,
+    // which are subset rows as well as table-D probes. Their shape is the
+    // `_missing` refusal below.
+    "gate-tables/directives/attribute__external__subkeyword.rex",
     "gate-tables/directives/method__external__subkeyword.rex",
     // The class-directive refusals: each is refused before the main body's
     // first clause, and nothing has been asked of the arena by then.
@@ -238,6 +240,14 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/comparison_operators_remaining.rex",
     "lang/deep_nested_expr.rex",
     "lang/directive_annotate_missing_target.rex",
+    // The `::ATTRIBUTE ... EXTERNAL 'LIBRARY REXX name'` refusals, which
+    // resolve against the same static table the `::METHOD` ones below do.
+    // `directive_attribute_external_bind.rex` and
+    // `directive_attribute_external_arguments.rex` are not here, for the
+    // reason their `::METHOD` siblings are not.
+    "lang/directive_attribute_external_get_third_word.rex",
+    "lang/directive_attribute_external_missing.rex",
+    "lang/directive_attribute_external_set_default.rex",
     "lang/directive_constant_blames_the_last_installed_class.rex",
     "lang/directive_constant_expression_blames_the_last_class.rex",
     "lang/directive_constant_expression_fails.rex",
@@ -253,6 +263,9 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/directive_method_external_before_duplicate.rex",
     "lang/directive_method_external_duplicate_wins.rex",
     "lang/directive_method_external_missing.rex",
+    // The `::METHOD ... ATTRIBUTE EXTERNAL` spelling of the attribute
+    // refusals above.
+    "lang/directive_method_attribute_external_missing.rex",
     // Not a refusal at all: the bound `::METHOD EXTERNAL` installs and the
     // `::CONSTANT`'s own divide is what fails. It allocates nothing for the
     // reason `directive_constant_expression_fails.rex` above does -- the

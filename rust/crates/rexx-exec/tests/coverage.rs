@@ -1179,6 +1179,16 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/class_rexx_defined_library_inherit.rex",
     "lang/class_rexx_defined_library_define.rex",
     "lang/class_rexx_defined_library_no_mutation.rex",
+    // `::ATTRIBUTE ... EXTERNAL 'LIBRARY REXX name'` and the `::METHOD ...
+    // ATTRIBUTE EXTERNAL` spelling of it, with gate table D's own probe for
+    // the row last, exactly as the `::METHOD EXTERNAL` block above ends.
+    "lang/directive_attribute_external_bind.rex",
+    "lang/directive_attribute_external_missing.rex",
+    "lang/directive_attribute_external_get_third_word.rex",
+    "lang/directive_attribute_external_set_default.rex",
+    "lang/directive_attribute_external_arguments.rex",
+    "lang/directive_method_attribute_external_missing.rex",
+    "gate-tables/directives/attribute__external__subkeyword.rex",
 ];
 
 #[test]
