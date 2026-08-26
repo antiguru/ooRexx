@@ -731,10 +731,10 @@ lang/directive_attribute_external_set_default.rex
 lang/directive_attribute_external_arguments.rex
 lang/directive_method_attribute_external_missing.rex
 gate-tables/directives/attribute__external__subkeyword.rex
-# `Method~scope` on every route to a method object that is not the directive
-# pair `gate-tables/concepts/xscope.rex` already asks: the unattached
+# `Method~scope` on the routes to a method object beyond the directive pair
+# `gate-tables/concepts/xscope.rex` asks about: the unattached
 # `::METHOD` no class has taken, the two `~define` shapes, `~defineMethods`,
 # the accessor and constant names, a class `Setup.cpp` builds and a donated
-# name. It ends untrapped on the argument refusal, whose frame line is the one
-# place a traceback prints the scope a native method resolved at.
+# name. It ends untrapped on the argument refusal, whose frame line names the
+# scope the native method resolved at.
 lang/method_scope.rex

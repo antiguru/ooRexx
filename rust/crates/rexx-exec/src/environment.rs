@@ -1440,11 +1440,10 @@ impl Interp {
     /// prints `The NIL object`, and the same object answers `K2` once
     /// `.K2~define("Y", ...)` has taken it.
     ///
-    /// Every route this crate has into a class's own instance dictionary
-    /// leaves the scope reachable through `Class~method`, so the refusal is
-    /// an internal inconsistency rather than a program's doing: the receiver
-    /// resolved `SCOPE` at `Method`, and every object this crate gives that
-    /// behaviour is a `Body::Native`.
+    /// The refusal is an internal inconsistency rather than a program's
+    /// doing: a receiver reaches here only by resolving `SCOPE` at `Method`,
+    /// and a method object is a `Body::Native`. Loud rather than `.nil`, so
+    /// a receiver that is neither cannot pass for one that carries no scope.
     pub(crate) fn method_scope(&self, receiver: ObjRef) -> Result<ObjRef, Failure> {
         match self.heap.get(receiver).map(|held| &held.body) {
             Some(Body::Native(native)) => Ok(native.scope().unwrap_or(ObjRef::NIL)),

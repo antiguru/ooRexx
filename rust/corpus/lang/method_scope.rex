@@ -22,10 +22,9 @@
  * The .nil row is what a build that fills the scope in unconditionally gets
  * wrong, and no other program here asks a method object that has no scope.
  *
- * The last send is untrapped and takes no trap, so the file pins the argument
- * refusal and the frame line a refusal raised inside this native method
- * carries -- which names the scope the method resolved at, and is the one
- * place the traceback prints it. rc 163.
+ * The last send is untrapped, so the file pins the argument refusal and the
+ * frame line a refusal raised inside this native method carries, which names
+ * the scope the method resolved at. rc 163.
  */
 
 m = .methods~z

@@ -88,8 +88,14 @@ both sides today, because `~method` reads the class's own dictionary alone. `.Me
 
 **Build.** `MethodClass::scope` answers the scope the method object carries. The previous plan's
 Task 21 put `scope: Option<ObjRef>` on `NativeObject` for `MethodClass::newScope`, so the field
-exists; what is missing is the reader. State what a method object with no scope yet answers, and
-whether any route in this phase can produce one.
+exists. State what a method object with no scope yet answers, and whether any route in this phase can
+produce one.
+
+**This paragraph used to say the reader was all that was missing, and that was wrong by one write.**
+`Interp::method_object`, the `Class~method` route, minted a method object and left its scope empty,
+so a reader alone would have answered `.nil` for **every** name a class's own dictionary holds and
+the row's first two lines with it. The scope was written only where `method_new_scope` ran, which is
+the `~define` family. Measured by Task 2 and recorded in `lang/method_scope.rex`.
 
 **Done when** the row agrees on both engines and a control is recorded: answering the *defining*
 class rather than the scope leaves `base` right and `sub` wrong, and the row reddens.
