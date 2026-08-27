@@ -2,12 +2,9 @@
  * (RexxClass::method, classes/ClassClass.cpp:984, which retrieves from
  * instanceMethodDictionary directly).
  *
- * This is the guard against a build that flattens every scope onto one class:
+ * This is a guard against a build that flattens every scope onto one class:
  * such a build answers the rows below that raise here, and an inherited name
- * is the shape it would answer first. There is no table C row for it --
- * nothing in the documentation supplies an expected answer for the scope
- * question -- so this program and class_method_class_side_raises.rex beside it
- * are the whole of the protection.
+ * is the shape it would answer first.
  *
  * What a row covers is its own receiver and its own name; the rows below are
  * where that is written down, and a class is covered here because a row names

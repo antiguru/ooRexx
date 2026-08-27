@@ -97,18 +97,10 @@
 //!
 //! # What this table cannot see
 //!
-//! * **Whether a method is defined at a class's own scope.** Measured,
-//!   `.Array~hasMethod("ID")` and `.Array~hasMethod("DEFINE")` are both 1
-//!   though `id` and `define` are `Class`'s, and `.Array~method("ID")` raises
-//!   because `~method` reads the instance dictionary. A build that moved a
-//!   class method between scopes is not caught here. The plan builds no scope
-//!   row class -- the documentation supplies no expected answer for the scope
-//!   question -- and the instrument is instead the `~method` corpus programs
-//!   Task 9 commits.
 //! * **The operator-frame traceback line.** The spec records it as a
 //!   mechanism with no documented section, and this table's concept rows are
 //!   one per `provide.xml` section id, so it has no row here. Its instrument
-//!   is Task 6's corpus programs.
+//!   is the corpus programs.
 //! * **A section's mechanism beyond what its one probe reaches.** A concept
 //!   row is one program; a claim of the section that program does not
 //!   exercise is outside the row. Each concept arm's `control` field names
@@ -267,10 +259,8 @@ fn read_method_rows() -> Vec<MethodRow> {
 /// mutation control demonstrates a row going from green to red, and a row
 /// that is already red demonstrates nothing -- measured on the commit that
 /// creates this table, every row here but the ones listed as agreeing is
-/// already red. So each control names the change that would falsify the row
-/// and the task that can first run it, which is the task where the row first
-/// reads `agree`. Two of them are D50's required controls and are carried in
-/// the "Done when" of the tasks that owe them.
+/// already red. So each control names the change that would falsify the row.
+/// Two of them are D50's required controls.
 struct Concept {
     /// The `provide.xml` section id, which is also the probe's file stem.
     id: &'static str,
@@ -278,7 +268,7 @@ struct Concept {
     phase: &'static str,
     /// The authority for that assignment.
     authority: &'static str,
-    /// The change that would redden the row, and who can first run it.
+    /// The change that would redden the row.
     control: &'static str,
     /// How many lines of `stdout` this section's probe prints on the oracle.
     ///
@@ -320,7 +310,7 @@ const CONCEPTS: &[Concept] = &[
         authority: "spec enumeration: the four kinds themselves are 5a, with enforcement \
                     split into its own rows",
         control: "make `::CLASS ... METACLASS` a no-op, so the declared class is an \
-                  instance of `.Class` like a plain one -- Task 9. The section's abstract \
+                  instance of `.Class` like a plain one. The section's abstract \
                   kind has no control here and is not owed one: this probe asks each class \
                   its `~class~id`, which an abstract class answers exactly as a plain one \
                   does, and abstract enforcement is `abscla`'s row, at 5b because the check \
@@ -344,7 +334,7 @@ const CONCEPTS: &[Concept] = &[
         authority: "spec enumeration: a mixin's base class, and who may inherit it, is 5a",
         control: "answer `~baseClass` with the class itself rather than with the mixin's \
                   first non-mixin superclass, or merge an INHERIT target's methods in front \
-                  of the class's own -- Task 7",
+                  of the class's own",
         oracle_lines: 4,
     },
     Concept {
@@ -362,18 +352,16 @@ const CONCEPTS: &[Concept] = &[
         phase: "5a",
         authority: "spec enumeration: the metaclass graph and its circularity is 5a",
         control: "ignore `METACLASS`, so a class declared with one is still an instance of \
-                  `.Class` -- Task 9, which is where this probe's `~id` and `~class` land; \
-                  `::CLASS ... METACLASS` itself installs from Task 8",
+                  `.Class`",
         oracle_lines: 3,
     },
     Concept {
         id: "xcremet",
         phase: "5a",
         authority: "no row in the spec enumeration; the probe needs `::CLASS` install with a \
-                    quoted identifier and a `::METHOD ... CLASS` body, which are Task 18's \
-                    and Task 15's",
+                    quoted identifier and a `::METHOD ... CLASS` body",
         control: "install a quoted `::CLASS` identifier under a different name, or give the \
-                  new class a superclass other than Object -- Task 18",
+                  new class a superclass other than Object",
         oracle_lines: 3,
     },
     Concept {
@@ -382,7 +370,7 @@ const CONCEPTS: &[Concept] = &[
         authority: "spec enumeration: `mixinClass()` and `inherit()` are 5a, and `~subclass` \
                     is the same factory protocol reached by message rather than by directive",
         control: "answer `~subclass` with a class whose superclass is Object rather than the \
-                  receiver -- Task 7",
+                  receiver",
         oracle_lines: 4,
     },
     Concept {
@@ -391,7 +379,7 @@ const CONCEPTS: &[Concept] = &[
         authority: "spec enumeration: the method dictionary's one entry per scope, and \
                     `Method~scope`, are 5a",
         control: "answer `~method` from the flattened all-scopes dictionary, so an inherited \
-                  name answers where the oracle raises -- Task 9",
+                  name answers where the oracle raises",
         oracle_lines: 2,
     },
     Concept {
@@ -407,12 +395,12 @@ const CONCEPTS: &[Concept] = &[
         id: "methna",
         phase: "5a",
         authority: "no row in the spec enumeration; the probe needs `~define` and `~method`, \
-                    which the enumeration files under 5a and which are Task 21's and Task 9's",
+                    which the enumeration files under 5a",
         control: "stop uppercasing a method name as it is added, so a name defined in lower \
-                  case is not found by the message that names it -- Task 21. Both sites that \
-                  upcase have to go together, measured: `dispatch.rs`'s own `method_name_pair`, \
-                  and `MethodDict::replace_method`, which upcases every key on insert and on \
-                  lookup. Either one alone leaves this row `agree` and the corpus untouched",
+                  case is not found by the message that names it. Both sites have to go \
+                  together, measured: `dispatch.rs`'s own `method_name_pair`, and \
+                  `MethodDict::replace_method`. Either one alone leaves this row `agree` \
+                  and the corpus untouched",
         oracle_lines: 4,
     },
     Concept {
@@ -422,7 +410,7 @@ const CONCEPTS: &[Concept] = &[
                     per-object arm 5b; this probe deliberately omits that arm, which is \
                     `usesem`'s row",
         control: "search a superclass before the class's own dictionary, or drop the \
-                  `UNKNOWN` step so a miss goes straight to NOMETHOD -- Task 12",
+                  `UNKNOWN` step so a miss goes straight to NOMETHOD",
         oracle_lines: 3,
     },
     Concept {
@@ -431,8 +419,7 @@ const CONCEPTS: &[Concept] = &[
         authority: "spec enumeration: the complete method search order, of which `UNKNOWN` \
                     is a step, is 5a",
         control: "**delete the `UNKNOWN` step** and record that this row reddens. One of \
-                  D50's two required controls; runnable only once the step exists, so \
-                  **Task 12** owes it and carries it in its own \"Done when\"",
+                  D50's two required controls; runnable only once the step exists",
         oracle_lines: 1,
     },
     Concept {
@@ -442,7 +429,7 @@ const CONCEPTS: &[Concept] = &[
                     is 5a",
         control: "start a scope-override send at the receiver's own class rather than at the \
                   named scope, which makes `self~type:super` recurse or answer the \
-                  subclass's method -- Task 10",
+                  subclass's method",
         oracle_lines: 1,
     },
     Concept {
@@ -450,7 +437,7 @@ const CONCEPTS: &[Concept] = &[
         phase: "5a",
         authority: "spec enumeration: PUBLIC / PACKAGE / PRIVATE as three access scopes is 5a",
         control: "let a PRIVATE method answer a send from outside the object, so the \
-                  outside-send line answers instead of raising 97.2 -- Task 13",
+                  outside-send line answers instead of raising 97.2",
         oracle_lines: 2,
     },
     Concept {
@@ -480,8 +467,7 @@ const CONCEPTS: &[Concept] = &[
         control: "**delete the `makeString` limb** and record that this row reddens (the \
                   second of D50's two required controls), and **answer `makeString` with \
                   the wrong string**, which reddens the same row at rc 0 with empty stderr \
-                  on both sides -- that second one is table C's mutation 3. **Task 14** \
-                  owes both and carries them in its own \"Done when\"",
+                  on both sides -- that second one is table C's mutation 3",
         oracle_lines: 6,
     },
     Concept {
@@ -490,27 +476,25 @@ const CONCEPTS: &[Concept] = &[
         authority: "spec enumeration: GUARDED/UNGUARDED, REPLY and GUARD legality is 5a, \
                     with the semantics Phase 6's",
         control: "refuse `REPLY` inside a method body, or stop returning its expression to \
-                  the sender -- Task 16",
+                  the sender",
         oracle_lines: 3,
     },
     Concept {
         id: "classmeth",
         phase: "5a",
         authority: "no row in the spec enumeration; the probe asks `~id` of every class \
-                    reachable as an environment symbol, which is Task 9's protocol over \
-                    Task 21's registry",
-        control: "drop a class from the registry, so its `~id` line cannot answer -- \
-                  Task 9, and again for the deferred classes at Task 21",
+                    reachable as an environment symbol",
+        control: "drop a class from the registry, so its `~id` line cannot answer",
         oracle_lines: 31,
     },
     Concept {
         id: "chi",
         phase: "5a",
         authority: "no row in the spec enumeration as a section; the hierarchy list is the \
-                    wiring rows' own authority and the probe asks Task 9's `~superClass` \
+                    wiring rows' own authority and the probe asks `~superClass` \
                     and `~superClasses`",
         control: "answer `~superClass` with the whole superclass list's last element rather \
-                  than the class's direct superclass -- Task 9",
+                  than the class's direct superclass",
         oracle_lines: 8,
     },
     Concept {
@@ -529,9 +513,7 @@ const CONCEPTS: &[Concept] = &[
 ///
 /// One value rather than a per-row assignment: the spec's class-set criterion
 /// replaces the roadmap's "32 classes exist and respond" with exactly this
-/// half, and the plan makes Task 9 the task that moves it and Task 21 the one
-/// that finishes it for the deferred classes. There is no class in
-/// `class-set.txt` the plan files anywhere else.
+/// half. There is no class in `class-set.txt` the plan files anywhere else.
 const WIRING_PHASE: &str = "5a";
 
 /// The phase that owes every method row an `agree`.
@@ -1804,7 +1786,7 @@ fn concept_and_class_gate_table() {
         emit_row(&mut report, row, CONCEPT_SUBDIR);
     }
     report.line("");
-    report.line("the negative control each concept row carries, and who can first run it:");
+    report.line("the negative control each concept row carries:");
     for (section, concept) in &concepts {
         report.line(&format!(
             "  {:<16} {:<4} {}",

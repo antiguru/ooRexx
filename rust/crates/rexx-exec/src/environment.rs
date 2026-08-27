@@ -456,8 +456,7 @@ impl Interp {
         let false_value = self.text(b"0");
         // `Setup.cpp:1736`-`:1737`: `REXXINFO` is a pre-built *instance* of a
         // class no environment name reaches, which is why the entry renders
-        // as `a RexxInfo` and answers `~class~id` `RexxInfo` where every
-        // other entry built from a class renders as `The X class`. Measured
+        // as `a RexxInfo` and answers `~class~id` `RexxInfo`. Measured
         // on the oracle at rc 0, `.RexxInfo~isA(.Class)` is `0` and
         // `.RexxInfo~class~superClass` is `The Object class`.
         //

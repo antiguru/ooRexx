@@ -11,9 +11,8 @@
  *   - an unattached ::METHOD, which .METHODS holds and no class has taken;
  *   - ~define with that object, which fills its scope in place;
  *   - ~define with an object that already carries a scope, which copies;
- *   - ~defineMethods, which copies for the reason its two newScope calls give
- *     (createMethodDictionary at classes/ClassClass.cpp:1265 and replaceMethods
- *     at MethodDictionary.cpp:233), leaving the object it was handed alone;
+ *   - ~defineMethods (createMethodDictionary at classes/ClassClass.cpp:1265
+ *     and replaceMethods at MethodDictionary.cpp:233);
  *   - ::ATTRIBUTE's two accessors and ::CONSTANT, whose names no ::METHOD in
  *     this file spells;
  *   - a class Setup.cpp builds, and a name donated to one class out of
@@ -41,7 +40,7 @@ say 'donor-untouched' .base~method('M')~scope~id
 
 .k4~defineMethods(.methods)
 say 'define-methods' .k4~method('Z')~scope~id
-say 'define-methods-copies' m~scope~id
+say 'define-methods-does-not-rescope' m~scope~id
 
 say 'attribute-get' .base~method('A')~scope~id
 say 'attribute-set' .base~method('A=')~scope~id

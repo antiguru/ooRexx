@@ -211,7 +211,7 @@ fn read_rows() -> Vec<Row> {
 ///   `::ROUTINE r EXTERNAL 'LIBRARY <lib> <entry>'` and `::ROUTINE r EXTERNAL
 ///   'LIBRARY REXX <entry>'` are one row, and its probe picks the first.
 ///
-///   **Task 22 drew the boundary and left `::ROUTINE` whole**: it moved the
+///   **The plan drew the boundary and left `::ROUTINE` whole**: it moved the
 ///   `::METHOD ... EXTERNAL 'LIBRARY REXX name'` form into 5a and neither
 ///   half of `::ROUTINE EXTERNAL`, so this row is still filed against the
 ///   phase that owns every form of it. What that costs is a *reported*

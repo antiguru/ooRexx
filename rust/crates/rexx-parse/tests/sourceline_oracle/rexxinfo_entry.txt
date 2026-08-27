@@ -1,5 +1,5 @@
 count 78
-/* .RexxInfo: the one `.environment` entry that is a pre-built instance
+/* .RexxInfo: an `.environment` entry that is a pre-built instance
  * rather than a class object.
  *
  * `addToEnvironment("REXXINFO", info)` puts the instance there
