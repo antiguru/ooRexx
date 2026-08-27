@@ -5,6 +5,25 @@
 One machine-readable record per landed task, written by `rexx-arms`
 (`crates/rexx-bench/src/bin/rexx-arms.rs`).
 
+## `c7345f7a9` has no row, and its absence is deliberate
+
+The merge that recovered `7c5035db1` ("Hold the innermost flat loop in its own
+field") landed **unmeasured**. `rexx-arms` could not run: `perf stat` returns
+`cycles:u` and drops `instructions:u` whenever the two are requested together,
+though each alone counts at 100.00% enabled. `perf_event_paranoid` is `-1` and
+the events exist, so it is a counter-slot shortage; `systemd-detect-virt` says
+`container-other`, where PMU slots are shared with the host.
+
+`arms.rs` takes the two events together and has no constructor for one of them,
+so there is no measurement to be had here without changing the instrument to
+fit the environment.
+
+**The figures in `7c5035db1`'s own message are not evidence for this tree.**
+They were taken 245 commits earlier, and that message records `rexxcps` moving
+the wrong way. `c7345f7a9`'s message says the axes "are re-measured"; that
+sentence was written before the run and is false. The five gates were re-run
+and are green.
+
 ## Why the file rather than the report
 
 A summary of a measurement is a new claim.
