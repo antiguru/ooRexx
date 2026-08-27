@@ -6,9 +6,8 @@
  * instance dictionary answers this one and raises that one, so neither
  * program alone separates the two dictionaries.
  *
- * The frame line is Task 6's, and this refusal is owed it by the rule
- * blame_native_method states: the oracle reached METHOD's body by an explicit
- * message send. rc 159.
+ * This refusal is owed a frame line by the rule blame_native_method states:
+ * the oracle reached METHOD's body by an explicit message send. rc 159.
  */
 
 say .K~method('M')
