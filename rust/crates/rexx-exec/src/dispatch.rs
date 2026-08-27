@@ -3497,8 +3497,13 @@ fn method_source_lines(
     Err(Loud::method_from_source("a method source that is neither a string nor an array").into())
 }
 
-/// Whether one value is a source line: a receiver whose whole value is its
-/// string value, which is what `makeString` answers for itself.
+/// Whether one value is a source line -- the C++'s `isString(source)` for
+/// the whole source and its `makeString()` for an array's items
+/// (`execution/BaseExecutable.cpp:174`, `classes/StringClassUtil.cpp:428`).
+///
+/// [`Primitive::SmallInt`] answers with [`Primitive::String`] because the
+/// oracle makes no distinction to answer differently: measured,
+/// `12345~class~id` is `String`, and `.k~define("m", 5)` is rc 0.
 fn is_source_line(interp: &Interp, value: ObjRef) -> bool {
     matches!(
         interp.receiver_kind(value),
@@ -3575,11 +3580,16 @@ fn method_name_argument(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<
 /// [`method_name_argument`] with the spelling the caller wrote kept beside
 /// the dictionary key.
 ///
-/// The two differ observably, and `~define` needs both at once: the key is
-/// `method_name->upper()` and the method object is built under `method_name`
-/// itself (`classes/ClassClass.cpp:830`-`:832`, `:849`). Measured, oracle
-/// rc 221: `.k~define("bad", 'this is not rexx +++')` reports
-/// `Error 35 running bad line 1:`, the name as written.
+/// `~define` needs both at once: the key is `method_name->upper()` and the
+/// method object is built under `method_name` itself
+/// (`classes/ClassClass.cpp:830`-`:832`, `:849`). What the oracle does with
+/// the second is report a parse failure under it -- measured, rc 221,
+/// `.k~define("bad", 'this is not rexx +++')` reports `Error 35 running bad
+/// line 1:`, the name as written -- and that report is
+/// [`compile_method_source`]'s refusal here, which names the method the same
+/// way. Nothing else in this crate can see the difference: a dictionary key
+/// is upcased again by `MethodDict` on insert and on lookup, so the two
+/// spellings reach the same entry.
 fn method_name_pair(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
