@@ -3309,6 +3309,23 @@ struct Interp {
         reason = "the box is the point: a pass boundary takes the top out to hand it a &mut Interp beside it, and moves a pointer rather than the header's Numbers"
     )]
     flat_loops: Vec<Box<crate::run::FlatLoop>>,
+    /// **SPIKE.** The innermost open flat loop, held apart from the stack of
+    /// the ones enclosing it.
+    ///
+    /// A pass boundary has to take this state out of the interpreter to hand
+    /// it a `&mut Interp` beside it, and puts it straight back. Off the top of
+    /// `flat_loops` that was a `Vec` pop and a `Vec` push -- a length load, an
+    /// emptiness test, a length store, an element load, then a length load, a
+    /// capacity compare, an element store and a length store. Here it is a
+    /// pointer load, a null store and a pointer store. `flat_loops` is
+    /// unchanged for the whole of a pass, so nothing below the innermost loop
+    /// is touched on the path every pass of every loop takes.
+    ///
+    /// The invariant, which [`Interp::unwind_frames`] is the one place that
+    /// has to restore rather than maintain: this is `Some` exactly when a
+    /// flat loop is open, and `flat_loops` then holds the ones enclosing it,
+    /// innermost last.
+    flat_top: Option<Box<crate::run::FlatLoop>>,
     /// **SPIKE.** The constructs the op driver has open, innermost last, across
     /// every level of it at once.
     ///
@@ -4304,6 +4321,7 @@ impl Interp {
             trace: Vec::new(),
             clause_state: ClauseState::new(),
             flat_loops: Vec::new(),
+            flat_top: None,
             flat_spares: Vec::new(),
             frames: Vec::new(),
             pending_traps: VecDeque::new(),
