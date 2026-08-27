@@ -897,21 +897,45 @@ impl Loud {
         }
     }
 
-    /// `~define` or `~defineMethods` handed something to compile rather than
-    /// a `Method` object.
+    /// A method compiled from source text, in one of the shapes or places
+    /// [`compile_method_source`] does not take.
     ///
     /// `MethodClass::newMethodObject` answers an existing method object
     /// unchanged and otherwise runs the source through
     /// `LanguageParser::createMethod` (`classes/MethodClass.cpp:457`-`:486`),
-    /// which builds a method whose package context is the running one.
-    /// Measured, oracle rc 0: `.K~define("SRC", "say 'x'")` then
-    /// `.K~method("SRC")` prints `a Method`. Nothing in this phase compiles a
-    /// method body outside a `::METHOD` directive, and answering a method
-    /// object with no body behind it would be a wrong answer to `~method`
-    /// rather than a gap.
-    fn method_from_source() -> Loud {
+    /// which builds a method whose package context is the running one. The
+    /// cases refused here, each measured on the oracle:
+    ///
+    /// * **A source that is neither a string nor an array.** The C++ asks the
+    ///   value for an array and then for a string
+    ///   (`execution/BaseExecutable.cpp:181`-`:194`), so a value that
+    ///   converts to either is a source: measured, oracle rc 0,
+    ///   `.k~define("m", .environment)` compiles the directory's own index
+    ///   list. This crate models `.environment`'s membership as a subset, so
+    ///   answering from what it holds would compile a different program;
+    ///   93.974, which the oracle raises for a value that converts to
+    ///   neither, would be a wrong answer for the same reason.
+    /// * **A source that does not parse.** The oracle reports it against the
+    ///   method rather than the program -- measured, rc 221,
+    ///   `.k~define("bad", 'this is not rexx +++')` echoes the body's own
+    ///   clause and then `Error 35 running bad line 1:` with `35.901
+    ///   Prefix operator "+" is not followed by an expression term.`
+    ///   `ParseError` carries no substitution values, so the second line
+    ///   would read `Prefix operator "&1"`, which is the same gap
+    ///   `Interp::run_fragment` records for `INTERPRET`.
+    /// * **A source carrying a directive.** `generateMethod` installs the
+    ///   package the source declares (`parser/LanguageParser.cpp:590`-`:608`)
+    ///   and the main section becomes the method: measured, oracle rc 0, a
+    ///   two-line array source whose second line is `::class zz` compiles,
+    ///   and `.zz` is 97.1 in the caller afterwards.
+    /// * **A class-side install**, where a send can reach the body. The body
+    ///   itself is not retained -- see [`compile_method_source`] for
+    ///   the whole of that argument.
+    ///
+    /// [`compile_method_source`]: crate::dispatch::compile_method_source
+    fn method_from_source(what: &str) -> Loud {
         Loud {
-            message: owned_message("a method built from source text", Some("Phase 5")),
+            message: owned_message(what, Some("Phase 5")),
         }
     }
 
@@ -3128,6 +3152,11 @@ struct Interp {
     ///
     /// [`Interp::package_objects`]: Interp::package_objects
     annotations: HashMap<environment::Annotated, ObjRef>,
+    /// How many methods have been compiled from source text, which is what
+    /// [`environment::Annotated::Compiled`] counts -- see that variant for
+    /// why a compiled method's annotation table is keyed by a count and not
+    /// by the dictionary entry it is installed into.
+    compiled_methods: usize,
     /// The `Method` object `Class~method` answers, keyed by the class and the
     /// instance dictionary name -- see [`Interp::method_object`] for the two
     /// oracle answers that make one object per entry observable.
@@ -4261,6 +4290,7 @@ impl Interp {
             package_tables: HashMap::new(),
             constant_values: HashMap::new(),
             annotations: HashMap::new(),
+            compiled_methods: 0,
             method_objects: HashMap::new(),
             library_bootstrap: false,
             collections_before_program: 0,

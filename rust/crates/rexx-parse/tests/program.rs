@@ -387,3 +387,93 @@ fn a_directives_clause_span_indexes_the_programs_own_source() {
     let text = p.source.span_bytes(d.clause_span.clone()).unwrap();
     assert_eq!(text, b"::routine r");
 }
+
+// ---- `parse_lines`: the array-of-lines source a method is compiled from ----
+
+/// The element boundaries are the only line boundaries, which is what
+/// `ArrayProgramSource` gives and a buffer split on its terminators does not.
+///
+/// Measured on `build/bin/rexx`, rc 243: `.k~define("m", 'say 1' || '0a'x ||
+/// 'say 2')` reports `Error 13.1: Incorrect character in program "\n"
+/// ('0A'X).` A source that let the scanner find the boundary would compile
+/// the same bytes at rc 0, so the negative half below is the one that says
+/// the model is right and the positive half only says it is usable.
+#[test]
+fn a_terminator_inside_an_element_is_a_character_and_not_a_line_break() {
+    assert_eq!(err(rexx_parse::parse_lines(&[b"say 1\nsay 2"])), (13, 1));
+    assert_eq!(err(rexx_parse::parse_lines(&[b"say 1\rsay 2"])), (13, 1));
+    let two = rexx_parse::parse_lines(&[b"say 1", b"say 2"]).expect("two elements are two lines");
+    assert_eq!(two.main.instructions.len(), 2);
+    assert_eq!(two.source.line_count(), 2);
+    assert_eq!(two.source.line(2), Some(&b"say 2"[..]));
+}
+
+/// A Ctrl-Z is a character here too, where a program truncates at one.
+///
+/// Measured on `build/bin/rexx`: `interpret "say c2x('" || '1a'x || "')"`
+/// prints `1A`, so the byte survives as data on a single-line source, and a
+/// bare one outside a literal is 13.1.
+#[test]
+fn a_ctrl_z_inside_an_element_does_not_truncate_the_source() {
+    assert_eq!(err(rexx_parse::parse_lines(&[b"say 1\x1asay 2"])), (13, 1));
+    let program = rexx_parse::parse_program(b"say 1\x1asay 2".to_vec()).expect("truncates");
+    assert_eq!(program.source.line_count(), 1);
+    assert_eq!(program.source.line(1), Some(&b"say 1"[..]));
+}
+
+/// A `#!` first element is skipped, as a file's first line is, and unlike an
+/// `INTERPRET`'s one line.
+///
+/// Measured on `build/bin/rexx`, rc 0: `.k~define("m", '#!/bin/sh')`
+/// compiles, where `interpret "#! nothing here"` is 13.1 on `#` ('23'X).
+#[test]
+fn a_shebang_first_element_is_skipped() {
+    let program = rexx_parse::parse_lines(&[b"#!/usr/bin/env rexx", b"say 1"]).expect("parses");
+    assert_eq!(program.main.instructions.len(), 1);
+    assert_eq!(program.source.line_count(), 2);
+    assert_eq!(
+        err(rexx_parse::parse_interpret(b"#! nothing here".to_vec())),
+        (13, 1)
+    );
+}
+
+/// Directives and labels are accepted, where an `INTERPRET` raises 99.914 and
+/// 47.1 for them: `generateMethod` compiles the whole source and takes the
+/// main section (`parser/LanguageParser.cpp:590`).
+///
+/// Measured on `build/bin/rexx`, rc 0: an array source whose second element
+/// is `::class zz` compiles, and `.zz` is 97.1 in the caller afterwards.
+#[test]
+fn parse_lines_accepts_what_an_interpret_refuses() {
+    let with_directive = rexx_parse::parse_lines(&[b"return 1", b"::class zz"]).expect("parses");
+    assert_eq!(with_directive.directives.len(), 1);
+    assert_eq!(
+        err(rexx_parse::parse_interpret(b"::class zz".to_vec())),
+        (99, 914)
+    );
+    let with_label = rexx_parse::parse_lines(&[b"lab: nop"]).expect("parses");
+    assert!(with_label.main.labels.contains_key(&b"LAB"[..]));
+    assert_eq!(
+        err(rexx_parse::parse_interpret(b"lab: nop".to_vec())),
+        (47, 1)
+    );
+}
+
+/// No elements is a source with no lines, and empty elements keep their
+/// places rather than collapsing.
+///
+/// Measured on `build/bin/rexx`, rc 0: `.k~define("m", .array~new)` compiles
+/// an empty array.
+#[test]
+fn an_empty_element_list_is_a_source_with_no_lines() {
+    let empty = rexx_parse::parse_lines(&[]).expect("parses");
+    assert_eq!(empty.source.line_count(), 0);
+    assert!(empty.main.instructions.is_empty());
+    let blanks = rexx_parse::parse_lines(&[b"", b"", b"say 1"]).expect("parses");
+    assert_eq!(blanks.source.line_count(), 3);
+    assert_eq!(blanks.source.line(3), Some(&b"say 1"[..]));
+    // Strictly increasing starts are what `line_of`'s binary search rests on,
+    // and two empty elements in a row are where they could have collided.
+    let at = blanks.main.instructions[0].clause_span.start;
+    assert_eq!(blanks.source.line_of(at), 3);
+}

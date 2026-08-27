@@ -153,12 +153,14 @@ pub(crate) fn is_symbol_char(byte: u8) -> bool {
 /// here and rc 0 under `rexxc`. Re-measured 2026-07-30; an earlier revision
 /// said 494 with the exact spelling, which matches neither count.
 ///
-/// An `INTERPRET` does not get the skip. `ArrayProgramSource::setup`
-/// (`ProgramSource.cpp:594`) guards it with `interpretAdjust == 0`, and
-/// measured, `interpret "#! nothing here"` is error 13.1 on `#` ('23'X) while
-/// the identical text as line 1 of a file is accepted and the program runs on.
+/// An `INTERPRET` does not get the skip, and it is the only kind that does
+/// not. `ArrayProgramSource::setup` (`ProgramSource.cpp:594`) guards it with
+/// `interpretAdjust == 0`, so an array of lines that is not an `INTERPRET`
+/// skips one as a file does. Measured, `interpret "#! nothing here"` is error
+/// 13.1 on `#` ('23'X), while the identical text as line 1 of a file, and as
+/// the source a method is compiled from, are both accepted.
 fn first_line(source: &ProgramSource) -> usize {
-    if source.kind() == SourceKind::Program
+    if source.kind() != SourceKind::Interpret
         && source.line(1).is_some_and(|line| line.starts_with(b"#!"))
     {
         2

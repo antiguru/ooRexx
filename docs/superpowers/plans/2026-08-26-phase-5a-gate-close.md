@@ -205,13 +205,24 @@ name** while a quoted name keeps its spelling as the method's own name: `~method
 `~method("type")` both answer for a name defined as `"type"`, and `"%"` is a name no symbol could
 hold.
 
-**Say what a compiled body can and cannot do in this phase**, since the body is real Rexx and
-reaches the interpreter: the row's own bodies are `return` of a literal. A body that reaches an
-unbuilt mechanism must refuse loudly rather than answer wrongly.
+**Say what a compiled body can and cannot do in this phase.** This paragraph used to open "since the
+body is real Rexx and reaches the interpreter", and that premise was measured wrong: `~define` and
+`~defineMethods` install into a class's **instance** dictionary, and with `~new` unbuilt no send this
+phase can make reaches one. The row's own bodies are never run. The one route a send can take to a
+body compiled from source text is `~subclass`'s class-method table, and the oracle reports a failure
+inside such a body against the **method** -- measured, rc 214, `.methods~put('return 1/0', 'M')` then
+`.object~subclass("k", .Class, .methods)` then `k~m` gives `Error 42 running M line 1:` where a
+program's own clause names its path. Nothing in this crate answers `running M`, so Task 5 keeps no
+compiled body and both halves of that route refuse loudly instead.
 
 **Done when** the row agrees on both engines, the upcasing pair is pinned by a corpus row of this
-task's own, and a control is recorded: keeping the as-written spelling as the dictionary key makes
-`~method("TYPE")` raise where the oracle answers, and the row reddens.
+task's own, and a control is recorded: the method name stops being upcased as it is added, so
+`~method("TYPE")` raises where the oracle answers and the row reddens. **Both sites that upcase have
+to go**, which Task 5 measured after the one-site version left the row `agree` twice: `~define`'s own
+argument (`dispatch.rs`'s `method_name_pair`) and `MethodDict::replace_method`, which upcases every
+key on insert and on lookup. With either one alone still upcasing, `REXX_CORPUS_GATE=1
+REXX_PHASE_GATE=5a cargo test -p rexx-exec --test gate_table_c` reports `methna` as `agree` and the
+whole corpus stays at 264 of 264.
 
 ---
 

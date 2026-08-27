@@ -409,7 +409,10 @@ const CONCEPTS: &[Concept] = &[
         authority: "no row in the spec enumeration; the probe needs `~define` and `~method`, \
                     which the enumeration files under 5a and which are Task 21's and Task 9's",
         control: "stop uppercasing a method name as it is added, so a name defined in lower \
-                  case is not found by the message that names it -- Task 21",
+                  case is not found by the message that names it -- Task 21. Both sites that \
+                  upcase have to go together, measured: `dispatch.rs`'s own `method_name_pair`, \
+                  and `MethodDict::replace_method`, which upcases every key on insert and on \
+                  lookup. Either one alone leaves this row `agree` and the corpus untouched",
         oracle_lines: 4,
     },
     Concept {

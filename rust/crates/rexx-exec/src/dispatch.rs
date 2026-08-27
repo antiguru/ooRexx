@@ -3452,16 +3452,145 @@ fn rexx_defined_lock(interp: &mut Interp, class: ObjRef) -> Result<(), Failure> 
     Ok(())
 }
 
+/// The physical lines a method source is compiled from, or the refusal for
+/// a value this crate cannot read as one -- `processExecutableSource`
+/// (`execution/BaseExecutable.cpp:169`).
+///
+/// **A string is one line and not a text to split.** The C++ wraps it in a
+/// one-element array (`:174`-`:177`) and `ArrayProgramSource` gives one line
+/// per element, so a terminator byte inside it is a character in the program:
+/// measured, oracle rc 243, `.k~define("m", 'say 1' || '0a'x || 'say 2')` is
+/// `Error 13.1: Incorrect character in program "\n" ('0A'X).` Joining the
+/// lines and letting the scanner find the boundaries would compile that at
+/// rc 0, which is why [`rexx_parse::parse_lines`] takes the elements rather
+/// than a buffer.
+///
+/// **The walk ends at the last item**, which is `stringArrayArgument`'s own
+/// `1..=lastIndex()` -- see [`Raised::method_source_not_all_strings`] for the
+/// pair of measurements that separates a hole from a longer array.
+///
+/// [`Raised::method_source_not_all_strings`]: crate::Raised::method_source_not_all_strings
+fn method_source_lines(
+    interp: &mut Interp,
+    source: ObjRef,
+    position: &'static str,
+) -> Result<Vec<Vec<u8>>, Failure> {
+    if let Ok(Primitive::Array) = interp.receiver_kind(source) {
+        let slots = interp.array_slots_of(source).unwrap_or_default();
+        let last_item = slots
+            .iter()
+            .rposition(Option::is_some)
+            .map_or(0, |at| at + 1);
+        let mut lines = Vec::with_capacity(last_item);
+        for slot in &slots[..last_item] {
+            let item = slot.filter(|item| is_source_line(interp, *item));
+            let Some(item) = item else {
+                return Err(Raised::method_source_not_all_strings(position).into());
+            };
+            lines.push(interp.to_text(item).to_vec());
+        }
+        return Ok(lines);
+    }
+    if is_source_line(interp, source) {
+        return Ok(vec![interp.to_text(source).to_vec()]);
+    }
+    Err(Loud::method_from_source("a method source that is neither a string nor an array").into())
+}
+
+/// Whether one value is a source line: a receiver whose whole value is its
+/// string value, which is what `makeString` answers for itself.
+fn is_source_line(interp: &Interp, value: ObjRef) -> bool {
+    matches!(
+        interp.receiver_kind(value),
+        Ok(Primitive::String | Primitive::SmallInt)
+    )
+}
+
+/// `MethodClass::newMethodObject`'s compiling arm
+/// (`classes/MethodClass.cpp:462`-`:485`): the `Method` object a source text
+/// becomes, carrying no scope, for a caller that is about to install it.
+///
+/// **The compiled body is validated and not retained, and that is a choice
+/// against a wrong answer rather than an omission.** A method this crate
+/// installs from source text goes into a class's *instance* dictionary, and
+/// no send this phase can make reaches one: `~new` is not built, so no
+/// instance of a class a program declares exists. The one route a send can
+/// take to a body compiled here is `~subclass`'s class-method table, and the
+/// oracle reports a failure inside such a body against the **method** where a
+/// program's own clause reports its path -- measured, rc 214,
+/// `.methods~put('return 1/0', 'M')` then
+/// `.object~subclass("k", .Class, .methods)` then `k~m` gives
+/// `Error 42 running M line 1:`. Nothing here answers `running M`. Retaining
+/// the body would make that route run and report a program's path instead,
+/// so both halves of it refuse loudly instead: this function keeps no body
+/// and [`install_enhancing_methods`] declines the install.
+///
+/// What the parse still buys is the oracle's **timing**: a source that does
+/// not parse fails at `~define` time and not at send time, measured at rc 221
+/// for a body no send ever reaches.
+///
+/// `name` is the method's own name as the caller wrote it, which the oracle
+/// keeps unchanged where the dictionary key is upcased
+/// (`classes/ClassClass.cpp:830`-`:832`): it is the name a parse failure
+/// reports the source under.
+fn compile_method_source(
+    interp: &mut Interp,
+    name: &[u8],
+    source: ObjRef,
+    position: &'static str,
+) -> Result<ObjRef, Failure> {
+    let lines = method_source_lines(interp, source, position)?;
+    let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
+    let parsed = rexx_parse::parse_lines(&borrowed).map_err(|error| {
+        Failure::from(Loud::method_from_source(&format!(
+            "reporting a method source that does not parse ({}, {error})",
+            String::from_utf8_lossy(name)
+        )))
+    })?;
+    if !parsed.directives.is_empty() {
+        return Err(Loud::method_from_source("a method source that carries a directive").into());
+    }
+    let method_class = interp.method_class();
+    let object = interp.native_instance(method_class);
+    // Every `Method` object this crate builds carries an annotation table, so
+    // that `~annotations` and `~annotation` answer from the object rather
+    // than from a way back to a directive. A compiled method has no directive
+    // and its table starts empty, which is the oracle's own answer: measured,
+    // rc 0, `.k~define("m", 'return 1')` then `.k~method("M")~annotation('x')`
+    // is `The NIL object`.
+    let site = crate::environment::Annotated::Compiled(interp.compiled_methods);
+    interp.compiled_methods += 1;
+    interp.attach_annotations(object, site);
+    Ok(object)
+}
+
 /// The `method name` argument `~define`, `~delete` and `~method` share:
 /// required, string-valued, and upcased before it reaches a dictionary --
 /// `stringArgument(method_name, "method name")->upper()`
 /// (`classes/ClassClass.cpp:831`-`:832`, `:961`, `:987`).
 fn method_name_argument(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<Vec<u8>, Failure> {
+    Ok(method_name_pair(interp, args)?.1)
+}
+
+/// [`method_name_argument`] with the spelling the caller wrote kept beside
+/// the dictionary key.
+///
+/// The two differ observably, and `~define` needs both at once: the key is
+/// `method_name->upper()` and the method object is built under `method_name`
+/// itself (`classes/ClassClass.cpp:830`-`:832`, `:849`). Measured, oracle
+/// rc 221: `.k~define("bad", 'this is not rexx +++')` reports
+/// `Error 35 running bad line 1:`, the name as written.
+fn method_name_pair(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+) -> Result<(Vec<u8>, Vec<u8>), Failure> {
     let Some(Some(argument)) = args.first().copied() else {
         return Err(Raised::missing_named_argument("method name").into());
     };
     let argument = required_string_named_argument(interp, argument, "method name")?;
-    Ok(interp.to_text(argument).to_ascii_uppercase())
+    let written = interp.to_text(argument).to_vec();
+    let key = written.to_ascii_uppercase();
+    Ok((written, key))
 }
 
 /// `Class~define(name, method)`: install one instance method on the receiver
@@ -3486,7 +3615,12 @@ fn method_name_argument(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<
 ///   phase can make reaches one, since `~new` is not built.
 ///
 /// Anything else is source text for `newMethodObject` to compile, which is
-/// [`Loud::method_from_source`].
+/// [`compile_method_source`]. The compiled object carries no scope, so the
+/// `newScope` inside [`Interp::define_method_object`] fills in this class and
+/// keeps the object rather than copying it: measured, oracle rc 0,
+/// `.cost~define("upper", 'return "U"')` then `.cost~method("UPPER")~scope~id`
+/// is `COST`, while an unattached `::METHOD` reached through `.methods~z`
+/// answers `The NIL object` until a class takes it.
 fn native_define(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -3495,7 +3629,7 @@ fn native_define(
 ) -> Result<Option<ObjRef>, Failure> {
     let class = class_receiver(interp, receiver)?;
     rexx_defined_lock(interp, class)?;
-    let name = method_name_argument(interp, args)?;
+    let (written, name) = method_name_pair(interp, args)?;
     match args.get(1).copied().flatten() {
         None => {
             interp
@@ -3510,9 +3644,11 @@ fn native_define(
             interp.drop_method_object(class, &name);
         }
         Some(source) => {
-            if interp.receiver_kind(source) != Ok(Primitive::Method) {
-                return Err(Loud::method_from_source().into());
-            }
+            let source = if interp.receiver_kind(source) == Ok(Primitive::Method) {
+                source
+            } else {
+                compile_method_source(interp, &written, source, "method")?
+            };
             interp
                 .define_method_object(class, &name, source)
                 .ok_or_else(|| {
@@ -3578,9 +3714,15 @@ fn native_define_methods(
             entries.push((name, None));
             continue;
         }
-        if interp.receiver_kind(value) != Ok(Primitive::Method) {
-            return Err(Loud::method_from_source().into());
-        }
+        let value = if interp.receiver_kind(value) == Ok(Primitive::Method) {
+            value
+        } else {
+            // The entry's own index is the method's name, as stored:
+            // `createMethodDictionary` builds the object under
+            // `supplier->index()->requestString()` and keys the dictionary
+            // under its upcase (`classes/ClassClass.cpp:1255`-`:1258`).
+            compile_method_source(interp, &name, value, "method source")?
+        };
         entries.push((name, Some(value)));
     }
     interp.define_method_table(class, &entries).ok_or_else(|| {
@@ -3825,13 +3967,20 @@ fn install_enhancing_methods(
     for name in names {
         let value = interp.native_entry(enhancing, name).unwrap_or(ObjRef::NIL);
         if interp.receiver_kind(value) != Ok(Primitive::Method) {
-            return Err(Loud::method_from_source().into());
+            // **Read as source before declining it**, so that a source the
+            // oracle refuses is refused here the same way rather than
+            // reaching the loud arm below: measured, oracle rc 163, a
+            // literal array `('return 1', , 'nop')` in this table is
+            // `93.952 Method argument method source is an array and does
+            // not contain all string values.`
+            method_source_lines(interp, value, "method source")?;
+            return Err(Loud::method_from_source("a class method built from source text").into());
         }
         interp
             .define_class_method_object(class, name, value)
             .ok_or_else(|| {
-                Failure::from(Loud::receiver_class(
-                    "a method object this crate did not build",
+                Failure::from(Loud::method_from_source(
+                    "a class method whose body this crate does not hold",
                 ))
             })?;
     }

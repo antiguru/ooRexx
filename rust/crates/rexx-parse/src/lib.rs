@@ -159,6 +159,32 @@ pub fn parse_program(text: Vec<u8>) -> Result<Program, ParseError> {
     })
 }
 
+/// Parses a program whose physical lines are given one per element.
+///
+/// This is `ArrayProgramSource` (`parser/ProgramSource.cpp:560`) rather than
+/// a buffer split on its terminators, and the difference is observable:
+/// nothing inside an element divides it, so a `\r`, a `\n` or a Ctrl-Z there
+/// is a character in the program rather than a line boundary. What the
+/// interpreter compiles a method or a routine from is an array like this,
+/// a string source having been wrapped in a one-element one first
+/// (`execution/BaseExecutable.cpp:174`-`:177`).
+///
+/// A `Program` and not a `Fragment`: `LanguageParser::generateMethod` runs
+/// the same `compileSource` a file does and takes the main section as the
+/// executable (`parser/LanguageParser.cpp:590`-`:608`), so directives are
+/// accepted here where an `INTERPRET` raises 99.914 for one, and a label is
+/// accepted where an `INTERPRET` raises 47.1.
+pub fn parse_lines(lines: &[&[u8]]) -> Result<Program, ParseError> {
+    let source = ProgramSource::from_lines(lines);
+    let parsed = parse(&source)?;
+    Ok(Program {
+        source,
+        main: parsed.main,
+        directives: parsed.directives,
+        symbols: parsed.symbols,
+    })
+}
+
 /// Parses the string an `INTERPRET` instruction is about to run.
 ///
 /// Differs from `parse_program` in three measured ways: directives are

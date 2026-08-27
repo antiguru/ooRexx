@@ -1495,6 +1495,25 @@ impl Raised {
         Raised::syntax(93, 903, vec![position.to_string().into_bytes()])
     }
 
+    /// 93.952: a method source array holds something that is not a string.
+    ///
+    /// `stringArrayArgument` (`classes/StringClassUtil.cpp:417`) walks
+    /// `1..=lastIndex()` and raises for an entry that is absent or has no
+    /// string value, so the walk stops at the last item and a longer array
+    /// with nothing beyond it is accepted. Measured, oracle: a literal array
+    /// `('return 1', , 'nop')` -- `~items` 2, `lastIndex` 3 -- is this error
+    /// at rc 163, while `.array~new(3)` with only its first item assigned is
+    /// rc 0.
+    ///
+    /// `position` is the argument name the caller passes down, and the
+    /// callers do not agree on one: measured, `~define` reports `Method
+    /// argument method is an array ...` (`classes/ClassClass.cpp:849`) while
+    /// `~defineMethods` and `~subclass`'s class-method table both report
+    /// `method source` (`:1265`).
+    pub(crate) fn method_source_not_all_strings(position: &str) -> Raised {
+        Raised::syntax(93, 952, vec![position.as_bytes().to_vec()])
+    }
+
     /// 93.902: a message send passed more arguments than the method takes.
     /// `arity` is the count the method **declares**, not the count that
     /// arrived -- measured, `'abc'~length(1)` reports `0 expected` and

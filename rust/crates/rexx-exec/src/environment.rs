@@ -332,6 +332,17 @@ pub(crate) enum Annotated {
     Unattached(ProgramId, Box<[u8]>),
     /// A `::ROUTINE`, by the directive that declares it.
     Routine(ProgramId, usize),
+    /// A method compiled from source text, by a count of its own.
+    ///
+    /// **No directive and no dictionary entry declares one**, which is what
+    /// separates this from [`Annotated::Member`]: the object exists before
+    /// any class has taken it, and one that a class never takes is still a
+    /// method whose `~annotations` answers. Counting is what keeps two of
+    /// them apart -- keying by the entry they are installed into would let a
+    /// `~define` over a name a `::ANNOTATE METHOD` already annotated answer
+    /// the old directive's pairs, where the oracle gives every compiled
+    /// method an empty table.
+    Compiled(usize),
 }
 
 /// Which directive list a reflection name reports on.
@@ -1292,8 +1303,12 @@ impl Interp {
     /// instance side no class object answers from. `defineClassMethod`
     /// installs where a send *does* land -- `.String~NL` after
     /// `CoreClasses.orx:73` -- so the minted id has to name the directive the
-    /// object came from. `None` is a method object this crate handed out
-    /// with no directive behind it, which the caller refuses.
+    /// object came from. `None` is a method object with no row in
+    /// [`Interp::table_method_bodies`]: one this crate did not build, or one
+    /// [`compile_method_source`] built from source text and kept no body for.
+    /// The caller refuses either.
+    ///
+    /// [`compile_method_source`]: crate::dispatch::compile_method_source
     pub(crate) fn define_class_method_object(
         &mut self,
         class: ObjRef,
@@ -1592,6 +1607,7 @@ fn annotation_root_key(site: &Annotated) -> String {
         Annotated::Routine(ProgramId(program), directive) => {
             format!("annotations of the routine at directive {directive} of program {program}")
         }
+        Annotated::Compiled(count) => format!("annotations of compiled method {count}"),
     }
 }
 

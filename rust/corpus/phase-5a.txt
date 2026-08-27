@@ -756,3 +756,15 @@ lang/class_subclass_refusals.rex
 # class, and the `hasMethod` rows read the dictionary whose absences -- `ID`
 # and `FILESEPARATOR` -- decide the 97.1 the file ends on.
 lang/rexxinfo_entry.rex
+
+# A method compiled from source text: `~define` and `~defineMethods` handed
+# something that is not already a `Method` object. `_from_source` is the
+# `~define` caller -- the upcasing pair a quoted name makes visible, a name no
+# symbol could hold, the one-line and array-of-lines source shapes, the scope
+# the taking class sets against the one an untaken method carries, and the
+# annotation table each compiled method gets of its own. `_table` is the other
+# caller, whose entries are walked by supplier. Each ends untrapped on the same
+# malformed array, and what separates the two reports is the position string
+# the caller hands down.
+lang/method_from_source.rex
+lang/method_from_source_table.rex

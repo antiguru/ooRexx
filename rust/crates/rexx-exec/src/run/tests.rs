@@ -7679,8 +7679,6 @@ fn every_directive_this_crate_can_install_leaves_the_program_alone() {
 ///   holds, which is why the partial table is refused rather than answered.
 ///   See `Loud::rexx_package_classes` for where the two halves of the
 ///   oracle's one table live here.
-/// * `.K~define("SRC", "say 'x'")` installs a compiled method, and
-///   `.K~method("SRC")` then prints `a Method`.
 /// * `.K~defineMethods(.local)` is **rc 163**, `93.974`: the oracle reads
 ///   `.local`'s entries and finds they are not methods, where this crate
 ///   cannot read them at all.
@@ -7697,16 +7695,97 @@ fn the_refusals_this_task_leaves_where_the_oracle_answers_still_fire() {
             "the REXX package's class table is not implemented (Phase 5)",
         ),
         (
-            b".K~define(\"SRC\", \"say 'x'\")\n::class K\n",
-            "a method built from source text is not implemented (Phase 5)",
-        ),
-        (
             b".K~defineMethods(.local)\n::class K\n",
             "a directory whose entries this crate does not fill is not implemented (Phase 7)",
         ),
         (
             b".K~defineMethods(.environment)\n::class K\n",
             "a directory whose entries this crate does not fill is not implemented (Phase 5)",
+        ),
+    ];
+    for (source, message) in cases {
+        let outcome = routine_program(source);
+        assert_eq!(
+            outcome.exit_code,
+            crate::NOT_IMPLEMENTED_EXIT,
+            "{message}: exit code"
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&outcome.stderr),
+            format!("rexx-exec: {message}\n"),
+            "{message}: stderr"
+        );
+    }
+}
+
+/// The source shapes a method compiled from source text refuses, each of
+/// which the shipped oracle takes.
+///
+/// **In-crate rather than a corpus row for the reason the refusals above
+/// are**: the oracle answers every one of these, so a differential program
+/// carrying one could never agree, and the exit code alone would not do it
+/// because `NOT_IMPLEMENTED_EXIT` is what a refusal from anywhere in the
+/// program produces.
+///
+/// The measured oracle answer for each:
+///
+/// * `.k~define("m", .environment)` is **rc 0**: `requestArray` on a
+///   directory answers its own index list, and every index is a string, so
+///   the directory compiles as a program. This crate holds a subset of
+///   `.environment`, so it would compile a different one.
+/// * `.k~define("bad", 'this is not rexx +++')` is **rc 221**, and the
+///   report names the method rather than the program:
+///   `Error 35 running bad line 1:` then
+///   `35.901 Prefix operator "+" is not followed by an expression term.`
+/// * `.k~define("m", 'say 1' || '0a'x || 'say 2')` is **rc 243**, `13.1`:
+///   a string source is one line, so a terminator inside it is a character
+///   in the program. This row is what says the refusal is the *report* and
+///   not the line model -- the number this crate reaches is 13.1 too.
+/// * A source whose second line is `::class zz` is **rc 0**, and `.zz` is
+///   97.1 in the caller afterwards: the directive installs into the
+///   method's own package and reaches nothing outside it.
+/// * `.methods~put('return 1', 'M')` then
+///   `.object~subclass("k", .Class, .methods)` is **rc 0**, and `k~m`
+///   answers. A body reached that way reports a failure inside it against
+///   the method -- measured, `return 1/0` there is
+///   `Error 42 running M line 1:` at rc 214 -- which is why no body
+///   compiled here is retained.
+/// * Putting the *method object* a `~define` produced into that same table
+///   is **rc 0** and answers too, so the last row reaches the same body by
+///   the one route that does not hand over source text.
+#[test]
+fn the_method_source_shapes_this_task_leaves_refuse_loudly() {
+    let cases: &[(&[u8], &str)] = &[
+        (
+            b".k~define(\"m\", .environment)\n::class k\n",
+            "a method source that is neither a string nor an array is not implemented (Phase 5)",
+        ),
+        (
+            b".k~define(\"bad\", 'this is not rexx +++')\n::class k\n",
+            "reporting a method source that does not parse (bad, 35.901: Invalid expression.) \
+             is not implemented (Phase 5)",
+        ),
+        (
+            b".k~define(\"m\", 'say 1' || '0a'x || 'say 2')\n::class k\n",
+            "reporting a method source that does not parse (m, 13.1: Invalid character in \
+             program.) is not implemented (Phase 5)",
+        ),
+        (
+            b".k~define(\"m\", ('return 1', '::class zz'))\n::class k\n",
+            "a method source that carries a directive is not implemented (Phase 5)",
+        ),
+        (
+            b".methods~put('return 1', 'M')\n\
+              zk = .object~subclass(\"k\", .Class, .methods)\n\
+              ::method z\n  return 1\n",
+            "a class method built from source text is not implemented (Phase 5)",
+        ),
+        (
+            b".k~define(\"m\", 'return 1')\n\
+              .methods~put(.k~method(\"M\"), 'M')\n\
+              zj = .object~subclass(\"j\", .Class, .methods)\n\
+              ::method z\n  return 1\n::class k\n",
+            "a class method whose body this crate does not hold is not implemented (Phase 5)",
         ),
     ];
     for (source, message) in cases {

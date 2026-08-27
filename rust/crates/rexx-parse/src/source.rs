@@ -39,6 +39,25 @@ pub enum SourceKind {
     /// interpretString), lineNumber)`), so nothing inside it can start a
     /// second line.
     Interpret,
+    /// Source handed over as an array of lines, one element per physical
+    /// line -- `ArrayProgramSource` with no interpret adjustment, which is
+    /// what `MethodClass::newMethodObject` compiles a method body from
+    /// (`classes/MethodClass.cpp:463`, `:482`).
+    ///
+    /// **The element boundaries are the only line boundaries**, so a `\r`,
+    /// a `\n` or a Ctrl-Z inside an element is a byte on that line and the
+    /// scanner rejects it the way it rejects any other character that cannot
+    /// appear in a program. Measured, oracle rc 243:
+    /// `.k~define("m", 'say 1' || '0a'x || 'say 2')` is
+    /// `Error 13.1: Incorrect character in program "\n" ('0A'X).`, and the
+    /// same bytes inside one element of an array source give the identical
+    /// report.
+    ///
+    /// A `#!` first line is skipped, unlike an `INTERPRET`:
+    /// `ArrayProgramSource::setup` takes that branch whenever
+    /// `interpretAdjust` is zero (`parser/ProgramSource.cpp:594`-`:603`).
+    /// Measured, oracle rc 0: `.k~define("m", '#!/bin/sh')` compiles.
+    Lines,
 }
 
 /// The retained text of one Rexx program, indexed by physical line.
@@ -136,6 +155,40 @@ impl ProgramSource {
         }
 
         ProgramSource { text, lines, kind }
+    }
+
+    /// A [`SourceKind::Lines`] source: the line index is given rather than
+    /// scanned, so nothing inside an element can divide it.
+    ///
+    /// The elements are joined by a single `\n` so that every span is still
+    /// a range into one retained buffer, and each element's own range is
+    /// recorded. The separator bytes lie between two line ranges and belong
+    /// to neither: the scanner reads a line at a time through `line_span`
+    /// and never sees them, which is what makes a `\n` *inside* an element a
+    /// character in the program while the one *between* two elements is not.
+    ///
+    /// An empty element list is a source with no lines, which is what an
+    /// empty array is: measured, oracle rc 0, `.k~define("m", .array~new)`.
+    pub fn from_lines(lines: &[&[u8]]) -> Self {
+        let mut text = Vec::new();
+        let mut index = Vec::with_capacity(lines.len());
+        for (position, line) in lines.iter().enumerate() {
+            // Between elements and never before the first, which is what
+            // keeps every line's start strictly greater than the one before
+            // it -- `line_of`'s binary search rests on that, and two empty
+            // elements in a row would otherwise share a start.
+            if position > 0 {
+                text.push(b'\n');
+            }
+            let start = text.len();
+            text.extend_from_slice(line);
+            index.push((start, text.len()));
+        }
+        ProgramSource {
+            text,
+            lines: index,
+            kind: SourceKind::Lines,
+        }
     }
 
     /// What this source holds, which the scanner needs because a `#!` first

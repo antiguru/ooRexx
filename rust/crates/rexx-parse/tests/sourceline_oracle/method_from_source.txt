@@ -1,0 +1,78 @@
+count 77
+/* A method compiled from source text: `Class~define` handed something that is
+ * not already a `Method` object.
+ *
+ * `MethodClass::newMethodObject` compiles anything that is not a method object
+ * (classes/MethodClass.cpp:457-:486), and the dictionary key is the upcased
+ * name while the object itself is built under the name as written
+ * (classes/ClassClass.cpp:830-:832). The `type` rows are that pair: a name
+ * added in lower case is found by a message spelled any way at all, and `%` is
+ * a name no symbol could hold.
+ *
+ * The source is an array of lines, a string being the one-line case of it that
+ * `processExecutableSource` wraps (execution/BaseExecutable.cpp:169-:177). So a
+ * number is a source and a `#!` first line is skipped as it is in a file.
+ *
+ * `~define` answers nothing, so it cannot sit in an expression: 91.999.
+ *
+ * A compiled method's scope is the class that takes it, where a method object
+ * no class has taken carries none. Its annotation table is its own and starts
+ * empty, and two compiled methods do not share one.
+ *
+ * The file ends untrapped on an array whose last item is not the last index
+ * filled: `stringArrayArgument` walks `1..=lastIndex()`
+ * (classes/StringClassUtil.cpp:417) and reports the position string `~define`
+ * hands it. `method_from_source_table.rex` is the other caller, which hands
+ * down a different one. rc 163.
+ */
+
+signal on syntax name trapped
+n = 0
+
+next:
+n = n + 1
+select
+  when n = 1  then .cost~define("%", 'return "percent"')
+  when n = 2  then say n 'operator-class' .cost~method("%")~class
+  when n = 3  then say n 'operator-scope' .cost~method("%")~scope~id
+  when n = 4  then .cost~define("type", 'return "a cost"')
+  when n = 5  then say n 'added-lowercase' .cost~method("TYPE")~class
+  when n = 6  then say n 'matched-as-written' .cost~method("type")~class
+  when n = 7  then say n 'matched-mixed' .cost~method("Type")~scope~id
+  when n = 8  then say n 'unattached-scope' .methods~z~scope
+  when n = 9  then .cost~define("num", 5)
+  when n = 10 then say n 'number-source' .cost~method("NUM")~class
+  when n = 11 then .cost~define("sh", '#!/usr/bin/env rexx')
+  when n = 12 then say n 'shebang-source' .cost~method("SH")~class
+  when n = 13 then .cost~define("dbl", ('use arg q', 'return q * 2'))
+  when n = 14 then say n 'array-source' .cost~method("DBL")~class .cost~method("DBL")~scope~id
+  when n = 15 then .cost~define("blank", ('nop', ''))
+  when n = 16 then say n 'blank-line' .cost~method("BLANK")~class
+  when n = 17 then say n 'annotation-empty' .cost~method("TYPE")~annotation('A')
+  when n = 18 then .cost~method("TYPE")~annotations~put('kept', 'A')
+  when n = 19 then say n 'annotation-read' .cost~method("TYPE")~annotation('A')
+  when n = 20 then say n 'annotation-other' .cost~method("DBL")~annotation('A')
+  when n = 21 then say n 'other-class' .jar~method("TYPE")~class
+  when n = 22 then .jar~define("type", 'return "a jar"')
+  when n = 23 then say n 'other-scope' .jar~method("TYPE")~scope~id .cost~method("TYPE")~scope~id
+  when n = 24 then say n 'no-result' .cost~define("q", 'return 1')
+  when n = 25 then say n 'survives' .cost~method("Q")~scope~id
+  otherwise signal done
+end
+signal next
+
+trapped:
+say n 'raised' rc'.'condition('E')
+signal on syntax name trapped
+signal next
+
+done:
+signal off syntax
+.cost~define("hole", ('return 1', , 'nop'))
+
+::method z
+  return 'unattached'
+
+::class cost
+
+::class jar

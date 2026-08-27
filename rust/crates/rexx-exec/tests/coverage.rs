@@ -1199,6 +1199,11 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     // `.RexxInfo`: the environment entry that is an instance, and the class
     // object behind it that no environment name reaches.
     "lang/rexxinfo_entry.rex",
+    // A method compiled from source text, through each of the two callers
+    // that compile one, ending on the position string that separates their
+    // reports.
+    "lang/method_from_source.rex",
+    "lang/method_from_source_table.rex",
 ];
 
 #[test]
