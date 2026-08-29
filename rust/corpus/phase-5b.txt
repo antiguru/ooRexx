@@ -1,0 +1,15 @@
+# Phase 5b corpus subset -- the union with phase-4a.txt, phase-4b.txt,
+# phase-4c.txt and phase-5a.txt is what the harnesses read, not this file
+# alone. Every entry in those four stays in force.
+#
+# One path per line, relative to this directory (rust/corpus/). Lines starting
+# with # are comments; blank lines are ignored. Same format as the earlier
+# phase files, and read by the same `read_subset`, which unions the files in
+# first-seen order and drops a repeat.
+#
+# EMPTY AS OF TASK 0. Task 0 only wires this file into every harness that
+# reads a phase subset list (SUBSET_FILES in corpus.rs, coverage.rs,
+# collect_stress.rs and ir_dual.rs; the unguarded literal in trace_oracle.rs;
+# and EXPECTED_SUBSET_5B beside EXPECTED_SUBSET_5A in coverage.rs); it adds no
+# corpus program of its own. Each later 5b task appends its own witness here
+# as its own construct starts agreeing with the oracle.

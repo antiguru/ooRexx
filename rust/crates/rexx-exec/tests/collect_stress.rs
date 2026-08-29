@@ -139,6 +139,7 @@ const SUBSET_FILES: &[&str] = &[
     "phase-4b.txt",
     "phase-4c.txt",
     "phase-5a.txt",
+    "phase-5b.txt",
 ];
 
 /// The subset programs that allocate nothing, so collect-on-every-allocation
