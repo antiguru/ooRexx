@@ -1,0 +1,24 @@
+count 23
+/* Phase 5b Task 1: two method bodies assign over SELF and then allocate, once
+   inside INIT while ~new is still building the object and once in an ordinary
+   send. An instance keeps its variable pools in its own body, so a collection
+   reaches the exposed value only by tracing the instance, and SELF is an
+   ordinary variable a body may assign to. The value is wider than a handle
+   can carry, because a short one would survive a missing root by not being a
+   heap object at all. */
+o = .K~new
+say 'a' o~go
+
+::CLASS K
+::METHOD init
+  expose kept
+  self = 'clobbered-in-init'
+  kept = 'kept-' || copies('yz', 30)
+::METHOD go
+  expose kept
+  self = 'clobbered'
+  t = ''
+  do i = 1 to 100
+    t = t || i
+  end
+  return kept length(t) self

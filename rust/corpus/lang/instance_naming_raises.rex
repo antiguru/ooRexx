@@ -1,0 +1,12 @@
+/* Phase 5b Task 1: rendering an instance runs its class's own methods, and
+   the traceback says so. `say o` sends STRING, whose Object-scope method
+   sends OBJECTNAME, whose Object-scope method sends DEFAULTNAME -- so a
+   defaultName that raises reports its own clause under two Compiled method
+   frames that no stored rendering could produce. */
+say 'a'
+say .K~new
+say 'b'
+
+::CLASS K
+::METHOD defaultName
+  return 1/0

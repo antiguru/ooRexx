@@ -42,8 +42,14 @@ fn an_instance_reaches_every_scope_and_every_value_but_no_name() {
     pools.set(sup, b"V", held_by_sup);
     pools.set(sub, b"V", held_by_sub);
     let mut out = Vec::new();
-    Body::Instance(pools).trace(&mut out);
-    assert_eq!(out, vec![sup, held_by_sup, sub, held_by_sub]);
+    let class = ObjRef::class(2).expect("a class identity");
+    Body::Instance {
+        class,
+        name: None,
+        pools,
+    }
+    .trace(&mut out);
+    assert_eq!(out, vec![class, sup, held_by_sup, sub, held_by_sub]);
 }
 
 #[test]
@@ -54,9 +60,15 @@ fn an_instance_stops_reaching_a_dropped_variable() {
     pools.set(scope, b"V", value);
     pools.clear(scope, b"V");
     let mut out = Vec::new();
-    Body::Instance(pools).trace(&mut out);
+    let class = ObjRef::class(2).expect("a class identity");
+    Body::Instance {
+        class,
+        name: None,
+        pools,
+    }
+    .trace(&mut out);
     // The scope's pool survives the drop and is still traced; the value it no
     // longer holds is not, which is what makes `DROP` release an object rather
     // than merely hide it.
-    assert_eq!(out, vec![scope]);
+    assert_eq!(out, vec![class, scope]);
 }

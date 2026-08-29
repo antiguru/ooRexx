@@ -55,8 +55,14 @@ fn a_second_write_to_one_name_replaces_rather_than_shadows() {
     // A shadowing push would leave the first value reachable and would make
     // the pool grow without bound under a loop that assigns one variable.
     let mut out = Vec::new();
-    Body::Instance(pools).trace(&mut out);
-    assert_eq!(out, vec![sup, second]);
+    let class = ObjRef::class(2).expect("a class identity");
+    Body::Instance {
+        class,
+        name: None,
+        pools,
+    }
+    .trace(&mut out);
+    assert_eq!(out, vec![class, sup, second]);
 }
 
 /// `DROP` on an exposed name, and the neighbouring success that pins it to the

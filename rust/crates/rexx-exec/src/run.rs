@@ -3070,22 +3070,38 @@ impl Interp {
     /// first use and rooted for as long as the class is -- which is for ever
     /// in this phase.
     ///
-    /// **Any other receiver is refused rather than given one**, and the reason
-    /// is the root rather than the storage: an instance's pools live in its
-    /// own body and are reached by tracing it, so they are safe exactly while
-    /// something roots the instance -- and the receiver of a running send is
-    /// rooted here only by the `SELF` slot, which the body may assign over.
-    /// The task that creates instances (`~new`) is the one that can settle
-    /// that, and no send in this phase reaches a `::METHOD` body with a
-    /// non-class receiver.
+    /// **An instance is its own.** Its pools live in its own
+    /// [`rexx_core::Body::Instance`] and the collector reaches them by tracing
+    /// it, so they are safe exactly while something roots the instance. The
+    /// `SELF` slot is not that root -- a body may assign over it -- and the
+    /// temporary [`Interp::message_term`] takes over the sending clause is.
+    ///
+    /// **Every other receiver is refused**, having nowhere to keep a pool.
     pub(crate) fn pool_owner(&mut self, receiver: ObjRef) -> Result<ObjRef, Failure> {
         let Some(class) = receiver.class_id() else {
+            if matches!(
+                self.heap.get(receiver).map(|object| &object.body),
+                Some(Body::Instance { .. })
+            ) {
+                return Ok(receiver);
+            }
             return Err(Loud::expose_receiver().into());
         };
         if let Some(owner) = self.class_variables.get(&receiver) {
             return Ok(*owner);
         }
-        let owner = self.alloc_with(BehaviourId::OBJECT, Body::Instance(ScopePools::new()));
+        // The pools of the class *object*, whose own class is its metaclass --
+        // what `.K~class` answers. This object is storage and never a value a
+        // program holds.
+        let holds = self.classes().class_of(receiver);
+        let owner = self.alloc_with(
+            BehaviourId::OBJECT,
+            Body::Instance {
+                class: holds,
+                name: None,
+                pools: ScopePools::new(),
+            },
+        );
         // Rooted before anything else can allocate, the rule `.environment`
         // and `.local` are created under. The key is per class and starts with
         // a period, so it can collide neither with another class's nor with a

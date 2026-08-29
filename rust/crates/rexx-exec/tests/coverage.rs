@@ -1225,7 +1225,16 @@ fn phase_5a_subset_matches_the_committed_list() {
 /// is for `phase-5a.txt`, and added for the same reason: committed empty by
 /// Task 0, with each later 5b task appending its own witness and this list
 /// together.
-const EXPECTED_SUBSET_5B: &[&str] = &[];
+const EXPECTED_SUBSET_5B: &[&str] = &[
+    // Task 1: the concept-row probes `~new` makes agree, and the witnesses
+    // of what those rows do not send.
+    "gate-tables/concepts/creo.rex",
+    "gate-tables/concepts/abscla.rex",
+    "lang/instance_naming.rex",
+    "lang/instance_naming_overrides.rex",
+    "lang/instance_naming_raises.rex",
+    "lang/instance_self_reassigned.rex",
+];
 
 #[test]
 fn phase_5b_subset_matches_the_committed_list() {

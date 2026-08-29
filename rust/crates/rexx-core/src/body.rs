@@ -117,9 +117,22 @@ pub enum Body {
     /// the distinction has to live in the body rather than be reconstructed
     /// from what a read answers.
     Array(Vec<Option<ObjRef>>),
-    /// A user-defined object: its instance variables, one pool per scope
-    /// (D40).
-    Instance(ScopePools),
+    /// A user-defined object: the class whose behaviour it dispatches
+    /// against, the name something gave it, and its instance variables, one
+    /// pool per scope (D40).
+    ///
+    /// `name` is `None` until `~objectName=` sets one, and that is not the
+    /// same as holding the default rendering: `RexxObject::objectName`
+    /// (`classes/ObjectClass.cpp:1695`) reads a set name first and otherwise
+    /// **sends** `DEFAULTNAME`, so a class overriding that method decides what
+    /// an unnamed instance answers. Measured, oracle rc 0: with
+    /// `::METHOD defaultName` returning a counter, two renderings print two
+    /// different values.
+    Instance {
+        class: ObjRef,
+        name: Option<Box<[u8]>>,
+        pools: ScopePools,
+    },
     /// An object the interpreter builds for itself rather than one a program
     /// constructs: `.environment`, `.local`, a package's `.methods` table and
     /// an activation's `.context`.
@@ -387,7 +400,14 @@ impl Body {
             Body::Array(items) => out.extend(items.iter().filter_map(|item| *item)),
             // Every scope's pool, walked by the storage's own type -- see
             // [`ScopePools::trace`] for why the walk lives there.
-            Body::Instance(pools) => pools.trace(out),
+            // The class handle is traced for the reason the `Native` arm
+            // below traces its own: it names no arena slot today
+            // ([`crate::CLASS_SLOT_BASE`]), and the arm stays correct on the
+            // day a class object is allocated like anything else.
+            Body::Instance { class, pools, .. } => {
+                out.push(*class);
+                pools.trace(out);
+            }
             Body::Native(native) => {
                 // The class handle travels with the values. It names no arena
                 // slot today ([`crate::CLASS_SLOT_BASE`]), so the collector

@@ -652,6 +652,18 @@ impl Raised {
         Raised::syntax(98, 990, vec![id.to_vec()])
     }
 
+    /// 98.989: `~new` on an `ABSTRACT` class -- `RexxClass::checkAbstract`
+    /// (`classes/ClassClass.cpp:1741`). One substitution, the class's own
+    /// `~id`, unquoted.
+    ///
+    /// Measured, rc 158, on `::class ab abstract` with `say .ab~new`:
+    /// `Error 98.989:  Class AB is ABSTRACT and cannot be directly created.`,
+    /// above it the sending clause and above that `       *-* Compiled method
+    /// "NEW" with scope "Object".`
+    pub(crate) fn abstract_class(id: &[u8]) -> Raised {
+        Raised::syntax(98, 989, vec![id.to_vec()])
+    }
+
     /// 98.942: an `INHERIT` target that is not a `MIXINCLASS`. One
     /// substitution, the target's `~defaultName`.
     ///

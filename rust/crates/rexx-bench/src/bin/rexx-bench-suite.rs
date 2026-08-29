@@ -179,7 +179,7 @@ const AXES: &[Axis] = &[
     },
     Axis {
         name: "dispatch",
-        role: Role::Blocked,
+        role: Role::Loop,
     },
     Axis {
         name: "dispatchclass",
@@ -1349,11 +1349,11 @@ mod tests {
     ///
     /// The names pin is not enough on its own. It catches an axis leaving the
     /// list; it cannot catch an axis staying in the list under a role that has
-    /// stopped being true. When Phase 5 lands message sends these three exit
-    /// 0, and without this they would go on being printed as unrunnable with
-    /// status 0 and an empty message while nothing timed them -- the pin's own
-    /// failure mode, reached by a different route. Red here forces the
-    /// decision instead.
+    /// stopped being true -- an axis printed as unrunnable with status 0 and
+    /// an empty message while nothing timed it, the pin's own failure mode
+    /// reached by a different route. Red here forces the decision instead, and
+    /// it has fired once: `dispatch.rex` started running when `~new` landed
+    /// and this is what said so.
     #[test]
     fn every_blocked_axis_still_fails_on_this_crate() {
         let binary = rust_binary_candidates()

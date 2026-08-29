@@ -1,0 +1,28 @@
+/* Phase 5b Task 1: an instance's name is a send, not stored text.
+   RexxObject::objectName reads a name something set and otherwise sends
+   DEFAULTNAME; RexxObject::stringValue is an OBJECTNAME send; and the
+   required-string protocol's own fallback sends STRING. So a class
+   overriding any of the three decides what a program sees, and the three
+   overrides reach different sets of contexts. */
+o = .DN~new
+say 'dn' o~objectName '/' o~string '/' o '/' o~defaultName
+o~objectName = 'zed'
+say 'dn-named' o~objectName '/' o~string '/' o '/' o~defaultName
+
+s = .ST~new
+say 'st' s~objectName '/' s~string '/' s '/' length(s)
+
+m = .MS~new
+say 'ms' m~objectName '/' m~string '/' m '/' m~request('STRING')
+
+::CLASS DN
+::METHOD defaultName
+  return 'overridden'
+
+::CLASS ST
+::METHOD string
+  return 'from-string'
+
+::CLASS MS
+::METHOD makeString
+  return 'from-makestring'

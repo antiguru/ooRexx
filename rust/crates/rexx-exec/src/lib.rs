@@ -978,19 +978,14 @@ impl Loud {
         }
     }
 
-    /// `EXPOSE` in a method whose receiver is not a class object.
+    /// `EXPOSE` in a method whose receiver is neither a class object nor an
+    /// instance.
     ///
-    /// **The gap is the root, not the storage.** An instance keeps its pools
-    /// in its own `Body::Instance` and the collector reaches them by tracing
-    /// it, so they are safe exactly while something roots the instance -- and
-    /// a running send's receiver is rooted here only by the `SELF` slot, which
-    /// the body may assign over. `~new` is where instances start existing and
-    /// is where that root belongs; until then this is unreachable from any
-    /// program, since every `::METHOD` body a send can enter in this phase is
-    /// reached through a class object.
+    /// A string, a number, an array and a stem have nowhere to keep a variable
+    /// pool, so a method reaching one refuses rather than losing the write.
     fn expose_receiver() -> Loud {
         Loud {
-            message: owned_message("EXPOSE on an object other than a class", Some("Phase 5")),
+            message: owned_message("EXPOSE on an object with no variable pool", Some("Phase 5")),
         }
     }
 
@@ -3902,7 +3897,8 @@ struct Interp {
     ///
     /// **This latches on every route that can make the protocol answer or
     /// refuse.** A `makeString` installed by a directive is what lets limb 1
-    /// answer a different string; a NOSTRING trap is what lets limb 3 refuse.
+    /// answer a different string; a NOSTRING trap is what lets limb 3 refuse;
+    /// an instance is a receiver whose own `STRING` the last limb sends.
     /// With neither, every context `provide.xml` `reqstr` lists renders
     /// exactly what it rendered before the protocol existed, and the gate is
     /// one load and a branch where the walk is a decode and a heap lookup.
@@ -3916,18 +3912,21 @@ struct Interp {
     /// **A missed arming is a wrong answer, so what protects a release build
     /// is the arming sites and not a check.** The writes are
     /// `Interp::arm_reqstr_for`, called from every directive install that adds
-    /// a name to a class's dictionary, and
-    /// `Interp::exec_condition_trap`'s `NOSTRING`/`ANY` arm; the initialiser
+    /// a name to a class's dictionary, `Interp::exec_condition_trap`'s
+    /// `NOSTRING`/`ANY` arm, and `dispatch.rs`'s `native_new`; the initialiser
     /// is `false` and nothing clears it. `dispatch.rs`'s
     /// `Interp::required_string_latch_holds` runs under `debug_assert` and
     /// tests both limbs' routes, so an arming route added without setting
     /// this reddens the **debug** gate -- both halves proved live by
     /// inverting each write in turn, which the task report records.
     ///
-    /// One route is latent rather than covered: a user class that inherited a
-    /// native `MAKESTRING` would install no `MAKESTRING` name of its own, and
-    /// `arm_reqstr_for` reads the installed name. `~new` is refused in this
-    /// phase, so no such receiver exists yet.
+    /// **An instance arms it outright rather than by any
+    /// name**: the protocol's own fallback sends `STRING` to an instance and
+    /// `Object~objectName` sends `DEFAULTNAME`, so every route by which the
+    /// instance's class could come to answer either differently -- a
+    /// directive, `~define`, `~defineMethods`, an inherited mixin -- would
+    /// otherwise need its own arming site. Arming at construction costs the
+    /// walk to a program that builds an instance and cannot answer wrongly.
     reqstr_armed: bool,
     /// The running program's own location, as `PARSE SOURCE`'s third word.
     ///
@@ -5450,11 +5449,14 @@ impl Interp {
         self.install_class_members(program_id, program, id, attached, false);
         // `RexxClass::makeAbstract` (`ClassClass.cpp:1754`-`:1761`): a
         // metaclass cannot be made abstract, and any other class takes the
-        // keyword by setting a flag whose reader is `~new`.
-        if class.abstract_ && self.classes().is_metaclass(id) {
-            let class_id = self.class_id_text(id).as_bytes().to_vec();
-            self.blame_directive(program, directive);
-            return Err(Raised::abstract_metaclass(&class_id).into());
+        // keyword by setting the flag `~new`'s `checkAbstract` reads.
+        if class.abstract_ {
+            if self.classes().is_metaclass(id) {
+                let class_id = self.class_id_text(id).as_bytes().to_vec();
+                self.blame_directive(program, directive);
+                return Err(Raised::abstract_metaclass(&class_id).into());
+            }
+            self.classes().make_abstract(id);
         }
         Ok(id)
     }
@@ -6091,7 +6093,7 @@ impl Interp {
             .get_mut(var.owner)
             .map(|object| &mut object.body)
             .and_then(|body| match body {
-                Body::Instance(pools) => Some(pools),
+                Body::Instance { pools, .. } => Some(pools),
                 _ => None,
             })
             .expect("an exposed variable's owner is a rooted Body::Instance");
@@ -6112,7 +6114,7 @@ impl Interp {
             .get_mut(var.owner)
             .map(|object| &mut object.body)
             .and_then(|body| match body {
-                Body::Instance(pools) => Some(pools),
+                Body::Instance { pools, .. } => Some(pools),
                 _ => None,
             })
             .expect("an exposed variable's owner is a rooted Body::Instance");
@@ -6136,7 +6138,7 @@ impl Interp {
             .get_mut(owner)
             .map(|object| &mut object.body)
             .and_then(|body| match body {
-                Body::Instance(pools) => Some(pools),
+                Body::Instance { pools, .. } => Some(pools),
                 _ => None,
             })
             .expect("Interp::pool_owner answers a rooted Body::Instance");
@@ -6164,7 +6166,7 @@ impl Interp {
     /// The scope pools `owner` holds, for a reader.
     pub(crate) fn pools_of(&self, owner: ObjRef) -> Option<&rexx_core::ScopePools> {
         match self.heap.get(owner).map(|object| &object.body) {
-            Some(Body::Instance(pools)) => Some(pools),
+            Some(Body::Instance { pools, .. }) => Some(pools),
             _ => None,
         }
     }
@@ -6415,14 +6417,16 @@ impl Interp {
         // collector as temporaries for the length of the sweep.
         //
         // **The one object an activation owns outright.** Everything else it
-        // holds is rooted by its slot frame or by `Interp::class_variables`;
-        // a `RexxContext` is created by `Interp::context_object` and stored
-        // on the activation, and nothing else refers to it. Swept here rather
-        // than kept rooted per activation because the alternative is a global
-        // root whose key has to be minted, replaced and retired as
-        // activations come and go, and this pays only when a collection
-        // actually happens. `Activation::object_roots` is the same objects'
-        // other route, for an activation a `REPLY` has parked.
+        // holds is rooted by its slot frame, by `Interp::class_variables`, or
+        // -- a send's receiver -- by the temporary `Interp::message_term`
+        // takes over the sending clause; a `RexxContext` is created by
+        // `Interp::context_object` and stored on the activation, and nothing
+        // else refers to it. Swept here rather than kept rooted per
+        // activation because the alternative is a global root whose key has
+        // to be minted, replaced and retired as activations come and go, and
+        // this pays only when a collection actually happens.
+        // `Activation::object_roots` is the same objects' other route, for an
+        // activation a `REPLY` has parked.
         let contexts: Vec<ObjRef> = self
             .running
             .iter()
@@ -6437,12 +6441,9 @@ impl Interp {
         let stats = self.heap.collect(&self.roots);
         self.roots.pop_frame(frame);
         // `pending_uninit` is what the collector resurrected so a finalizer
-        // could run against a whole graph. Nothing in this crate sets
-        // `Object::has_uninit`, because `UNINIT` needs a class to define
-        // it and message sends are Phase 5, so the list is empty and there
-        // is nothing to deliver. The day something sets that flag, this is
-        // the site that owes the delivery -- which is why the value is
-        // named here rather than dropped at the call.
+        // could run against a whole graph. `native_new` sets
+        // `Object::has_uninit` for an instance whose class defines `UNINIT`,
+        // and this is the site that owes the delivery.
         debug_assert!(
             stats.pending_uninit.is_empty(),
             "an object was resurrected for UNINIT and nothing here runs a finalizer"

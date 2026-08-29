@@ -599,6 +599,12 @@ impl Interp {
             // same position a tagged integer's digits are in, reached one
             // indirection later.
             Redirect::Array => return self.array_string_of(value).len(),
+            // Derived the same way and for the same reason, through the same
+            // function `to_text` renders it with.
+            Redirect::InstanceDefault(class) => {
+                return crate::environment::default_object_name(self.classes().id_string(class))
+                    .len();
+            }
             Redirect::None => {}
         }
 
@@ -791,6 +797,21 @@ impl Interp {
             // An array's string value is built here and stored nowhere, so it
             // is `Cow::Owned` and `try_text` answers `None` for one.
             Redirect::Array => return Cow::Owned(self.array_string_of(value)),
+            // Derived from the class id and stored nowhere, the position an
+            // array's own string value is in.
+            //
+            // **The oracle sends `DEFAULTNAME` here and this does not.** The
+            // paths that can send -- `Object~objectName`, `Object~string` and
+            // the required-string protocol -- do; what is left is every
+            // rendering reached through an infallible function, which is
+            // `TRACE`'s value lines and this crate's own error-message
+            // substitutions. Measured, oracle rc 0: under `trace i`, an
+            // instance of a class overriding `defaultName` traces as that
+            // method's answer where this renders the class id.
+            Redirect::InstanceDefault(class) => {
+                let id = crate::environment::default_object_name(self.classes().id_string(class));
+                return Cow::Owned(id.into_bytes());
+            }
             Redirect::None => {}
         }
 
@@ -818,9 +839,25 @@ impl Interp {
             // directories were given theirs by the prologue and the rest
             // derive theirs from a class id -- `environment.rs` builds both.
             Body::Native(native) => Cow::Borrowed(native.rendered()),
+            // Reached only with a name set: the redirect above answers for
+            // an instance that has none.
+            Body::Instance { name, .. } => match name {
+                Some(bytes) => Cow::Borrowed(bytes),
+                None => unreachable!("Redirect::InstanceDefault answers an unnamed instance"),
+            },
             other => unreachable!(
-                "the value model only creates Text, Num, Stem, Array and Native, got {other:?}"
+                "the value model only creates Text, Num, Stem, Array, Native and Instance, \
+                 got {other:?}"
             ),
+        }
+    }
+
+    /// The name `~objectName=` gave an instance, or `None` for one that still
+    /// answers its class's default -- and `None` for every other value kind.
+    pub(crate) fn instance_name(&self, value: ObjRef) -> Option<Vec<u8>> {
+        match &self.heap.get(value)?.body {
+            Body::Instance { name, .. } => name.as_ref().map(|bytes| bytes.to_vec()),
+            _ => None,
         }
     }
 
@@ -889,8 +926,12 @@ impl Interp {
             // Joined on demand by `to_text` and held nowhere, which is one of
             // the causes of `None` this function's doc names.
             Body::Array(_) => None,
+            // The same cause for an instance nothing has named: `to_text`
+            // derives those bytes from the class id and stores them nowhere.
+            Body::Instance { name, .. } => name.as_deref(),
             other => unreachable!(
-                "the value model only creates Text, Num, Stem, Array and Native, got {other:?}"
+                "the value model only creates Text, Num, Stem, Array, Native and Instance, \
+                 got {other:?}"
             ),
         }
     }
@@ -1111,10 +1152,19 @@ impl Interp {
                 let bytes = self.array_string_of(value);
                 Number::parse_bytes(&bytes).ok_or(NotNumeric)
             }
+            // Parses the name something gave the object, which
+            // `~objectName=` can make numeric: measured, oracle rc 0,
+            // `datatype(o)` is `CHAR` for an untouched instance and `NUM`
+            // after `o~objectName = '123'`. An unnamed one renders as an
+            // article and its class's id, which never parses.
+            Body::Instance {
+                name: Some(bytes), ..
+            } => Number::parse_bytes(bytes).ok_or(NotNumeric),
+            Body::Instance { name: None, .. } => Err(NotNumeric),
             other => {
                 unreachable!(
-                    "the value model only creates Text, Num, Stem, Array and Native, got \
-                     {other:?}"
+                    "the value model only creates Text, Num, Stem, Array, Native and Instance, \
+                     got {other:?}"
                 )
             }
         }
@@ -1349,6 +1399,9 @@ enum Redirect {
     StemDefault(ObjRef),
     /// An array joins its items, which the arm reads back out of the object.
     Array,
+    /// An instance nothing has named, which renders as its class's id with an
+    /// article in front and stores those bytes nowhere.
+    InstanceDefault(ObjRef),
     /// The object's own body holds the text.
     None,
 }
@@ -1361,6 +1414,9 @@ impl Redirect {
                 ..
             } => Redirect::StemDefault(*default),
             Body::Array(_) => Redirect::Array,
+            Body::Instance {
+                class, name: None, ..
+            } => Redirect::InstanceDefault(*class),
             _ => Redirect::None,
         }
     }

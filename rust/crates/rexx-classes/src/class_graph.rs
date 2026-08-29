@@ -222,6 +222,14 @@ struct ClassDef {
     /// inheritance edge: `subclass` (`:1634`), `mixinClass` (`:1525`) and
     /// `inherit` (`:1364`).
     parent_has_uninit: bool,
+    /// `~new` on this class refuses -- oracle's `ABSTRACT` class flag, set by
+    /// `RexxClass::makeAbstract` (`ClassClass.cpp:1754`) and read by
+    /// `checkAbstract` (`:1741`) as the first step of `completeNewObject`.
+    ///
+    /// **Not inherited**, measured: with `::CLASS AB ABSTRACT`, both
+    /// `::CLASS SUB SUBCLASS AB` and `.AB~subclass('KID')` construct at rc 0
+    /// where `.AB~new` is 98.989.
+    is_abstract: bool,
     /// This class may not be altered from Rexx -- oracle's `REXX_DEFINED`
     /// class flag. `RexxClass::liveGeneral` sets it on every class in the
     /// image under `PREPARINGIMAGE` (`ClassClass.cpp:136`-`:142`), which is
@@ -344,6 +352,7 @@ impl ClassGraph {
                 is_metaclass: derived_from_metaclass.is_some(),
                 has_uninit: false,
                 parent_has_uninit,
+                is_abstract: false,
                 rexx_defined: false,
             },
         );
@@ -425,6 +434,17 @@ impl ClassGraph {
     /// `parentHasUninitDefined`.
     pub fn parent_has_uninit(&self, class: ObjRef) -> bool {
         self.classes[&class].parent_has_uninit
+    }
+
+    /// Oracle's `RexxClass::makeAbstract` past its metaclass refusal, which
+    /// the caller raises -- see [`ClassDef::is_abstract`].
+    pub fn make_abstract(&mut self, class: ObjRef) {
+        self.classes.get_mut(&class).unwrap().is_abstract = true;
+    }
+
+    /// Oracle's `RexxClass::isAbstract`, what `checkAbstract` reads.
+    pub fn is_abstract(&self, class: ObjRef) -> bool {
+        self.classes[&class].is_abstract
     }
 
     fn behaviour_handle(&self, class: ObjRef, side: Side) -> BehaviourHandle {

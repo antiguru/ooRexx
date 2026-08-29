@@ -1651,6 +1651,12 @@ impl Interp {
             // `.Array` defines no arithmetic, comparison or logical method,
             // so the send finds nothing rather than converting.
             Body::Array(_) => Some("an array"),
+            // The oracle sends the operator as a message here too, and it is
+            // the send that fails: measured, oracle rc 159, `o + 1` on an
+            // instance is `97.1 Object "a K" does not understand message
+            // "+".`, and the same after `o~objectName = '123'` -- the
+            // rendering being numeric does not make it a conversion.
+            Body::Instance { .. } => Some("an instance of a user class"),
             // **The redirect every conversion here takes, taken here too.**
             // A stem with a default answers *as* that default -- `to_text`
             // and `to_number` both chase it -- so a check that stopped at the

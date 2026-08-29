@@ -324,6 +324,16 @@ impl ClassRegistry {
         self.graph.parent_has_uninit(class)
     }
 
+    /// See [`ClassGraph::make_abstract`].
+    pub fn make_abstract(&mut self, class: ObjRef) {
+        self.graph.make_abstract(class);
+    }
+
+    /// See [`ClassGraph::is_abstract`].
+    pub fn is_abstract(&self, class: ObjRef) -> bool {
+        self.graph.is_abstract(class)
+    }
+
     /// `~superClass` -- the first entry of `~superClasses`, oracle's
     /// `superClass` field (singular), or `None` for `.Object`.
     pub fn superclass(&self, class: ObjRef) -> Option<ObjRef> {

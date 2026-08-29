@@ -830,3 +830,72 @@ fn a_parked_reply_keeps_its_variables_across_a_collection() {
         );
     }
 }
+
+/// A method body that assigns over `SELF` still reads its exposed variables
+/// back, with a collection at every allocation in between.
+///
+/// **An instance keeps its variable pools in its own body**, so a collection
+/// reaches an exposed value only by tracing the instance, and `SELF` is an
+/// ordinary variable a body may assign to. The clobber happens twice: once
+/// inside `INIT`, while `~new` is still building the object and only
+/// `native_new`'s own temporary holds it, and once in an ordinary send.
+///
+/// The exposed value is wider than a handle can carry, because a short one
+/// rides in the handle and would survive a missing root by not being a heap
+/// object -- measured, with a five-byte value this row stays green under the
+/// first mutation below.
+///
+/// **Checked by taking its subject away**, one mutation at a time: with
+/// `Body::trace`'s `Instance` arm no longer tracing the pools, and with
+/// `native_new`'s `push_temp` removed, this row fails on both engines, the
+/// first on `a live value` and the second on `an exposed variable's owner is
+/// a rooted Body::Instance`. Under the second the plain (non-stress) run of
+/// the same program still agrees with the oracle on all three descriptors, so
+/// nothing but the collector sees it.
+///
+/// **What it adds over the subset run above, measured:** nothing for this
+/// program, which `corpus/phase-5b.txt` also names, so the subset row reddens
+/// under the same two mutations. What it adds is the pinned stdout and the
+/// non-zero collection count for this shape on their own.
+#[test]
+fn a_method_that_assigns_over_self_keeps_its_exposed_variables() {
+    let program = concat!(
+        "o = .K~new\n",
+        "say 'a' o~go\n",
+        "::CLASS K\n",
+        "::METHOD init\n",
+        "  expose kept\n",
+        "  self = 'clobbered-in-init'\n",
+        "  kept = 'kept-' || copies('yz', 30)\n",
+        "::METHOD go\n",
+        "  expose kept\n",
+        "  self = 'clobbered'\n",
+        "  t = ''\n",
+        "  do i = 1 to 100\n",
+        "    t = t || i\n",
+        "  end\n",
+        "  return kept length(t) self\n",
+    );
+    let expected = concat!(
+        "a kept-",
+        "yzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyz",
+        " 192 clobbered\n",
+    );
+    for engine in [rexx_exec::Engine::TreeWalker, rexx_exec::Engine::Ir] {
+        let stress = run_program_collect_every_alloc(
+            "<self-reassigned-rooting>",
+            program.as_bytes().to_vec(),
+            rexx_exec::Invocation::none().with_engine(engine),
+        );
+        assert_eq!(stress.exit_code, 0, "{engine:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&stress.stdout),
+            expected,
+            "an instance lost its variable pools under collect-on-every-allocation, {engine:?}"
+        );
+        assert!(
+            stress.collections > 0,
+            "the stress mode did not collect, so this proves nothing, {engine:?}"
+        );
+    }
+}

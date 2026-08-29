@@ -4,7 +4,11 @@ use rexx_core::{Body, Bytes, Heap, ObjRef, RootSet, ScopePools};
 fn an_object_with_uninit_is_reported_rather_than_swept_immediately() {
     let mut heap = Heap::new();
     let roots = RootSet::new();
-    let obj = heap.alloc(Body::Instance(ScopePools::new()));
+    let obj = heap.alloc(Body::Instance {
+        class: ObjRef::class(0).expect("a class identity"),
+        name: None,
+        pools: ScopePools::new(),
+    });
     assert!(heap.set_uninit(obj), "the handle names a live object");
     let stats = heap.collect(&roots);
     assert_eq!(stats.pending_uninit, vec![obj]);
@@ -62,7 +66,11 @@ fn a_weak_reference_to_an_uninit_pending_object_is_still_cleared() {
     // See RexxMemory.cpp:422-426.
     let mut heap = Heap::new();
     let mut roots = RootSet::new();
-    let target = heap.alloc(Body::Instance(ScopePools::new()));
+    let target = heap.alloc(Body::Instance {
+        class: ObjRef::class(0).expect("a class identity"),
+        name: None,
+        pools: ScopePools::new(),
+    });
     assert!(heap.set_uninit(target), "the handle names a live object");
     let weak = heap.alloc(Body::WeakRef(target));
     roots.add_global(".WEAK", weak);
@@ -96,7 +104,11 @@ fn a_weak_reference_to_an_uninit_pending_object_is_still_cleared() {
 fn an_object_flagged_twice_across_a_clear_is_reported_once() {
     let mut heap = Heap::new();
     let roots = RootSet::new();
-    let obj = heap.alloc(Body::Instance(ScopePools::new()));
+    let obj = heap.alloc(Body::Instance {
+        class: ObjRef::class(0).expect("a class identity"),
+        name: None,
+        pools: ScopePools::new(),
+    });
     assert!(heap.set_uninit(obj), "the handle names a live object");
     assert!(heap.clear_uninit(obj));
     assert!(heap.set_uninit(obj), "and can be flagged again");

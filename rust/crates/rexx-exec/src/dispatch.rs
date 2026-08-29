@@ -293,6 +293,12 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("Class", "ANNOTATION", Arity::Fixed(1), native_annotation),
     ("Class", "ANNOTATIONS", Arity::Fixed(0), native_annotations),
     ("Class", "BASECLASS", Arity::Fixed(0), native_base_class),
+    (
+        "Class",
+        "DEFAULTNAME",
+        Arity::Fixed(0),
+        native_class_default_name,
+    ),
     // The five mutators, each of which `Setup.cpp` declares
     // `AddProtectedMethod` (`:456`, `:457`, `:463`, `:478`) except `Inherit`
     // (`:466`), and each of which opens with the same `REXX_DEFINED` refusal.
@@ -359,6 +365,12 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `BaseExecutable` one (`classes/MethodClass.hpp:168`).
     ("Method", "SCOPE", Arity::Fixed(0), native_scope),
     ("Object", "CLASS", Arity::Fixed(0), native_class),
+    (
+        "Object",
+        "DEFAULTNAME",
+        Arity::Fixed(0),
+        native_default_name,
+    ),
     ("Object", "HASMETHOD", Arity::Fixed(1), native_has_method),
     (
         "Object",
@@ -449,6 +461,21 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(2),
         native_hash_unknown,
     ),
+];
+
+/// The primitive methods bound to a class's **class** dictionary rather than
+/// its instance one -- `memory/Setup.cpp`'s `AddClassMethod` rows.
+///
+/// A separate table because the two dictionaries are separate: a name in one
+/// is not the name in the other, and [`ObjectModel::build`] resolves a row
+/// here through `lookup_class_method`. `Setup.cpp`'s `AddMethod` on `.Class`
+/// stays in [`NATIVE_METHODS`], because a class object's messages resolve
+/// against `.Class`'s *instance* behaviour by way of the metaclass merge.
+static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
+    // `AddClassMethod("New", RexxObject::newRexx, A_COUNT)`,
+    // `memory/Setup.cpp:514`, reached by every class whose own class
+    // behaviour declares no `NEW` of its own.
+    ("Object", "NEW", Arity::Counted, native_new),
 ];
 
 /// The two methods `Setup.cpp` puts on `.Class` for the image build and
@@ -606,6 +633,28 @@ impl ObjectModel {
                 },
             );
         }
+        for (class_id, method_name, arity, run) in NATIVE_CLASS_METHODS {
+            let class = classes.lookup(class_id).unwrap_or_else(|| {
+                panic!(
+                    "NATIVE_CLASS_METHODS names class {class_id:?}, which is not in the registry"
+                )
+            });
+            let (_, method) = classes
+                .lookup_class_method(class, method_name)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "NATIVE_CLASS_METHODS names {class_id}~{method_name}, which that class's \
+                         class behaviour does not answer"
+                    )
+                });
+            natives.insert(
+                method,
+                NativeEntry {
+                    arity: *arity,
+                    run: *run,
+                },
+            );
+        }
         let string = classes.lookup("String").expect("String is a native class");
         let object = classes.lookup("Object").expect("Object is a native class");
         let metaclass = classes.lookup("Class").expect("Class is a native class");
@@ -745,6 +794,10 @@ enum Primitive {
     /// `.K~m` runs the body, `.K~hasMethod('M')` is `1` and
     /// `.K~hasMethod('LENGTH')` is `0`.
     Class(ObjRef),
+    /// What `~new` builds: an object whose messages resolve against the
+    /// instance behaviour of the class it carries. Measured, `::class K` and
+    /// `o = .K~new`: `o~class~id` is `K` and `o~string` is `a K`.
+    Instance(ObjRef),
 }
 
 /// The behaviour a receiver's messages resolve against.
@@ -1120,7 +1173,7 @@ impl Interp {
                     Body::Text { .. } | Body::Num { .. } => Ok(Primitive::String),
                     Body::Stem { .. } => Err("a stem"),
                     Body::Array(_) => Ok(Primitive::Array),
-                    Body::Instance(_) => Err("an instance of a user class"),
+                    Body::Instance { class, .. } => Ok(Primitive::Instance(*class)),
                     Body::WeakRef(_) => Err("a weak reference"),
                     // The package object `~package` answers. `.Package`'s
                     // instance behaviour here is `Setup.cpp`'s whole set, so a
@@ -1226,6 +1279,7 @@ impl Interp {
             Primitive::Context => Behaviour::Instance(model.context),
             Primitive::RexxInfo => Behaviour::Instance(model.rexx_info),
             Primitive::Class(class) => Behaviour::ClassSide(class),
+            Primitive::Instance(class) => Behaviour::Instance(class),
         })
     }
 
@@ -2554,6 +2608,17 @@ enum RequiredString {
 /// required-string protocol a program can write.
 pub(crate) const MAKESTRING: &[u8] = b"MAKESTRING";
 
+/// What `RexxObject::stringValue` sends (`classes/ObjectClass.cpp:1157`).
+pub(crate) const OBJECTNAME: &[u8] = b"OBJECTNAME";
+
+/// What `RexxObject::objectName` sends for an object nothing has named and
+/// whose class is not a base class (`classes/ObjectClass.cpp:1712`).
+pub(crate) const DEFAULTNAME: &[u8] = b"DEFAULTNAME";
+
+/// The required-string protocol's last limb, past every conversion
+/// (`RexxInternalObject::requiredString`, `classes/ObjectClass.cpp:1353`).
+pub(crate) const STRING: &[u8] = b"STRING";
+
 /// What a value's own string value is, before the protocol's fallbacks: the
 /// value itself, the object a `makeString` answered, bytes no object holds, or
 /// nothing.
@@ -2693,10 +2758,25 @@ impl Interp {
                 return Err(failure);
             }
         }
-        // `sendMessage(STRING)`, which for every value this phase builds is
-        // `stringValue()` -- `Interp::string_value_text`'s own doc says which
-        // question that is.
-        let readable = self.string_value_text(value);
+        // `sendMessage(STRING)`. An instance's `STRING` can be a Rexx
+        // method, so it is sent; the shortcut below is what the send answers
+        // wherever `STRING` resolves to `native_string`. Measured, oracle
+        // rc 0: with `::METHOD string` returning `from-string`, `say o`,
+        // `'x' o` and `length(o)` all follow it.
+        //
+        // **No `REQUEST` frame when the send raises**, unlike the conversion
+        // limbs above: measured, oracle rc 214, `::METHOD string` ending in
+        // `1/0` reports the method's own clause and then the sending clause,
+        // and nothing between them.
+        let readable = if matches!(self.receiver_kind(value), Ok(Primitive::Instance(_))) {
+            let caller = self.caller();
+            match self.send_message(value, STRING, None, &[], caller)? {
+                Some(answered) => self.string_value_text(answered),
+                None => self.string_value_text(value),
+            }
+        } else {
+            self.string_value_text(value)
+        };
         // Gated on the trap rather than raised unconditionally, the shape
         // `Interp::novalue_raised` describes: an untrapped NOSTRING resumes
         // with the readable rendering, so a raise nothing can take would
@@ -3141,6 +3221,47 @@ fn native_id(
     Ok(Some(interp.text_built(id)))
 }
 
+/// `Class~defaultName`: `The <id> class` -- `RexxClass::defaultNameRexx`
+/// (`classes/ClassClass.cpp:614`).
+///
+/// **`~objectName=` does not move it**, which is what separates it from
+/// [`native_object_name`]: measured, oracle rc 0, after `.K~objectName = 'zed'`
+/// the class answers `zed` for `~objectName` and `~string` and `The K class`
+/// for this.
+fn native_class_default_name(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    let name = interp.classes().default_name(class).as_bytes().to_vec();
+    Ok(Some(interp.text_built(name)))
+}
+
+/// `Object~defaultName`: the receiver's class id with an article in front --
+/// `RexxObject::defaultNameRexx` (`classes/ObjectClass.cpp:2868`) over
+/// `RexxObject::defaultName` (`:1760`).
+///
+/// The receiver's own class and not the scope the method resolved at, so it
+/// follows a subclass. Measured, oracle rc 0: `'abc'`, a small integer and
+/// `1.5` all answer `a String`; `.nil` answers `an Object`; `.environment`
+/// answers `a Directory`; and `.local~defaultName` is `a Directory` where its
+/// `~objectName` is `The Local Directory`, so a stored name does not reach
+/// this.
+fn native_default_name(
+    interp: &mut Interp,
+    cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(class) = native_class(interp, cleared, receiver, &[])? else {
+        return Err(Loud::receiver_class("a value with no class of its own").into());
+    };
+    let name = crate::environment::default_object_name(interp.classes().id_string(class));
+    Ok(Some(interp.text_built(name.into_bytes())))
+}
+
 /// `Class~metaClass`: `RexxClass::getMetaClass` (`classes/ClassClass.cpp:419`).
 ///
 /// **Not `~class`**, and the pair parts iff the superclass is a metaclass and
@@ -3239,6 +3360,7 @@ fn native_class(
         Primitive::Context => model.context,
         Primitive::RexxInfo => model.rexx_info,
         Primitive::Class(class) => model.classes.class_of(class),
+        Primitive::Instance(class) => class,
     }))
 }
 
@@ -3793,6 +3915,55 @@ fn native_mixin_class_factory(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     class_factory(interp, receiver, args, ClassKind::Mixin)
+}
+
+/// `Object~new`: what every class that declares no `NEW` of its own answers.
+///
+/// `RexxObject::newRexx` (`classes/ObjectClass.cpp:2630`) allocates a plain
+/// object and hands it to `RexxClass::completeNewObject`
+/// (`classes/ClassClass.cpp:1882`), whose four steps run in a fixed order:
+/// `checkAbstract`, the behaviour, the `UNINIT` registration, the `INIT` send.
+///
+/// **The order is observable.** The abstract check precedes `INIT`, so an
+/// abstract class whose `INIT` prints never prints; and `~new`'s frame is
+/// still on the traceback while `INIT` runs -- measured, oracle rc 163,
+/// `.Object~new(1)` reports `Compiled method "INIT" with scope "Object".`
+/// above `Compiled method "NEW" with scope "Object".`
+///
+/// **`~new`'s arguments are `INIT`'s, and nothing chains them.** Measured,
+/// oracle rc 0: a subclass whose `INIT` omits `self~init:super` leaves the
+/// superclass's `INIT` unrun and its exposed variable reading its own name.
+fn native_new(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    if interp.classes().is_abstract(class) {
+        let id = interp.classes().id_string(class).as_bytes().to_vec();
+        return Err(Raised::abstract_class(&id).into());
+    }
+    let object = interp.alloc_with(
+        rexx_core::BehaviourId::OBJECT,
+        Body::Instance {
+            class,
+            name: None,
+            pools: rexx_core::ScopePools::new(),
+        },
+    );
+    // `ProtectedObject p(newObj)` (`ObjectClass.cpp:2637`): the `INIT` send
+    // allocates, and nothing else holds the object until it returns.
+    interp.roots.push_temp(object);
+    // See `Interp::reqstr_armed` for why an instance arms the protocol
+    // outright rather than by the name a directive installed.
+    interp.reqstr_armed = true;
+    if interp.classes().has_uninit(class) {
+        interp.heap.set_uninit(object);
+    }
+    let caller = interp.caller();
+    interp.send_message(object, INIT, None, args, caller)?;
+    Ok(Some(object))
 }
 
 /// `RexxClass::subclass` (`classes/ClassClass.cpp:1562`), in its own order.
@@ -4675,6 +4846,17 @@ fn native_string(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    // **Sent rather than shortcut for an instance**, whose `OBJECTNAME` a
+    // program can replace: measured, oracle rc 0, `::METHOD defaultName`
+    // returning `overridden` makes `o~string` answer `overridden`.
+    if matches!(interp.receiver_kind(receiver), Ok(Primitive::Instance(_))) {
+        let caller = interp.caller();
+        let answered = interp.send_message(receiver, OBJECTNAME, None, &[], caller)?;
+        if let Some(answered) = answered {
+            let text = interp.string_value_text(answered);
+            return Ok(Some(interp.text_built(text)));
+        }
+    }
     let text = interp.string_value_text(receiver);
     Ok(Some(interp.text_built(text)))
 }
@@ -4706,6 +4888,22 @@ fn native_object_name(
         // carries a stored name for -- there is nowhere on a string to put
         // one, which is also why `native_object_name_set` refuses it.
         Primitive::String | Primitive::SmallInt => b"a String".to_vec(),
+        // **A set name, or the answer to a `DEFAULTNAME` send.** The oracle
+        // reads the object's own `Object`-scope variable and, for anything
+        // that is not a base class, sends rather than deriving -- so a class
+        // overriding `defaultName` decides what an unnamed instance answers,
+        // and a name set afterwards wins over it. Both measured, oracle rc 0.
+        Primitive::Instance(_) => match interp.instance_name(receiver) {
+            Some(held) => held,
+            None => {
+                let caller = interp.caller();
+                let answered = interp.send_message(receiver, DEFAULTNAME, None, &[], caller)?;
+                match answered {
+                    Some(answered) => interp.string_value_text(answered),
+                    None => interp.string_value_text(receiver),
+                }
+            }
+        },
         Primitive::Object
         | Primitive::Array
         | Primitive::Class(_)
@@ -4752,6 +4950,15 @@ fn native_object_name_set(
         Primitive::Class(class) => {
             let name = String::from_utf8_lossy(&name).into_owned();
             interp.classes().set_object_name(class, &name);
+        }
+        Primitive::Instance(_) => {
+            let Some(object) = interp.heap.get_mut(receiver) else {
+                return Err(Loud::receiver_class("a value whose object is no longer live").into());
+            };
+            match &mut object.body {
+                Body::Instance { name: held, .. } => *held = Some(name.as_slice().into()),
+                other => unreachable!("an instance receiver is Body::Instance, got {other:?}"),
+            }
         }
         Primitive::Package
         | Primitive::Method
