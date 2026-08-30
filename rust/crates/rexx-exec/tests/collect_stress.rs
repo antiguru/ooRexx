@@ -855,7 +855,7 @@ fn a_parked_reply_keeps_its_variables_across_a_collection() {
 ///
 /// **What it adds over the subset run above, measured:** nothing for this
 /// program, which `corpus/phase-5b.txt` also names, so the subset row reddens
-/// under the same two mutations. What it adds is the pinned stdout and the
+/// under the same mutations. What it adds is the pinned stdout and the
 /// non-zero collection count for this shape on their own.
 #[test]
 fn a_method_that_assigns_over_self_keeps_its_exposed_variables() {

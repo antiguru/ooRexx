@@ -3921,7 +3921,7 @@ fn native_mixin_class_factory(
 ///
 /// `RexxObject::newRexx` (`classes/ObjectClass.cpp:2630`) allocates a plain
 /// object and hands it to `RexxClass::completeNewObject`
-/// (`classes/ClassClass.cpp:1882`), whose four steps run in a fixed order:
+/// (`classes/ClassClass.cpp:1882`), whose steps run in a fixed order:
 /// `checkAbstract`, the behaviour, the `UNINIT` registration, the `INIT` send.
 ///
 /// **The order is observable.** The abstract check precedes `INIT`, so an
