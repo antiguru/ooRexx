@@ -2159,12 +2159,12 @@ impl Interp {
     /// `UninitDispatcher` under `activity->run` does
     /// (`memory/RexxMemory.cpp:373`, and the dispatcher's two `handleError`
     /// overrides at `memory/UninitDispatcher.cpp:64` and `:77`). Measured,
-    /// oracle rc 0 with empty
-    /// stderr: `y = 1/0`, `raise syntax 40.900` and `exit 5` inside an
-    /// `UNINIT` each print the finalizer's own output and nothing else, and
-    /// the rest of the program runs on. A loud refusal is not discarded --
-    /// that is this crate saying it cannot run the construct, and the loud
-    /// rule is what keeps it from becoming a silent wrong answer.
+    /// oracle rc 0 with empty stderr: `y = 1/0`, `raise syntax 40.900` and
+    /// `exit 5` inside an `UNINIT` each print the finalizer's own output and
+    /// nothing else, and the rest of the program runs on. A loud refusal is
+    /// not discarded -- that is this crate saying it cannot run the
+    /// construct, and the loud rule is what keeps it from becoming a silent
+    /// wrong answer.
     fn run_one_uninit(&mut self, object: ObjRef) -> Option<Loud> {
         let caller = self.caller();
         let outcome = self.send_message(object, UNINIT, None, &[], caller);
@@ -2181,9 +2181,9 @@ impl Interp {
     ///
     /// **The flags are cleared before this is called**, which is `runUninits`
     /// removing the table entry (`memory/RexxMemory.cpp:362`) before running
-    /// the method (`:373`). The flag was the batch's only
-    /// root, so the park is this loop's `ProtectedObject`: without it a
-    /// collection inside one finalizer sweeps the members that have not run.
+    /// the method (`:373`). The flag was the batch's only root, so the park
+    /// is this loop's `ProtectedObject`: without it a collection inside one
+    /// finalizer sweeps the members that have not run.
     fn run_uninit_batch(&mut self, batch: Vec<ObjRef>, loud: &mut Vec<Loud>) {
         let parked = self.roots.park(batch.clone());
         for object in batch {
@@ -2197,12 +2197,7 @@ impl Interp {
     /// (`memory/RexxMemory.cpp:337`), reached from `collectAndUninit` and so
     /// from `GC('force')` (`expression/BuiltinFunctions.cpp:3033`).
     ///
-    /// The flag is cleared before the send, as `runUninits` removes the table
-    /// entry before running the method, so a collection inside the finalizer
-    /// cannot ready the same object twice; the object is a temporary for the
-    /// length of the send, which is that function's `ProtectedObject`.
-    ///
-    /// **A body queued by a body in this loop is run too**: a finalizer can
+    /// **A batch queued by a batch in this loop is run too**: a finalizer can
     /// drop the last reference to another flagged object and collect.
     pub(crate) fn run_ready_uninits(&mut self) -> Vec<Loud> {
         let mut loud = Vec::new();
