@@ -27,7 +27,7 @@ mod heap;
 mod roots;
 
 pub use behaviour::{BehaviourTable, MethodId};
-pub use body::{BehaviourId, Body, NativeObject, NotNumeric, Object, ScopePools};
+pub use body::{BehaviourHandle, BehaviourId, Body, NativeObject, NotNumeric, Object, ScopePools};
 pub use bytes::{Bytes, INLINE_BYTES};
 pub use handle::{
     CLASS_SLOT_BASE, Decoded, GENERATION_MAX, INLINE_TEXT, InlineText, ObjRef, SMALL_INT_MAX,

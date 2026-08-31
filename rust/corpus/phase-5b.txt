@@ -73,3 +73,22 @@ lang/uninit_class_sweep_order.rex
 lang/uninit_class_uninherit.rex
 lang/uninit_allocating_finalizer.rex
 lang/uninit_nested_collection.rex
+
+# Task 2: the behaviour snapshot (D58). `objcla.rex` is the gate row an
+# instance holding the behaviour it was built with makes agree.
+# `class_behaviour_snapshot_inherit.rex` and its `uninherit` twin are the arm
+# that goes the other way, where the mutator rebuilds the behaviour object the
+# instance already holds and the change reaches it; no committed program
+# combined either mutator with an instance before.
+# `class_behaviour_snapshot_delete.rex` is the copying family's third member,
+# whose own divergence -- an existing instance losing a deleted method -- no
+# row named; it asks three readers of the same behaviour, the name, the send
+# and the `UNINIT` question, because a build can move them apart.
+# `class_behaviour_snapshot_subclass.rex` is where the two families agree:
+# both rebuild every subclass's existing behaviour in place, so a subclass's
+# instance sees either mutation on its parent.
+gate-tables/concepts/objcla.rex
+lang/class_behaviour_snapshot_inherit.rex
+lang/class_behaviour_snapshot_uninherit.rex
+lang/class_behaviour_snapshot_delete.rex
+lang/class_behaviour_snapshot_subclass.rex

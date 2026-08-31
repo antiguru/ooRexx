@@ -1,0 +1,19 @@
+count 18
+/* ~uninherit rebuilds the same behaviour object, so an instance created while
+   the mixin was inherited loses its method.  The trap on the `d` send is what
+   separates losing the method from merely stopping reporting it. */
+k = .Object~subclass('K')
+k~inherit(.Mx)
+o = k~new
+say 'a' o~hasMethod('MXM')
+say 'b' o~mxm
+k~uninherit(.Mx)
+say 'c' o~hasMethod('MXM')
+signal on syntax name h
+say 'd' o~mxm
+h: say 'e trapped' rc
+exit 0
+
+::CLASS Mx MIXINCLASS Object
+::METHOD mxm
+  return 'mixin-ran'

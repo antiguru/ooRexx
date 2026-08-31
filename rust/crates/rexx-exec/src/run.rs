@@ -3099,10 +3099,12 @@ impl Interp {
         // what `.K~class` answers. This object is storage and never a value a
         // program holds.
         let holds = self.classes().class_of(receiver);
+        let behaviour = self.classes().instance_behaviour_handle(holds);
         let owner = self.alloc_with(
             BehaviourId::OBJECT,
             Body::Instance {
                 class: holds,
+                behaviour,
                 name: None,
                 pools: ScopePools::new(),
             },

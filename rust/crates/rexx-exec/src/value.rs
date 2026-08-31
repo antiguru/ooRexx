@@ -1758,11 +1758,13 @@ mod tests {
             .classes()
             .lookup("Object")
             .expect("the Object class is registered");
+        let behaviour = interp.classes().instance_behaviour_handle(class);
         for name in [None, Some(b"123".to_vec().into_boxed_slice())] {
             let instance = interp.alloc_with(
                 BehaviourId::OBJECT,
                 Body::Instance {
                     class,
+                    behaviour,
                     name,
                     pools: rexx_core::ScopePools::new(),
                 },

@@ -28,6 +28,34 @@ impl BehaviourId {
     pub const STEM: BehaviourId = BehaviourId(3);
 }
 
+/// Names one flattened method dictionary in the class graph `rexx-classes`
+/// builds -- the oracle's `RexxBehaviour` object, which an object points at.
+///
+/// Distinct from [`BehaviourId`] above, which indexes [`crate::BehaviourTable`]
+/// and is not what a [`Body::Instance`] dispatches against.
+///
+/// **Declared in this crate so that [`Body::Instance`] can store one**, which
+/// is what makes an instance dispatch against the behaviour its class held at
+/// construction: `~define` repoints the class at a fresh handle and leaves
+/// existing holders on the old one, while `~inherit` rebuilds the dictionary
+/// the old handle already names. `rexx-classes` depends on this crate, so the
+/// type cannot live there and be named here.
+///
+/// Only `rexx-classes` mints one; every other holder copies a handle it was
+/// given.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct BehaviourHandle(usize);
+
+impl BehaviourHandle {
+    pub const fn new(index: usize) -> BehaviourHandle {
+        BehaviourHandle(index)
+    }
+
+    pub const fn index(self) -> usize {
+        self.0
+    }
+}
+
 /// A byte string that failed `Number::parse_bytes` (D15). One marker and no
 /// cause, which is not a simplification paid for later: nothing observable
 /// distinguishes one cause from another. A Rexx program that uses a
@@ -117,9 +145,24 @@ pub enum Body {
     /// the distinction has to live in the body rather than be reconstructed
     /// from what a read answers.
     Array(Vec<Option<ObjRef>>),
-    /// A user-defined object: the class whose behaviour it dispatches
-    /// against, the name something gave it, and its instance variables, one
-    /// pool per scope (D40).
+    /// A user-defined object: the class it belongs to, the behaviour it
+    /// dispatches against, the name something gave it, and its instance
+    /// variables, one pool per scope (D40).
+    ///
+    /// **`behaviour` is fixed at construction and every message resolves
+    /// against it** (D58), which is where the oracle keeps it: its object
+    /// points at a `RexxBehaviour` and reaches its class only through that
+    /// behaviour's `owningClass`. So `~define`, `~defineMethods` and
+    /// `~delete`, which replace the class's behaviour object with a copy
+    /// (`ClassClass.cpp:860`-`:862`, `:531`-`:533`, `:962`-`:964`, each with
+    /// the C++'s own comment saying so), leave this object on the old one,
+    /// while `~inherit` and `~uninherit`, which rebuild the existing object
+    /// in place (`:1361`, `:1413`, both into `updateSubClasses` at `:1036`),
+    /// are seen here at once.
+    ///
+    /// `class` is what `~class` answers and what the default rendering
+    /// names; the copy carries the owning class across, so it does not move
+    /// when the behaviour does.
     ///
     /// `name` is `None` until `~objectName=` sets one, and that is not the
     /// same as holding the default rendering: `RexxObject::objectName`
@@ -130,6 +173,7 @@ pub enum Body {
     /// different values.
     Instance {
         class: ObjRef,
+        behaviour: BehaviourHandle,
         name: Option<Box<[u8]>>,
         pools: ScopePools,
     },

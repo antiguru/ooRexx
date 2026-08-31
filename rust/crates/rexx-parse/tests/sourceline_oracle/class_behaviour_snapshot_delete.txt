@@ -1,0 +1,25 @@
+count 24
+/* ~delete replaces the class's instance behaviour with a copy, so an object
+   created before the call keeps what the class no longer defines and a fresh
+   one does not.  Three readers of that behaviour are asked in turn: the name
+   (a), the send (b), and the UNINIT question (c and the finalizer), which is
+   asked of the object's own behaviour and not of its class -- an instance
+   registered at construction still runs the finalizer its class has dropped.
+   Only one UNINIT can fire and it is forced with drop then a driven
+   collection, so nothing depends on a termination order (D61). */
+o = .K~new
+.K~delete('GONE')
+.K~delete('UNINIT')
+say 'a' o~hasMethod('GONE')
+say 'b' o~gone
+say 'c' o~hasMethod('UNINIT')
+say 'd' .K~new~hasMethod('GONE')
+drop o
+call gc 'force'
+say 'e done'
+
+::class K
+::method gone
+  return 'still-here'
+::method uninit
+  say 'uninit-ran'

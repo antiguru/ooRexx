@@ -96,7 +96,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use rexx_classes::{ClassKind, ClassRegistry, InheritRefusal, MethodId, MethodSlot};
-use rexx_core::{BehaviourId, Body, Decoded, ObjRef};
+use rexx_core::{BehaviourHandle, BehaviourId, Body, Decoded, ObjRef};
 use rexx_parse::{Access, Expr};
 
 use crate::activation::{
@@ -806,10 +806,20 @@ enum Primitive {
     /// `.K~m` runs the body, `.K~hasMethod('M')` is `1` and
     /// `.K~hasMethod('LENGTH')` is `0`.
     Class(ObjRef),
-    /// What `~new` builds: an object whose messages resolve against the
-    /// instance behaviour of the class it carries. Measured, `::class K` and
-    /// `o = .K~new`: `o~class~id` is `K` and `o~string` is `a K`.
-    Instance(ObjRef),
+    /// What `~new` builds: an object carrying both the class it belongs to
+    /// and the behaviour it was given at construction (D58). Measured,
+    /// `::class K` and `o = .K~new`: `o~class~id` is `K` and `o~string` is
+    /// `a K`.
+    ///
+    /// **The two are separate answers**, which is what the pair is for:
+    /// `class` is what `~class` and the default rendering read, and
+    /// `behaviour` is what every message resolves against. `~define` on `K`
+    /// after this object exists moves the class's own behaviour and leaves
+    /// this one where it was.
+    Instance {
+        class: ObjRef,
+        behaviour: BehaviourHandle,
+    },
 }
 
 /// The behaviour a receiver's messages resolve against.
@@ -818,9 +828,19 @@ enum Primitive {
 /// are answered by its **class** behaviour while every other receiver's are
 /// answered by its class's **instance** behaviour, and those dictionaries
 /// hold different names for the same class.
+///
+/// The instance arm names the dictionary itself rather than the class, so
+/// that every reader of it -- the lookup, `~hasMethod`, the scope-override
+/// check, `SUPER`, the `UNINIT` question -- answers from the behaviour the
+/// receiver actually holds and none of them has to restate D58 for itself.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum Behaviour {
-    Instance(ObjRef),
+    Instance {
+        methods: BehaviourHandle,
+        /// `behaviour->getOwningClass()`: the class the dictionary belongs
+        /// to, which the copying mutators carry across unchanged.
+        owner: ObjRef,
+    },
     ClassSide(ObjRef),
 }
 
@@ -1084,7 +1104,7 @@ impl Interp {
     /// [`Interp::receiver_kind`]'s own refusal.
     fn receiver_class_id(&mut self, receiver: ObjRef) -> Option<String> {
         let owner = match self.receiver_behaviour(receiver).ok()? {
-            Behaviour::Instance(class) => class,
+            Behaviour::Instance { owner, .. } => owner,
             // A class object's messages resolve against its class behaviour,
             // whose owning class is the metaclass in play -- which is what
             // `ClassRegistry::class_of` answers, and what makes
@@ -1185,7 +1205,12 @@ impl Interp {
                     Body::Text { .. } | Body::Num { .. } => Ok(Primitive::String),
                     Body::Stem { .. } => Err("a stem"),
                     Body::Array(_) => Ok(Primitive::Array),
-                    Body::Instance { class, .. } => Ok(Primitive::Instance(*class)),
+                    Body::Instance {
+                        class, behaviour, ..
+                    } => Ok(Primitive::Instance {
+                        class: *class,
+                        behaviour: *behaviour,
+                    }),
                     Body::WeakRef(_) => Err("a weak reference"),
                     // The package object `~package` answers. `.Package`'s
                     // instance behaviour here is `Setup.cpp`'s whole set, so a
@@ -1269,10 +1294,17 @@ impl Interp {
 
     /// The behaviour a value's messages resolve against, or the value's own
     /// shape when this phase builds no class for it.
+    ///
+    /// **Only [`Primitive::Instance`] carries a stored handle**; every other
+    /// receiver's is read off its class here, and the two answer alike for
+    /// them because the `REXX_DEFINED` lock refuses every mutator a program
+    /// could send to a class this crate builds. Measured, oracle rc 158:
+    /// `.String~define('ZORK', .methods~z)` is 98.985, "User additions are
+    /// not allowed to the REXX language classes".
     fn receiver_behaviour(&mut self, receiver: ObjRef) -> Result<Behaviour, &'static str> {
         let kind = self.receiver_kind(receiver)?;
         let model = self.object_model();
-        Ok(match kind {
+        let live = match kind {
             // Both arms answer one behaviour, which is what makes
             // `Primitive::SmallInt` a distinction without a divergence: the
             // oracle gives `RexxInteger` the id `String`
@@ -1280,18 +1312,27 @@ impl Interp {
             // resolve against `String`'s instance behaviour exactly as a
             // literal's do. This fold is one of the two sites that would
             // change if that ever stopped being true.
-            Primitive::String | Primitive::SmallInt => Behaviour::Instance(model.string),
-            Primitive::Object => Behaviour::Instance(model.object),
-            Primitive::Array => Behaviour::Instance(model.array),
-            Primitive::Package => Behaviour::Instance(model.package),
-            Primitive::Method => Behaviour::Instance(model.method),
-            Primitive::Routine => Behaviour::Instance(model.routine),
-            Primitive::Directory => Behaviour::Instance(model.directory),
-            Primitive::StringTable => Behaviour::Instance(model.string_table),
-            Primitive::Context => Behaviour::Instance(model.context),
-            Primitive::RexxInfo => Behaviour::Instance(model.rexx_info),
-            Primitive::Class(class) => Behaviour::ClassSide(class),
-            Primitive::Instance(class) => Behaviour::Instance(class),
+            Primitive::String | Primitive::SmallInt => model.string,
+            Primitive::Object => model.object,
+            Primitive::Array => model.array,
+            Primitive::Package => model.package,
+            Primitive::Method => model.method,
+            Primitive::Routine => model.routine,
+            Primitive::Directory => model.directory,
+            Primitive::StringTable => model.string_table,
+            Primitive::Context => model.context,
+            Primitive::RexxInfo => model.rexx_info,
+            Primitive::Class(class) => return Ok(Behaviour::ClassSide(class)),
+            Primitive::Instance { class, behaviour } => {
+                return Ok(Behaviour::Instance {
+                    methods: behaviour,
+                    owner: class,
+                });
+            }
+        };
+        Ok(Behaviour::Instance {
+            methods: self.classes().instance_behaviour_handle(live),
+            owner: live,
         })
     }
 
@@ -1360,12 +1401,12 @@ impl Interp {
         // the bytes it has to replace.
         let name = String::from_utf8_lossy(name);
         let (scope, method) = match (behaviour, start_scope) {
-            (Behaviour::Instance(class), None) => {
-                self.classes().lookup_instance_method(class, &name)?
+            (Behaviour::Instance { methods, .. }, None) => {
+                self.classes().lookup_at(methods, &name)?
             }
-            (Behaviour::Instance(class), Some(start)) => self
-                .classes()
-                .lookup_instance_method_from_scope(class, &name, start)?,
+            (Behaviour::Instance { methods, .. }, Some(start)) => {
+                self.classes().lookup_from_scope_at(methods, &name, start)?
+            }
             (Behaviour::ClassSide(class), None) => {
                 self.classes().lookup_class_method(class, &name)?
             }
@@ -1391,8 +1432,8 @@ impl Interp {
     /// [`Interp::send_message`] before the message name is looked up.
     fn receiver_has_scope(&mut self, receiver: ObjRef, scope: ObjRef) -> bool {
         match self.receiver_behaviour(receiver) {
-            Ok(Behaviour::Instance(class)) => {
-                self.classes().instance_behaviour_has_scope(class, scope)
+            Ok(Behaviour::Instance { methods, .. }) => {
+                self.classes().behaviour_has_scope(methods, scope)
             }
             Ok(Behaviour::ClassSide(class)) => {
                 self.classes().class_behaviour_has_scope(class, scope)
@@ -1569,7 +1610,7 @@ impl Interp {
     /// (`classes/ObjectClass.cpp:258`-`:261`), which is the `None` arm.
     fn class_of_value(&mut self, value: ObjRef) -> Option<ObjRef> {
         match self.receiver_behaviour(value).ok()? {
-            Behaviour::Instance(class) => Some(class),
+            Behaviour::Instance { owner, .. } => Some(owner),
             Behaviour::ClassSide(class) => Some(self.classes().class_of(class)),
         }
     }
@@ -1590,8 +1631,8 @@ impl Interp {
     /// (`RexxActivation.cpp:535`-`536`).
     fn super_scope_for(&mut self, receiver: ObjRef, resolution: Resolution) -> Option<ObjRef> {
         match self.receiver_behaviour(receiver).ok()? {
-            Behaviour::Instance(class) => {
-                self.classes().instance_super_scope(class, resolution.scope)
+            Behaviour::Instance { methods, .. } => {
+                self.classes().super_scope_at(methods, resolution.scope)
             }
             Behaviour::ClassSide(class) => {
                 self.classes().class_super_scope(class, resolution.scope)
@@ -2205,7 +2246,7 @@ impl Interp {
         };
         let classes = &self.object_model().classes;
         match behaviour {
-            Behaviour::Instance(class) => classes.has_method(class, "UNINIT"),
+            Behaviour::Instance { methods, .. } => classes.has_method_at(methods, "UNINIT"),
             Behaviour::ClassSide(class) => classes.class_has_method(class, "UNINIT"),
         }
     }
@@ -2936,7 +2977,7 @@ impl Interp {
         // limbs above: measured, oracle rc 214, `::METHOD string` ending in
         // `1/0` reports the method's own clause and then the sending clause,
         // and nothing between them.
-        let readable = if matches!(self.receiver_kind(value), Ok(Primitive::Instance(_))) {
+        let readable = if matches!(self.receiver_kind(value), Ok(Primitive::Instance { .. })) {
             let caller = self.caller();
             match self.send_message(value, STRING, None, &[], caller)? {
                 Some(answered) => self.string_value_text(answered),
@@ -3310,7 +3351,7 @@ fn native_has_method(
     };
     let classes = &interp.object_model().classes;
     let answers = match behaviour {
-        Behaviour::Instance(class) => classes.has_method(class, &name),
+        Behaviour::Instance { methods, .. } => classes.has_method_at(methods, &name),
         Behaviour::ClassSide(class) => classes.class_has_method(class, &name),
     };
     Ok(Some(interp.counted(usize::from(answers))))
@@ -3528,7 +3569,7 @@ fn native_class(
         Primitive::Context => model.context,
         Primitive::RexxInfo => model.rexx_info,
         Primitive::Class(class) => model.classes.class_of(class),
-        Primitive::Instance(class) => class,
+        Primitive::Instance { class, .. } => class,
     }))
 }
 
@@ -4112,10 +4153,16 @@ fn native_new(
         let id = interp.classes().id_string(class).as_bytes().to_vec();
         return Err(Raised::abstract_class(&id).into());
     }
+    // `RexxClass::completeNewObject` (`classes/ClassClass.cpp:1882`) sets the
+    // object's behaviour from the class here, once. What the class holds
+    // later is a different behaviour or the same one rebuilt, and D58 turns
+    // on which.
+    let behaviour = interp.classes().instance_behaviour_handle(class);
     let object = interp.alloc_with(
         rexx_core::BehaviourId::OBJECT,
         Body::Instance {
             class,
+            behaviour,
             name: None,
             pools: rexx_core::ScopePools::new(),
         },
@@ -5017,7 +5064,10 @@ fn native_string(
     // **Sent rather than shortcut for an instance**, whose `OBJECTNAME` a
     // program can replace: measured, oracle rc 0, `::METHOD defaultName`
     // returning `overridden` makes `o~string` answer `overridden`.
-    if matches!(interp.receiver_kind(receiver), Ok(Primitive::Instance(_))) {
+    if matches!(
+        interp.receiver_kind(receiver),
+        Ok(Primitive::Instance { .. })
+    ) {
         let caller = interp.caller();
         let answered = interp.send_message(receiver, OBJECTNAME, None, &[], caller)?;
         if let Some(answered) = answered {
@@ -5061,7 +5111,7 @@ fn native_object_name(
         // that is not a base class, sends rather than deriving -- so a class
         // overriding `defaultName` decides what an unnamed instance answers,
         // and a name set afterwards wins over it. Both measured, oracle rc 0.
-        Primitive::Instance(_) => match interp.instance_name(receiver) {
+        Primitive::Instance { .. } => match interp.instance_name(receiver) {
             Some(held) => held,
             None => {
                 let caller = interp.caller();
@@ -5119,7 +5169,7 @@ fn native_object_name_set(
             let name = String::from_utf8_lossy(&name).into_owned();
             interp.classes().set_object_name(class, &name);
         }
-        Primitive::Instance(_) => {
+        Primitive::Instance { .. } => {
             let Some(object) = interp.heap.get_mut(receiver) else {
                 return Err(Loud::receiver_class("a value whose object is no longer live").into());
             };
@@ -5715,18 +5765,22 @@ mod tests {
         );
 
         let string = interp.classes().lookup("String").expect("String is native");
+        let string_behaviour = Behaviour::Instance {
+            methods: interp.classes().instance_behaviour_handle(string),
+            owner: string,
+        };
         assert_eq!(
             interp
                 .receiver_behaviour(integer)
                 .expect("a small integer resolves"),
-            Behaviour::Instance(string),
+            string_behaviour,
             "the arm sends a small integer's messages somewhere other than String"
         );
         assert_eq!(
             interp
                 .receiver_behaviour(text)
                 .expect("a text handle resolves"),
-            Behaviour::Instance(string)
+            string_behaviour
         );
 
         assert_eq!(

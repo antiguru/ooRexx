@@ -30,7 +30,7 @@
 
 use crate::class_graph::{ClassGraph, ClassKind, InheritRefusal};
 use crate::method_dict::{MethodId, MethodSlot};
-use rexx_core::ObjRef;
+use rexx_core::{BehaviourHandle, ObjRef};
 use std::collections::HashMap;
 
 pub struct ClassRegistry {
@@ -448,17 +448,6 @@ impl ClassRegistry {
             .has_scope_at(self.graph.class_behaviour_handle(class), scope)
     }
 
-    /// True once `scope` is folded into `class`'s current instance
-    /// behaviour -- the instance-side twin of
-    /// [`Self::class_behaviour_has_scope`], and what
-    /// `RexxObject::validateScopeOverride` (`classes/ObjectClass.cpp:1950`)
-    /// asks of an ordinary receiver before a `target~name:scope` send may
-    /// start its lookup at `scope`.
-    pub fn instance_behaviour_has_scope(&self, class: ObjRef, scope: ObjRef) -> bool {
-        self.graph
-            .has_scope_at(self.graph.instance_behaviour_handle(class), scope)
-    }
-
     /// An ordinary (unscoped) message resolution against `class`'s current
     /// instance behaviour: the scope the winning entry came from, and the
     /// method it names -- oracle's `RexxBehaviour::methodLookup`, which
@@ -473,30 +462,65 @@ impl ClassRegistry {
             .lookup_at(self.graph.instance_behaviour_handle(class), name)
     }
 
+    /// The handle a class hands to an instance built now -- what
+    /// [`rexx_core::Body::Instance`] stores, and what every reader below
+    /// takes in place of a class (D58).
+    pub fn instance_behaviour_handle(&self, class: ObjRef) -> BehaviourHandle {
+        self.graph.instance_behaviour_handle(class)
+    }
+
+    /// An ordinary (unscoped) resolution against a behaviour a receiver
+    /// holds -- oracle's `RexxBehaviour::methodLookup`, which
+    /// `RexxObject::messageSend` (`ObjectClass.cpp:866`) calls on
+    /// `behaviour` and not on the class.
+    ///
+    /// The scope comes back because a caller needs it for more than the
+    /// lookup: it is the class whose `~id` the oracle names in a native
+    /// method's own traceback line, and it is the starting point a further
+    /// scope-override send would take.
+    pub fn lookup_at(&self, handle: BehaviourHandle, name: &str) -> Option<(ObjRef, MethodId)> {
+        self.graph.lookup_at(handle, name)
+    }
+
+    /// A scope-override resolution against a behaviour a receiver holds --
+    /// oracle's `RexxObject::superMethod`, which the scope-override
+    /// `messageSend` (`ObjectClass.cpp:919`) calls. See
+    /// [`MethodDict::lookup_from_scope`](crate::MethodDict::lookup_from_scope)
+    /// for what `start_scope` selects.
+    pub fn lookup_from_scope_at(
+        &self,
+        handle: BehaviourHandle,
+        name: &str,
+        start_scope: ObjRef,
+    ) -> Option<(ObjRef, MethodId)> {
+        self.graph.lookup_from_scope_at(handle, name, start_scope)
+    }
+
+    /// `~hasMethod` against a behaviour a receiver holds.
+    pub fn has_method_at(&self, handle: BehaviourHandle, name: &str) -> bool {
+        self.graph.has_method_at(handle, name)
+    }
+
+    /// True once `scope` is folded into a behaviour a receiver holds -- what
+    /// `RexxObject::validateScopeOverride` (`classes/ObjectClass.cpp:1950`)
+    /// asks before a `target~name:scope` send may start its lookup at
+    /// `scope`.
+    pub fn behaviour_has_scope(&self, handle: BehaviourHandle, scope: ObjRef) -> bool {
+        self.graph.has_scope_at(handle, scope)
+    }
+
+    /// The scope a `SUPER` reference resolves to for a method found at
+    /// `scope` in a behaviour a receiver holds -- `RexxObject::superScope`.
+    pub fn super_scope_at(&self, handle: BehaviourHandle, scope: ObjRef) -> Option<ObjRef> {
+        self.graph.resolve_super_scope_at(handle, scope)
+    }
+
     /// An ordinary message resolution against the class object itself --
     /// `class`'s current class behaviour, which is what a send to the class
     /// rather than to one of its instances answers from.
     pub fn lookup_class_method(&self, class: ObjRef, name: &str) -> Option<(ObjRef, MethodId)> {
         self.graph
             .lookup_at(self.graph.class_behaviour_handle(class), name)
-    }
-
-    /// A scope-override message resolution against `class`'s current
-    /// instance behaviour -- oracle's `RexxObject::superMethod`, which the
-    /// scope-override `messageSend` (`ObjectClass.cpp:919`) calls. See
-    /// [`MethodDict::lookup_from_scope`](crate::MethodDict::lookup_from_scope)
-    /// for what `start_scope` selects.
-    pub fn lookup_instance_method_from_scope(
-        &self,
-        class: ObjRef,
-        name: &str,
-        start_scope: ObjRef,
-    ) -> Option<(ObjRef, MethodId)> {
-        self.graph.lookup_from_scope_at(
-            self.graph.instance_behaviour_handle(class),
-            name,
-            start_scope,
-        )
     }
 
     /// A scope-override message resolution against the class object itself --
@@ -513,13 +537,6 @@ impl ClassRegistry {
     ) -> Option<(ObjRef, MethodId)> {
         self.graph
             .lookup_from_scope_at(self.graph.class_behaviour_handle(class), name, start_scope)
-    }
-
-    /// The scope a `SUPER` reference resolves to for a method found at `scope`
-    /// in `class`'s instance behaviour -- `RexxObject::superScope`.
-    pub fn instance_super_scope(&self, class: ObjRef, scope: ObjRef) -> Option<ObjRef> {
-        self.graph
-            .resolve_super_scope_at(self.graph.instance_behaviour_handle(class), scope)
     }
 
     /// The same for a method found in `class`'s class behaviour, which is

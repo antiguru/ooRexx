@@ -1,4 +1,4 @@
-use rexx_core::{Body, Bytes, Heap, ObjRef, RootSet, ScopePools};
+use rexx_core::{BehaviourHandle, Body, Bytes, Heap, ObjRef, RootSet, ScopePools};
 
 #[test]
 fn an_object_with_uninit_is_reported_rather_than_swept_immediately() {
@@ -6,6 +6,7 @@ fn an_object_with_uninit_is_reported_rather_than_swept_immediately() {
     let roots = RootSet::new();
     let obj = heap.alloc(Body::Instance {
         class: ObjRef::class(0).expect("a class identity"),
+        behaviour: BehaviourHandle::new(0),
         name: None,
         pools: ScopePools::new(),
     });
@@ -68,6 +69,7 @@ fn a_weak_reference_to_an_uninit_pending_object_is_still_cleared() {
     let mut roots = RootSet::new();
     let target = heap.alloc(Body::Instance {
         class: ObjRef::class(0).expect("a class identity"),
+        behaviour: BehaviourHandle::new(0),
         name: None,
         pools: ScopePools::new(),
     });
@@ -106,6 +108,7 @@ fn an_object_flagged_twice_across_a_clear_is_reported_once() {
     let roots = RootSet::new();
     let obj = heap.alloc(Body::Instance {
         class: ObjRef::class(0).expect("a class identity"),
+        behaviour: BehaviourHandle::new(0),
         name: None,
         pools: ScopePools::new(),
     });
@@ -131,6 +134,7 @@ fn a_still_unreachable_flagged_object_is_reported_once_and_resurrected_every_tim
     let roots = RootSet::new();
     let obj = heap.alloc(Body::Instance {
         class: ObjRef::class(0).expect("a class identity"),
+        behaviour: BehaviourHandle::new(0),
         name: None,
         pools: ScopePools::new(),
     });
@@ -157,6 +161,7 @@ fn taking_the_flagged_objects_clears_every_flag() {
     for index in 0..3 {
         let obj = heap.alloc(Body::Instance {
             class: ObjRef::class(0).expect("a class identity"),
+            behaviour: BehaviourHandle::new(0),
             name: None,
             pools: ScopePools::new(),
         });

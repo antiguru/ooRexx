@@ -4029,10 +4029,12 @@ mod object_operand_tests {
             .classes()
             .lookup("Object")
             .expect("the Object class is registered");
+        let behaviour = interp.classes().instance_behaviour_handle(class);
         let named = interp.alloc_with(
             rexx_core::BehaviourId::OBJECT,
             rexx_core::Body::Instance {
                 class,
+                behaviour,
                 name: Some(b"123".to_vec().into_boxed_slice()),
                 pools: rexx_core::ScopePools::new(),
             },

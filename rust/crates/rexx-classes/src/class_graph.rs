@@ -48,7 +48,7 @@
 //! instance-of-itself probes.
 
 use crate::method_dict::{MethodDict, MethodId, MethodSlot};
-use rexx_core::ObjRef;
+use rexx_core::{BehaviourHandle, ObjRef};
 use std::collections::{BTreeSet, HashMap};
 
 /// Whether a class was declared with `SUBCLASS`/plain inheritance or with
@@ -108,13 +108,6 @@ struct Behaviour {
     dict: MethodDict,
     version: u64,
 }
-
-/// An index into [`ClassGraph`]'s behaviour storage. Two classes can never
-/// share one: [`ClassGraph::define`] always allocates a fresh handle for
-/// the class it is called on, and every other class keeps the handle it
-/// was given at [`ClassGraph::define_class`] time for as long as it exists.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct BehaviourHandle(usize);
 
 struct ClassDef {
     /// `Regular` or `Mixin` -- oracle's `isMixinClass`. `inherit`'s
@@ -250,10 +243,11 @@ struct ClassDef {
 
 /// The class graph and its behaviour storage.
 ///
-/// Behaviour handles are never freed: an orphaned one (left behind by
-/// [`ClassGraph::define`]) stays valid and frozen forever, which is
-/// exactly the property D43's asymmetry depends on -- an object holding
-/// that handle keeps answering to it undisturbed.
+/// Behaviour handles are never freed and never shared: an orphaned one (left
+/// behind by [`ClassGraph::define`]) stays valid and frozen forever, and no
+/// two classes ever answer from one, which together are the property D43's
+/// asymmetry depends on -- an object holding a handle keeps answering to it
+/// undisturbed however its class is mutated afterwards.
 #[derive(Default)]
 pub struct ClassGraph {
     classes: HashMap<ObjRef, ClassDef>,
@@ -274,7 +268,7 @@ impl ClassGraph {
     }
 
     fn alloc_behaviour(&mut self) -> BehaviourHandle {
-        let handle = BehaviourHandle(self.behaviours.len());
+        let handle = BehaviourHandle::new(self.behaviours.len());
         self.behaviours.push(Behaviour {
             dict: MethodDict::new(),
             version: 0,
@@ -399,11 +393,13 @@ impl ClassGraph {
     /// it is about an object's own methods rather than a class's.
     pub fn check_uninit(&mut self, class: ObjRef) {
         let instance = self.behaviour_handle(class, Side::Instance);
-        if self.behaviours[instance.0].dict.has_method("UNINIT") {
+        if self.behaviours[instance.index()].dict.has_method("UNINIT") {
             self.classes.get_mut(&class).unwrap().has_uninit = true;
         }
         let class_side = self.behaviour_handle(class, Side::Class);
-        if self.behaviours[class_side.0].dict.has_method("UNINIT")
+        if self.behaviours[class_side.index()]
+            .dict
+            .has_method("UNINIT")
             && !self.uninit_classes.contains(&class)
         {
             self.uninit_classes.push(class);
@@ -474,7 +470,7 @@ impl ClassGraph {
 
     fn behaviour_has_scope(&self, class: ObjRef, side: Side, scope: ObjRef) -> bool {
         let handle = self.behaviour_handle(class, side);
-        self.behaviours[handle.0].dict.has_scope(scope)
+        self.behaviours[handle.index()].dict.has_scope(scope)
     }
 
     /// Oracle's `createInstanceBehaviour` / `createClassBehaviour`
@@ -523,7 +519,7 @@ impl ClassGraph {
                 let metaclass = classes[&class].metaclass;
                 if !target.has_scope(metaclass) {
                     let meta_instance = classes[&metaclass].instance_behaviour;
-                    target.merge(&behaviours[meta_instance.0].dict);
+                    target.merge(&behaviours[meta_instance.index()].dict);
                 }
             }
             let own = match side {
@@ -553,10 +549,10 @@ impl ClassGraph {
     /// the borrow checker without changing what gets read or written.
     fn rebuild_behaviour(&mut self, class: ObjRef, side: Side) {
         let handle = self.behaviour_handle(class, side);
-        let mut dict = std::mem::take(&mut self.behaviours[handle.0].dict);
+        let mut dict = std::mem::take(&mut self.behaviours[handle.index()].dict);
         dict.clear();
         Self::cascade_build(&self.classes, &self.behaviours, class, &mut dict, side);
-        let behaviour = &mut self.behaviours[handle.0];
+        let behaviour = &mut self.behaviours[handle.index()];
         behaviour.dict = dict;
         behaviour.version += 1;
     }
@@ -751,7 +747,7 @@ impl ClassGraph {
             def.own_class_methods.add_method(name, class, method);
             def.class_behaviour
         };
-        self.behaviours[handle.0]
+        self.behaviours[handle.index()]
             .dict
             .add_method(name, class, method);
     }
@@ -1069,10 +1065,10 @@ impl ClassGraph {
     /// once, directly, instead.
     pub fn bootstrap_root_class_behaviour(&mut self, root: ObjRef, metaclass: ObjRef) {
         let meta_instance = self.classes[&metaclass].instance_behaviour;
-        let meta_dict = self.behaviours[meta_instance.0].dict.clone();
+        let meta_dict = self.behaviours[meta_instance.index()].dict.clone();
         let handle = self.behaviour_handle(root, Side::Class);
-        self.behaviours[handle.0].dict.merge(&meta_dict);
-        self.behaviours[handle.0].version += 1;
+        self.behaviours[handle.index()].dict.merge(&meta_dict);
+        self.behaviours[handle.index()].version += 1;
     }
 
     /// Mark `class` a metaclass without deriving it from one -- oracle's
@@ -1160,13 +1156,13 @@ impl ClassGraph {
     /// `~hasMethod` against a specific, possibly stale, handle -- a
     /// simulated already-created instance's own frozen reference (D43).
     pub fn has_method_at(&self, handle: BehaviourHandle, name: &str) -> bool {
-        self.behaviours[handle.0].dict.has_method(name)
+        self.behaviours[handle.index()].dict.has_method(name)
     }
 
     /// Every method name a specific handle answers to -- the method-SET
     /// assertion `ancestors` cannot substitute for.
     pub fn method_names_at(&self, handle: BehaviourHandle) -> BTreeSet<String> {
-        self.behaviours[handle.0].dict.method_names()
+        self.behaviours[handle.index()].dict.method_names()
     }
 
     /// True once `scope` has been folded into a specific handle's dictionary
@@ -1177,12 +1173,12 @@ impl ClassGraph {
     /// check (the donated *methods* still land) while this would go false
     /// for the metaclass's own scope specifically.
     pub fn has_scope_at(&self, handle: BehaviourHandle, scope: ObjRef) -> bool {
-        self.behaviours[handle.0].dict.has_scope(scope)
+        self.behaviours[handle.index()].dict.has_scope(scope)
     }
 
     /// An ordinary (unscoped) lookup against a specific handle.
     pub fn lookup_at(&self, handle: BehaviourHandle, name: &str) -> Option<(ObjRef, MethodId)> {
-        self.behaviours[handle.0].dict.lookup(name)
+        self.behaviours[handle.index()].dict.lookup(name)
     }
 
     /// A scope-override lookup against a specific handle -- see
@@ -1193,7 +1189,7 @@ impl ClassGraph {
         name: &str,
         start_scope: ObjRef,
     ) -> Option<(ObjRef, MethodId)> {
-        self.behaviours[handle.0]
+        self.behaviours[handle.index()]
             .dict
             .lookup_from_scope(name, start_scope)
     }
@@ -1201,14 +1197,16 @@ impl ClassGraph {
     /// The immediate superscope of `scope` within a specific handle's own
     /// ordering -- see [`MethodDict::resolve_super_scope`].
     pub fn resolve_super_scope_at(&self, handle: BehaviourHandle, scope: ObjRef) -> Option<ObjRef> {
-        self.behaviours[handle.0].dict.resolve_super_scope(scope)
+        self.behaviours[handle.index()]
+            .dict
+            .resolve_super_scope(scope)
     }
 
     /// The monotonic version D29 asks for -- bumped once per
     /// `rebuild_behaviour` call against this
     /// handle.
     pub fn version_at(&self, handle: BehaviourHandle) -> u64 {
-        self.behaviours[handle.0].version
+        self.behaviours[handle.index()].version
     }
 
     /// `~hasMethod` against `class`'s *current* instance behaviour --

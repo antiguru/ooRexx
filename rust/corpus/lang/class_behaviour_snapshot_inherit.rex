@@ -1,0 +1,14 @@
+/* ~inherit rebuilds the behaviour object an existing instance already points
+   at, so the mixin's method reaches an object created before the call.  The
+   `c` line sends the message rather than asking about it, which is what
+   separates a build that reports the method from one that can run it. */
+k = .Object~subclass('K')
+o = k~new
+k~inherit(.Mx)
+say 'a' o~hasMethod('MXM')
+say 'b' k~new~hasMethod('MXM')
+say 'c' o~mxm
+
+::CLASS Mx MIXINCLASS Object
+::METHOD mxm
+  return 'mixin-ran'

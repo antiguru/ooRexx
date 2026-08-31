@@ -1248,6 +1248,14 @@ const EXPECTED_SUBSET_5B: &[&str] = &[
     "lang/uninit_class_uninherit.rex",
     "lang/uninit_allocating_finalizer.rex",
     "lang/uninit_nested_collection.rex",
+    // Task 2: the concept row the behaviour snapshot makes agree, the two
+    // rebuild-in-place arms, the copying family's third member, and the
+    // subclass shape where the two families agree.
+    "gate-tables/concepts/objcla.rex",
+    "lang/class_behaviour_snapshot_inherit.rex",
+    "lang/class_behaviour_snapshot_uninherit.rex",
+    "lang/class_behaviour_snapshot_delete.rex",
+    "lang/class_behaviour_snapshot_subclass.rex",
 ];
 
 #[test]

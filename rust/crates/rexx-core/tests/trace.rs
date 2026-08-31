@@ -1,4 +1,4 @@
-use rexx_core::{Body, Bytes, ObjRef, ScopePools};
+use rexx_core::{BehaviourHandle, Body, Bytes, ObjRef, ScopePools};
 
 #[test]
 fn a_string_reaches_nothing() {
@@ -45,6 +45,7 @@ fn an_instance_reaches_every_scope_and_every_value_but_no_name() {
     let class = ObjRef::class(2).expect("a class identity");
     Body::Instance {
         class,
+        behaviour: BehaviourHandle::new(0),
         name: None,
         pools,
     }
@@ -63,6 +64,7 @@ fn an_instance_stops_reaching_a_dropped_variable() {
     let class = ObjRef::class(2).expect("a class identity");
     Body::Instance {
         class,
+        behaviour: BehaviourHandle::new(0),
         name: None,
         pools,
     }

@@ -11,7 +11,7 @@
 
 //! [`ScopePools`], the storage `EXPOSE` binds a method's names to (D40).
 
-use rexx_core::{Body, ObjRef, ScopePools};
+use rexx_core::{BehaviourHandle, Body, ObjRef, ScopePools};
 
 fn scopes() -> (ObjRef, ObjRef) {
     (
@@ -58,6 +58,7 @@ fn a_second_write_to_one_name_replaces_rather_than_shadows() {
     let class = ObjRef::class(2).expect("a class identity");
     Body::Instance {
         class,
+        behaviour: BehaviourHandle::new(0),
         name: None,
         pools,
     }
