@@ -70,6 +70,7 @@
 //! reaches libtest's thread-local capture sink and not the terminal; see
 //! `corpus.rs`'s module doc for the measurement behind that.
 
+use rayon::prelude::*;
 use rexx_exec::{NOT_IMPLEMENTED_EXIT, Outcome, run_program};
 use rexx_extract::bif::{DropReason, RaiseRow, extract_bif};
 use rexx_extract::keyword::count_assert_same;
@@ -467,9 +468,10 @@ fn the_exempt_set_matches_the_current_failures() {
     let (rows, _, _) = collect();
     let committed = committed_exempt();
 
+    let outcomes: Vec<RowOutcome> = rows.par_iter().map(|row| evaluate(&row.kind)).collect();
     let mut measured: BTreeMap<String, String> = BTreeMap::new();
-    for row in &rows {
-        if let Some(attribution) = evaluate(&row.kind).attribution() {
+    for (row, outcome) in rows.iter().zip(outcomes) {
+        if let Some(attribution) = outcome.attribution() {
             measured.insert(row.key.clone(), attribution);
         }
     }
@@ -536,7 +538,8 @@ fn bif_assertions_differential() {
     let mut unaccounted = Vec::new();
     let mut anomalies = Vec::new();
 
-    for row in &rows {
+    let outcomes: Vec<RowOutcome> = rows.par_iter().map(|row| evaluate(&row.kind)).collect();
+    for (row, outcome) in rows.iter().zip(outcomes) {
         let (group, raise) = match &row.kind {
             RowKind::Value(r) => (r.group.clone(), false),
             RowKind::Raise(r) => (r.group.clone(), true),
@@ -549,7 +552,6 @@ fn bif_assertions_differential() {
             value_total += 1;
         }
 
-        let outcome = evaluate(&row.kind);
         if let RowOutcome::Blocked { construct, .. } = &outcome {
             *by_construct.entry(construct.clone()).or_insert(0) += 1;
         }

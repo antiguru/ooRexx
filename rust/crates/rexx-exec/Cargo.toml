@@ -39,8 +39,7 @@ rexx-lib = { path = "../rexx-lib" }
 
 [dev-dependencies]
 # Case tables as data files rather than `const` arrays in Rust sources, for
-# tables written from Task 6 onward (the plan's Tech Stack section). Test-only,
-# and the only dependency this workspace takes from outside it.
+# tables written from Task 6 onward (the plan's Tech Stack section). Test-only.
 # `default-features = false` drops its `async` feature, which is the whole of
 # what pulls `futures` in: nothing here runs a case asynchronously.
 datadriven = { version = "0.9.0", default-features = false }
@@ -49,6 +48,13 @@ datadriven = { version = "0.9.0", default-features = false }
 # `ootest/ooRexx/base/expressions/`. Test-only: nothing in `src/` produces or
 # consumes an `AssertionRow`.
 rexx-extract = { path = "../rexx-extract" }
+
+# Work-stealing for the three sweeps below, whose per-case costs are very
+# uneven. Test-only: nothing in `src/` is parallel, and the interpreter's own
+# dependency set is unchanged. Each use is a `par_iter().map().collect()` that
+# precomputes one pure function into an index-ordered `Vec`, leaving the serial
+# fold that consumes it -- and so the emitted report -- untouched.
+rayon = "1.12.0"
 
 [lints]
 workspace = true

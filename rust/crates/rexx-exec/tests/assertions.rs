@@ -131,6 +131,7 @@
 //! that motivated it; nothing about the mechanism differs here, so it is
 //! not re-derived.
 
+use rayon::prelude::*;
 use rexx_exec::{NOT_IMPLEMENTED_EXIT, Outcome, run_program};
 use rexx_extract::{
     AssertionRow, BlockedMethod, Form, RaiseExpectation, extract_assertions, find_test_groups,
@@ -867,10 +868,10 @@ fn assertions_differential() {
     let mut gate_failures: Vec<String> = Vec::new();
     let mut occurrence_counts: std::collections::HashMap<(String, String), usize> =
         std::collections::HashMap::new();
-    for row in &rows {
+    let outcomes: Vec<RowOutcome> = rows.par_iter().map(evaluate_row).collect();
+    for (row, outcome) in rows.iter().zip(outcomes) {
         let occurrence = occurrence_of(&mut occurrence_counts, row);
         let exempt = exempt_entry(row, occurrence);
-        let outcome = evaluate_row(row);
 
         if matches!(outcome, RowOutcome::Pass) {
             passed += 1;
@@ -948,10 +949,11 @@ fn the_exempt_set_matches_the_current_blocked_rows() {
     let (rows, _) = collect_all();
     let mut occurrence_counts: std::collections::HashMap<(String, String), usize> =
         std::collections::HashMap::new();
+    let outcomes: Vec<RowOutcome> = rows.par_iter().map(evaluate_row).collect();
     let mut still_blocked: Vec<(String, String, usize, String, String)> = Vec::new();
-    for row in &rows {
+    for (row, outcome) in rows.iter().zip(outcomes) {
         let occurrence = occurrence_of(&mut occurrence_counts, row);
-        if !matches!(evaluate_row(row), RowOutcome::Pass) {
+        if !matches!(outcome, RowOutcome::Pass) {
             still_blocked.push((
                 row.group.clone(),
                 row.method.clone(),

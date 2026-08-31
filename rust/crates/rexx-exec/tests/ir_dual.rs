@@ -131,6 +131,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use rayon::prelude::*;
 use rexx_exec::{Engine, Invocation, Outcome, run_program};
 use rexx_extract::bif::extract_bif;
 use rexx_extract::keyword::extract_keyword;
@@ -1581,14 +1582,20 @@ fn every_population_the_tree_calls_for_is_present_and_non_empty() {
 #[test]
 fn both_engines_agree_across_every_population() {
     let populations = populations();
+    // Flattened first so work stealing spans populations rather than stalling
+    // on the longest one's tail, then folded in the original order.
+    let pairs: Vec<_> = populations
+        .iter()
+        .flat_map(|population| population.cases.iter().map(move |case| (population, case)))
+        .collect();
+    let reasons: Vec<Option<String>> = pairs.par_iter().map(|(_, case)| compare(case)).collect();
+
     let mut divergences = Vec::new();
     let mut compared = 0usize;
-    for population in &populations {
-        for case in &population.cases {
-            compared += 1;
-            if let Some(reason) = compare(case) {
-                divergences.push(format!("[{}] {}: {reason}", population.name, case.name));
-            }
+    for ((population, case), reason) in pairs.iter().zip(reasons) {
+        compared += 1;
+        if let Some(reason) = reason {
+            divergences.push(format!("[{}] {}: {reason}", population.name, case.name));
         }
     }
     assert!(
