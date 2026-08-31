@@ -1,0 +1,64 @@
+count 63
+/* Where a named instance IS the value an operand position takes.
+
+   `~objectName=` can give an instance a name that spells a number or a
+   truth value, and the oracle converts it in some positions and refuses in
+   others: `o + 1` and `o & 1` are 97.1 because the operator is a message
+   sent to the object, while everything below reaches the object through the
+   required-string protocol instead and answers. The refusals are this
+   crate's own loud ones and no differential row can carry them, so they are
+   asserted by `a_named_instance_is_never_an_operators_left_operand`
+   (`eval.rs`); this program is the half the oracle answers. */
+
+o = .K~new
+say 'unnamed' datatype(o)
+
+o~objectName = '123'
+say 'named' datatype(o) datatype(o, 'N')
+
+/* The right operand of an operator whose LEFT operand answers it: there the
+   conversion is the left operand's own method asking for a string. */
+say 'right' (123 = o) ('123' = o) (1 + o) (2 * o)
+
+say 'concat' 'q' || o
+say 'abut' 'q'o
+say 'blank' 'q' o
+
+say 'bifs' length(o) substr(o, 2) pos('2', o) abs(o) trunc(o) sign(o)
+say 'more' max(o, 5) min(o, 5) format(o, 6)
+
+a. = 'dflt'
+a.123 = 'hit'
+say 'tail' a.o
+
+parse value o with v
+say 'parse' v
+
+w = o
+say 'assign' w
+
+o~objectName = '1'
+if o then say 'if yes'
+else say 'if no'
+
+select
+  when o then say 'when yes'
+  otherwise say 'when no'
+end
+
+n = 0
+do while o
+  n = n + 1
+  leave
+end
+say 'while' n
+
+say 'right-logical' (1 & o) (0 | o)
+
+o~objectName = '3'
+say 'count' copies('z', o) left('abcdef', o)
+do i = 1 to 2
+  say 'loop' i
+end
+
+::CLASS K

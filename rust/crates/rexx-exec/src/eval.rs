@@ -929,18 +929,17 @@ impl Interp {
                 self.number(result, saturate_digits(digits), form)
             }
             PrefixOp::Not => {
+                // `\.array` is 97.1 on the oracle, the same message send the
+                // dyadic operators make, and it is asked ahead of the truth
+                // test for the reason [`Interp::logical_values_body`] states.
+                if let Some(kind) = self.operator_operand_gap(value) {
+                    return Err(Loud::operator_operand(op.spelling(), kind).into());
+                }
                 let text = self.to_text(value).to_vec();
                 let flipped = match logical_value(&text) {
                     Some(true) => b"0",
                     Some(false) => b"1",
-                    // `\.array` is 97.1 on the oracle, the same message send
-                    // the dyadic operators make.
-                    None => {
-                        if let Some(kind) = self.operator_operand_gap(value) {
-                            return Err(Loud::operator_operand(op.spelling(), kind).into());
-                        }
-                        return Err(Raised::not_logical(&text).into());
-                    }
+                    None => return Err(Raised::not_logical(&text).into()),
                 };
                 self.text(flipped)
             }
@@ -1472,17 +1471,18 @@ impl Interp {
         // object against the very text it renders as answers `0` on the
         // oracle and `1` here; see `Loud::operator_operand`.
         //
-        // **Behind the left operand's own parse as well, and the assertion is
-        // what makes that safe rather than the argument for it.** Every shape
-        // this gap names -- a class identity, one of the interpreter's own
-        // objects, and a stem redirecting to either -- is a shape
-        // `Interp::to_number` answers `NotNumeric` for, so a left operand that
-        // produced a `Number` has no gap to report and the lookup this costs
-        // is a heap fetch on a value already known to be a number. The
-        // ordering the skip must not disturb is the *error's*, and it is
-        // undisturbed: nothing between here and the original position can
-        // fail, and the arm that could -- `compare_numbers` -- is reached only
-        // when both operands parsed, which is exactly when there is no gap.
+        // **Behind the left operand's own parse as well, and the premise is
+        // that a shape this gap names is one `Interp::to_number` answers
+        // `NotNumeric` for** -- so a left operand that produced a `Number`
+        // has no gap to report and the lookup this costs is a heap fetch on a
+        // value already known to be a number. That premise is held by
+        // `a_value_the_operator_gap_names_parses_as_no_number` rather than by
+        // this paragraph; the assertion below is its tripwire on every
+        // comparison the debug gate runs. The ordering the skip must not
+        // disturb is the *error's*, and it is undisturbed: nothing between
+        // here and the original position can fail, and the arm that could --
+        // `compare_numbers` -- is reached only when both operands parsed,
+        // which is exactly when there is no gap.
         debug_assert!(
             left_number.is_err() || self.operator_operand_gap(left_value).is_none(),
             "a left operand that parsed as a number reported an operator gap"
@@ -1589,19 +1589,18 @@ impl Interp {
         left_value: ObjRef,
         right_value: ObjRef,
     ) -> Result<ObjRef, Failure> {
+        // **Ahead of the truth test, not behind it.** The oracle sends
+        // `&`/`|`/`&&` to the left operand as a message -- `.array & 1` is
+        // 97.1 where this crate's own 34.901 quotes the object's rendering --
+        // so an operand this names refuses however it renders, and a
+        // rendering that is itself `0` or `1` is not an answer: measured,
+        // oracle rc 159, `o & 1` for an instance named `'1'` is
+        // `97.1 Object "1" does not understand message "&".`
+        if let Some(kind) = self.operator_operand_gap(left_value) {
+            return Err(Loud::operator_operand(op.spelling(), kind).into());
+        }
         let left_text = self.to_text(left_value).to_vec();
-        let left_bool = match logical_value(&left_text) {
-            Some(value) => value,
-            // The oracle sends `&`/`|`/`&&` to the left operand as a message
-            // -- `.array & 1` is 97.1 where this crate's own 34.901 quotes
-            // the object's rendering.
-            None => {
-                if let Some(kind) = self.operator_operand_gap(left_value) {
-                    return Err(Loud::operator_operand(op.spelling(), kind).into());
-                }
-                return Err(Raised::not_logical(&left_text).into());
-            }
-        };
+        let left_bool = logical_value(&left_text).ok_or_else(|| Raised::not_logical(&left_text))?;
         let right_text = self.to_text(right_value).to_vec();
         let right_bool =
             logical_value(&right_text).ok_or_else(|| Raised::not_logical(&right_text))?;
@@ -1620,16 +1619,16 @@ impl Interp {
     /// The noun for an operand no operator here can take, or `None` for one
     /// every operator can.
     ///
-    /// The shapes are a class object and one of the interpreter's own
-    /// objects, and neither is a value the oracle treats as text when an
-    /// operator meets it. [`Loud::operator_operand`] carries the measurements
-    /// and [`Loud::object_position`] the surfaces that are not operators.
+    /// The arms below are the shapes, and none of them is a value the oracle
+    /// treats as text when an operator meets it. [`Loud::operator_operand`]
+    /// carries the measurements and [`Loud::object_position`] the surfaces
+    /// that are not operators.
     ///
-    /// **Every caller reaches this on a path that was already failing, except
-    /// [`Interp::compare_values`] and `Interp::header_number`**: a comparison
-    /// of renderings always succeeds, so the first sits behind the
-    /// two-small-integer fast path where a loop bound never pays for it, and
-    /// the second runs once per loop entry rather than once per iteration.
+    /// **[`Interp::compare_values`] and `Interp::header_number` ask on a path
+    /// that has not already failed**: a comparison of renderings always
+    /// succeeds, so the first sits behind the two-small-integer fast path
+    /// where a loop bound never pays for it, and the second runs once per
+    /// loop entry rather than once per iteration.
     ///
     /// Takes one operand and allocates nothing, so it carries no rooting
     /// precondition of its own.
@@ -1646,10 +1645,12 @@ impl Interp {
             Body::Native(_) => Some("one of the interpreter's own objects"),
             // An array *does* have a string value -- `ArrayClass::makeString`
             // joins its items -- so concatenation, which never asks here,
-            // agrees with the oracle. Every operator that does ask needs a
-            // number or a truth value, and the oracle answers 97.1 for those:
-            // `.Array` defines no arithmetic, comparison or logical method,
-            // so the send finds nothing rather than converting.
+            // agrees with the oracle. An operator that does ask never gets
+            // that string value: `.Array` defines no arithmetic or logical
+            // method, so measured, oracle rc 159, `a = (1,); say a + 1` is
+            // 97.1; and where a comparison finds one it is `Object`'s own
+            // identity test, so `say (a = 1)` is `0` at rc 0 rather than a
+            // comparison of `1` against `1`.
             Body::Array(_) => Some("an array"),
             // The oracle sends the operator as a message here too, and it is
             // the send that fails: measured, oracle rc 159, `o + 1` on an
@@ -3512,6 +3513,17 @@ mod object_operand_tests {
             // form: `0` on the oracle at rc 0.
             (b"say (.Object~superClasses = '')\n", "=", "an array"),
             (b"say (.Object~superClasses == '')\n", "==", "an array"),
+            // An array whose joined items *are* a number, which the rows
+            // above cannot reach: `.Object~superClasses` holds nothing, so
+            // its string value is empty and parses as no number whatever
+            // this crate does with it. Measured, oracle: `a = (1,)` then
+            // `say a + 1` and `say (a & 1)` are 97.1 at rc 159, and
+            // `say (a = 1)` is `0` at rc 0 -- `Object`'s identity test, not
+            // a comparison of `1` against `1`.
+            (b"a = (1,)\nsay (a + 1)\n", "+", "an array"),
+            (b"a = (1,)\nsay (a = 1)\n", "=", "an array"),
+            (b"a = (1,)\nsay (a & 1)\n", "&", "an array"),
+            (b"a = (1,)\nsay \\a\n", "\\", "an array"),
             // A package object, which `~package` puts in a program's hands
             // and which reaches the same arm `.environment` does.
             // oracle 97.1 at rc 159
@@ -3922,5 +3934,131 @@ mod object_operand_tests {
              operator-forwarded frame -- no method ever ran to raise from -- \
              but got {stderr:?}"
         );
+    }
+
+    /// An instance is never an operator's left operand, whatever it renders
+    /// as, and a name that spells a number or a truth value does not make it
+    /// one.
+    ///
+    /// The oracle sends the operator to the left operand as a message and an
+    /// instance answers none: measured, oracle rc 159, an instance named
+    /// `'1'` gives `97.1 Object "1" does not understand message "+".` for
+    /// `o + 1` and the same for `>`, `&` and `\`. This crate's own answer is
+    /// the licensed loud refusal, which no differential row can carry -- so
+    /// this is the instrument for it, and the shapes the oracle *does*
+    /// answer are `corpus/lang/instance_named_operands.rex`.
+    ///
+    /// **The two adjacent successes are the load-bearing half**, because
+    /// refusing an instance in every position would satisfy the refusals
+    /// alone: to the right of a string's own operator, and in a truth test,
+    /// the oracle converts and so does this.
+    #[test]
+    fn a_named_instance_is_never_an_operators_left_operand() {
+        let prologue = "o = .K~new\no~objectName = '1'\n";
+        let epilogue = "::CLASS K\n";
+        for (expression, spelling) in [
+            ("o + 1", "+"),
+            ("o - 1", "-"),
+            ("o * 2", "*"),
+            ("o / 2", "/"),
+            ("o // 2", "//"),
+            ("o % 2", "%"),
+            ("o ** 2", "**"),
+            ("(o = 1)", "="),
+            ("(o \\= 1)", "\\="),
+            ("(o > 0)", ">"),
+            ("(o < 2)", "<"),
+            ("(o == '1')", "=="),
+            ("(o & 1)", "&"),
+            ("(o | 0)", "|"),
+            ("(o && 1)", "&&"),
+            ("(\\o)", "\\"),
+            ("(-o)", "-"),
+            ("(+o)", "+"),
+        ] {
+            let source = format!("{prologue}say {expression}\n{epilogue}");
+            let (code, stdout, stderr) = both_engines(source.as_bytes());
+            assert_eq!(
+                code,
+                crate::NOT_IMPLEMENTED_EXIT,
+                "{expression}: {stderr:?}"
+            );
+            assert_eq!(stdout, "", "{expression}");
+            assert!(
+                stderr.contains(&format!(
+                    "the operator `{spelling}` applied to an instance of a user class"
+                )),
+                "{expression} reported {stderr:?}"
+            );
+        }
+        for (expression, expected) in [("(1 = o)", "1\n"), ("('q' || o)", "q1\n")] {
+            let source = format!("{prologue}say {expression}\n{epilogue}");
+            let (code, stdout, stderr) = both_engines(source.as_bytes());
+            assert_eq!(code, 0, "{expression}: {stderr:?}");
+            assert_eq!(stdout, expected, "{expression}");
+        }
+        let source = format!("{prologue}if o then say 'yes'\nelse say 'no'\n{epilogue}");
+        let (code, stdout, stderr) = both_engines(source.as_bytes());
+        assert_eq!(code, 0, "{stderr:?}");
+        assert_eq!(stdout, "yes\n");
+    }
+
+    /// A value [`Interp::operator_operand_gap`] names parses as no number,
+    /// which is what makes [`Interp::compare_values`]'s skip past that gap
+    /// sound rather than merely cheap.
+    ///
+    /// The skip reads the gap only when the left operand failed to parse, so
+    /// a value that is both a number and a gap is compared where the oracle
+    /// refuses -- measured, `a = (1,); say (a = 1)` answered `1` against the
+    /// oracle's `0`, at rc 0 on both sides. The `debug_assert` beside the
+    /// skip states the premise; this is what holds them against each other,
+    /// on the value kinds whose rendering can be a number.
+    ///
+    /// **Every value here renders as a number**, which is the point: a body
+    /// whose rendering could never parse would satisfy this whatever the two
+    /// functions did.
+    #[test]
+    fn a_value_the_operator_gap_names_parses_as_no_number() {
+        let mut interp = crate::Interp::new();
+        let one = interp.text(b"1");
+        let array = interp.alloc_with(
+            rexx_core::BehaviourId::ARRAY,
+            rexx_core::Body::Array(vec![Some(one)]),
+        );
+        let class = interp
+            .classes()
+            .lookup("Object")
+            .expect("the Object class is registered");
+        let named = interp.alloc_with(
+            rexx_core::BehaviourId::OBJECT,
+            rexx_core::Body::Instance {
+                class,
+                name: Some(b"123".to_vec().into_boxed_slice()),
+                pools: rexx_core::ScopePools::new(),
+            },
+        );
+        // A stem is in the gap's set only through its default, so it needs
+        // one that is itself in the set.
+        let aliased = interp.alloc_with(
+            rexx_core::BehaviourId::STEM,
+            rexx_core::Body::Stem {
+                name: b"A.".to_vec().into(),
+                default: Some(array),
+                tails: rexx_core::NameMap::default(),
+            },
+        );
+        for value in [array, named, aliased] {
+            let rendering = interp.to_text(value).into_owned();
+            assert!(
+                rexx_num::Number::parse_bytes(&rendering).is_some(),
+                "{value:?} renders as {rendering:?}, which is not a number"
+            );
+            assert!(interp.operator_operand_gap(value).is_some(), "{value:?}");
+            assert_eq!(
+                interp.to_number(value),
+                Err(rexx_core::NotNumeric),
+                "{value:?}"
+            );
+        }
     }
 }

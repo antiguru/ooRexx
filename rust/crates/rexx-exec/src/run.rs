@@ -3073,8 +3073,13 @@ impl Interp {
     /// **An instance is its own.** Its pools live in its own
     /// [`rexx_core::Body::Instance`] and the collector reaches them by tracing
     /// it, so they are safe exactly while something roots the instance. The
-    /// `SELF` slot is not that root -- a body may assign over it -- and the
-    /// temporary [`Interp::message_term`] takes over the sending clause is.
+    /// `SELF` slot is not that root, because a body may assign over it. What
+    /// roots it for a send a program writes is the temporary
+    /// [`Interp::message_term`] takes over the receiver, and for the `INIT`
+    /// send `~new` makes it is `native_new`'s own, because there
+    /// `message_term`'s temporary holds the class and not the new object.
+    /// `a_method_that_assigns_over_self_keeps_its_exposed_variables`
+    /// (`tests/collect_stress.rs`) reddens when the second goes.
     ///
     /// **Every other receiver is refused**, having nowhere to keep a pool.
     pub(crate) fn pool_owner(&mut self, receiver: ObjRef) -> Result<ObjRef, Failure> {

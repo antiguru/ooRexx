@@ -623,8 +623,16 @@ impl Interp {
             } => num_rendering(number, *created_digits, *created_form, text).len(),
             Body::Stem { name, .. } => name.len(),
             Body::Native(native) => native.rendered().len(),
+            // Reached only with a name set, the arm `to_text` takes in the
+            // same position: the redirect above answers for an instance that
+            // has none.
+            Body::Instance { name, .. } => match name {
+                Some(bytes) => bytes.len(),
+                None => unreachable!("Redirect::InstanceDefault answers an unnamed instance"),
+            },
             other => unreachable!(
-                "the value model only creates Text, Num, Stem, Array and Native, got {other:?}"
+                "the value model only creates Text, Num, Stem, Array, Native and Instance, \
+                 got {other:?}"
             ),
         }
     }
@@ -1141,26 +1149,18 @@ impl Interp {
             // and never numeric, so this answers the marker rather
             // than parsing what `to_text` would produce.
             Body::Native(_) => Err(NotNumeric),
-            // Parses the array's own string value, the same bytes
-            // `to_text` renders, rather than answering the marker
-            // outright: a one-item array holding a number has a
-            // numeric string value, and `Interp::operator_operand_gap`
-            // -- not this function -- is what keeps an array out of
-            // arithmetic, where the oracle's answer is 97.1 and not a
-            // conversion at all.
-            Body::Array(_) => {
-                let bytes = self.array_string_of(value);
-                Number::parse_bytes(&bytes).ok_or(NotNumeric)
-            }
-            // Parses the name something gave the object, which
-            // `~objectName=` can make numeric: measured, oracle rc 0,
-            // `datatype(o)` is `CHAR` for an untouched instance and `NUM`
-            // after `o~objectName = '123'`. An unnamed one renders as an
-            // article and its class's id, which never parses.
-            Body::Instance {
-                name: Some(bytes), ..
-            } => Number::parse_bytes(bytes).ok_or(NotNumeric),
-            Body::Instance { name: None, .. } => Err(NotNumeric),
+            // **The marker whatever they render as**, because the oracle
+            // sends an operator to its left operand as a message and neither
+            // answers one: measured, oracle rc 159, `a = (1,); say a + 1` and
+            // `o~objectName = '123'; say o + 1` are both
+            // `97.1 ... does not understand message "+".` even though each
+            // renders as a number, and the comparisons `say (a = 1)` and
+            // `say (o = 123)` are both `0` where parsing that rendering gives
+            // `1`. `Interp::operator_operand_gap` is what reports them, and
+            // it is reached only where this answers `NotNumeric` -- the
+            // premise `a_value_the_operator_gap_names_parses_as_no_number`
+            // holds.
+            Body::Array(_) | Body::Instance { .. } => Err(NotNumeric),
             other => {
                 unreachable!(
                     "the value model only creates Text, Num, Stem, Array, Native and Instance, \
@@ -1744,6 +1744,31 @@ mod tests {
             },
         );
         values.push(defaulted);
+
+        // An array's string value is joined on demand and cached nowhere,
+        // which is the redirect arm both functions take.
+        let joined = interp.text(b"1");
+        let array = interp.alloc_with(BehaviourId::ARRAY, Body::Array(vec![Some(joined), None]));
+        values.push(array);
+
+        // Both shapes of instance, because `Redirect::of` answers only for
+        // the unnamed one: the named one reaches the body match, which is the
+        // half of the mirror a redirect arm cannot stand in for.
+        let class = interp
+            .classes()
+            .lookup("Object")
+            .expect("the Object class is registered");
+        for name in [None, Some(b"123".to_vec().into_boxed_slice())] {
+            let instance = interp.alloc_with(
+                BehaviourId::OBJECT,
+                Body::Instance {
+                    class,
+                    name,
+                    pools: rexx_core::ScopePools::new(),
+                },
+            );
+            values.push(instance);
+        }
 
         // **`text_len` is asked first, before anything renders**, so that a
         // `Body::Num` reaches its arm with an empty `text` cache at least

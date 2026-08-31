@@ -1234,6 +1234,8 @@ const EXPECTED_SUBSET_5B: &[&str] = &[
     "lang/instance_naming_overrides.rex",
     "lang/instance_naming_raises.rex",
     "lang/instance_self_reassigned.rex",
+    // Task 1 fix round: the operand positions a named instance answers in.
+    "lang/instance_named_operands.rex",
 ];
 
 #[test]

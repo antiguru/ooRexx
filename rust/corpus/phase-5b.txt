@@ -33,3 +33,11 @@ lang/instance_naming.rex
 lang/instance_naming_overrides.rex
 lang/instance_naming_raises.rex
 lang/instance_self_reassigned.rex
+
+# Task 1 fix round: the positions a named instance IS the value of. `~objectName=`
+# can give an instance a name that spells a number or a truth value, and the
+# oracle converts it in every position below and refuses it as an operator's
+# left operand, where this crate's own refusal is loud and no differential row
+# can carry it. Nothing else in the corpus puts an instance in an operand
+# position at all, which is how a build answering `o + 1` shipped.
+lang/instance_named_operands.rex
