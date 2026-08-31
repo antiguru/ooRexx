@@ -534,7 +534,7 @@ const UNKNOWN: &[u8] = b"UNKNOWN";
 pub(crate) const INIT: &[u8] = b"INIT";
 
 /// The message a finalizer delivery sends -- `GlobalNames::UNINIT`, sent by
-/// `UninitDispatcher` (`memory/RexxMemory.cpp:381`). Upper case for
+/// `UninitDispatcher::run` (`memory/UninitDispatcher.cpp:52`). Upper case for
 /// [`UNKNOWN`]'s reason.
 const UNINIT: &[u8] = b"UNINIT";
 
@@ -2157,7 +2157,9 @@ impl Interp {
     ///
     /// **A raised condition and an `EXIT` are both discarded**, which is what
     /// `UninitDispatcher` under `activity->run` does
-    /// (`memory/RexxMemory.cpp:381`-`:384`). Measured, oracle rc 0 with empty
+    /// (`memory/RexxMemory.cpp:373`, and the dispatcher's two `handleError`
+    /// overrides at `memory/UninitDispatcher.cpp:64` and `:77`). Measured,
+    /// oracle rc 0 with empty
     /// stderr: `y = 1/0`, `raise syntax 40.900` and `exit 5` inside an
     /// `UNINIT` each print the finalizer's own output and nothing else, and
     /// the rest of the program runs on. A loud refusal is not discarded --
@@ -2178,8 +2180,8 @@ impl Interp {
     /// rooted for the length of the run.
     ///
     /// **The flags are cleared before this is called**, which is `runUninits`
-    /// removing the table entry before running the method
-    /// (`memory/RexxMemory.cpp:363`-`:373`). The flag was the batch's only
+    /// removing the table entry (`memory/RexxMemory.cpp:362`) before running
+    /// the method (`:373`). The flag was the batch's only
     /// root, so the park is this loop's `ProtectedObject`: without it a
     /// collection inside one finalizer sweeps the members that have not run.
     fn run_uninit_batch(&mut self, batch: Vec<ObjRef>, loud: &mut Vec<Loud>) {

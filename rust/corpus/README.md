@@ -29,7 +29,22 @@ over a `StringTable` of eight string keys gives **one** output in ten.
 So **no program here may print the iteration order of a collection whose keys
 are objects rather than strings or numbers**. That covers an `IdentityTable`
 outright and covers a `Table`, `Set`, `Bag` or `Relation` whenever what went
-into it was not a string. It is not a gap this project could close by working
+into it was not a string.
+
+**A class object is the exception, and it is one because `RexxClass` overrides
+the hash rather than because a class is special.** `RexxClass::getHashValue`
+(`classes/ClassClass.cpp:209`) answers `id->getHashValue()` -- the hash of the
+class's id string -- so a class object's bucket is string-derived and does not
+move with ASLR. The collection this reaches is the collector's own uninit
+table, whose iteration order is the order class `UNINIT`s run at termination:
+measured, three runs each, four classes declared `C`, `B`, `A`, `D` fire
+`D A B C`, and twenty declared `A` through `T` fire
+`D E F G H I J K L M N O P Q A R B S C T`. `lang/uninit_class_sweep_order.rex`
+prints that order and is allowed to. **An instance in the same table is not**:
+its hash is the inherited `identityHash`, so a program whose termination sweep
+mixes an instance `UNINIT` with a class `UNINIT` is exactly the shape this rule
+forbids -- measured, twenty runs of one class at bucket 16 beside one live
+instance gave the instance first nineteen times and the class first once. It is not a gap this project could close by working
 harder: the oracle does not agree with itself, so a differential has nothing to
 compare against and such a row would land as an intermittent red rather than as
 an honest gap. Iterating a **string**-keyed table and printing something
