@@ -29,27 +29,35 @@ over a `StringTable` of eight string keys gives **one** output in ten.
 So **no program here may print the iteration order of a collection whose keys
 are objects rather than strings or numbers**. That covers an `IdentityTable`
 outright and covers a `Table`, `Set`, `Bag` or `Relation` whenever what went
-into it was not a string.
-
-**A class object is the exception, and it is one because `RexxClass` overrides
-the hash rather than because a class is special.** `RexxClass::getHashValue`
-(`classes/ClassClass.cpp:209`) answers `id->getHashValue()` -- the hash of the
-class's id string -- so a class object's bucket is string-derived and does not
-move with ASLR. The collection this reaches is the collector's own uninit
-table, whose iteration order is the order class `UNINIT`s run at termination:
-measured, three runs each, four classes declared `C`, `B`, `A`, `D` fire
-`D A B C`, and twenty declared `A` through `T` fire
-`D E F G H I J K L M N O P Q A R B S C T`. `lang/uninit_class_sweep_order.rex`
-prints that order and is allowed to. **An instance in the same table is not**:
-its hash is the inherited `identityHash`, so a program whose termination sweep
-mixes an instance `UNINIT` with a class `UNINIT` is exactly the shape this rule
-forbids -- measured, twenty runs of one class at bucket 16 beside one live
-instance gave the instance first nineteen times and the class first once. It is not a gap this project could close by working
+into it was not a string. It is not a gap this project could close by working
 harder: the oracle does not agree with itself, so a differential has nothing to
 compare against and such a row would land as an intermittent red rather than as
 an honest gap. Iterating a **string**-keyed table and printing something
 order-independent -- a count, or a lookup of each index against the table --
 is fine, and is what `lang/do_over_string_table.rex` does.
+
+**A class object is an exception, and it is one because `RexxClass` overrides
+the hash rather than because a class is special.** `RexxClass::getHashValue`
+(`classes/ClassClass.cpp:209`) answers `id->getHashValue()` -- the hash of the
+class's id string -- so a class object's bucket is string-derived and does not
+move with ASLR. The other overrides are whatever
+
+```
+/bin/grep -rn "HashCode .*::getHashValue" ../../../ooRexx/interpreter/
+```
+
+names; `RexxNilObject`'s answers a stored constant, so `.nil` is a second
+object that is neither a string nor a number and still hashes reproducibly.
+The collection this reaches is the collector's own uninit table, whose
+iteration order is the order class `UNINIT`s run at termination.
+`lang/uninit_class_sweep_order.rex` prints that order and is allowed to; the
+sequences it and the oracle produce are asserted in
+`crates/rexx-classes/tests/uninit_sweep_order.rs`. **An instance in the same
+table is not**: its hash is the inherited `identityHash`, so a program whose
+termination sweep mixes an instance `UNINIT` with a class `UNINIT` is exactly
+the shape the rule above forbids -- measured, twenty runs of one class at
+bucket 16 beside one live instance gave the instance first nineteen times and
+the class first once.
 
 When the self-test (`--cpp X --rs X`, the same binary twice) reports a
 divergence, the corpus is at fault, not the differ. **Fix the program; never
