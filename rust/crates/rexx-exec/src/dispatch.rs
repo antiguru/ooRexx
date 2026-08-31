@@ -2242,12 +2242,16 @@ impl Interp {
     /// A `GC('force')` inside a finalizer therefore collects and marks and
     /// runs no method.
     ///
-    /// Both together are one transcript. Measured, oracle rc 0 with empty
-    /// stderr: a finalizer that builds an instance of another `UNINIT` class,
-    /// drops it and calls `GC('force')` prints `g uninit` / `inner built` /
-    /// `g done` / `end` / `uninit K` -- the inner finalizer neither inline
-    /// (the interlock) nor before the program's next clause (the single
-    /// pass), but at termination.
+    /// **Only the interlock has a reproducible witness.** Measured on a
+    /// finalizer that builds an instance of another `UNINIT` class, drops it
+    /// and calls `GC('force')`: the oracle never runs the inner finalizer
+    /// inline, twelve runs of twelve, rc 0 with empty stderr -- but *when* it
+    /// does run is bimodal, before the program's next clause in 3 of 13 runs
+    /// and at termination in the other 10, which is the iterator's cursor
+    /// against an address-derived bucket. `corpus/lang/uninit_nested_collection.rex`
+    /// prints the first and deliberately not the second. The single pass is
+    /// chosen on the C++ rather than on that split, and it lands on the
+    /// majority side.
     pub(crate) fn run_ready_uninits(&mut self) -> Vec<Loud> {
         if self.processing_uninits {
             return Vec::new();

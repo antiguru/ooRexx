@@ -55,6 +55,14 @@ lang/instance_named_operands.rex
 # entries are not all made at directive-install time.
 # `uninit_class_sweep_order.rex` pins the sweep's order over class objects
 # against declaration order, which it contradicts on every class.
+# The last three are each a delivery *point* rather than an order:
+# `uninit_class_uninherit.rex` is a registration that outlives its method and
+# runs nothing, `uninit_allocating_finalizer.rex` is a finalizer that
+# allocates, which bounds the termination sweep, and
+# `uninit_nested_collection.rex` is a collection driven from inside a
+# finalizer, which must run no finalizer of its own. That last one prints
+# only whether the inner finalizer ran inline, never when it did run: the
+# oracle answers that two ways across runs.
 gate-tables/concepts/obdes.rex
 lang/uninit_instance_collected.rex
 lang/uninit_instance_retained.rex
@@ -62,3 +70,6 @@ lang/uninit_class_inherited.rex
 lang/uninit_class_mixin.rex
 lang/uninit_class_inherit_runtime.rex
 lang/uninit_class_sweep_order.rex
+lang/uninit_class_uninherit.rex
+lang/uninit_allocating_finalizer.rex
+lang/uninit_nested_collection.rex

@@ -1,0 +1,38 @@
+/* A GC('force') inside a finalizer collects and marks and runs nothing:
+   MemoryObject::runUninits refuses to re-enter while a sweep is in progress.
+   G asks K whether its finalizer has run yet, immediately after driving a
+   collection that made K's instance unreachable; the answer is 0 because the
+   interlock held it back.  When K's finalizer does run is deliberately not
+   printed -- the oracle answers that two different ways across runs. */
+say 'start'
+g = .G~new
+say 'built'
+z1='a'; z2='b'; z3='c'; z4='d'; z5='e'; z6='f'
+z7='g'; z8='h'; z9='i'; z10='j'; z11='k'; z12='l'
+drop g
+call gc 'force'
+say 'end'
+exit 0
+
+::class k
+::method uninit
+  n = .K~mark
+::method mark class
+  expose ran
+  ran = 1
+  return 1
+::method ran class
+  expose ran
+  if var('ran') = 0 then return 0
+  return ran
+
+::class g
+::method uninit
+  say 'g uninit'
+  o = .K~new
+  say 'inner built'
+  y1='a'; y2='b'; y3='c'; y4='d'; y5='e'; y6='f'
+  y7='g'; y8='h'; y9='i'; y10='j'; y11='k'; y12='l'
+  drop o
+  call gc 'force'
+  say 'K finalizer ran during the nested collection?' .K~ran

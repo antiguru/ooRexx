@@ -1,0 +1,21 @@
+count 20
+/* A finalizer that allocates another instance of its own class.  The
+   termination sweep is bounded: the oracle reaches it twice at shutdown and
+   each pass runs only what its own collection readied, so the second
+   instance's finalizer runs and the third one's never does. */
+say 'start'
+o = .K~new
+drop o
+say 'end'
+exit 0
+
+::class k
+::method uninit
+  n = .K~bump
+  say 'u' n
+  if n < 8 then z = .K~new
+::method bump class
+  expose c
+  if var('c') = 0 then c = 0
+  c = c + 1
+  return c
