@@ -3669,6 +3669,14 @@ struct Interp {
     /// same flag and should not have to rename it away from a gate task's
     /// number.
     stress_collect: bool,
+    /// The objects a collection found unreachable and flagged for `UNINIT`,
+    /// oldest first, awaiting [`Interp::run_ready_uninits`] -- oracle's
+    /// `setReadyForUninit` list (`memory/RexxMemory.cpp:274`).
+    ///
+    /// **Needs no root of its own.** `Heap::collect` resurrects a flagged
+    /// object and keeps its registry entry, so the flag holds the object
+    /// alive until the finalizer clears it.
+    uninit_ready: Vec<ObjRef>,
     /// The arena size at which [`Interp::alloc_with`] collects, and half of
     /// this crate's trigger policy. The other half is `Heap::will_grow`.
     ///
@@ -4334,6 +4342,7 @@ impl Interp {
             clause_line_override: None,
             fragment_depth: 0,
             stress_collect: false,
+            uninit_ready: Vec::new(),
             collect_at: COLLECT_FLOOR,
             depth: 0,
             max_depth: 0,
@@ -6441,13 +6450,15 @@ impl Interp {
         let stats = self.heap.collect(&self.roots);
         self.roots.pop_frame(frame);
         // `pending_uninit` is what the collector resurrected so a finalizer
-        // could run against a whole graph. `native_new` sets
-        // `Object::has_uninit` for an instance whose class defines `UNINIT`,
-        // and this is the site that owes the delivery.
-        debug_assert!(
-            stats.pending_uninit.is_empty(),
-            "an object was resurrected for UNINIT and nothing here runs a finalizer"
-        );
+        // could run against a whole graph. The finalizer is not sent from
+        // here: the oracle's collector only marks
+        // (`MemoryObject::checkUninit`), and `runUninits` is reached from
+        // `GC('force')` and from the termination sweep.
+        for object in stats.pending_uninit {
+            if !self.uninit_ready.contains(&object) {
+                self.uninit_ready.push(object);
+            }
+        }
         // **Not raised for the stress mode**, which collects on every
         // allocation by definition and must not have its watermark moved
         // out from under it.
@@ -6886,6 +6897,19 @@ fn execute(
                 interp.trace.extend_from_slice(&raised.report(&site));
             }
         }
+    }
+
+    // `MemoryObject::lastChanceUninit` (`memory/RexxMemory.cpp:324`), reached
+    // from `Interpreter::terminateInterpreter` (`runtime/Interpreter.cpp:279`)
+    // -- after everything the program and its replied bodies do, and reached
+    // whatever the program's own outcome was. Measured, oracle: a program
+    // whose main body raises 42.3 still prints its class `UNINIT` and exits
+    // 214, and one ending `exit 7` prints it and exits 7.
+    for loud in interp.run_termination_uninits() {
+        interp
+            .trace
+            .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());
+        exit_code = NOT_IMPLEMENTED_EXIT;
     }
 
     // Read after the deferred bodies above, so a collection or a refused chunk

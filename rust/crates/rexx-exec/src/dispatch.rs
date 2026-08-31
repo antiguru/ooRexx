@@ -533,6 +533,11 @@ const UNKNOWN: &[u8] = b"UNKNOWN";
 /// (`classes/ClassClass.cpp:1631`). Upper case for [`UNKNOWN`]'s reason.
 pub(crate) const INIT: &[u8] = b"INIT";
 
+/// The message a finalizer delivery sends -- `GlobalNames::UNINIT`, sent by
+/// `UninitDispatcher` (`memory/RexxMemory.cpp:381`). Upper case for
+/// [`UNKNOWN`]'s reason.
+const UNINIT: &[u8] = b"UNINIT";
+
 /// The message the last install pass sends every class the package built --
 /// `GlobalNames::ACTIVATE`, sent by `ClassDirective::activate`
 /// (`instructions/ClassDirective.cpp:288`).
@@ -2146,6 +2151,91 @@ impl Interp {
             "a replied method body's values are still parked with nothing owing them"
         );
         failures
+    }
+
+    /// Sends `UNINIT` to `object` and answers a loud refusal if one escaped.
+    ///
+    /// **A raised condition and an `EXIT` are both discarded**, which is what
+    /// `UninitDispatcher` under `activity->run` does
+    /// (`memory/RexxMemory.cpp:381`-`:384`). Measured, oracle rc 0 with empty
+    /// stderr: `y = 1/0`, `raise syntax 40.900` and `exit 5` inside an
+    /// `UNINIT` each print the finalizer's own output and nothing else, and
+    /// the rest of the program runs on. A loud refusal is not discarded --
+    /// that is this crate saying it cannot run the construct, and the loud
+    /// rule is what keeps it from becoming a silent wrong answer.
+    fn run_one_uninit(&mut self, object: ObjRef) -> Option<Loud> {
+        let frame = self.roots.push_frame();
+        self.roots.push_temp(object);
+        let caller = self.caller();
+        let outcome = self.send_message(object, UNINIT, None, &[], caller);
+        self.roots.pop_frame(frame);
+        self.failure_site = None;
+        self.failure_sites.clear();
+        match outcome {
+            Ok(_) | Err(Failure::Raised(_) | Failure::Exited(_)) => None,
+            Err(Failure::Loud(loud)) => Some(*loud),
+        }
+    }
+
+    /// Runs the `UNINIT` of every object a collection has readied, oldest
+    /// first -- oracle's `MemoryObject::runUninits`
+    /// (`memory/RexxMemory.cpp:337`), reached from `collectAndUninit` and so
+    /// from `GC('force')` (`expression/BuiltinFunctions.cpp:3033`).
+    ///
+    /// The flag is cleared before the send, as `runUninits` removes the table
+    /// entry before running the method, so a collection inside the finalizer
+    /// cannot ready the same object twice; the object is a temporary for the
+    /// length of the send, which is that function's `ProtectedObject`.
+    ///
+    /// **A body queued by a body in this loop is run too**: a finalizer can
+    /// drop the last reference to another flagged object and collect.
+    pub(crate) fn run_ready_uninits(&mut self) -> Vec<Loud> {
+        let mut loud = Vec::new();
+        while !self.uninit_ready.is_empty() {
+            let object = self.uninit_ready.remove(0);
+            self.heap.clear_uninit(object);
+            loud.extend(self.run_one_uninit(object));
+        }
+        loud
+    }
+
+    /// The termination sweep: every live object still carrying the flag
+    /// (D69), then every class object with a class-side `UNINIT` (D60) in the
+    /// order [`ClassRegistry::uninit_classes_in_sweep_order`] gives.
+    ///
+    /// **Not the same as [`Interp::run_ready_uninits`] and not buildable out
+    /// of it.** Under D59 a class-scope `EXPOSE` roots an instance for ever,
+    /// so it never becomes unreachable and a collection never readies it;
+    /// the oracle fires those at termination anyway, measured. A class object
+    /// is never in the arena at all.
+    ///
+    /// **The instance group runs before the class group, and no check may
+    /// depend on that** (D61). The oracle's sweep is one table holding both,
+    /// and an instance's position in it comes from its address: measured,
+    /// twenty runs of one class-side `UNINIT` on `::CLASS C` beside one live
+    /// instance answered `instance` before `C` nineteen times and after it
+    /// once.
+    ///
+    /// [`ClassRegistry::uninit_classes_in_sweep_order`]:
+    ///     rexx_classes::ClassRegistry::uninit_classes_in_sweep_order
+    pub(crate) fn run_termination_uninits(&mut self) -> Vec<Loud> {
+        let mut loud = Vec::new();
+        loop {
+            let flagged = self.heap.uninit_flagged();
+            if flagged.is_empty() {
+                break;
+            }
+            for object in flagged {
+                self.heap.clear_uninit(object);
+                loud.extend(self.run_one_uninit(object));
+            }
+        }
+        self.uninit_ready.clear();
+        let classes = self.classes().uninit_classes_in_sweep_order();
+        for class in classes {
+            loud.extend(self.run_one_uninit(class));
+        }
+        loud
     }
 
     /// Puts one parked method body back and runs the rest of it.

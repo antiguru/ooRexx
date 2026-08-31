@@ -1,0 +1,18 @@
+/* A class-scope variable retains the instance, so it is never unreachable and
+   no collection can deliver its UNINIT.  The termination sweep runs it
+   anyway, after the clause following the forced collection. */
+say 'start'
+o = .K~new
+drop o
+call gc 'force'
+say 'after-gc'
+
+::class k
+::method init
+  .K~keep(self)
+::method keep class
+  expose bag
+  use arg obj
+  bag = obj
+::method uninit
+  say 'instance uninit'

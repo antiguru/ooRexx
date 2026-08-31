@@ -258,6 +258,14 @@ struct ClassDef {
 pub struct ClassGraph {
     classes: HashMap<ObjRef, ClassDef>,
     behaviours: Vec<Behaviour>,
+    /// Oracle's uninit table restricted to class objects -- the entries
+    /// `RexxClass::checkUninit`'s `requiresUninit()` (`ClassClass.cpp:1224`)
+    /// makes, in the order it makes them.
+    ///
+    /// Insertion order, because a repeated `put` on an identity table replaces
+    /// the value and leaves the entry where it is, so a class re-checked after
+    /// a mutator keeps the position it first got.
+    uninit_classes: Vec<ObjRef>,
 }
 
 impl ClassGraph {
@@ -377,26 +385,35 @@ impl ClassGraph {
         self.classes[&class].has_uninit
     }
 
-    /// Oracle's `RexxClass::checkUninit` (`ClassClass.cpp:1210`-`:1218`), the
-    /// half of it this crate can model: set [`Self::has_uninit`] when the
-    /// class's **flattened** instance behaviour answers `UNINIT`, whether the
-    /// class defines it or inherits it.
-    ///
-    /// **The other half is not here and is not a flag.** `checkUninit` goes on
-    /// to `if (hasUninitMethod()) requiresUninit();` (`:1222`), which asks the
-    /// class *object's own* behaviour -- the class side, where a
-    /// `::METHOD uninit CLASS` lands -- and enters the object in the
-    /// collector's uninit table. This crate has no such table.
+    /// Oracle's `RexxClass::checkUninit` (`ClassClass.cpp:1210`-`:1226`), both
+    /// halves of it: set [`Self::has_uninit`] when the class's **flattened**
+    /// instance behaviour answers `UNINIT`, whether the class defines it or
+    /// inherits it, and enter the class object itself in
+    /// [`Self::uninit_classes`] when its **class** behaviour answers `UNINIT`
+    /// -- `if (hasUninitMethod()) requiresUninit();` (`:1224`), which is where
+    /// a `::METHOD uninit CLASS` lands.
     ///
     /// **Idempotent and one-way**, like the oracle's: it never clears the
-    /// flag. `RexxObject::checkUninit` (`ObjectClass.cpp:2604`) is a different
-    /// function that does clear, and it is about an object's own methods
-    /// rather than a class's.
+    /// flag and never removes a table entry. `RexxObject::checkUninit`
+    /// (`ObjectClass.cpp:2604`) is a different function that does clear, and
+    /// it is about an object's own methods rather than a class's.
     pub fn check_uninit(&mut self, class: ObjRef) {
-        let handle = self.behaviour_handle(class, Side::Instance);
-        if self.behaviours[handle.0].dict.has_method("UNINIT") {
+        let instance = self.behaviour_handle(class, Side::Instance);
+        if self.behaviours[instance.0].dict.has_method("UNINIT") {
             self.classes.get_mut(&class).unwrap().has_uninit = true;
         }
+        let class_side = self.behaviour_handle(class, Side::Class);
+        if self.behaviours[class_side.0].dict.has_method("UNINIT")
+            && !self.uninit_classes.contains(&class)
+        {
+            self.uninit_classes.push(class);
+        }
+    }
+
+    /// Every class object whose own behaviour answers `UNINIT`, in the order
+    /// [`Self::check_uninit`] entered them.
+    pub fn uninit_classes(&self) -> &[ObjRef] {
+        &self.uninit_classes
     }
 
     /// Recompute [`Self::parent_has_uninit`] from the class's current

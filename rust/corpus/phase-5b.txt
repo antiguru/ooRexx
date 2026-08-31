@@ -41,3 +41,19 @@ lang/instance_self_reassigned.rex
 # can carry it. Nothing else in the corpus puts an instance in an operand
 # position at all, which is how a build answering `o + 1` shipped.
 lang/instance_named_operands.rex
+
+# Task 5: `UNINIT`. `obdes.rex` is the gate row a class-side `UNINIT` makes
+# agree. `uninit_instance_collected.rex` is the delivery driven by a
+# collection and `uninit_instance_retained.rex` the one D69 owes: a
+# class-scope variable roots the instance for ever, so no collection can ever
+# reach it and only the termination sweep runs its finalizer.
+# `uninit_class_inherited.rex` and `uninit_class_mixin.rex` are the two arms
+# `obdes.rex` cannot see, where the class that fires declares no `UNINIT` of
+# its own. `uninit_class_sweep_order.rex` pins the sweep's order over class
+# objects against declaration order, which it contradicts on every class.
+gate-tables/concepts/obdes.rex
+lang/uninit_instance_collected.rex
+lang/uninit_instance_retained.rex
+lang/uninit_class_inherited.rex
+lang/uninit_class_mixin.rex
+lang/uninit_class_sweep_order.rex

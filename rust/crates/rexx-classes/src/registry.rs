@@ -313,6 +313,33 @@ impl ClassRegistry {
         self.graph.check_uninit(class);
     }
 
+    /// The class objects with a class-side `UNINIT`, in the order the
+    /// oracle's termination sweep runs them.
+    ///
+    /// `MemoryObject::lastChanceUninit` (`memory/RexxMemory.cpp:324`) walks
+    /// `uninitTable`, an `IdentityTable` built at
+    /// `HashCollection::DefaultTableSize`, and `HashContents::iterateNext`
+    /// (`classes/support/HashContents.cpp:489`) takes buckets in index order
+    /// and the overflow chain within a bucket, which `HashContents::put`
+    /// appends to. A class object's bucket comes from
+    /// `RexxClass::getHashValue` (`classes/ClassClass.cpp:209`), which is the
+    /// hash of the class's **id string** rather than of its address -- the
+    /// reason this order reproduces where an instance's does not.
+    ///
+    /// Measured, oracle rc 0 with empty stderr, three runs each: four
+    /// directive classes declared `C`, `B`, `A`, `D` fire `D A B C`, and
+    /// twenty declared `A` through `T` fire
+    /// `D E F G H I J K L M N O P Q A R B S C T`.
+    ///
+    /// **Predicts the oracle only while its table has not expanded.**
+    /// `HashCollection::expandContents` doubles the bucket count and rehashes
+    /// every entry; twenty entries do not reach that, measured above.
+    pub fn uninit_classes_in_sweep_order(&self) -> Vec<ObjRef> {
+        let mut sweep = self.graph.uninit_classes().to_vec();
+        sweep.sort_by_key(|&class| uninit_bucket(self.id_string(class).as_bytes()));
+        sweep
+    }
+
     /// See [`ClassGraph::refresh_parent_has_uninit`].
     pub fn refresh_parent_has_uninit(&mut self, class: ObjRef) {
         self.graph.refresh_parent_has_uninit(class);
@@ -669,4 +696,22 @@ impl ClassRegistry {
     pub fn bootstrap_root_class_behaviour(&mut self, root: ObjRef, metaclass: ObjRef) {
         self.graph.bootstrap_root_class_behaviour(root, metaclass);
     }
+}
+
+/// Which bucket of the oracle's uninit table a class object with id `id`
+/// lands in.
+///
+/// `RexxString::getStringHash` (`classes/StringClass.hpp:328`) folds
+/// `h = 31 * h + stringData[i]` over the bytes into a `size_t`, with
+/// `stringData` a signed `char`, and `HashContents::hashIndex` reduces that
+/// modulo the bucket count (`classes/support/HashContents.hpp:204`).
+fn uninit_bucket(id: &[u8]) -> usize {
+    /// `HashCollection::DefaultTableSize`, which `new_identity_table` builds
+    /// the uninit table at (`classes/IdentityTableClass.hpp:69`).
+    const BUCKETS: u64 = 17;
+    let hash = id.iter().fold(0u64, |hash, &byte| {
+        hash.wrapping_mul(31)
+            .wrapping_add(i64::from(byte as i8) as u64)
+    });
+    (hash % BUCKETS) as usize
 }

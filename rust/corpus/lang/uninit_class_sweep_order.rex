@@ -1,0 +1,20 @@
+/* The termination sweep runs class objects in the oracle's uninit table
+   iteration order, a bucket over the hash of the class's id string.
+   Declaration order here is C, B, A, D and the sweep runs D, A, B, C. */
+say 'main'
+
+::class c
+::method uninit class
+  say 'uninit on' self~id
+
+::class b
+::method uninit class
+  say 'uninit on' self~id
+
+::class a
+::method uninit class
+  say 'uninit on' self~id
+
+::class d
+::method uninit class
+  say 'uninit on' self~id

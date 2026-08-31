@@ -348,6 +348,21 @@ impl Heap {
         true
     }
 
+    /// Every handle still flagged, oldest first.
+    ///
+    /// **An over-approximation**, for the reason the `uninit` field carries:
+    /// an entry is dropped when a collection next reads the list, so a caller
+    /// re-reads [`Object::has_uninit`] before acting on one.
+    ///
+    /// [`Object::has_uninit`]: crate::Object::has_uninit
+    pub fn uninit_flagged(&self) -> Vec<ObjRef> {
+        self.uninit
+            .iter()
+            .copied()
+            .filter(|&r| self.get(r).is_some_and(|object| object.has_uninit()))
+            .collect()
+    }
+
     /// How many objects this heap has interned as immortal.
     ///
     /// The instrument for the paragraph above: a program's count is the number

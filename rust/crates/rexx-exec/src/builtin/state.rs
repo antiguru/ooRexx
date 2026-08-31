@@ -231,6 +231,15 @@ pub(crate) fn gc(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<Obj
     // through also keeps `collect_at` adjusted, which a bare `Heap::collect`
     // leaves where it was.
     interp.collect_now();
+    // `collectAndUninit` is collect *and* run, and `GC('force')` is the one
+    // path that runs the finalizers inline rather than leaving them to a
+    // later safe point. Measured, oracle rc 0: `o = .K~new` / `say 'b'` /
+    // `drop o` / `call gc 'force'` / `say 'c'` answers `a b uninit c`, five
+    // runs of five, where 200,000 unforced allocations in place of the
+    // `GC('force')` defer the same finalizer to termination.
+    if let Some(loud) = interp.run_ready_uninits().into_iter().next() {
+        return Err(Failure::Loud(Box::new(loud)));
+    }
     Ok(interp.text(b"1"))
 }
 

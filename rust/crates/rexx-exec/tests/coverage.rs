@@ -1236,6 +1236,14 @@ const EXPECTED_SUBSET_5B: &[&str] = &[
     "lang/instance_self_reassigned.rex",
     // Task 1 fix round: the operand positions a named instance answers in.
     "lang/instance_named_operands.rex",
+    // Task 5: the concept row a class-side `UNINIT` makes agree, the two
+    // instance deliveries, the two inherited class arms, and the sweep order.
+    "gate-tables/concepts/obdes.rex",
+    "lang/uninit_instance_collected.rex",
+    "lang/uninit_instance_retained.rex",
+    "lang/uninit_class_inherited.rex",
+    "lang/uninit_class_mixin.rex",
+    "lang/uninit_class_sweep_order.rex",
 ];
 
 #[test]

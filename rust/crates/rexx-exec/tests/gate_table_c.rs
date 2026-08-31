@@ -454,9 +454,10 @@ const CONCEPTS: &[Concept] = &[
         phase: "5b",
         authority: "spec enumeration: object destruction and uninitialization -- `UNINIT` \
                     and its propagation flags -- is 5b, with the flags carried by 5a's code",
-        control: "stop running `UNINIT` before the object's storage is reclaimed, which is \
-                  **silent**: measured today the row is rc 0 with empty stderr on both \
-                  sides and differs on stdout alone -- 5b",
+        control: "skip the termination sweep, since under D59 a class object's storage is \
+                  never reclaimed and no collection ever reaches one. Measured as run: the \
+                  row reddens **silently**, rc 0 with empty stderr on both sides, differing \
+                  on stdout alone -- 5b",
         oracle_lines: 2,
     },
     Concept {

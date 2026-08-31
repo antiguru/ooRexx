@@ -1,0 +1,10 @@
+/* A mixin's class-side UNINIT reaches the class that inherits it. */
+say 'main'
+
+::class m mixinclass Object
+::method uninit class
+  say 'uninit on' self~id
+
+::class k inherit m
+::method uninit class
+  say 'uninit on' self~id
