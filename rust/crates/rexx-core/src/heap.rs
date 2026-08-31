@@ -205,7 +205,7 @@ impl Heap {
 
         // Pass 2: resurrect unreachable objects that define UNINIT, marking
         // everything they reach so the finalizer never sees a half-collected
-        // graph. They are reported, not swept; the caller calls `clear_uninit`
+        // graph. They are reported, not swept; the caller clears the flag
         // once the finalizer has run, and the next collection takes them.
         //
         // Read from the registry `set_uninit` maintains rather than from a
@@ -339,33 +339,8 @@ impl Heap {
         true
     }
 
-    /// Undoes [`Heap::set_uninit`], for the caller reporting that the
-    /// finalizer has run. The next collection sweeps the object like any
-    /// other.
-    ///
-    /// **The registry entry goes with the flag**, because dropping it lazily
-    /// lets one object hold two entries: clearing and re-flagging before the
-    /// next collection pushes a second, and both are then live and flagged,
-    /// so the collection reports the same object twice and the finalizer runs
-    /// twice. Measured -- `set`, `clear`, `set`, `collect` answers a
-    /// two-element `pending_uninit` without this line, where a walk of the
-    /// arena answers one.
-    pub fn clear_uninit(&mut self, r: ObjRef) -> bool {
-        let Some(slot) = self.resolve(r) else {
-            return false;
-        };
-        let Slot::Live { object, .. } = &mut self.slots[slot] else {
-            unreachable!("resolve rejects free slots")
-        };
-        object.has_uninit = false;
-        object.ready_for_uninit = false;
-        self.uninit.retain(|&flagged| flagged != r);
-        true
-    }
-
     /// Every handle still flagged, oldest first, with the flag cleared and
-    /// the registry emptied -- [`Heap::clear_uninit`] over the whole registry
-    /// at once, for a caller running every pending finalizer.
+    /// the registry emptied, for a caller running every pending finalizer.
     ///
     /// **The flag is what kept these objects reachable**, since `collect`
     /// resurrects a flagged object rather than sweeping it. A caller that
@@ -389,8 +364,21 @@ impl Heap {
         flagged
     }
 
-    /// [`Heap::clear_uninit`] over a batch, in one pass of the registry
-    /// rather than one pass per handle.
+    /// Undoes [`Heap::set_uninit`] for a batch, for the caller reporting that
+    /// their finalizers have run. The next collection sweeps them like any
+    /// other object.
+    ///
+    /// **The registry entries go with the flags**, because dropping them
+    /// lazily lets one object hold two: clearing and re-flagging before the
+    /// next collection pushes a second, and both are then live and flagged,
+    /// so the collection reports the same object twice and the finalizer runs
+    /// twice. Measured -- `set`, `clear`, `set`, `collect` answers a
+    /// two-element `pending_uninit` without the filter below, where a walk of
+    /// the arena answers one.
+    ///
+    /// One pass of the registry rather than one pass per handle: the sweep
+    /// this serves runs every flagged object, so a `retain` per object is
+    /// quadratic in the number of finalizers.
     pub fn clear_uninit_all(&mut self, objects: &[ObjRef]) {
         for &r in objects {
             let Some(slot) = self.resolve(r) else {

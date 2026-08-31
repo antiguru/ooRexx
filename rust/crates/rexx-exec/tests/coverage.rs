@@ -1243,6 +1243,7 @@ const EXPECTED_SUBSET_5B: &[&str] = &[
     "lang/uninit_instance_retained.rex",
     "lang/uninit_class_inherited.rex",
     "lang/uninit_class_mixin.rex",
+    "lang/uninit_class_inherit_runtime.rex",
     "lang/uninit_class_sweep_order.rex",
 ];
 

@@ -538,6 +538,13 @@ pub(crate) const INIT: &[u8] = b"INIT";
 /// [`UNKNOWN`]'s reason.
 const UNINIT: &[u8] = b"UNINIT";
 
+/// How many times the termination sweep runs, from the number of times the
+/// oracle's shutdown reaches `MemoryObject::runUninits`: `collectAndUninit`
+/// at `runtime/InterpreterInstance.cpp:581` and `lastChanceUninit` at
+/// `runtime/Interpreter.cpp:279`. See
+/// [`Interp::run_termination_uninits`](Interp::run_termination_uninits).
+const SWEEPS: usize = 2;
+
 /// The message the last install pass sends every class the package built --
 /// `GlobalNames::ACTIVATE`, sent by `ClassDirective::activate`
 /// (`instructions/ClassDirective.cpp:288`).
@@ -2165,7 +2172,19 @@ impl Interp {
     /// not discarded -- that is this crate saying it cannot run the
     /// construct, and the loud rule is what keeps it from becoming a silent
     /// wrong answer.
+    ///
+    /// **An object that no longer answers `UNINIT` is reached and runs
+    /// nothing**, which is `RexxObject::uninit`'s own `hasMethod` test
+    /// (`classes/ObjectClass.cpp:2581`). Registration is never undone --
+    /// `RexxClass::checkUninit` only sets (`classes/ClassClass.cpp:1211`) --
+    /// so this test is the only thing that cancels a finalizer. Measured,
+    /// oracle rc 0 with empty stderr: `.QQ~inherit(.MX)` then
+    /// `.QQ~uninherit(.MX)` runs `MX`'s finalizer and not `QQ`'s, and an
+    /// instance built between an `~inherit` and its `~uninherit` runs none.
     fn run_one_uninit(&mut self, object: ObjRef) -> Option<Loud> {
+        if !self.answers_uninit(object) {
+            return None;
+        }
         let caller = self.caller();
         let outcome = self.send_message(object, UNINIT, None, &[], caller);
         self.failure_site = None;
@@ -2173,6 +2192,21 @@ impl Interp {
         match outcome {
             Ok(_) | Err(Failure::Raised(_) | Failure::Exited(_)) => None,
             Err(Failure::Loud(loud)) => Some(*loud),
+        }
+    }
+
+    /// Whether `object` still answers `UNINIT` -- `RexxObject::hasMethod`
+    /// as `RexxObject::uninit` asks it (`classes/ObjectClass.cpp:2581`),
+    /// resolved the way [`native_has_method`] resolves the `HASMETHOD`
+    /// message.
+    fn answers_uninit(&mut self, object: ObjRef) -> bool {
+        let Ok(behaviour) = self.receiver_behaviour(object) else {
+            return false;
+        };
+        let classes = &self.object_model().classes;
+        match behaviour {
+            Behaviour::Instance(class) => classes.has_method(class, "UNINIT"),
+            Behaviour::ClassSide(class) => classes.class_has_method(class, "UNINIT"),
         }
     }
 
@@ -2197,30 +2231,58 @@ impl Interp {
     /// (`memory/RexxMemory.cpp:337`), reached from `collectAndUninit` and so
     /// from `GC('force')` (`expression/BuiltinFunctions.cpp:3033`).
     ///
-    /// **A batch queued by a batch in this loop is run too**: a finalizer can
-    /// drop the last reference to another flagged object and collect.
+    /// **One pass, not a fixed point.** `runUninits` walks the table once,
+    /// so an object readied *during* the walk is reached only if its bucket
+    /// is still ahead of the iterator -- and an instance's bucket is its
+    /// address, so which side it falls on is not reproducible. This crate
+    /// takes the deterministic side and leaves it for the next sweep.
+    ///
+    /// **Re-entering it runs nothing**, which is the interlock `runUninits`
+    /// opens with (`memory/RexxMemory.cpp:341`-`:347`, cleared at `:383`).
+    /// A `GC('force')` inside a finalizer therefore collects and marks and
+    /// runs no method.
+    ///
+    /// Both together are one transcript. Measured, oracle rc 0 with empty
+    /// stderr: a finalizer that builds an instance of another `UNINIT` class,
+    /// drops it and calls `GC('force')` prints `g uninit` / `inner built` /
+    /// `g done` / `end` / `uninit K` -- the inner finalizer neither inline
+    /// (the interlock) nor before the program's next clause (the single
+    /// pass), but at termination.
     pub(crate) fn run_ready_uninits(&mut self) -> Vec<Loud> {
-        let mut loud = Vec::new();
-        loop {
-            let ready = std::mem::take(&mut self.uninit_ready);
-            if ready.is_empty() {
-                break;
-            }
-            self.heap.clear_uninit_all(&ready);
-            self.run_uninit_batch(ready, &mut loud);
+        if self.processing_uninits {
+            return Vec::new();
         }
+        self.processing_uninits = true;
+        let mut loud = Vec::new();
+        let ready = std::mem::take(&mut self.uninit_ready);
+        self.heap.clear_uninit_all(&ready);
+        self.run_uninit_batch(ready, &mut loud);
+        self.processing_uninits = false;
         loud
     }
 
     /// The termination sweep: every live object still carrying the flag
     /// (D69), then every class object with a class-side `UNINIT` (D60) in the
-    /// order [`ClassRegistry::uninit_classes_in_sweep_order`] gives.
+    /// order [`ClassRegistry::take_uninit_classes_in_sweep_order`] gives,
+    /// and then the same again once.
     ///
     /// **Not the same as [`Interp::run_ready_uninits`] and not buildable out
     /// of it.** Under D59 a class-scope `EXPOSE` roots an instance for ever,
     /// so it never becomes unreachable and a collection never readies it;
     /// the oracle fires those at termination anyway, measured. A class object
     /// is never in the arena at all.
+    ///
+    /// **[`SWEEPS`] passes, and then whatever is still flagged is
+    /// discarded.** The oracle's shutdown reaches the sweep exactly twice --
+    /// `collectAndUninit` at `runtime/InterpreterInstance.cpp:581` and
+    /// `lastChanceUninit` at `runtime/Interpreter.cpp:279`, which ends
+    /// `uninitTable->empty()` (`memory/RexxMemory.cpp:330`) -- and each pass
+    /// runs only what its own `collect` readied (`:274`). Measured, oracle
+    /// rc 0 with empty stderr: a finalizer that allocates one further
+    /// instance of its own class per call prints `u 1` / `u 2` and stops,
+    /// at a self-imposed limit of 4 and of 8 alike. Running to a fixed point
+    /// instead does not terminate on a finalizer that always allocates,
+    /// where the oracle exits rc 0.
     ///
     /// **The instance group runs before the class group, and no check may
     /// depend on that** (D61). The oracle's sweep is one table holding both,
@@ -2229,22 +2291,24 @@ impl Interp {
     /// instance answered `instance` before `C` nineteen times and after it
     /// once.
     ///
-    /// [`ClassRegistry::uninit_classes_in_sweep_order`]:
-    ///     rexx_classes::ClassRegistry::uninit_classes_in_sweep_order
+    /// [`ClassRegistry::take_uninit_classes_in_sweep_order`]:
+    ///     rexx_classes::ClassRegistry::take_uninit_classes_in_sweep_order
     pub(crate) fn run_termination_uninits(&mut self) -> Vec<Loud> {
+        if self.processing_uninits {
+            return Vec::new();
+        }
+        self.processing_uninits = true;
         let mut loud = Vec::new();
-        loop {
+        for _ in 0..SWEEPS {
             let flagged = self.heap.take_uninit_flagged();
-            if flagged.is_empty() {
-                break;
-            }
             self.run_uninit_batch(flagged, &mut loud);
+            let classes = self.classes().take_uninit_classes_in_sweep_order();
+            for class in classes {
+                loud.extend(self.run_one_uninit(class));
+            }
         }
         self.uninit_ready.clear();
-        let classes = self.classes().uninit_classes_in_sweep_order();
-        for class in classes {
-            loud.extend(self.run_one_uninit(class));
-        }
+        self.processing_uninits = false;
         loud
     }
 

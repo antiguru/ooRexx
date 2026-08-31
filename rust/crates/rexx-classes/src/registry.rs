@@ -314,7 +314,11 @@ impl ClassRegistry {
     }
 
     /// The class objects with a class-side `UNINIT`, in the order the
-    /// oracle's termination sweep runs them.
+    /// oracle's termination sweep runs them, **taken out of the registry**.
+    ///
+    /// Draining is `runUninits` removing each entry before running it
+    /// (`memory/RexxMemory.cpp:362`), and it is what keeps a class from
+    /// being finalized twice when the sweep makes more than one pass.
     ///
     /// `MemoryObject::lastChanceUninit` (`memory/RexxMemory.cpp:324`) walks
     /// `uninitTable`, an `IdentityTable` built at
@@ -326,16 +330,14 @@ impl ClassRegistry {
     /// hash of the class's **id string** rather than of its address -- the
     /// reason this order reproduces where an instance's does not.
     ///
-    /// Measured, oracle rc 0 with empty stderr, three runs each: four
-    /// directive classes declared `C`, `B`, `A`, `D` fire `D A B C`, and
-    /// twenty declared `A` through `T` fire
-    /// `D E F G H I J K L M N O P Q A R B S C T`.
+    /// The oracle transcripts this reproduces are the cases in
+    /// `tests/uninit_sweep_order.rs`, which asserts them.
     ///
     /// **Predicts the oracle only while its table has not expanded.**
     /// `HashCollection::expandContents` doubles the bucket count and rehashes
     /// every entry; twenty entries do not reach that, measured above.
-    pub fn uninit_classes_in_sweep_order(&self) -> Vec<ObjRef> {
-        let mut sweep = self.graph.uninit_classes().to_vec();
+    pub fn take_uninit_classes_in_sweep_order(&mut self) -> Vec<ObjRef> {
+        let mut sweep = self.graph.take_uninit_classes();
         sweep.sort_by_key(|&class| uninit_bucket(self.id_string(class).as_bytes()));
         sweep
     }
@@ -705,6 +707,14 @@ impl ClassRegistry {
 /// `h = 31 * h + stringData[i]` over the bytes into a `size_t`, with
 /// `stringData` a signed `char`, and `HashContents::hashIndex` reduces that
 /// modulo the bucket count (`classes/support/HashContents.hpp:204`).
+///
+/// **Over the bytes the id still has, which for a non-ASCII id are not the
+/// oracle's.** A class id reaches this crate through
+/// `String::from_utf8_lossy`, so a byte outside UTF-8 is already a
+/// replacement character by the time an id string exists. Measured, oracle
+/// rc 0: `.Object~subclass('<0xE9>A')~id` is `E941` there and `EFBFBD41`
+/// here, with no `UNINIT` anywhere -- a pre-existing divergence in class ids
+/// that this function inherits rather than introduces.
 fn uninit_bucket(id: &[u8]) -> usize {
     /// `HashCollection::DefaultTableSize`, which `new_identity_table` builds
     /// the uninit table at (`classes/IdentityTableClass.hpp:69`).

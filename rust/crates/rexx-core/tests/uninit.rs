@@ -22,7 +22,7 @@ fn an_object_with_uninit_is_reported_rather_than_swept_immediately() {
     // object is ordinary again and the next collection takes it. Without this
     // the object would be resurrected on every collection for the rest of the
     // run, which is a leak the first half of the test cannot see.
-    assert!(heap.clear_uninit(obj));
+    heap.clear_uninit_all(&[obj]);
     let stats = heap.collect(&roots);
     assert_eq!(stats.pending_uninit, vec![]);
     assert!(heap.get(obj).is_none(), "and it is swept this time");
@@ -98,8 +98,8 @@ fn a_weak_reference_to_an_uninit_pending_object_is_still_cleared() {
 /// walking the arena, so an object that is cleared and flagged again holds
 /// two entries unless clearing takes its own away. Both are live and both
 /// flagged, so both would be reported, and `UNINIT` would run twice for one
-/// object. Deleting the `retain` in `Heap::clear_uninit` reddens this and
-/// nothing else in the workspace.
+/// object. Deleting the registry filter in `Heap::clear_uninit_all`
+/// reddens this and nothing else in the workspace.
 #[test]
 fn an_object_flagged_twice_across_a_clear_is_reported_once() {
     let mut heap = Heap::new();
@@ -110,7 +110,7 @@ fn an_object_flagged_twice_across_a_clear_is_reported_once() {
         pools: ScopePools::new(),
     });
     assert!(heap.set_uninit(obj), "the handle names a live object");
-    assert!(heap.clear_uninit(obj));
+    heap.clear_uninit_all(&[obj]);
     assert!(heap.set_uninit(obj), "and can be flagged again");
     let stats = heap.collect(&roots);
     assert_eq!(stats.pending_uninit, vec![obj]);
@@ -124,9 +124,7 @@ fn an_object_flagged_twice_across_a_clear_is_reported_once() {
 /// it would sweep an object whose finalizer has not run; and a caller
 /// recording every report has to scan what it already holds unless the
 /// reports are unique, which is what made a program with many pending
-/// finalizers quadratic. Deleting `ready_for_uninit`'s test in
-/// `Heap::collect` reddens the second assertion, and skipping the
-/// `resurrect.push` for an object already reported reddens the third.
+/// finalizers quadratic.
 #[test]
 fn a_still_unreachable_flagged_object_is_reported_once_and_resurrected_every_time() {
     let mut heap = Heap::new();

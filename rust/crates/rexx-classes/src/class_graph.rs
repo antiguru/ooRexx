@@ -411,9 +411,9 @@ impl ClassGraph {
     }
 
     /// Every class object whose own behaviour answers `UNINIT`, in the order
-    /// [`Self::check_uninit`] entered them.
-    pub fn uninit_classes(&self) -> &[ObjRef] {
-        &self.uninit_classes
+    /// [`Self::check_uninit`] entered them, taken out of the graph.
+    pub fn take_uninit_classes(&mut self) -> Vec<ObjRef> {
+        std::mem::take(&mut self.uninit_classes)
     }
 
     /// Recompute [`Self::parent_has_uninit`] from the class's current
@@ -563,13 +563,22 @@ impl ClassGraph {
 
     /// Oracle's `updateSubClasses` (`:1036`): rebuild both behaviours in
     /// place, instance side first ("the added methods may have an impact
-    /// on metaclasses"), then cascade to every subclass. This is what
-    /// [`inherit`](Self::inherit) calls, and it never allocates a new
-    /// handle -- every class it touches, direct or cascaded, keeps the id
-    /// its instances were created with.
+    /// on metaclasses"), then [`check_uninit`](Self::check_uninit), then
+    /// cascade to every subclass. This is what [`inherit`](Self::inherit)
+    /// calls, and it never allocates a new handle -- every class it
+    /// touches, direct or cascaded, keeps the id its instances were
+    /// created with.
+    ///
+    /// **The `UNINIT` check is here rather than at the mutators** because
+    /// the oracle's is (`:1052`, between `createClassBehaviour` and the
+    /// subclass loop). An inherit can give a class a `UNINIT` it did not
+    /// declare, and the cascade gives the same one to every subclass; both
+    /// mutators that reach this function need that and neither says so
+    /// itself.
     fn update_sub_classes(&mut self, class: ObjRef) {
         self.rebuild_behaviour(class, Side::Instance);
         self.rebuild_behaviour(class, Side::Class);
+        self.check_uninit(class);
         let subclasses = self.classes[&class].subclasses.clone();
         for sub in subclasses {
             self.update_sub_classes(sub);

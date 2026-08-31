@@ -437,7 +437,7 @@ pub struct Object {
     /// Set when the object defines an `UNINIT` method. Such an object is
     /// resurrected by the collector and reported through
     /// `CollectStats::pending_uninit` rather than swept, and is cleared
-    /// through [`crate::Heap::clear_uninit`] once the caller reports the
+    /// through [`crate::Heap::clear_uninit_all`] once the caller reports the
     /// finalizer has run.
     ///
     /// **Set through [`crate::Heap::set_uninit`] and nowhere else**, which is

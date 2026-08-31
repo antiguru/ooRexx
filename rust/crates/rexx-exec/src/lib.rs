@@ -3677,6 +3677,12 @@ struct Interp {
     /// object and keeps its registry entry, so the flag holds the object
     /// alive until the finalizer clears it.
     uninit_ready: Vec<ObjRef>,
+    /// Whether a `UNINIT` sweep is running -- oracle's `processingUninits`
+    /// (`memory/RexxMemory.cpp:341`-`:347`, cleared at `:383`).
+    ///
+    /// A finalizer that drives a collection must not run the finalizers that
+    /// collection readies; they wait for the sweep already in progress.
+    processing_uninits: bool,
     /// The arena size at which [`Interp::alloc_with`] collects, and half of
     /// this crate's trigger policy. The other half is `Heap::will_grow`.
     ///
@@ -4343,6 +4349,7 @@ impl Interp {
             fragment_depth: 0,
             stress_collect: false,
             uninit_ready: Vec::new(),
+            processing_uninits: false,
             collect_at: COLLECT_FLOOR,
             depth: 0,
             max_depth: 0,

@@ -1,7 +1,6 @@
 //! The order the termination sweep runs class objects in.
 //!
-//! Every expectation here is an oracle transcript recorded before this
-//! crate's ordering was written, from probes run as
+//! Every expectation here is an oracle transcript, from probes run as
 //! `( ulimit -v 1048576; LD_LIBRARY_PATH=.../ooRexx/build/lib .../ooRexx/build/bin/rexx FILE )`
 //! against `/home/moritz/dev/repos/ooRexx/build/bin/rexx`, from a fresh empty
 //! directory, three runs each, rc 0 with empty stderr throughout. Each test
@@ -35,9 +34,9 @@ fn declare(names: &[&str]) -> ClassRegistry {
 }
 
 /// The sweep order as id strings.
-fn sweep(registry: &ClassRegistry) -> Vec<String> {
+fn sweep(registry: &mut ClassRegistry) -> Vec<String> {
     registry
-        .uninit_classes_in_sweep_order()
+        .take_uninit_classes_in_sweep_order()
         .into_iter()
         .map(|class| registry.id_string(class).to_string())
         .collect()
@@ -52,8 +51,8 @@ fn sweep(registry: &ClassRegistry) -> Vec<String> {
 /// walking the class registry in creation order answers the reverse.
 #[test]
 fn the_sweep_contradicts_declaration_order() {
-    let registry = declare(&["C", "B", "A", "D"]);
-    assert_eq!(sweep(&registry), ["D", "A", "B", "C"]);
+    let mut registry = declare(&["C", "B", "A", "D"]);
+    assert_eq!(sweep(&mut registry), ["D", "A", "B", "C"]);
 }
 
 /// Twenty classes declared `A` through `T`.
@@ -65,9 +64,9 @@ fn the_sweep_contradicts_declaration_order() {
 fn twenty_classes_still_run_in_bucket_order() {
     let names: Vec<String> = ('A'..='T').map(|c| c.to_string()).collect();
     let refs: Vec<&str> = names.iter().map(String::as_str).collect();
-    let registry = declare(&refs);
+    let mut registry = declare(&refs);
     assert_eq!(
-        sweep(&registry),
+        sweep(&mut registry),
         [
             "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "A", "R", "B",
             "S", "C", "T"
@@ -83,10 +82,10 @@ fn twenty_classes_still_run_in_bucket_order() {
 /// the tie-break no other case here can see, since no other case collides.
 #[test]
 fn a_shared_bucket_keeps_entry_order() {
-    let forward = declare(&["AB", "ZZ", "K"]);
-    assert_eq!(sweep(&forward), ["AB", "ZZ", "K"]);
-    let reverse = declare(&["K", "ZZ", "AB"]);
-    assert_eq!(sweep(&reverse), ["K", "ZZ", "AB"]);
+    let mut forward = declare(&["AB", "ZZ", "K"]);
+    assert_eq!(sweep(&mut forward), ["AB", "ZZ", "K"]);
+    let mut reverse = declare(&["K", "ZZ", "AB"]);
+    assert_eq!(sweep(&mut reverse), ["K", "ZZ", "AB"]);
 }
 
 /// A class with no class-side `UNINIT` is not in the sweep at all, and an
@@ -115,5 +114,19 @@ fn an_instance_side_uninit_does_not_enter_the_sweep() {
     registry.add_instance_method(id, "UNINIT");
     registry.check_uninit(id);
     assert!(registry.has_uninit(id), "its instances need UNINIT");
-    assert!(sweep(&registry).is_empty(), "the class object does not");
+    assert!(sweep(&mut registry).is_empty(), "the class object does not");
+}
+
+/// The sweep takes its entries, so a second pass over the same registry
+/// answers nothing.
+///
+/// `MemoryObject::runUninits` removes each entry before running it
+/// (`memory/RexxMemory.cpp:362`), and the oracle's shutdown reaches the
+/// sweep twice. Measured, oracle rc 0: four classes each with
+/// `::METHOD uninit CLASS` print their finalizer once, not twice.
+#[test]
+fn a_second_sweep_of_the_same_registry_is_empty() {
+    let mut registry = declare(&["C", "B", "A", "D"]);
+    assert_eq!(sweep(&mut registry), ["D", "A", "B", "C"]);
+    assert!(sweep(&mut registry).is_empty());
 }

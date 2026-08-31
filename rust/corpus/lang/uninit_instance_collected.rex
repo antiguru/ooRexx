@@ -2,8 +2,13 @@
    collection reaches it, so the finalizer runs at the collection rather than
    at termination.  The clauses between ~new and DROP are what let the
    collection reach it: the oracle holds recently allocated objects out of a
-   driven collection (Memory::SaveStackSize), and measured, eight allocating
-   clauses in their place leave the finalizer for the termination sweep. */
+   driven collection (Memory::SaveStackSize).  Measured, oracle rc 0 with
+   empty stderr, two runs each -- the SAY clause alone is enough and the PAD
+   line is this row's margin:
+
+     as committed        start / built K / uninit ran / after-gc
+     PAD deleted         start / built K / uninit ran / after-gc
+     both deleted        start / after-gc / uninit ran            */
 say 'start'
 o = .K~new
 say 'built' o~class~id
