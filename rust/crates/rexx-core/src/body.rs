@@ -446,6 +446,13 @@ pub struct Object {
     /// walking the arena, so a flag raised directly would name an object the
     /// sweeper never asks about.
     pub(crate) has_uninit: bool,
+    /// Set once the collector has reported this object through
+    /// `CollectStats::pending_uninit`, so that a later collection resurrects
+    /// it again without reporting it twice -- oracle's `setReadyForUninit`
+    /// (`classes/ObjectClass.hpp`), read by `MemoryObject::runUninits`.
+    ///
+    /// Cleared with [`Self::has_uninit`], through the same methods.
+    pub(crate) ready_for_uninit: bool,
 }
 
 impl Object {

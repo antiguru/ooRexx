@@ -6454,11 +6454,7 @@ impl Interp {
         // here: the oracle's collector only marks
         // (`MemoryObject::checkUninit`), and `runUninits` is reached from
         // `GC('force')` and from the termination sweep.
-        for object in stats.pending_uninit {
-            if !self.uninit_ready.contains(&object) {
-                self.uninit_ready.push(object);
-            }
-        }
+        self.uninit_ready.extend(stats.pending_uninit);
         // **Not raised for the stress mode**, which collects on every
         // allocation by definition and must not have its watermark moved
         // out from under it.

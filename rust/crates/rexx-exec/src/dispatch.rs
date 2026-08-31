@@ -2164,17 +2164,30 @@ impl Interp {
     /// that is this crate saying it cannot run the construct, and the loud
     /// rule is what keeps it from becoming a silent wrong answer.
     fn run_one_uninit(&mut self, object: ObjRef) -> Option<Loud> {
-        let frame = self.roots.push_frame();
-        self.roots.push_temp(object);
         let caller = self.caller();
         let outcome = self.send_message(object, UNINIT, None, &[], caller);
-        self.roots.pop_frame(frame);
         self.failure_site = None;
         self.failure_sites.clear();
         match outcome {
             Ok(_) | Err(Failure::Raised(_) | Failure::Exited(_)) => None,
             Err(Failure::Loud(loud)) => Some(*loud),
         }
+    }
+
+    /// Runs `UNINIT` on each of `batch`, oldest first, with the whole batch
+    /// rooted for the length of the run.
+    ///
+    /// **The flags are cleared before this is called**, which is `runUninits`
+    /// removing the table entry before running the method
+    /// (`memory/RexxMemory.cpp:363`-`:373`). The flag was the batch's only
+    /// root, so the park is this loop's `ProtectedObject`: without it a
+    /// collection inside one finalizer sweeps the members that have not run.
+    fn run_uninit_batch(&mut self, batch: Vec<ObjRef>, loud: &mut Vec<Loud>) {
+        let parked = self.roots.park(batch.clone());
+        for object in batch {
+            loud.extend(self.run_one_uninit(object));
+        }
+        self.roots.release(parked);
     }
 
     /// Runs the `UNINIT` of every object a collection has readied, oldest
@@ -2191,10 +2204,13 @@ impl Interp {
     /// drop the last reference to another flagged object and collect.
     pub(crate) fn run_ready_uninits(&mut self) -> Vec<Loud> {
         let mut loud = Vec::new();
-        while !self.uninit_ready.is_empty() {
-            let object = self.uninit_ready.remove(0);
-            self.heap.clear_uninit(object);
-            loud.extend(self.run_one_uninit(object));
+        loop {
+            let ready = std::mem::take(&mut self.uninit_ready);
+            if ready.is_empty() {
+                break;
+            }
+            self.heap.clear_uninit_all(&ready);
+            self.run_uninit_batch(ready, &mut loud);
         }
         loud
     }
@@ -2221,14 +2237,11 @@ impl Interp {
     pub(crate) fn run_termination_uninits(&mut self) -> Vec<Loud> {
         let mut loud = Vec::new();
         loop {
-            let flagged = self.heap.uninit_flagged();
+            let flagged = self.heap.take_uninit_flagged();
             if flagged.is_empty() {
                 break;
             }
-            for object in flagged {
-                self.heap.clear_uninit(object);
-                loud.extend(self.run_one_uninit(object));
-            }
+            self.run_uninit_batch(flagged, &mut loud);
         }
         self.uninit_ready.clear();
         let classes = self.classes().uninit_classes_in_sweep_order();

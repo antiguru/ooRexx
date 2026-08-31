@@ -226,12 +226,26 @@ impl Heap {
                     return false;
                 }
                 if !self.marks[slot] {
-                    pending_uninit.push(r);
+                    // Resurrected on every collection that finds it
+                    // unreachable, because the flag is what keeps it alive;
+                    // reported once, which is `setReadyForUninit`.
+                    if !object.ready_for_uninit {
+                        pending_uninit.push(r);
+                    }
                     resurrect.push(r);
                 }
                 true
             });
             self.uninit = registry;
+        }
+        for &r in &pending_uninit {
+            let Some(slot) = self.resolve(r) else {
+                continue;
+            };
+            let Slot::Live { object, .. } = &mut self.slots[slot] else {
+                unreachable!("resolve rejects free slots")
+            };
+            object.ready_for_uninit = true;
         }
         while let Some(r) = resurrect.pop() {
             let Some(slot) = self.resolve(r) else {
@@ -344,23 +358,55 @@ impl Heap {
             unreachable!("resolve rejects free slots")
         };
         object.has_uninit = false;
+        object.ready_for_uninit = false;
         self.uninit.retain(|&flagged| flagged != r);
         true
     }
 
-    /// Every handle still flagged, oldest first.
+    /// Every handle still flagged, oldest first, with the flag cleared and
+    /// the registry emptied -- [`Heap::clear_uninit`] over the whole registry
+    /// at once, for a caller running every pending finalizer.
     ///
-    /// **An over-approximation**, for the reason the `uninit` field carries:
-    /// an entry is dropped when a collection next reads the list, so a caller
-    /// re-reads [`Object::has_uninit`] before acting on one.
-    ///
-    /// [`Object::has_uninit`]: crate::Object::has_uninit
-    pub fn uninit_flagged(&self) -> Vec<ObjRef> {
-        self.uninit
-            .iter()
-            .copied()
-            .filter(|&r| self.get(r).is_some_and(|object| object.has_uninit()))
-            .collect()
+    /// **The flag is what kept these objects reachable**, since `collect`
+    /// resurrects a flagged object rather than sweeping it. A caller that
+    /// allocates before it has finished with the answer must root it.
+    pub fn take_uninit_flagged(&mut self) -> Vec<ObjRef> {
+        let registry = std::mem::take(&mut self.uninit);
+        let mut flagged = Vec::new();
+        for r in registry {
+            let Some(slot) = self.resolve(r) else {
+                continue;
+            };
+            let Slot::Live { object, .. } = &mut self.slots[slot] else {
+                unreachable!("resolve rejects free slots")
+            };
+            if object.has_uninit {
+                object.has_uninit = false;
+                object.ready_for_uninit = false;
+                flagged.push(r);
+            }
+        }
+        flagged
+    }
+
+    /// [`Heap::clear_uninit`] over a batch, in one pass of the registry
+    /// rather than one pass per handle.
+    pub fn clear_uninit_all(&mut self, objects: &[ObjRef]) {
+        for &r in objects {
+            let Some(slot) = self.resolve(r) else {
+                continue;
+            };
+            let Slot::Live { object, .. } = &mut self.slots[slot] else {
+                unreachable!("resolve rejects free slots")
+            };
+            object.has_uninit = false;
+            object.ready_for_uninit = false;
+        }
+        let registry = std::mem::take(&mut self.uninit);
+        self.uninit = registry
+            .into_iter()
+            .filter(|&r| self.get(r).is_some_and(crate::Object::has_uninit))
+            .collect();
     }
 
     /// How many objects this heap has interned as immortal.
@@ -424,6 +470,7 @@ impl Heap {
                         behaviour,
                         body,
                         has_uninit: false,
+                        ready_for_uninit: false,
                     },
                     generation,
                 };
@@ -447,6 +494,7 @@ impl Heap {
                         behaviour,
                         body,
                         has_uninit: false,
+                        ready_for_uninit: false,
                     },
                     generation: 0,
                 });

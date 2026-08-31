@@ -115,3 +115,65 @@ fn an_object_flagged_twice_across_a_clear_is_reported_once() {
     let stats = heap.collect(&roots);
     assert_eq!(stats.pending_uninit, vec![obj]);
 }
+
+/// A flagged object that stays unreachable across several collections is
+/// resurrected every time and reported once.
+///
+/// **Both halves are load-bearing and they pull in opposite directions.** The
+/// flag is the object's only root, so a collection that stopped resurrecting
+/// it would sweep an object whose finalizer has not run; and a caller
+/// recording every report has to scan what it already holds unless the
+/// reports are unique, which is what made a program with many pending
+/// finalizers quadratic. Deleting `ready_for_uninit`'s test in
+/// `Heap::collect` reddens the second assertion, and skipping the
+/// `resurrect.push` for an object already reported reddens the third.
+#[test]
+fn a_still_unreachable_flagged_object_is_reported_once_and_resurrected_every_time() {
+    let mut heap = Heap::new();
+    let roots = RootSet::new();
+    let obj = heap.alloc(Body::Instance {
+        class: ObjRef::class(0).expect("a class identity"),
+        name: None,
+        pools: ScopePools::new(),
+    });
+    assert!(heap.set_uninit(obj), "the handle names a live object");
+    assert_eq!(heap.collect(&roots).pending_uninit, vec![obj]);
+    assert_eq!(
+        heap.collect(&roots).pending_uninit,
+        vec![],
+        "reported once, not once per collection"
+    );
+    assert!(heap.get(obj).is_some(), "and still alive to be finalized");
+}
+
+/// `take_uninit_flagged` answers every flagged object and leaves none behind.
+///
+/// The termination sweep's entry point: after it, the objects are ordinary
+/// and the next collection takes them, which is what makes them finalizable
+/// exactly once.
+#[test]
+fn taking_the_flagged_objects_clears_every_flag() {
+    let mut heap = Heap::new();
+    let mut roots = RootSet::new();
+    let mut objects = Vec::new();
+    for index in 0..3 {
+        let obj = heap.alloc(Body::Instance {
+            class: ObjRef::class(0).expect("a class identity"),
+            name: None,
+            pools: ScopePools::new(),
+        });
+        roots.add_global(&format!(".KEPT{index}"), obj);
+        assert!(heap.set_uninit(obj));
+        objects.push(obj);
+    }
+    assert_eq!(
+        heap.collect(&roots).pending_uninit,
+        vec![],
+        "a rooted object is never unreachable, so no collection reports it"
+    );
+    assert_eq!(heap.take_uninit_flagged(), objects);
+    assert_eq!(heap.take_uninit_flagged(), vec![]);
+    for obj in objects {
+        assert!(!heap.get(obj).expect("still rooted").has_uninit());
+    }
+}
