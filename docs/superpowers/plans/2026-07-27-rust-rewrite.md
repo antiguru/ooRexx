@@ -2464,6 +2464,50 @@ The generating procedure for each phase:
     **Done 2026-08-15 at `b029abe77`:** `perf-baseline.md`, "The pre-Phase-5 baseline". Two records, because one instrument cannot serve both purposes -- the wall-clock standing against the oracle, and a pinned binary with `rexx-arms` instruction rows in `rust/bench-baselines/pre-phase-5-arms.tsv` for the guard below.
   * **Run the axes during Phase 5 as a regression guard, not as an optimisation target.** The risk being bought down is not that optimisation opportunities go stale; it is that Phase 5 silently costs 30% on the classic paths and nobody attributes it, because attribution across a large refactor is not available after the fact.
   * **`apply_binary` is measured after Phase 5, not before.** It is 13.5% of the pinned `rexxcps`' allocations and has never been examined, but Rexx objects can override the operator methods, so Phase 5 must add an object check to that path. Optimising it now measures a function whose shape is about to change. `rexx_num::format::render_integer_padded` (9.4% of the same program's allocations) carries no such coupling and is durable either way.
+  * **The post-Phase-5 performance round, decided 2026-09-01 by Moritz.** The guard above did its job
+    and could not have caught what it was not built to see: every per-task reading across Phase 5a
+    was honest and under half a percent, and the sum measured against the 5a pin 153 commits later is
+    **+32.58% instructions on `strings` (ir), +16.36% `rexxcps`, +13.11% `alloc4c`, with 6 of 8 axes
+    regressed** (`rust/bench-baselines/phase-5b-drift.tsv`). A per-step threshold that always passes
+    still permits unbounded cumulative regression; only a comparison against a fixed distant point
+    shows the total, which is what a pin is and why a stale one removes the instrument silently.
+    Ruled: not any one task's defect, no gate widens mid-phase, and **a non-SDD performance iteration
+    round after Phase 5 completes** owns it. Two things that round must not inherit as fact:
+
+    - **The drift figures conflate a compiler change with the code.** The 5a pin was built with
+      `rustc 1.97.1` and the 5b pin with `1.98.0`. Rebuild `15a1ffa98` with 1.98.0 and re-run one
+      axis -- `strings`, the worst -- against the 1.97.1 pin before attributing any share to either
+      cause. Until that runs, none of it is attributable.
+    - **Instructions are the readable instrument at this resolution and cycles are not.** The
+      do-nothing control moves a cycles axis by several percent at identical instruction counts;
+      Task 3's fix round measured `dispatchclass` moving **4.3% the other way** under a change that
+      adds two functions nothing calls. Build the do-nothing control before reporting any cycles
+      movement as a regression.
+
+  * **`Op::Generic` and the compiler's catch-all, deferred to that same round, decided 2026-09-01 by
+    Moritz.** `compile` ends in a `_` arm emitting [`Op::Generic`], which delegates the clause back
+    to the tree-walker, so an instruction is unpromoted either because someone decided it should be
+    or because nobody wrote an arm -- and the code cannot tell you which. Two separable changes, and
+    the distinction is the point:
+
+    - **Exhaustiveness.** Remove the catch-all so every `InstructionKind` gets a named arm, with the
+      ones that keep `Op::Generic` saying why. This is a type-level forcing function: a new AST
+      variant then breaks the build until someone rules on its IR representation, which is the only
+      kind of "make it a priority" this project has found to hold. It also fixes by construction the
+      doc at `ir.rs:267`, which claims five promoted kinds where the code has sixteen -- a universal
+      quantifier over a set the compiler could have enumerated.
+    - **Promotion**, which is the expensive half and should be evidence-led rather than driven by
+      completeness. Some kinds should probably never be promoted: `Interpret` builds a body at run
+      time, `Guard` and `Reply` are concurrency, `Address`/`Options`/`Trace` mutate interpreter
+      state, `Command` shells out -- promoting them buys a bailout you immediately re-enter.
+      `Drop`, `Numeric` and the structural `Else`/`Otherwise` look like the real candidates. Note the
+      constraint that decides some of it: `compile` asserts **no `Generic` op sits inside an
+      `Op::Clause` region** (`compile.rs:1896`, checked at `:1926`), so promotion is not uniformly
+      free.
+
+    This also feeds the open question of whether the tree-walker is retired: it cannot be while
+    instruction kinds delegate to it.
+
 - **Phase 6** must hold D3's frame-ownership constraint: activities own their frames; cross-activity signalling goes through a channel or a polled atomic, never a foreign frame reference. Verify this by construction (no shared frame type exists) rather than by test.
 - **Phase 7**'s stream model is a subsystem, not file I/O. `StreamNative.cpp` is 3,765 lines and its positioning and line/character interaction rules are all observable.
 
