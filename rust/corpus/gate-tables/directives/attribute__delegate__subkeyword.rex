@@ -1,6 +1,6 @@
 k = .K~new
 k~at = 'via-set'
-say 'main' k~peek~at
+say 'main' k~at k~peek~at
 ::class inner
 ::attribute at
 ::class k
