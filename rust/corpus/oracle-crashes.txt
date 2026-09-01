@@ -267,3 +267,54 @@ anything -- `dispatch.rs`'s `factory_metaclass`, whose doc carries the reason
 -- so the crashing shape is one this crate cannot reach.
 
 Found 2026-08-26 while building `Class~subclass`. **No upstream ticket.**
+
+--------------------------------------------------------------------------
+
+A `FORWARD` without `CONTINUE` that resolves back to the method it is in
+
+    o = .K~new
+    say o~m
+
+    ::CLASS K
+    ::METHOD m
+      forward
+
+Effect: SIGSEGV, rc 139, deterministic (measured 3 runs of 3), stdout and
+stderr both empty.
+
+Not about any one option. `forward` bare is the minimal form; `forward
+array(1,2)` and `forward message('M')` crash the same way, and so does the
+subclass shape where a `::METHOD m` overriding a superclass `m` forwards
+without naming a target. What they share is that `FORWARD` supplies the
+defaults: `RexxActivation::forward` (`execution/RexxActivation.cpp:1335`-`:1347`)
+fills an unspecified target with `receiver` and an unspecified message with
+`settings.messageName`, so the send goes back to the method it left.
+
+Cause: the non-continuing path makes the activation a phantom **before** it
+sends. `execution/RexxActivation.cpp:1365`-`:1391`: it calls
+`settings.setForwarded(true)`, then `stopExecution(RETURNED)`, and only then
+`target->messageSend(...)`, finishing with `termination()`. The comment above
+it says so -- "this activation becomes a phantom, and we issued the message as
+if we don't exist". Because the activation is already stopped, the recursion
+does not grow the interpreter's own activation depth, which is what the
+resource guard counts; it grows the C++ stack instead, and that runs out
+without anything checking.
+
+The neighbour that bounds it, and it is one keyword: **the same program with
+`forward continue` is a clean `rc 245`** with a traceback, because the
+continuing path at `:1349`-`:1361` sends without terminating the activation, so
+the depth guard sees the frames. Ordinary unbounded Rexx recursion -- a
+`procedure` that calls itself -- is also a clean `rc 245`. So the interpreter
+does have the guard; the phantom path is what steps around it.
+
+Consequence for this crate: **nothing to match, and a decision Task 4 owns.**
+`FORWARD` is rc 120 `FORWARD is not implemented (Phase 5)` on both engines
+today, so the shape is unreachable here. Task 4 builds `FORWARD`, and when it
+does, the oracle's answer to this shape is a signal and not a behaviour: match
+the clean `rc 245` that `forward continue` already produces rather than the
+SIGSEGV. Record it as a licensed divergence in the same terms Task 9's list
+uses for the oracle's `Error 5` stack overflows -- matching an oracle crash is
+not a target.
+
+Found 2026-09-01 by the controller while measuring `keyForward`'s six options
+for Task 4's brief. **No upstream ticket.**
