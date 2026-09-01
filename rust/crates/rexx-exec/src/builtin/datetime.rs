@@ -1416,15 +1416,21 @@ mod tests {
     #[test]
     fn time_e_does_not_reset_the_anchor_time_r_does() {
         let stdout = output(
-            b"e1 = time('E')\ncall burn\ne2 = time('E')\ncall burn\ne3 = time('E')\nsay e1 e2 e3\nexit\nburn: procedure\n  do i = 1 to 20000\n    j = i * i\n  end\n  return\n",
+            b"e1 = time('E')\ncall burn 400000\ne2 = time('E')\ncall burn 2000\ne3 = time('E')\nsay e1 e2 e3\nexit\nburn: procedure\n  use arg n\n  do i = 1 to n\n    j = i * i\n  end\n  return\n",
         );
         let [e1, e2, e3] = parse_numbers(&stdout);
         assert_eq!(e1, 0.0);
         assert!(e2 > 0.0, "e2 = {e2}");
-        // e3, since e1's still-unmoved anchor, covers BOTH burns -- not
-        // merely `e3 > e2`, which a reset (measuring only the second burn
-        // alone, a similarly sized one) could satisfy by chance.
-        assert!(e3 > e2 * 1.5, "e2 = {e2}, e3 = {e3}");
+        // The burns are deliberately lopsided, the first 200 times the
+        // second, so that the discriminator is monotonicity rather than a
+        // ratio of two wall-clock spans. With the anchor unmoved `e3`
+        // covers both burns and exceeds `e2` because time only moves
+        // forward; if `E` reset it, `e3` would measure the *small* burn
+        // alone and fall far below `e2`. An earlier form asserted
+        // `e3 > e2 * 1.5` over two equal burns, which is the same claim
+        // only while the two are scheduled alike: it failed three times
+        // under load, once at `e2 = 0.161732, e3 = 0.230071`.
+        assert!(e3 > e2, "e2 = {e2}, e3 = {e3}");
     }
 
     /// The real divergence `Interp::elapsed_anchor`'s own doc names: a
