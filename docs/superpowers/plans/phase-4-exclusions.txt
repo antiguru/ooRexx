@@ -1022,6 +1022,309 @@ DEVIATIONS -- permanent, chosen
      to this row, because a group excluded without a reason is
      indistinguishable from a group nobody ran.
 
+  5. A CLASS OBJECT'S UNINIT RUNS IN THE TERMINATION SWEEP RATHER THAN AT THE
+     DRIVEN COLLECTION THAT MADE IT UNREACHABLE.
+
+     IMPLEMENTED by Phase 5b Task 5's third delivery,
+     `Interp::run_termination_uninits` (`rust/crates/rexx-exec/src/
+     dispatch.rs`), drained by `lib.rs`'s end-of-run path. The decision behind
+     it is D59 in `docs/superpowers/specs/2026-08-27-phase-5b-instances.md`: a
+     class identity here is not an arena object, so no collection can ever
+     ready one, and D60 puts the finalizer in the termination sweep instead.
+
+     LICENSED BY MORITZ, 2026-09-01, in the register Deviations 3 and 4 use.
+     His ruling was given on Deviation 6 and is stated over gc ordering
+     generally -- it is quoted in the WHY below -- and was relayed with the
+     direction that this row be written in the same terms rather than as a
+     shortfall against the oracle, because it is the same question.
+
+     SCOPE -- ORDERING ONLY, AND THE BOUNDARY IS LOAD-BEARING. Deliberately
+     narrow, in Deviation 0's register: this is not licence to differ in
+     anything else, and it must not be cited as precedent for a second licence.
+     "One of the many correct orderings" requires that the finalizer RUN, after
+     the object is unreachable and no later than termination. It does NOT
+     license:
+
+       - an UNINIT that never runs at all. An absence is not an ordering, and
+         that is D69's subject rather than this row's.
+       - an UNINIT that runs while the object is still reachable.
+       - any difference in exit status, or in stderr, on either side.
+       - any stdout difference other than the position of the finalizer's own
+         output.
+
+     A divergence outside that list is a defect and is not covered here. The
+     5b spec's Risks table names "D59's licence widens by drift" with the
+     consequence "a further silent divergence arrives under cover of the named
+     ones"; the list above is this row's share of the mitigation. It is stated
+     in full in Deviation 6 as well rather than cross-referenced, so that a
+     reader of either row finds it, and the two bulleted lists are textually
+     identical so a diff shows any drift between them.
+
+     Within that boundary: every class object defining a class-side UNINIT still
+     gets it run, because the termination sweep reaches all of them -- which is
+     what keeps `corpus/gate-tables/concepts/obdes.rex` a gated row rather than
+     a re-filed one. Nothing here reaches an instance's UNINIT.
+
+     MEASURED, standard oracle wrapper, a fresh empty directory per run, three
+     descriptors read separately, five runs on each of the three sides. rc 0
+     and zero bytes of stderr on every run:
+
+       k = .Object~subclass('K', .MyMeta)
+       say 'before'
+       drop k
+       call gc 'force'
+       say 'after'
+
+       ::CLASS MyMeta SUBCLASS Class
+       ::METHOD uninit
+         say 'class uninit'
+
+       oracle               before / class uninit / after
+       ir and tree-walker   before / after / class uninit
+
+     Both crate engines agree with each other, so this is a crate-against-
+     oracle row and not an engine-against-engine one, and it is silent: exit
+     status and stderr are identical on all three sides and only the position
+     of one stdout line moves.
+
+     The metaclass is the route rather than `k~setMethod('UNINIT', ...)`, which
+     from a program context is refused before it installs anything -- measured,
+     three runs of three, rc 159, stdout empty: `Error 97.2:  Object "The K
+     class" cannot accept private message "SETMETHOD" from this context.` The
+     metaclass overrides no NEW, so it is not the shape
+     `rust/corpus/oracle-crashes.txt`'s metaclass entry forbids.
+
+     WHY THIS IS A CORRECT ANSWER RATHER THAN A SHORTFALL, and the argument is
+     the language's own documentation. The specified contract is ordering
+     relative to RECLAMATION, not a point in time.
+     `oodocs/rexxref/en-US/provide.xml`'s `id="obdes"` section -- the one
+     `corpus/gate-tables/concepts/obdes.rex` is named after -- reads "Object
+     destruction is implicit.
+     When an object is no longer in use, Rexx automatically reclaims its
+     storage." and "An object requiring uninitialization should define an UNINIT
+     method. If this method is defined, Rexx runs it before reclaiming the
+     object's storage." `oodocs/rexxpg/en-US/classes.xml:447` says the same in
+     one line: "If an object has an UNINIT method, Rexx runs it before
+     reclaiming the object's storage." Neither document says WHEN reclamation
+     happens, how promptly, or in what order across objects. So the oracle's
+     timing is an artifact of its collector rather than a behaviour to match,
+     and both orderings are correct orderings of the same program. Ruled by
+     Moritz, 2026-09-01: "anything that depends on gc ordering is inherently
+     unpredictable, and we shouldn't aim for equal behavior. it just needs to be
+     one of the many correct orderings." Both quoted documents are git-ignored
+     `svn` working copies, checked rather than assumed: `svn info` reports
+     r13198 for each.
+
+     WHERE THAT CITATION AND D59 DO NOT COMPOSE CLEANLY, said here rather than
+     left for a reader to trip over. Under D59 a class object's storage is never
+     reclaimed in this crate, so the document's trigger never fires for one, and
+     the termination sweep runs its UNINIT for storage nothing will reclaim.
+     That is MORE than the document requires, not less: an UNINIT that runs for
+     an object never reclaimed satisfies "before reclaiming" vacuously and
+     satisfies D69's requirement that it run at all, so the crate is inside the
+     contract on both counts.
+
+     A SUPPORTING FACT AND NOT THE REASON. Reaching the oracle's ordering here
+     would mean collecting class objects, which is D59 reversed, and D59 carries
+     its own measured cost and measured benefit for that trade. That is why the
+     ordering is not changed. It is not why the ordering is allowed to differ.
+
+     WITNESS, RUNNABLE. `rust/crates/rexx-exec/tests/licensed_divergences.rs`
+     runs this program through the oracle and through both crate engines and
+     asserts all three descriptors on each side. It reddens if either side's
+     answer moves in either direction -- including a fix, which should delete
+     this row and its witness together rather than update them.
+     LICENSED DIVERGENCE WITNESS: class-uninit-at-driven-collection
+
+     THE WITNESS PINS EXACT BYTES WHERE THE LICENCE DOES NOT, AND BOTH ARE
+     WANTED. The licence says this crate's ordering may legitimately change; the
+     witness asserts both sides' exact stdout so that nothing moves quietly.
+     Read a red witness accordingly: a change on the CRATE's side, inside the
+     boundary in SCOPE, is a deliberate edit to this row by whoever re-timed the
+     finalizer, and not a defect the row caught. A change on the ORACLE's side,
+     or any exit-status or stderr change on either side, is a real finding.
+
+     CONTROL, RECORDED AS RUN. Delivering the class's UNINIT from the driven
+     collection instead of the termination sweep -- `run_termination_uninits`'s
+     class-side drain copied into `Interp::run_ready_uninits` (`dispatch.rs`),
+     which is what `builtin/state.rs`'s `gc` calls after its `collect_now` --
+     makes this crate answer `before / class uninit / after` and reddens the
+     row's crate assertion. Transcript in
+     `.superpowers/sdd/2026-08-27-phase-5b/task-6-report.md`.
+
+  6. A DRIVEN COLLECTION HERE REACHES A JUST-ALLOCATED OBJECT THE ORACLE'S
+     CANNOT, SO AN INSTANCE'S UNINIT CAN RUN A CLAUSE EARLIER.
+
+     NOT IMPLEMENTED BY ANYTHING. This row records a hold this crate declines
+     to build. Found by Phase 5b Task 5, measured by Task 6, and LICENSED BY
+     MORITZ, 2026-09-01, whose ruling was to license it and not to build the
+     save-stack hold. His words are quoted in Deviation 5's WHY.
+
+     THIS IS NOT D59a's LICENCE. That one is stated over the observable "a
+     class object was collected" and enumerates the consequences it covers.
+     This is about an instance and about the collector's own reachability, so
+     D59a does not reach it and cannot be cited for it. This row is its own
+     decision.
+
+     WHY THIS IS A CORRECT ANSWER RATHER THAN A SHORTFALL. Deviation 5's WHY
+     paragraph carries the argument and the two documentation quotations in
+     full, and it applies here unchanged: the documented contract is that an
+     UNINIT runs before the object's storage is reclaimed, and nothing in
+     `oodocs/rexxref/en-US/provide.xml`'s `id="obdes"` or in
+     `oodocs/rexxpg/en-US/classes.xml:447` says when reclamation happens or in
+     what order across objects. This crate reclaims an instance and runs its
+     UNINIT before doing so, which is the whole of what is specified. The
+     oracle's save stack delays its own reclamation; that is its collector's
+     choice and not a behaviour this crate owes.
+
+     SCOPE -- ORDERING ONLY, AND THE BOUNDARY IS LOAD-BEARING. Deliberately
+     narrow, in Deviation 0's register: this is not licence to differ in
+     anything else, and it must not be cited as precedent for a second licence.
+     "One of the many correct orderings" requires that the finalizer RUN, after
+     the object is unreachable and no later than termination. It does NOT
+     license:
+
+       - an UNINIT that never runs at all. An absence is not an ordering, and
+         that is D69's subject rather than this row's.
+       - an UNINIT that runs while the object is still reachable.
+       - any difference in exit status, or in stderr, on either side.
+       - any stdout difference other than the position of the finalizer's own
+         output.
+
+     A divergence outside that list is a defect and is not covered here. The
+     list is stated in full in Deviation 5 as well rather than cross-referenced,
+     so that a reader of either row finds it, and the two bulleted lists are
+     textually identical so a diff shows any drift between them.
+
+     WHAT THE ORACLE DOES. `MemoryObject::newObject` pushes every newly
+     allocated object onto a save stack (`memory/RexxMemory.cpp:1053`,
+     `pushSaveStack(newObj)`) whose depth is `Memory::SaveStackSize`, 10
+     (`memory/Memory.hpp:107`), and `GC('force')` is
+     `memoryObject.collectAndUninit(false)` -- `expression/
+     BuiltinFunctions.cpp:3033`, whose own comment on that line reads
+     `// keep stack`. So the oracle's forced collection cannot reach an object
+     still in that stack. This crate has no such hold.
+
+     MEASURED, standard oracle wrapper, a fresh empty directory per run, three
+     descriptors read separately, five runs on each of the three sides at each
+     N. rc 0 and zero bytes of stderr on every run:
+
+       say 'start'
+       o = .K~new
+       <N padding clauses, each `z<i> = 'pad<i>'`>
+       drop o
+       call gc 'force'
+       say 'after-gc'
+
+       ::class k
+       ::method uninit
+         say 'uninit ran'
+
+       N              oracle                          ir and tree-walker
+       0, 1, 2, 8     start / after-gc / uninit ran    start / uninit ran / after-gc
+       9, 10          start / uninit ran / after-gc    start / uninit ran / after-gc
+
+     Silent again: rc 0 and empty stderr on every side, stdout differing only
+     in the position of one line.
+
+     THE WINDOW COUNTS ALLOCATIONS, NOT CLAUSES, and that is what decides this
+     row. Replacing each padding clause with `z<i> = 'p'||'q'||'r'||'s'` moves
+     the oracle's threshold from nine clauses to three -- three allocations per
+     clause, nine either way -- and twenty `nop` clauses do not move it at all.
+     The concatenating family is five runs at each N and the `nop` one three at
+     each of N = 9 and N = 20; every run rc 0 with empty stderr.
+
+     WHY THE HOLD IS NOT BUILT, AND THIS IS MEASURED RATHER THAN ARGUED. The
+     hold was built as this row's control and run. It does not close the
+     divergence, it inverts it, and it costs four committed corpus programs to
+     do so. `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test corpus`
+     reports `315 of 315 matching` at exit 0 without it and exits 101 with
+     `4 of 315 corpus programs disagree` under it, every one differing on stdout
+     at rc 0 with empty stderr:
+
+       corpus/lang/uninit_instance_collected.rex
+       corpus/lang/uninit_nested_collection.rex
+       corpus/lang/class_behaviour_snapshot_delete.rex
+       corpus/lang/setmethod_uninit.rex
+
+     `uninit_instance_collected.rex` flips from `start / built K / uninit ran /
+     after-gc` to `start / built K / after-gc / uninit ran`. And the padding
+     family above answers `start / after-gc / uninit ran` on both engines at
+     N = 8, 9 and 10 alike under the hold -- the oracle's answer at N = 8 and
+     not its answer at N = 9 or 10 -- so the hold buys agreement below the
+     threshold by giving it up above, which is the same divergence moved rather
+     than closed.
+
+     THAT COUNT WAS PREDICTED AS ONE AND MEASURED AS FOUR. The allocation
+     figures below say `uninit_instance_collected.rex` would flip, and it did;
+     the other three were not foreseen. Recorded because the next person
+     weighing this needs the measured number and not the expected one, and
+     because a control that surprises its author is worth more than one that
+     confirms.
+
+     A SUPPORTING FACT AND NOT THE REASON: EXACT AGREEMENT IS NOT AVAILABLE
+     EITHER. This paragraph and the one after it are why the hold could not have
+     worked in the first place. They are weaker than the measurement above --
+     "we cannot match the allocation count" invites a later reader to try
+     harder, where "this breaks four committed programs" tells them what it
+     costs. Reproducing the threshold means allocating arena objects in
+     one-to-one correspondence with the C++ interpreter's, and this crate does
+     not. Measured through
+     `rexx_exec::run_program_collect_every_alloc`, under which `Outcome::
+     collections` is the program's arena allocation count: the family above
+     reads 4 allocations at each N measured (0, 1, 2, 3, 4, 8, 9, 10) and the
+     concatenating one reads 4 at each of N = 1, 2, 3, 4, while fifty
+     concatenating clauses in a loop with no instance at all read 0.
+     The oracle's window advances one slot per plain padding clause and
+     three per concatenating one; this crate's count does not move for either,
+     because the literal is already interned in the compiled stream and the
+     concatenated result is short enough to live inline in the value. The same
+     instrument reads 0, 1, 5 and 20 for `say 'x'` and for one, five and twenty
+     `.K~new` calls, which is what says it is live rather than stuck.
+
+     WHICH IS WHY THE CORPUS ROW ABOVE FLIPS, by the same instrument over a
+     prefix series of its clauses: `o = .K~new` reads 1, adding
+     `say 'built' o~class~id` reads 1, adding `pad = '<51-byte literal>'` reads
+     2, and adding `drop o` / `call gc 'force'` reads 3. So exactly one arena
+     allocation falls between `.K~new` and `drop o` in
+     `corpus/lang/uninit_instance_collected.rex`, against the nine the oracle
+     needs to evict it, and a ten-deep hold rooted from `Interp::alloc_with`
+     still holds that instance at the forced collection.
+
+     NO CORPUS PROGRAM IS ON THE DIVERGING SIDE.
+     `corpus/lang/uninit_instance_collected.rex` deliberately puts allocating
+     clauses between `~new` and `DROP`, and its own header comment carries the
+     three-row margin table saying why.
+
+     THE SHAPE IS EXACT, AND A READER SHORTENING IT MEASURES SOMETHING ELSE.
+     Nothing may sit between `~new` and the padding. Measured, three runs on
+     each of the three sides for each of two programs, rc 0 with empty stderr
+     on all eighteen: the N=8 program
+     with one `say 'built'` inserted immediately after `.K~new`, and the same
+     with it immediately before `drop o`, both answer
+     `start / built / uninit ran / after-gc` on the oracle AND on both crate
+     engines. The one extra clause allocates enough to evict the instance, so
+     the divergence is gone and a probe of that shape sees agreement.
+
+     WITNESS, RUNNABLE. `rust/crates/rexx-exec/tests/licensed_divergences.rs`,
+     the same harness and the same property as Deviation 5's, at N=8.
+     LICENSED DIVERGENCE WITNESS: driven-collection-reaches-a-new-object
+
+     THE WITNESS PINS EXACT BYTES WHERE THE LICENCE DOES NOT, AND BOTH ARE
+     WANTED. The licence says this crate's ordering may legitimately change; the
+     witness asserts both sides' exact stdout so that nothing moves quietly.
+     Read a red witness accordingly: a change on the CRATE's side, inside the
+     boundary in SCOPE, is a deliberate edit to this row by whoever re-timed the
+     finalizer, and not a defect the row caught. A change on the ORACLE's side,
+     or any exit-status or stderr change on either side, is a real finding.
+
+     CONTROL, RECORDED AS RUN. Building the hold -- a ring of the ten most
+     recently allocated handles, filled in `Interp::alloc_with` and pushed as
+     roots in `Interp::collect_now` -- makes this crate answer
+     `start / after-gc / uninit ran` and reddens the row's crate assertion.
+     Transcript, and what else that mutation reddened, in
+     `.superpowers/sdd/2026-08-27-phase-5b/task-6-report.md`.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 
