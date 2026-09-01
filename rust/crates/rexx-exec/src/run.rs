@@ -3667,7 +3667,7 @@ impl Interp {
 
     /// `FORWARD`, with any of `TO`, `MESSAGE`, `CLASS`, `ARGUMENTS`, `ARRAY`
     /// and `CONTINUE` (`RexxInstructionForward::execute`,
-    /// `instructions/ForwardInstruction.cpp:123`).
+    /// `instructions/ForwardInstruction.cpp:128`).
     ///
     /// **What is left unspecified comes from the context**, and that is
     /// `RexxActivation::forward`'s own three defaults
@@ -3739,7 +3739,7 @@ impl Interp {
         let evaluated = self.forward_arguments(code, forward, &mut values);
         // **After every option and before the send**, which is where
         // `RexxActivation::forward` asks it (`execution/RexxActivation.cpp:
-        // 1368`-`:1373`): a non-continuing `FORWARD` answers the sender, and
+        // 1367`-`:1369`): a non-continuing `FORWARD` answers the sender, and
         // a `REPLY` carrying a value has answered it already.
         let owed = evaluated.and_then(|()| self.forward_after_reply(forward));
         let caller = self.caller();
@@ -3768,7 +3768,7 @@ impl Interp {
 
     /// 98.937 for a non-continuing `FORWARD` under a `REPLY` that carried a
     /// value, which is the one legality question `FORWARD` asks that is not
-    /// about `FORWARD` (`execution/RexxActivation.cpp:1370`-`:1374`).
+    /// about `FORWARD` (`execution/RexxActivation.cpp:1367`-`:1369`).
     ///
     /// **The condition is the replied value and not the reply**, which the
     /// C++ spells as `result != OREF_NULL` over the field

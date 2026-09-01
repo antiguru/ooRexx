@@ -1857,7 +1857,7 @@ fn class_install_order(
 /// plain one. Both keys are [`GeneratedKind::Delegate`], which is what
 /// `createDelegateMethod` builds for each: one `DelegateCode` per name, over
 /// the one retriever the directive's `DELEGATE` symbol resolved to
-/// (`parser/DirectiveParser.cpp:830`, `:843`, `:846`).
+/// (`parser/DirectiveParser.cpp:831`, `:843`, `:846`).
 ///
 /// **The setter's key is here and not under `ATTRIBUTE`'s arm below**: a key
 /// the dictionary does not hold makes `.K~a = 5` a name miss on the class,
@@ -4121,7 +4121,7 @@ enum GeneratedKind {
     ///
     /// **Here rather than on the body path, and that is measured rather than
     /// a matter of shape.** The C++ builds a `DelegateCode`
-    /// (`parser/DirectiveParser.cpp:2441`), a primitive that pushes no Rexx
+    /// (`parser/DirectiveParser.cpp:2442`), a primitive that pushes no Rexx
     /// activation, so a failure inside the delegated-to method leaves **no**
     /// frame of its own on the traceback. `dire.xml`'s stated equivalence --
     /// `expose delegateName` plus `forward to (delegateName)` -- does leave

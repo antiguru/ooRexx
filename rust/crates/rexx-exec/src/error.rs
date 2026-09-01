@@ -2097,8 +2097,8 @@ impl Raised {
     /// Measured rc 158, `forward message('OTHER') arguments (.nil)`:
     /// `FORWARD arguments must be a single-dimensional array of values.` The
     /// oracle tests `requestArray`'s answer for `TheNilObject` or a
-    /// multi-dimensional array (`instructions/ForwardInstruction.cpp:184`-
-    /// `:188`), and `.nil` is the reachable half here.
+    /// multi-dimensional array (`instructions/ForwardInstruction.cpp:189`-
+    /// `:191`), and `.nil` is the reachable half here.
     ///
     /// **A value that is neither is not this error**: measured rc 0,
     /// `arguments ('abc')` reaches the callee as one argument spelling
