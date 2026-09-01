@@ -171,11 +171,17 @@ pub enum Body {
     /// an unnamed instance answers. Measured, oracle rc 0: with
     /// `::METHOD defaultName` returning a counter, two renderings print two
     /// different values.
+    ///
+    /// `own` is `SETMETHOD`'s dictionary, searched ahead of `behaviour` and
+    /// `None` for an object nothing has attached a method to. Boxed so that
+    /// an object that never takes one costs a pointer -- see this module's
+    /// own width assertion for what a wider `Body` costs.
     Instance {
         class: ObjRef,
         behaviour: BehaviourHandle,
         name: Option<Box<[u8]>>,
         pools: ScopePools,
+        own: Option<Box<ObjectMethods>>,
     },
     /// An object the interpreter builds for itself rather than one a program
     /// constructs: `.environment`, `.local`, a package's `.methods` table and
@@ -288,6 +294,103 @@ impl ScopePools {
             out.push(*scope);
             out.extend(pool.iter().map(|(_, value)| *value));
         }
+    }
+}
+
+/// Names one method body in the dictionaries `rexx-classes` builds.
+///
+/// **Declared in this crate for [`BehaviourHandle`]'s reason**: an
+/// [`ObjectMethods`] holds one per name and lives inside [`Body::Instance`],
+/// and `rexx-classes` depends on this crate. It re-exports this name, so
+/// every other holder still spells it `rexx_classes::MethodId`.
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+pub struct MethodId(pub u32);
+
+/// One method attached to a single object: the body it runs and the scope
+/// its `EXPOSE` binds in.
+///
+/// `scope` is `RexxObject::setMethod`'s `targetScope`
+/// (`classes/ObjectClass.cpp:1834`, `:1863`): [`ObjRef::NIL`] for the
+/// default `FLOAT` option, which is the oracle's own `TheNilObject`, and the
+/// object's class for `OBJECT`. Since a pool is found by scope *within one
+/// object*, `NIL` gives every `FLOAT` method on an object one shared pool,
+/// separate from the class's.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct ObjectMethod {
+    pub method: MethodId,
+    pub scope: ObjRef,
+}
+
+/// The methods `SETMETHOD` has attached to one object, searched ahead of the
+/// class behaviour (`MethodDictionary::addInstanceMethod`'s `addFront`,
+/// `behaviour/MethodDictionary.cpp:399`).
+///
+/// A name mapped to `None` is `setMethod`'s no-method form, which stores the
+/// oracle's `.nil` and hides whatever the class answers -- measured, oracle
+/// rc 159: after `self~setMethod('MM')`, `hasMethod('MM')` is `0` and the
+/// send is 97.1 even though the class defines `MM`.
+///
+/// Keys are upper case, and a lookup upcases too, which is what
+/// `MethodDictionary` does on both sides.
+#[derive(Clone, Debug, Default)]
+pub struct ObjectMethods {
+    entries: Vec<(Box<[u8]>, Option<ObjectMethod>)>,
+}
+
+impl ObjectMethods {
+    pub fn new() -> ObjectMethods {
+        ObjectMethods {
+            entries: Vec::new(),
+        }
+    }
+
+    /// What this object answers for `name`: `None` when it has no entry of
+    /// its own, `Some(None)` for a hidden name, `Some(Some(method))` for one
+    /// it defines.
+    pub fn get(&self, name: &[u8]) -> Option<Option<ObjectMethod>> {
+        self.entries
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case(name))
+            .map(|(_, entry)| *entry)
+    }
+
+    /// Adds or replaces the entry for `name`, which `addInstanceMethod`
+    /// does in one step: it removes any method it added before under that
+    /// name and puts the new one at the front.
+    pub fn set(&mut self, name: &[u8], entry: Option<ObjectMethod>) {
+        match self
+            .entries
+            .iter_mut()
+            .find(|(key, _)| key.eq_ignore_ascii_case(name))
+        {
+            Some(slot) => slot.1 = entry,
+            None => self.entries.push((name.to_ascii_uppercase().into(), entry)),
+        }
+    }
+
+    /// Removes the entry for `name`.
+    ///
+    /// **A name this object never set is untouched**, which is what keeps
+    /// `unsetMethod` off the class's dictionary:
+    /// `MethodDictionary::removeInstanceMethod` removes from the main
+    /// dictionary only when the instance dictionary held the name
+    /// (`behaviour/MethodDictionary.cpp:365`-`:371`). Measured, oracle rc 0:
+    /// `self~unsetMethod('MM')` for a class-defined `MM` leaves `o~mm`
+    /// answering the class's.
+    pub fn remove(&mut self, name: &[u8]) {
+        self.entries
+            .retain(|(key, _)| !key.eq_ignore_ascii_case(name));
+    }
+
+    /// Appends every object these entries reach, which is each defined
+    /// method's scope -- [`ScopePools::trace`]'s position and its reason.
+    fn trace(&self, out: &mut Vec<ObjRef>) {
+        out.extend(
+            self.entries
+                .iter()
+                .filter_map(|(_, entry)| *entry)
+                .map(|ObjectMethod { scope, .. }| scope),
+        );
     }
 }
 
@@ -448,9 +551,16 @@ impl Body {
             // below traces its own: it names no arena slot today
             // ([`crate::CLASS_SLOT_BASE`]), and the arm stays correct on the
             // day a class object is allocated like anything else.
-            Body::Instance { class, pools, .. } => {
+            Body::Instance {
+                class, pools, own, ..
+            } => {
                 out.push(*class);
                 pools.trace(out);
+                // A one-off method's scope, in the position the class handle
+                // above is in and traced for the same reason.
+                if let Some(own) = own {
+                    own.trace(out);
+                }
             }
             Body::Native(native) => {
                 // The class handle travels with the values. It names no arena

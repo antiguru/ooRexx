@@ -11,13 +11,8 @@
 
 //! Behaviours: which methods an object responds to, and what it inherits.
 
-use crate::body::BehaviourId;
+use crate::body::{BehaviourId, MethodId};
 use std::collections::HashMap;
-
-/// Identifies a method body. The bodies themselves live elsewhere; this table
-/// only answers "which method does this message resolve to".
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct MethodId(pub u32);
 
 #[derive(Default)]
 struct BehaviourEntry {

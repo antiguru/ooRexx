@@ -47,7 +47,8 @@
 //! `tests/native_classes_wiring.rs`'s `mixinclass class` and `.class`-is-an-
 //! instance-of-itself probes.
 
-use crate::method_dict::{MethodDict, MethodId, MethodSlot};
+use crate::method_dict::{MethodDict, MethodSlot};
+use rexx_core::MethodId;
 use rexx_core::{BehaviourHandle, ObjRef};
 use std::collections::{BTreeSet, HashMap};
 

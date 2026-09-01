@@ -7746,13 +7746,9 @@ fn the_refusals_this_task_leaves_where_the_oracle_answers_still_fire() {
 ///   method's own package and reaches nothing outside it.
 /// * `.methods~put('return 1', 'M')` then
 ///   `.object~subclass("k", .Class, .methods)` is **rc 0**, and `k~m`
-///   answers. A body reached that way reports a failure inside it against
-///   the method -- measured, `return 1/0` there is
-///   `Error 42 running M line 1:` at rc 214 -- which is why no body
-///   compiled here is retained.
-/// * Putting the *method object* a `~define` produced into that same table
-///   is **rc 0** and answers too, so the last row reaches the same body by
-///   the one route that does not hand over source text.
+///   answers. The source text is what is declined: putting the *method
+///   object* a `~define` produced into that same table agrees instead, and
+///   `corpus/lang/method_source_reported_name.rex` is that arm's witness.
 #[test]
 fn the_method_source_shapes_this_task_leaves_refuse_loudly() {
     let cases: &[(&[u8], &str)] = &[
@@ -7779,13 +7775,6 @@ fn the_method_source_shapes_this_task_leaves_refuse_loudly() {
               zk = .object~subclass(\"k\", .Class, .methods)\n\
               ::method z\n  return 1\n",
             "a class method built from source text is not implemented (Phase 5)",
-        ),
-        (
-            b".k~define(\"m\", 'return 1')\n\
-              .methods~put(.k~method(\"M\"), 'M')\n\
-              zj = .object~subclass(\"j\", .Class, .methods)\n\
-              ::method z\n  return 1\n::class k\n",
-            "a class method whose body this crate does not hold is not implemented (Phase 5)",
         ),
     ];
     for (source, message) in cases {

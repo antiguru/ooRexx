@@ -1,0 +1,16 @@
+count 15
+/* checkRestrictedMethod refuses a caller that got past the private check:
+   a class method of a class the receiver is not an instance of. 98.991 at a
+   different exit status from the 97.2 above it, and under a Compiled method
+   frame the private refusal has no counterpart for. */
+o = .k~new
+say 'a' .other~poke(o)
+exit 0
+
+::class k
+
+::class other
+::method poke class
+  use arg obj
+  obj~setMethod('NN', 'return "x"')
+  return 'ALLOWED'

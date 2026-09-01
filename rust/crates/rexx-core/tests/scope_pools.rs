@@ -61,6 +61,7 @@ fn a_second_write_to_one_name_replaces_rather_than_shadows() {
         behaviour: BehaviourHandle::new(0),
         name: None,
         pools,
+        own: None,
     }
     .trace(&mut out);
     assert_eq!(out, vec![class, sup, second]);

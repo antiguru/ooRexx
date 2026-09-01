@@ -1,0 +1,9 @@
+count 8
+/* setMethod is one of Object's private methods, so a program context is
+   refused at dispatch with 97.2 before the body runs. The traceback carries
+   no method frame, which is what tells this refusal from the restricted one
+   setmethod_restricted_refusal.rex reaches. */
+say 'a'
+o = .Object~new
+o~setMethod('MM', 'return 42')
+say 'unreached'

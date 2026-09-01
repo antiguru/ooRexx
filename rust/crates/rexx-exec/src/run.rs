@@ -3107,6 +3107,7 @@ impl Interp {
                 behaviour,
                 name: None,
                 pools: ScopePools::new(),
+                own: None,
             },
         );
         // Rooted before anything else can allocate, the rule `.environment`
@@ -6893,9 +6894,31 @@ impl Interp {
         if let Some((line, text)) = self.clause_site(source, blame) {
             self.failure_site = Some(match self.sourceless_site(line, indent) {
                 Some(site) => site,
-                None => FailureSite::Clause { line, text, indent },
+                None => match self.compiled_method_site(line, &text, indent) {
+                    Some(site) => site,
+                    None => FailureSite::Clause { line, text, indent },
+                },
             });
         }
+    }
+
+    /// The frame a level inside a method compiled from source text
+    /// contributes, or `None` for a level in a program's own body.
+    ///
+    /// The clause is echoed exactly as [`FailureSite::Clause`] echoes it and
+    /// only the report's `running <name> line <n>` span differs, because the
+    /// oracle compiles such a source into an executable of its own name --
+    /// measured, oracle rc 214: a one-off whose body is `return 1/0` echoes
+    /// `1 *-* return 1/0` and then reports `Error 42 running MM line 1:`.
+    fn compiled_method_site(&self, line: usize, text: &[u8], indent: usize) -> Option<FailureSite> {
+        let program_id = self.running_activation()?.program_id;
+        let name = self.compiled_method_names.get(&program_id)?.to_vec();
+        Some(FailureSite::Named {
+            line,
+            indent,
+            text: text.to_vec(),
+            name,
+        })
     }
 
     /// The frame a level in the interpreter's own library contributes, or
@@ -6939,11 +6962,11 @@ impl Interp {
             // the oracle would not.
             None => Raised::sourceless_program_line(crate::LIBRARY_PACKAGE_NAME),
         };
-        Some(FailureSite::Sourceless {
+        Some(FailureSite::Named {
             line,
             indent,
             text,
-            package: crate::LIBRARY_PACKAGE_NAME.to_vec(),
+            name: crate::LIBRARY_PACKAGE_NAME.to_vec(),
         })
     }
 

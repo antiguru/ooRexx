@@ -269,6 +269,9 @@ fn replay(
                 }
                 registry.add_instance_method(class, name);
             }
+            Op::AddPrivateInstanceMethod(name) => {
+                registry.add_private_instance_method(class, name);
+            }
             Op::InheritInstanceMethods(source) => {
                 let source_id = registry.lookup(source).unwrap_or_else(|| {
                     panic!("InheritInstanceMethods({source}) before {source} was built")

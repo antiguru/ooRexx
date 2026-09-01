@@ -97,3 +97,36 @@ lang/class_behaviour_snapshot_inherit.rex
 lang/class_behaviour_snapshot_uninherit.rex
 lang/class_behaviour_snapshot_delete.rex
 lang/class_behaviour_snapshot_subclass.rex
+
+# Task 3: per-object methods. `usesem.rex` is the gate row setMethod,
+# unsetMethod, enhanced and the object's own scope make agree; it defines
+# EXTRA nowhere else, so the rows under it are what it cannot see.
+# `setmethod_precedence.rex` shadows a class method and an inherited one and
+# then takes the shadow back, which an implementation searching the class
+# first prints identically for `usesem.rex` alone.
+# `setmethod_float_scope.rex` and `setmethod_object_scope.rex` are D67's two
+# arms: FLOAT is one pool per object rather than one per method, measured
+# with two methods and two instances, and OBJECT is the class's own pool.
+# `setmethod_hidden.rex` is the no-method form, which hides where
+# `unsetMethod` reveals, and `setmethod_uninit.rex` is a finalizer attached
+# to one object and a class's finalizer hidden from one object.
+# `setmethod_private_refusal.rex` and `setmethod_restricted_refusal.rex` are
+# D66's two refusals, which differ in error, exit status and whether the
+# traceback carries a method frame; `setmethod_restricted_allowed.rex` is the
+# adjacent success that pins the second to its rule.
+# `enhanced_scope.rex` is `Class~enhanced` with an enhancing INIT, which runs
+# where the class's does not because the methods are in before the send.
+# `method_source_reported_name.rex` is the executable a source string
+# becomes: `parse source` and a failure inside the body both name the method
+# rather than the file.
+gate-tables/concepts/usesem.rex
+lang/setmethod_precedence.rex
+lang/setmethod_float_scope.rex
+lang/setmethod_object_scope.rex
+lang/setmethod_hidden.rex
+lang/setmethod_uninit.rex
+lang/setmethod_private_refusal.rex
+lang/setmethod_restricted_refusal.rex
+lang/setmethod_restricted_allowed.rex
+lang/enhanced_scope.rex
+lang/method_source_reported_name.rex

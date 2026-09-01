@@ -1767,6 +1767,7 @@ mod tests {
                     behaviour,
                     name,
                     pools: rexx_core::ScopePools::new(),
+                    own: None,
                 },
             );
             values.push(instance);

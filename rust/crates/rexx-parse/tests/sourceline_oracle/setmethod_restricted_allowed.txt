@@ -1,0 +1,26 @@
+count 25
+/* The arms checkRestrictedMethod lets through, which is what pins the
+   refusal beside them to the rule rather than to something coincidental:
+   the object sending to itself, and a class method of a class the object is
+   an instance of, including an ancestor's. */
+o = .kid~new
+say 'self' o~own
+say 'class' .kid~poke(o)
+say 'read' o~nn
+say 'ancestor' .k~poke(o)
+say 'read2' o~pp
+
+::class k
+::method poke class
+  use arg obj
+  obj~setMethod('PP', 'return "by-ancestor"')
+  return 'ALLOWED'
+
+::class kid subclass k
+::method own
+  self~setMethod('OWN2', 'return "by-self"')
+  return self~own2
+::method poke class
+  use arg obj
+  obj~setMethod('NN', 'return "by-class"')
+  return 'ALLOWED'

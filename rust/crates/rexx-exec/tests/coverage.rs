@@ -1260,6 +1260,21 @@ const EXPECTED_SUBSET_5B: &[&str] = &[
     "lang/class_behaviour_snapshot_uninherit.rex",
     "lang/class_behaviour_snapshot_delete.rex",
     "lang/class_behaviour_snapshot_subclass.rex",
+    // Task 3: the concept row per-object methods make agree, and the shapes
+    // that row cannot see. `usesem.rex` defines its one-off nowhere else, so
+    // it cannot see the search order, the scope argument, either
+    // restricted-private refusal, or the no-method form.
+    "gate-tables/concepts/usesem.rex",
+    "lang/setmethod_precedence.rex",
+    "lang/setmethod_float_scope.rex",
+    "lang/setmethod_object_scope.rex",
+    "lang/setmethod_hidden.rex",
+    "lang/setmethod_uninit.rex",
+    "lang/setmethod_private_refusal.rex",
+    "lang/setmethod_restricted_refusal.rex",
+    "lang/setmethod_restricted_allowed.rex",
+    "lang/enhanced_scope.rex",
+    "lang/method_source_reported_name.rex",
 ];
 
 #[test]

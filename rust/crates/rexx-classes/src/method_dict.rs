@@ -34,14 +34,8 @@
 //! rc 0: `.Stem~method("==")` prints `The NIL object` where
 //! `.Queue~method("SORT")` raises 97.1.
 
-use rexx_core::ObjRef;
+use rexx_core::{MethodId, ObjRef};
 use std::collections::{BTreeSet, HashMap};
-
-/// Identifies a method body. The bodies themselves are a later task's
-/// concern (dispatch, Task 3); this crate only tracks which name resolves
-/// to which identity, and through which scope.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub struct MethodId(pub u32);
 
 /// One entry under one name. Several of these can share a name when more
 /// than one class in the ancestor chain defines it -- that is exactly the

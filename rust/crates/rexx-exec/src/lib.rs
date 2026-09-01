@@ -41,8 +41,8 @@ use rexx_core::{Body, Heap, NameMap, ObjRef, RootSet, SlotFrame, SlotRef};
 use rexx_parse::{
     Access, AnnotationTarget, AttributeDirective, AttributeStyle, ClassDirective, ClassRef,
     CodeBody, ConstantDirective, ConstantValue, Directive, DirectiveKind, Expr, ExprKind,
-    InstructionKind, MethodDirective, Operator, Program, Protection, SymbolId, SymbolTable,
-    compound_parts, parse_program,
+    GuardOption, InstructionKind, MethodDirective, Operator, Program, Protection, SymbolId,
+    SymbolTable, compound_parts, parse_program,
 };
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::rc::Rc;
@@ -928,12 +928,32 @@ impl Loud {
     ///   and the main section becomes the method: measured, oracle rc 0, a
     ///   two-line array source whose second line is `::class zz` compiles,
     ///   and `.zz` is 97.1 in the caller afterwards.
-    /// * **A class-side install**, where a send can reach the body. The body
-    ///   itself is not retained -- see [`compile_method_source`] for
-    ///   the whole of that argument.
+    /// * **A class-side install.** The oracle reports a failure inside such
+    ///   a body against the method where a program's own clause reports its
+    ///   path, and `~subclass`'s enhancing table is the one route a send can
+    ///   take to one -- measured, rc 214, `.methods~put('return 1/0', 'M')`
+    ///   then `.object~subclass("k", .Class, .methods)` then `k~m` gives
+    ///   `Error 42 running M line 1:`. [`install_enhancing_methods`] declines
+    ///   the install rather than answering `running <path>`.
     ///
     /// [`compile_method_source`]: crate::dispatch::compile_method_source
+    /// [`install_enhancing_methods`]: crate::dispatch::install_enhancing_methods
     fn method_from_source(what: &str) -> Loud {
+        Loud {
+            message: owned_message(what, Some("Phase 5")),
+        }
+    }
+
+    /// A `SETMETHOD` or `UNSETMETHOD` whose receiver has no dictionary of
+    /// its own here.
+    ///
+    /// The oracle copies the behaviour of whatever it is given, so every
+    /// receiver can carry one; this crate keeps the dictionary in
+    /// `Body::Instance` and has nowhere to put one on a string, an array or
+    /// a class object. Loud rather than silent for
+    /// `native_object_name_set`'s reason -- forgetting the definition would
+    /// be a wrong answer where the oracle keeps it.
+    fn object_method(what: &str) -> Loud {
         Loud {
             message: owned_message(what, Some("Phase 5")),
         }
@@ -3208,9 +3228,31 @@ struct Interp {
     /// does.
     ///
     library_programs: Vec<ProgramId>,
+    /// The name a program compiled from method source text reports under.
+    ///
+    /// `MethodClass::newMethodObject` builds an executable of its own, named
+    /// for the method rather than for the file that supplied the string, and
+    /// two readers see the difference. Measured, oracle: a one-off whose body
+    /// is `return 1/0` reports `Error 42 running MM line 1:` at rc 214, and
+    /// `parse source` inside one answers `LINUX METHOD MM`.
+    ///
+    /// The name is the one the caller wrote, not the dictionary key --
+    /// measured, oracle rc 221: `.k~define("bad", 'this is not rexx +++')`
+    /// reports `Error 35 running bad line 1:`.
+    compiled_method_names: HashMap<ProgramId, Box<[u8]>>,
+    /// Whether any object has been given a method of its own, which is what
+    /// keeps the per-object dictionary off a send's path in a program that
+    /// never sends `SETMETHOD` -- see `Interp::own_method_entry`.
+    ///
+    /// Monotone: it is set when a definition is stored and never cleared, so
+    /// a dead object cannot make it answer wrongly. The cost of leaving it
+    /// set is one arena read per send to an instance.
+    object_methods: bool,
     /// Which directive is the body of a `Method` object this crate handed
-    /// out through `.METHODS`, for the one caller that installs such an
-    /// object where it can be sent to: `Class~defineClassMethod`.
+    /// out through `.METHODS` or compiled from source text.
+    ///
+    /// The two callers that install such an object where it can be sent to
+    /// are `Class~defineClassMethod` and `Object~setMethod`.
     ///
     /// Keyed by the object rather than by a [`MethodId`], because a
     /// `.METHODS` entry has no dictionary entry and so no id: it is a
@@ -4326,6 +4368,8 @@ impl Interp {
             collections_before_program: 0,
             library_programs: Vec::new(),
             method_bodies: HashMap::new(),
+            compiled_method_names: HashMap::new(),
+            object_methods: false,
             table_method_bodies: HashMap::new(),
             generated_methods: HashMap::new(),
             native_externals: HashMap::new(),
@@ -4420,7 +4464,7 @@ impl Interp {
             "the library bootstrap must build the object model, so nothing may have forced \
              the shipped one before it runs"
         );
-        self.object_model = Some(dispatch::ObjectModel::bootstrap_for_library());
+        self.install_object_model(dispatch::ObjectModel::bootstrap_for_library());
         self.library_bootstrap = true;
         #[cfg(test)]
         ir::drive::suspend_counters();
@@ -5844,6 +5888,66 @@ impl Interp {
             !previous,
             "a MethodId was recorded twice, so one of the two bodies is lost"
         );
+    }
+
+    /// Files a body compiled from method source text as a program of its own
+    /// and hangs it on the `Method` object, so a send can enter it.
+    ///
+    /// `MethodClass::newMethodObject` runs the same `compileSource` a file
+    /// does and takes the main section as the executable
+    /// (`parser/LanguageParser.cpp:590`-`:608`). The main section is what
+    /// [`rexx_parse::parse_lines`] returns as `main`, and it is moved into a
+    /// `::METHOD` directive here because an [`InstalledMethodBody`] names a
+    /// directive.
+    ///
+    /// `name` is the method's name as the caller wrote it, which is what the
+    /// program reports under -- see [`Interp::compiled_method_names`].
+    fn record_compiled_body(&mut self, object: ObjRef, name: &[u8], parsed: Program) {
+        let Program {
+            source,
+            main,
+            symbols,
+            ..
+        } = parsed;
+        let program = Rc::new(Program {
+            source,
+            main: CodeBody::default(),
+            directives: vec![Directive {
+                kind: DirectiveKind::Method(Box::new(MethodDirective {
+                    name: name.into(),
+                    class_method: false,
+                    attribute: false,
+                    abstract_: false,
+                    access: Access::default(),
+                    protection: Protection::default(),
+                    guard: GuardOption::default(),
+                    external: None,
+                    delegate: None,
+                    body: Some(main),
+                })),
+                clause_span: 0..0,
+            }],
+            symbols,
+        });
+        let program_id = ProgramId(self.programs.len());
+        self.programs.push(program);
+        self.compiled_method_names.insert(program_id, name.into());
+        self.table_method_bodies.insert(
+            object,
+            InstalledMethodBody {
+                program: program_id,
+                directive: 0,
+            },
+        );
+    }
+
+    /// The name a program reports under: a compiled method's own, or the
+    /// running program's path.
+    pub(crate) fn program_display_name(&self, program: ProgramId) -> &[u8] {
+        match self.compiled_method_names.get(&program) {
+            Some(name) => name,
+            None => self.program_path.as_bytes(),
+        }
     }
 
     /// Records a just-minted method's access scope and protection, for the

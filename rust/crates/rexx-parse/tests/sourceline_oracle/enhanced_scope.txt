@@ -1,0 +1,26 @@
+count 25
+/* Class~enhanced puts its methods in before INIT runs, so an enhancing INIT
+   is the one that runs and the class's does not. The methods are attached
+   with setMethod's own FLOAT scope, so they share a pool with each other and
+   not with the class, and they do not reach the class's other instances. */
+t = .stringtable~new
+t['INIT'] = "expose q; use arg a; q = 'init:'a; say 'enhanced init' a"
+t['PEEK'] = "expose q; return q"
+t['ALSO'] = "expose q; return 'also:'q"
+e = .k~enhanced(t, 'arg1')
+say 'peek' e~peek
+say 'also' e~also
+say 'class' e~class~id
+say 'isa' e~isA(.k)
+say 'class-pool' e~seen
+say 'plain' .k~new~seen
+say 'shared' .k~new~hasMethod('PEEK')
+
+::class k
+::method init
+  expose seen
+  seen = 'k-init'
+  say 'class init'
+::method seen
+  expose seen
+  return seen

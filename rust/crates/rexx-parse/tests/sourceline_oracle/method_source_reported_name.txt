@@ -1,0 +1,20 @@
+count 19
+/* A method compiled from source text is an executable of its own, named for
+   the method rather than for the file the string came from: parse source
+   answers that name, and a failure inside the body reports `running` it. The
+   name is the one the caller wrote, which setMethod upcases and ~define does
+   not, so the two lines below name the same method two ways. */
+o = .k~new
+o~mk
+say o~mm
+.k~define('lower', 'return 1/0')
+.methods~put(.k~method('LOWER'), 'M')
+zj = .object~subclass('j', .Class, .methods)
+say 'answer' zj~m
+
+::method z
+  return 1
+
+::class k
+::method mk
+  self~setMethod('MM', 'parse source s; parse var s . . name; return "named" name')

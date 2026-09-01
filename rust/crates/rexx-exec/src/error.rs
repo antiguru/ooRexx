@@ -652,6 +652,38 @@ impl Raised {
         Raised::syntax(98, 990, vec![id.to_vec()])
     }
 
+    /// 88.916: an option argument that is not one of the values the method
+    /// takes -- `Error_Invalid_argument_list`. Three substitutions: the
+    /// argument's position, the values it may take (already quoted, as the
+    /// caller writes them), and the value found.
+    ///
+    /// Measured, rc 168, on `self~setMethod('MM', 'return 1', 'BOGUS')`:
+    /// `Error 88.916:  Argument 3 must be one of "FLOAT" or "OBJECT"; found
+    /// "BOGUS".`
+    pub(crate) fn not_one_of(position: usize, values: &[u8], found: &[u8]) -> Raised {
+        Raised::syntax(
+            88,
+            916,
+            vec![
+                position.to_string().into_bytes(),
+                values.to_vec(),
+                found.to_vec(),
+            ],
+        )
+    }
+
+    /// 98.991: `run`, `setMethod` or `unsetMethod` sent from somewhere
+    /// `RexxObject::checkRestrictedMethod` does not allow (D66). One
+    /// substitution, the method's own name.
+    ///
+    /// Measured, rc 158, from a class method of a class the receiver is not
+    /// an instance of: `Error 98.991:  Method SETMETHOD may only be invoked
+    /// from a method of the same object or one of its classes.`, under a
+    /// `Compiled method "SETMETHOD" with scope "Object".` frame.
+    pub(crate) fn restricted_method(name: &[u8]) -> Raised {
+        Raised::syntax(98, 991, vec![name.to_vec()])
+    }
+
     /// 98.989: `~new` on an `ABSTRACT` class -- `RexxClass::checkAbstract`
     /// (`classes/ClassClass.cpp:1741`). One substitution, the class's own
     /// `~id`, unquoted.
@@ -2298,22 +2330,26 @@ pub(crate) enum FailureSite {
         /// stateful to desync.
         indent: usize,
     },
-    /// A level whose **package** carries no source, so its echo is a
-    /// catalogue message where a clause's text would be --
-    /// `PackageClass::traceBack`'s `source->extract` miss
-    /// (`classes/PackageClass.cpp:575`-`:589`).
+    /// A level whose `running <name> line <n>` span names something other
+    /// than the running program's path, `name` being what it names.
     ///
-    /// **It still has a line and an indent**, unlike [`FailureSite::
-    /// Rendered`]: an image-saved package knows which line the method was
-    /// on, and the oracle formats the number and the `*-*` marker around the
-    /// message exactly as around a source clause. `package` is what the
-    /// report's own `running <name> line <n>` span carries in place of a
-    /// path, which is the other half of the same divergence.
-    Sourceless {
+    /// **It still has a line and an indent**, unlike
+    /// [`FailureSite::Rendered`], and its `text` is echoed under the number
+    /// and the `*-*` marker exactly as a [`FailureSite::Clause`]'s is. Two
+    /// levels reach it:
+    ///
+    /// * a level in a package that carries no source, whose `text` is the
+    ///   catalogue message `PackageClass::traceBack` prints when
+    ///   `source->extract` misses (`classes/PackageClass.cpp:575`-`:589`);
+    /// * a level in a method compiled from source text, whose `text` is its
+    ///   own clause -- measured, oracle rc 214, a one-off whose body is
+    ///   `return 1/0` echoes `1 *-* return 1/0` and reports `Error 42
+    ///   running MM line 1:`.
+    Named {
         line: usize,
         indent: usize,
         text: Vec<u8>,
-        package: Vec<u8>,
+        name: Vec<u8>,
     },
     /// A level with no source clause of its own: a native method
     /// activation, whose whole echo line is a catalogue entry
@@ -2331,19 +2367,19 @@ impl FailureSite {
     /// no clause of its own.
     pub(crate) fn line(&self) -> Option<usize> {
         match self {
-            FailureSite::Clause { line, .. } | FailureSite::Sourceless { line, .. } => Some(*line),
+            FailureSite::Clause { line, .. } | FailureSite::Named { line, .. } => Some(*line),
             FailureSite::Rendered(_) => None,
         }
     }
 
-    /// The package a [`FailureSite::Sourceless`] reports in place of a
-    /// path, or `None` for a site whose level has a file of its own.
+    /// What a [`FailureSite::Named`] reports in place of the program's path,
+    /// or `None` for a site whose level reports that path.
     ///
     /// Asked only of the entry [`FailureSite::line`] answered for, since the
     /// report names one level's line and that level's name together.
-    pub(crate) fn package(&self) -> Option<&[u8]> {
+    pub(crate) fn reported_name(&self) -> Option<&[u8]> {
         match self {
-            FailureSite::Sourceless { package, .. } => Some(package),
+            FailureSite::Named { name, .. } => Some(name),
             FailureSite::Clause { .. } | FailureSite::Rendered(_) => None,
         }
     }
@@ -2357,7 +2393,7 @@ impl FailureSite {
     #[cfg(test)]
     pub(crate) fn text(&self) -> &[u8] {
         match self {
-            FailureSite::Clause { text, .. } | FailureSite::Sourceless { text, .. } => text,
+            FailureSite::Clause { text, .. } | FailureSite::Named { text, .. } => text,
             FailureSite::Rendered(bytes) => bytes,
         }
     }
@@ -2369,9 +2405,7 @@ impl FailureSite {
     #[cfg(test)]
     pub(crate) fn indent(&self) -> Option<usize> {
         match self {
-            FailureSite::Clause { indent, .. } | FailureSite::Sourceless { indent, .. } => {
-                Some(*indent)
-            }
+            FailureSite::Clause { indent, .. } | FailureSite::Named { indent, .. } => Some(*indent),
             FailureSite::Rendered(_) => None,
         }
     }
@@ -2480,7 +2514,7 @@ impl Raised {
         for entry in site.sites {
             match entry {
                 FailureSite::Clause { line, text, indent }
-                | FailureSite::Sourceless {
+                | FailureSite::Named {
                     line, text, indent, ..
                 } => {
                     crate::trace::push_clause(&mut out, *line, *indent, text);
@@ -2509,7 +2543,7 @@ impl Raised {
         // neither, for the reason its own doc gives.
         let innermost = site.sites.iter().find(|entry| entry.line().is_some());
         let line = innermost.and_then(FailureSite::line).unwrap_or(0);
-        let named = match innermost.and_then(FailureSite::package) {
+        let named = match innermost.and_then(FailureSite::reported_name) {
             Some(package) => String::from_utf8_lossy(package).into_owned(),
             None => site.path.to_string(),
         };

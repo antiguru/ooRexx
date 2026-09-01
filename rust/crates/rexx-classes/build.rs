@@ -64,6 +64,9 @@ fn generate(src: &str) -> String {
          pub enum Op {\n\
          \x20   AddClassMethod(&'static str),\n\
          \x20   AddInstanceMethod(&'static str),\n\
+         \x20   /// `AddPrivateMethod`, whose method the ordinary private\n\
+         \x20   /// check refuses from a program context.\n\
+         \x20   AddPrivateInstanceMethod(&'static str),\n\
          \x20   InheritInstanceMethods(&'static str),\n\
          \x20   RemoveInstanceMethod(&'static str),\n\
          \x20   HideInstanceMethod(&'static str),\n\
@@ -93,6 +96,9 @@ fn generate(src: &str) -> String {
             let rendered = match op {
                 Op::AddClassMethod(n) => format!("Op::AddClassMethod({n:?})"),
                 Op::AddInstanceMethod(n) => format!("Op::AddInstanceMethod({n:?})"),
+                Op::AddPrivateInstanceMethod(n) => {
+                    format!("Op::AddPrivateInstanceMethod({n:?})")
+                }
                 Op::InheritInstanceMethods(n) => format!("Op::InheritInstanceMethods({n:?})"),
                 Op::RemoveInstanceMethod(n) => format!("Op::RemoveInstanceMethod({n:?})"),
                 Op::HideInstanceMethod(n) => format!("Op::HideInstanceMethod({n:?})"),
@@ -121,6 +127,7 @@ fn parse_checklist(src: &str) -> Vec<String> {
 enum Op {
     AddClassMethod(String),
     AddInstanceMethod(String),
+    AddPrivateInstanceMethod(String),
     InheritInstanceMethods(String),
     RemoveInstanceMethod(String),
     HideInstanceMethod(String),
@@ -187,8 +194,9 @@ fn parse_definitions(src: &str) -> Vec<ClassDef> {
             .or_else(|| macro_string_arg(line, "AddClassUnguardedMethod"))
         {
             def.ops.push(Op::AddClassMethod(n));
+        } else if let Some(n) = macro_string_arg(line, "AddPrivateMethod") {
+            def.ops.push(Op::AddPrivateInstanceMethod(n));
         } else if let Some(n) = macro_string_arg(line, "AddProtectedMethod")
-            .or_else(|| macro_string_arg(line, "AddPrivateMethod"))
             .or_else(|| macro_string_arg(line, "AddUnguardedMethod"))
             .or_else(|| macro_string_arg(line, "AddMethod"))
         {

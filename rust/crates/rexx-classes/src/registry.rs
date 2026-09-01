@@ -29,7 +29,8 @@
 //! `.context`/`.rexxinfo`-style dynamic instance).
 
 use crate::class_graph::{ClassGraph, ClassKind, InheritRefusal};
-use crate::method_dict::{MethodId, MethodSlot};
+use crate::method_dict::MethodSlot;
+use rexx_core::MethodId;
 use rexx_core::{BehaviourHandle, ObjRef};
 use std::collections::HashMap;
 
@@ -56,6 +57,9 @@ pub struct ClassRegistry {
     /// `addToSystem(name, classObj)`, a second table `.NAME` never reaches.
     /// See [`ClassRegistry::define_system_class`].
     by_system_name: HashMap<String, ObjRef>,
+    /// `Setup.cpp`'s `AddPrivateMethod` rows, in mint order -- see
+    /// [`ClassRegistry::private_native_methods`].
+    private_native_methods: Vec<MethodId>,
 }
 
 impl Default for ClassRegistry {
@@ -75,6 +79,7 @@ impl ClassRegistry {
             object_names: HashMap::new(),
             by_name: HashMap::new(),
             by_system_name: HashMap::new(),
+            private_native_methods: Vec::new(),
         }
     }
 
@@ -576,6 +581,24 @@ impl ClassRegistry {
         let method = self.next_method_id();
         self.graph.define(class, name, method);
         method
+    }
+
+    /// [`Self::add_instance_method`] for a `Setup.cpp` `AddPrivateMethod`
+    /// row, which additionally records the minted identity in
+    /// [`Self::private_native_methods`].
+    pub fn add_private_instance_method(&mut self, class: ObjRef, name: &str) -> MethodId {
+        let method = self.add_instance_method(class, name);
+        self.private_native_methods.push(method);
+        method
+    }
+
+    /// The native methods `Setup.cpp` marks private, in mint order.
+    ///
+    /// The flattened cascade copies a defining class's entry, its
+    /// [`MethodId`] included, into every heir's behaviour, so one identity
+    /// here covers every receiver that answers the name.
+    pub fn private_native_methods(&self) -> &[MethodId] {
+        &self.private_native_methods
     }
 
     /// Install a directly-added class (static) method -- oracle's

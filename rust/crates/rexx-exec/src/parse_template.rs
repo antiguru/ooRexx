@@ -674,7 +674,13 @@ impl Interp {
                 source.push(b' ');
                 source.extend_from_slice(self.activation().call_type.token());
                 source.push(b' ');
-                source.extend_from_slice(self.program_path.as_bytes());
+                // The third word is the executable's own name, which is the
+                // program's path for a program and the method's name for a
+                // method compiled from source text -- measured, oracle rc 0,
+                // `parse source` inside a `setMethod` body answers `LINUX
+                // METHOD MM`.
+                let program = self.activation().program_id;
+                source.extend_from_slice(self.program_display_name(program));
                 ("SOURCE", Subject::Bytes(source))
             }
             ParseSource::Version => {

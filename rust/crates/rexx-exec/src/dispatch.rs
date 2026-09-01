@@ -96,7 +96,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use rexx_classes::{ClassKind, ClassRegistry, InheritRefusal, MethodId, MethodSlot};
-use rexx_core::{BehaviourHandle, BehaviourId, Body, Decoded, ObjRef};
+use rexx_core::{BehaviourHandle, BehaviourId, Body, Decoded, ObjRef, ObjectMethod, ObjectMethods};
 use rexx_parse::{Access, Expr};
 
 use crate::activation::{
@@ -310,6 +310,7 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         native_define_methods,
     ),
     ("Class", "DELETE", Arity::Fixed(1), native_delete),
+    ("Class", "ENHANCED", Arity::Counted, native_enhanced),
     ("Class", "ID", Arity::Fixed(0), native_id),
     ("Class", "INHERIT", Arity::Fixed(2), native_class_inherit),
     (
@@ -350,6 +351,10 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // traceback says: measured, `.environment~at()` reports `Compiled method
     // "AT" with scope "Directory".`, not `IdentityTable`.
     ("Directory", "[]", Arity::Fixed(1), native_hash_at),
+    // `HashCollection::putRexx` under its second name, donated from
+    // `IdentityTable` (`memory/Setup.cpp:826`) and so the same function with
+    // the same argument order: `t[i] = v` sends `t~"[]="(v, i)`.
+    ("Directory", "[]=", Arity::Fixed(2), native_hash_put),
     ("Directory", "AT", Arity::Fixed(1), native_hash_at),
     ("Directory", "PUT", Arity::Fixed(2), native_hash_put),
     // `StringHashCollection::unknownRexx`, `StringTable`'s own row
@@ -395,7 +400,18 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         native_object_name_set,
     ),
     ("Object", "REQUEST", Arity::Fixed(1), native_request),
+    // `AddPrivateMethod("SetMethod", ..., 3)` and its partner at
+    // `memory/Setup.cpp:550`-`:551`. Private, which is where the refusal a
+    // program context meets comes from; `rexx_classes::native_classes` files
+    // the access scope off the same rows.
+    ("Object", "SETMETHOD", Arity::Fixed(3), native_set_method),
     ("Object", "STRING", Arity::Fixed(0), native_string),
+    (
+        "Object",
+        "UNSETMETHOD",
+        Arity::Fixed(1),
+        native_unset_method,
+    ),
     (
         "Package",
         "ADDCLASS",
@@ -453,7 +469,11 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `IdentityTable` (`memory/Setup.cpp:881`) and declares `Unknown` itself
     // (`:883`), and `Directory` then takes that whole set from `StringTable`.
     ("StringTable", "[]", Arity::Fixed(1), native_hash_at),
+    ("StringTable", "[]=", Arity::Fixed(2), native_hash_put),
     ("StringTable", "AT", Arity::Fixed(1), native_hash_at),
+    // `HashCollection::initRexx` (`memory/Setup.cpp:842`), which `~new`
+    // sends and which validates the initial-size argument.
+    ("StringTable", "INIT", Arity::Fixed(1), native_hash_init),
     ("StringTable", "PUT", Arity::Fixed(2), native_hash_put),
     (
         "StringTable",
@@ -476,6 +496,15 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `memory/Setup.cpp:514`, reached by every class whose own class
     // behaviour declares no `NEW` of its own.
     ("Object", "NEW", Arity::Counted, native_new),
+    // `AddClassMethod("New", StringTable::newRexx, A_COUNT)`,
+    // `memory/Setup.cpp:875`. A row of its own rather than `Object`'s,
+    // because the collection allocates a hash body rather than an instance.
+    (
+        "StringTable",
+        "NEW",
+        Arity::Counted,
+        native_string_table_new,
+    ),
 ];
 
 /// The two methods `Setup.cpp` puts on `.Class` for the image build and
@@ -1034,7 +1063,46 @@ impl Interp {
 
     /// The object model, built on first use.
     pub(crate) fn object_model(&mut self) -> &mut ObjectModel {
-        self.object_model.get_or_insert_with(ObjectModel::bootstrap)
+        if self.object_model.is_none() {
+            self.install_object_model(ObjectModel::bootstrap());
+        }
+        self.object_model
+            .as_mut()
+            .expect("the object model was just installed")
+    }
+
+    /// Stores a freshly built object model and files the access scopes of
+    /// the natives `Setup.cpp` declares private.
+    ///
+    /// **The natives are recorded here rather than at their `NATIVE_METHODS`
+    /// row** because the identity a row is filed under is the registry's
+    /// mint, and only the registry that minted it knows which rows came from
+    /// an `AddPrivateMethod`. They are also the lowest identities any run
+    /// holds, which is what lets [`Interp::record_access_scope`] keep
+    /// appending in mint order afterwards.
+    pub(crate) fn install_object_model(&mut self, model: ObjectModel) {
+        debug_assert!(
+            self.special_methods.is_empty(),
+            "the natives' access scopes are the first rows filed, so nothing may have filed one \
+             before the model that mints them exists"
+        );
+        self.special_methods.extend(
+            model
+                .classes
+                .private_native_methods()
+                .iter()
+                .map(|&method| {
+                    (
+                        method,
+                        AccessScope {
+                            access: Access::Private,
+                            protected: false,
+                            package: Package::Rexx,
+                        },
+                    )
+                }),
+        );
+        self.object_model = Some(model);
     }
 
     /// The class registry: the one class model in this crate (R9), holding
@@ -1395,6 +1463,17 @@ impl Interp {
         name: &[u8],
         start_scope: Option<ObjRef>,
     ) -> Option<Resolution> {
+        // **The object's own methods come first**, which is where
+        // `MethodDictionary::addInstanceMethod` puts them
+        // (`behaviour/MethodDictionary.cpp:399`, `addFront`). A scope
+        // override starts inside the class hierarchy and so never reaches
+        // one: `RexxObject::superMethod` searches from a named scope, and a
+        // one-off's scope is `.nil` or the class's own.
+        if start_scope.is_none()
+            && let Some(entry) = self.own_method_entry(receiver, name)
+        {
+            return entry.map(|ObjectMethod { method, scope }| Resolution { scope, method });
+        }
         let behaviour = self.receiver_behaviour(receiver).ok()?;
         // Borrowed rather than owned wherever the name is UTF-8, which every
         // name a program can write is: `from_utf8_lossy` allocates only for
@@ -1415,6 +1494,94 @@ impl Interp {
                 .lookup_class_method_from_scope(class, &name, start)?,
         };
         Some(Resolution { scope, method })
+    }
+
+    /// What `receiver`'s own dictionary answers for `name`: `None` when it
+    /// holds no entry under it, `Some(None)` for a name it hides, and
+    /// `Some(Some(method))` for one it defines.
+    ///
+    /// **Gated on [`Interp::object_methods`]**, so a program that never
+    /// sends `SETMETHOD` pays one load and one branch per send --
+    /// [`Interp::special_methods`]'s shape, taken for its reason.
+    pub(crate) fn own_method_entry(
+        &self,
+        receiver: ObjRef,
+        name: &[u8],
+    ) -> Option<Option<ObjectMethod>> {
+        if !self.object_methods {
+            return None;
+        }
+        match &self.heap.get(receiver)?.body {
+            Body::Instance { own: Some(own), .. } => own.get(name),
+            _ => None,
+        }
+    }
+
+    /// Installs one entry in `receiver`'s own dictionary, or takes one away
+    /// -- `RexxObject::defineInstanceMethod` (`classes/ObjectClass.cpp:2297`)
+    /// and `deleteInstanceMethod` (`:2331`).
+    ///
+    /// `entry` is `None` for `setMethod`'s no-method form, which stores the
+    /// oracle's `.nil` and hides the name; `remove` is `unsetMethod`, which
+    /// takes the entry away and reveals whatever the class answers.
+    ///
+    /// A receiver with no dictionary of its own to hold one is loud rather
+    /// than silent, for [`native_object_name_set`]'s reason: the oracle
+    /// copies the behaviour of whatever it is given, and forgetting the
+    /// definition would be a wrong answer where the oracle keeps it.
+    fn write_object_method(
+        &mut self,
+        receiver: ObjRef,
+        name: &[u8],
+        entry: Option<ObjectMethod>,
+        remove: bool,
+    ) -> Result<(), Failure> {
+        match self.receiver_kind(receiver) {
+            Ok(Primitive::Instance { .. }) => {}
+            Ok(_) => return Err(Loud::object_method("a receiver with no scope of its own").into()),
+            Err(kind) => return Err(Loud::receiver_class(kind).into()),
+        }
+        let Some(object) = self.heap.get_mut(receiver) else {
+            return Err(Loud::receiver_class("a value whose object is no longer live").into());
+        };
+        let Body::Instance { own, .. } = &mut object.body else {
+            unreachable!("an instance receiver is Body::Instance")
+        };
+        if remove {
+            if let Some(own) = own {
+                own.remove(name);
+            }
+            self.check_uninit(receiver, name);
+            return Ok(());
+        }
+        own.get_or_insert_with(|| Box::new(ObjectMethods::new()))
+            .set(name, entry);
+        self.object_methods = true;
+        self.check_uninit(receiver, name);
+        Ok(())
+    }
+
+    /// `RexxObject::checkUninit` (`classes/ObjectClass.cpp:2604`), which both
+    /// mutators run: an object that answers `UNINIT` after the change is
+    /// registered for finalization and one that does not is taken back out.
+    ///
+    /// Both directions are measured, oracle rc 0:
+    /// `self~setMethod('UNINIT', 'say "one-off uninit"')` prints from the
+    /// termination sweep and from a forced collection alike, and
+    /// `self~setMethod('UNINIT')` on a class that declares one prints
+    /// nothing.
+    ///
+    /// Asked only for the one name, which is what makes it free for every
+    /// other definition.
+    fn check_uninit(&mut self, receiver: ObjRef, name: &[u8]) {
+        if !name.eq_ignore_ascii_case(UNINIT) {
+            return;
+        }
+        if self.answers_uninit(receiver) {
+            self.heap.set_uninit(receiver);
+        } else {
+            self.heap.clear_uninit_all(&[receiver]);
+        }
     }
 
     /// `RexxObject::validateScopeOverride` (`classes/ObjectClass.cpp:1950`):
@@ -2216,9 +2383,11 @@ impl Interp {
     ///
     /// **An object that no longer answers `UNINIT` is reached and runs
     /// nothing**, which is `RexxObject::uninit`'s own `hasMethod` test
-    /// (`classes/ObjectClass.cpp:2581`). Registration is never undone --
-    /// `RexxClass::checkUninit` only sets (`classes/ClassClass.cpp:1211`) --
-    /// so this test is the only thing that cancels a finalizer. Measured,
+    /// (`classes/ObjectClass.cpp:2581`). A class's registration is never
+    /// undone -- `RexxClass::checkUninit` only sets
+    /// (`classes/ClassClass.cpp:1211`) -- so for an instance of a class
+    /// whose ancestry gained and lost a finalizer this test is the only
+    /// thing that cancels one. Measured,
     /// oracle rc 0 with empty stderr: `.QQ~inherit(.MX)` then
     /// `.QQ~uninherit(.MX)` runs `MX`'s finalizer and not `QQ`'s, and an
     /// instance built between an `~inherit` and its `~uninherit` runs none.
@@ -2241,6 +2410,9 @@ impl Interp {
     /// resolved the way [`native_has_method`] resolves the `HASMETHOD`
     /// message.
     fn answers_uninit(&mut self, object: ObjRef) -> bool {
+        if let Some(entry) = self.own_method_entry(object, UNINIT) {
+            return entry.is_some();
+        }
         let Ok(behaviour) = self.receiver_behaviour(object) else {
             return false;
         };
@@ -3336,6 +3508,13 @@ fn native_has_method(
     };
     let argument = required_string_argument(interp, argument, 1)?;
     let name = String::from_utf8_lossy(&interp.to_text(argument).to_ascii_uppercase()).into_owned();
+    // **The object's own dictionary answers first**, so a `setMethod` name
+    // reports `1` and a hidden one reports `0` even where the class defines
+    // it -- measured, oracle rc 0 for the first and rc 159 for the send
+    // after the second.
+    if let Some(entry) = interp.own_method_entry(receiver, name.as_bytes()) {
+        return Ok(Some(interp.counted(usize::from(entry.is_some()))));
+    }
     // **A receiver with no class here is loud, not `0`.** `send_message`
     // screens for it before any method runs, so this arm is unreachable
     // today; answering `0` from it anyway would make this the one place in
@@ -3846,24 +4025,15 @@ fn is_source_line(interp: &Interp, value: ObjRef) -> bool {
 /// (`classes/MethodClass.cpp:462`-`:485`): the `Method` object a source text
 /// becomes, carrying no scope, for a caller that is about to install it.
 ///
-/// **The compiled body is validated and not retained, and that is a choice
-/// against a wrong answer rather than an omission.** A method this crate
-/// installs from source text goes into a class's *instance* dictionary, and
-/// no send this phase can make reaches one: `~new` is not built, so no
-/// instance of a class a program declares exists. The one route a send can
-/// take to a body compiled here is `~subclass`'s class-method table, and the
-/// oracle reports a failure inside such a body against the **method** where a
-/// program's own clause reports its path -- measured, rc 214,
-/// `.methods~put('return 1/0', 'M')` then
-/// `.object~subclass("k", .Class, .methods)` then `k~m` gives
-/// `Error 42 running M line 1:`. Nothing here answers `running M`. Retaining
-/// the body would make that route run and report a program's path instead,
-/// so both halves of it refuse loudly instead: this function keeps no body
-/// and [`install_enhancing_methods`] declines the install.
+/// **The body is filed under the object rather than under a dictionary
+/// key**, which is [`Interp::record_compiled_body`]'s job: the two callers
+/// that install source text on a class mint their own identity for it, and
+/// only `SETMETHOD` installs where a send can reach the body this crate
+/// holds.
 ///
-/// What the parse still buys is the oracle's **timing**: a source that does
-/// not parse fails at `~define` time and not at send time, measured at rc 221
-/// for a body no send ever reaches.
+/// The parse also buys the oracle's **timing**: a source that does not parse
+/// fails at `~define` time and not at send time, measured at rc 221 for a
+/// body no send ever reaches.
 ///
 /// `name` is the method's own name as the caller wrote it, which the oracle
 /// keeps unchanged where the dictionary key is upcased
@@ -3897,6 +4067,7 @@ fn compile_method_source(
     let site = crate::environment::Annotated::Compiled(interp.compiled_methods);
     interp.compiled_methods += 1;
     interp.attach_annotations(object, site);
+    interp.record_compiled_body(object, name, parsed);
     Ok(object)
 }
 
@@ -4149,14 +4320,27 @@ fn native_new(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let class = class_receiver(interp, receiver)?;
+    let object = new_instance(interp, class)?;
+    let caller = interp.caller();
+    interp.send_message(object, INIT, None, args, caller)?;
+    Ok(Some(object))
+}
+
+/// `RexxClass::completeNewObject` (`classes/ClassClass.cpp:1882`) up to but
+/// not including the `INIT` send: the abstract check, the behaviour, the
+/// rooting and the `UNINIT` registration, in that order.
+///
+/// Split from [`native_new`] because [`native_enhanced`] takes the same
+/// steps and then puts the enhancing methods in before `INIT` runs, which is
+/// what makes an enhancing `INIT` the one that runs.
+fn new_instance(interp: &mut Interp, class: ObjRef) -> Result<ObjRef, Failure> {
     if interp.classes().is_abstract(class) {
         let id = interp.classes().id_string(class).as_bytes().to_vec();
         return Err(Raised::abstract_class(&id).into());
     }
-    // `RexxClass::completeNewObject` (`classes/ClassClass.cpp:1882`) sets the
-    // object's behaviour from the class here, once. What the class holds
-    // later is a different behaviour or the same one rebuilt, and D58 turns
-    // on which.
+    // The object's behaviour is set from the class here, once. What the class
+    // holds later is a different behaviour or the same one rebuilt, and D58
+    // turns on which.
     let behaviour = interp.classes().instance_behaviour_handle(class);
     let object = interp.alloc_with(
         rexx_core::BehaviourId::OBJECT,
@@ -4165,6 +4349,7 @@ fn native_new(
             behaviour,
             name: None,
             pools: rexx_core::ScopePools::new(),
+            own: None,
         },
     );
     // `ProtectedObject p(newObj)` (`ObjectClass.cpp:2637`): the `INIT` send
@@ -4176,9 +4361,7 @@ fn native_new(
     if interp.classes().has_uninit(class) {
         interp.heap.set_uninit(object);
     }
-    let caller = interp.caller();
-    interp.send_message(object, INIT, None, args, caller)?;
-    Ok(Some(object))
+    Ok(object)
 }
 
 /// `RexxClass::subclass` (`classes/ClassClass.cpp:1562`), in its own order.
@@ -5198,6 +5381,302 @@ fn native_object_name_set(
         Primitive::String | Primitive::SmallInt | Primitive::Object | Primitive::Array => {
             return Err(Loud::native_method(b"OBJECTNAME=", "Object").into());
         }
+    }
+    Ok(None)
+}
+
+/// `Object~setMethod(name, method, scope)`: attach one method to this object
+/// alone -- `RexxObject::setMethod` (`classes/ObjectClass.cpp:1829`).
+///
+/// **The order of the steps is observable**, and it is the C++'s: the name,
+/// then the method object, then the scope option, then the restricted check,
+/// then the definition. Measured, oracle rc 168 from a class method of an
+/// unrelated class: `self~setMethod('MM', 'return 1', 'BOGUS')` reports the
+/// option's 88.916 and not the restricted check's 98.991, so the option is
+/// read first.
+///
+/// **A second argument that is omitted hides the name**, storing the
+/// oracle's `.nil` rather than removing anything: measured, oracle rc 159,
+/// after `self~setMethod('MM')` on a class that defines `MM`,
+/// `hasMethod('MM')` is `0` and the send is 97.1.
+///
+/// The third argument is D67 and [`rexx_core::ObjectMethod`] carries the two
+/// scopes it selects.
+fn native_set_method(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let name = method_name_argument(interp, args)?;
+    let source = match args.get(1).copied().flatten() {
+        None => None,
+        Some(source) if interp.receiver_kind(source) == Ok(Primitive::Method) => Some(source),
+        Some(source) => Some(compile_method_source(interp, &name, source, "method")?),
+    };
+    let scope = set_method_scope(interp, receiver, args)?;
+    check_restricted_method(interp, receiver, b"SETMETHOD")?;
+    let entry = match source {
+        None => None,
+        Some(object) => {
+            let Some(body) = interp.table_method_bodies.get(&object).copied() else {
+                return Err(Loud::method_from_source(
+                    "a one-off method whose body this crate does not hold",
+                )
+                .into());
+            };
+            let method = interp.classes().mint_method_id();
+            interp.method_bodies.insert(method, body);
+            Some(ObjectMethod { method, scope })
+        }
+    };
+    interp.write_object_method(receiver, &name, entry, false)?;
+    Ok(None)
+}
+
+/// `Object~unsetMethod(name)`: take back a `setMethod` definition --
+/// `RexxObject::unsetMethod` (`classes/ObjectClass.cpp:1891`).
+///
+/// **A name this object never set is untouched**, and that is the whole
+/// difference from `Class~delete`: measured, oracle rc 0,
+/// `self~unsetMethod('MM')` for a class-defined `MM` leaves `o~mm` answering
+/// the class's, and `self~unsetMethod('ZZZ')` for a name nothing defines is
+/// not an error either.
+fn native_unset_method(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let name = method_name_argument(interp, args)?;
+    check_restricted_method(interp, receiver, b"UNSETMETHOD")?;
+    interp.write_object_method(receiver, &name, None, true)?;
+    Ok(None)
+}
+
+/// `setMethod`'s third argument: which variable pool the new method's
+/// `EXPOSE` reaches (D67).
+///
+/// `FLOAT`, the default, is `TheNilObject` -- one pool per object, shared by
+/// all of that object's `FLOAT` methods and separate from the class's.
+/// `OBJECT` is `classObject()`, the object's own class, so the pool is the
+/// one the class's own methods use. Measured, oracle rc 0: two `FLOAT`
+/// methods on one object read each other's writes while a second instance of
+/// the same class sees the name uninitialised, and an `OBJECT` method's write
+/// is what a `::METHOD` of the class reads back.
+///
+/// Anything else is 88.916 -- measured, oracle rc 168, `Argument 3 must be
+/// one of "FLOAT" or "OBJECT"; found "BOGUS".`
+fn set_method_scope(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    let Some(Some(option)) = args.get(2).copied() else {
+        return Ok(ObjRef::NIL);
+    };
+    let option = required_string_named_argument(interp, option, "scope option")?;
+    let text = interp.to_text(option).to_vec();
+    if text.eq_ignore_ascii_case(b"OBJECT") {
+        return interp
+            .class_of_value(receiver)
+            .ok_or_else(|| Loud::object_method("a receiver with no class of its own").into());
+    }
+    if text.eq_ignore_ascii_case(b"FLOAT") {
+        return Ok(ObjRef::NIL);
+    }
+    Err(Raised::not_one_of(3, b"\"FLOAT\" or \"OBJECT\"", &text).into())
+}
+
+/// `RexxObject::checkRestrictedMethod` (`classes/ObjectClass.cpp:697`), the
+/// fourth access check (D66): `run`, `setMethod` and `unsetMethod` may be
+/// sent only from a method of the receiving object itself or from a class
+/// method of a class it is an instance of.
+///
+/// **It is not the private check and it has its own error.** The private
+/// check runs first, at dispatch, and refuses a program context with `97.2
+/// ... cannot accept private message` at rc 159 and no method frame; this
+/// one refuses with `98.991 ... may only be invoked from a method of the
+/// same object or one of its classes.` at rc 158, under a `Compiled method
+/// "SETMETHOD" with scope "Object".` frame. Both measured, and the frame is
+/// what tells them apart. The allowing arm is measured too: a class method
+/// of the object's own class may send it, oracle rc 0.
+///
+/// The caller's *receiver* is the input, which is what makes this a check no
+/// value of [`Access`] can express.
+fn check_restricted_method(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    name: &[u8],
+) -> Result<(), Failure> {
+    let caller = interp.caller();
+    // `sender == OREF_NULL` at `:715`-`:719`, a routine or program context,
+    // which the private check refuses first: each of the three is private,
+    // so `check_private`'s own `caller.receiver()` arm has already answered
+    // for a caller with no receiver.
+    let Some(sender) = caller.receiver() else {
+        return Err(Raised::restricted_method(name).into());
+    };
+    if sender == receiver {
+        return Ok(());
+    }
+    // `isOfClassType(Class, sender)` then `isInstanceOf((RexxClass *)sender)`
+    // (`:722`-`:729`): a class method of a class this object is an instance
+    // of.
+    if interp.is_class_object(sender)
+        && let Some(class) = interp.class_of_value(receiver)
+        && interp.classes().is_a(class, sender)
+    {
+        return Ok(());
+    }
+    Err(Raised::restricted_method(name).into())
+}
+
+/// `Class~enhanced(methods, ...)`: an instance of the receiver carrying
+/// methods of its own -- `RexxClass::enhanced`
+/// (`classes/ClassClass.cpp:1440`).
+///
+/// **The enhancing methods are in place before `INIT` runs**, which is
+/// observable and is why this builds the object rather than sending `~new`:
+/// the C++ puts them in a dummy subclass's behaviour and then sends `NEW` to
+/// that subclass (`:1454`-`:1470`). Measured, oracle rc 0: with `INIT` in the
+/// table, the enhancing `INIT` runs and the class's own does not, and the
+/// arguments after the table are its arguments.
+///
+/// **The dummy subclass is invisible.** `setOwningClass(this)` (`:1473`)
+/// puts the object's class back to the receiver, so `~class~id` and `~isA`
+/// answer for the receiver -- measured, `K` and `1`. The methods are added
+/// with `.nil` scope, "so that these additional methods will look like they
+/// were added with setMethod" (`:1457`), which is what this crate stores
+/// them as.
+fn native_enhanced(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    // The two refusals are different errors and the C++ checks them in this
+    // order (`:1443`-`:1451`). Measured: `.K~enhanced` and `.K~enhanced()`
+    // are both `93.901 Not enough arguments for method; 1 expected.` at rc
+    // 163, the second because a trailing omission is dropped from the count,
+    // while `.K~enhanced(, 'x')` is `88.901 Missing argument; argument
+    // methods is required.` at rc 168.
+    if args.is_empty() {
+        return Err(Raised::not_enough_method_arguments(1).into());
+    }
+    let Some(table) = args[0] else {
+        return Err(Raised::missing_named_argument("methods").into());
+    };
+    if !matches!(
+        interp.receiver_kind(table),
+        Ok(Primitive::Directory | Primitive::StringTable)
+    ) {
+        return Err(supplier_refusal(interp, table));
+    }
+    if let Some(owner) = interp.unbuilt_collection_owner(table) {
+        return Err(Loud::unreadable_collection(owner).into());
+    }
+    let mut names = interp.native_keys(table);
+    names.sort();
+    let object = new_instance(interp, class)?;
+    let frame = interp.roots.push_frame();
+    let installed = install_enhanced_methods(interp, object, table, &names);
+    interp.roots.pop_frame(frame);
+    installed?;
+    // `dummy_subclass->sendMessage(GlobalNames::NEW, args + 1, ...)`
+    // (`:1470`), whose `INIT` send is `completeNewObject`'s -- the enhancing
+    // `INIT` by then, since it is already in the behaviour.
+    let caller = interp.caller();
+    interp.send_message(object, INIT, None, &args[1..], caller)?;
+    Ok(Some(object))
+}
+
+/// [`native_enhanced`]'s walk, split out so the root frame it runs inside is
+/// released on the failure path too -- [`install_enhancing_methods`]'s shape.
+fn install_enhanced_methods(
+    interp: &mut Interp,
+    object: ObjRef,
+    table: ObjRef,
+    names: &[Box<[u8]>],
+) -> Result<(), Failure> {
+    for name in names {
+        let value = interp.native_entry(table, name).unwrap_or(ObjRef::NIL);
+        let source = if interp.receiver_kind(value) == Ok(Primitive::Method) {
+            value
+        } else {
+            compile_method_source(interp, name, value, "method source")?
+        };
+        let Some(body) = interp.table_method_bodies.get(&source).copied() else {
+            return Err(Loud::method_from_source(
+                "an enhancing method whose body this crate does not hold",
+            )
+            .into());
+        };
+        let method = interp.classes().mint_method_id();
+        interp.method_bodies.insert(method, body);
+        interp.write_object_method(
+            object,
+            name,
+            Some(ObjectMethod {
+                method,
+                scope: ObjRef::NIL,
+            }),
+            false,
+        )?;
+    }
+    Ok(())
+}
+
+/// `StringTable~new`: an empty string table -- `StringTable::newRexx`
+/// (`memory/Setup.cpp:875`), which allocates and then sends `INIT` with the
+/// whole argument list.
+///
+/// The `INIT` send is what validates the initial-size argument, and it is a
+/// send rather than a check here so the traceback carries both frames --
+/// measured, oracle rc 163 for `.stringtable~new('abc')`: `Compiled method
+/// "INIT" with scope "StringTable".` above `Compiled method "NEW" with scope
+/// "StringTable".`
+fn native_string_table_new(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    let object = interp.native_instance(class);
+    let caller = interp.caller();
+    interp.send_message(object, INIT, None, args, caller)?;
+    Ok(Some(object))
+}
+
+/// `HashCollection~init(size)`: the initial-size argument, validated and
+/// then dropped -- `HashCollection::initRexx`
+/// (`classes/support/HashCollection.cpp:120`).
+///
+/// The size is a capacity hint and nothing observable depends on it, so it
+/// is checked and not kept. Measured, oracle rc 163:
+/// `.stringtable~new('abc')` is `93.923 Invalid length argument specified;
+/// found "abc".`
+fn native_hash_init(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    _receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    match whole_method_argument(interp, args, 0, Raised::invalid_length)? {
+        Some(size) if size >= 0 => {
+            usize_or_refuse(interp, args, 0, size, Raised::invalid_length)?;
+        }
+        Some(_) => {
+            return Err(refuse_method_argument(
+                interp,
+                args,
+                0,
+                Raised::invalid_length,
+            ));
+        }
+        None => {}
     }
     Ok(None)
 }
