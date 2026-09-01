@@ -653,9 +653,9 @@ impl Raised {
     }
 
     /// 88.916: an option argument that is not one of the values the method
-    /// takes -- `Error_Invalid_argument_list`. Three substitutions: the
-    /// argument's position, the values it may take (already quoted, as the
-    /// caller writes them), and the value found.
+    /// takes -- `Error_Invalid_argument_list`. It substitutes the argument's
+    /// position, the values it may take (already quoted, as the caller writes
+    /// them), and the value found.
     ///
     /// Measured, rc 168, on `self~setMethod('MM', 'return 1', 'BOGUS')`:
     /// `Error 88.916:  Argument 3 must be one of "FLOAT" or "OBJECT"; found

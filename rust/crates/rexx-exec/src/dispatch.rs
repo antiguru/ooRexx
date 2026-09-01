@@ -4026,9 +4026,9 @@ fn is_source_line(interp: &Interp, value: ObjRef) -> bool {
 /// becomes, carrying no scope, for a caller that is about to install it.
 ///
 /// **The body is filed under the object rather than under a dictionary
-/// key**, which is [`Interp::record_compiled_body`]'s job: the two callers
-/// that install source text on a class mint their own identity for it, and
-/// only `SETMETHOD` installs where a send can reach the body this crate
+/// key**, which is [`Interp::record_compiled_body`]'s job: `~define` and
+/// `~defineMethods` mint their own identity for what they install, and
+/// `SETMETHOD` is what installs where a send can reach the body this crate
 /// holds.
 ///
 /// The parse also buys the oracle's **timing**: a source that does not parse
@@ -5400,8 +5400,8 @@ fn native_object_name_set(
 /// after `self~setMethod('MM')` on a class that defines `MM`,
 /// `hasMethod('MM')` is `0` and the send is 97.1.
 ///
-/// The third argument is D67 and [`rexx_core::ObjectMethod`] carries the two
-/// scopes it selects.
+/// The third argument is D67 and [`rexx_core::ObjectMethod`] carries which
+/// pool each of its values selects.
 fn native_set_method(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -5511,9 +5511,10 @@ fn check_restricted_method(
 ) -> Result<(), Failure> {
     let caller = interp.caller();
     // `sender == OREF_NULL` at `:715`-`:719`, a routine or program context,
-    // which the private check refuses first: each of the three is private,
-    // so `check_private`'s own `caller.receiver()` arm has already answered
-    // for a caller with no receiver.
+    // which the private check refuses first: `run`, `setMethod` and
+    // `unsetMethod` are each private, so `check_private`'s own
+    // `caller.receiver()` arm has already answered for a caller with no
+    // receiver.
     let Some(sender) = caller.receiver() else {
         return Err(Raised::restricted_method(name).into());
     };
@@ -5556,7 +5557,7 @@ fn native_enhanced(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let class = class_receiver(interp, receiver)?;
-    // The two refusals are different errors and the C++ checks them in this
+    // The refusals are different errors and the C++ checks them in this
     // order (`:1443`-`:1451`). Measured: `.K~enhanced` and `.K~enhanced()`
     // are both `93.901 Not enough arguments for method; 1 expected.` at rc
     // 163, the second because a trailing omission is dropped from the count,

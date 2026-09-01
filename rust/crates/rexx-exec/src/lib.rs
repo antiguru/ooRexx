@@ -3232,8 +3232,9 @@ struct Interp {
     ///
     /// `MethodClass::newMethodObject` builds an executable of its own, named
     /// for the method rather than for the file that supplied the string, and
-    /// two readers see the difference. Measured, oracle: a one-off whose body
-    /// is `return 1/0` reports `Error 42 running MM line 1:` at rc 214, and
+    /// a traceback's `running <name>` span and `parse source`'s third word
+    /// each see the difference. Measured, oracle: a one-off whose body is
+    /// `return 1/0` reports `Error 42 running MM line 1:` at rc 214, and
     /// `parse source` inside one answers `LINUX METHOD MM`.
     ///
     /// The name is the one the caller wrote, not the dictionary key --
@@ -3251,8 +3252,8 @@ struct Interp {
     /// Which directive is the body of a `Method` object this crate handed
     /// out through `.METHODS` or compiled from source text.
     ///
-    /// The two callers that install such an object where it can be sent to
-    /// are `Class~defineClassMethod` and `Object~setMethod`.
+    /// `Class~defineClassMethod` and `Object~setMethod` are what install
+    /// such an object where it can be sent to.
     ///
     /// Keyed by the object rather than by a [`MethodId`], because a
     /// `.METHODS` entry has no dictionary entry and so no id: it is a
