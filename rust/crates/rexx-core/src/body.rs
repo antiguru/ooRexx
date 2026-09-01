@@ -329,9 +329,9 @@ pub struct ObjectMethod {
 /// **Which level holds an entry decides whether `unsetMethod` can take it
 /// away.** `set` is `SETMETHOD`'s, tracked so that
 /// `MethodDictionary::removeInstanceMethod` removes only what `setMethod`
-/// added (`behaviour/MethodDictionary.cpp:363`-`:371`); `enhanced` is
+/// added (`behaviour/MethodDictionary.cpp:362`-`:371`); `enhanced` is
 /// `Class~enhanced`'s, which the oracle keeps in a dummy subclass's
-/// behaviour (`classes/ClassClass.cpp:1454`-`:1461`) where no `unsetMethod`
+/// behaviour (`classes/ClassClass.cpp:1453`-`:1463`) where no `unsetMethod`
 /// reaches it. Measured, oracle rc 0: over an enhancing `MM`, `setMethod`
 /// then `unsetMethod` answers the enhancing method again, and `unsetMethod`
 /// for an enhancing name nothing set leaves it in place.
@@ -386,7 +386,7 @@ impl ObjectMethods {
     /// `unsetMethod` off the class's dictionary and off the enhancing level:
     /// `MethodDictionary::removeInstanceMethod` removes from the main
     /// dictionary only when the instance dictionary held the name
-    /// (`behaviour/MethodDictionary.cpp:365`-`:371`). Measured, oracle rc 0:
+    /// (`behaviour/MethodDictionary.cpp:362`-`:371`). Measured, oracle rc 0:
     /// `self~unsetMethod('MM')` for a class-defined `MM` leaves `o~mm`
     /// answering the class's.
     pub fn remove(&mut self, name: &[u8]) {

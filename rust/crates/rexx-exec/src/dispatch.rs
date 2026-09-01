@@ -1534,7 +1534,7 @@ impl Interp {
 
     /// Installs one entry in `receiver`'s own dictionary, or takes one away
     /// -- `RexxObject::defineInstanceMethod` (`classes/ObjectClass.cpp:2297`)
-    /// and `deleteInstanceMethod` (`:2331`).
+    /// and `deleteInstanceMethod` (`:2328`).
     ///
     /// A receiver with no dictionary of its own to hold one is loud rather
     /// than silent, for [`native_object_name_set`]'s reason: the oracle
@@ -5562,13 +5562,13 @@ fn check_restricted_method(
 /// table, the enhancing `INIT` runs and the class's own does not, and the
 /// arguments after the table are its arguments.
 ///
-/// **The dummy subclass is invisible.** `setOwningClass(this)` (`:1473`)
+/// **The dummy subclass is invisible.** `setOwningClass(this)` (`:1474`)
 /// puts the object's class back to the receiver, so `~class~id` and `~isA`
 /// answer for the receiver -- measured, `K` and `1`.
 ///
 /// **The methods are a level of their own, not `setMethod`'s.** They are
 /// added with `.nil` scope, "so that these additional methods will look like
-/// they were added with setMethod" (`:1457`), which is D67's pool selection
+/// they were added with setMethod" (`:1454`-`:1455`), which is D67's pool selection
 /// and is measured: an enhancing method and a `FLOAT` one-off on the same
 /// object read each other's `EXPOSE`d names, oracle rc 0. The oracle keeps
 /// them in the dummy subclass's behaviour, where `unsetMethod` cannot reach
