@@ -831,9 +831,9 @@ say 'main' .K~new~length          -- main 8
 ```
 
 ```rexx
-k = .K~new                        -- main via-set
+k = .K~new                        -- main via-set via-set
 k~at = 'via-set'
-say 'main' k~peek~at
+say 'main' k~at k~peek~at
 ::class inner
 ::attribute at
 ::class k
