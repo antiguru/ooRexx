@@ -1237,7 +1237,10 @@ const EXPECTED_SUBSET_5B: &[&str] = &[
     // Task 1 fix round: the operand positions a named instance answers in.
     "lang/instance_named_operands.rex",
     // Task 5: the concept row a class-side `UNINIT` makes agree, the two
-    // instance deliveries, the two inherited class arms, and the sweep order.
+    // instance deliveries, the two inherited class arms, the sweep order, and
+    // the delivery points -- a registration outliving its method, an
+    // allocating finalizer, and a collection driven from inside a finalizer
+    // at each of the interlock's copies.
     "gate-tables/concepts/obdes.rex",
     "lang/uninit_instance_collected.rex",
     "lang/uninit_instance_retained.rex",
@@ -1248,6 +1251,7 @@ const EXPECTED_SUBSET_5B: &[&str] = &[
     "lang/uninit_class_uninherit.rex",
     "lang/uninit_allocating_finalizer.rex",
     "lang/uninit_nested_collection.rex",
+    "lang/uninit_nested_collection_at_exit.rex",
     // Task 2: the concept row the behaviour snapshot makes agree, the two
     // rebuild-in-place arms, the copying family's third member, and the
     // subclass shape where the two families agree.

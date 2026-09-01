@@ -383,7 +383,7 @@ impl ClassGraph {
     /// halves of it: set [`Self::has_uninit`] when the class's **flattened**
     /// instance behaviour answers `UNINIT`, whether the class defines it or
     /// inherits it, and enter the class object itself in
-    /// [`Self::uninit_classes`] when its **class** behaviour answers `UNINIT`
+    /// the `uninit_classes` list when its **class** behaviour answers `UNINIT`
     /// -- `if (hasUninitMethod()) requiresUninit();` (`:1224`), which is where
     /// a `::METHOD uninit CLASS` lands.
     ///
