@@ -317,5 +317,17 @@ the clean answer the oracle itself gives `forward continue`. The divergence is
 recorded in the same terms Task 9's list uses for the oracle's `Error 5` stack
 overflows; matching an oracle crash is not a target.
 
+**With a `REPLY` before the FORWARD, this crate does not terminate**, and that
+is a second divergence rather than a narrowing of the first. Measured on the
+crate alone, both engines, `timeout -s KILL 60`: a method doing `reply` and
+then a FORWARD that resolves back to it is rc 137 at the timeout with both
+descriptors empty, where the same shapes without the `reply` are rc 245 in
+under 0.08 s. The replied body is queued and `Interp::run_deferred_replies`
+drains a queue each drained body refills, so no activation depth grows and the
+guard above never fires -- `VmRSS` flat at 17,760 kB, the interpreter thread's
+stack 24 frames and not growing. The oracle's answer to this member cannot be
+measured, because it is this shape. No bound has been chosen; Task 9's list
+carries the reasoning.
+
 Found 2026-09-01 by the controller while measuring `keyForward`'s six options
 for Task 4's brief. **No upstream ticket.**

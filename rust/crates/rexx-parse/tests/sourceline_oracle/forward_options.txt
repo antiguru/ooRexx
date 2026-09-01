@@ -1,11 +1,12 @@
-count 36
-/* FORWARD's four value-carrying options, and the three defaults it fills in
+count 37
+/* FORWARD's value-carrying options, and the defaults it fills in
    for whatever is not written. Each send below leaves exactly one option
    unnamed, so the default it takes is the thing the line reports: `to` alone
    keeps the message name and the arguments, `message` alone keeps the
    receiver and the arguments, and `arguments`/`array` keep both while
-   replacing what the callee sees. A bare FORWARD, which would take all three
-   at once, is the shape corpus/oracle-crashes.txt names and is not here. */
+   replacing what the callee sees. A bare FORWARD, which would take every
+   default at once, is the shape corpus/oracle-crashes.txt names and is not
+   here. */
 t = .Target~new
 o = .K~new
 say 'to' o~m(t)
