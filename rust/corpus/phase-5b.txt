@@ -177,10 +177,14 @@ lang/delegate_private.rex
 # raises, and `forward_frame.rex` is `delegate_no_frame.rex`'s pair: the same
 # failure through the equivalence `dire.xml` states `DELEGATE` as, which
 # leaves its own `forward` clause on the traceback where `DELEGATE` leaves
-# none.
+# none. `forward_after_reply.rex` is the one legality question `FORWARD` asks
+# that is not about `FORWARD`: a non-continuing one answers the sender, so a
+# `REPLY` that carried a value makes it 98.937, and a bare `REPLY` beside it
+# does not.
 lang/forward_class_super.rex
 lang/forward_options.rex
 lang/forward_continue.rex
 lang/forward_outside_method.rex
 lang/forward_arguments_not_an_array.rex
 lang/forward_frame.rex
+lang/forward_after_reply.rex

@@ -3660,6 +3660,7 @@ impl Interp {
         }
         let activation = self.activation_mut();
         activation.reply = ReplyState::Owed;
+        activation.replied_a_value = value.is_some();
         activation.pc = index + 1;
         Ok(Flow::Return(value))
     }
@@ -3736,9 +3737,14 @@ impl Interp {
 
         let mut values = self.take_value_buffer();
         let evaluated = self.forward_arguments(code, forward, &mut values);
+        // **After every option and before the send**, which is where
+        // `RexxActivation::forward` asks it (`execution/RexxActivation.cpp:
+        // 1368`-`:1373`): a non-continuing `FORWARD` answers the sender, and
+        // a `REPLY` carrying a value has answered it already.
+        let owed = evaluated.and_then(|()| self.forward_after_reply(forward));
         let caller = self.caller();
-        let sent = evaluated
-            .and_then(|()| self.send_message(target, &message, start_scope, &values, caller));
+        let sent =
+            owed.and_then(|()| self.send_message(target, &message, start_scope, &values, caller));
         self.give_value_buffer(values);
         let sent = sent?;
 
@@ -3758,6 +3764,24 @@ impl Interp {
             None => self.clear_variable(frame, slot),
         }
         Ok(Flow::Next)
+    }
+
+    /// 98.937 for a non-continuing `FORWARD` under a `REPLY` that carried a
+    /// value, which is the one legality question `FORWARD` asks that is not
+    /// about `FORWARD` (`execution/RexxActivation.cpp:1370`-`:1374`).
+    ///
+    /// **The condition is the replied value and not the reply**, which the
+    /// C++ spells as `result != OREF_NULL` over the field
+    /// `RexxActivation::reply` assigns (`:1050`-`:1062`). Measured, oracle,
+    /// a method replying and then forwarding to a sibling method: `reply
+    /// 'replied'` is rc 0 with the report on `stderr`, `EXIT cannot return a
+    /// value after a REPLY.`, and a bare `reply` is rc 0 with `stderr`
+    /// empty. `CONTINUE` is exempt on both sides: it answers nobody.
+    fn forward_after_reply(&self, forward: &Forward) -> Result<(), Failure> {
+        if forward.continue_ || !self.activation().replied_a_value {
+            return Ok(());
+        }
+        Err(Raised::exit_after_reply().into())
     }
 
     /// One `FORWARD` option that is a single expression: its value, rooted,

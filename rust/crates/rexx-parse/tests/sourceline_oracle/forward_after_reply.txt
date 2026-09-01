@@ -1,0 +1,22 @@
+count 21
+/* A non-continuing FORWARD answers the sender, so a REPLY that already
+   answered it makes the FORWARD 98.937 -- the one legality question FORWARD
+   asks that is not about FORWARD. The condition is the replied VALUE and not
+   the reply: `bare` replies nothing and forwards at rc 0 with no report,
+   which is the adjacent success that pins the rule to the value rather than
+   to the keyword. Both reports land on stderr from a resumed body, where
+   nothing is left to carry an exit status, so the program's own rc is 0. */
+o = .K~new
+say 'valued' o~valued
+o~bare
+say 'done'
+
+::CLASS K
+::METHOD valued
+  reply 'replied'
+  forward message('SEEN')
+::METHOD bare
+  reply
+  forward message('SEEN')
+::METHOD seen
+  return 'seen'

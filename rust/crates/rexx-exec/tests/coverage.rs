@@ -1296,6 +1296,7 @@ const EXPECTED_SUBSET_5B: &[&str] = &[
     "lang/forward_outside_method.rex",
     "lang/forward_arguments_not_an_array.rex",
     "lang/forward_frame.rex",
+    "lang/forward_after_reply.rex",
 ];
 
 #[test]

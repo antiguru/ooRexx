@@ -571,6 +571,21 @@ pub(crate) struct Activation {
     /// so the `None`/`Issued` distinction survives whatever replaces the
     /// scheduling; [`ReplyState::Owed`] and its readers do not.
     pub(crate) reply: ReplyState,
+    /// Whether the `REPLY` that ran here carried a value.
+    ///
+    /// **`RexxActivation::result` read as a bool.** The oracle's own field
+    /// holds the replied object (`execution/RexxActivation.cpp:1061`) and the
+    /// only check that reads it asks whether it is null, which is
+    /// `Interp::forward_after_reply`'s 98.937. Keeping the object here would
+    /// root a value the sender already holds.
+    ///
+    /// Separate from [`reply`] rather than a payload on it, because the two
+    /// answer different questions and only one of them moves: the state goes
+    /// `None` to `Owed` to `Issued` as the body is put down and picked up,
+    /// and this is fixed at the `REPLY` itself.
+    ///
+    /// [`reply`]: Activation::reply
+    pub(crate) replied_a_value: bool,
     /// Whether no instruction has yet been executed in this activation --
     /// where a label does not count as an instruction.
     ///
@@ -990,6 +1005,7 @@ impl Activation {
             method_identity: None,
             exposed: Vec::new(),
             reply: ReplyState::None,
+            replied_a_value: false,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc: 0,
@@ -1101,6 +1117,7 @@ impl Activation {
             method_identity: None,
             exposed: Vec::new(),
             reply: ReplyState::None,
+            replied_a_value: false,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc,
@@ -1165,6 +1182,7 @@ impl Activation {
             method_identity: None,
             exposed: Vec::new(),
             reply: ReplyState::None,
+            replied_a_value: false,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc: 0,
@@ -1221,6 +1239,7 @@ impl Activation {
             method_identity: Some(identity),
             exposed: Vec::new(),
             reply: ReplyState::None,
+            replied_a_value: false,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc: 0,
@@ -1287,6 +1306,7 @@ impl Activation {
             method_identity,
             exposed,
             reply: _,
+            replied_a_value: _,
             first_instruction_pending: _,
             trace_entry: _,
             pc: _,
