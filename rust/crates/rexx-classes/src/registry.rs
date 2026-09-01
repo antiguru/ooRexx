@@ -524,7 +524,7 @@ impl ClassRegistry {
     }
 
     /// A scope-override message resolution against the class object itself --
-    /// the class-behaviour twin of [`Self::lookup_instance_method_from_scope`].
+    /// the class-behaviour twin of [`Self::lookup_from_scope_at`].
     ///
     /// `RexxObject::superMethod` reads the *receiver's* behaviour, and for a
     /// send to a class object that behaviour is the class behaviour, so the

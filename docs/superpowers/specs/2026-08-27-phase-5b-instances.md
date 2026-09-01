@@ -444,7 +444,7 @@ itself "Uninitializing and Deleting **Instances**".
 `rexx-core`'s heap already implements the resurrection half. `Heap::collect` returns
 `CollectStats::pending_uninit`, the unreachable objects whose `has_uninit` flag is set, which are
 reported rather than swept so a finalizer does not see a half-collected graph; `Heap::set_uninit` is
-the only writer of `true` and `Heap::clear_uninit` is how a caller reports the finalizer has run.
+the only writer of `true` and `Heap::clear_uninit_all` is how a caller reports the finalizer has run.
 `Interp::collect` (`rexx-exec/src/lib.rs:6446`) carries the matching `debug_assert!` that the list is
 empty, with a comment naming itself as the site that owes delivery on the day something sets the
 flag. 5b is that day.
