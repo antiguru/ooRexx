@@ -18,6 +18,31 @@ the events exist, so it is a counter-slot shortage; `systemd-detect-virt` says
 so there is no measurement to be had here without changing the instrument to
 fit the environment.
 
+**Corrected 2026-09-01: the cause above is wrong, and the correction is what
+makes this recoverable.** It is not a shortage shared with the host, and it is
+not a property of the machine. It is the **agent sandbox boundary**. Measured
+the same minute, same machine: inside the sandbox exactly **one** hardware
+counter slot is available -- `instructions:u`, `cycles:u` and `branches:u` each
+count alone, and *any* pair drops the second, whichever two are asked for --
+while outside the sandbox `perf stat -e instructions:u,cycles:u /bin/true`
+counts both. `perf_event_paranoid` is `-1` on both sides, so it was never a
+permissions question.
+
+Two things follow. **The sandbox's share is not fixed**, so absence is not a
+verdict: sittings with both columns were taken from inside it earlier the same
+day (`phase-5b-drift.tsv`, and Task 3's rows in `phase-5b-arms.tsv`), and the
+pair stopped scheduling later with no competing `perf` process visible. A run
+that fails today may succeed tomorrow, and one that fails is evidence about the
+moment, not about the instrument. **And a sitting can always be taken from
+outside the sandbox**, which is what `c7345f7a9` needed and nobody tried,
+because the diagnosis above said the machine could not do it.
+
+The general form, worth more than the perf detail: **an environmental limit
+observed from one side of a boundary was written down as a property of the
+world.** Everything in the sentence was true -- the events exist, paranoid is
+`-1`, the pair really does fail -- and the conclusion still named the wrong
+cause, which retired a measurement permanently instead of for an afternoon.
+
 **The figures in `7c5035db1`'s own message are not evidence for this tree.**
 They were taken 245 commits earlier, and that message records `rexxcps` moving
 the wrong way. `c7345f7a9`'s message says the axes "are re-measured"; that
