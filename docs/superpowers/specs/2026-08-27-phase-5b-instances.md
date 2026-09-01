@@ -796,12 +796,12 @@ say 'len' k~length
 ::ATTRIBUTE d
 ::METHOD init
   expose d
-  d = 'abcdef'
+  d = 'abcdefgh'
 ::METHOD length DELEGATE d
 ```
 
 ```
-oracle rc 0:    main / len 6
+oracle rc 0:    main / len 8
 crate  rc 120:  main    stderr  rexx-exec: method "NEW" of class "Object" is not implemented (Phase 5)
 ```
 
@@ -820,12 +820,12 @@ a non-refusing row's oracle stdout at exactly one line -- `expected_oracle_lines
 and `name=`, so a probe that sends only the getter leaves the setter arm green over an unbuilt one.
 
 ```rexx
-say 'main' .K~new~length          -- main 6
+say 'main' .K~new~length          -- main 8
 ::class k
 ::attribute d
 ::method init
   expose d
-  d = 'abcdef'
+  d = 'abcdefgh'
 ::method m delegate d
 ::method length delegate d
 ```
