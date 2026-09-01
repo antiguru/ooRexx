@@ -6959,4 +6959,71 @@ mod tests {
             );
         }
     }
+
+    /// An `Interp` whose class registry holds one class awaiting a class-side
+    /// `UNINIT`, which is what a directive install leaves behind.
+    fn interp_awaiting_a_class_uninit() -> Interp {
+        let mut interp = Interp::new();
+        let program = Rc::new(
+            rexx_parse::parse_program(b"nop\n::class k\n::method uninit class\n  nop\n".to_vec())
+                .expect("it parses"),
+        );
+        // The id `install_directives` is given has to name a program in
+        // `Interp::programs`, which is what `Interp::run` pushes before it
+        // installs anything; without it a finalizer's body cannot be reached.
+        let id = crate::ProgramId(interp.programs.len());
+        interp.programs.push(Rc::clone(&program));
+        interp
+            .install_directives(id, &program)
+            .expect("the directives install");
+        interp
+    }
+
+    /// [`Interp::run_termination_uninits`] refuses to re-enter itself, and
+    /// refusing leaves its work pending rather than consuming it.
+    ///
+    /// **The only instrument for the termination sweep's copy of the
+    /// interlock.** Its other copy, in [`Interp::run_ready_uninits`], is
+    /// witnessed differentially by
+    /// `corpus/lang/uninit_nested_collection_at_exit.rex`, which reaches it
+    /// from inside a termination finalizer; the check-and-set below is
+    /// reached only by a second entry into the termination sweep, which no
+    /// program has been found to produce.
+    ///
+    /// **The empty answer is not the assertion**, because an empty `Vec<Loud>`
+    /// is also what a sweep that ran everything successfully answers. What
+    /// separates them is whether the registry still holds the class, so the
+    /// un-interlocked arm below is what gives the interlocked one its meaning.
+    #[test]
+    fn an_interlocked_termination_sweep_runs_nothing_and_consumes_nothing() {
+        let mut fresh = interp_awaiting_a_class_uninit();
+        assert_eq!(
+            fresh.classes().take_uninit_classes_in_sweep_order().len(),
+            1,
+            "the setup must really leave a class pending, or both arms below \
+             are green over an empty registry"
+        );
+
+        let mut held = interp_awaiting_a_class_uninit();
+        held.processing_uninits = true;
+        assert!(
+            held.run_termination_uninits().is_empty(),
+            "an interlocked sweep answers no loud refusal because it runs nothing"
+        );
+        assert_eq!(
+            held.classes().take_uninit_classes_in_sweep_order().len(),
+            1,
+            "an interlocked sweep must leave the class for the caller holding \
+             the flag; an empty answer here means it swept anyway"
+        );
+
+        let mut free = interp_awaiting_a_class_uninit();
+        assert!(free.run_termination_uninits().is_empty());
+        assert!(
+            free.classes()
+                .take_uninit_classes_in_sweep_order()
+                .is_empty(),
+            "a sweep that is not interlocked consumes what it ran"
+        );
+    }
 }
