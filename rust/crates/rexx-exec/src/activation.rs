@@ -586,6 +586,22 @@ pub(crate) struct Activation {
     ///
     /// [`reply`]: Activation::reply
     pub(crate) replied_a_value: bool,
+    /// Whether this activation is performing the send of a `FORWARD` that
+    /// does not `CONTINUE`, which makes it a phantom for condition delivery.
+    ///
+    /// `RexxActivation::forward` sets `settings.setForwarded(true)` before
+    /// the send (`execution/RexxActivation.cpp:1372`), and both
+    /// `RexxActivation::trap` (`:2450`) and `RexxActivation::willTrap`
+    /// (`:2582`) open by reading it and drilling to the previous
+    /// non-forwarded frame. So a trap armed here does not see a condition
+    /// the send raises, and the caller's does. Measured, oracle: a
+    /// `signal on syntax` in the forwarding method over a `1/0` in the
+    /// forwarded-to method is rc 214 with the report on stderr, and the same
+    /// program with `CONTINUE` on the `FORWARD` traps.
+    ///
+    /// Never cleared: the C++ does not clear it either, and the activation
+    /// ends with the send.
+    pub(crate) forwarded: bool,
     /// Whether no instruction has yet been executed in this activation --
     /// where a label does not count as an instruction.
     ///
@@ -1006,6 +1022,7 @@ impl Activation {
             exposed: Vec::new(),
             reply: ReplyState::None,
             replied_a_value: false,
+            forwarded: false,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc: 0,
@@ -1118,6 +1135,7 @@ impl Activation {
             exposed: Vec::new(),
             reply: ReplyState::None,
             replied_a_value: false,
+            forwarded: false,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc,
@@ -1183,6 +1201,7 @@ impl Activation {
             exposed: Vec::new(),
             reply: ReplyState::None,
             replied_a_value: false,
+            forwarded: false,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc: 0,
@@ -1240,6 +1259,7 @@ impl Activation {
             exposed: Vec::new(),
             reply: ReplyState::None,
             replied_a_value: false,
+            forwarded: false,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc: 0,
@@ -1307,6 +1327,7 @@ impl Activation {
             exposed,
             reply: _,
             replied_a_value: _,
+            forwarded: _,
             first_instruction_pending: _,
             trace_entry: _,
             pc: _,
@@ -1436,6 +1457,28 @@ impl Interp {
     /// [`Interp::caller_activation`] for a writer.
     pub(crate) fn caller_activation_mut(&mut self) -> Option<&mut Activation> {
         self.suspended.last_mut().map(Box::as_mut)
+    }
+
+    /// The activation whose trap table answers for a condition raised right
+    /// now: the running one, or, while that one is a phantom performing a
+    /// non-continuing `FORWARD`'s send, the innermost frame beneath it that
+    /// is not.
+    ///
+    /// `RexxActivation::willTrap` and `RexxActivation::trap`
+    /// (`execution/RexxActivation.cpp:2582` and `:2450`) both open with this
+    /// drill, and both keep drilling because several forwards can be in
+    /// progress at once. `None` where nothing is running, and where every
+    /// live frame is a phantom.
+    pub(crate) fn trap_frame(&self) -> Option<&Activation> {
+        let running = self.running_activation()?;
+        if !running.forwarded {
+            return Some(running);
+        }
+        self.suspended
+            .iter()
+            .rev()
+            .map(Box::as_ref)
+            .find(|activation| !activation.forwarded)
     }
 
     /// How many activations are live, the running one included.

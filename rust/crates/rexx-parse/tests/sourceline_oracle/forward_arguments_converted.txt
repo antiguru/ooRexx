@@ -1,0 +1,54 @@
+count 53
+/* FORWARD ARGUMENTS hands its value to requestArray, which is not the same
+   question as "can an operator take this". A stem becomes its assigned
+   tails, and its default is not one of them; a string becomes its own lines,
+   so a value with no line end at all is one argument and an empty one is no
+   arguments; and an object requestArray cannot convert is 98.946 rather than
+   a single argument of itself. Only the one-tail stem below reports its
+   items: the oracle orders a stem's tails by a walk of its own tree, which
+   this crate does not reproduce, so every other stem line reports arg()
+   alone. */
+o = .K~new
+say 'a' o~stem
+say 'b' o~onetail
+say 'c' o~stemdefault
+say 'd' o~lines
+say 'e' o~trailing
+say 'f' o~oneline
+say 'g' o~empty
+say 'h' o~plain
+say 'never'
+
+::CLASS Plain
+
+::CLASS K
+::METHOD stem
+  s.0 = 3
+  s.1 = 'p'
+  s.2 = 'q'
+  s.3 = 'r'
+  forward message('COUNT') arguments (s.)
+::METHOD onetail
+  s.zz = 'v'
+  forward message('SEEN') arguments (s.)
+::METHOD stemdefault
+  s. = 'dflt'
+  forward message('COUNT') arguments (s.)
+::METHOD lines
+  forward message('SEEN') arguments ('p' || '0a'x || 'q')
+::METHOD trailing
+  forward message('SEEN') arguments ('p' || '0a'x)
+::METHOD oneline
+  forward message('SEEN') arguments ('p q')
+::METHOD empty
+  forward message('COUNT') arguments ('')
+::METHOD plain
+  forward message('SEEN') arguments (.Plain~new)
+::METHOD count
+  return 'count' arg()
+::METHOD seen
+  r = 'seen' arg()
+  do i = 1 to arg()
+    r = r '['arg(i)']'
+  end
+  return r

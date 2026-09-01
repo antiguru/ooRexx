@@ -188,3 +188,24 @@ lang/forward_outside_method.rex
 lang/forward_arguments_not_an_array.rex
 lang/forward_frame.rex
 lang/forward_after_reply.rex
+
+# Task 4 fix round: what a non-continuing FORWARD's send does to the
+# forwarding activation, and what ARGUMENTS does to its value.
+# `forward_phantom_trap.rex` is the condition rule -- the forwarding
+# activation is a phantom for condition delivery, so a trap armed there does
+# not see a condition the send raises and the caller's does -- with the four
+# adjacent successes that bound it to that one send: a trap in the caller
+# alone, the same failure under CONTINUE, the same failure through DELEGATE,
+# and a NOMETHOD trap in the caller. `forward_class_scope.rex` is the
+# scope-override validation, which the send performs rather than the
+# instruction: its placement decides the error number, decides whether the
+# forwarding method can trap it, and makes the report name the TO target
+# rather than SELF. `forward_arguments_converted.rex` is `requestArray` over
+# a stem and over a string's own lines; only its one-tail line reports items,
+# because the oracle's order over several tails is a walk of its own tree.
+# `forward_class_trace.rex` is the `>K>` line an invalid CLASS does not write,
+# which no other descriptor can see.
+lang/forward_phantom_trap.rex
+lang/forward_class_scope.rex
+lang/forward_arguments_converted.rex
+lang/forward_class_trace.rex

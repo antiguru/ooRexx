@@ -1297,6 +1297,24 @@ const EXPECTED_SUBSET_5B: &[&str] = &[
     "lang/forward_arguments_not_an_array.rex",
     "lang/forward_frame.rex",
     "lang/forward_after_reply.rex",
+    // Task 4 fix round: what the send does to the forwarding activation, and
+    // what `ARGUMENTS` does to its value. `forward_phantom_trap.rex` is the
+    // condition rule -- a trap armed in the forwarding method does not see a
+    // condition the send raises and the caller's does -- with the four
+    // adjacent successes that bound it to a non-continuing FORWARD's own
+    // send. `forward_class_scope.rex` is the scope-override validation the
+    // send performs, whose placement decides both the error number and
+    // whether the forwarding method can trap it, and which names the TO
+    // target rather than SELF. `forward_arguments_converted.rex` is
+    // `requestArray` over a stem and over a string's lines, where the
+    // predicate that stood there answered a different question.
+    // `forward_class_trace.rex` is the `>K>` line an invalid CLASS does not
+    // write, which is the one thing about `FORWARD`'s options that only a
+    // trace transcript can see.
+    "lang/forward_phantom_trap.rex",
+    "lang/forward_class_scope.rex",
+    "lang/forward_arguments_converted.rex",
+    "lang/forward_class_trace.rex",
 ];
 
 #[test]

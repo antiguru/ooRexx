@@ -83,7 +83,9 @@ use crate::{
     ActiveCondition, Argument, CallContext, Code, Engine, Failure, InstalledRoutine, Interp, Loud,
     Novalue, PendingTrap, VarHome,
 };
-use rexx_core::{BehaviourId, Body, Decoded, FrameId, ObjRef, ScopePools, SlotFrame};
+use rexx_core::{
+    BehaviourId, Body, Decoded, FrameId, ObjRef, ScopePools, SlotFrame, is_class_slot,
+};
 use rexx_num::{ArithError, CompareOp, Number, SettingsError, compare_decoded};
 use rexx_parse::{
     CodeBody, ConditionTrap, ControlExpr, DirectiveKind, EndStyle, Expr, ExprKind, Forward,
@@ -1189,6 +1191,50 @@ pub(crate) enum ConditionTrace<'a> {
 /// **A tag rather than two functions**, because the two arms would otherwise
 /// be the same arm twice: `RETURN` and `EXIT` root, trace and carry their
 /// value identically, and differ only in which [`Flow`] they answer.
+/// Which arm of `RexxInternalObject::requestArray` a `FORWARD ARGUMENTS`
+/// value takes (`classes/ObjectClass.cpp:1646`).
+#[derive(Clone, Copy)]
+enum Conversion {
+    /// An array answers itself.
+    Array,
+    /// `StringUtil::makearray` over the value's own text.
+    Lines,
+    /// `StemClass::tailArray`.
+    Tails,
+    /// `TheNilObject`, which `FORWARD` reports as 98.946.
+    Refused,
+    /// A conversion this crate does not build. The string is the noun
+    /// [`Loud::object_position`] puts in the refusal.
+    NotBuilt(&'static str),
+}
+
+/// `StringUtil::makearray` with the default separator
+/// (`classes/support/StringUtil.cpp:545`-`:638`): a piece per line end, one
+/// `\r` dropped from a piece that ends in one, and a trailing piece only
+/// where the text does not end at a separator.
+///
+/// Measured, oracle, through `FORWARD ARGUMENTS`: `''` is no arguments at
+/// all, `'p'` and `'p\n'` are both `[p]`, `'p\r\nq'` is `[p] [q]`,
+/// `'p\n\nq'` is `[p] [] [q]`, `'\nq'` is `[] [q]`, and a lone `\r` is
+/// kept.
+fn makearray_lines(text: &[u8]) -> Vec<&[u8]> {
+    let mut pieces = Vec::new();
+    let mut start = 0;
+    while let Some(offset) = text[start..].iter().position(|byte| *byte == b'\n') {
+        let separator = start + offset;
+        let mut end = separator;
+        if end > start && text[end - 1] == b'\r' {
+            end -= 1;
+        }
+        pieces.push(&text[start..end]);
+        start = separator + 1;
+    }
+    if start < text.len() {
+        pieces.push(&text[start..]);
+    }
+    pieces
+}
+
 #[derive(Clone, Copy)]
 pub(crate) enum ReturnKeyword {
     Return,
@@ -2676,7 +2722,7 @@ impl Interp {
                 self.exec_reply(code, index, expression.as_ref())
             }
 
-            // `FORWARD`, with any of its six options. See `exec_forward`.
+            // `FORWARD` and its options. See `exec_forward`.
             InstructionKind::Forward(forward) => self.exec_forward(code, forward),
 
             other => Err(Loud::instruction(other).into()),
@@ -3670,7 +3716,7 @@ impl Interp {
     /// `instructions/ForwardInstruction.cpp:128`).
     ///
     /// **What is left unspecified comes from the context**, and that is
-    /// `RexxActivation::forward`'s own three defaults
+    /// `RexxActivation::forward`'s own defaults
     /// (`execution/RexxActivation.cpp:1335`-`:1347`): the target is the
     /// receiver, the message is the name this method was entered under, and
     /// the arguments are the ones it was entered with.
@@ -3722,15 +3768,21 @@ impl Interp {
         let start_scope = match &forward.class {
             None => None,
             Some(expr) => {
-                let value = self.forward_keyword(code, expr, "CLASS")?;
+                let value = self.eval(code, expr)?;
+                self.roots.push_temp(value);
                 // `_superClass->isInstanceOf(TheClassClass)`
                 // (`ForwardInstruction.cpp:171`), reported with the same two
                 // fixed substitutions a `~name:scope` override's own check
                 // takes. Measured, `forward class (5) message('OTHER')` is
                 // 88.914 at rc 168.
+                //
+                // **Between the evaluate and the trace**, which is where the
+                // C++ raises it (`:168`-`:175`): under `trace i` an invalid
+                // `CLASS` writes its `>L>` line and no `>K>` line at all.
                 if value.class_id().is_none() {
                     return Err(Raised::scope_override_not_a_class().into());
                 }
+                self.trace_forward_keyword("CLASS", value);
                 Some(value)
             }
         };
@@ -3742,9 +3794,17 @@ impl Interp {
         // 1367`-`:1369`): a non-continuing `FORWARD` answers the sender, and
         // a `REPLY` carrying a value has answered it already.
         let owed = evaluated.and_then(|()| self.forward_after_reply(forward));
+        // `settings.setForwarded(true)` (`execution/RexxActivation.cpp:1372`):
+        // after the 98.937 above and before the send below, so a condition
+        // the send raises is not offered to this activation's own traps.
+        // [`Activation::forwarded`] carries what that costs.
+        if owed.is_ok() && !forward.continue_ {
+            self.activation_mut().forwarded = true;
+        }
         let caller = self.caller();
-        let sent =
-            owed.and_then(|()| self.send_message(target, &message, start_scope, &values, caller));
+        let sent = owed
+            .and_then(|()| self.validate_scope_override(target, start_scope))
+            .and_then(|()| self.send_message(target, &message, start_scope, &values, caller));
         self.give_value_buffer(values);
         let sent = sent?;
 
@@ -3798,15 +3858,21 @@ impl Interp {
     ) -> Result<ObjRef, Failure> {
         let value = self.eval(code, expr)?;
         self.roots.push_temp(value);
+        self.trace_forward_keyword(keyword, value);
+        Ok(value)
+    }
+
+    /// One `FORWARD` option's `>K>` line, for a caller that has to evaluate
+    /// and trace at separate points.
+    fn trace_forward_keyword(&mut self, keyword: &str, value: ObjRef) {
         let traced = self.string_value_text(value);
         self.trace_keyword(self.clause_state.current_value_indent, keyword, &traced);
-        Ok(value)
     }
 
     /// The argument list a `FORWARD` sends, into a borrowed buffer so that
     /// [`Interp::exec_forward`] returns it on the failure path too.
     ///
-    /// **Three sources, and the third is the default.** `ARGUMENTS expr`
+    /// **`ARGUMENTS`, `ARRAY`, or the method's own arguments.** `ARGUMENTS expr`
     /// hands its value to `requestArray` and trims the trailing omitted
     /// positions (`ForwardInstruction.cpp:179`-`:210`); `ARRAY (a, b)`
     /// evaluates its own expressions, tracing each as an argument; and with
@@ -3824,22 +3890,9 @@ impl Interp {
     ) -> Result<(), Failure> {
         if let Some(expr) = &forward.arguments {
             let value = self.forward_keyword(code, expr, "ARGUMENTS")?;
-            if value == ObjRef::NIL {
-                return Err(Raised::forward_arguments().into());
-            }
-            match self.array_slots_of(value) {
-                Some(mut slots) => {
-                    while slots.last().is_some_and(Option::is_none) {
-                        slots.pop();
-                    }
-                    values.extend(slots);
-                }
-                None => {
-                    if let Some(kind) = self.operator_operand_gap(value) {
-                        return Err(Loud::object_position("FORWARD ARGUMENTS", kind).into());
-                    }
-                    values.push(Some(value));
-                }
+            self.forward_arguments_converted(value, values)?;
+            while values.last().is_some_and(Option::is_none) {
+                values.pop();
             }
             return Ok(());
         }
@@ -3875,6 +3928,118 @@ impl Interp {
             self.roots.push_temp(*value);
         }
         Ok(())
+    }
+
+    /// `ARGUMENTS expr`'s value through `requestArray`
+    /// (`instructions/ForwardInstruction.cpp:182`), appended to `values`.
+    ///
+    /// 98.946 wherever `RexxInternalObject::requestArray`
+    /// (`classes/ObjectClass.cpp:1646`) answers `TheNilObject`: `.nil`, a
+    /// class object, and an instance whose behaviour has no `MAKEARRAY`.
+    /// Measured, oracle rc 158 for `arguments (self)` and
+    /// `arguments (.String)`, and rc 0 `a seen 2 [x] [y]` for an instance of
+    /// a class defining `makeArray`.
+    ///
+    /// Refuses loudly for a conversion this crate does not build, rather
+    /// than sending the object itself as one argument.
+    fn forward_arguments_converted(
+        &mut self,
+        value: ObjRef,
+        values: &mut Vec<Option<ObjRef>>,
+    ) -> Result<(), Failure> {
+        match self.forward_arguments_conversion(value) {
+            Conversion::Array => {
+                let slots = self.array_slots_of(value).unwrap_or_default();
+                values.extend(slots);
+            }
+            Conversion::Lines => {
+                let text = self.to_text(value).into_owned();
+                for line in makearray_lines(&text) {
+                    self.push_converted_argument(line, values);
+                }
+            }
+            Conversion::Tails => {
+                for tail in self.stem_assigned_tails(value) {
+                    self.push_converted_argument(&tail, values);
+                }
+            }
+            Conversion::Refused => return Err(Raised::forward_arguments().into()),
+            Conversion::NotBuilt(kind) => {
+                return Err(Loud::object_position("FORWARD ARGUMENTS", kind).into());
+            }
+        }
+        Ok(())
+    }
+
+    /// Which arm of `requestArray` this value takes.
+    fn forward_arguments_conversion(&mut self, value: ObjRef) -> Conversion {
+        match value.decode() {
+            Decoded::Nil => return Conversion::Refused,
+            // `RexxInteger::makeArray` and `NumberString::makeArray` both
+            // hand the work to their string value's.
+            Decoded::SmallInt(_) | Decoded::Text(_) => return Conversion::Lines,
+            // A class object is a primitive with no `makeArray` of its own,
+            // so `requestArray` stops at `TheNilObject`.
+            Decoded::Heap { slot, generation } if is_class_slot(slot, generation) => {
+                return Conversion::Refused;
+            }
+            Decoded::Heap { .. } => {}
+        }
+        match self.heap.get(value).map(|object| &object.body) {
+            Some(Body::Array(_)) => Conversion::Array,
+            Some(Body::Text { .. } | Body::Num { .. }) => Conversion::Lines,
+            // `StemClass::makeArray` is `tailArray`, which is the assigned
+            // tails and never the default: measured, `a. = 'dflt'` with no
+            // tail assigned forwards no arguments at all.
+            Some(Body::Stem { .. }) => Conversion::Tails,
+            // `requestArray` sends `REQUEST('ARRAY')` for a non-primitive,
+            // which looks `MAKEARRAY` up in the behaviour and sends it, and
+            // otherwise answers `.nil` (`RexxObject::requestRexx`,
+            // `classes/ObjectClass.cpp:1920`-`:1940`).
+            Some(Body::Instance { .. }) => {
+                if self.answers_message(value, "MAKEARRAY") {
+                    Conversion::NotBuilt("an instance of a user class")
+                } else {
+                    Conversion::Refused
+                }
+            }
+            Some(Body::Native(_) | Body::WeakRef(_)) | None => {
+                Conversion::NotBuilt("one of the interpreter's own objects")
+            }
+        }
+    }
+
+    /// One converted `ARGUMENTS` item, rooted as it is appended.
+    ///
+    /// The values a conversion produces are new strings that nothing else
+    /// holds, and the buffer they go into is not walked by the collector, so
+    /// each is rooted before the next allocation can run one.
+    fn push_converted_argument(&mut self, bytes: &[u8], values: &mut Vec<Option<ObjRef>>) {
+        let item = self.text(bytes);
+        self.roots.push_temp(item);
+        values.push(Some(item));
+    }
+
+    /// A stem's assigned tails, ordered by `CompoundVariableTail::compare`
+    /// (`classes/support/CompoundVariableTail.hpp:170`), which sorts on
+    /// length first and bytes second.
+    ///
+    /// **This is not the oracle's own order**, which is a walk of the
+    /// balanced tree `CompoundVariableTable` builds and so depends on the
+    /// order the tails were assigned in; this crate's tails are a hash map
+    /// and hold no such order. The count agrees and the items do not, which
+    /// is a divergence recorded on Task 9's list.
+    fn stem_assigned_tails(&self, value: ObjRef) -> Vec<Vec<u8>> {
+        let Some(Body::Stem { tails, .. }) = self.heap.get(value).map(|object| &object.body) else {
+            return Vec::new();
+        };
+        let mut names: Vec<Vec<u8>> = tails
+            .iter()
+            .filter(|(_, held)| held.is_some())
+            .map(|(name, _)| name.clone())
+            .collect();
+        names.sort_by(|left, right| left.len().cmp(&right.len()).then_with(|| left.cmp(right)));
+        names
     }
 
     /// Everything a `RETURN` or an `EXIT` does once its expression has been
@@ -4393,7 +4558,7 @@ impl Interp {
     /// [`Interp::nomethod`]'s reading and is what `dispatch.rs`'s own
     /// `send_message` tests do.
     pub(crate) fn trap_for(&self, condition: &[u8]) -> Option<Trap> {
-        let traps = &self.running_activation()?.traps;
+        let traps = &self.trap_frame()?.traps;
         traps
             .get(condition)
             .or_else(|| traps.get(b"ANY".as_slice()))
@@ -4510,6 +4675,16 @@ impl Interp {
             Search::Top if self.activation_depth() > 1 => return Err(failure),
             Search::Top => {}
             Search::Nobody => return Err(failure),
+        }
+        // A phantom does not trap. `RexxActivation::trap`
+        // (`execution/RexxActivation.cpp:2450`) reads `isForwarded` before it
+        // looks at any trap table, and this crate reaches the frame it drills
+        // to by declining here and letting the failure leave this activation.
+        // [`Interp::trap_for`] does the drilling for the callers that ask
+        // whether a condition would be trapped at all, which is the same
+        // question `RexxActivation::willTrap` answers.
+        if self.running_activation().is_some_and(|a| a.forwarded) {
+            return Err(failure);
         }
         let Some(trap) = self.trap_for(raised.condition.as_bytes()) else {
             return Err(failure);

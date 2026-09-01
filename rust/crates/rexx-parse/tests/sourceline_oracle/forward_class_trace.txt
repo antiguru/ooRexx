@@ -1,0 +1,24 @@
+count 23
+/* An invalid FORWARD CLASS is raised between evaluating the value and
+   tracing it, so under TRACE I the value's own >L> line appears and the
+   option's >K> line does not. The first send is the adjacent success: a good
+   CLASS traces its keyword line, in the order the instruction evaluates the
+   options rather than the order they are written. */
+o = .K~new
+say 'a' o~good
+say 'b' o~bad
+say 'never'
+
+::CLASS Base
+::METHOD other
+  return 'base-other'
+
+::CLASS K SUBCLASS Base
+::METHOD good
+  trace i
+  forward message('OTHER') class (super) to (self)
+::METHOD bad
+  trace i
+  forward message('OTHER') class (5)
+::METHOD other
+  return 'k-other'

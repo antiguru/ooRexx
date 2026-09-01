@@ -1615,6 +1615,33 @@ impl Interp {
     /// resolving from a scope nothing here can search. Every receiver
     /// [`Interp::receiver_kind`] rejects is already refused by
     /// [`Interp::send_message`] before the message name is looked up.
+    /// `RexxObject::validateScopeOverride` as the send itself runs it.
+    ///
+    /// The oracle asks it inside `RexxObject::messageSend`'s scope-override
+    /// overload (`classes/ObjectClass.cpp:921`), whose comment says FORWARD
+    /// relies on that placement, so every site here that hands
+    /// [`Interp::send_message`] a start scope asks it first.
+    ///
+    /// `target` is the object the send is made to, which for a `FORWARD` is
+    /// the `TO` value rather than `SELF` -- measured, `forward to (t) class
+    /// (.Other)` reports `Target object "a TGT"`. `Ok(())` for a send that
+    /// names no scope.
+    pub(crate) fn validate_scope_override(
+        &mut self,
+        target: ObjRef,
+        scope: Option<ObjRef>,
+    ) -> Result<(), Failure> {
+        let Some(scope) = scope else {
+            return Ok(());
+        };
+        if self.receiver_has_scope(target, scope) {
+            return Ok(());
+        }
+        let named_target = self.string_value_text(target);
+        let named_scope = self.string_value_text(scope);
+        Err(Raised::scope_override_not_a_scope(&named_target, &named_scope).into())
+    }
+
     fn receiver_has_scope(&mut self, receiver: ObjRef, scope: ObjRef) -> bool {
         match self.receiver_behaviour(receiver) {
             Ok(Behaviour::Instance { methods, .. }) => {
@@ -2137,9 +2164,9 @@ impl Interp {
 
     /// The variable a `DELEGATE` method addresses, refusing the name shapes
     /// whose storage this crate has no representation for -- see
-    /// [`Loud::accessor_variable`].
+    /// [`Loud::delegate_variable`].
     ///
-    /// [`Loud::accessor_variable`]: crate::Loud::accessor_variable
+    /// [`Loud::delegate_variable`]: crate::Loud::delegate_variable
     fn delegate_variable(&self, generated: crate::GeneratedMethod) -> Result<Box<[u8]>, Failure> {
         let program = &self.programs[generated.program.0];
         let Some(directive) = program.directives.get(generated.directive) else {
@@ -2150,7 +2177,7 @@ impl Interp {
         };
         let variable = program.symbols.name(symbol).as_bytes();
         if crate::run::shape_of(variable) != crate::run::NameShape::Simple {
-            return Err(Loud::accessor_variable(variable).into());
+            return Err(Loud::delegate_variable(variable).into());
         }
         Ok(variable.into())
     }
@@ -2504,7 +2531,14 @@ impl Interp {
     /// resolved the way [`native_has_method`] resolves the `HASMETHOD`
     /// message.
     fn answers_uninit(&mut self, object: ObjRef) -> bool {
-        if let Some(entry) = self.own_method_entry(object, UNINIT) {
+        self.answers_message(object, "UNINIT")
+    }
+
+    /// Whether `object`'s behaviour answers `name`, which must already be
+    /// upper case. `RexxBehaviour::methodLookup` with no scope override,
+    /// resolved the way [`native_has_method`] resolves `HASMETHOD`.
+    pub(crate) fn answers_message(&mut self, object: ObjRef, name: &str) -> bool {
+        if let Some(entry) = self.own_method_entry(object, name.as_bytes()) {
             return entry.is_some();
         }
         let Ok(behaviour) = self.receiver_behaviour(object) else {
@@ -2512,8 +2546,8 @@ impl Interp {
         };
         let classes = &self.object_model().classes;
         match behaviour {
-            Behaviour::Instance { methods, .. } => classes.has_method_at(methods, "UNINIT"),
-            Behaviour::ClassSide(class) => classes.class_has_method(class, "UNINIT"),
+            Behaviour::Instance { methods, .. } => classes.has_method_at(methods, name),
+            Behaviour::ClassSide(class) => classes.class_has_method(class, name),
         }
     }
 
@@ -2961,11 +2995,7 @@ impl Interp {
                 if scope.class_id().is_none() {
                     return Err(Raised::scope_override_not_a_class().into());
                 }
-                if !self.receiver_has_scope(receiver, scope) {
-                    let target = self.string_value_text(receiver);
-                    let named = self.string_value_text(scope);
-                    return Err(Raised::scope_override_not_a_scope(&target, &named).into());
-                }
+                self.validate_scope_override(receiver, Some(scope))?;
                 Some(scope)
             }
         };

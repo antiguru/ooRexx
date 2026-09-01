@@ -1091,6 +1091,24 @@ impl Loud {
         }
     }
 
+    /// A `DELEGATE` whose variable is a stem or a single compound tail, the
+    /// same storage gap [`Loud::accessor_variable`] refuses reached from a
+    /// different directive.
+    ///
+    /// Measured on the oracle, `::method m delegate a.b` with nothing
+    /// assigned: rc 159, `Object "A.B" does not understand message "M".`, so
+    /// the variable resolves to its derived name and the send goes to that.
+    ///
+    /// No owner string, for the reason [`Loud::compound_expose`] gives.
+    fn delegate_variable(name: &[u8]) -> Loud {
+        Loud {
+            message: format!(
+                "a DELEGATE to the variable \"{}\" is not implemented",
+                String::from_utf8_lossy(name)
+            ),
+        }
+    }
+
     /// A builtin's option letter whose answer this crate cannot produce.
     ///
     /// **A disclosed gap inside an otherwise delivered builtin**, the shape
