@@ -130,3 +130,12 @@ lang/setmethod_restricted_refusal.rex
 lang/setmethod_restricted_allowed.rex
 lang/enhanced_scope.rex
 lang/method_source_reported_name.rex
+
+# Task 3 fix round: `enhanced_unset.rex` is the level `Class~enhanced`'s
+# methods sit at. The oracle keeps them in a dummy subclass's behaviour, so
+# `unsetMethod` over one reveals it where the same call over a `setMethod`
+# entry removes it, and an enhancing name nothing set stays put;
+# `enhanced_scope.rex` builds an enhanced object and never sends `unsetMethod`
+# to one. Its `pool` line is the control that separates the level from the
+# scope: an enhancing method and a `FLOAT` one-off share the object's pool.
+lang/enhanced_unset.rex

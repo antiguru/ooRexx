@@ -1275,6 +1275,9 @@ const EXPECTED_SUBSET_5B: &[&str] = &[
     "lang/setmethod_restricted_allowed.rex",
     "lang/enhanced_scope.rex",
     "lang/method_source_reported_name.rex",
+    // Task 3 fix round: the level `Class~enhanced`'s methods sit at, which
+    // `unsetMethod` reveals rather than removes.
+    "lang/enhanced_unset.rex",
 ];
 
 #[test]

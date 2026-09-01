@@ -172,10 +172,11 @@ pub enum Body {
     /// `::METHOD defaultName` returning a counter, two renderings print two
     /// different values.
     ///
-    /// `own` is `SETMETHOD`'s dictionary, searched ahead of `behaviour` and
-    /// `None` for an object nothing has attached a method to. Boxed so that
-    /// an object that never takes one costs a pointer -- see this module's
-    /// own width assertion for what a wider `Body` costs.
+    /// `own` is the dictionary `SETMETHOD` and `Class~enhanced` write,
+    /// searched ahead of `behaviour` and `None` for an object nothing has
+    /// attached a method to. Boxed so that an object that never takes one
+    /// costs a pointer -- see this module's own width assertion for what a
+    /// wider `Body` costs.
     Instance {
         class: ObjRef,
         behaviour: BehaviourHandle,
@@ -321,76 +322,108 @@ pub struct ObjectMethod {
     pub scope: ObjRef,
 }
 
-/// The methods `SETMETHOD` has attached to one object, searched ahead of the
-/// class behaviour (`MethodDictionary::addInstanceMethod`'s `addFront`,
-/// `behaviour/MethodDictionary.cpp:399`).
+/// The methods attached to one object rather than to its class, searched
+/// ahead of the class behaviour (`MethodDictionary::addInstanceMethod`'s
+/// `addFront`, `behaviour/MethodDictionary.cpp:399`).
 ///
-/// A name mapped to `None` is `setMethod`'s no-method form, which stores the
-/// oracle's `.nil` and hides whatever the class answers -- measured, oracle
-/// rc 159: after `self~setMethod('MM')`, `hasMethod('MM')` is `0` and the
-/// send is 97.1 even though the class defines `MM`.
+/// **Two levels, and which one holds an entry decides whether `unsetMethod`
+/// can take it away.** `set` is `SETMETHOD`'s, tracked so that
+/// `MethodDictionary::removeInstanceMethod` removes only what `setMethod`
+/// added (`behaviour/MethodDictionary.cpp:363`-`:371`); `enhanced` is
+/// `Class~enhanced`'s, which the oracle keeps in a dummy subclass's
+/// behaviour (`classes/ClassClass.cpp:1454`-`:1461`) where no `unsetMethod`
+/// reaches it. Measured, oracle rc 0: over an enhancing `MM`, `setMethod`
+/// then `unsetMethod` answers the enhancing method again, and `unsetMethod`
+/// for an enhancing name nothing set leaves it in place.
+///
+/// A `set` name mapped to `None` is `setMethod`'s no-method form, which
+/// stores the oracle's `.nil` and hides whatever is behind it -- measured,
+/// oracle rc 159: after `self~setMethod('MM')`, `hasMethod('MM')` is `0` and
+/// the send is 97.1 even though the class defines `MM`.
 ///
 /// Keys are upper case, and a lookup upcases too, which is what
 /// `MethodDictionary` does on both sides.
 #[derive(Clone, Debug, Default)]
 pub struct ObjectMethods {
-    entries: Vec<(Box<[u8]>, Option<ObjectMethod>)>,
+    set: Vec<(Box<[u8]>, Option<ObjectMethod>)>,
+    enhanced: Vec<(Box<[u8]>, ObjectMethod)>,
 }
 
 impl ObjectMethods {
     pub fn new() -> ObjectMethods {
         ObjectMethods {
-            entries: Vec::new(),
+            set: Vec::new(),
+            enhanced: Vec::new(),
         }
     }
 
-    /// What this object answers for `name`: `None` when it has no entry of
-    /// its own, `Some(None)` for a hidden name, `Some(Some(method))` for one
-    /// it defines.
+    /// What this object answers for `name`: `None` when neither level holds
+    /// an entry under it, `Some(None)` for a hidden name, and
+    /// `Some(Some(method))` for one it defines.
     pub fn get(&self, name: &[u8]) -> Option<Option<ObjectMethod>> {
-        self.entries
-            .iter()
-            .find(|(key, _)| key.eq_ignore_ascii_case(name))
-            .map(|(_, entry)| *entry)
-    }
-
-    /// Adds or replaces the entry for `name`, which `addInstanceMethod`
-    /// does in one step: it removes any method it added before under that
-    /// name and puts the new one at the front.
-    pub fn set(&mut self, name: &[u8], entry: Option<ObjectMethod>) {
-        match self
-            .entries
-            .iter_mut()
-            .find(|(key, _)| key.eq_ignore_ascii_case(name))
-        {
-            Some(slot) => slot.1 = entry,
-            None => self.entries.push((name.to_ascii_uppercase().into(), entry)),
+        match Self::find(&self.set, name) {
+            Some(entry) => Some(*entry),
+            None => Self::find(&self.enhanced, name).map(|method| Some(*method)),
         }
     }
 
-    /// Removes the entry for `name`.
+    /// Adds or replaces `setMethod`'s entry for `name`, which
+    /// `addInstanceMethod` does in one step: it removes any method it added
+    /// before under that name and puts the new one at the front.
+    pub fn set(&mut self, name: &[u8], entry: Option<ObjectMethod>) {
+        Self::write(&mut self.set, name, entry);
+    }
+
+    /// Adds `Class~enhanced`'s entry for `name`, behind `setMethod`'s.
+    pub fn enhance(&mut self, name: &[u8], method: ObjectMethod) {
+        Self::write(&mut self.enhanced, name, method);
+    }
+
+    /// Removes `setMethod`'s entry for `name`, revealing an enhancing method
+    /// of the same name.
     ///
-    /// **A name this object never set is untouched**, which is what keeps
-    /// `unsetMethod` off the class's dictionary:
+    /// **A name `setMethod` never wrote is untouched**, which is what keeps
+    /// `unsetMethod` off the class's dictionary and off the enhancing level:
     /// `MethodDictionary::removeInstanceMethod` removes from the main
     /// dictionary only when the instance dictionary held the name
     /// (`behaviour/MethodDictionary.cpp:365`-`:371`). Measured, oracle rc 0:
     /// `self~unsetMethod('MM')` for a class-defined `MM` leaves `o~mm`
     /// answering the class's.
     pub fn remove(&mut self, name: &[u8]) {
-        self.entries
-            .retain(|(key, _)| !key.eq_ignore_ascii_case(name));
+        self.set.retain(|(key, _)| !key.eq_ignore_ascii_case(name));
     }
 
     /// Appends every object these entries reach, which is each defined
     /// method's scope -- [`ScopePools::trace`]'s position and its reason.
     fn trace(&self, out: &mut Vec<ObjRef>) {
         out.extend(
-            self.entries
+            self.set
                 .iter()
                 .filter_map(|(_, entry)| *entry)
                 .map(|ObjectMethod { scope, .. }| scope),
         );
+        out.extend(
+            self.enhanced
+                .iter()
+                .map(|(_, ObjectMethod { scope, .. })| *scope),
+        );
+    }
+
+    fn find<'a, T>(level: &'a [(Box<[u8]>, T)], name: &[u8]) -> Option<&'a T> {
+        level
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case(name))
+            .map(|(_, entry)| entry)
+    }
+
+    fn write<T>(level: &mut Vec<(Box<[u8]>, T)>, name: &[u8], entry: T) {
+        match level
+            .iter_mut()
+            .find(|(key, _)| key.eq_ignore_ascii_case(name))
+        {
+            Some(slot) => slot.1 = entry,
+            None => level.push((name.to_ascii_uppercase().into(), entry)),
+        }
     }
 }
 

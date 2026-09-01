@@ -96,7 +96,9 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use rexx_classes::{ClassKind, ClassRegistry, InheritRefusal, MethodId, MethodSlot};
-use rexx_core::{BehaviourHandle, BehaviourId, Body, Decoded, ObjRef, ObjectMethod, ObjectMethods};
+use rexx_core::{
+    BehaviourHandle, BehaviourId, Body, Decoded, ObjRef, Object, ObjectMethod, ObjectMethods,
+};
 use rexx_parse::{Access, Expr};
 
 use crate::activation::{
@@ -737,6 +739,19 @@ impl ObjectModel {
     }
 }
 
+/// What [`Interp::write_object_method`] does to one name in an object's own
+/// dictionary, which decides which of [`ObjectMethods`]'s levels it reaches.
+#[derive(Copy, Clone, Debug)]
+enum ObjectMethodWrite {
+    /// `setMethod`, whose `None` is the no-method form: it stores the
+    /// oracle's `.nil` and hides the name rather than removing anything.
+    Set(Option<ObjectMethod>),
+    /// `Class~enhanced`, which no `unsetMethod` reaches.
+    Enhance(ObjectMethod),
+    /// `unsetMethod`, which reveals whatever is behind the entry it takes.
+    Remove,
+}
+
 /// Which native class a value answers to -- the classes a value this crate
 /// can build belongs to, and no others.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -1077,9 +1092,9 @@ impl Interp {
     /// **The natives are recorded here rather than at their `NATIVE_METHODS`
     /// row** because the identity a row is filed under is the registry's
     /// mint, and only the registry that minted it knows which rows came from
-    /// an `AddPrivateMethod`. They are also the lowest identities any run
-    /// holds, which is what lets [`Interp::record_access_scope`] keep
-    /// appending in mint order afterwards.
+    /// an `AddPrivateMethod`. Every identity minted afterwards is higher,
+    /// which is what lets [`Interp::record_access_scope`] keep appending in
+    /// mint order.
     pub(crate) fn install_object_model(&mut self, model: ObjectModel) {
         debug_assert!(
             self.special_methods.is_empty(),
@@ -1521,10 +1536,6 @@ impl Interp {
     /// -- `RexxObject::defineInstanceMethod` (`classes/ObjectClass.cpp:2297`)
     /// and `deleteInstanceMethod` (`:2331`).
     ///
-    /// `entry` is `None` for `setMethod`'s no-method form, which stores the
-    /// oracle's `.nil` and hides the name; `remove` is `unsetMethod`, which
-    /// takes the entry away and reveals whatever the class answers.
-    ///
     /// A receiver with no dictionary of its own to hold one is loud rather
     /// than silent, for [`native_object_name_set`]'s reason: the oracle
     /// copies the behaviour of whatever it is given, and forgetting the
@@ -1533,30 +1544,37 @@ impl Interp {
         &mut self,
         receiver: ObjRef,
         name: &[u8],
-        entry: Option<ObjectMethod>,
-        remove: bool,
+        write: ObjectMethodWrite,
     ) -> Result<(), Failure> {
         match self.receiver_kind(receiver) {
             Ok(Primitive::Instance { .. }) => {}
             Ok(_) => return Err(Loud::object_method("a receiver with no scope of its own").into()),
             Err(kind) => return Err(Loud::receiver_class(kind).into()),
         }
-        let Some(object) = self.heap.get_mut(receiver) else {
-            return Err(Loud::receiver_class("a value whose object is no longer live").into());
-        };
-        let Body::Instance { own, .. } = &mut object.body else {
+        let Some(Object {
+            body: Body::Instance { own, .. },
+            ..
+        }) = self.heap.get_mut(receiver)
+        else {
             unreachable!("an instance receiver is Body::Instance")
         };
-        if remove {
-            if let Some(own) = own {
-                own.remove(name);
+        match write {
+            ObjectMethodWrite::Remove => {
+                if let Some(own) = own {
+                    own.remove(name);
+                }
             }
-            self.check_uninit(receiver, name);
-            return Ok(());
+            ObjectMethodWrite::Set(entry) => {
+                own.get_or_insert_with(|| Box::new(ObjectMethods::new()))
+                    .set(name, entry);
+                self.object_methods = true;
+            }
+            ObjectMethodWrite::Enhance(method) => {
+                own.get_or_insert_with(|| Box::new(ObjectMethods::new()))
+                    .enhance(name, method);
+                self.object_methods = true;
+            }
         }
-        own.get_or_insert_with(|| Box::new(ObjectMethods::new()))
-            .set(name, entry);
-        self.object_methods = true;
         self.check_uninit(receiver, name);
         Ok(())
     }
@@ -4530,14 +4548,14 @@ fn enhance_class_methods(
     // `newScope` makes, and the temporary rooting that copy carries until
     // `hold_method_object` roots it as a global has to be released somewhere.
     let frame = interp.roots.push_frame();
-    let installed = install_enhancing_methods(interp, class, enhancing, &names);
+    let installed = install_enhancing_class_methods(interp, class, enhancing, &names);
     interp.roots.pop_frame(frame);
     installed
 }
 
 /// [`enhance_class_methods`]'s walk, split out so the root frame it runs
 /// inside is released on the failure path too.
-fn install_enhancing_methods(
+fn install_enhancing_class_methods(
     interp: &mut Interp,
     class: ObjRef,
     enhancing: ObjRef,
@@ -5430,7 +5448,7 @@ fn native_set_method(
             Some(ObjectMethod { method, scope })
         }
     };
-    interp.write_object_method(receiver, &name, entry, false)?;
+    interp.write_object_method(receiver, &name, ObjectMethodWrite::Set(entry))?;
     Ok(None)
 }
 
@@ -5450,7 +5468,7 @@ fn native_unset_method(
 ) -> Result<Option<ObjRef>, Failure> {
     let name = method_name_argument(interp, args)?;
     check_restricted_method(interp, receiver, b"UNSETMETHOD")?;
-    interp.write_object_method(receiver, &name, None, true)?;
+    interp.write_object_method(receiver, &name, ObjectMethodWrite::Remove)?;
     Ok(None)
 }
 
@@ -5546,10 +5564,15 @@ fn check_restricted_method(
 ///
 /// **The dummy subclass is invisible.** `setOwningClass(this)` (`:1473`)
 /// puts the object's class back to the receiver, so `~class~id` and `~isA`
-/// answer for the receiver -- measured, `K` and `1`. The methods are added
-/// with `.nil` scope, "so that these additional methods will look like they
-/// were added with setMethod" (`:1457`), which is what this crate stores
-/// them as.
+/// answer for the receiver -- measured, `K` and `1`.
+///
+/// **The methods are a level of their own, not `setMethod`'s.** They are
+/// added with `.nil` scope, "so that these additional methods will look like
+/// they were added with setMethod" (`:1457`), which is D67's pool selection
+/// and is measured: an enhancing method and a `FLOAT` one-off on the same
+/// object read each other's `EXPOSE`d names, oracle rc 0. The oracle keeps
+/// them in the dummy subclass's behaviour, where `unsetMethod` cannot reach
+/// them, and [`ObjectMethods`] is where that level lives here.
 fn native_enhanced(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -5582,7 +5605,7 @@ fn native_enhanced(
     names.sort();
     let object = new_instance(interp, class)?;
     let frame = interp.roots.push_frame();
-    let installed = install_enhanced_methods(interp, object, table, &names);
+    let installed = install_enhancing_object_methods(interp, object, table, &names);
     interp.roots.pop_frame(frame);
     installed?;
     // `dummy_subclass->sendMessage(GlobalNames::NEW, args + 1, ...)`
@@ -5594,8 +5617,9 @@ fn native_enhanced(
 }
 
 /// [`native_enhanced`]'s walk, split out so the root frame it runs inside is
-/// released on the failure path too -- [`install_enhancing_methods`]'s shape.
-fn install_enhanced_methods(
+/// released on the failure path too --
+/// [`install_enhancing_class_methods`]'s shape.
+fn install_enhancing_object_methods(
     interp: &mut Interp,
     object: ObjRef,
     table: ObjRef,
@@ -5619,11 +5643,10 @@ fn install_enhanced_methods(
         interp.write_object_method(
             object,
             name,
-            Some(ObjectMethod {
+            ObjectMethodWrite::Enhance(ObjectMethod {
                 method,
                 scope: ObjRef::NIL,
             }),
-            false,
         )?;
     }
     Ok(())

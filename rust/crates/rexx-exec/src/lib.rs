@@ -928,16 +928,13 @@ impl Loud {
     ///   and the main section becomes the method: measured, oracle rc 0, a
     ///   two-line array source whose second line is `::class zz` compiles,
     ///   and `.zz` is 97.1 in the caller afterwards.
-    /// * **A class-side install.** The oracle reports a failure inside such
-    ///   a body against the method where a program's own clause reports its
-    ///   path, and `~subclass`'s enhancing table is the one route a send can
-    ///   take to one -- measured, rc 214, `.methods~put('return 1/0', 'M')`
-    ///   then `.object~subclass("k", .Class, .methods)` then `k~m` gives
-    ///   `Error 42 running M line 1:`. [`install_enhancing_methods`] declines
-    ///   the install rather than answering `running <path>`.
+    /// * **A class-side install.** Nothing files a class-side body here, so
+    ///   the source is refused rather than compiled -- measured, oracle rc
+    ///   214, `.methods~put('return 1/0', 'M')` then
+    ///   `.object~subclass("k", .Class, .methods)` then `k~m` gives
+    ///   `Error 42 running M line 1:`.
     ///
     /// [`compile_method_source`]: crate::dispatch::compile_method_source
-    /// [`install_enhancing_methods`]: crate::dispatch::install_enhancing_methods
     fn method_from_source(what: &str) -> Loud {
         Loud {
             message: owned_message(what, Some("Phase 5")),
@@ -5903,6 +5900,15 @@ impl Interp {
     ///
     /// `name` is the method's name as the caller wrote it, which is what the
     /// program reports under -- see [`Interp::compiled_method_names`].
+    ///
+    /// **The program is never reclaimed**, so a run that compiles method
+    /// sources in a loop grows without bound where the oracle is flat.
+    /// Measured, `maxrss` under `REXX_ENGINE=ir`: 20,000 `setMethod` calls
+    /// under one name, each replacing the last, reach 382,788 KB against the
+    /// oracle's 20,636, while 20,000 of `setMethod`'s no-method form under
+    /// one name reach 17,192 KB against an empty program's 16,556 -- so the
+    /// cost is this program and not the object's dictionary, and a forced
+    /// collection every thousandth iteration leaves it at 377,044 KB.
     fn record_compiled_body(&mut self, object: ObjRef, name: &[u8], parsed: Program) {
         let Program {
             source,
@@ -5942,7 +5948,7 @@ impl Interp {
         );
     }
 
-    /// The name a program reports under: a compiled method's own, or the
+    /// `PARSE SOURCE`'s third word: a compiled method's own name, or the
     /// running program's path.
     pub(crate) fn program_display_name(&self, program: ProgramId) -> &[u8] {
         match self.compiled_method_names.get(&program) {

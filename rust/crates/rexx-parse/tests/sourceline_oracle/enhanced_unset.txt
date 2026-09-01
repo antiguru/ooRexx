@@ -1,0 +1,36 @@
+count 35
+/* Class~enhanced's methods are a level between the object's own setMethod
+   entries and the class: unsetMethod reveals an enhancing method where it
+   removes a setMethod one, and an enhancing name setMethod never wrote stays
+   put. They carry setMethod's FLOAT scope, so a FLOAT one-off on the same
+   object reads what an enhancing method exposed. */
+t = .stringtable~new
+t['MM'] = "return 'enhanced-mm'"
+t['EW'] = "expose v; v = 'enh-wrote'; return 'wrote'"
+e = .k~enhanced(t)
+say 'enhanced' e~mm
+e~shadow
+say 'shadowed' e~mm
+say 'has' e~hasMethod('MM')
+e~drop('MM')
+say 'revealed' e~mm
+say 'has2' e~hasMethod('MM')
+e~drop('MM')
+say 'still' e~mm
+e~drop('EW')
+say 'kept' e~ew
+e~mkfloat
+say 'pool' e~fr
+say 'other' .k~new~mm
+say 'not-shared' .k~new~hasMethod('EW')
+
+::class k
+::method mm
+  return 'class-mm'
+::method shadow
+  self~setMethod('MM', "return 'one-off-mm'")
+::method drop
+  use arg n
+  self~unsetMethod(n)
+::method mkfloat
+  self~setMethod('FR', "expose v; return 'float['v']'")
