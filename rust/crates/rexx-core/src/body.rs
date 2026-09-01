@@ -326,8 +326,8 @@ pub struct ObjectMethod {
 /// ahead of the class behaviour (`MethodDictionary::addInstanceMethod`'s
 /// `addFront`, `behaviour/MethodDictionary.cpp:399`).
 ///
-/// **Two levels, and which one holds an entry decides whether `unsetMethod`
-/// can take it away.** `set` is `SETMETHOD`'s, tracked so that
+/// **Which level holds an entry decides whether `unsetMethod` can take it
+/// away.** `set` is `SETMETHOD`'s, tracked so that
 /// `MethodDictionary::removeInstanceMethod` removes only what `setMethod`
 /// added (`behaviour/MethodDictionary.cpp:363`-`:371`); `enhanced` is
 /// `Class~enhanced`'s, which the oracle keeps in a dummy subclass's
