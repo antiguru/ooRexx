@@ -307,14 +307,15 @@ the depth guard sees the frames. Ordinary unbounded Rexx recursion -- a
 `procedure` that calls itself -- is also a clean `rc 245`. So the interpreter
 does have the guard; the phantom path is what steps around it.
 
-Consequence for this crate: **nothing to match, and a decision Task 4 owns.**
-`FORWARD` is rc 120 `FORWARD is not implemented (Phase 5)` on both engines
-today, so the shape is unreachable here. Task 4 builds `FORWARD`, and when it
-does, the oracle's answer to this shape is a signal and not a behaviour: match
-the clean `rc 245` that `forward continue` already produces rather than the
-SIGSEGV. Record it as a licensed divergence in the same terms Task 9's list
-uses for the oracle's `Error 5` stack overflows -- matching an oracle crash is
-not a target.
+Consequence for this crate: **nothing to match, and a licensed divergence.**
+The oracle's answer to this shape is a signal and not a behaviour. This crate
+sends with the forwarding activation still on the stack, so its own
+`MAX_ACTIVATION_DEPTH` guard counts the recursion: measured on the crate alone,
+both engines, the program above is **rc 245**, stdout empty, stderr ending
+`Error 11.1:  Insufficient control stack space; cannot continue execution.` --
+the clean answer the oracle itself gives `forward continue`. The divergence is
+recorded in the same terms Task 9's list uses for the oracle's `Error 5` stack
+overflows; matching an oracle crash is not a target.
 
 Found 2026-09-01 by the controller while measuring `keyForward`'s six options
 for Task 4's brief. **No upstream ticket.**

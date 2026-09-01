@@ -83,11 +83,10 @@
 //! `rexx-parse` into the exact target variant, checked here rather than
 //! assumed, and (b) reaches that instruction or expression through ordinary
 //! straight-line execution with no preceding label, call or condition to
-//! satisfy. Some out-of-scope instructions are conventionally written after
-//! a label reached by `CALL` (`EXPOSE`, `GUARD`, `REPLY`, `FORWARD`) --
-//! nothing in the grammar requires that context, so each is written as a
-//! bare top-level clause instead, which also avoids depending on `CALL`
-//! (itself out of scope) ever succeeding.
+//! satisfy. Some instructions are conventionally written after a label
+//! reached by `CALL` -- nothing in the grammar requires that context, so each
+//! is written as a bare top-level clause instead, which also avoids depending
+//! on `CALL` (itself out of scope) ever succeeding.
 //!
 //! **`ExprKind::VariableReference` (`>x`/`<x`) has no row, and the reason is
 //! worth keeping because it was got wrong once:** `ast.rs`'s 20.930 is about
@@ -218,11 +217,6 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
     Witness {
         tag: "Options",
         source: "options 'x'\n",
-        category: Category::Instruction,
-    },
-    Witness {
-        tag: "Forward",
-        source: "forward\n",
         category: Category::Instruction,
     },
 ];
@@ -360,7 +354,7 @@ fn assert_witness_set_is_complete() {
          InstructionKind variant (per arm, for Call and Address), no more \
          and no fewer"
     );
-    assert_eq!(expected_instructions.len(), 5);
+    assert_eq!(expected_instructions.len(), 4);
 
     let expected_exprs: Vec<&str> = EXPR_TAGS
         .iter()
@@ -391,7 +385,7 @@ fn in_scope_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        39
+        40
     );
     assert_eq!(
         EXPR_TAGS

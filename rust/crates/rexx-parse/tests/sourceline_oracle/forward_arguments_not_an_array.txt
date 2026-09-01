@@ -1,0 +1,18 @@
+count 17
+/* FORWARD ARGUMENTS is handed to requestArray, and .nil is what that answers
+   for a value it cannot convert -- 98.946, which no other instruction raises.
+   The adjacent success is the first line: a value that is not an array at all
+   converts to a one-item array and reaches the callee as one argument, so the
+   refusal is about the conversion failing and not about the value not being
+   an Array to begin with. */
+o = .K~new
+say 'converted' o~converted
+say 'refused' o~refused
+
+::CLASS K
+::METHOD converted
+  forward message('SEEN') arguments ('abc')
+::METHOD refused
+  forward message('SEEN') arguments (.nil)
+::METHOD seen
+  return 'seen' arg() '['arg(1)']'

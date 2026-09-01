@@ -2077,6 +2077,36 @@ impl Raised {
         Raised::syntax(99, 919, Vec::new())
     }
 
+    /// 98.947: `FORWARD` outside a method invocation. No substitutions.
+    ///
+    /// The same legality question [`guard_outside_method`] and
+    /// [`reply_outside_method`] ask, at a **different major**: measured rc
+    /// 158, as a program's own clause and as a `::ROUTINE`'s, `FORWARD can
+    /// only be issued in an object method invocation.` under an `Error 98
+    /// ... Execution error.` line, where those two are 99 at rc 157.
+    ///
+    /// [`guard_outside_method`]: Raised::guard_outside_method
+    /// [`reply_outside_method`]: Raised::reply_outside_method
+    pub(crate) fn forward_outside_method() -> Raised {
+        Raised::syntax(98, 947, Vec::new())
+    }
+
+    /// 98.946: a `FORWARD ARGUMENTS` value `requestArray` cannot answer as a
+    /// single-dimensional array. No substitutions.
+    ///
+    /// Measured rc 158, `forward message('OTHER') arguments (.nil)`:
+    /// `FORWARD arguments must be a single-dimensional array of values.` The
+    /// oracle tests `requestArray`'s answer for `TheNilObject` or a
+    /// multi-dimensional array (`instructions/ForwardInstruction.cpp:184`-
+    /// `:188`), and `.nil` is the reachable half here.
+    ///
+    /// **A value that is neither is not this error**: measured rc 0,
+    /// `arguments ('abc')` reaches the callee as one argument spelling
+    /// `abc`, because a string's own `makeArray` answers a one-item array.
+    pub(crate) fn forward_arguments() -> Raised {
+        Raised::syntax(98, 946, Vec::new())
+    }
+
     /// 98.935: a second `REPLY` in one method invocation. No substitutions.
     ///
     /// Measured, oracle **rc 0**: a class method replying `one` and then

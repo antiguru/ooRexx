@@ -191,9 +191,14 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     // the sub-case with no code -- a `REPLY` under a construct whose state an
     // instruction index cannot restore -- fails loudly.
     InstructionKind::Reply { .. } => ("Reply", Owner::InScope),
+    // Re-sends the message the method was entered with, to whatever `TO`,
+    // `MESSAGE`, `CLASS`, `ARGUMENTS` and `ARRAY` leave of the context. In
+    // scope in the same sense `Guard` is: every option executes, and the
+    // sub-case with no code -- an `ARGUMENTS` value whose conversion this
+    // crate does not build -- fails loudly.
+    InstructionKind::Forward(_) => ("Forward", Owner::InScope),
     // ---- Phase 5's ----
     InstructionKind::Options { .. } => ("Options", Owner::Phase("Phase 5")),
-    InstructionKind::Forward(_) => ("Forward", Owner::Phase("Phase 5")),
 },
 // ---- `CALL`, arm-grained, because its arms do not share one owner ----
 // The language is what forces the split rather than a preference: a
@@ -391,7 +396,6 @@ pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     ("InstructionKind", "Call::Qualified", "Phase 5"),
     ("InstructionKind", "Address::Command", "Phase 7"),
     ("InstructionKind", "Options", "Phase 5"),
-    ("InstructionKind", "Forward", "Phase 5"),
     ("ExprKind", "QualifiedCall", "Phase 5"),
     ("ExprKind", "ClassResolver", "Phase 5"),
     ("LoopKind", "With", "Phase 5"),
@@ -512,7 +516,7 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        39
+        40
     );
     assert_eq!(
         INSTRUCTION_TAGS
@@ -533,7 +537,7 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::Phase("Phase 5"))
             .count(),
-        3
+        2
     );
     assert_eq!(
         INSTRUCTION_TAGS

@@ -1854,31 +1854,24 @@ fn class_install_order(
 /// does: `methodDirective`'s comment there is "A delegate method can also be
 /// an attribute, which really just means we produce two delegate methods",
 /// and it calls `createDelegateMethod` for the setter name as well as the
-/// plain one. Both keys land on the body path, where [`method_body_gap`]
-/// refuses them, because forwarding a message to a delegate property's value
-/// is `FORWARD`'s job and 5b's.
-///
-/// **The refusal is a divergence from the oracle and is the one this crate
-/// chooses.** Measured, `::method a class delegate p attribute` beside
-/// `::attribute p class`: the oracle answers `.K~a = 5` with 97.1 at rc 159
-/// naming `Object "P"`, and `say .K~a` with 97.1 at rc 159 naming the same
-/// receiver, because both messages reach the delegate. This crate refuses
-/// both at rc 120, so it differs from the oracle on the status where a name
-/// miss would have matched it.
+/// plain one. Both keys are [`GeneratedKind::Delegate`], which is what
+/// `createDelegateMethod` builds for each: one `DelegateCode` per name, over
+/// the one retriever the directive's `DELEGATE` symbol resolved to
+/// (`parser/DirectiveParser.cpp:830`, `:843`, `:846`).
 ///
 /// **The setter's key is here and not under `ATTRIBUTE`'s arm below**: a key
 /// the dictionary does not hold makes `.K~a = 5` a name miss on the class,
 /// reporting the oracle's own status and the oracle's own catalogue row over
 /// a receiver the oracle does not name -- a difference no comparison of exit
-/// status or error number can see. The refusal spends a matching status on a
-/// difference a reader can find.
+/// status or error number can see.
 fn method_dictionary_keys(method: &MethodDirective) -> Vec<(Vec<u8>, Option<GeneratedKind>)> {
     let upper = method.name.to_ascii_uppercase();
     if method.delegate.is_some() {
+        let delegate = Some(GeneratedKind::Delegate);
         if method.attribute {
-            vec![(accessor_setter_name(&upper), None), (upper, None)]
+            vec![(accessor_setter_name(&upper), delegate), (upper, delegate)]
         } else {
-            vec![(upper, None)]
+            vec![(upper, delegate)]
         }
     } else if method.attribute {
         let setter = accessor_setter_name(&upper);
@@ -1923,10 +1916,9 @@ fn attribute_dictionary_keys(
     let setter_name = accessor_setter_name(&upper);
     let generated = if attribute.abstract_ {
         Some(GeneratedKind::Abstract)
-    } else if attribute.external.is_some()
-        || attribute.delegate.is_some()
-        || attribute.body.is_some()
-    {
+    } else if attribute.delegate.is_some() {
+        Some(GeneratedKind::Delegate)
+    } else if attribute.external.is_some() || attribute.body.is_some() {
         None
     } else {
         // The one place what an accessor is depends on which half of the pair
@@ -2202,10 +2194,10 @@ fn annotation_target<'a>(
 /// an internal inconsistency and gets a refusal of its own rather than a
 /// panic, on the reasoning [`Loud::instruction`]'s doc gives.
 ///
-/// `DELEGATE` is what is left: measured, `.K~m` on
-/// `::method m class delegate p` is 97.1 at rc 159 naming `"P"`, because the
-/// message is forwarded to the delegate property's value, and `FORWARD` is
-/// 5b's. **`EXTERNAL` never reaches this function either.** A form bound to a
+/// **`DELEGATE` never reaches this function**: it is a
+/// [`GeneratedKind::Delegate`] and so is answered out of
+/// [`Interp::generated_methods`], like every other method a directive
+/// implements itself. **`EXTERNAL` never reaches it either.** A form bound to a
 /// `LIBRARY REXX` entry point does reach a send, and `Interp::invocable`
 /// answers it out of [`Interp::native_externals`] before it looks in
 /// [`Interp::method_bodies`], so no `InstalledMethodBody` is ever minted for
@@ -2276,6 +2268,25 @@ fn accessor_variable(kind: &DirectiveKind) -> Option<&[u8]> {
     match kind {
         DirectiveKind::Attribute(attribute) => Some(&attribute.name),
         DirectiveKind::Method(method) => Some(&method.name),
+        _ => None,
+    }
+}
+
+/// The variable a `DELEGATE` method reads to find its target: the directive's
+/// `DELEGATE` symbol, **not** the directive's own name.
+///
+/// A symbol rather than a byte slice because that is what the parser kept,
+/// and the spelling behind it is already upcased -- which is the oracle's too,
+/// measured: `::method length delegate Dd` over an `init` exposing `dD`
+/// answers `6` for a six-byte string, so the two spellings name one variable.
+/// Contrast [`accessor_variable`], whose name is the as-written one.
+///
+/// `None` for a directive kind that declares no delegate, which is an
+/// internal inconsistency where a [`GeneratedKind::Delegate`] reached it.
+fn delegate_variable(kind: &DirectiveKind) -> Option<SymbolId> {
+    match kind {
+        DirectiveKind::Attribute(attribute) => attribute.delegate,
+        DirectiveKind::Method(method) => method.delegate,
         _ => None,
     }
 }
@@ -2444,7 +2455,13 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // fail loudly through `Loud::guard_when_false`/
         // `Loud::reply_inside_construct` rather than answering.
         InstructionKind::Guard(_) | InstructionKind::Reply { .. } => None,
-        InstructionKind::Options { .. } | InstructionKind::Forward(_) => Some("Phase 5"),
+        // `FORWARD` is `None` in the sense `Guard` and `Reply` above are: the
+        // instruction executes and every option is built, and the one
+        // sub-case with no code -- an `ARGUMENTS` value whose conversion to a
+        // single-dimensional array this crate does not build -- fails loudly
+        // through `Loud::object_position` rather than answering.
+        InstructionKind::Forward(_) => None,
+        InstructionKind::Options { .. } => Some("Phase 5"),
         InstructionKind::Command { .. } => Some("Phase 7"),
     }
 }
@@ -4079,16 +4096,13 @@ struct GeneratedMethod {
 
 /// Which method a directive generated.
 ///
-/// **`DELEGATE` and `EXTERNAL` are not here, and not for the same reason.**
-/// `DELEGATE` has no body and this crate refuses it, and what refuses it is
-/// [`method_body_gap`] reading the directive behind an
-/// [`InstalledMethodBody`] -- so it stays on the body path. An `EXTERNAL`
-/// this phase binds has a body that is neither a directive's nor a
-/// dictionary key's: it is a row of `dispatch::native`'s registry, reached
-/// through [`Interp::native_externals`], and the `EXTERNAL` forms this phase
-/// does not bind are refused before any id is minted for them. So this enum
-/// covers what a send runs *out of a directive*, which is what an installer
-/// can decide from the directive alone.
+/// **`EXTERNAL` is not here.** An `EXTERNAL` this phase binds has a body that
+/// is neither a directive's nor a dictionary key's: it is a row of
+/// `dispatch::native`'s registry, reached through
+/// [`Interp::native_externals`], and the `EXTERNAL` forms this phase does not
+/// bind are refused before any id is minted for them. So this enum covers
+/// what a send runs *out of a directive*, which is what an installer can
+/// decide from the directive alone.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum GeneratedKind {
     /// A generated getter: it answers the attribute's variable in the
@@ -4099,6 +4113,23 @@ enum GeneratedKind {
     /// `ABSTRACT`, on either directive and on either half of a generated
     /// accessor pair: the send is 93.965 whatever the arguments are.
     Abstract,
+    /// `DELEGATE`, on either directive and on both halves of the pair a
+    /// `::ATTRIBUTE` or a `::METHOD ... ATTRIBUTE` generates: the message is
+    /// re-sent, under the name it arrived under and with the arguments it
+    /// arrived with, to the value of the delegate variable in the declaring
+    /// scope's pool on the receiver.
+    ///
+    /// **Here rather than on the body path, and that is measured rather than
+    /// a matter of shape.** The C++ builds a `DelegateCode`
+    /// (`parser/DirectiveParser.cpp:2441`), a primitive that pushes no Rexx
+    /// activation, so a failure inside the delegated-to method leaves **no**
+    /// frame of its own on the traceback. `dire.xml`'s stated equivalence --
+    /// `expose delegateName` plus `forward to (delegateName)` -- does leave
+    /// one: measured over the same failing inner method, `::method m delegate
+    /// d` reports the inner clause then the sending clause, and the
+    /// written-out body reports the inner clause, its own `forward to (d)`
+    /// clause, and then the sending clause. Both rc 214, `Error 42.3`.
+    Delegate,
     /// A `::CONSTANT` accessor: it answers the value
     /// [`Interp::constant_values`] holds for the directive.
     ///
@@ -8020,15 +8051,39 @@ say 1
         }
     }
 
-    /// A `DELEGATE` method is a row of the body table and not of the
-    /// generated one, which is what keeps `method_body_gap` the thing that
-    /// refuses it.
+    /// A `DELEGATE` method is a row of the generated table and not of the
+    /// body one, and under `ATTRIBUTE` it is two rows rather than one.
+    ///
+    /// **The pair's arm is what the name assertion alone would miss**: a
+    /// build installing the getter's key only leaves `.K~a = 5` a name miss
+    /// on the class, which reports the oracle's own status and catalogue row
+    /// over a receiver the oracle does not name.
     #[test]
-    fn a_delegate_method_stays_on_the_body_path() {
+    fn a_delegate_method_is_a_generated_method() {
         let (interp, _program) =
             installed(b"say 'main ran'\n::class Foo\n::method baz class delegate p\n");
-        assert!(generated_kinds(&interp).is_empty());
-        assert_eq!(interp.method_bodies.len(), 1);
+        assert_eq!(generated_kinds(&interp), vec!["Delegate"]);
+        assert!(
+            interp.method_bodies.is_empty(),
+            "a delegate method is not a row of the body table"
+        );
+
+        for source in [
+            b"say 'main ran'\n::class Foo\n::method baz class delegate p attribute\n".to_vec(),
+            b"say 'main ran'\n::class Foo\n::attribute baz class delegate p\n".to_vec(),
+        ] {
+            let (mut interp, _program) = installed(&source);
+            assert_eq!(
+                generated_kinds(&interp),
+                vec!["Delegate", "Delegate"],
+                "{:?}",
+                String::from_utf8_lossy(&source)
+            );
+            let id = installed_class(&interp, "FOO");
+            let names = interp.classes().own_class_method_names(id);
+            assert!(names.contains("BAZ"), "{names:?}");
+            assert!(names.contains("BAZ="), "{names:?}");
+        }
     }
 
     /// Every generated method `install_directives` recorded, as its `Debug`

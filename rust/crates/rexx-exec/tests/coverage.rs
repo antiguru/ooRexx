@@ -1278,6 +1278,24 @@ const EXPECTED_SUBSET_5B: &[&str] = &[
     // Task 3 fix round: the level `Class~enhanced`'s methods sit at, which
     // `unsetMethod` reveals rather than removes.
     "lang/enhanced_unset.rex",
+    // Task 4: the two table D rows `DELEGATE` makes agree, and the arms
+    // neither row can see -- which variable a delegate reads, at which
+    // scope, and that it leaves no traceback frame of its own.
+    "gate-tables/directives/method__delegate__subkeyword.rex",
+    "gate-tables/directives/attribute__delegate__subkeyword.rex",
+    "lang/delegate_variable.rex",
+    "lang/delegate_no_frame.rex",
+    "lang/delegate_private.rex",
+    // Task 4: `FORWARD`, which the `DELEGATE` rows do not reach at all --
+    // each option, the defaults, `CONTINUE`'s two outcomes, the two refusals
+    // no other instruction raises, and the traceback frame that is the
+    // difference from `DELEGATE`.
+    "lang/forward_class_super.rex",
+    "lang/forward_options.rex",
+    "lang/forward_continue.rex",
+    "lang/forward_outside_method.rex",
+    "lang/forward_arguments_not_an_array.rex",
+    "lang/forward_frame.rex",
 ];
 
 #[test]

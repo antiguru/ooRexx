@@ -86,9 +86,9 @@ use crate::{
 use rexx_core::{BehaviourId, Body, Decoded, FrameId, ObjRef, ScopePools, SlotFrame};
 use rexx_num::{ArithError, CompareOp, Number, SettingsError, compare_decoded};
 use rexx_parse::{
-    CodeBody, ConditionTrap, ControlExpr, DirectiveKind, EndStyle, Expr, ExprKind, Fragment, Guard,
-    Instruction, InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting, ProgramSource,
-    Raise, SymbolId, Trace, Use, UseTarget, VariableRef, parse_interpret,
+    CodeBody, ConditionTrap, ControlExpr, DirectiveKind, EndStyle, Expr, ExprKind, Forward,
+    Fragment, Guard, Instruction, InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting,
+    ProgramSource, Raise, SymbolId, Trace, Use, UseTarget, VariableRef, parse_interpret,
 };
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -2676,6 +2676,9 @@ impl Interp {
                 self.exec_reply(code, index, expression.as_ref())
             }
 
+            // `FORWARD`, with any of its six options. See `exec_forward`.
+            InstructionKind::Forward(forward) => self.exec_forward(code, forward),
+
             other => Err(Loud::instruction(other).into()),
         }
     }
@@ -3659,6 +3662,195 @@ impl Interp {
         activation.reply = ReplyState::Owed;
         activation.pc = index + 1;
         Ok(Flow::Return(value))
+    }
+
+    /// `FORWARD`, with any of `TO`, `MESSAGE`, `CLASS`, `ARGUMENTS`, `ARRAY`
+    /// and `CONTINUE` (`RexxInstructionForward::execute`,
+    /// `instructions/ForwardInstruction.cpp:123`).
+    ///
+    /// **What is left unspecified comes from the context**, and that is
+    /// `RexxActivation::forward`'s own three defaults
+    /// (`execution/RexxActivation.cpp:1335`-`:1347`): the target is the
+    /// receiver, the message is the name this method was entered under, and
+    /// the arguments are the ones it was entered with.
+    ///
+    /// **`CONTINUE` decides which of two instructions this is.** Continuing,
+    /// it is a message send whose value lands in `RESULT` and execution goes
+    /// on -- and a send that answered nothing **drops** `RESULT` rather than
+    /// leaving the previous one, measured: `result = 'preset'` then a
+    /// continued forward to a body ending in a bare `return` leaves
+    /// `symbol('RESULT')` at `LIT`. Not continuing, the send's value becomes
+    /// this method's, which [`Flow::Return`] is exactly.
+    ///
+    /// **A non-continuing self-forward is a licensed divergence and is not
+    /// the oracle's answer.** The send happens with this activation still on
+    /// the stack, so `Interp::enter_method_body`'s `MAX_ACTIVATION_DEPTH`
+    /// guard counts the recursion and answers 11.1 at rc 245. The oracle
+    /// stops its own activation *before* the send, so its depth guard never
+    /// sees the frames and the C++ stack goes instead -- `rc 139`,
+    /// `corpus/oracle-crashes.txt`. Matching that is not a target.
+    ///
+    /// **Legality is asked first and is 98.947 at rc 158**, measured as a
+    /// program's own clause and as a `::ROUTINE`'s.
+    fn exec_forward(&mut self, code: &Code<'_>, forward: &Forward) -> Result<Flow, Failure> {
+        let Some(identity) = self.activation().method_identity.as_ref() else {
+            return Err(Raised::forward_outside_method().into());
+        };
+        let receiver = identity.receiver;
+        let own_name = identity.name.clone();
+        let indent = self.clause_state.current_value_indent;
+
+        // The option order is the C++'s, and it is observable in the trace:
+        // `TO`, `MESSAGE`, `CLASS`, then whichever of `ARGUMENTS` and `ARRAY`
+        // is present. Measured under `trace i`, `forward to (t)
+        // message('OTHER') array(1,2)` emits `>K> "TO"`, `>K> "MESSAGE"` and
+        // `>K> "ARRAY"` in that order, with the `ARRAY` items' own `>A>`
+        // lines ahead of its keyword line.
+        let target = match &forward.to {
+            None => receiver,
+            Some(expr) => self.forward_keyword(code, expr, "TO")?,
+        };
+        let message = match &forward.message {
+            None => own_name,
+            Some(expr) => {
+                let value = self.forward_keyword(code, expr, "MESSAGE")?;
+                let text = self.required_string_value(value)?;
+                self.to_text(text).to_ascii_uppercase().into_boxed_slice()
+            }
+        };
+        let start_scope = match &forward.class {
+            None => None,
+            Some(expr) => {
+                let value = self.forward_keyword(code, expr, "CLASS")?;
+                // `_superClass->isInstanceOf(TheClassClass)`
+                // (`ForwardInstruction.cpp:171`), reported with the same two
+                // fixed substitutions a `~name:scope` override's own check
+                // takes. Measured, `forward class (5) message('OTHER')` is
+                // 88.914 at rc 168.
+                if value.class_id().is_none() {
+                    return Err(Raised::scope_override_not_a_class().into());
+                }
+                Some(value)
+            }
+        };
+
+        let mut values = self.take_value_buffer();
+        let evaluated = self.forward_arguments(code, forward, &mut values);
+        let caller = self.caller();
+        let sent = evaluated
+            .and_then(|()| self.send_message(target, &message, start_scope, &values, caller));
+        self.give_value_buffer(values);
+        let sent = sent?;
+
+        if !forward.continue_ {
+            return Ok(Flow::Return(sent));
+        }
+        let slot = self.reserved_result_slot();
+        let frame = self.activation().frame;
+        match sent {
+            Some(value) => {
+                self.roots.push_temp(value);
+                if let Some(rendered) = self.result_text(value) {
+                    self.trace_result(indent, &rendered);
+                }
+                self.set_variable(frame, slot, value);
+            }
+            None => self.clear_variable(frame, slot),
+        }
+        Ok(Flow::Next)
+    }
+
+    /// One `FORWARD` option that is a single expression: its value, rooted,
+    /// with the `>K>` line the oracle's `traceKeywordResult` writes.
+    ///
+    /// The line renders the object through `stringValue()`, which is
+    /// [`Interp::string_value_text`] here -- measured, `>K>   "TO" => "a K"`
+    /// for an instance and `>K>   "ARGUMENTS" => "an Array"` for an array.
+    fn forward_keyword(
+        &mut self,
+        code: &Code<'_>,
+        expr: &Expr,
+        keyword: &str,
+    ) -> Result<ObjRef, Failure> {
+        let value = self.eval(code, expr)?;
+        self.roots.push_temp(value);
+        let traced = self.string_value_text(value);
+        self.trace_keyword(self.clause_state.current_value_indent, keyword, &traced);
+        Ok(value)
+    }
+
+    /// The argument list a `FORWARD` sends, into a borrowed buffer so that
+    /// [`Interp::exec_forward`] returns it on the failure path too.
+    ///
+    /// **Three sources, and the third is the default.** `ARGUMENTS expr`
+    /// hands its value to `requestArray` and trims the trailing omitted
+    /// positions (`ForwardInstruction.cpp:179`-`:210`); `ARRAY (a, b)`
+    /// evaluates its own expressions, tracing each as an argument; and with
+    /// neither, the method's own arguments go on unchanged.
+    ///
+    /// **`.nil` is 98.946 and a string is one argument**, both measured --
+    /// `requestArray` answers `TheNilObject` for the first and a one-item
+    /// array for the second. An object whose conversion this crate does not
+    /// build refuses loudly rather than silently sending the object itself.
+    fn forward_arguments(
+        &mut self,
+        code: &Code<'_>,
+        forward: &Forward,
+        values: &mut Vec<Option<ObjRef>>,
+    ) -> Result<(), Failure> {
+        if let Some(expr) = &forward.arguments {
+            let value = self.forward_keyword(code, expr, "ARGUMENTS")?;
+            if value == ObjRef::NIL {
+                return Err(Raised::forward_arguments().into());
+            }
+            match self.array_slots_of(value) {
+                Some(mut slots) => {
+                    while slots.last().is_some_and(Option::is_none) {
+                        slots.pop();
+                    }
+                    values.extend(slots);
+                }
+                None => {
+                    if let Some(kind) = self.operator_operand_gap(value) {
+                        return Err(Loud::object_position("FORWARD ARGUMENTS", kind).into());
+                    }
+                    values.push(Some(value));
+                }
+            }
+            return Ok(());
+        }
+        if let Some(items) = &forward.array {
+            for item in items {
+                match item {
+                    None => {
+                        self.trace_argument(self.clause_state.current_value_indent, b"");
+                        values.push(None);
+                    }
+                    Some(expr) => {
+                        values.push(Some(self.eval_traced_argument(code, expr)?.value()));
+                    }
+                }
+            }
+            // The line renders the instruction's own array of expressions,
+            // which has no evaluated counterpart here. Measured under
+            // `trace i`, `forward message('OTHER') array(1,2)` writes
+            // `>K>   "ARRAY" => "an Array"` after the items' own `>A>` lines.
+            self.trace_keyword(
+                self.clause_state.current_value_indent,
+                "ARRAY",
+                crate::dispatch::ARRAY_DEFAULT_NAME,
+            );
+            return Ok(());
+        }
+        for argument in &self.call_context.arguments {
+            values.push(argument.as_ref().map(crate::Argument::value));
+        }
+        // Rooted here rather than relied on through `call_context`, which the
+        // collector does not walk.
+        for value in values.iter().flatten() {
+            self.roots.push_temp(*value);
+        }
+        Ok(())
     }
 
     /// Everything a `RETURN` or an `EXIT` does once its expression has been

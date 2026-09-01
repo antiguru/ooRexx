@@ -280,6 +280,11 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     // Every value it names is short enough to live in the handle, so the run
     // reaches its 98.992 without asking the arena for anything.
     "lang/expose_outside_a_method.rex",
+    // `FORWARD`'s own legality refusal, and it is here for the reason the
+    // `EXPOSE` one above is: the check is asked before any option's
+    // expression is evaluated, so the `to (unassigned)` the program writes is
+    // never looked at and the report substitutes nothing.
+    "lang/forward_outside_method.rex",
     "lang/if_else_chain.rex",
     "lang/iterate_from_select.rex",
     // A condition raised inside a library method. The traceback frame is a

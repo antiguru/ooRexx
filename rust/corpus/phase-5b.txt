@@ -139,3 +139,48 @@ lang/method_source_reported_name.rex
 # to one. Its `pool` line is the control that separates the level from the
 # scope: an enhancing method and a `FLOAT` one-off share the object's pool.
 lang/enhanced_unset.rex
+
+# Task 4: `FORWARD` and `DELEGATE`. The two table D rows are the ones this
+# task replaced: each was `say 'main'` plus directives and never sent the
+# delegated message, so both sides printed `main` whether or not `DELEGATE`
+# existed. `method__delegate__subkeyword.rex` now sends `~length` through a
+# delegate whose value is eight bytes where the directive's own name is six,
+# which is what separates a build reading the DELEGATE symbol from one
+# reading the method's name; `attribute__delegate__subkeyword.rex` sends the
+# setter as well as the getter and reads back through the delegate object.
+# `delegate_variable.rex` is the arm neither row reaches: the same
+# separation over a case-shifted delegate, the declaring scope's pool rather
+# than the receiving class's, and both halves of the pair one
+# `::METHOD ... DELEGATE ATTRIBUTE` generates. `delegate_no_frame.rex` is the
+# traceback: a failure inside the delegated-to method reports the sending
+# clause with nothing between, because the oracle's `DelegateCode` pushes no
+# activation. `delegate_private.rex` is the access check on the far side: a
+# PRIVATE method on the delegate refuses a method of the delegating class the
+# same way it refuses an outside sender, and names the delegate object while
+# doing it.
+gate-tables/directives/method__delegate__subkeyword.rex
+gate-tables/directives/attribute__delegate__subkeyword.rex
+lang/delegate_variable.rex
+lang/delegate_no_frame.rex
+lang/delegate_private.rex
+
+# Task 4: `FORWARD` as an instruction, which needs no instance and which the
+# `DELEGATE` rows never reach. `forward_class_super.rex` is the plan's own
+# shape and its instance-side twin. `forward_options.rex` covers `TO`,
+# `MESSAGE`, `ARGUMENTS` and `ARRAY`, each send leaving exactly one option
+# unwritten so the default it takes is what the line reports; a bare FORWARD,
+# which would take all three defaults at once, is the shape
+# `corpus/oracle-crashes.txt` names and is in no program here.
+# `forward_continue.rex` is the keyword that decides which instruction this
+# is, including the arm where a continued send answering nothing DROPS
+# `RESULT`. The two refusal rows carry catalogue entries no other instruction
+# raises, and `forward_frame.rex` is `delegate_no_frame.rex`'s pair: the same
+# failure through the equivalence `dire.xml` states `DELEGATE` as, which
+# leaves its own `forward` clause on the traceback where `DELEGATE` leaves
+# none.
+lang/forward_class_super.rex
+lang/forward_options.rex
+lang/forward_continue.rex
+lang/forward_outside_method.rex
+lang/forward_arguments_not_an_array.rex
+lang/forward_frame.rex

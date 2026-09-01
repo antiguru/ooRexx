@@ -1,0 +1,25 @@
+/* FORWARD CLASS (SUPER), the arm that needs no instance and could have landed
+   before ~new: a class method overriding its superclass's and reaching the
+   overridden one. The instance arm below it is the same keyword through a
+   receiver the class arm cannot have, and the third send shows the override
+   is still in force for anything that does not forward. */
+say 'a' .K~cm
+o = .K~new
+say 'b' o~im
+say 'c' o~plain
+
+::CLASS Base
+::METHOD cm CLASS
+  return 'base-cm'
+::METHOD im
+  return 'base-im'
+::METHOD plain
+  return 'base-plain'
+
+::CLASS K SUBCLASS Base
+::METHOD cm CLASS
+  forward class (super)
+::METHOD im
+  forward class (super)
+::METHOD plain
+  return 'k-plain'

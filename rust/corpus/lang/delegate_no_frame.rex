@@ -1,0 +1,21 @@
+/* A DELEGATE method leaves NO clause of its own on the traceback: the failure
+   inside the delegated-to method is reported under the sending clause with
+   nothing between them, because the oracle builds a DelegateCode primitive
+   that pushes no Rexx activation. lang/forward_frame.rex is the same failure
+   through the equivalence dire.xml states DELEGATE as -- `expose d` plus
+   `forward to (d)` -- and that one DOES leave its FORWARD clause on the
+   traceback, so the two files together are what says the equivalence is not
+   observably exact. */
+o = .K~new
+say 'a' o~fail
+
+::CLASS Inner
+::METHOD fail
+  return 1/0
+
+::CLASS K
+::ATTRIBUTE d
+::METHOD init
+  expose d
+  d = .Inner~new
+::METHOD fail DELEGATE d

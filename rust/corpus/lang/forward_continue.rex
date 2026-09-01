@@ -1,0 +1,35 @@
+/* CONTINUE is the keyword that decides which instruction FORWARD is. With it,
+   the send is an ordinary one whose value lands in RESULT and the method runs
+   on; without it, the send's value is the method's and nothing after the
+   FORWARD runs. The `dropped` line is the arm no other row reaches: a
+   continued send that answered nothing DROPS RESULT rather than leaving the
+   previous value in place, so `symbol('RESULT')` reads LIT after a preset. */
+o = .K~new
+say 'continued' o~continued
+say 'dropped' o~dropped
+say 'returned' o~returned
+say 'twice' o~twice
+
+::CLASS K
+::METHOD continued
+  forward message('VALUED') continue
+  return 'after' result
+::METHOD dropped
+  result = 'preset'
+  forward message('QUIET') continue
+  if symbol('RESULT') == 'LIT' then return 'gone'
+  return 'kept' result
+::METHOD returned
+  forward message('VALUED')
+  return 'never'
+::METHOD twice
+  forward message('VALUED') continue
+  first = result
+  forward message('OTHER') continue
+  return first result
+::METHOD valued
+  return 'valued'
+::METHOD other
+  return 'other'
+::METHOD quiet
+  return

@@ -1952,6 +1952,9 @@ impl Interp {
                 crate::GeneratedKind::Constant => {
                     self.read_constant(cleared, generated, receiver, args)
                 }
+                crate::GeneratedKind::Delegate => {
+                    self.send_to_delegate(cleared, generated, resolution, receiver, name, args)
+                }
             },
         }
     }
@@ -2077,6 +2080,79 @@ impl Interp {
                 report.into()
             },
         )
+    }
+
+    /// A `DELEGATE` method: the message re-sent, under the name it arrived
+    /// under and with the arguments it arrived with, to the value of the
+    /// delegate variable in the declaring scope's pool on the receiver
+    /// (`DelegateCode::run`, `execution/CPPCode.cpp:605`-`:628`).
+    ///
+    /// **No activation and no frame**, which [`Interp::read_attribute`] has
+    /// for the same reason and which is measured here from the other side: a
+    /// `1/0` inside the delegated-to method reports its own clause and then
+    /// the *sending* clause, with nothing between them.
+    ///
+    /// **The variable is read exactly as a generated getter reads one**,
+    /// uninitialised value included -- measured, `::method m delegate d` with
+    /// nothing assigned to `d` is `97.1 Object "D" does not understand
+    /// message "M".` at rc 159, the delegate variable rendering as its own
+    /// derived name and the message name being the one the send used.
+    ///
+    /// **The caller of the re-sent message is this send's own caller**, not
+    /// the delegate method: `DelegateCode::run` pushes no activation, so
+    /// `getTopStackFrame()` inside it is still the sending code's.
+    /// [`Interp::caller`] answers the same here, because this arm runs before
+    /// any activation is pushed.
+    ///
+    /// **`GUARDED` has no reachable effect**, for the reason
+    /// [`Interp::read_attribute`]'s own doc gives: the C++ splits on
+    /// `method->isGuarded()` only to reserve the variable dictionary against
+    /// other activities while it reads the target, and this crate runs one
+    /// activity.
+    ///
+    /// There is no argument bound: the delegated message takes whatever the
+    /// original send carried, and the method it reaches applies its own.
+    fn send_to_delegate(
+        &mut self,
+        _cleared: Cleared,
+        generated: crate::GeneratedMethod,
+        resolution: Resolution,
+        receiver: ObjRef,
+        name: &[u8],
+        args: &[Option<ObjRef>],
+    ) -> Result<Option<ObjRef>, Failure> {
+        let variable = self.delegate_variable(generated)?;
+        let owner = self.pool_owner(receiver)?;
+        let stored = self
+            .pools_of(owner)
+            .and_then(|pools| pools.get(resolution.scope, &variable));
+        let target = match stored {
+            Some(value) => value,
+            None => self.text(&variable),
+        };
+        self.roots.push_temp(target);
+        let caller = self.caller();
+        self.send_message(target, name, None, args, caller)
+    }
+
+    /// The variable a `DELEGATE` method addresses, refusing the name shapes
+    /// whose storage this crate has no representation for -- see
+    /// [`Loud::accessor_variable`].
+    ///
+    /// [`Loud::accessor_variable`]: crate::Loud::accessor_variable
+    fn delegate_variable(&self, generated: crate::GeneratedMethod) -> Result<Box<[u8]>, Failure> {
+        let program = &self.programs[generated.program.0];
+        let Some(directive) = program.directives.get(generated.directive) else {
+            return Err(Loud::missing_body().into());
+        };
+        let Some(symbol) = crate::delegate_variable(&directive.kind) else {
+            return Err(Loud::missing_body().into());
+        };
+        let variable = program.symbols.name(symbol).as_bytes();
+        if crate::run::shape_of(variable) != crate::run::NameShape::Simple {
+            return Err(Loud::accessor_variable(variable).into());
+        }
+        Ok(variable.into())
     }
 
     /// The variable a generated accessor addresses, refusing the name shapes
@@ -6441,40 +6517,6 @@ mod tests {
         // names Phase 5 as the owner and `Loud::accessor_variable` names
         // none, on the reasoning that constructor's doc gives.
         let refused: &[(&str, &str)] = &[
-            // oracle 97.1 at rc 159 naming `"P"`: the message is forwarded to
-            // the delegate property's value.
-            (
-                "say .K~m\n::class K\n::method m class delegate p\n",
-                "a ::METHOD with no body of its own is not implemented (Phase 5)",
-            ),
-            // The same forwarding through the other directive. Oracle 97.1 at
-            // rc 159, also naming `"P"`.
-            (
-                "say .K~a\n::class K\n::attribute a class delegate p\n",
-                "a ::ATTRIBUTE with no body of its own is not implemented (Phase 5)",
-            ),
-            // **`DELEGATE` with `ATTRIBUTE`, both halves of the pair, and the
-            // setter is the row with no other instrument at all.** The oracle
-            // installs a delegate method under each key and forwards both, so
-            // it answers 97.1 at rc 159 naming `Object "P"` for either. A key
-            // this crate's dictionary does not hold makes the same message a
-            // name miss on the class instead -- 97.1 at rc 159 naming
-            // `Object "The K class"`, the oracle's status and the oracle's
-            // catalogue row over a receiver the oracle does not name -- and
-            // the setter's row is what fails on that. No corpus program covers
-            // the combination in either direction and table D's row identity
-            // is one keyword, so **the rows here are the whole instrument for
-            // it**.
-            (
-                "say .K~a\n::class K\n::method a class delegate p attribute\n\
-                 ::attribute p class\n",
-                "a ::METHOD with no body of its own is not implemented (Phase 5)",
-            ),
-            (
-                ".K~a = 5\nsay 'stored'\n::class K\n\
-                 ::method a class delegate p attribute\n::attribute p class\n",
-                "a ::METHOD with no body of its own is not implemented (Phase 5)",
-            ),
             // A generated accessor over a variable that is not a simple name.
             // Oracle rc 0 both: the stem answers `5` for the round trip and
             // the compound answers its own derived name `a.b`.
@@ -6527,6 +6569,54 @@ mod tests {
             assert_eq!(
                 both_engines(source),
                 (0, expected.to_string(), String::new()),
+                "{source:?}"
+            );
+        }
+    }
+
+    /// **A `DELEGATE` directive installs a forwarding method under every key
+    /// it claims**, including the setter half of the pair a `ATTRIBUTE`
+    /// modifier adds, and every row's bytes are the oracle's own.
+    ///
+    /// **These rows were the refusal list's above until `DELEGATE` was
+    /// built**, and they are here rather than in the corpus because the
+    /// receiver is a class object whose delegate property is never assigned:
+    /// the answer is a refusal from the *delegate*, which is what says the
+    /// message reached it. The message name each row reports is the one the
+    /// send used, so the setter row is the only instrument anywhere for the
+    /// `A=` key -- a build that installed the getter alone would make
+    /// `.K~a = 5` a name miss on the class and report `Object "The K class"`
+    /// instead, the oracle's status and catalogue row over a receiver the
+    /// oracle does not name.
+    ///
+    /// Table D's two rows send through an *instance* and answer rather than
+    /// refuse, so they cover the arm this one cannot and the two are not
+    /// substitutes.
+    #[test]
+    fn a_delegate_directive_forwards_under_every_key_it_claims() {
+        for (source, message) in [
+            ("say .K~m\n::class K\n::method m class delegate p\n", "M"),
+            ("say .K~a\n::class K\n::attribute a class delegate p\n", "A"),
+            (
+                "say .K~a\n::class K\n::method a class delegate p attribute\n\
+                 ::attribute p class\n",
+                "A",
+            ),
+            (
+                ".K~a = 5\nsay 'stored'\n::class K\n\
+                 ::method a class delegate p attribute\n::attribute p class\n",
+                "A=",
+            ),
+        ] {
+            let clause = source.lines().next().expect("a first clause");
+            let expected = format!(
+                "     1 *-* {clause}\n\
+                 Error 97 running /t.rex line 1:  Object method not found.\n\
+                 Error 97.1:  Object \"P\" does not understand message \"{message}\".\n"
+            );
+            assert_eq!(
+                both_engines(source),
+                (159, String::new(), expected),
                 "{source:?}"
             );
         }

@@ -1,0 +1,26 @@
+count 25
+/* PRIVATE on the delegated-TO method is checked at the delegated send, and
+   the caller it reads is the one that sent the delegate message rather than
+   anything the delegate method contributes -- so a method of the delegating
+   class is refused exactly as an outside sender is. The refusal names the
+   INNER object, which is the second half: the send really reached the
+   delegate rather than stopping at the class that declared the DELEGATE. */
+o = .K~new
+say 'outside' o~try
+say 'direct' o~secret
+
+::CLASS Inner
+::METHOD secret PRIVATE
+  return 'inner-secret'
+
+::CLASS K
+::ATTRIBUTE d
+::METHOD init
+  expose d
+  d = .Inner~new
+::METHOD secret DELEGATE d
+::METHOD try
+  signal on syntax name bad
+  return self~secret
+bad:
+  return 'refused' rc

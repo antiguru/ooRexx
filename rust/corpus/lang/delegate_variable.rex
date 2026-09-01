@@ -1,0 +1,51 @@
+/* Which variable a DELEGATE method reads, and where. The gate rows cannot see
+   either question. `named` delegates `length` to `dD`, whose value is eight
+   bytes where the directive's own name is six, so the line separates a build
+   reading the DELEGATE symbol from one reading the method's name. `cased`
+   makes the same separation over a delegate written in the other case, which
+   is how the oracle spells it too. `scoped` and `subclassed` read the pool of
+   the class that DECLARED the method rather than the one the send arrived at,
+   bounded from both sides: neither the value a superclass stored under the
+   same name nor the one a subclass did is what they find. `pair` and `plain`
+   are the two methods one ::METHOD ... DELEGATE ATTRIBUTE generates, read
+   back through the delegate object rather than through the delegating one. */
+o = .K~new
+say 'named' o~length
+say 'cased' o~reverse
+say 'scoped' .Scoped~new~length
+say 'subclassed' .Sub~new~length
+o~a = 'through-the-pair'
+say 'pair' o~peek~a
+say 'plain' o~a
+
+::CLASS Inner
+::ATTRIBUTE a
+
+::CLASS K
+::ATTRIBUTE d
+::METHOD init
+  expose d dD
+  d = .Inner~new
+  dD = 'abcdefgh'
+::METHOD peek
+  expose d
+  return d
+::METHOD length DELEGATE dD
+::METHOD reverse DELEGATE Dd
+::METHOD a DELEGATE d ATTRIBUTE
+
+::CLASS Sub SUBCLASS K
+::METHOD init
+  expose dD
+  self~init:super
+  dD = 'sub'
+
+::CLASS Base
+::METHOD setbase
+  expose d
+  d = 'base-value'
+
+::CLASS Scoped SUBCLASS Base
+::METHOD init
+  self~setbase
+::METHOD length DELEGATE d
