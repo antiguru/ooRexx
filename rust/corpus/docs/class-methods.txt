@@ -933,14 +933,14 @@ Buffer	new	class	unreachable	mthBufferNew	utilityclasses.xml:459	the reference s
 Comparable	compareTo	instance	covered	mthComparableCompareTo	utilityclasses.xml:513	a bare ~new constructs an instance on the oracle
 Comparator	compare	instance	covered	mthComparatorCompare	utilityclasses.xml:607	a bare ~new constructs an instance on the oracle
 CaselessComparator	compare	instance	covered	mthCaselessComparatorCompare	utilityclasses.xml:679	a bare ~new constructs an instance on the oracle
-ColumnComparator	compare	instance	not-covered	mthColumnComparatorCompare	utilityclasses.xml:749	no construction program is committed; a bare ~new raises 93.901 on the oracle
-ColumnComparator	init	instance	not-covered	mthColumnComparatorInit	utilityclasses.xml:768	no construction program is committed; a bare ~new raises 93.901 on the oracle
-CaselessColumnComparator	compare	instance	not-covered	mthCaselessColumnComparatorCompare	utilityclasses.xml:839	no construction program is committed; a bare ~new raises 93.901 on the oracle
-CaselessColumnComparator	init	instance	not-covered	mthCaselessColumnComparatorInit	utilityclasses.xml:858	no construction program is committed; a bare ~new raises 93.901 on the oracle
+ColumnComparator	compare	instance	covered	mthColumnComparatorCompare	utilityclasses.xml:749	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+ColumnComparator	init	instance	covered	mthColumnComparatorInit	utilityclasses.xml:768	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+CaselessColumnComparator	compare	instance	covered	mthCaselessColumnComparatorCompare	utilityclasses.xml:839	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+CaselessColumnComparator	init	instance	covered	mthCaselessColumnComparatorInit	utilityclasses.xml:858	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
 DescendingComparator	compare	instance	covered	mthDescendingComparatorCompare	utilityclasses.xml:932	a bare ~new constructs an instance on the oracle
 CaselessDescendingComparator	compare	instance	covered	mthCaselessDescendingComparatorCompare	utilityclasses.xml:1009	a bare ~new constructs an instance on the oracle
-InvertingComparator	compare	instance	not-covered	mthInvertingComparatorCompare	utilityclasses.xml:1080	no construction program is committed; a bare ~new raises 93.901 on the oracle
-InvertingComparator	init	instance	not-covered	mthInvertingComparatorInit	utilityclasses.xml:1099	no construction program is committed; a bare ~new raises 93.901 on the oracle
+InvertingComparator	compare	instance	covered	mthInvertingComparatorCompare	utilityclasses.xml:1080	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+InvertingComparator	init	instance	covered	mthInvertingComparatorInit	utilityclasses.xml:1099	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
 NumericComparator	compare	instance	covered	mthNumericComparatorCompare	utilityclasses.xml:1180	a bare ~new constructs an instance on the oracle
 NumericComparator	init	instance	covered	mthNumericComparatorInit	utilityclasses.xml:1200	a bare ~new constructs an instance on the oracle
 DateTime	init	instance	covered	mthDateTimeInit	utilityclasses.xml:1775	a bare ~new constructs an instance on the oracle
@@ -1284,63 +1284,63 @@ Ticker	canceled	instance	not-covered	mthTickerCanceled	utilityclasses.xml:10283	
 Ticker	cancelled	instance	not-covered	mthTickerCanceled	utilityclasses.xml:10283	no construction program is committed; a bare ~new raises 93.901 on the oracle
 Ticker	init	instance	not-covered	mthTickerInit	utilityclasses.xml:10313	no construction program is committed; a bare ~new raises 93.901 on the oracle
 Ticker	interval	instance	not-covered	mthTickerInterval	utilityclasses.xml:10414	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	init	instance	not-covered	mthTimeSpanInit	utilityclasses.xml:10700	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	new	class	not-covered	mthTimeSpanInit	utilityclasses.xml:10492	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	fromCivilTime	class	not-covered	mthTimeSpanFromCivilTime	utilityclasses.xml:10644	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	fromDays	class	not-covered	mthTimeSpanFromDays	utilityclasses.xml:10535	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	fromHours	class	not-covered	mthTimeSpanFromHours	utilityclasses.xml:10553	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	fromLongTime	class	not-covered	mthTimeSpanFromLongTime	utilityclasses.xml:10663	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	fromMicroseconds	class	not-covered	mthTimeSpanFromMicroseconds	utilityclasses.xml:10607	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	fromMinutes	class	not-covered	mthTimeSpanFromMinutes	utilityclasses.xml:10571	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	fromNormalTime	class	not-covered	mthTimeSpanFromNormalTime	utilityclasses.xml:10625	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	fromSeconds	class	not-covered	mthTimeSpanFromSeconds	utilityclasses.xml:10589	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	fromStringFormat	class	not-covered	mthTimeSpanFromStringFormat	utilityclasses.xml:10682	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	+	instance	not-covered	mthTimeSpanArithmeticMethods	utilityclasses.xml:10737	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	-	instance	not-covered	mthTimeSpanArithmeticMethods	utilityclasses.xml:10737	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	*	instance	not-covered	mthTimeSpanArithmeticMethods	utilityclasses.xml:10737	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	/	instance	not-covered	mthTimeSpanArithmeticMethods	utilityclasses.xml:10737	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	//	instance	not-covered	mthTimeSpanArithmeticMethods	utilityclasses.xml:10737	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	%	instance	not-covered	mthTimeSpanArithmeticMethods	utilityclasses.xml:10737	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	addDays	instance	not-covered	mthTimeSpanAddDays	utilityclasses.xml:11144	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	addHours	instance	not-covered	mthTimeSpanAddHours	utilityclasses.xml:11166	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	addMicroseconds	instance	not-covered	mthTimeSpanAddMicroseconds	utilityclasses.xml:11232	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	addMinutes	instance	not-covered	mthTimeSpanAddMinutes	utilityclasses.xml:11188	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	addSeconds	instance	not-covered	mthTimeSpanAddSeconds	utilityclasses.xml:11210	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	addWeeks	instance	not-covered	mthTimeSpanAddWeeks	utilityclasses.xml:11122	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	compareTo	instance	not-covered	mthTimeSpanCompareTo	utilityclasses.xml:10874	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	days	instance	not-covered	mthTimeSpanDays	utilityclasses.xml:10911	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	duration	instance	not-covered	mthTimeSpanDuration	utilityclasses.xml:10894	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	hashCode	instance	not-covered	mthTimeSpanHashCode	utilityclasses.xml:11104	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	hours	instance	not-covered	mthTimeSpanHours	utilityclasses.xml:10928	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	makeString	instance	not-covered	mthTimeSpanMakeString	utilityclasses.xml:10981	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	microseconds	instance	not-covered	mthTimeSpanMicroseconds	utilityclasses.xml:10997	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	minutes	instance	not-covered	mthTimeSpanMinutes	utilityclasses.xml:10945	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	seconds	instance	not-covered	mthTimeSpanSeconds	utilityclasses.xml:10962	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	sign	instance	not-covered	mthTimeSpanSign	utilityclasses.xml:11253	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	string	instance	not-covered	mthTimeSpanString	utilityclasses.xml:11274	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	totalDays	instance	not-covered	mthTimeSpanTotalDays	utilityclasses.xml:11014	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	totalHours	instance	not-covered	mthTimeSpanTotalHours	utilityclasses.xml:11032	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	totalMicroseconds	instance	not-covered	mthTimeSpanTotalMicroseconds	utilityclasses.xml:11086	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	totalMinutes	instance	not-covered	mthTimeSpanTotalMinutes	utilityclasses.xml:11050	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	totalSeconds	instance	not-covered	mthTimeSpanTotalSeconds	utilityclasses.xml:11068	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	==	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	<	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	<=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	<<	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	<<=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	<>	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	>	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	>=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	><	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	>>	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	>>=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	\=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	\==	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	\<	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	\<<	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	\>	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-TimeSpan	\>>	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+TimeSpan	init	instance	covered	mthTimeSpanInit	utilityclasses.xml:10700	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	new	class	covered	mthTimeSpanInit	utilityclasses.xml:10492	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	fromCivilTime	class	covered	mthTimeSpanFromCivilTime	utilityclasses.xml:10644	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	fromDays	class	covered	mthTimeSpanFromDays	utilityclasses.xml:10535	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	fromHours	class	covered	mthTimeSpanFromHours	utilityclasses.xml:10553	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	fromLongTime	class	covered	mthTimeSpanFromLongTime	utilityclasses.xml:10663	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	fromMicroseconds	class	covered	mthTimeSpanFromMicroseconds	utilityclasses.xml:10607	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	fromMinutes	class	covered	mthTimeSpanFromMinutes	utilityclasses.xml:10571	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	fromNormalTime	class	covered	mthTimeSpanFromNormalTime	utilityclasses.xml:10625	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	fromSeconds	class	covered	mthTimeSpanFromSeconds	utilityclasses.xml:10589	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	fromStringFormat	class	covered	mthTimeSpanFromStringFormat	utilityclasses.xml:10682	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	+	instance	covered	mthTimeSpanArithmeticMethods	utilityclasses.xml:10737	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	-	instance	covered	mthTimeSpanArithmeticMethods	utilityclasses.xml:10737	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	*	instance	covered	mthTimeSpanArithmeticMethods	utilityclasses.xml:10737	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	/	instance	covered	mthTimeSpanArithmeticMethods	utilityclasses.xml:10737	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	//	instance	covered	mthTimeSpanArithmeticMethods	utilityclasses.xml:10737	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	%	instance	covered	mthTimeSpanArithmeticMethods	utilityclasses.xml:10737	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	addDays	instance	covered	mthTimeSpanAddDays	utilityclasses.xml:11144	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	addHours	instance	covered	mthTimeSpanAddHours	utilityclasses.xml:11166	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	addMicroseconds	instance	covered	mthTimeSpanAddMicroseconds	utilityclasses.xml:11232	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	addMinutes	instance	covered	mthTimeSpanAddMinutes	utilityclasses.xml:11188	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	addSeconds	instance	covered	mthTimeSpanAddSeconds	utilityclasses.xml:11210	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	addWeeks	instance	covered	mthTimeSpanAddWeeks	utilityclasses.xml:11122	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	compareTo	instance	covered	mthTimeSpanCompareTo	utilityclasses.xml:10874	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	days	instance	covered	mthTimeSpanDays	utilityclasses.xml:10911	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	duration	instance	covered	mthTimeSpanDuration	utilityclasses.xml:10894	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	hashCode	instance	covered	mthTimeSpanHashCode	utilityclasses.xml:11104	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	hours	instance	covered	mthTimeSpanHours	utilityclasses.xml:10928	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	makeString	instance	covered	mthTimeSpanMakeString	utilityclasses.xml:10981	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	microseconds	instance	covered	mthTimeSpanMicroseconds	utilityclasses.xml:10997	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	minutes	instance	covered	mthTimeSpanMinutes	utilityclasses.xml:10945	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	seconds	instance	covered	mthTimeSpanSeconds	utilityclasses.xml:10962	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	sign	instance	covered	mthTimeSpanSign	utilityclasses.xml:11253	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	string	instance	covered	mthTimeSpanString	utilityclasses.xml:11274	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	totalDays	instance	covered	mthTimeSpanTotalDays	utilityclasses.xml:11014	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	totalHours	instance	covered	mthTimeSpanTotalHours	utilityclasses.xml:11032	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	totalMicroseconds	instance	covered	mthTimeSpanTotalMicroseconds	utilityclasses.xml:11086	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	totalMinutes	instance	covered	mthTimeSpanTotalMinutes	utilityclasses.xml:11050	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	totalSeconds	instance	covered	mthTimeSpanTotalSeconds	utilityclasses.xml:11068	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	==	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	<	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	<=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	<<	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	<<=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	<>	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	>	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	>=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	><	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	>>	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	>>=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	\=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	\==	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	\<	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	\<<	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	\>	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+TimeSpan	\>>	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
 TraceObject	activate	class	covered	mthTraceObjectActivate	utilityclasses.xml:11396	a bare ~new constructs an instance on the oracle
 TraceObject	collector	class	covered	mthTraceObjectCollectorGet	utilityclasses.xml:11427	a bare ~new constructs an instance on the oracle
 TraceObject	collector=	class	covered	mthTraceObjectCollectorSet	utilityclasses.xml:11451	a bare ~new constructs an instance on the oracle

@@ -122,6 +122,7 @@ use gate_tables::{
     compare_raw, excerpt, is_loud, refused_construct, run_on_both_engines, stdout_lines, verdict,
     verdict_is_gated, verdict_label,
 };
+use rexx_extract::docs::classes::NO_PROGRAM;
 use support::oracle::{CppOutcome, did_not_finish, wrapped_exit_code};
 
 fn corpus_dir() -> PathBuf {
@@ -190,6 +191,23 @@ fn read_sections() -> Vec<Section> {
         .collect()
 }
 
+/// What a method probe's instance arm binds `o` to.
+///
+/// **This is where `covered` stops being a string.** The variant is parsed
+/// from the row's `status` and `construction` together, the two disagreeing
+/// is a panic, and [`method_probe_text`] can only emit a construction
+/// program out of [`Construction::Constructs`] -- so a class cannot be
+/// flipped to `covered` and left on a bare `~new` that raises.
+#[derive(Clone, PartialEq, Eq, Debug)]
+enum Construction {
+    /// The class is `covered`, and this is the committed expression the
+    /// instance arm constructs with.
+    Constructs(String),
+    /// The class is not `covered`, so the instance arm asks a bare `~new`
+    /// whose raise is the row's evidence.
+    Raises,
+}
+
 /// One documented class, from `class-set.txt`.
 struct ClassRow {
     name: String,
@@ -197,10 +215,11 @@ struct ClassRow {
     cite: String,
     status: String,
     reason: String,
+    construction: Construction,
 }
 
 fn read_classes() -> Vec<ClassRow> {
-    read_table("class-set.txt", 6)
+    read_table("class-set.txt", 7)
         .into_iter()
         .map(|row| ClassRow {
             name: row[0].clone(),
@@ -208,8 +227,30 @@ fn read_classes() -> Vec<ClassRow> {
             cite: row[3].clone(),
             status: row[4].clone(),
             reason: row[5].clone(),
+            construction: construction_of(&row[0], &row[4], &row[6]),
         })
         .collect()
+}
+
+/// The two fields `covered` is spread across, read back as one value.
+///
+/// A panic rather than a structural row: a `covered` class with no program
+/// would leave every instance-arm probe below it derived from a status that
+/// claims a route the row set does not carry, and there is nothing to compare
+/// once that is true.
+fn construction_of(name: &str, status: &str, program: &str) -> Construction {
+    match (status, program) {
+        ("covered", NO_PROGRAM) => panic!(
+            "class-set.txt records {name} as `covered` and carries no construction program \
+             for it. `covered` is exactly the claim that one is committed"
+        ),
+        ("covered", program) => Construction::Constructs(program.to_string()),
+        (_, NO_PROGRAM) => Construction::Raises,
+        (status, program) => panic!(
+            "class-set.txt records {name} as `{status}` and carries the construction program \
+             {program:?} for it. Only a `covered` row has a route to an instance"
+        ),
+    }
 }
 
 /// One documented hierarchy edge, from `hierarchy-edges.txt`.
@@ -803,43 +844,44 @@ fn method_name_literal(name: &str) -> &str {
 
 /// The text of a (class, arm) method probe.
 ///
-/// **Which shape this takes comes from the committed `status` column, and the
-/// column is a fact about the row set rather than a claim about the oracle.**
-/// The class arm asks `.X~hasMethod`, which needs no instance. The instance
-/// arm needs one, and `status` says whether the row set offers a way to get
-/// it: `covered` is "a bare `~new` constructs an instance on the oracle **or**
-/// a construction program is opted in", and `not-covered` says only that no
-/// construction program is committed -- its own header adds, in capitals,
-/// that it CARRIES NO CLAIM ABOUT THE ORACLE.
+/// **Which shape this takes comes from the committed row set, which is a fact
+/// about the row set rather than a claim about the oracle.** The class arm
+/// asks `.X~hasMethod`, which needs no instance. The instance arm needs one,
+/// and [`Construction`] says whether the row set offers a route to it:
+/// `covered` carries the expression this opens with, and `not-covered` says
+/// only that none is committed -- its own header adds, in capitals, that it
+/// CARRIES NO CLAIM ABOUT THE ORACLE.
 ///
-/// **This derives only the first limb of `covered`.** Every instance-arm
-/// program here opens with a bare `~new`, and there is no route to a
-/// committed construction program because none exists to route to. The task
-/// that commits the first one has to add that route here in the same change;
-/// what it must not do is flip a class to `covered` and leave the derived
-/// probe on a bare `~new` that raises. What it would see if it did is not a
-/// wrong verdict -- [`OracleShape::AllOrNothing`] admits a group that answered
-/// nothing -- but a group whose every row reads `agree` on the two sides
-/// raising alike, which is the standing hole the report counts on every run.
-fn method_probe_text(class: &str, arm: &str, status: &str, reason: &str, names: &[&str]) -> String {
-    let mut text = if arm == "class" {
-        format!(
+/// A `covered` group's oracle shape is [`OracleShape::Exactly`], not
+/// `AllOrNothing`: the claim is that the expression answers an instance, so a
+/// group whose oracle construction raised is a structural failure rather than
+/// a set of rows agreeing over a question neither side was asked.
+fn method_probe_text(
+    class: &str,
+    arm: &str,
+    status: &str,
+    reason: &str,
+    construction: &Construction,
+    names: &[&str],
+) -> String {
+    let mut text = match (arm, construction) {
+        ("class", _) => format!(
             "/* Table C method rows: {class}, class arm -- .{class}~hasMethod(\"M\") for\n\
              \x20  every method corpus/docs/class-methods.txt documents on this arm,\n\
              \x20  one line per row and in the row set's own order. Derived by\n\
              \x20  crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on\n\
              \x20  every run and compares it in both directions. */\n"
-        )
-    } else if status == "covered" {
-        format!(
+        ),
+        (_, Construction::Constructs(program)) => format!(
             "/* Table C method rows: {class}, instance arm -- one line per method\n\
-             \x20  corpus/docs/class-methods.txt documents on this arm, asked of a bare\n\
-             \x20  ~new instance, in the row set's own order. Derived by\n\
-             \x20  crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on\n\
-             \x20  every run and compares it in both directions. */\n"
-        )
-    } else {
-        format!(
+             \x20  corpus/docs/class-methods.txt documents on this arm, asked of the\n\
+             \x20  instance `{program}` answers, in the row set's own order. That\n\
+             \x20  expression is corpus/docs/class-set.txt's committed construction\n\
+             \x20  program for this class, and carrying one is what `covered` claims.\n\
+             \x20  Derived by crates/rexx-exec/tests/gate_table_c.rs, which re-derives\n\
+             \x20  this file on every run and compares it in both directions. */\n"
+        ),
+        (_, Construction::Raises) => format!(
             "/* Table C method rows: {class}, instance arm. corpus/docs/class-set.txt\n\
              \x20  records this class as `{status}`, because\n\
              \x20  {reason}.\n\
@@ -847,7 +889,7 @@ fn method_probe_text(class: &str, arm: &str, status: &str, reason: &str, names: 
              \x20  is that raise, which is what the row set says there is to have.\n\
              \x20  Derived by crates/rexx-exec/tests/gate_table_c.rs, which re-derives\n\
              \x20  this file on every run and compares it in both directions. */\n"
-        )
+        ),
     };
     if arm == "class" {
         for name in names {
@@ -857,7 +899,10 @@ fn method_probe_text(class: &str, arm: &str, status: &str, reason: &str, names: 
             ));
         }
     } else {
-        text.push_str(&format!("o = .{class}~new\n"));
+        match construction {
+            Construction::Constructs(program) => text.push_str(&format!("o = {program}\n")),
+            Construction::Raises => text.push_str(&format!("o = .{class}~new\n")),
+        }
         for name in names {
             text.push_str(&format!(
                 "say 'instance' o~hasMethod(\"{}\")\n",
@@ -1308,7 +1353,7 @@ fn concept_rows<'a>(
 }
 
 /// The row-set text a derived probe copies into a Rexx block comment, checked
-/// for the one sequence that would end the comment early.
+/// for the sequences that would end the comment early or split the line.
 ///
 /// `class-set.txt`'s `reason` is free text and [`method_probe_text`] writes it
 /// between `/*` and `*/`. A reason containing `*/` closes the comment where it
@@ -1318,6 +1363,10 @@ fn concept_rows<'a>(
 /// fails to parse answers no lines, which [`OracleShape::AllOrNothing`]
 /// admits. The fix belongs in the row file, so this names the row rather than
 /// escaping the text and carrying on.
+///
+/// `construction` is written into the header the same way **and** into the
+/// probe's own `o = ` line, so a newline in it would put the tail of the
+/// expression on a line of its own.
 fn check_interpolated_text(classes: &[ClassRow], structural: &mut Vec<Structural>) {
     for row in classes {
         if row.reason.contains("*/") {
@@ -1327,6 +1376,19 @@ fn check_interpolated_text(classes: &[ClassRow], structural: &mut Vec<Structural
                     "its `reason` contains `*/`, which ends the Rexx block comment the \
                      derived probe writes it into: {:?}",
                     row.reason
+                ),
+            });
+        }
+        let Construction::Constructs(program) = &row.construction else {
+            continue;
+        };
+        if program.contains("*/") || program.contains('\n') || program.trim() != program {
+            structural.push(Structural {
+                subject: format!("class-set.txt row {}", row.name),
+                detail: format!(
+                    "its `construction` is not a single trimmed line free of `*/`, and the \
+                     derived probe writes it into both a Rexx block comment and its own \
+                     `o = ` line: {program:?}"
                 ),
             });
         }
@@ -1473,20 +1535,13 @@ fn concept_and_class_gate_table() {
 
     // Method rows, grouped into the (class, arm) programs they share, in the
     // row set's own order on both axes.
-    let mut method_groups: Vec<(String, String, String, String, Vec<usize>)> = Vec::new();
+    let mut method_groups: Vec<MethodGroup> = Vec::new();
     let mut group_index: BTreeMap<(String, String), usize> = BTreeMap::new();
-    let class_status: BTreeMap<&str, (&str, &str)> = classes
-        .iter()
-        .map(|row| {
-            (
-                row.name.as_str(),
-                (row.status.as_str(), row.reason.as_str()),
-            )
-        })
-        .collect();
+    let class_row: BTreeMap<&str, &ClassRow> =
+        classes.iter().map(|row| (row.name.as_str(), row)).collect();
     for (index, row) in method_rows.iter().enumerate() {
         let key = (row.class.clone(), row.arm.clone());
-        let Some(&(status, reason)) = class_status.get(row.class.as_str()) else {
+        let Some(class) = class_row.get(row.class.as_str()) else {
             structural.push(Structural {
                 subject: format!("{} {} ({})", row.class, row.method, row.arm),
                 detail: "class-methods.txt names a class class-set.txt does not carry, so \
@@ -1497,22 +1552,22 @@ fn concept_and_class_gate_table() {
             continue;
         };
         assert_eq!(
-            row.status.as_str(),
-            status,
+            row.status, class.status,
             "class-methods.txt and class-set.txt disagree on {}'s status",
             row.class
         );
         match group_index.get(&key) {
-            Some(&at) => method_groups[at].4.push(index),
+            Some(&at) => method_groups[at].rows.push(index),
             None => {
                 group_index.insert(key.clone(), method_groups.len());
-                method_groups.push((
-                    row.class.clone(),
-                    row.arm.clone(),
-                    status.to_string(),
-                    reason.to_string(),
-                    vec![index],
-                ));
+                method_groups.push(MethodGroup {
+                    class: row.class.clone(),
+                    arm: row.arm.clone(),
+                    status: class.status.clone(),
+                    reason: class.reason.clone(),
+                    construction: class.construction.clone(),
+                    rows: vec![index],
+                });
             }
         }
     }
@@ -1530,7 +1585,7 @@ fn concept_and_class_gate_table() {
         .collect();
     let method_paths: BTreeSet<String> = method_groups
         .iter()
-        .map(|(class, arm, _, _, _)| method_probe(class, arm))
+        .map(|group| method_probe(&group.class, &group.arm))
         .collect();
     let concept_on_disk = probe_set(&corpus, CONCEPT_SUBDIR, &concept_paths, &mut structural);
     let class_on_disk = probe_set(&corpus, CLASS_SUBDIR, &class_paths, &mut structural);
@@ -1557,15 +1612,23 @@ fn concept_and_class_gate_table() {
             &mut structural,
         );
     }
-    for (class, arm, status, reason, rows) in &method_groups {
-        let names: Vec<&str> = rows
+    for group in &method_groups {
+        let names: Vec<&str> = group
+            .rows
             .iter()
             .map(|&at| method_rows[at].method.as_str())
             .collect();
         check_probe_text(
             &corpus,
-            &method_probe(class, arm),
-            &method_probe_text(class, arm, status, reason, &names),
+            &method_probe(&group.class, &group.arm),
+            &method_probe_text(
+                &group.class,
+                &group.arm,
+                &group.status,
+                &group.reason,
+                &group.construction,
+                &names,
+            ),
             &method_on_disk,
             &mut structural,
         );
@@ -1708,7 +1771,10 @@ fn concept_and_class_gate_table() {
     // One measurement per method row, from one run per (class, arm).
     let mut method_measured: Vec<(usize, Option<Verdict>, bool, Option<String>)> = Vec::new();
     let mut method_programs: Vec<MethodProgram> = Vec::new();
-    for (class, arm, _, _, rows) in &method_groups {
+    for group in &method_groups {
+        let MethodGroup {
+            class, arm, rows, ..
+        } = group;
         let probe = method_probe(class, arm);
         let subject = format!("{class} ({arm} arm)");
         let Some(ran) = run_probe(
@@ -1730,25 +1796,21 @@ fn concept_and_class_gate_table() {
             .map(<[u8]>::to_vec)
             .collect();
         // The class arm asks its questions of the class object directly, so
-        // every `say` is reached. The instance arm constructs first, and that
-        // construction either answers -- one line per row -- or raises, and
-        // no count between the two is reachable. **Neither is read off the
-        // row set's `status` column**: that column says whether a
-        // construction program is committed, and its own header says
-        // `not-covered` "CARRIES NO CLAIM ABOUT THE ORACLE".
+        // every `say` is reached. An instance arm with a committed
+        // construction program claims that program answers an instance, so
+        // every `say` below it is reached too, and a group whose oracle
+        // construction raised is a structural failure -- **this is what makes
+        // `covered` mean the probe constructs**, rather than a status a
+        // string edit can move. An instance arm without one asks a bare
+        // `~new` the row set says nothing about, and no count between all and
+        // none is reachable.
         //
-        // What this does not check is that the construction *succeeded*: a
-        // group whose `~new` raises answers none of its names, and every row
-        // of it can read `agree` on the two sides raising alike. The row that
-        // catches a class this build does not have at all is the class wiring
-        // row, which every method row reaches by the class-set membership
-        // check above; what stays uncovered is a class the build has whose
-        // constructor stopped constructing, and the report says how many rows
-        // sit there on every run.
-        let shape = if arm == "class" {
-            OracleShape::Exactly(rows.len())
-        } else {
-            OracleShape::AllOrNothing(rows.len())
+        // What stays uncovered is a `not-covered` group whose two sides raise
+        // alike: every row of it can read `agree` over a question neither
+        // side was asked, and the report counts those on every run.
+        let shape = match (arm.as_str(), &group.construction) {
+            ("class", _) | (_, Construction::Constructs(_)) => OracleShape::Exactly(rows.len()),
+            (_, Construction::Raises) => OracleShape::AllOrNothing(rows.len()),
         };
         let shape_held =
             check_oracle_shape(&probe, &subject, shape, &ran.oracle_stdout, &mut structural);
@@ -2022,6 +2084,17 @@ fn concept_and_class_gate_table() {
          three descriptors on both sides.",
         gated.len(),
     );
+}
+
+/// One (class, arm) group of method rows, with everything its shared program
+/// is derived from.
+struct MethodGroup {
+    class: String,
+    arm: String,
+    status: String,
+    reason: String,
+    construction: Construction,
+    rows: Vec<usize>,
 }
 
 /// One (class, arm) program and the rows that share it.

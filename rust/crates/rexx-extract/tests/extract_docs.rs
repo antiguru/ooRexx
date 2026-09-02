@@ -188,6 +188,31 @@ fn skipping_the_comment_blanking_fires_the_argutil_assertion() {
     );
 }
 
+/// A committed construction program is only evidence if something runs it,
+/// and what runs it is the instance-arm probe its class's method rows share.
+///
+/// Measured: `Buffer`, `Singleton`, `Validate` and `ArgUtil` have no
+/// instance-arm row, so a program committed for one of them would make the
+/// class `covered` with nothing on either side ever constructing.
+#[test]
+fn every_committed_construction_program_has_an_instance_arm_to_run_it() {
+    let methods: &'static str = Box::leak(committed("class-methods.txt").into_boxed_str());
+    let instance_arms: BTreeSet<String> = rows_of(methods)
+        .into_iter()
+        .filter_map(|row| {
+            let fields: Vec<&str> = row.split('\t').collect();
+            (fields.get(2) == Some(&"instance")).then(|| fields[0].to_ascii_uppercase())
+        })
+        .collect();
+    for (class, program) in classes::CONSTRUCTION_PROGRAMS {
+        assert!(
+            instance_arms.contains(*class),
+            "{class} has the committed construction program {program} and no instance-arm \
+             method row, so no probe ever runs it"
+        );
+    }
+}
+
 /// The two class row sets have to agree about every class, or a method row's
 /// status says one thing and its class's row another.
 #[test]

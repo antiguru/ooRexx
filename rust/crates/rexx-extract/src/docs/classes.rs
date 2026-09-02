@@ -95,6 +95,37 @@ impl Status {
     }
 }
 
+/// A class's status together with, for a `covered` class, the Rexx expression
+/// its instance arm binds `o` to.
+///
+/// The expression rides inside the status because it is what the status
+/// claims: there is no way to reach [`Coverage::Covered`] without naming the
+/// route the derived probe then constructs with.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Coverage {
+    Covered(String),
+    NotCovered,
+    Unreachable,
+}
+
+impl Coverage {
+    pub fn status(&self) -> Status {
+        match self {
+            Coverage::Covered(_) => Status::Covered,
+            Coverage::NotCovered => Status::NotCovered,
+            Coverage::Unreachable => Status::Unreachable,
+        }
+    }
+
+    /// The construction expression, or `None` for a class that has no route.
+    pub fn program(&self) -> Option<&str> {
+        match self {
+            Coverage::Covered(program) => Some(program),
+            _ => None,
+        }
+    }
+}
+
 /// What a bare `~new` does on the oracle, per `.environment` class entry.
 ///
 /// **Measured, not derived**, and committed here for the same reason
@@ -178,6 +209,30 @@ pub const CONSTRUCTION: &[(&str, &str)] = &[
     ("VARIABLEREFERENCE", "93.967"),
     ("WEAKREFERENCE", "93.903"),
 ];
+
+/// The committed construction program for a class whose bare `~new` raises:
+/// the Rexx expression the instance arm binds `o` to, taken from the book's
+/// own syntax for that class's constructor.
+///
+/// A name here makes the class `covered`, and `covered` means nothing else --
+/// the derived probe opens with this expression rather than with a bare
+/// `~new`.
+pub const CONSTRUCTION_PROGRAMS: &[(&str, &str)] = &[
+    (
+        "CASELESSCOLUMNCOMPARATOR",
+        ".CaselessColumnComparator~new(3, 100)",
+    ),
+    ("COLUMNCOMPARATOR", ".ColumnComparator~new(3, 100)"),
+    (
+        "INVERTINGCOMPARATOR",
+        ".InvertingComparator~new(.Comparator~new)",
+    ),
+    ("TIMESPAN", ".TimeSpan~new(1)"),
+];
+
+/// What `class-set.txt`'s construction field holds for a class that is not
+/// `covered`, and so has no route to an instance.
+pub const NO_PROGRAM: &str = "-";
 
 /// A sentence of the reference saying the user cannot construct a class, with
 /// the line it is on and the status it grounds.
@@ -326,7 +381,7 @@ pub struct ClassRow {
     /// `class` for a name whose `.environment` entry is the class object,
     /// `instance` for the one whose entry is an instance.
     pub entry: &'static str,
-    pub status: Status,
+    pub coverage: Coverage,
     pub reason: String,
 }
 
@@ -380,18 +435,18 @@ pub fn class_rows(books: &[Book], argutil_citation: &str) -> Vec<ClassRow> {
         } else {
             "class"
         };
-        let (status, reason) = status_of(&name, sentences.get(name.as_str()).copied());
+        let (coverage, reason) = coverage_of(&name, sentences.get(name.as_str()).copied());
         out.push(ClassRow {
             name,
             section: id,
             book: book.name.clone(),
             line: section.open_line,
             entry,
-            status,
+            coverage,
             reason,
         });
     }
-    let (status, reason) = status_of(UNDOCUMENTED_CLASS, None);
+    let (coverage, reason) = coverage_of(UNDOCUMENTED_CLASS, None);
     out.push(ClassRow {
         name: UNDOCUMENTED_CLASS.to_string(),
         section: "-".into(),
@@ -402,7 +457,7 @@ pub fn class_rows(books: &[Book], argutil_citation: &str) -> Vec<ClassRow> {
             .and_then(|n| n.parse().ok())
             .unwrap_or_else(|| panic!("ArgUtil citation {argutil_citation} names no line")),
         entry: "class",
-        status,
+        coverage,
         reason,
     });
     let derived: BTreeSet<String> = out
@@ -416,6 +471,14 @@ pub fn class_rows(books: &[Book], argutil_citation: &str) -> Vec<ClassRow> {
         "the class set the books produce and the swept .environment class entries disagree; \
          CONSTRUCTION is a measurement of the image and this is where the two would drift apart"
     );
+    let named: BTreeSet<String> = out.iter().map(|r| r.name.to_ascii_uppercase()).collect();
+    for (class, program) in CONSTRUCTION_PROGRAMS {
+        assert!(
+            named.contains(*class),
+            "CONSTRUCTION_PROGRAMS commits {program} for {class}, which the class set does not \
+             carry -- a program for a name no row derives is never reached and never run"
+        );
+    }
     out
 }
 
@@ -478,15 +541,29 @@ fn collapse(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-fn status_of(
+/// A class's coverage and the sentence `class-set.txt` states it in.
+///
+/// A committed [`CONSTRUCTION_PROGRAMS`] entry is what makes a class
+/// `covered` where a bare `~new` raises; it may not be committed for a class
+/// whose sentence makes it [`Status::Unreachable`], which is D73's guard.
+fn coverage_of(
     name: &str,
     sentence: Option<(usize, usize, &'static str, Status)>,
-) -> (Status, String) {
+) -> (Coverage, String) {
     let upper = name.to_ascii_uppercase();
     let construction = CONSTRUCTION
         .iter()
         .find(|(n, _)| *n == upper)
         .map(|(_, outcome)| *outcome);
+    let program = CONSTRUCTION_PROGRAMS
+        .iter()
+        .find(|(n, _)| *n == upper)
+        .map(|(_, program)| *program);
+    assert!(
+        program.is_none() || matches!(construction, Some(code) if code != "new"),
+        "{name} has a committed construction program and a bare ~new that does not raise on \
+         the oracle, so the program is a route to nothing the bare ~new does not already reach"
+    );
     if let Some((first, last, text, status)) = sentence {
         let at = if first == last {
             format!("{first}")
@@ -494,33 +571,57 @@ fn status_of(
             format!("{first}-{last}")
         };
         let cited = format!("{UNCONSTRUCTIBLE_BOOK}:{at} \"{text}\"");
-        return match status {
-            Status::Unreachable => (
-                status,
+        if status == Status::Unreachable {
+            assert!(
+                program.is_none(),
+                "{name} is unreachable and has a committed construction program"
+            );
+            return (
+                Coverage::Unreachable,
                 format!("the reference says instances come only from native code -- {cited}"),
-            ),
-            _ => (
-                status,
+            );
+        }
+        return match program {
+            Some(program) => (
+                Coverage::Covered(program.to_string()),
                 format!(
-                    "no construction program is committed; the reference says the user cannot \
-                     create one and names a Rexx-level route instead -- {cited}"
+                    "a committed construction program answers an instance; the reference \
+                     says the user cannot create one and names a Rexx-level route instead \
+                     -- {cited}"
+                ),
+            ),
+            None => (
+                Coverage::NotCovered,
+                format!(
+                    "no construction program is committed; the reference says the user \
+                     cannot create one and names a Rexx-level route instead -- {cited}"
                 ),
             ),
         };
     }
+    if let Some(program) = program {
+        let code = construction.unwrap_or_default();
+        return (
+            Coverage::Covered(program.to_string()),
+            format!(
+                "a committed construction program answers an instance; a bare ~new raises \
+                 {code} on the oracle"
+            ),
+        );
+    }
     match construction {
         Some("new") => (
-            Status::Covered,
+            Coverage::Covered(format!(".{name}~new")),
             "a bare ~new constructs an instance on the oracle".into(),
         ),
         Some(code) => (
-            Status::NotCovered,
+            Coverage::NotCovered,
             format!(
                 "no construction program is committed; a bare ~new raises {code} on the oracle"
             ),
         ),
         None => (
-            Status::NotCovered,
+            Coverage::NotCovered,
             "no construction program is committed; the name is not an .environment class entry"
                 .into(),
         ),
@@ -564,7 +665,7 @@ pub fn method_rows(
     let titles = method_sections(books);
     let status: BTreeMap<&str, (Status, &str)> = class_rows
         .iter()
-        .map(|r| (r.name.as_str(), (r.status, r.reason.as_str())))
+        .map(|r| (r.name.as_str(), (r.coverage.status(), r.reason.as_str())))
         .collect();
     let mut out = Vec::new();
     for (book, section) in class_sections(books) {
@@ -871,14 +972,15 @@ pub fn class_set_rows(rows: &[ClassRow]) -> Vec<String> {
     rows.iter()
         .map(|r| {
             format!(
-                "{}\t{}\t{}\t{}:{}\t{}\t{}",
+                "{}\t{}\t{}\t{}:{}\t{}\t{}\t{}",
                 r.name,
                 r.entry,
                 r.section,
                 r.book,
                 r.line,
-                r.status.as_str(),
-                r.reason
+                r.coverage.status().as_str(),
+                r.reason,
+                r.coverage.program().unwrap_or(NO_PROGRAM)
             )
         })
         .collect()
@@ -934,7 +1036,8 @@ pub fn class_set_header(stamp: &str, argutil_citation: &str) -> Vec<String> {
         "fundclasses.xml, collclasses.xml, utilityclasses.xml and".into(),
         "streamclasses.xml.".into(),
         String::new(),
-        "One `name<TAB>entry<TAB>section<TAB>book:line<TAB>status<TAB>reason`".into(),
+        "One `name<TAB>entry<TAB>section<TAB>book:line<TAB>status<TAB>reason<TAB>construction`"
+            .into(),
         "per line, in book order then document order.".into(),
         String::new(),
         format!(
@@ -950,12 +1053,22 @@ pub fn class_set_header(stamp: &str, argutil_citation: &str) -> Vec<String> {
         String::new(),
         "`status` is the spec's three row statuses. `covered` is a class a bare".into(),
         "~new constructs, or one opted in with a committed construction".into(),
-        "program -- none is committed today. `not-covered` says no construction".into(),
-        "program is committed and CARRIES NO CLAIM ABOUT THE ORACLE.".into(),
-        "`unreachable` is grounded in a sentence of the reference itself and".into(),
-        "belongs to the classes whose sentence says instances come only from".into(),
-        "native code; each such sentence is re-read at the line it cites on".into(),
-        "every run.".into(),
+        "program. `not-covered` says no construction program is committed and".into(),
+        "CARRIES NO CLAIM ABOUT THE ORACLE. `unreachable` is grounded in a".into(),
+        "sentence of the reference itself and belongs to the classes whose".into(),
+        "sentence says instances come only from native code; each such".into(),
+        "sentence is re-read at the line it cites on every run.".into(),
+        String::new(),
+        format!(
+            "`construction` is the Rexx expression a method row's instance arm \
+             binds `o` to, and it is what `covered` claims: every `covered` row \
+             carries one and every other row carries `{NO_PROGRAM}`. A class \
+             whose bare ~new constructs carries that bare ~new; one opted in by \
+             CONSTRUCTION_PROGRAMS carries the book's own constructor syntax. \
+             gate_table_c.rs derives the instance-arm probe from this field, so \
+             a `covered` status and the program the probe runs cannot say \
+             different things."
+        ),
         String::new(),
         "Derived by `cargo run -p rexx-extract --bin rexx-extract-docs`, whose".into(),
         "module is `src/docs/classes.rs`. Re-derived and compared in both".into(),
