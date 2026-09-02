@@ -331,3 +331,42 @@ carries the reasoning.
 
 Found 2026-09-01 by the controller while measuring `keyForward`'s six options
 for Task 4's brief. **No upstream ticket.**
+
+--------------------------------------------------------------------------
+
+`Message~result` on a message whose send has not been made
+
+    m = .Message~new(.Object~new, 'STRING')
+    say m~result
+
+Effect: **an indefinite block**, the third mode this file's header names.
+Measured under the standard wrapper with `timeout -s KILL` added: rc 137 (the
+kill, not an answer), nothing on stdout, nothing on stderr, twice at 15 s and
+8 s. A bounded run under `/usr/bin/time -v` reports **0.00 s user and 0.00 s
+system over 8.00 s elapsed**, so the process is parked on a wait rather than
+spinning.
+
+Cause: `MessageClass::result` waits for the message to complete
+(`classes/MessageClass.cpp:279`). `Message~new` builds the message without
+dispatching it -- `MessageClass::newRexx` ends at `completeNewObject`
+(`:896`), with no send -- so nothing will ever complete it and the wait has no
+end.
+
+The neighbours bound it and are all clean, rc 0 under the same deadline:
+`~completed` and `~hasError` on the same unsent object answer `0` and `0`;
+`~messageName` and `~target` answer `STRING` and `an Object`; `m~send` then
+`m~result` answers `an Object`; and `.Object~new~start('STRING')~result`, whose
+send was made by `~start`, answers `an Object`. So it is the *unsent* state and
+not `~result` itself.
+
+Consequence for this crate: **there is no oracle behaviour to match**, so
+`rexx-exec` refuses the shape rather than answering it --
+`Loud::unsent_message_result`, whose own doc carries these measurements. No
+differential row can cover it, and the rc 137 above is the deadline killing
+the process rather than an answer.
+
+Found 2026-09-03 while building `Message~new` for Phase 5c Task 2. **No
+upstream ticket.** The wait is what `~result` is specified to do, and whether
+an interpreter should detect that no activity can ever satisfy a particular
+one is the design question entry 7 already puts and this project has not put
+to the maintainers.

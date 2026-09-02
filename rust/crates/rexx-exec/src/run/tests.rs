@@ -4925,6 +4925,85 @@ fn use_strict_arg_checks_arity_at_both_ends() {
     );
 }
 
+/// `USE STRICT ARG`'s three refusals report the method catalogue rows inside a
+/// method and the call ones outside -- `UseInstruction.cpp`'s three
+/// `inMethod()` switches (`:103`, `:292`, `:305`).
+///
+/// The two halves of each pair are what make this discriminating: one error
+/// family for both contexts passes half the rows whichever family it picks,
+/// and the two rows that must not raise are what a check applied to `USE ARG`
+/// as well would redden.
+#[test]
+fn use_strict_arg_reports_method_errors_in_a_method_and_call_errors_outside() {
+    for (source, status, catalogue) in [
+        (
+            "o = .K~new\n::class K\n::method init\nuse strict arg a\n",
+            163,
+            "Error 93.901:  Not enough arguments for method; 1 expected.\n",
+        ),
+        (
+            "o = .K~new(1, 2)\n::class K\n::method init\nuse strict arg a\n",
+            163,
+            "Error 93.902:  Too many arguments in invocation of method; 1 expected.\n",
+        ),
+        (
+            "o = .K~new(, 2)\n::class K\n::method init\nuse strict arg a, b\n",
+            163,
+            "Error 93.903:  Missing argument in method; argument 1 is required.\n",
+        ),
+        (
+            "call sub\n::routine sub\nuse strict arg a\n",
+            216,
+            "Error 40.3:  Not enough arguments in invocation of SUB; minimum expected is 1.\n",
+        ),
+        (
+            "call sub 1, 2\n::routine sub\nuse strict arg a\n",
+            216,
+            "Error 40.4:  Too many arguments in invocation of SUB; maximum expected is 1.\n",
+        ),
+        (
+            "call sub , 2\n::routine sub\nuse strict arg a, b\n",
+            216,
+            "Error 40.5:  Missing argument in invocation of SUB; argument 1 is required.\n",
+        ),
+    ] {
+        for engine in [crate::Engine::TreeWalker, crate::Engine::Ir] {
+            let outcome = crate::run_program(
+                "/t.rex",
+                source.as_bytes().to_vec(),
+                crate::Invocation::none().with_engine(engine),
+            );
+            assert_eq!(
+                (outcome.exit_code, outcome.stdout.len()),
+                (status, 0),
+                "{source:?}"
+            );
+            let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
+            assert!(stderr.ends_with(catalogue), "{source:?}: {stderr:?}");
+        }
+    }
+    // The neighbouring successes: an omitted position without `STRICT` drops
+    // the target, and one with a default of its own is filled rather than
+    // refused.
+    let mut interp = Interp::new();
+    assert_eq!(
+        say_output(
+            &mut interp,
+            b"call sub2 ,2\nexit\nsub2: procedure\nuse arg p, q\nsay '['p']['q']'\nreturn\n",
+        ),
+        b"[P][2]\n".to_vec()
+    );
+    let mut interp = Interp::new();
+    assert_eq!(
+        say_output(
+            &mut interp,
+            b"call sub2 ,2\nexit\n\
+              sub2: procedure\nuse strict arg p = 'dflt', q\nsay '['p']['q']'\nreturn\n",
+        ),
+        b"[dflt][2]\n".to_vec()
+    );
+}
+
 /// `USE ARG >name` aliases the caller's variable; the same call into a
 /// plain target copies its value instead.
 ///

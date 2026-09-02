@@ -37,19 +37,19 @@
 # derived-at: oodocs/rexxref/en-US r13198
 
 Class	class	clsClass	fundclasses.xml:51	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle	-
-Message	class	clsMessage	fundclasses.xml:1093	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle	-
+Message	class	clsMessage	fundclasses.xml:1093	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.Message~new(.Object~new, 'STRING')
 Method	class	clsMethod	fundclasses.xml:1987	not-covered	no construction program is committed; a bare ~new raises 88.901 on the oracle	-
 Object	class	clsObject	fundclasses.xml:2519	covered	a bare ~new constructs an instance on the oracle	.Object~new
 Package	class	clsPackage	fundclasses.xml:3561	not-covered	no construction program is committed; a bare ~new raises 88.901 on the oracle	-
 Routine	class	clsRoutine	fundclasses.xml:4689	not-covered	no construction program is committed; a bare ~new raises 88.901 on the oracle	-
-String	class	clsString	fundclasses.xml:4996	not-covered	no construction program is committed; a bare ~new raises 93.903 on the oracle	-
+String	class	clsString	fundclasses.xml:4996	covered	a committed construction program answers an instance; a bare ~new raises 93.903 on the oracle	.String~new('abc')
 Collection	class	clsCollection	collclasses.xml:170	covered	a bare ~new constructs an instance on the oracle	.Collection~new
 MapCollection	class	clsMapCollection	collclasses.xml:612	covered	a bare ~new constructs an instance on the oracle	.MapCollection~new
 OrderedCollection	class	clsOrderedCollection	collclasses.xml:741	covered	a bare ~new constructs an instance on the oracle	.OrderedCollection~new
 SetCollection	class	clsSetCollection	collclasses.xml:1222	covered	a bare ~new constructs an instance on the oracle	.SetCollection~new
 Array	class	clsArray	collclasses.xml:1267	covered	a bare ~new constructs an instance on the oracle	.Array~new
 Bag	class	clsBag	collclasses.xml:2566	covered	a bare ~new constructs an instance on the oracle	.Bag~new
-CircularQueue	class	clsCircularQueue	collclasses.xml:3252	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle	-
+CircularQueue	class	clsCircularQueue	collclasses.xml:3252	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.CircularQueue~new(5)
 Directory	class	clsDirectory	collclasses.xml:3943	covered	a bare ~new constructs an instance on the oracle	.Directory~new
 IdentityTable	class	clsIdentityTable	collclasses.xml:4609	covered	a bare ~new constructs an instance on the oracle	.IdentityTable~new
 List	class	clsList	collclasses.xml:5000	covered	a bare ~new constructs an instance on the oracle	.List~new
@@ -87,13 +87,13 @@ RexxQueue	class	clsRexxQueue	utilityclasses.xml:8811	covered	a bare ~new constru
 Singleton	class	clsSingleton	utilityclasses.xml:9260	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle	-
 StackFrame	class	clsStackFrame	utilityclasses.xml:9396	not-covered	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:9407 "StackFrame instances cannot be directly created by the user."	-
 StreamSupplier	class	clsStreamSupplier	utilityclasses.xml:9754	not-covered	no construction program is committed; a bare ~new raises 97.1 on the oracle	-
-Supplier	class	clsSupplier	utilityclasses.xml:9903	not-covered	no construction program is committed; a bare ~new raises 93.903 on the oracle	-
+Supplier	class	clsSupplier	utilityclasses.xml:9903	covered	a committed construction program answers an instance; a bare ~new raises 93.903 on the oracle	.Supplier~new(.Array~new, .Array~new)
 Ticker	class	clsTicker	utilityclasses.xml:10169	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle	-
 TimeSpan	class	clsTimeSpan	utilityclasses.xml:10442	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.TimeSpan~new(1)
 TraceObject	class	clsTraceObject	utilityclasses.xml:11301	covered	a bare ~new constructs an instance on the oracle	.TraceObject~new
 Validate	class	clsValidate	utilityclasses.xml:12201	covered	a bare ~new constructs an instance on the oracle	.Validate~new
 VariableReference	class	clsVariableReference	utilityclasses.xml:12548	not-covered	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:12556-12557 "Calling the new method to create a VariableReference instance is not allowed."	-
-WeakReference	class	clsWeakReference	utilityclasses.xml:12698	not-covered	no construction program is committed; a bare ~new raises 93.903 on the oracle	-
+WeakReference	class	clsWeakReference	utilityclasses.xml:12698	covered	a committed construction program answers an instance; a bare ~new raises 93.903 on the oracle	.WeakReference~new(.Object~new)
 InputOutputStream	class	clsInputOutputStream	streamclasses.xml:57	covered	a bare ~new constructs an instance on the oracle	.InputOutputStream~new
 InputStream	class	clsInputStream	streamclasses.xml:103	covered	a bare ~new constructs an instance on the oracle	.InputStream~new
 OutputStream	class	clsOutputStream	streamclasses.xml:245	covered	a bare ~new constructs an instance on the oracle	.OutputStream~new

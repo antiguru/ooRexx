@@ -222,12 +222,17 @@ pub const CONSTRUCTION_PROGRAMS: &[(&str, &str)] = &[
         "CASELESSCOLUMNCOMPARATOR",
         ".CaselessColumnComparator~new(3, 100)",
     ),
+    ("CIRCULARQUEUE", ".CircularQueue~new(5)"),
     ("COLUMNCOMPARATOR", ".ColumnComparator~new(3, 100)"),
     (
         "INVERTINGCOMPARATOR",
         ".InvertingComparator~new(.Comparator~new)",
     ),
+    ("MESSAGE", ".Message~new(.Object~new, 'STRING')"),
+    ("STRING", ".String~new('abc')"),
+    ("SUPPLIER", ".Supplier~new(.Array~new, .Array~new)"),
     ("TIMESPAN", ".TimeSpan~new(1)"),
+    ("WEAKREFERENCE", ".WeakReference~new(.Object~new)"),
 ];
 
 /// What `class-set.txt`'s construction field holds for a class that is not

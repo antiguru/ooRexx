@@ -1412,6 +1412,26 @@ impl Loud {
         }
     }
 
+    /// `Message~result` on a message whose send has not been made.
+    ///
+    /// `MessageClass::result` waits for the message to complete
+    /// (`classes/MessageClass.cpp:279`), and a message nothing has sent never
+    /// does. Measured under an 8-second kill: rc 137, no bytes on any
+    /// descriptor, and 0.00 s of CPU over 8.00 s elapsed -- a block, not a
+    /// spin -- where the same object's `~completed` and `~hasError` both
+    /// answer `0` at rc 0.
+    ///
+    /// **There is no oracle behaviour to match here**, so this is a refusal
+    /// rather than an answer: the program is in `corpus/oracle-crashes.txt`
+    /// and must not be run.
+    fn unsent_message_result() -> Loud {
+        Loud {
+            message: "`Message~result` on a message whose send has not been made is not \
+                      implemented (Phase 6)"
+                .to_string(),
+        }
+    }
+
     /// A `REPLY` that is not a clause of its method body's own top level.
     ///
     /// Continuing the body needs the enclosing `DO`/`SELECT`/`IF` state that

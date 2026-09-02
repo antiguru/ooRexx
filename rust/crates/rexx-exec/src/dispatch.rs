@@ -289,6 +289,12 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         native_array_make_string,
     ),
     ("Array", "SIZE", Arity::Fixed(0), native_array_size),
+    // `HashCollection::initRexx`, in `Bag`'s own dictionary by
+    // `InheritInstanceMethods(Relation)` (`memory/Setup.cpp:988`) out of
+    // `IdentityTable`'s own row (`:841`). A donation puts the method in the
+    // receiving class's own dictionary, which is what the scope in the
+    // traceback says, so each donee needs a row of its own here.
+    ("Bag", "INIT", Arity::Fixed(1), native_capacity_init),
     // `RexxObject::initRexx`, bound to `.Class` under this name by
     // `memory/Setup.cpp:497` whose own comment is "this is a NOP by default,
     // so we'll just use the object init method as a fill in". Every class
@@ -363,6 +369,10 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         native_superclasses,
     ),
     ("Class", "UNINHERIT", Arity::Fixed(1), native_uninherit),
+    // `Directory`'s own row (`memory/Setup.cpp:935`), which names
+    // `DirectoryClass::initRexx` -- the inherited `HashCollection::initRexx`,
+    // since `DirectoryClass` declares none of its own.
+    ("Directory", "INIT", Arity::Fixed(1), native_capacity_init),
     // `HashCollection::getRexx` under both of its names and
     // `HashCollection::putRexx`, donated to `Directory` by
     // `InheritInstanceMethods(StringTable)` (`memory/Setup.cpp:933`) out of
@@ -382,6 +392,23 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `InheritInstanceMethods`. This is the entry-method mechanism: an entry
     // is reached by sending its name.
     ("Directory", "UNKNOWN", Arity::Fixed(2), native_hash_unknown),
+    // `EventSemaphoreClass::close` (`memory/Setup.cpp:1330`), which closes an
+    // operating system semaphore this crate never opened and answers no
+    // value. A row here rather than nothing, because the class declares
+    // `UNINIT` and so every instance of it is registered for the finalizer
+    // sweep, where a method with no row is a loud refusal at collection time
+    // rather than at the send.
+    ("EventSemaphore", "UNINIT", Arity::Fixed(0), native_no_op),
+    // `HashCollection::initRexx` at the class that declares it
+    // (`memory/Setup.cpp:841`), and `ListClass::initRexx` (`:1011`), which
+    // differs from it only in the default capacity.
+    (
+        "IdentityTable",
+        "INIT",
+        Arity::Fixed(1),
+        native_capacity_init,
+    ),
+    ("List", "INIT", Arity::Fixed(1), native_capacity_init),
     (
         "Message",
         "COMPLETED",
@@ -402,6 +429,8 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // alone, and the scope is a `MethodClass` field rather than a
     // `BaseExecutable` one (`classes/MethodClass.hpp:168`).
     ("Method", "SCOPE", Arity::Fixed(0), native_scope),
+    // `MutexSemaphoreClass::close`, `EventSemaphore`'s partner above.
+    ("MutexSemaphore", "UNINIT", Arity::Fixed(0), native_no_op),
     ("Object", "CLASS", Arity::Fixed(0), native_class),
     ("Object", "COPY", Arity::Fixed(0), native_copy),
     (
@@ -481,6 +510,10 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(0),
         native_package_public_classes,
     ),
+    // `QueueClass::initRexx` (`memory/Setup.cpp:777`) and the donation
+    // `InheritInstanceMethods(IdentityTable)` makes at `Relation` (`:958`).
+    ("Queue", "INIT", Arity::Fixed(1), native_capacity_init),
+    ("Relation", "INIT", Arity::Fixed(1), native_capacity_init),
     // `.context`'s own package, which is the running program's -- the one
     // route to it, since `Class~package` above answers `REXX` for every
     // class the bootstrap registered.
@@ -497,6 +530,8 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(0),
         native_annotations,
     ),
+    // The same donation at `Set` (`memory/Setup.cpp:908`).
+    ("Set", "INIT", Arity::Fixed(1), native_capacity_init),
     ("String", "LENGTH", Arity::Fixed(0), native_length),
     (
         "String",
@@ -514,9 +549,11 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("StringTable", "[]", Arity::Fixed(1), native_hash_at),
     ("StringTable", "[]=", Arity::Fixed(2), native_hash_put),
     ("StringTable", "AT", Arity::Fixed(1), native_hash_at),
-    // `HashCollection::initRexx` (`memory/Setup.cpp:842`), which `~new`
-    // sends and which validates the initial-size argument.
-    ("StringTable", "INIT", Arity::Fixed(1), native_hash_init),
+    // `HashCollection::initRexx`, which `~new` sends and which validates the
+    // initial-size argument, in `StringTable`'s own dictionary by
+    // `InheritInstanceMethods(IdentityTable)` (`memory/Setup.cpp:881`) out of
+    // that class's own row (`:841`).
+    ("StringTable", "INIT", Arity::Fixed(1), native_capacity_init),
     ("StringTable", "PUT", Arity::Fixed(2), native_hash_put),
     (
         "StringTable",
@@ -524,6 +561,12 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(2),
         native_hash_unknown,
     ),
+    // `SupplierClass::initRexx` (`memory/Setup.cpp:1626`), which is where
+    // `.Supplier~new`'s refusal comes from: the two arrays are required and
+    // the allocation above it is not what raises.
+    ("Supplier", "INIT", Arity::Fixed(2), native_supplier_init),
+    // The same donation at `Table` (`memory/Setup.cpp:861`).
+    ("Table", "INIT", Arity::Fixed(1), native_capacity_init),
 ];
 
 /// The primitive methods bound to a class's **class** dictionary rather than
@@ -552,6 +595,53 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         "NEW",
         Arity::Counted,
         native_string_table_new,
+    ),
+    // Every class whose own `newRexx` is an allocation followed by
+    // `completeNewObject` and nothing else -- `memory/Setup.cpp:766`, `:821`,
+    // `:902`, `:928`, `:953`, `:982`, `:1006`, `:1327`, `:1350`, `:1618`.
+    // Each allocates a primitive body this crate does not model, so each
+    // answers [`native_new`]'s plain instance: the class's own behaviour and
+    // the `INIT` send, and nothing that would read the body.
+    ("Bag", "NEW", Arity::Counted, native_new),
+    ("Directory", "NEW", Arity::Counted, native_new),
+    ("EventSemaphore", "NEW", Arity::Counted, native_new),
+    ("IdentityTable", "NEW", Arity::Counted, native_new),
+    ("List", "NEW", Arity::Counted, native_new),
+    ("MutexSemaphore", "NEW", Arity::Counted, native_new),
+    ("Queue", "NEW", Arity::Counted, native_new),
+    ("Relation", "NEW", Arity::Counted, native_new),
+    ("Set", "NEW", Arity::Counted, native_new),
+    ("Supplier", "NEW", Arity::Counted, native_new),
+    ("Table", "NEW", Arity::Counted, native_new),
+    // The classes whose own `newRexx` checks its arguments and then builds
+    // something this crate does not -- a class object, an undispatched
+    // message, a compiled executable, a loaded package, a weak reference
+    // (`memory/Setup.cpp:450`, `:1052`, `:1091`, `:1128`, `:1156`, `:1683`).
+    // Each checks exactly what the C++ checks before that point and refuses
+    // loudly past it.
+    ("Class", "NEW", Arity::Counted, native_class_new),
+    ("Message", "NEW", Arity::Counted, native_message_new),
+    ("Method", "NEW", Arity::Counted, native_executable_new),
+    ("Package", "NEW", Arity::Counted, native_package_new),
+    ("Routine", "NEW", Arity::Counted, native_executable_new),
+    (
+        "WeakReference",
+        "NEW",
+        Arity::Counted,
+        native_weak_reference_new,
+    ),
+    // `AddClassMethod("New", RexxString::newRexx, A_COUNT)`,
+    // `memory/Setup.cpp:572`. The one row here whose answer is a value rather
+    // than an instance.
+    ("String", "NEW", Arity::Counted, native_string_new),
+    // `AddClassMethod("New", MutableBuffer::newRexx, A_COUNT)`,
+    // `memory/Setup.cpp:1418`. A row of its own because the arguments are
+    // checked before the allocation rather than by `INIT`.
+    (
+        "MutableBuffer",
+        "NEW",
+        Arity::Counted,
+        native_mutable_buffer_new,
     ),
 ];
 
@@ -6572,11 +6662,15 @@ fn native_message_result(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if let Some(Some(raised)) = interp.message_outcomes.get(&receiver) {
-        return Err(Failure::Raised(raised.clone()));
+    match interp.message_outcomes.get(&receiver) {
+        Some(Some(raised)) => Err(Failure::Raised(raised.clone())),
+        Some(None) => {
+            let held = interp.native_entry(receiver, MESSAGE_RESULT);
+            Ok(Some(held.unwrap_or(ObjRef::NIL)))
+        }
+        // A `Message~new` object, whose send has not been made.
+        None => Err(Loud::unsent_message_result().into()),
     }
-    let held = interp.native_entry(receiver, MESSAGE_RESULT);
-    Ok(Some(held.unwrap_or(ObjRef::NIL)))
 }
 
 /// `Message~completed`: whether the send has ended, with a result or with an
@@ -6865,33 +6959,281 @@ fn native_string_table_new(
     Ok(Some(object))
 }
 
-/// `HashCollection~init(size)`: the initial-size argument, validated and
+/// A collection's `~init(size)`: the initial-size argument, validated and
 /// then dropped -- `HashCollection::initRexx`
-/// (`classes/support/HashCollection.cpp:120`).
+/// (`classes/support/HashCollection.cpp:63`), and the `QueueClass::initRexx`
+/// and `ListClass::initRexx` beside it (`classes/QueueClass.cpp:261`,
+/// `classes/ListClass.cpp:102`), which differ only in the default capacity.
 ///
 /// The size is a capacity hint and nothing observable depends on it, so it
 /// is checked and not kept. Measured, oracle rc 163:
 /// `.stringtable~new('abc')` is `93.923 Invalid length argument specified;
 /// found "abc".`
-fn native_hash_init(
+fn native_capacity_init(
     interp: &mut Interp,
     _cleared: Cleared,
     _receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    match whole_method_argument(interp, args, 0, Raised::invalid_length)? {
+    optional_length_argument(interp, args, 0)?;
+    Ok(None)
+}
+
+/// `optionalLengthArgument` (`runtime/MethodArguments.hpp:327`): an omitted
+/// argument is the default and anything that is not a non-negative whole
+/// number in range is 93.923.
+fn optional_length_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    index: usize,
+) -> Result<(), Failure> {
+    match whole_method_argument(interp, args, index, Raised::invalid_length)? {
         Some(size) if size >= 0 => {
-            usize_or_refuse(interp, args, 0, size, Raised::invalid_length)?;
+            usize_or_refuse(interp, args, index, size, Raised::invalid_length)?;
         }
         Some(_) => {
             return Err(refuse_method_argument(
                 interp,
                 args,
-                0,
+                index,
                 Raised::invalid_length,
             ));
         }
         None => {}
+    }
+    Ok(())
+}
+
+/// The refusal a constructor that has checked its arguments and cannot build
+/// the primitive body answers.
+///
+/// [`Loud::native_method`] with the receiving class's own `~id`, so the
+/// message names the class the send went to rather than the one the row is
+/// filed under.
+fn unbuilt_new(interp: &mut Interp, class: ObjRef) -> Failure {
+    let id = interp.classes().id_string(class).to_string();
+    Loud::native_method(b"NEW", &id).into()
+}
+
+/// `MutableBuffer~new(string, size, ...)`: an instance carrying neither, and
+/// both arguments validated as `MutableBuffer::newRexx` validates them
+/// (`classes/MutableBufferClass.cpp:90`).
+///
+/// **The `INIT` send takes the arguments from the front with the last two
+/// dropped from the count**, `completeNewObject(newBuffer, args, argc > 2 ?
+/// argc - 2 : 0)` (`:134`), which is not the same list as "the arguments past
+/// the second".
+///
+/// The buffer's contents are not kept, and nothing that would read them
+/// answers -- which is what keeps the rendering honest, since the oracle
+/// renders a buffer as its contents rather than as a default name: measured,
+/// rc 0, `say .MutableBuffer~new('abc')` is `abc`.
+/// `a_constructor_taking_arguments_answers_an_instance_and_refuses_its_state`
+/// asserts the pair.
+fn native_mutable_buffer_new(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    if let Some(text) = args.first().copied().flatten() {
+        required_string_argument(interp, text, 1)?;
+    }
+    optional_length_argument(interp, args, 1)?;
+    let object = new_instance(interp, class)?;
+    let caller = interp.caller();
+    let kept = args.len().saturating_sub(2);
+    let rest: Vec<Option<ObjRef>> = args.iter().take(kept).copied().collect();
+    interp.send_message(object, INIT, None, &rest, caller)?;
+    Ok(Some(object))
+}
+
+/// `Class~new(id, ...)`: the class id is required and this crate builds no
+/// class from it -- `RexxClass::newRexx` (`classes/ClassClass.cpp:1776`).
+///
+/// The refusal past the checks is the clone at `:1789`, which makes the
+/// receiver the new class's metaclass; `~subclass` is the factory this crate
+/// does build. Measured, oracle: `.Class~new` is `93.901 Not enough arguments
+/// for method; 1 expected.` at rc 163 and `.Class~new(.nil)` is `88.909
+/// Argument class id must have a string value.` at rc 168.
+fn native_class_new(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    if args.is_empty() {
+        return Err(Raised::not_enough_method_arguments(1).into());
+    }
+    match args[0] {
+        Some(id) => required_string_named_argument(interp, id, "class id")?,
+        None => return Err(Raised::missing_named_argument("class id").into()),
+    };
+    Err(unbuilt_new(interp, class))
+}
+
+/// `Message~new(target, message, ...)`: a message object whose send has not
+/// been made -- `MessageClass::newRexx` (`classes/MessageClass.cpp:828`).
+///
+/// The target, the name and the arguments are not kept, and a third argument
+/// -- the `"AI"` argument-style option (`:861`) -- is refused rather than
+/// checked. What the object does carry is the **absence** of an entry in
+/// [`Interp::message_outcomes`], which is what tells an unsent message from a
+/// completed one; [`Loud::unsent_message_result`] reads it.
+///
+/// Measured, oracle rc 163: `.Message~new` is `93.901 Not enough arguments
+/// for method; 2 expected.`
+fn native_message_new(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    if args.len() < 2 {
+        return Err(Raised::not_enough_method_arguments(2).into());
+    }
+    if args[0].is_none() {
+        return Err(Raised::missing_named_argument("message target").into());
+    }
+    decode_message_name(interp, args[1])?;
+    if args.len() > 2 || class != interp.object_model().message {
+        return Err(unbuilt_new(interp, class));
+    }
+    let object = interp.native_instance(class);
+    let caller = interp.caller();
+    interp.send_message(object, INIT, None, &[], caller)?;
+    Ok(Some(object))
+}
+
+/// `Method~new(name, source, ...)` and `Routine~new(name, source, ...)`: both
+/// arguments are required and this crate compiles no executable from them --
+/// `BaseExecutable::processNewExecutableArgs`
+/// (`execution/BaseExecutable.cpp:225`), which `MethodClass::newRexx` and
+/// `RoutineClass::newRexx` share.
+///
+/// Measured, oracle rc 168: `.Method~new` is `88.901 Missing argument;
+/// argument name is required.` and `.Method~new('m')` is `88.901 Missing
+/// argument; argument source is required.`
+fn native_executable_new(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    executable_name_argument(interp, args)?;
+    if args.get(1).copied().flatten().is_none() {
+        return Err(Raised::missing_named_argument("source").into());
+    }
+    Err(unbuilt_new(interp, class))
+}
+
+/// `Package~new(name, source, ...)`: the name is required, the source is not,
+/// and this crate loads no package either way -- `PackageClass::newRexx`
+/// (`classes/PackageClass.cpp:158`).
+///
+/// A constructor of its own rather than [`native_executable_new`]'s, because
+/// an omitted source is a file to resolve and load here rather than the
+/// 88.901 the other two raise -- measured, oracle rc 0, `.Package~new('p')`
+/// answers `a Package`.
+fn native_package_new(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    executable_name_argument(interp, args)?;
+    Err(unbuilt_new(interp, class))
+}
+
+/// The `name` argument `Method`, `Routine` and `Package` share --
+/// `stringArgument(pgmname, "name")`.
+fn executable_name_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    match args.first().copied().flatten() {
+        Some(name) => required_string_named_argument(interp, name, "name"),
+        None => Err(Raised::missing_named_argument("name").into()),
+    }
+}
+
+/// `String~new(value, ...)`: a string carrying `value`'s own bytes --
+/// `RexxString::newRexx` (`classes/StringClass.cpp:2352`).
+///
+/// **A fresh string and not the argument**, which the C++ says is so that the
+/// class can be adjusted (`:2365`-`:2368`). The `INIT` send takes the
+/// arguments past the first, so `.String~new('abc', 'x')` reaches
+/// `Object~init` with one argument -- measured, oracle rc 163, `93.902 Too
+/// many arguments in invocation of method; 0 expected.`
+///
+/// A subclass of `String` refuses: `completeNewObject` would give the string
+/// that subclass's behaviour, and a string this crate builds carries no class
+/// of its own.
+fn native_string_new(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    let Some(Some(value)) = args.first().copied() else {
+        return Err(Raised::missing_method_argument(1).into());
+    };
+    let text = required_string_argument(interp, value, 1)?;
+    if class != interp.object_model().string {
+        return Err(unbuilt_new(interp, class));
+    }
+    let bytes = interp.to_text(text).to_vec();
+    let object = interp.text_built(bytes);
+    interp.roots.push_temp(object);
+    let caller = interp.caller();
+    interp.send_message(object, INIT, None, &args[1..], caller)?;
+    Ok(Some(object))
+}
+
+/// `WeakReference~new(value, ...)`: an instance that does not hold the value
+/// -- `WeakReference::newRexx` (`classes/WeakReferenceClass.cpp:231`).
+///
+/// The referent is not kept. Measured, oracle rc 163: `.WeakReference~new`
+/// is `93.903 Missing argument in method; argument 1 is required.`
+fn native_weak_reference_new(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    if args.first().copied().flatten().is_none() {
+        return Err(Raised::missing_method_argument(1).into());
+    }
+    let object = new_instance(interp, class)?;
+    let caller = interp.caller();
+    let rest: Vec<Option<ObjRef>> = args.iter().skip(1).copied().collect();
+    interp.send_message(object, INIT, None, &rest, caller)?;
+    Ok(Some(object))
+}
+
+/// `Supplier~init(items, indexes)`: both arrays required, validated and then
+/// dropped -- `SupplierClass::initRexx` (`classes/SupplierClass.cpp:309`).
+///
+/// Measured, oracle rc 163: `.Supplier~new` is `93.903 Missing argument in
+/// method; argument 1 is required.`, raised here rather than in `NEW`.
+fn native_supplier_init(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    _receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    for position in [1, 2] {
+        let Some(value) = args.get(position - 1).copied().flatten() else {
+            return Err(Raised::missing_method_argument(position).into());
+        };
+        array_argument(interp, value, ArrayArgument::Positional)?;
     }
     Ok(None)
 }
@@ -8290,6 +8632,157 @@ mod tests {
             );
         }
     }
+    /// Every class with a `NEW` row of its own answers an instance of the
+    /// class the send was addressed to, or the oracle's own refusal.
+    ///
+    /// The refusing rows are what stop the pair from collapsing: a constructor
+    /// that skipped its argument checks would answer an instance for all of
+    /// them, and one that refused everything would answer none.
+    #[test]
+    fn a_primitive_constructor_answers_an_instance_or_the_oracle_s_own_refusal() {
+        for class in [
+            "Bag",
+            "Directory",
+            "EventSemaphore",
+            "IdentityTable",
+            "List",
+            "MutableBuffer",
+            "MutexSemaphore",
+            "Queue",
+            "Relation",
+            "Set",
+            "Table",
+        ] {
+            let source = format!("say .{class}~new~class~id\n");
+            assert_eq!(
+                both_engines(&source),
+                (0, format!("{class}\n"), String::new()),
+                "{class}"
+            );
+        }
+        for (class, status, catalogue) in [
+            ("Class", 163, "Error 93.901:"),
+            ("Message", 163, "Error 93.901:"),
+            ("Method", 168, "Error 88.901:"),
+            ("Package", 168, "Error 88.901:"),
+            ("Routine", 168, "Error 88.901:"),
+            ("String", 163, "Error 93.903:"),
+            ("Supplier", 163, "Error 93.903:"),
+            ("WeakReference", 163, "Error 93.903:"),
+        ] {
+            let (code, stdout, stderr) = both_engines(&format!("say .{class}~new\n"));
+            assert_eq!((code, stdout.as_str()), (status, ""), "{class}");
+            assert!(stderr.contains(catalogue), "{class}: {stderr:?}");
+        }
+    }
+
+    /// The constructors whose argument list carries the instance's whole state
+    /// answer one, and the state itself is refused rather than answered.
+    ///
+    /// The refusal rows are what stop this from passing over a constructor
+    /// that fabricated a body: each names a method that would read what the
+    /// arguments carried, and the crate holds none of it.
+    #[test]
+    fn a_constructor_taking_arguments_answers_an_instance_and_refuses_its_state() {
+        for (program, id, unread) in [
+            (".Message~new(.Object~new, 'STRING')", "Message", "o~send"),
+            (
+                ".WeakReference~new(.Object~new)",
+                "WeakReference",
+                "o~value",
+            ),
+            (
+                ".Supplier~new(.Array~new, .Array~new)",
+                "Supplier",
+                "o~available",
+            ),
+            (".MutableBuffer~new('abc')", "MutableBuffer", "o~length"),
+        ] {
+            assert_eq!(
+                both_engines(&format!("o = {program}\nsay o~class~id\n")),
+                (0, format!("{id}\n"), String::new()),
+                "{program}"
+            );
+            let (code, stdout, stderr) = both_engines(&format!("o = {program}\nsay {unread}\n"));
+            assert_eq!((code, stdout.as_str()), (120, ""), "{program}");
+            assert!(stderr.starts_with("rexx-exec: "), "{program}: {stderr:?}");
+        }
+        // The oracle renders a `MutableBuffer` as its contents rather than as
+        // a default name, so the bare rendering has to refuse too: an answer
+        // here would be `a MutableBuffer` where the oracle says `abc`.
+        let (code, stdout, stderr) = both_engines("say .MutableBuffer~new('abc')\n");
+        assert_eq!((code, stdout.as_str()), (120, ""));
+        assert!(stderr.starts_with("rexx-exec: "), "{stderr:?}");
+        // `~result` on a message nothing has sent blocks the oracle, so this
+        // is a refusal rather than an answer; `~completed` and `~hasError`
+        // beside it are the oracle's own `0`.
+        let (code, stdout, stderr) =
+            both_engines("say .Message~new(.Object~new, 'STRING')~result\n");
+        assert_eq!((code, stdout.as_str()), (120, ""));
+        assert_eq!(
+            stderr,
+            "rexx-exec: `Message~result` on a message whose send has not been made is not \
+             implemented (Phase 6)\n"
+        );
+        assert_eq!(
+            both_engines(
+                "m = .Message~new(.Object~new, 'STRING')\n\
+                 say m~completed m~hasError\n"
+            ),
+            (0, "0 0\n".to_string(), String::new())
+        );
+    }
+
+    /// A `.Directory~new` answers `.nil` for every index because nothing can
+    /// put an entry in it: this crate builds the instance without the hash
+    /// body, so every write refuses.
+    ///
+    /// The pair is the whole test. Reading `.nil` is the oracle's answer for
+    /// an empty directory and a wrong answer for any other, so it is only
+    /// correct while the refusal beside it holds.
+    #[test]
+    fn a_new_directory_reads_nil_for_every_index_and_refuses_every_write() {
+        assert_eq!(
+            both_engines(
+                "d = .Directory~new\n\
+                 say d['X'] d~at('X') d~zork\n"
+            ),
+            (
+                0,
+                "The NIL object The NIL object The NIL object\n".to_string(),
+                String::new()
+            )
+        );
+        for write in ["d~put('v','X')", "d['X'] = 'v'", "d~zork = 'v'"] {
+            let (code, stdout, stderr) = both_engines(&format!("d = .Directory~new\n{write}\n"));
+            assert_eq!((code, stdout.as_str()), (120, ""), "{write}");
+            assert_eq!(
+                stderr,
+                "rexx-exec: a message send to a value that is not a hash collection is not \
+                 implemented (Phase 5)\n",
+                "{write}"
+            );
+        }
+    }
+
+    /// A semaphore's `UNINIT` runs at collection rather than at a send, so a
+    /// class that declares one needs a row even where the finalizer does
+    /// nothing.
+    ///
+    /// A refusal escaping the sweep reaches the program, so the instance
+    /// merely going out of scope is what this asks about.
+    #[test]
+    fn a_semaphore_instance_runs_its_finalizer_without_refusing() {
+        for class in ["EventSemaphore", "MutexSemaphore"] {
+            let source = format!("o = .{class}~new\nsay 'built'\n");
+            assert_eq!(
+                both_engines(&source),
+                (0, "built\n".to_string(), String::new()),
+                "{class}"
+            );
+        }
+    }
+
     /// **The one shape of `~at` that has no oracle behaviour to match**, and
     /// the instrument [`Loud::array_index_hole`]'s own doc names.
     ///

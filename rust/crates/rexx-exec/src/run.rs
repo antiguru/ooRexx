@@ -3319,6 +3319,7 @@ impl Interp {
         allow_optionals: bool,
         targets: &[Option<UseTarget>],
     ) -> Result<(), Failure> {
+        let in_method = self.activation().entry == Entry::Method;
         if strict {
             let supplied = self.call_context.arguments.len();
             // The minimum is the position of the last target that must be
@@ -3334,12 +3335,20 @@ impl Interp {
                 })
                 .map_or(0, |index| index + 1);
             if supplied < minimum {
-                let name = self.call_context.name.clone();
-                return Err(Raised::not_enough_arguments(&name, minimum).into());
+                return Err(if in_method {
+                    Raised::not_enough_method_arguments(minimum).into()
+                } else {
+                    let name = self.call_context.name.clone();
+                    Raised::not_enough_arguments(&name, minimum).into()
+                });
             }
             if !allow_optionals && supplied > targets.len() {
-                let name = self.call_context.name.clone();
-                return Err(Raised::too_many_arguments(&name, targets.len()).into());
+                return Err(if in_method {
+                    Raised::too_many_method_arguments(targets.len()).into()
+                } else {
+                    let name = self.call_context.name.clone();
+                    Raised::too_many_arguments(&name, targets.len()).into()
+                });
             }
         }
 
@@ -3348,7 +3357,7 @@ impl Interp {
             // `get` past the end and a `None` inside the list are the same
             // thing to a target: nothing was supplied for this position.
             let argument = self.call_context.arguments.get(index).cloned().flatten();
-            self.bind_use_target(code, index, target, argument)?;
+            self.bind_use_target(code, index, target, argument, strict, in_method)?;
         }
         Ok(())
     }
@@ -3370,6 +3379,8 @@ impl Interp {
         index: usize,
         target: &UseTarget,
         argument: Option<Argument>,
+        strict: bool,
+        in_method: bool,
     ) -> Result<(), Failure> {
         let position = index + 1;
         if target.alias {
@@ -3488,10 +3499,24 @@ impl Interp {
                 if let Some(rendered) = &rendered {
                     self.trace_assignment(indent, &name, rendered);
                 }
+                Ok(())
             }
-            None => self.drop_by_name(&name),
+            // `USE STRICT ARG` refuses an omitted position that has no
+            // default of its own, where `USE ARG` drops the target
+            // (`UseInstruction.cpp:97`-`:111`). The position is the target's,
+            // not the last one supplied -- measured, oracle rc 216, `call r
+            // , 2` into `use strict arg a, b` reports `argument 1`.
+            None if strict => Err(if in_method {
+                Raised::missing_method_argument(position).into()
+            } else {
+                let call = self.call_context.name.clone();
+                Raised::missing_argument(&call, position).into()
+            }),
+            None => {
+                self.drop_by_name(&name);
+                Ok(())
+            }
         }
-        Ok(())
     }
 
     /// Whether a `USE ARG >name` target is in the uninitialised state the
