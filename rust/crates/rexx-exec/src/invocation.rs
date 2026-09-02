@@ -234,24 +234,14 @@ impl Invocation {
     /// The same invocation, abandoned if the run is still executing clauses
     /// `deadline` after it starts.
     ///
-    /// **A field here for the same reason [`Engine`] is one, and the argument
-    /// transfers word for word**: an environment variable is read once per
-    /// process, so it could not give two arms inside one `cargo test`, and the
-    /// harnesses that run a population of programs call
-    /// [`run_program`](crate::run_program) directly rather than spawning an
-    /// interpreter. A deadline is a per-run choice made by the caller that
-    /// knows what it is running.
+    /// A field here for the same reason [`Engine`] is one: an environment
+    /// variable is read once per process, and a deadline is a per-run choice
+    /// made by the caller that knows what it is running.
     ///
-    /// **What it bounds is narrower than "the run", and the difference is the
-    /// whole of what this is worth**: `clause.rs`'s `Deadline` names what a
-    /// clause-boundary check cannot see -- a park, a spin inside one clause,
-    /// and the parse. A caller needing a bound on those needs one outside the
-    /// interpreter thread.
-    ///
-    /// The run ends with [`DEADLINE_EXIT`](crate::DEADLINE_EXIT) and a line on
-    /// stderr. It is not a Rexx condition: nothing can trap it, it has no
-    /// error number, and an invocation that never calls this cannot produce
-    /// it.
+    /// What it bounds is narrower than the run -- `clause.rs`'s `Deadline`
+    /// names what a clause-boundary check cannot see. The run ends with
+    /// [`DEADLINE_EXIT`](crate::DEADLINE_EXIT); it is not a Rexx condition and
+    /// an invocation that never calls this cannot produce one.
     pub fn with_deadline(self, deadline: Duration) -> Invocation {
         Invocation {
             deadline: Some(deadline),

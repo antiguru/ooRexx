@@ -2399,14 +2399,10 @@ pub(crate) enum Failure {
     /// ([`Deadline`](crate::clause::Deadline), whose own doc has what that
     /// bound does and does not reach).
     ///
-    /// **A harness bound, not language behaviour, and the type is what keeps
-    /// the two apart.** It carries nothing, so there is no condition name, no
-    /// error number and no substitution to render; `Interp::offer_to_trap`
-    /// declines every failure that is not [`Failure::Raised`], so no
-    /// `SIGNAL ON` can take it, and a `CALL ON` trap never sees a failure at
-    /// all. `execute` renders it as [`DEADLINE_EXIT`](crate::DEADLINE_EXIT)
-    /// with a line on stderr, and a run whose `Invocation` set no deadline
-    /// cannot produce one.
+    /// It is a harness bound, not language behaviour: it carries nothing, so
+    /// there is no condition name or error number to render, and
+    /// `Interp::offer_to_trap` declines every failure that is not
+    /// [`Failure::Raised`], so nothing can trap it.
     Deadline,
 }
 

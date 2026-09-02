@@ -164,28 +164,15 @@ pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 /// ([`Invocation::with_deadline`]).
 ///
 /// Every constraint [`NOT_IMPLEMENTED_EXIT`] states applies here for the same
-/// reasons -- outside 157..=253 so it cannot be read as a condition, below 126
-/// so it cannot be read as a shell's `128 + signal`, and not 0, 1, 2, 126 or
-/// 127 -- **and it is a different number from that one**, because the two mean
-/// opposite things to a harness. A not-implemented refusal is a row this crate
-/// is allowed to be blocked on and several harnesses classify it as such; a
-/// deadline is a hard failure of the run. Sharing a code would let a hang be
-/// counted as a construct awaiting implementation.
-///
-/// **No value in 0..=255 is collision-free**, and the same answer applies:
-/// `exit 121` is a status a program can name for itself, and what makes the
-/// choice safe is the harness treating this code as a hard failure whatever
-/// the oracle did, not the number.
+/// reasons, and it is a different number from that one because a harness must
+/// not count a hang as a construct awaiting implementation.
 pub const DEADLINE_EXIT: i32 = 121;
 
 /// The stderr line a run abandoned at its deadline leaves behind.
 ///
 /// It shares the `rexx-exec: ` prefix with a loud refusal because both are
-/// this interpreter speaking rather than the language, and it says *deadline*
-/// rather than naming a construct so that a reader and a `grep` can tell the
-/// two apart. It names no duration: the caller that set the bound is the one
-/// that knows it, and a message quoting a value it was handed would be one
-/// more thing to keep in step.
+/// this interpreter speaking rather than the language, and names no duration
+/// because the caller that set the bound is the one that knows it.
 pub const DEADLINE_REPORT: &[u8] = b"rexx-exec: the run exceeded its deadline\n";
 
 /// The name the interpreter's own package answers to -- `PackageClass::
@@ -3069,13 +3056,12 @@ struct Interp {
     deadline: Option<crate::clause::Deadline>,
     /// Clauses left before `Interp::countdown_reached` runs.
     ///
-    /// **Separate from `deadline` and never `None`**, which is the whole of
-    /// what the default path costs: one decrement and one branch, with the
-    /// question of whether there is a deadline at all behind them.
-    /// `crate::clause::Deadline`'s own doc has the measurement.
+    /// Clauses left before `Interp::countdown_reached` runs.
     ///
-    /// Every write leaves it at least 1, which is what makes the decrement
-    /// unable to underflow.
+    /// Separate from `deadline` and never `None`, so the default path pays one
+    /// decrement and one branch with the question of whether there is a
+    /// deadline at all behind them. Every write leaves it at least 1, which is
+    /// what makes the decrement unable to underflow.
     clause_countdown: u32,
     /// The chunk cache (Phase 4e): D16's discipline applied to a second cache
     /// rather than invented afresh for it, under `plans`' own `BodyKey`
