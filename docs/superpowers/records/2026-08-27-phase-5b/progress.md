@@ -1261,3 +1261,56 @@ and labelling the whole sentence measured.
 `spec-review.md` against the workspace's fifty-one files. The `review-<base>..<head>.diff` packages
 are excluded by the records README, but only after both endpoints of each are verified reachable --
 that verification is part of the copy, not an assumption to inherit.
+
+## Phase 5b whole-phase review (2026-09-02)
+
+Three strands in parallel at `60256a8cc`, each in its own `git archive` extract with its own
+`CARGO_TARGET_DIR`, main worktree read-only. Plan at `final-review-plan.md`. Scoped as a hunt for one
+defect class -- **a check that passes over the absence, or the wrong instance, of its subject** --
+rather than a general read, because the last consolidated review here found zero code defects and five
+prose defects, and prose fix rounds have introduced new false statements at 5, 0, 4, 0.
+
+**The instruments held.** All 55 send-surface rows of `refusal-sites.tsv` reddened under three
+independent mutations; all 55 `sourceline_oracle` expectations; all 58 corpus programs 5b added or
+touched; ten of the fourteen 5b decisions reddened by a mutation of their subject. Every control the
+seven unreviewed tasks named was run and is live, including the two the controller most doubted --
+Task 8's transposition (only the `order` line moves, `element` byte-identical) and Task 10's flip
+(reproduced by a different route, a table C row at exit 101 with no `REXX_PHASE_GATE`).
+
+**Exactly one code defect, and the phase introduced it. B1.** `~sendWith`, `~startWith`,
+`FORWARD ARGUMENTS` and `~run`'s `A` style with a multidimensional array are **rc 0 here against
+oracle rc 168/158**. Verified by the controller on a freshly built binary: `o~sendWith('M',
+.array~new(2,2))` is oracle `Error 88.913` at rc 168 against crate rc 0 `a seen 0`, and the
+`~startWith` shape is oracle `Error 98.913` at rc 158 against rc 0. **All four were loud rc 120
+refusals until Task 8 landed `Array~new`** -- so making arrays constructible converted four correct
+refusals into four wrong answers, in the defect class this phase's own spec names as what it is most
+exposed to. Nothing in the tree stands over them: no gated row, no corpus program, no
+`LICENSED_DIVERGENCES` row, no DEVIATION, nothing in `refusal-sites.tsv`; three of the four have no
+constructor to enumerate. **Ruled a fix, not a record**: the oracle's two `arrayArgument` overloads
+both reject `isMultiDimensional`, so matching them is a check rather than a surface, and licensing a
+wrong answer that has no design reason to differ would be the wrong instrument.
+
+**C1, medium, and it makes the flip reversible in silence.** Nothing asserts `CLOSED_PHASES`'s
+contents -- confirmed independently, its only mentions are the definition, two uses and doc comments
+-- so removing `"5b"` reddens nothing, and strand C measured that with a 5b row broken underneath the
+gate still exits 0 while printing `5b: 2 rows, 2 not yet agree`. D65 criterion 4 has no failing
+witness. `corpus.rs`'s `SUBSET_FILES` doc records the same shape for its own headline and that one was
+given a check.
+
+**A1, latent rather than present, and 5c inherits it.** `88.909` and `88.914` are each carried by two
+rows of `refusal-sites.tsv`, and swapping a pair's `answer` *and* `witness` columns leaves all four
+tests green. That is `invalid_position`'s shape with nothing wrong today. Everything else
+discriminates: every other row's answer was planted into every row, one at a time, and no plant
+survived.
+
+**Also found:** B2, a false *reason* beside a true claim (`refusal-sites.tsv:39` says nothing in this
+crate can re-run a probe; twelve test binaries do, one built this phase); B3, the `verdict` column
+held against nothing, where the phase already measured that check finding one bad row in twelve; B4,
+Task 0's `trace_oracle.rs` arm still unfalsifiable for a new reason; C2, D59a unmentioned anywhere
+under `rust/`; C4, D61's literal text contradicted by a row D60's conditional clause licenses. C3
+(D57 unwitnessed) ruled **not a defect** -- pure scoping, every mechanism it names witnessed
+elsewhere.
+
+**One process note worth keeping.** Strand B hit the stale-binary trap mid-review: it restored two
+sources, swept without rebuilding, and got a false divergence on `object_copy.rex`; rebuilding moved
+the binary hash and the re-run is 63 of 63. It now states a binary hash beside every figure.
