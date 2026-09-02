@@ -911,6 +911,20 @@ impl Interp {
         }
     }
 
+    /// Stores one entry on a `Body::Native`, and does nothing for a receiver
+    /// that is not one.
+    ///
+    /// The collector walks these, which is what makes the entry table the
+    /// right place for a value one of the interpreter's own objects has to
+    /// keep alive -- `dispatch`'s `MESSAGE_RESULT` is the caller.
+    pub(crate) fn set_native_entry(&mut self, object: ObjRef, index: &[u8], value: ObjRef) {
+        if let Some(held) = self.heap.get_mut(object)
+            && let Body::Native(native) = &mut held.body
+        {
+            native.set_entry(index, value);
+        }
+    }
+
     /// Which of the two directories this model built `directory` is, or `None`
     /// for any other object.
     ///

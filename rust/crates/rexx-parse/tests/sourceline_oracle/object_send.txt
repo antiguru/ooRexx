@@ -1,0 +1,38 @@
+count 37
+/* `~send` and `~sendWith` under a name built at run time, and the array form
+   of that name, whose second item is the class the method search starts from
+   -- the dynamic form of the `receiver~name:scope` override. The subclass
+   and the base both define M, so a build ignoring the second item prints the
+   subclass's answer twice.
+
+   The name is upcased before it is looked up, the arguments go to the method
+   in order, and a send that answers nothing leaves the cascade form yielding
+   the target, which is the one reading of it that does not end the program.
+   `~sendWith` takes its arguments from a single-dimensional array. */
+
+o = .Sub~new
+say 'plain' o~send('M') o~send('m')
+say 'scope' o~send(('M', .Base)) o~send(('m', .Sub))
+say 'args' o~send('WITHARGS', 3, 4) o~sendWith('WITHARGS', (5, 6))
+say 'scope-args' o~sendWith(('WITHARGS', .Base), (7, 8))
+say 'string' 'abc'~send('LENGTH') (1, 2)~send('ITEMS') .Sub~send('ID')
+say 'novalue' o~~send('NOVALUE')~class~id
+say 'unknown' o~send('ZORK')
+
+::CLASS Base
+::METHOD M
+  return 'base'
+::METHOD withArgs
+  use arg a, b
+  return 'base' a b
+::METHOD unknown
+  use arg name, args
+  return 'unknown' name args~items
+::CLASS Sub SUBCLASS Base
+::METHOD M
+  return 'sub'
+::METHOD withArgs
+  use arg a, b
+  return 'sub' a b
+::METHOD noValue
+  return

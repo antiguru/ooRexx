@@ -209,3 +209,34 @@ lang/forward_phantom_trap.rex
 lang/forward_class_scope.rex
 lang/forward_arguments_converted.rex
 lang/forward_class_trace.rex
+
+# Task 7: `~copy`, `~run`, `~send`/`~sendWith` and `~start`/`~startWith`.
+# `object_copy.rex` writes through the copy and reads the receiver back,
+# which is what tells a copied pool from a shared one, and its
+# finalizers are forced one at a time because the order two pending ones run
+# in is not reproducible. `object_run.rex` is the allowing arm, which the
+# refusal a program context meets never reaches: it carries the option table,
+# the source shapes, and D67's own reading -- the body's EXPOSE finds the
+# object's FLOAT pool and never the class's. `object_send.rex` carries the
+# array form of the message name, whose second item is the class the search
+# starts from, against a subclass that overrides the base's method, and
+# `object_start.rex` reads every message's `~result` before its `~completed`
+# and `~hasError`, which is all D68 leaves assertable.
+# The refusal rows beneath them are what a witness of the answers cannot see.
+# `object_run_refusals.rex` pins run's step order -- the option is read before
+# the restricted check, so an unrelated class's method meets 93.915 first --
+# and `object_send_refusals.rex` pins the message-name shapes, including that
+# the count checked is the array's last filled slot rather than its size and
+# that `sendWith` decodes the name before reading the array where `startWith`
+# does the opposite. The two untrapped rows carry the substitutions a trapped
+# one cannot: `Class~copy`'s own refusal, which is where a class object stops
+# short of `Object~copy`, and the name-shape refusal beside the same send
+# spelled with a string.
+lang/object_copy.rex
+lang/object_copy_class_refusal.rex
+lang/object_run.rex
+lang/object_run_refusals.rex
+lang/object_send.rex
+lang/object_send_refusals.rex
+lang/object_send_name_refusal.rex
+lang/object_start.rex

@@ -1,0 +1,50 @@
+count 49
+/* `~run`'s own refusals, trapped so that one program carries them all and
+   reported by exit status and sub-number, which is what tells one catalogue
+   row from another.
+
+   The last line is the step order and is the reason this program exists
+   rather than the option table alone: `run` reads the method, then the
+   option, then the restricted check, so a call from a class method of an
+   unrelated class reports the option's 93.915 first and the restricted
+   check's 98.991 only once the option is good. A build checking access first
+   reports 98.991 twice. */
+
+say .K~probe
+say .Other~poke(.K~new)
+exit 0
+
+::CLASS K
+::METHOD probe CLASS
+  o = self~new
+  r = ''
+  r = r self~try(o, "o~run()")
+  r = r self~try(o, "o~run('return 1', 'BOGUS')")
+  r = r self~try(o, "o~run('return 1', '')")
+  r = r self~try(o, "o~run('return 1', , 5)")
+  r = r self~try(o, "o~run('return 1', .nil, 5)")
+  r = r self~try(o, "o~run('return 1', 'A')")
+  r = r self~try(o, "o~run('return 1', 'A', (1,), (2,))")
+  r = r self~try(o, "o~run((.nil, 'return 1'))")
+  return r
+::METHOD try CLASS PRIVATE
+  use arg o, text
+  signal on syntax name caught
+  interpret 'zr =' text
+  return '['text '->' zr']'
+caught:
+  return '['text '->' rc'.'condition('E')']'
+
+::CLASS Other
+::METHOD poke CLASS
+  use arg o
+  signal on syntax name badOption
+  zr = o~run('return 1', 'BOGUS')
+  return 'no refusal for a bad option'
+badOption:
+  option = rc'.'condition('E')
+  signal on syntax name restricted
+  zr = o~run('return 1', 'I')
+  return 'option' option 'then no refusal'
+restricted:
+  return 'option' option 'then' rc'.'condition('E')

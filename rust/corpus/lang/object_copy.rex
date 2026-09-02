@@ -1,0 +1,52 @@
+/* `~copy` is shallow and copies the object's variable pools, which only a
+   write through the copy tells from sharing them: after `c~set` the receiver
+   still reads its own value. The identity line is spelled through
+   `~identityHash` because an instance as an operator's left operand is what
+   `eval.rs`'s `a_named_instance_is_never_an_operators_left_operand` refuses,
+   and it carries the receiver against itself so that the `0` is a difference
+   and not a comparison that never holds.
+
+   The copy carries the class, the object's own setMethod dictionary and the
+   FLOAT pool those one-offs share, and it is registered for UNINIT the way
+   the receiver was. Each finalizer is forced at a point of its own, because
+   the order two pending ones run in is not reproducible. */
+
+o = .K~new
+o~set('orig')
+o~mk
+
+c = o~copy
+say 'same' (o~identityHash == c~identityHash) (o~identityHash == o~identityHash)
+say 'class' c~class~id c~isA(.K) c~objectName
+say 'copy-init' c~get 'float' c~fl
+say 'one-off' c~mm
+
+c~set('changed')
+c~wr('float-changed')
+say 'receiver' o~get o~fl
+say 'copy' c~get c~fl
+
+c~objectName = 'renamed'
+say 'named' o~objectName c~objectName
+
+drop c
+call gc 'force'
+say 'copy gone'
+drop o
+call gc 'force'
+say 'receiver gone'
+
+::CLASS K
+::METHOD set
+  expose v
+  use arg v
+::METHOD get
+  expose v
+  return v
+::METHOD mk
+  self~setMethod('MM', 'return "one-off"')
+  self~setMethod('WR', 'expose fv; use arg fv')
+  self~setMethod('FL', 'expose fv; return fv')
+::METHOD uninit
+  expose v
+  say 'uninit' v

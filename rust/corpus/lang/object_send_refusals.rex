@@ -1,0 +1,42 @@
+/* Every shape decodeMessageName and the two `With` methods refuse, in one
+   program: a raise ends a program, so each is trapped and reported by its
+   exit status and its own sub-number, which is what tells one catalogue row
+   from another.
+
+   The order the two `With` methods check their arguments in is opposite and
+   is what the last pair reads: one call shape, two catalogue rows. `sendWith`
+   decodes the name first, so a name that is neither a string nor an array is
+   93.972 before the missing second argument is noticed, while `startWith`
+   only checks the name is present and reads the array before decoding, so
+   the same call reports the missing argument instead. */
+
+o = .K~new
+call try "o~send()"
+call try "o~send(.nil)"
+call try "o~send(('M', .K, 'x'))"
+call try "o~send(('M',))"
+call try "o~send((.nil, .K))"
+call try "o~send(('M', 'notaclass'))"
+call try "o~send(('M', .Array))"
+call try "o~sendWith('M')"
+call try "o~sendWith()"
+call try "o~start()"
+call try "o~startWith('M')"
+call try "o~startWith(, ('M',))"
+call try "o~sendWith(.nil)"
+call try "o~startWith(.nil)"
+say 'done'
+exit 0
+
+try:
+  signal on syntax name caught
+  interpret 'zr =' arg(1)
+  say arg(1) '->' zr
+  return
+caught:
+  say arg(1) '-> rc' rc 'error' rc'.'condition('E') 'condition' condition('C')
+  return
+
+::CLASS K
+::METHOD M
+  return 'm'

@@ -1,0 +1,13 @@
+count 12
+/* decodeMessageName's own refusal for a name that is neither a string nor an
+   array, untrapped so that the message carries the value it substitutes.
+   The adjacent success above it is the same send with a string, which is
+   what pins the refusal to the name's shape and not to the send. */
+o = .K~new
+say 'string' o~send('M')
+say 'nil' o~send(.nil)
+say 'never'
+
+::CLASS K
+::METHOD M
+  return 'm'

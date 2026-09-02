@@ -1,0 +1,37 @@
+/* `~run`'s allowing arm, which the refusal a program context meets does not
+   reach: the refusal fires at dispatch before any body runs, so a witness of
+   it alone agrees while RUN is a private name with nothing behind it.
+
+   The body is compiled from a source string or an array of them, runs at the
+   object's FLOAT scope rather than the class's -- so it reads what a FLOAT
+   one-off wrote and what another run body wrote, and never the class's own
+   pool -- and reports under the name RUN rather than the file's. The
+   argument options are Individual, Array and neither, first letter only. */
+
+o = .K~new
+say o~probe
+say .K~fromClassMethod
+
+::CLASS K
+::METHOD init
+  expose v
+  v = 'class-pool'
+::METHOD probe
+  expose v
+  r = 'none=' || self~run('return "ran"')
+  r = r 'ind=' || self~run('use arg a, b; return a b', 'Individual', 4, 5)
+  r = r 'arr=' || self~run('use arg a, b; return a b', 'A', (6, 7))
+  r = r 'ignored=' || self~run('use arg a; return a', 'i-and-the-rest', 8)
+  lines = ('use arg a', 'return "lines" a')
+  r = r 'array-source=' || self~run(lines, 'I', 9)
+  r = r 'source=' || self~run('parse source s; parse var s . kind name; return kind name')
+  self~setMethod('WR', 'expose fv; fv = "one-off wrote"')
+  self~wr
+  r = r 'float=' || self~run('expose fv; return fv')
+  self~run('expose rv; rv = "first run wrote"')
+  r = r 'shared=' || self~run('expose rv; return rv')
+  r = r 'class-pool=' || self~run('expose v; return v') '/' v
+  r = r 'self=' || self~run('return self~class~id')
+  return r
+::METHOD fromClassMethod CLASS
+  return 'class-method=' || self~new~run('return "allowed"')

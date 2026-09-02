@@ -1,0 +1,10 @@
+/* `Setup.cpp` gives Class its own COPY, and it is a refusal rather than a
+   copy: the class object never reaches Object's. Untrapped, so that the
+   message carries its substitution and the traceback carries the frame,
+   which names Class and not Object. */
+o = .K~new
+say 'instance' o~copy~class~id
+say 'class' .K~copy~id
+say 'never'
+
+::CLASS K

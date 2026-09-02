@@ -9178,3 +9178,50 @@ fn two_runs_in_one_process_allocate_the_annotation_tables_alike() {
         );
     }
 }
+
+/// `Message~hasError` answering `1`, which no differential row can carry.
+///
+/// The oracle's own answer to a started method that raises is not
+/// reproducible: measured, the failure report interleaves with the starting
+/// program's and `~hasError` sampled before `~result` reads `0` as readily as
+/// `1`, which is what D68 puts out of reach of every check. So the arm is
+/// asserted against this crate alone.
+///
+/// **This crate reports the failure once, at `~result`**, where the oracle
+/// reports it twice -- once from the message's own activity, with no
+/// `running <file>` line, and once when `~result` re-raises it. Both sides
+/// end at rc 214.
+#[test]
+fn a_started_method_that_raises_has_an_error_and_reraises_at_result() {
+    const PATH: &str = "/tmp/message-has-error.rex";
+    let source = b"o = .K~new\n\
+                   m = o~start('M')\n\
+                   say 'haserror' m~hasError 'completed' m~completed\n\
+                   say 'result' m~result\n\
+                   say 'never'\n\
+                   ::class K\n\
+                   ::method M\n\
+                   \x20 return 1/0\n";
+    for engine in [crate::Engine::Ir, crate::Engine::TreeWalker] {
+        let outcome = crate::run_program(
+            PATH,
+            source.to_vec(),
+            crate::Invocation::none().with_engine(engine),
+        );
+        assert_eq!(outcome.exit_code, 214, "256 - 42");
+        assert_eq!(
+            String::from_utf8_lossy(&outcome.stdout),
+            "haserror 1 completed 1\n"
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&outcome.stderr),
+            format!(
+                "\x20    8 *-* return 1/0\n\
+                 \x20      *-* Compiled method \"RESULT\" with scope \"Message\".\n\
+                 \x20    4 *-* say 'result' m~result\n\
+                 Error 42 running {PATH} line 8:  Arithmetic overflow/underflow.\n\
+                 Error 42.3:  Arithmetic overflow; divisor must not be zero.\n"
+            )
+        );
+    }
+}

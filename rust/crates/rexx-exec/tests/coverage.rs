@@ -1315,6 +1315,16 @@ const EXPECTED_SUBSET_5B: &[&str] = &[
     "lang/forward_class_scope.rex",
     "lang/forward_arguments_converted.rex",
     "lang/forward_class_trace.rex",
+    // Task 7: the four paths, and the refusal rows a witness of the answers
+    // cannot see.
+    "lang/object_copy.rex",
+    "lang/object_copy_class_refusal.rex",
+    "lang/object_run.rex",
+    "lang/object_run_refusals.rex",
+    "lang/object_send.rex",
+    "lang/object_send_refusals.rex",
+    "lang/object_send_name_refusal.rex",
+    "lang/object_start.rex",
 ];
 
 #[test]

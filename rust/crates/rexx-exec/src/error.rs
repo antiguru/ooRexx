@@ -1721,6 +1721,39 @@ impl Raised {
         Raised::syntax(93, 915, vec![options.as_bytes().to_vec(), found.to_vec()])
     }
 
+    /// 93.970: `Class~copy`, which the oracle answers for no class object.
+    /// `object` is the receiver's own string value.
+    ///
+    /// `RexxClass::copyRexx` (`classes/ClassClass.cpp:166`) is nothing but
+    /// this raise. Measured at rc 163: `.K~copy` reports `COPY method is not
+    /// supported for object The K class.`
+    pub(crate) fn copy_not_supported(object: &[u8]) -> Raised {
+        Raised::syntax(93, 970, vec![object.to_vec()])
+    }
+
+    /// 93.972: a `~send`/`~start` message name that is neither a string nor
+    /// an array. `found` is the value's own string value.
+    ///
+    /// `RexxObject::decodeMessageName` reaches it through `requestArray`
+    /// answering `TheNilObject` (`classes/ObjectClass.cpp:2137`-`:2140`).
+    /// Measured at rc 163: `o~send(.nil)` reports `A message name argument
+    /// must be a string or an array with 2 elements; found "The NIL
+    /// object".`
+    pub(crate) fn message_name_shape(found: &[u8]) -> Raised {
+        Raised::syntax(93, 972, vec![found.to_vec()])
+    }
+
+    /// 93.946: a `~send`/`~start` message name that is an array of any shape
+    /// but a single dimension of two elements
+    /// (`classes/ObjectClass.cpp:2143`-`:2146`). No substitution.
+    ///
+    /// Measured at rc 163: `o~send(('M', .K, 'extra'))` and a one-item array
+    /// both report `A message array must be a single-dimensional array with 2
+    /// elements.`
+    pub(crate) fn message_array_shape() -> Raised {
+        Raised::syntax(93, 946, vec![])
+    }
+
     /// 97.1: the receiver's behaviour answers no method of that name.
     /// `target` is the receiver's own **string value** and `name` the
     /// message as the send spells it, already upcased by the parser.

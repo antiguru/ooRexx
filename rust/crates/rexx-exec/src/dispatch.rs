@@ -304,6 +304,11 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // The five mutators, each of which `Setup.cpp` declares
     // `AddProtectedMethod` (`:456`, `:457`, `:463`, `:478`) except `Inherit`
     // (`:466`), and each of which opens with the same `REXX_DEFINED` refusal.
+    // `RexxClass::copyRexx` (`classes/ClassClass.cpp:166`), which is a
+    // refusal and not a copy: `Setup.cpp:483` overrides `Object`'s row with
+    // one that raises. Measured, oracle rc 163: `.K~copy` is `93.970 COPY
+    // method is not supported for object The K class.`
+    ("Class", "COPY", Arity::Fixed(0), native_class_copy),
     ("Class", "DEFINE", Arity::Fixed(2), native_define),
     (
         "Class",
@@ -364,6 +369,19 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `InheritInstanceMethods`. This is the entry-method mechanism: an entry
     // is reached by sending its name.
     ("Directory", "UNKNOWN", Arity::Fixed(2), native_hash_unknown),
+    (
+        "Message",
+        "COMPLETED",
+        Arity::Fixed(0),
+        native_message_completed,
+    ),
+    (
+        "Message",
+        "HASERROR",
+        Arity::Fixed(0),
+        native_message_has_error,
+    ),
+    ("Message", "RESULT", Arity::Fixed(0), native_message_result),
     ("Method", "ANNOTATION", Arity::Fixed(1), native_annotation),
     ("Method", "ANNOTATIONS", Arity::Fixed(0), native_annotations),
     // `MethodClass::getScopeRexx`, `memory/Setup.cpp:1113`. `Routine` and
@@ -372,6 +390,7 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `BaseExecutable` one (`classes/MethodClass.hpp:168`).
     ("Method", "SCOPE", Arity::Fixed(0), native_scope),
     ("Object", "CLASS", Arity::Fixed(0), native_class),
+    ("Object", "COPY", Arity::Fixed(0), native_copy),
     (
         "Object",
         "DEFAULTNAME",
@@ -402,6 +421,15 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         native_object_name_set,
     ),
     ("Object", "REQUEST", Arity::Fixed(1), native_request),
+    // `AddPrivateMethod("Run", RexxObject::run, A_COUNT)`,
+    // `memory/Setup.cpp:549`. Private, so a program context is refused by
+    // the private check before this entry is reached, and restricted
+    // besides -- D66 and [`check_restricted_method`].
+    ("Object", "RUN", Arity::Counted, native_run),
+    ("Object", "SEND", Arity::Counted, native_send),
+    ("Object", "SENDWITH", Arity::Fixed(2), native_send_with),
+    ("Object", "START", Arity::Counted, native_start),
+    ("Object", "STARTWITH", Arity::Fixed(2), native_start_with),
     // `AddPrivateMethod("SetMethod", ..., 3)` and its partner at
     // `memory/Setup.cpp:550`-`:551`. Private, which is where the refusal a
     // program context meets comes from; `rexx_classes::native_classes` files
@@ -559,6 +587,19 @@ pub(crate) const ARRAY_DEFAULT_NAME: &[u8] = b"an Array";
 /// so a lookup spelled any other way finds nothing.
 const UNKNOWN: &[u8] = b"UNKNOWN";
 
+/// The message name a `~run` body is entered under --
+/// `GlobalNames::UNNAMED_METHOD` (`memory/GlobalNames.h:240`), which
+/// `RexxObject::run` passes to `methobj->run`
+/// (`classes/ObjectClass.cpp:2245`).
+const UNNAMED_METHOD: &[u8] = b"*UNNAMED*";
+
+/// The entry a `Message` object keeps the value its send answered under.
+///
+/// On the object rather than beside it in [`Interp::message_outcomes`]
+/// because the collector walks a `Body::Native`'s entries and does not walk
+/// that table.
+const MESSAGE_RESULT: &[u8] = b"RESULT";
+
 /// The message a class construction sends the class it just built --
 /// `GlobalNames::INIT`, sent by `RexxClass::subclass`
 /// (`classes/ClassClass.cpp:1631`). Upper case for [`UNKNOWN`]'s reason.
@@ -612,6 +653,8 @@ pub(crate) struct ObjectModel {
     /// Reached through `ClassRegistry::system_lookup`, since no `.NAME`
     /// resolves to it.
     rexx_info: ObjRef,
+    /// The class `~start` and `~startWith` answer an instance of.
+    message: ObjRef,
 }
 
 impl ObjectModel {
@@ -721,6 +764,9 @@ impl ObjectModel {
         let rexx_info = classes
             .system_lookup("RexxInfo")
             .expect("RexxInfo is a native class in the kernel directory");
+        let message = classes
+            .lookup("Message")
+            .expect("Message is a native class");
         ObjectModel {
             classes,
             natives,
@@ -735,6 +781,7 @@ impl ObjectModel {
             string_table,
             context,
             rexx_info,
+            message,
         }
     }
 }
@@ -844,6 +891,15 @@ enum Primitive {
     /// gap and refuses loudly, because the oracle answers those: measured,
     /// `.RexxInfo~digits` is `9` and `.RexxInfo~languageLevel` is `6.06`.
     RexxInfo,
+    /// A `Body::Native` whose class is `.Message` -- what `~start` and
+    /// `~startWith` answer. Measured, oracle rc 0: `o~start('M', 5)~class~id`
+    /// is `Message` and `~string` is `a Message`.
+    ///
+    /// `Message`'s instance behaviour here is `Setup.cpp`'s whole set, the
+    /// position `.Package` above is in, so a name it does not hold is 97.1
+    /// and a name it holds with no [`NativeMethod`] behind it is this crate's
+    /// own gap.
+    Message,
     /// The receiver **is** a class object, so its messages resolve against
     /// that class's own class behaviour rather than against any class's
     /// instance behaviour. Measured, `::class K` plus `::method m class`:
@@ -1365,6 +1421,12 @@ impl Interp {
                     {
                         Ok(Primitive::RexxInfo)
                     }
+                    Body::Native(native)
+                        if self.object_model.as_ref().map(|model| model.message)
+                            == Some(native.class()) =>
+                    {
+                        Ok(Primitive::Message)
+                    }
                     // A `Body::Native` of a class this crate builds no
                     // receiver arm for. Nothing constructs one today; loud
                     // rather than answered, this crate's rule for an internal
@@ -1405,6 +1467,7 @@ impl Interp {
             Primitive::StringTable => model.string_table,
             Primitive::Context => model.context,
             Primitive::RexxInfo => model.rexx_info,
+            Primitive::Message => model.message,
             Primitive::Class(class) => return Ok(Behaviour::ClassSide(class)),
             Primitive::Instance { class, behaviour } => {
                 return Ok(Behaviour::Instance {
@@ -3871,6 +3934,7 @@ fn native_class(
         Primitive::StringTable => model.string_table,
         Primitive::Context => model.context,
         Primitive::RexxInfo => model.rexx_info,
+        Primitive::Message => model.message,
         Primitive::Class(class) => model.classes.class_of(class),
         Primitive::Instance { class, .. } => class,
     }))
@@ -5438,7 +5502,8 @@ fn native_object_name(
         | Primitive::Directory
         | Primitive::StringTable
         | Primitive::Context
-        | Primitive::RexxInfo => interp.string_value_text(receiver),
+        | Primitive::RexxInfo
+        | Primitive::Message => interp.string_value_text(receiver),
     };
     Ok(Some(interp.text_built(name)))
 }
@@ -5491,7 +5556,8 @@ fn native_object_name_set(
         | Primitive::Directory
         | Primitive::StringTable
         | Primitive::Context
-        | Primitive::RexxInfo => {
+        | Primitive::RexxInfo
+        | Primitive::Message => {
             let Some(object) = interp.heap.get_mut(receiver) else {
                 return Err(Loud::receiver_class("a value whose object is no longer live").into());
             };
@@ -5655,6 +5721,486 @@ fn check_restricted_method(
         return Ok(());
     }
     Err(Raised::restricted_method(name).into())
+}
+
+/// `Object~copy`: a new object with the receiver's methods and an equivalent
+/// set of object variables holding the same values -- `RexxObject::copyRexx`
+/// (`classes/ObjectClass.cpp:2879`).
+///
+/// **Shallow, and the write-through is what makes that observable.**
+/// Measured, oracle rc 0: `(o~identityHash == c~identityHash)` is `0`, the
+/// copy reads the receiver's values back, and after `c~set('changed')` the
+/// receiver's `~get` still answers `orig` where the copy's answers `changed`.
+/// The objects the pools hold are shared and not copied.
+///
+/// The object's own `setMethod` and `Class~enhanced` dictionary travels with
+/// it -- measured, oracle rc 0, a one-off set on the receiver answers on the
+/// copy -- and so does the receiver's `UNINIT` registration: measured, one
+/// instance with a finalizer, copied once and both dropped, prints
+/// `uninit ran` twice.
+///
+/// A receiver with no scope of its own is loud rather than answered. A class
+/// object never reaches here -- `memory/Setup.cpp:483` overrides this row and
+/// [`native_class_copy`] is the refusal it installs.
+fn native_copy(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    match interp.receiver_kind(receiver) {
+        Ok(Primitive::Instance { .. }) => {}
+        Ok(_) => return Err(Loud::native_method(b"COPY", "Object").into()),
+        Err(kind) => return Err(Loud::receiver_class(kind).into()),
+    }
+    // The allocation below collects first, and while the cloned body is a
+    // local the collector does not walk, every value in it is reachable from
+    // the receiver and from nowhere else.
+    interp.roots.push_temp(receiver);
+    let Some(source) = interp.heap.get(receiver) else {
+        return Err(Loud::receiver_class("a value whose object is no longer live").into());
+    };
+    let body = source.body.clone();
+    let copy = interp.alloc_with(rexx_core::BehaviourId::OBJECT, body);
+    interp.roots.push_temp(copy);
+    if interp.answers_uninit(copy) {
+        interp.heap.set_uninit(copy);
+    }
+    Ok(Some(copy))
+}
+
+/// `Class~copy`: the refusal `memory/Setup.cpp:483` puts over [`native_copy`]
+/// -- `RexxClass::copyRexx` (`classes/ClassClass.cpp:166`), whose whole body
+/// is the raise.
+///
+/// Measured, oracle rc 163: `.K~copy` is `93.970 COPY method is not supported
+/// for object The K class.` under a `Compiled method "COPY" with scope
+/// "Class".` frame.
+fn native_class_copy(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let target = interp.string_value_text(receiver);
+    Err(Raised::copy_not_supported(&target).into())
+}
+
+/// `Object~run(method [, option [, argument ...]])`: run a method on this
+/// object as if the object had defined it -- `RexxObject::run`
+/// (`classes/ObjectClass.cpp:2185`).
+///
+/// **The body's `EXPOSE` reaches the object's `FLOAT` pool** (D67), because
+/// the method is built with `TheNilObject` for its scope (`:2201`). Measured,
+/// oracle: `self~run('expose v; return v*10')` is `41.1` at rc 215 where the
+/// class's own `v` is 7; a `FLOAT` one-off's write is what a run body reads
+/// back; and two run bodies on one object read each other's writes.
+///
+/// **The steps are in the C++'s order and the order is observable**: the
+/// method, then the option, then the restricted check. Measured, oracle rc
+/// 163 from a class method of an unrelated class,
+/// `o~run('return 1', 'BOGUS')` reports the option's 93.915 and not the
+/// restricted check's 98.991.
+///
+/// **The body is named `RUN` and not for the file.** Measured, oracle rc 0,
+/// `parse source` inside one answers `LINUX METHOD RUN`; and rc 214, a
+/// failure inside one reports `Error 42 running RUN line 1` with no
+/// `Compiled method` line of its own above the native `RUN` frame.
+fn native_run(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(Some(source)) = args.first().copied() else {
+        return Err(Raised::missing_named_argument("method").into());
+    };
+    let body = run_method_body(interp, source)?;
+    let values = run_arguments(interp, args)?;
+    check_restricted_method(interp, receiver, b"RUN")?;
+    let method = interp.classes().mint_method_id();
+    interp.method_bodies.insert(method, body);
+    let resolution = Resolution {
+        scope: ObjRef::NIL,
+        method,
+    };
+    interp.invoke(resolution, receiver, UNNAMED_METHOD, &values)
+}
+
+/// `~run`'s first argument as a body this crate can enter --
+/// `MethodClass::newMethodObject(GlobalNames::RUN, methobj, TheNilObject,
+/// "method")` (`classes/ObjectClass.cpp:2201`).
+///
+/// A source string and an `Array` of source strings are
+/// [`compile_method_source`]'s two shapes and are compiled here. A `Method`
+/// object is taken when this crate holds its body, which is every object
+/// `compile_method_source` built; one that came from `Class~method` names a
+/// dictionary entry and carries no body a send could enter, so it is loud
+/// rather than run under the wrong one.
+///
+/// The scope every arm runs at is `ObjRef::NIL`, which a `Method` object does
+/// not override: measured, oracle rc 0, `self~run(.K~method('PROBE'))` on a
+/// `PROBE` that exposes `v` answers the derived name `V` where the class's
+/// own pool holds `class-pool`.
+fn run_method_body(
+    interp: &mut Interp,
+    source: ObjRef,
+) -> Result<crate::InstalledMethodBody, Failure> {
+    let object = if interp.receiver_kind(source) == Ok(Primitive::Method) {
+        source
+    } else {
+        compile_method_source(interp, b"RUN", source, "method")?
+    };
+    interp
+        .table_method_bodies
+        .get(&object)
+        .copied()
+        .ok_or_else(|| {
+            Loud::method_from_source("a one-off method whose body this crate does not hold").into()
+        })
+}
+
+/// `~run`'s `Individual`/`Array` option and the arguments behind it
+/// (`classes/ObjectClass.cpp:2207`-`:2235`).
+///
+/// A send with no second argument passes none, which is the option being
+/// absent rather than empty: measured, oracle rc 0, `self~run('return
+/// "no-opt"')` answers, while `self~run('...', , 5)` is `88.901 Missing
+/// argument; argument argument style is required.` at rc 168 and
+/// `self~run('...', '', 5)` is `93.915 ... found "".` at rc 163.
+///
+/// Only the first letter is read and the rest ignored -- measured, oracle rc
+/// 0, `'ignored-after-first'` passes its arguments individually.
+fn run_arguments(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+) -> Result<Vec<Option<ObjRef>>, Failure> {
+    let Some(option) = args.get(1).copied() else {
+        return Ok(Vec::new());
+    };
+    let Some(option) = option else {
+        return Err(Raised::missing_named_argument("argument style").into());
+    };
+    let option = required_string_named_argument(interp, option, "argument style")?;
+    let text = interp.to_text(option).to_vec();
+    match text.first().map(u8::to_ascii_uppercase) {
+        Some(b'I') => Ok(args[2..].to_vec()),
+        // `argCount < 3` and `argCount > 3` are separate raises with separate
+        // numbers. Measured, oracle: `self~run('return 1', 'A')` is `88.901
+        // ... argument argument array is required.` at rc 168, and a fourth
+        // argument is `93.902 ... 3 expected.` at rc 163.
+        Some(b'A') => {
+            let Some(Some(array)) = args.get(2).copied() else {
+                return Err(Raised::missing_named_argument("argument array").into());
+            };
+            if args.len() > 3 {
+                return Err(Raised::too_many_method_arguments(3).into());
+            }
+            interp
+                .array_slots_of(array)
+                .map(message_argument_slots)
+                .ok_or_else(|| unconverted_array_argument(interp, array))
+        }
+        _ => Err(Raised::method_option_not_recognised("AI", &text).into()),
+    }
+}
+
+/// `Object~send(messagename [, argument ...])`: invoke a method on this
+/// object under a name built at run time -- `RexxObject::send`
+/// (`classes/ObjectClass.cpp:2008`).
+///
+/// The name may be an array whose first item is the message and whose second
+/// is the class to start the method search from, which is the dynamic form of
+/// `receiver~name:scope`. Measured, oracle rc 0: with `::class Sub subclass
+/// Base` both defining `M`, `o~send('M')` answers the subclass's and
+/// `o~send(('M', .Base))` the base's.
+fn native_send(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let (name, scope) = decode_message_name(interp, args.first().copied().flatten())?;
+    dynamic_send(interp, receiver, &name, scope, &args[1..])
+}
+
+/// `Object~sendWith(messagename, arguments)`: [`native_send`] with the
+/// arguments in an array -- `RexxObject::sendWith`
+/// (`classes/ObjectClass.cpp:1972`).
+///
+/// **The name is decoded before the array is read**, which is the C++'s order
+/// and is observable: measured, oracle rc 163, `o~sendWith(.nil)` is the
+/// name's own 93.972 where the same call to `~startWith` reports the missing
+/// second argument instead.
+fn native_send_with(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let (name, scope) = decode_message_name(interp, args.first().copied().flatten())?;
+    let values = message_arguments(interp, args.get(1).copied().flatten())?;
+    dynamic_send(interp, receiver, &name, scope, &values)
+}
+
+/// `Object~start(messagename [, argument ...])`: a `Message` object whose
+/// send has been made -- `RexxObject::start`
+/// (`classes/ObjectClass.cpp:2067`) through `startCommon` (`:2094`).
+///
+/// **The send runs before this answers**, where the oracle runs it on an
+/// activity of its own, and nothing a check may assert separates the two
+/// (D68): `~start`'s interleaving with the program that started it is not
+/// reproducible on the oracle, and `~completed` sampled *before* `~result` is
+/// part of that interleaving. What is reproducible, and what the corpus
+/// asserts, is `~result`'s value and `~completed` after it -- measured,
+/// oracle rc 0, `result ran 5` / `completed 1` / `haserror 0`.
+///
+/// **Phase 6 owes the scheduling.** Two consequences of running the send
+/// here, both measured against the oracle and neither reachable by a check
+/// this phase may write: a started method's own output lands before the
+/// starting program's next clause rather than interleaved with it, and a
+/// started method that raises reports its failure once, at `~result`, where
+/// the oracle writes the same report twice in a transcript that does not
+/// reproduce -- four runs of one program, two orderings.
+///
+/// A `Message` row with no [`NativeMethod`] behind it refuses loudly, so a
+/// message this crate cannot drive never answers as though it could.
+fn native_start(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(message) = args.first().copied().flatten() else {
+        return Err(Raised::missing_named_argument("message name").into());
+    };
+    started_message(interp, receiver, message, &args[1..])
+}
+
+/// `Object~startWith(messagename, arguments)`: [`native_start`] with the
+/// arguments in an array -- `RexxObject::startWith`
+/// (`classes/ObjectClass.cpp:2046`).
+///
+/// **The array is read before the name is decoded**, the opposite of
+/// [`native_send_with`], because `startWith` checks the message is merely
+/// present and leaves the decoding to `startCommon` (`:2049`-`:2053`).
+/// Measured, oracle rc 163, one call shape and two catalogue rows:
+/// `o~startWith(.nil)` is `93.903 Missing argument in method; argument 2 is
+/// required.` where `o~sendWith(.nil)` is the name's own 93.972.
+fn native_start_with(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(message) = args.first().copied().flatten() else {
+        return Err(Raised::missing_named_argument("message name").into());
+    };
+    let Some(arguments) = args.get(1).copied().flatten() else {
+        return Err(Raised::missing_method_argument(2).into());
+    };
+    let values = interp
+        .array_slots_of(arguments)
+        .map(message_argument_slots)
+        .ok_or_else(|| unconverted_array_argument(interp, arguments))?;
+    started_message(interp, receiver, message, &values)
+}
+
+/// The send `~send` and `~sendWith` make, once the name has been decoded.
+///
+/// The scope override is validated before the send, which is where
+/// `RexxObject::sendWith` puts it (`:1989`) and what makes an unrelated class
+/// 93.957 rather than 97.1: measured, oracle rc 163, `o~send(('M', .Array))`
+/// is `Target object "a K" is not a subclass of the message override scope
+/// (The Array class).`
+fn dynamic_send(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    name: &[u8],
+    scope: Option<ObjRef>,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    interp.validate_scope_override(receiver, scope)?;
+    let caller = interp.caller();
+    interp.send_message(receiver, name, scope, args, caller)
+}
+
+/// The `Message` object `~start` and `~startWith` answer, with its send
+/// already made -- `RexxObject::startCommon` (`classes/ObjectClass.cpp:2094`)
+/// and `MessageClass::dispatch` (`classes/MessageClass.cpp:421`).
+///
+/// **Only a raised condition is caught.** `MessageClass::error` is handed a
+/// condition object by the activation notifying it, so what a message records
+/// is a Rexx condition and nothing else: a [`Loud`] is this crate saying it
+/// cannot run something and has to reach the program rather than become a
+/// message's `~hasError`, and `Failure::Exited` is not a failure at all.
+fn started_message(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    message: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let (name, scope) = decode_message_name(interp, Some(message))?;
+    interp.validate_scope_override(receiver, scope)?;
+    let class = interp.object_model().message;
+    let object = interp.native_instance(class);
+    let caller = interp.caller();
+    let outcome = match interp.send_message(receiver, &name, scope, args, caller) {
+        Ok(None) => None,
+        Ok(Some(value)) => {
+            interp.set_native_entry(object, MESSAGE_RESULT, value);
+            None
+        }
+        Err(Failure::Raised(raised)) => Some(raised),
+        Err(other) => return Err(other),
+    };
+    interp.message_outcomes.insert(object, outcome);
+    Ok(Some(object))
+}
+
+/// `Message~result`: the value the send answered, `.nil` for one that
+/// answered none, and the send's own condition raised again where it failed
+/// -- `MessageClass::result` (`classes/MessageClass.cpp:279`).
+///
+/// Measured, oracle rc 0: `m~result` after `o~start('M', 5)` is the method's
+/// value, and after a method ending in a bare `return` it is
+/// `The NIL object`.
+fn native_message_result(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if let Some(Some(raised)) = interp.message_outcomes.get(&receiver) {
+        return Err(Failure::Raised(raised.clone()));
+    }
+    let held = interp.native_entry(receiver, MESSAGE_RESULT);
+    Ok(Some(held.unwrap_or(ObjRef::NIL)))
+}
+
+/// `Message~completed`: whether the send has ended, with a result or with an
+/// error -- `MessageClass::completed` (`classes/MessageClass.cpp:722`), which
+/// is `resultReturned() || raiseError()`.
+///
+/// `setResultReturned()` runs after the send whether or not it produced a
+/// value (`:446`), so a method ending in a bare `return` completes like any
+/// other. **Sampling this before `~result` is racy on the oracle**, which is
+/// what D68 puts out of reach of every check.
+fn native_message_completed(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let completed = interp.message_outcomes.contains_key(&receiver);
+    Ok(Some(interp.counted(usize::from(completed))))
+}
+
+/// `Message~hasError`: whether the send ended by raising --
+/// `MessageClass::hasError` (`classes/MessageClass.cpp:736`).
+fn native_message_has_error(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let failed = matches!(interp.message_outcomes.get(&receiver), Some(Some(_)));
+    Ok(Some(interp.counted(usize::from(failed))))
+}
+
+/// `RexxObject::decodeMessageName` (`classes/ObjectClass.cpp:2125`): a
+/// message name, or a two-item array of a name and the class to start the
+/// method search from.
+///
+/// The name is upcased, so `o~send('m')` reaches `::method M` -- measured,
+/// oracle rc 0. Each refusal below differs from its neighbours in exit status
+/// or catalogue row, and `corpus/lang/object_send_refusals.rex` is where they
+/// are asserted rather than listed.
+fn decode_message_name(
+    interp: &mut Interp,
+    message: Option<ObjRef>,
+) -> Result<(Vec<u8>, Option<ObjRef>), Failure> {
+    let Some(message) = message else {
+        return Err(Raised::missing_named_argument("message name").into());
+    };
+    // `isString(message)` first, so a value that merely has a string value --
+    // `.nil` is the reachable one -- takes the array path and its own 93.972
+    // rather than being converted.
+    if matches!(
+        interp.receiver_kind(message),
+        Ok(Primitive::String | Primitive::SmallInt)
+    ) {
+        return Ok((interp.to_text(message).to_ascii_uppercase(), None));
+    }
+    let Some(slots) = interp.array_slots_of(message) else {
+        let rendered = interp.string_value_text(message);
+        return Err(Raised::message_name_shape(&rendered).into());
+    };
+    // `messageArgCount() != 2` (`classes/ObjectClass.cpp:2143`), which is
+    // `lastItem` (`classes/ArrayClass.hpp:305`) and not the slot count: a
+    // trailing empty slot is not an element. Measured, oracle rc 163,
+    // `o~send(('M',))` is 93.946 where the same array is `~size` 2.
+    let slots = &slots[..message_argument_count(&slots)];
+    if slots.len() != 2 {
+        return Err(Raised::message_array_shape().into());
+    }
+    // `stringArgument` distinguishes an empty slot from a value with no
+    // string value. Measured, oracle: `o~send((, .K))` is `88.901 ...
+    // argument message name is required.` and `o~send((.nil, .K))` is
+    // `88.909 Argument message name must have a string value.`, both rc 168.
+    let Some(name) = slots[0] else {
+        return Err(Raised::missing_named_argument("message name").into());
+    };
+    let name = required_string_named_argument(interp, name, "message name")?;
+    let name = interp.to_text(name).to_ascii_uppercase();
+    let scope = slots[1].filter(|scope| interp.is_class_object(*scope));
+    if scope.is_none() {
+        return Err(Raised::argument_not_a_class("SCOPE").into());
+    }
+    Ok((name, scope))
+}
+
+/// `ArrayClass::messageArgCount` (`classes/ArrayClass.hpp:305`), which is the
+/// array's `lastItem`: the position of the last filled slot, so a trailing
+/// empty slot is not an argument and an interior one is an omitted argument.
+///
+/// Measured, oracle rc 0, over `~sendWith` into a method reporting `arg()`:
+/// `(5,)` passes `1`, `(5, , 7)` passes `3` with the second omitted, and
+/// `(, 6)` passes `2` with the first omitted.
+fn message_argument_count(slots: &[Option<ObjRef>]) -> usize {
+    slots
+        .iter()
+        .rposition(Option::is_some)
+        .map_or(0, |at| at + 1)
+}
+
+/// [`message_argument_count`] applied to an argument array, which is what
+/// `messageArgs()`/`messageArgCount()` hand a send together.
+fn message_argument_slots(slots: Vec<Option<ObjRef>>) -> Vec<Option<ObjRef>> {
+    let count = message_argument_count(&slots);
+    let mut slots = slots;
+    slots.truncate(count);
+    slots
+}
+
+/// The argument array `~sendWith` requires -- `arrayArgument(args, "message
+/// arguments")` (`classes/ObjectClass.cpp:1980`).
+///
+/// A value that is not already an `Array` takes
+/// [`unconverted_array_argument`]'s refusal, for the reason `~UNKNOWN`'s own
+/// argument list takes it: the C++ converts with `requestArray`, which is a
+/// `MAKEARRAY` send this crate answers for no receiver.
+fn message_arguments(
+    interp: &mut Interp,
+    arguments: Option<ObjRef>,
+) -> Result<Vec<Option<ObjRef>>, Failure> {
+    let Some(arguments) = arguments else {
+        return Err(Raised::missing_named_argument("message arguments").into());
+    };
+    interp
+        .array_slots_of(arguments)
+        .map(message_argument_slots)
+        .ok_or_else(|| unconverted_array_argument(interp, arguments))
 }
 
 /// `Class~enhanced(methods, ...)`: an instance of the receiver carrying

@@ -3293,6 +3293,20 @@ struct Interp {
     /// only for a written `::METHOD`; `environment.rs`'s `written_method`
     /// carries why an `::ATTRIBUTE` or `::CONSTANT` accessor is absent.
     table_method_bodies: HashMap<ObjRef, InstalledMethodBody>,
+    /// What the send behind each `Message` object this crate has built ended
+    /// with -- `MessageClass`'s `flagResultReturned` and `flagRaiseError`
+    /// (`classes/MessageClass.hpp:61`-`:62`) and its `condition` field (`:135`).
+    ///
+    /// A row is added when the send returns, so `Message~completed` is a
+    /// lookup here and not a constant: a `Message` this table does not name
+    /// has not completed.
+    ///
+    /// The result is **not** here: it is an entry on the `Message` object's
+    /// own [`rexx_core::NativeObject`], which the collector walks. A row here
+    /// holds no [`ObjRef`], so a message that dies takes nothing with it but
+    /// this row, which stays -- the position [`Interp::method_objects`] is
+    /// in.
+    message_outcomes: HashMap<ObjRef, Option<Box<Raised>>>,
     /// The methods a directive implements itself -- see [`GeneratedMethod`]
     /// for why these are not rows of [`method_bodies`], which is a
     /// measurement rather than a taxonomy.
@@ -4418,6 +4432,7 @@ impl Interp {
             compiled_method_names: HashMap::new(),
             object_methods: false,
             table_method_bodies: HashMap::new(),
+            message_outcomes: HashMap::new(),
             generated_methods: HashMap::new(),
             native_externals: HashMap::new(),
             special_methods: Vec::new(),
