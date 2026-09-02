@@ -1,0 +1,16 @@
+/* FORWARD ARGUMENTS has a single-dimension test of its own, at 98.946, which
+   it shares with a value requestArray answers .nil for. The forwarded target
+   is another method, so neither arm re-enters the forwarding one. */
+
+o = .K~new
+say o~one
+say o~two
+say 'unreached'
+
+::CLASS K
+::METHOD M
+  return 'm' arg()
+::METHOD ONE
+  forward message('M') arguments (.array~new(2))
+::METHOD TWO
+  forward message('M') arguments (.array~new(2,2))

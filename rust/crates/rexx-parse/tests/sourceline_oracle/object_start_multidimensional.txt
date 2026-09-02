@@ -1,0 +1,13 @@
+count 12
+/* ~startWith's argument array reaches arrayArgument's positional overload,
+   whose refusal renders the object rather than naming the argument: 98.913,
+   not the 88.913 ~sendWith reports for the same call shape. */
+
+o = .K~new
+say o~startWith('M', .array~new(2))~result
+say o~startWith('M', .array~new(2,2))~result
+say 'unreached'
+
+::CLASS K
+::METHOD M
+  return 'm' arg()

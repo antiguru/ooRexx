@@ -118,9 +118,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use gate_tables::{
-    Descriptors, Report, Structural, Verdict, assert_no_structural_failures, compare_raw, excerpt,
-    is_loud, refused_construct, run_on_both_engines, stdout_lines, verdict, verdict_is_gated,
-    verdict_label,
+    CLOSED_PHASES, Descriptors, Report, Structural, Verdict, assert_no_structural_failures,
+    compare_raw, excerpt, is_loud, refused_construct, run_on_both_engines, stdout_lines, verdict,
+    verdict_is_gated, verdict_label,
 };
 use support::oracle::{CppOutcome, did_not_finish, wrapped_exit_code};
 
@@ -506,7 +506,13 @@ const CONCEPTS: &[Concept] = &[
                     handover puts instance construction in 5b",
         control: "route `matrix[2, 3] = 0` to a single-index `[]=`, so the element read back \
                   is not the one written; or transpose the index mapping, which the `order` \
-                  line reads and no write-then-read pair can -- 5b",
+                  line reads and no write-then-read pair can. Transpose the **offset \
+                  accumulation alone**, leaving `multi_dimension_position`'s bounds pass \
+                  pairing each subscript with its own dimension: reversing that pairing does \
+                  not terminate, because a subscript past the dimension it was mispaired with \
+                  re-enters `array_extend_multi` and the interpreter thread overflows its \
+                  stack at rc 134, which reads as an infrastructure failure and not as a \
+                  reddened row -- 5b",
         oracle_lines: 5,
     },
 ];
@@ -1416,6 +1422,40 @@ fn argutil_assertion(
         (true, true) => "held: ArgUtil is a class row and emits no hierarchy edge".to_string(),
         _ => "FAILED -- see the structural failures above".to_string(),
     }
+}
+
+/// Every phase this table owns rows for whose corpus subset file exists is in
+/// [`CLOSED_PHASES`].
+///
+/// `CLOSED_PHASES` is what turns a red row of a closed phase into an exit
+/// status. Its other readers are `verdict_is_gated` and `Report::new`, so a
+/// phase dropped from it simply stops being gated: the only trace is the
+/// report's own `verdicts gated for ...` line and its `N not yet agree`
+/// tally, and nothing asserts on either. A `corpus/phase-<id>.txt` is the
+/// project's own record that the phase's programs agree with the oracle, so a
+/// phase that has one and owns rows here owes those rows an exit status.
+///
+/// **One direction, and the other needs none.** A phase added here before it
+/// closes gates rows that do not agree yet, which the next gate run reports as
+/// an exit status of its own.
+#[test]
+fn every_closed_phase_this_table_owns_rows_for_is_gated() {
+    let corpus = corpus_dir();
+    let ungated: Vec<&str> = CONCEPTS
+        .iter()
+        .map(|concept| concept.phase)
+        .chain([WIRING_PHASE, METHOD_PHASE])
+        .collect::<BTreeSet<&str>>()
+        .into_iter()
+        .filter(|phase| corpus.join(format!("phase-{phase}.txt")).is_file())
+        .filter(|phase| !CLOSED_PHASES.contains(phase))
+        .collect();
+    assert!(
+        ungated.is_empty(),
+        "{ungated:?} own rows in gate table C and have a committed corpus subset file, so \
+         their programs agree with the oracle, but CLOSED_PHASES does not name them -- a \
+         verdict of theirs can move and every gate still exits 0"
+    );
 }
 
 #[test]

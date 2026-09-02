@@ -1,0 +1,12 @@
+/* ~sendWith's argument array reaches arrayArgument's named overload, which
+   takes a single-dimensional array and refuses a multi-dimensional one at
+   88.913. The refusal ends the program, so it is the last thing tried. */
+
+o = .K~new
+say o~sendWith('M', .array~new(2))
+say o~sendWith('M', .array~new(2,2))
+say 'unreached'
+
+::CLASS K
+::METHOD M
+  return 'm' arg()

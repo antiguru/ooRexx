@@ -572,6 +572,62 @@ fn a_reached_row_carries_its_own_site_identifier_and_an_unreached_one_does_not()
     }
 }
 
+/// The `answer` values more than one send-surface row carries, with the rows
+/// that carry them.
+///
+/// `admits` accepts an answer that is one of the constructor's own
+/// `syntax(M, N)` numbers, so two constructors raising the same number admit
+/// each other's rows and
+/// [`a_reached_row_carries_its_own_site_identifier_and_an_unreached_one_does_not`]
+/// cannot tell a transposition inside such a pair from the truth. Measured, at
+/// both entries below: swapping a pair's `answer` and `witness` together
+/// leaves every test in this file green.
+const SHARED_ANSWERS: &[(&str, &[&str])] = &[
+    (
+        "88.909",
+        &[
+            "argument_needs_a_string_value",
+            "named_argument_needs_a_string_value",
+        ],
+    ),
+    (
+        "88.914",
+        &["argument_not_a_class", "scope_override_not_a_class"],
+    ),
+];
+
+/// The rows sharing an `answer` are the recorded ones, so the table's own
+/// header cannot go stale about what its check does not see.
+///
+/// The limit itself is not closed here: this says which pairs carry it.
+#[test]
+fn the_answers_more_than_one_row_shares_are_the_recorded_ones() {
+    let mut by_answer: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for row in committed() {
+        if row.surface.split('+').any(|tag| tag == "send") {
+            by_answer.entry(row.answer).or_default().push(row.name);
+        }
+    }
+    let shared: Vec<(String, Vec<String>)> = by_answer
+        .into_iter()
+        .filter(|(_, names)| names.len() > 1)
+        .collect();
+    let recorded: Vec<(String, Vec<String>)> = SHARED_ANSWERS
+        .iter()
+        .map(|(answer, names)| {
+            (
+                (*answer).to_string(),
+                names.iter().map(|name| (*name).to_string()).collect(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        shared, recorded,
+        "the send-surface rows sharing an `answer` have changed. The table's header names \
+         the pairs this file's check cannot discriminate; correct both together"
+    );
+}
+
 /// The scanner reads the source rather than a copy of the answer: the file it
 /// is pointed at decides what it finds.
 ///

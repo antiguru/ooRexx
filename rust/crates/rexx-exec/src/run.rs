@@ -3935,10 +3935,12 @@ impl Interp {
     ///
     /// 98.946 wherever `RexxInternalObject::requestArray`
     /// (`classes/ObjectClass.cpp:1646`) answers `TheNilObject`: `.nil`, a
-    /// class object, and an instance whose behaviour has no `MAKEARRAY`.
-    /// Measured, oracle rc 158 for `arguments (self)` and
-    /// `arguments (.String)`, and rc 0 `a seen 2 [x] [y]` for an instance of
-    /// a class defining `makeArray`.
+    /// class object, and an instance whose behaviour has no `MAKEARRAY`; and
+    /// for a multi-dimensional array, which converts to itself and fails the
+    /// instruction's own single-dimension test. Measured, oracle rc 158 for
+    /// `arguments (self)`, `arguments (.String)` and
+    /// `arguments (.array~new(2,2))`, and rc 0 `a seen 2 [x] [y]` for an
+    /// instance of a class defining `makeArray`.
     ///
     /// Refuses loudly for a conversion this crate does not build, rather
     /// than sending the object itself as one argument.
@@ -3986,7 +3988,16 @@ impl Interp {
             Decoded::Heap { .. } => {}
         }
         match self.heap.get(value).map(|object| &object.body) {
-            Some(Body::Array { .. }) => Conversion::Array,
+            // A multi-dimensional array shares `TheNilObject`'s raise rather
+            // than converting (`instructions/ForwardInstruction.cpp:189`-
+            // `:191`).
+            Some(Body::Array { .. }) => {
+                if self.is_multi_dimensional_array(value) {
+                    Conversion::Refused
+                } else {
+                    Conversion::Array
+                }
+            }
             Some(Body::Text { .. } | Body::Num { .. }) => Conversion::Lines,
             // `StemClass::makeArray` is `tailArray`, which is the assigned
             // tails and never the default: measured, `a. = 'dflt'` with no

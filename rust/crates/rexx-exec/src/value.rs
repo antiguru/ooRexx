@@ -746,6 +746,20 @@ impl Interp {
         }
     }
 
+    /// Whether a fixed dimension list makes this array multi-dimensional --
+    /// `ArrayClass::isMultiDimensional` (`classes/ArrayClass.hpp:312`), a
+    /// dimension list of any length other than one.
+    ///
+    /// An array no dimension list was fixed for is single-dimensional, which
+    /// is the C++'s `dimensions == OREF_NULL`. A value that is not an array
+    /// answers `false`; every caller asks that question first.
+    pub(crate) fn is_multi_dimensional_array(&self, value: ObjRef) -> bool {
+        matches!(
+            self.array_body(value),
+            Some((_, Some(dimensions))) if dimensions.len() != 1
+        )
+    }
+
     /// [`Interp::array_slots`] as an owned copy, for a caller that goes on to
     /// use `interp`.
     pub(crate) fn array_slots_of(&self, value: ObjRef) -> Option<Vec<Option<ObjRef>>> {

@@ -26,7 +26,11 @@
 # claim's stderr arm: a `defaultName` that raises reports `Compiled method`
 # frames for `OBJECTNAME` and `STRING` that no stored rendering could make.
 # `instance_self_reassigned.rex` is a method body assigning over `SELF` and
-# then allocating, the shape the receiver's rooting turns on.
+# then allocating, once inside `INIT` while `~new` is still building the
+# object and once in an ordinary send; what it pins is that the exposed pool
+# is still reached after the assignment. It is not a witness of the receiver's
+# rooting: measured, deleting `Activation`'s `receiver` and `owner` root
+# pushes leaves it green.
 gate-tables/concepts/creo.rex
 gate-tables/concepts/abscla.rex
 lang/instance_naming.rex
@@ -266,3 +270,20 @@ lang/array_multidimensional_refusals.rex
 # refuse everything. Every case is trapped, so the row compares the condition
 # each raises rather than a traceback carrying the file's own path.
 lang/array_allocation_refused.rex
+
+# Phase 5b review fix round: the argument slots the oracle guards with
+# `arrayArgument`, each handed a multi-dimensional array. Making `Array~new`
+# constructible turned four correct rc 120 refusals into four answers at rc 0
+# with nothing in the tree over them. Every row runs its single-dimensional
+# neighbour first, so a build refusing both would redden here too, and every
+# row ends on the untrapped refusal, so it carries the substitution as well as
+# the number: `object_send_multidimensional.rex` and
+# `object_run_multidimensional.rex` are the named overload's 88.913 under two
+# different argument names, `object_start_multidimensional.rex` is the
+# positional overload's 98.913, which renders the object instead of naming the
+# argument, and `forward_arguments_multidimensional.rex` is the instruction's
+# own 98.946, which it shares with a value `requestArray` answers `.nil` for.
+lang/object_send_multidimensional.rex
+lang/object_start_multidimensional.rex
+lang/forward_arguments_multidimensional.rex
+lang/object_run_multidimensional.rex

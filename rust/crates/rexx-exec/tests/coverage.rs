@@ -1337,6 +1337,14 @@ const EXPECTED_SUBSET_5B: &[&str] = &[
     // error `MaxFixedArraySize` does not decide, beside that limit's own
     // 93.959 and a size in reach.
     "lang/array_allocation_refused.rex",
+    // Review fix round: the argument slots `arrayArgument` guards, each handed
+    // a multi-dimensional array, with the single-dimensional neighbour that
+    // answers ahead of it. The named overload's 88.913 under two argument
+    // names, the positional overload's 98.913, and `FORWARD`'s own 98.946.
+    "lang/object_send_multidimensional.rex",
+    "lang/object_start_multidimensional.rex",
+    "lang/forward_arguments_multidimensional.rex",
+    "lang/object_run_multidimensional.rex",
 ];
 
 #[test]

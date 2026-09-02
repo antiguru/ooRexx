@@ -685,9 +685,9 @@ that draft said -- walk the class registry in creation order -- would emit a sil
 rc 0 with empty stderr, produced by following the spec.
 
 What is established is weaker and is what D60 now says: the order is reproducible run to run, it
-holds within a homogeneous group, and it is not creation order across groups. **Characterising it is
-a task the plan owes**, and until it is characterised D61's prohibition covers class objects as well
-as instances. `obdes.rex` is unaffected: it has exactly one class with a `UNINIT`.
+holds within a homogeneous group, and it is not creation order across groups. **Task 5 characterised
+it** -- see D60 -- so D61's prohibition no longer covers class objects. `obdes.rex` is unaffected
+either way: it has exactly one class with a `UNINIT`.
 
 ### What is reproducible about UNINIT and what is not
 
@@ -1010,14 +1010,25 @@ their count as its own progress measure is measuring 5c.
   `corpus/gate-tables/concepts/obdes.rex` reachable and gated. **The sweep's order is not creation
   order**: an earlier draft said it was, on a two-class measurement that could not discriminate, and a
   three-class program falsifies it three runs of three. What holds is that the oracle's order is
-  reproducible and agrees with creation order within a homogeneous group. **Characterising it is a
-  task this phase's plan owes**, and until it is characterised D61 covers class objects too.
+  reproducible and agrees with creation order within a homogeneous group. **Task 5 characterised
+  it**, which is what retired the "until it is characterised" clause below: the oracle's
+  `uninitTable` is an `IdentityTable` walked bucket by bucket, and a class object's bucket comes from
+  the hash of its **id string** rather than of its address, which is why this order reproduces where
+  an instance's does not. `ClassRegistry::take_uninit_classes_in_sweep_order` carries the citations
+  and `rexx-classes/tests/uninit_sweep_order.rs` asserts the oracle transcripts it reproduces.
 * **D61. No row of any gate table, and no program in `corpus/phase-5b.txt`, may depend on the order
-  in which `UNINIT` runs at termination** -- for instances, because the oracle does not reproduce it
-  (two instances, two orders over twenty runs); for class objects, because D60 has not characterised
-  it yet. A program needing more than one `UNINIT` to fire must force each with `drop` followed by
-  `call gc 'force'`, which is reproducible five runs of five, or must not exist. `obdes.rex` is
-  unaffected: it has exactly one class with a `UNINIT`.
+  in which `UNINIT` runs at termination over more than one instance**, because the oracle does not
+  reproduce it (two instances, two orders over twenty runs). A program needing more than one
+  `UNINIT` to fire must force each with `drop` followed by `call gc 'force'`, which is reproducible
+  five runs of five, or must not exist. `obdes.rex` is unaffected: it has exactly one class with a
+  `UNINIT`.
+  **Removed from D61, and why: class objects.** The rule read "for class objects, because D60 has
+  not characterised it yet". Task 5 characterised it, so D60's own conditional lapsed and the clause
+  with it; `corpus/lang/uninit_class_sweep_order.rex`, a `phase-5b.txt` program whose whole subject
+  is that order, is licensed rather than a violation. It is removed rather than narrowed because
+  what replaces it is D60's characterisation and not a second rule. **This governs 5c as well**: a
+  row there may depend on the class sweep's order and may not depend on the order over several
+  instances.
 * **D62. Gate table D's two `DELEGATE` rows are replaced by probes that send the delegated message**,
   in the two one-line shapes above -- one line because `expected_oracle_lines` bounds a non-refusing
   row's stdout at one, and for `::ATTRIBUTE` both generated methods, `name` and `name=`, because the
@@ -1087,7 +1098,7 @@ Four items, each with a site.
 | a `UNINIT` row, or a `~completed` row, is written from a racy transcript | the row passes and fails at random | D61 and D68, and the reproducible shapes are named with their measurements |
 | D59's licence widens by drift | a further silent divergence arrives under cover of the named ones | D59a enumerates the four and says a fifth needs its own decision; each owed witness names its phase |
 | the class-scope root makes an instance's `UNINIT` an *absence* rather than a late delivery | a silent wrong answer with no gate row anywhere near it | D69 puts the termination sweep over every live object carrying the flag, not over the class registry; D64 gives it a witness |
-| the class UNINIT sweep is implemented in creation order, as an earlier draft of D60 said | a silent wrong answer produced by following the spec | D60 retracts it and D61 covers class objects until the order is characterised; the falsifying program is in the licence section |
+| the class UNINIT sweep is implemented in creation order, as an earlier draft of D60 said | a silent wrong answer produced by following the spec | D60 retracts it and carries the characterisation Task 5 measured; the falsifying program is in the licence section, and `uninit_class_sweep_order.rex` is the committed row over it |
 | the class-scope root retains instances | a long-running program's resident set grows without bound where the oracle's does not | stated in D59 rather than left to be found; no ordinary path pays for it, and the shape that provokes it is a class-side `EXPOSE` accumulating instances |
 | the instance-arm method rows move a lot when `~new` lands | 5b's progress is read off 5c's criterion | D65 gates 5b on 5b's rows and says explicitly that the method rows are reported, not gated |
 | 5b's row set is small enough to close while a named mechanism is unbuilt | the phase closes over a gap | D64's corpus subset is the denominator for the mechanisms with no concept row, and the exit criterion names it |
@@ -1108,8 +1119,8 @@ Four items, each with a site.
 * **What rule the oracle's class-`UNINIT` termination order actually follows.** D60 records that it
   is reproducible and that it is not creation order, and no more. The two falsifying programs both
   fire metaclass-`UNINIT` classes before `::METHOD uninit CLASS` ones, and runtime-built classes
-  before directive-installed ones, but two witnesses do not make a rule and the plan owes the
-  characterisation.
+  before directive-installed ones, but two witnesses did not make a rule. **Task 5 delivered the
+  characterisation**, which is what D60 now carries; this entry records the state at spec time.
 * **Whether any documented mechanism outside this list becomes reachable once `~new` exists.** The
   parent spec's enumeration was the source for what 5b owns; a mechanism it filed under 5a or 5c and
   that turns out to need an instance would surface as a red row rather than as a gap in this

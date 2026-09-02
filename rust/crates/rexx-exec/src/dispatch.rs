@@ -6384,10 +6384,7 @@ fn run_arguments(
             if args.len() > 3 {
                 return Err(Raised::too_many_method_arguments(3).into());
             }
-            interp
-                .array_slots_of(array)
-                .map(message_argument_slots)
-                .ok_or_else(|| unconverted_array_argument(interp, array))
+            array_argument(interp, array, ArrayArgument::Named("argument array"))
         }
         _ => Err(Raised::method_option_not_recognised("AI", &text).into()),
     }
@@ -6487,10 +6484,7 @@ fn native_start_with(
     let Some(arguments) = args.get(1).copied().flatten() else {
         return Err(Raised::missing_method_argument(2).into());
     };
-    let values = interp
-        .array_slots_of(arguments)
-        .map(message_argument_slots)
-        .ok_or_else(|| unconverted_array_argument(interp, arguments))?;
+    let values = array_argument(interp, arguments, ArrayArgument::Positional)?;
     started_message(interp, receiver, message, &values)
 }
 
@@ -6673,11 +6667,6 @@ fn message_argument_slots(slots: Vec<Option<ObjRef>>) -> Vec<Option<ObjRef>> {
 
 /// The argument array `~sendWith` requires -- `arrayArgument(args, "message
 /// arguments")` (`classes/ObjectClass.cpp:1980`).
-///
-/// A value that is not already an `Array` takes
-/// [`unconverted_array_argument`]'s refusal, for the reason `~UNKNOWN`'s own
-/// argument list takes it: the C++ converts with `requestArray`, which is a
-/// `MAKEARRAY` send this crate answers for no receiver.
 fn message_arguments(
     interp: &mut Interp,
     arguments: Option<ObjRef>,
@@ -6685,10 +6674,53 @@ fn message_arguments(
     let Some(arguments) = arguments else {
         return Err(Raised::missing_named_argument("message arguments").into());
     };
-    interp
-        .array_slots_of(arguments)
-        .map(message_argument_slots)
-        .ok_or_else(|| unconverted_array_argument(interp, arguments))
+    array_argument(interp, arguments, ArrayArgument::Named("message arguments"))
+}
+
+/// Which `arrayArgument` overload a site calls, which is what decides the
+/// refusal a multi-dimensional array takes.
+enum ArrayArgument {
+    /// `arrayArgument(object, const char *name)`
+    /// (`runtime/MethodArguments.hpp:703`), whose raise names the argument.
+    Named(&'static str),
+    /// `arrayArgument(object, size_t position)`
+    /// (`runtime/MethodArguments.hpp:675`), whose raise renders the object.
+    Positional,
+}
+
+/// `arrayArgument`: an argument's message-argument slots.
+///
+/// A value that is not already an `Array` takes
+/// [`unconverted_array_argument`]'s refusal, for the reason `~UNKNOWN`'s own
+/// argument list takes it: the C++ converts with `requestArray`, which is a
+/// `MAKEARRAY` send this crate answers for no receiver.
+///
+/// Both overloads then test that answer for `isMultiDimensional`, and they
+/// differ in the raise that carries. Measured, oracle:
+/// `o~sendWith('M', .array~new(2,2))` is `88.913 Argument message arguments
+/// must be a single-dimensional array.` at rc 168, and
+/// `o~startWith('M', .array~new(2,2))` is `98.913 Unable to convert object
+/// "an Array" to a single-dimensional array value.` at rc 158.
+fn array_argument(
+    interp: &mut Interp,
+    value: ObjRef,
+    overload: ArrayArgument,
+) -> Result<Vec<Option<ObjRef>>, Failure> {
+    let Some(slots) = interp.array_slots_of(value) else {
+        return Err(unconverted_array_argument(interp, value));
+    };
+    if interp.is_multi_dimensional_array(value) {
+        return Err(match overload {
+            ArrayArgument::Named(argument) => {
+                Raised::argument_not_single_dimensional(argument).into()
+            }
+            ArrayArgument::Positional => {
+                let found = interp.string_value_text(value);
+                Raised::object_not_single_dimensional(&found).into()
+            }
+        });
+    }
+    Ok(message_argument_slots(slots))
 }
 
 /// `Class~enhanced(methods, ...)`: an instance of the receiver carrying

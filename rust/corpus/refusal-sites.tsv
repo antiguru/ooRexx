@@ -36,10 +36,21 @@
 # byte-identical output and deletes the row is the failure this column exists to
 # stop.
 #
-# The test does not re-run a probe -- nothing in this crate can -- so `answer`
-# ties the row to the source, not to the transcript. Two constructors may share
-# an "M.N" (88.909 is both string-value refusals); the witness is what separates
-# them.
+# The test does not re-run a probe: the `witness` column is prose rather than a
+# runnable program, and re-running one would need it to be a program.
+# (Integration-test binaries under crates/rexx-exec/tests/ do reach the oracle
+# through support::oracle -- licensed_divergences.rs among them -- so the
+# obstacle is this column's medium and not the tooling.) `answer` therefore
+# ties the row to the source, not to the transcript.
+#
+# Two constructors may share an "M.N", and where they do this check cannot tell
+# their rows apart: transposing both the `answer` and the `witness` of
+# argument_needs_a_string_value with named_argument_needs_a_string_value
+# (88.909), or of argument_not_a_class with scope_override_not_a_class
+# (88.914), leaves every test in refusal_sites.rs green. Measured, both pairs.
+# Those are the only such pairs, and
+# `the_answers_more_than_one_row_shares_are_the_recorded_ones` is what keeps
+# that sentence true rather than merely written down.
 #
 # kind	name	surface	definition	verdict	reached	answer	witness
 Raised	abstract_class	send	crates/rexx-exec/src/error.rs:695	agrees	yes	98.989	say .K~new over ::class K abstract
@@ -55,6 +66,7 @@ Raised	argument_not_in_list	body	crates/rexx-exec/src/error.rs:1118	off-send-sur
 Raised	argument_not_non_negative	body+send	crates/rexx-exec/src/error.rs:1273	agrees	yes	93.906	.array~new(-1)
 Raised	argument_not_non_negative_call	body	crates/rexx-exec/src/error.rs:1478	off-send-surface	-	-	-
 Raised	argument_not_positive	body	crates/rexx-exec/src/error.rs:1043	off-send-surface	-	-	-
+Raised	argument_not_single_dimensional	send	crates/rexx-exec/src/error.rs:2256	agrees	yes	88.913	o~sendWith('M', .array~new(2,2)) -- ~run's A style is the same raise under the name "argument array", and .array~new(2) answers on both sides
 Raised	argument_not_whole	body	crates/rexx-exec/src/error.rs:944	off-send-surface	-	-	-
 Raised	argument_out_of_range	body	crates/rexx-exec/src/error.rs:1086	off-send-surface	-	-	-
 Loud	array_index_hole	send	crates/rexx-exec/src/lib.rs:826	not-run	no	oracle-crashes.txt entry 6 (SF 2085): never run	-
@@ -86,17 +98,17 @@ Raised	duplicate_resource	body	crates/rexx-exec/src/error.rs:520	off-send-surfac
 Raised	duplicate_routine	body	crates/rexx-exec/src/error.rs:492	off-send-surface	-	-	-
 Loud	entry_method_without_a_value	send	crates/rexx-exec/src/lib.rs:861	recorded	yes	an entry-method assignment to	.local~sendWith('ZZZ=', .array~new(1))
 Loud	environment_entry	body	crates/rexx-exec/src/lib.rs:772	off-send-surface	-	-	-
-Raised	environment_name_too_long	body	crates/rexx-exec/src/error.rs:2238	off-send-surface	-	-	-
+Raised	environment_name_too_long	body	crates/rexx-exec/src/error.rs:2239	off-send-surface	-	-	-
 Loud	environment_symbol	body	crates/rexx-exec/src/lib.rs:757	off-send-surface	-	-	-
-Raised	exit_after_reply	body	crates/rexx-exec/src/error.rs:2195	off-send-surface	-	-	-
+Raised	exit_after_reply	body	crates/rexx-exec/src/error.rs:2196	off-send-surface	-	-	-
 Raised	expose_outside_method	body	crates/rexx-exec/src/error.rs:2108	off-send-surface	-	-	-
 Loud	expose_receiver	body	crates/rexx-exec/src/lib.rs:1015	off-send-surface	-	-	-
 Loud	expression	body	crates/rexx-exec/src/lib.rs:582	off-send-surface	-	-	-
 Raised	external_method_not_found	body	crates/rexx-exec/src/error.rs:459	off-send-surface	-	-	-
 Raised	format_incompatible_separator	body	crates/rexx-exec/src/error.rs:1206	off-send-surface	-	-	-
-Raised	forward_arguments	body	crates/rexx-exec/src/error.rs:2161	off-send-surface	-	-	-
+Raised	forward_arguments	body	crates/rexx-exec/src/error.rs:2162	off-send-surface	-	-	-
 Raised	forward_outside_method	body	crates/rexx-exec/src/error.rs:2145	off-send-surface	-	-	-
-Raised	from	body	crates/rexx-exec/src/error.rs:2311	off-send-surface	-	-	-
+Raised	from	body	crates/rexx-exec/src/error.rs:2346	off-send-surface	-	-	-
 Raised	guard_outside_method	body	crates/rexx-exec/src/error.rs:2120	off-send-surface	-	-	-
 Loud	guard_when_false	body	crates/rexx-exec/src/lib.rs:1392	off-send-surface	-	-	-
 Raised	halt	body	crates/rexx-exec/src/error.rs:313	off-send-surface	-	-	-
@@ -150,6 +162,7 @@ Raised	not_inherited	body+send	crates/rexx-exec/src/error.rs:743	agrees	yes	98.9
 Raised	not_logical	body	crates/rexx-exec/src/error.rs:363	off-send-surface	-	-	-
 Raised	not_one_of	send	crates/rexx-exec/src/error.rs:663	agrees	yes	88.916	self~setMethod('Z', "return 1", 'BOGUS')
 Loud	object_method	send	crates/rexx-exec/src/lib.rs:965	diverges	yes	a receiver with no scope of its own	self~setMethod('ZZ', "return 'x'") inside ::method cm class, then .K~zz -- from the main body it is 98.991
+Raised	object_not_single_dimensional	send	crates/rexx-exec/src/error.rs:2273	agrees	yes	98.913	o~startWith('M', .array~new(2,2)) -- the same call shape ~sendWith reports 88.913 for
 Loud	object_position	body	crates/rexx-exec/src/lib.rs:740	off-send-surface	-	-	-
 Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:1251	off-send-surface	-	-	-
 Loud	operator_operand	body	crates/rexx-exec/src/lib.rs:703	off-send-surface	-	-	-
@@ -158,27 +171,27 @@ Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:1207	off-send-surfac
 Raised	power_exponent_not_whole	body	crates/rexx-exec/src/error.rs:353	off-send-surface	-	-	-
 Raised	private_method	send	crates/rexx-exec/src/error.rs:1797	agrees	yes	97.2	.K~new~p over ::method p private
 Raised	procedure_out_of_place	body	crates/rexx-exec/src/error.rs:854	off-send-surface	-	-	-
-Raised	raise_syntax_condition	body	crates/rexx-exec/src/run.rs:12643	off-send-surface	-	-	-
-Raised	raised_digit_led	body	crates/rexx-exec/src/run.rs:12520	off-send-surface	-	-	-
-Raised	raised_dot_led	body	crates/rexx-exec/src/run.rs:12525	off-send-surface	-	-	-
-Raised	raised_for_count_not_whole	body	crates/rexx-exec/src/run.rs:12749	off-send-surface	-	-	-
-Raised	raised_from_settings	body	crates/rexx-exec/src/run.rs:12715	off-send-surface	-	-	-
-Raised	raised_guard_not_logical	body	crates/rexx-exec/src/run.rs:12547	off-send-surface	-	-	-
-Raised	raised_if_not_logical	body+ir	crates/rexx-exec/src/run.rs:12533	off-send-surface	-	-	-
+Raised	raise_syntax_condition	body	crates/rexx-exec/src/run.rs:12654	off-send-surface	-	-	-
+Raised	raised_digit_led	body	crates/rexx-exec/src/run.rs:12531	off-send-surface	-	-	-
+Raised	raised_dot_led	body	crates/rexx-exec/src/run.rs:12536	off-send-surface	-	-	-
+Raised	raised_for_count_not_whole	body	crates/rexx-exec/src/run.rs:12760	off-send-surface	-	-	-
+Raised	raised_from_settings	body	crates/rexx-exec/src/run.rs:12726	off-send-surface	-	-	-
+Raised	raised_guard_not_logical	body	crates/rexx-exec/src/run.rs:12558	off-send-surface	-	-	-
+Raised	raised_if_not_logical	body+ir	crates/rexx-exec/src/run.rs:12544	off-send-surface	-	-	-
 Raised	raised_invalid_trace_letter	body	crates/rexx-exec/src/trace.rs:461	off-send-surface	-	-	-
-Raised	raised_iterate_no_loop	body	crates/rexx-exec/src/run.rs:12761	off-send-surface	-	-	-
-Raised	raised_iterate_no_match	body	crates/rexx-exec/src/run.rs:12775	off-send-surface	-	-	-
-Raised	raised_iterate_wrong_kind	body	crates/rexx-exec/src/run.rs:12784	off-send-surface	-	-	-
-Raised	raised_leave_no_loop	body	crates/rexx-exec/src/run.rs:12755	off-send-surface	-	-	-
-Raised	raised_leave_no_match	body	crates/rexx-exec/src/run.rs:12770	off-send-surface	-	-	-
-Raised	raised_naming_the_operand	body	crates/rexx-exec/src/run.rs:12701	off-send-surface	-	-	-
+Raised	raised_iterate_no_loop	body	crates/rexx-exec/src/run.rs:12772	off-send-surface	-	-	-
+Raised	raised_iterate_no_match	body	crates/rexx-exec/src/run.rs:12786	off-send-surface	-	-	-
+Raised	raised_iterate_wrong_kind	body	crates/rexx-exec/src/run.rs:12795	off-send-surface	-	-	-
+Raised	raised_leave_no_loop	body	crates/rexx-exec/src/run.rs:12766	off-send-surface	-	-	-
+Raised	raised_leave_no_match	body	crates/rexx-exec/src/run.rs:12781	off-send-surface	-	-	-
+Raised	raised_naming_the_operand	body	crates/rexx-exec/src/run.rs:12712	off-send-surface	-	-	-
 Raised	raised_numeric_trace_interactive_only	body	crates/rexx-exec/src/trace.rs:449	off-send-surface	-	-	-
-Raised	raised_repetition_count_not_whole	body	crates/rexx-exec/src/run.rs:12743	off-send-surface	-	-	-
-Raised	raised_select_no_when	body	crates/rexx-exec/src/run.rs:12574	off-send-surface	-	-	-
-Raised	raised_symbol_expected	body	crates/rexx-exec/src/run.rs:12515	off-send-surface	-	-	-
-Raised	raised_until_not_logical	body	crates/rexx-exec/src/run.rs:12735	off-send-surface	-	-	-
-Raised	raised_when_not_logical	body+ir	crates/rexx-exec/src/run.rs:12558	off-send-surface	-	-	-
-Raised	raised_while_not_logical	body	crates/rexx-exec/src/run.rs:12730	off-send-surface	-	-	-
+Raised	raised_repetition_count_not_whole	body	crates/rexx-exec/src/run.rs:12754	off-send-surface	-	-	-
+Raised	raised_select_no_when	body	crates/rexx-exec/src/run.rs:12585	off-send-surface	-	-	-
+Raised	raised_symbol_expected	body	crates/rexx-exec/src/run.rs:12526	off-send-surface	-	-	-
+Raised	raised_until_not_logical	body	crates/rexx-exec/src/run.rs:12746	off-send-surface	-	-	-
+Raised	raised_when_not_logical	body+ir	crates/rexx-exec/src/run.rs:12569	off-send-surface	-	-	-
+Raised	raised_while_not_logical	body	crates/rexx-exec/src/run.rs:12741	off-send-surface	-	-	-
 Raised	random_bounds_reversed	body	crates/rexx-exec/src/error.rs:1514	off-send-surface	-	-	-
 Raised	random_range_too_wide	body	crates/rexx-exec/src/error.rs:1504	off-send-surface	-	-	-
 Loud	receiver_class	body+send	crates/rexx-exec/src/lib.rs:671	diverges	yes	a message send to	a. = 'dflt' then a.~length
@@ -186,9 +199,9 @@ Raised	recursive_inherit	body+send	crates/rexx-exec/src/error.rs:728	agrees	yes	
 Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:1278	off-send-surface	-	-	-
 Loud	reply_inside_construct	body	crates/rexx-exec/src/lib.rs:1417	off-send-surface	-	-	-
 Raised	reply_outside_method	body	crates/rexx-exec/src/error.rs:2131	off-send-surface	-	-	-
-Raised	reply_twice	body	crates/rexx-exec/src/error.rs:2171	off-send-surface	-	-	-
+Raised	reply_twice	body	crates/rexx-exec/src/error.rs:2172	off-send-surface	-	-	-
 Raised	restricted_method	send	crates/rexx-exec/src/error.rs:683	agrees	yes	98.991	'abc'~setMethod('Z', "return 1") from a ::method body
-Raised	return_after_reply	body	crates/rexx-exec/src/error.rs:2183	off-send-surface	-	-	-
+Raised	return_after_reply	body	crates/rexx-exec/src/error.rs:2184	off-send-surface	-	-	-
 Raised	rexx_defined_class	send	crates/rexx-exec/src/error.rs:761	agrees	yes	98.985	.Array~define('ZZZ', "return 1")
 Raised	rexx_package_addition	send	crates/rexx-exec/src/error.rs:774	agrees	yes	98.984	.Array~package~addClass('ZZZ', .Object)
 Loud	rexx_package_classes	send	crates/rexx-exec/src/lib.rs:888	diverges	yes	the REXX package's class table	say .Array~package~publicClasses~class~id -- the REXX package, not .context~package, which agrees
@@ -210,8 +223,8 @@ Raised	too_many_subscripts	send	crates/rexx-exec/src/error.rs:1615	agrees	yes	93
 Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:903	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
 Loud	unresolved_call	body	crates/rexx-exec/src/lib.rs:647	off-send-surface	-	-	-
 Loud	use_local_in_a_method	body	crates/rexx-exec/src/lib.rs:1029	off-send-surface	-	-	-
-Raised	use_local_not_first	body	crates/rexx-exec/src/error.rs:2221	off-send-surface	-	-	-
-Raised	use_local_outside_method	body	crates/rexx-exec/src/error.rs:2208	off-send-surface	-	-	-
+Raised	use_local_not_first	body	crates/rexx-exec/src/error.rs:2222	off-send-surface	-	-	-
+Raised	use_local_outside_method	body	crates/rexx-exec/src/error.rs:2209	off-send-surface	-	-	-
 Loud	value_selector	body	crates/rexx-exec/src/lib.rs:1189	off-send-surface	-	-	-
 Raised	variable_reference_not_uninitialised	body	crates/rexx-exec/src/error.rs:2091	off-send-surface	-	-	-
 Raised	variable_reference_omitted	body	crates/rexx-exec/src/error.rs:2039	off-send-surface	-	-	-

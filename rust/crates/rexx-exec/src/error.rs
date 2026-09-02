@@ -2153,7 +2153,8 @@ impl Raised {
     /// `FORWARD arguments must be a single-dimensional array of values.` The
     /// oracle tests `requestArray`'s answer for `TheNilObject` or a
     /// multi-dimensional array (`instructions/ForwardInstruction.cpp:189`-
-    /// `:191`), and `.nil` is the reachable half here.
+    /// `:191`), and both halves are reachable here: measured rc 158 for
+    /// `arguments (.array~new(2,2))` as well.
     ///
     /// **A value that is neither is not this error**: measured rc 0,
     /// `arguments ('abc')` reaches the callee as one argument spelling
@@ -2237,6 +2238,40 @@ impl Raised {
     /// that bounded the name and the number in the text are one value.
     pub(crate) fn environment_name_too_long(limit: usize, found: &[u8]) -> Raised {
         Raised::syntax(29, 1, vec![limit.to_string().into_bytes(), found.to_vec()])
+    }
+
+    /// 88.913: a method argument the oracle names is not a single-dimensional
+    /// array. The substitution is that name.
+    ///
+    /// `arrayArgument`'s named overload
+    /// (`runtime/MethodArguments.hpp:703`, whose `isMultiDimensional` arm
+    /// raises at `:714`). Measured at rc 168:
+    /// `o~sendWith('M', .array~new(2,2))` reports `Argument message arguments
+    /// must be a single-dimensional array.` and `self~run(source, 'A',
+    /// .array~new(2,2))` reports the same for `argument array`.
+    ///
+    /// [`object_not_single_dimensional`] is the other overload's raise.
+    ///
+    /// [`object_not_single_dimensional`]: Raised::object_not_single_dimensional
+    pub(crate) fn argument_not_single_dimensional(argument: &str) -> Raised {
+        Raised::syntax(88, 913, vec![argument.as_bytes().to_vec()])
+    }
+
+    /// 98.913: an argument the oracle numbers rather than names is not a
+    /// single-dimensional array. The substitution is the value's own string
+    /// value.
+    ///
+    /// `arrayArgument`'s positional overload
+    /// (`runtime/MethodArguments.hpp:675`, raising at `:687`). Measured at rc 158:
+    /// `o~startWith('M', .array~new(2,2))` reports `Unable to convert object
+    /// "an Array" to a single-dimensional array value.` -- the object and not
+    /// the position, so the two overloads differ in more than their number.
+    ///
+    /// [`argument_not_single_dimensional`] is the other overload's raise.
+    ///
+    /// [`argument_not_single_dimensional`]: Raised::argument_not_single_dimensional
+    pub(crate) fn object_not_single_dimensional(found: &[u8]) -> Raised {
+        Raised::syntax(98, 913, vec![found.to_vec()])
     }
 }
 
