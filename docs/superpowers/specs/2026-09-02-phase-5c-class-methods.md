@@ -1,5 +1,10 @@
 # Phase 5c: the documented per-class method sets
 
+**Status:** **CORRECTED 2026-09-02** after review. Sections M2–M6 and the original D70/D71 rested
+on a false premise and are superseded by "What table C actually measures" below; they are kept only
+so the correction can be read against them. The plan is
+`docs/superpowers/plans/2026-09-02-phase-5c.md`, rewritten.
+
 **Status:** draft, 2026-09-02. Continues the Phase 5 object-model spec's numbering; new decisions
 here are **D70** onward (5b ended at D69).
 
@@ -28,6 +33,46 @@ gate table C's largest row kind and the phase's whole subject.
 are a *measurement*, and they are already generated. The work divides by **mechanism**, and this
 document's job is to name the mechanisms so a plan can carry one task per mechanism rather than one
 per row.
+
+---
+
+## What table C actually measures — the correction
+
+**Every one of the 96 programs under `corpus/gate-tables/methods/` is a `hasMethod` readback. A
+method is never sent.** Measured: 96 of 96 have zero `say` lines that are not `hasMethod`. So a
+method row asks *"does this class answer this name"*, never *"does the method work"*:
+
+```
+'abc'~hasMethod('abbrev')   ->  1        the row agrees
+'abc'~abbrev('a')           ->  rc 120   unimplemented
+```
+
+**Consequences, each measured:**
+
+* **Implementing method bodies moves no gate row.** M2–M6's adapters and tables — the whole
+  mechanism decomposition below — move zero. That work is real but this phase's instrument cannot
+  see it, and it needs a spec of its own.
+* **The phase is 903 rows, not 452.** `METHOD_PHASE` is `"5c"`, so all 1347 method rows are this
+  phase's. Running the plan's own gate command at BASE: exit 101, `5c: 1347 rows, 868 not yet
+  agree` in table C and `5c: 38 rows, 35 not yet agree` in table D. The 35 are `::OPTIONS` and
+  `::REQUIRES`.
+* **All 868 are construction-blocked on this crate**, including the 371 on classes `class-set.txt`
+  calls `covered` — that status is a claim about the **oracle's** bare `~new`, not ours. Measured:
+  `bag__instance.rex` is rc 120 `method "NEW" of class "Bag"`, and so are `directory`, `list`,
+  `queue`, `set` and `table`.
+
+**The measured shape of the work**, sweeping all 96 probes on the crate at `414b71b22`:
+
+| outcome | probes | what it means |
+|---|---|---|
+| rc 0 | 58 | already answering |
+| rc 120 | 30 | `~new` unimplemented — **24 distinct constructors** |
+| rc 216 | 8 | `~new` reaches `init` and raises: needs a construction program *with arguments* |
+| rc 159 | 1 | `RexxInfo`, which has no `~new` at all |
+
+So **5c is constructors and documented method-name sets**, not method bodies. `.TimeSpan~new(1)`
+already answers `0.000001` byte-identically to the oracle; its 47 rows need a construction program,
+nothing more.
 
 ---
 
