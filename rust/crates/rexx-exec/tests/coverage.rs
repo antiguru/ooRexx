@@ -1333,6 +1333,10 @@ const EXPECTED_SUBSET_5B: &[&str] = &[
     "gate-tables/concepts/methodsbyclass.rex",
     "lang/array_multidimensional.rex",
     "lang/array_multidimensional_refusals.rex",
+    // Task 9: the array size the allocator refuses, which is the one array
+    // error `MaxFixedArraySize` does not decide, beside that limit's own
+    // 93.959 and a size in reach.
+    "lang/array_allocation_refused.rex",
 ];
 
 #[test]

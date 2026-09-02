@@ -257,3 +257,12 @@ lang/object_start.rex
 gate-tables/concepts/methodsbyclass.rex
 lang/array_multidimensional.rex
 lang/array_multidimensional_refusals.rex
+
+# Task 9: the instance-side reading of 5a's limits, whose one closed defect is
+# an array size the allocator refuses. `array_allocation_refused.rex` is the
+# witness: the oracle asks the allocator rather than a size limit, so the four
+# paths that size a slot vector raise 5.0 where MaxFixedArraySize's own 93.959
+# is a different answer, and a size in reach beside them says the guard did not
+# refuse everything. Every case is trapped, so the row compares the condition
+# each raises rather than a traceback carrying the file's own path.
+lang/array_allocation_refused.rex

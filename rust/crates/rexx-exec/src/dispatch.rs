@@ -5102,6 +5102,22 @@ fn array_is_fixed_dimension(interp: &Interp, receiver: ObjRef) -> Result<bool, F
 /// `ArrayClass::MaxFixedArraySize` (`classes/ArrayClass.hpp:329`).
 const MAX_FIXED_ARRAY_SIZE: usize = 100_000_000_000_000_000;
 
+/// `size` empty slots, or the 5.0 the oracle raises when the allocator refuses
+/// -- [`Raised::system_resources`] carries why that refusal is asked of the
+/// allocator rather than of a size limit.
+///
+/// [`MAX_FIXED_ARRAY_SIZE`] is a different check and runs first: a size above
+/// it is 93.959, and a size below it the allocator cannot satisfy is this.
+/// `corpus/lang/array_allocation_refused.rex` holds both against the oracle.
+fn empty_slots(size: usize) -> Result<Vec<Option<ObjRef>>, Failure> {
+    let mut slots = Vec::new();
+    slots
+        .try_reserve_exact(size)
+        .map_err(|_| Failure::from(Raised::system_resources()))?;
+    slots.resize(size, None);
+    Ok(slots)
+}
+
 /// The bounds policy a subscript list is validated under -- `IndexAccess`
 /// and `IndexUpdate` (`classes/ArrayClass.hpp:62`-`:63`).
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -5319,6 +5335,11 @@ fn position_index(
 fn array_resize(interp: &mut Interp, receiver: ObjRef, size: usize) -> Result<(), Failure> {
     match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
+            if let Some(extra) = size.checked_sub(slots.len()) {
+                slots
+                    .try_reserve_exact(extra)
+                    .map_err(|_| Failure::from(Raised::system_resources()))?;
+            }
             slots.resize(size, None);
             Ok(())
         }
@@ -5382,7 +5403,7 @@ fn array_reshape(
         old.is_some() || slots.iter().all(Option::is_none),
         "a reshape with no source shape must have nothing to move"
     );
-    let mut grown = vec![None; size];
+    let mut grown = empty_slots(size)?;
     if let Some(old) = old {
         for (position, item) in slots.iter().enumerate() {
             if item.is_none() {
@@ -5542,7 +5563,7 @@ fn native_array_new(
             None => {
                 let size = array_size_argument(interp, *only, 1)?;
                 Body::Array {
-                    slots: vec![None; size],
+                    slots: empty_slots(size)?,
                     // `newRexx`'s own `if (totalSize == 0)` (`:125`-`:128`),
                     // whose one entry nothing reads: an explicit zero size
                     // fixes the shape, and the entry is not the extent.
@@ -5580,7 +5601,7 @@ fn multidimensional_body(
         shape.push(extent);
     }
     Ok(Body::Array {
-        slots: vec![None; size],
+        slots: empty_slots(size)?,
         dimensions: Some(shape.into()),
     })
 }
