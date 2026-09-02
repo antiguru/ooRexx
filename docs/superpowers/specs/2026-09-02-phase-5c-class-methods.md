@@ -68,9 +68,17 @@ say .WeakReference~new    rc=163  Error 93
 say .TimeSpan~new         rc=163  Error 93
 ```
 
-Every one of the 23 groups has the oracle at rc 159/163/168 and never at rc 0. So matching those
-refusals turns 546 rows green **while `.String~new('abc')~length~upper` remains unimplemented** —
-the oracle already answers that with `3 ABC`.
+Every one has the oracle at rc 159/163/168 and never at rc 0. So matching those refusals turns 546
+rows green **while `.String~new('abc')~length~upper` remains unimplemented** — the oracle already
+answers that with `3 ABC`.
+
+**Two different sets of 23 are in play and they are not the same set.** The gate's report groups by
+*unanswered probe* and `class-methods.txt` groups by *`not-covered` status*; both count 23 classes,
+but the gate's set contains `Pointer` and not `Singleton`, and the file's set the reverse. The
+oracle evidence above was gathered over the gate's set, so `Singleton` was measured separately to
+close the gap — `.Singleton~new` is rc 163 `Error 93`, and the claim holds for the file's set too.
+**This document's figures are `class-methods.txt`'s throughout**; a plan quoting the gate's
+`unanswered` counts is quoting a different measurement.
 
 **The tree already says so and this decision only makes it binding.** `class-methods.txt` carries
 the reason per row (`no construction program is committed; a bare ~new raises 93.903 on the
@@ -259,6 +267,57 @@ whose spec can be about that rather than a task inside one that is not.
 
 ---
 
+## D72. The native-entry table is sliced per mechanism, not per class and not flat
+
+**Flatness costs nothing at run time and the question is only review and merge.** `NATIVE_METHODS`
+is iterated **once, at startup**, into a `HashMap<MethodId, NativeEntry>`; no dispatch touches the
+list. Its two startup panics already reject a row naming an unregistered class or a method the
+class's behaviour does not answer, and both keep working under any of the shapes below because they
+iterate the chain rather than the array.
+
+| shape | what it buys | what it costs |
+|---|---|---|
+| **A. one flat list** (today) | one place; `git diff` shows every addition | ~500 lines in `dispatch.rs`, and all nine tasks edit one span |
+| **B. per-class slices** | locality matching the book's organisation | the tasks are per *mechanism* and cut across classes, so each still touches many files |
+| **C. per-mechanism slices, chained** | one file per task: adapter and table together | "what does String answer" becomes a query rather than a read |
+| **D. generated from a data file** | checkable against the book in both directions, like `class-methods.txt` | the book names no implementation, so the `fn` binds by string through a macro — a typo becomes a runtime panic instead of a compile error |
+
+**C.** It is the only one that makes D71's unit — one adapter plus one table — also the unit of
+review and of the file system, and nine implementers working in parallel then never edit the same
+file. The consumer already reads `NATIVE_METHODS.iter().chain(extra)`, so chaining more slices is
+the shape that exists rather than a new one.
+
+B's locality is recovered by a test, not by the layout: assert that the union of the slices is
+exactly what `class-methods.txt` marks implemented, which is a check the tree wants regardless.
+
+---
+
+## D73. `unreachable` classes are deferred, and guarded against becoming reachable
+
+**Deferred:** `Buffer` and `Pointer`, seven rows, both grounded in the same sentence of the
+reference — `utilityclasses.xml:429` and `:6910`, "can only be created using the native code
+application programming interfaces." All six `Pointer` rows and the one `Buffer` row carry the
+status; neither class has a row with any other status.
+
+**But `unreachable` is a claim about today that 5c could falsify by accident.** A phase that adds
+constructors, `~of`-style class methods, or a `makeArray` that hands one back could make either
+class constructible without anyone deciding to, and the status would then be a false sentence
+sitting in a generated file that nothing re-checks against behaviour.
+
+So the deferral comes with a guard: **for every class `class-set.txt` marks `unreachable`, a
+committed test that its documented construction route still refuses**, on both engines, with the
+oracle's answer recorded beside it. The guard is derived from the status column rather than from a
+list of two names, so a class that becomes `unreachable` later is guarded by existing.
+
+**The guard must be shown to fail.** Its control is to make one of the two constructible and
+confirm the test reddens — [[test-can-fail-is-not-test-adds-coverage]], and this project has shipped
+a guard blind to its own subject often enough that an ungated one is not worth having.
+
+**Phase 5e** takes whatever `unreachable` classes remain when 5d closes, if any turn out to be
+reachable after all. If the guard never fires, 5e is empty and that is the good outcome.
+
+---
+
 ## Handover to Phase 5d
 
 **5d owns `File`, `Stream` and `StreamSupplier` — 94 `not-covered` rows.**
@@ -301,6 +360,10 @@ Criteria, each with the instrument that measures it:
    witnesses (`plans/2026-08-27-phase-5b.md:730`, `:848`, `:944`). Landing them early in 5c
    unblocks deferred work and restores the instrument before the phase's bulk lands.
 
+6. **The `unreachable` guard passes and has been shown to fail** (D73): every class
+   `class-set.txt` marks `unreachable` still refuses its documented construction route on both
+   engines, and the control that makes one constructible has been run and reddened it.
+
 **Not a criterion:** the count of method rows that agree, for D70's reason.
 
 ---
@@ -314,13 +377,25 @@ Criteria, each with the instrument that measures it:
 | a task grows to one step per method | 452 rows, nine mechanisms | D71: one adapter and one table per task; exceptions listed and counted |
 | the perf axes stay dark through an object-model phase | `alloc.rex` and `heapshape.rex` are rc 120, and per-step thresholds already hid a +32.58% cumulative drift once | gate criterion 5 |
 | construction programs invented to fit | a class documented as having no public constructor | `unreachable` status, grounded in a re-read sentence |
+| an `unreachable` class quietly becomes constructible | a new class method or `makeArray` can hand one back without anyone deciding to; the status is then a false sentence nothing re-checks | D73's guard, derived from the status column and with a run control |
+| a figure quoted from the gate's report instead of the file | the two group differently and their 23-class sets differ by one element each way | D70 names `class-methods.txt` as this document's source throughout |
 
-## Open questions for the plan
+## Settled, 2026-09-02
 
-1. **What is the target `not-covered` count?** 452 is the whole of 5c's set; a phase that stops at
-   the five String mechanisms plus construction is a much smaller one, and both are defensible.
-2. **Which of the 20 classes are genuinely `unreachable`** rather than merely unconstructed today?
-   `StreamSupplier` was one and it turned out to be 5d's; the same question has not been asked of
-   the comparators, `Singleton`, or `VariableReference`.
-3. **Does the native-entry table stay one flat list at ~500 entries**, or does it need per-class
-   grouping before it gets there? At 59 today this is cheap to decide and expensive to retrofit.
+| question | ruling |
+|---|---|
+| target `not-covered` count | **452 — the whole of 5c's set.** Not a subset stopping at String. |
+| native-entry table shape | **D72: per-mechanism slices, chained.** |
+| `unreachable` classes | **D73: deferred with a guard**, and Phase 5e for any that turn out reachable. |
+| I/O | **Phase 5d**, with `StreamSupplier`. |
+
+## Open for the plan
+
+1. **Are M2..M6 five tasks or one?** They share String and a review of all five together is one
+   reading of one class; five tasks is five sets of gates. The merge argument (D72) points at five,
+   the coherence argument at one.
+2. **Task order beyond M1 first.** M4 depends on M2 and M6 for its siblings, which the plan has to
+   sequence or the caseless task blocks.
+3. **Whether the three comparators and `VariableReference` are constructible at all.** They are
+   `not-covered` today, which carries no claim about the oracle; nobody has run them. If any is
+   documented as native-only it belongs under D73's guard rather than M1's construction list.
