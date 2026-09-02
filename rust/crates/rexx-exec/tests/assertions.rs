@@ -131,8 +131,10 @@
 //! that motivated it; nothing about the mechanism differs here, so it is
 //! not re-derived.
 
+mod watchdog;
+
 use rayon::prelude::*;
-use rexx_exec::{NOT_IMPLEMENTED_EXIT, Outcome, run_program};
+use rexx_exec::{NOT_IMPLEMENTED_EXIT, Outcome};
 use rexx_extract::{
     AssertionRow, BlockedMethod, Form, RaiseExpectation, extract_assertions, find_test_groups,
 };
@@ -486,7 +488,7 @@ fn exempt_entry(row: &AssertionRow, occurrence: usize) -> Option<&'static Exempt
 
 /// Runs one row's program and classifies what happened.
 fn evaluate_row(row: &AssertionRow) -> RowOutcome {
-    let outcome = run_program(ROW_PATH, program_for(row), rexx_exec::Invocation::none());
+    let outcome = watchdog::run_bounded(ROW_PATH, program_for(row), rexx_exec::Invocation::none());
     classify(row, outcome)
 }
 

@@ -22,12 +22,11 @@
 //! control this is measured against -- the same program with no deadline
 //! anywhere in the path -- is measured by hand rather than run here.
 //!
-//! This does not prove the crate side of a gate-table row can be bounded:
-//! `Invocation::with_engine` runs **in-process**, and an in-process run
-//! cannot be killed by anything short of the whole test process dying with
-//! it. That half stays a human check: every probe program a later task
-//! commits is run by hand through `rexx-run` under `timeout -s KILL 10`
-//! first, and the task says it did. Nothing here changes that.
+//! This proves nothing about the crate side, which runs **in-process** and
+//! has a bound of its own: `Invocation::with_deadline` and `tests/watchdog`,
+//! whose two docs say which of them catches what. An in-process run still
+//! cannot be *killed* -- a Rust thread cannot be -- so the crate side's outer
+//! layer abandons a thread where this file's kill reaps a process.
 //!
 //! # The gate
 //!

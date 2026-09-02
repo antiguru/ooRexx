@@ -2548,13 +2548,25 @@ impl Interp {
     /// Each failure carries its **own** echo stack, drained at the resume that
     /// produced it: the sites accumulate on `self` and a second resumed body
     /// would otherwise report the first one's clauses under its own error.
+    ///
+    /// **A deadline stops the drain**, and it is the one failure that does.
+    /// This loop is where the self-forward's non-termination lives -- each
+    /// drained body queues its own successor, so a deadline that only
+    /// reddened one entry would leave the loop running for ever collecting
+    /// failures. See [`Failure::Deadline`] and
+    /// [`Deadline`](crate::clause::Deadline).
     pub(crate) fn run_deferred_replies(&mut self) -> Vec<(Failure, Vec<FailureSite>)> {
         let mut failures = Vec::new();
+        let mut abandoned = false;
         while let Some(deferred) = self.deferred.pop_front() {
             if let Err(failure) = self.resume_reply(deferred) {
+                abandoned = matches!(failure, Failure::Deadline);
                 let mut sites = std::mem::take(&mut self.failure_sites);
                 sites.extend(self.failure_site.take());
                 failures.push((failure, sites));
+                if abandoned {
+                    break;
+                }
             }
         }
         // Every park is matched by the release its resume does, and this is
@@ -2562,9 +2574,11 @@ impl Interp {
         // still rooting anything is a set of values kept alive for the rest of
         // the process. Cheap and once per run, unlike `RootSet::live_frames`'
         // own callers.
-        debug_assert_eq!(
-            self.roots.live_parked(),
-            0,
+        //
+        // Not asked of a drain the deadline cut short: the queue is not empty
+        // there, so the entries still in it are parked and owed.
+        debug_assert!(
+            abandoned || self.roots.live_parked() == 0,
             "a replied method body's values are still parked with nothing owing them"
         );
         failures
@@ -2602,7 +2616,12 @@ impl Interp {
         self.failure_site = None;
         self.failure_sites.clear();
         match outcome {
-            Ok(_) | Err(Failure::Raised(_) | Failure::Exited(_)) => None,
+            // A deadline is discarded here with the rest, and `execute`'s own
+            // guard is what keeps that from being a silent answer: the flag
+            // the check set outlives this match. Every later clause of this
+            // run fails the same way, so the bounded sweep above finishes at
+            // once rather than running the remaining finalizers.
+            Ok(_) | Err(Failure::Raised(_) | Failure::Exited(_) | Failure::Deadline) => None,
             Err(Failure::Loud(loud)) => Some(*loud),
         }
     }

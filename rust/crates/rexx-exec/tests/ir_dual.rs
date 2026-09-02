@@ -131,8 +131,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+mod watchdog;
+
 use rayon::prelude::*;
-use rexx_exec::{Engine, Invocation, Outcome, run_program};
+use rexx_exec::{Engine, Invocation, Outcome};
 use rexx_extract::bif::extract_bif;
 use rexx_extract::keyword::extract_keyword;
 use rexx_extract::{AssertionRow, Form, extract_assertions, find_test_groups};
@@ -156,7 +158,7 @@ fn both_engines_agree_on_an_all_generic_program() {
 }
 
 fn run(text: Vec<u8>, engine: Engine) -> Outcome {
-    run_program(INLINE_PATH, text, Invocation::none().with_engine(engine))
+    watchdog::run_bounded(INLINE_PATH, text, Invocation::none().with_engine(engine))
 }
 
 /// One inline program with the answer the tree-walker gives for it.
@@ -1398,16 +1400,26 @@ fn keyword_cases(suite: &str) -> Vec<Case> {
 /// there is no oracle here, so `corpus.rs`'s DEVIATION 0 does not apply and
 /// a trace line's own indentation is required to match exactly.
 fn compare(case: &Case) -> Option<String> {
-    let tw = run_program(
+    let tw = watchdog::run_bounded(
         &case.path,
         case.text.clone(),
         Invocation::none().with_engine(Engine::TreeWalker),
     );
-    let ir = run_program(
+    let ir = watchdog::run_bounded(
         &case.path,
         case.text.clone(),
         Invocation::none().with_engine(Engine::Ir),
     );
+    // Named before the byte comparisons below, which would otherwise report
+    // a run that did not finish as a stdout divergence between two cut runs.
+    for (side, outcome) in [("tree-walker", &tw), ("ir", &ir)] {
+        if watchdog::did_not_finish(outcome) {
+            return Some(format!(
+                "{side}: {}",
+                String::from_utf8_lossy(&outcome.stderr).trim_end()
+            ));
+        }
+    }
 
     if tw.exit_code != ir.exit_code {
         return Some(format!(

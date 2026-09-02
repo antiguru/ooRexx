@@ -6893,9 +6893,11 @@ impl Interp {
         source: Option<&ProgramSource>,
         work: impl FnOnce(&mut Self) -> Result<T, Failure>,
     ) -> Result<ClauseOutcome<T>, Failure> {
+        let counted = self.count_clause_against_deadline()?;
         // The tree-walker reaches a clause with no chunk in hand, so it reads
         // the plan as this always did.
-        let entry = self.enter_stepped_clause(echo, code, index, instruction, source, None);
+        let entry =
+            self.enter_stepped_clause(echo, code, index, instruction, source, None, counted);
         let ran = work(self);
         self.leave_stepped_clause(entry, code, index, instruction, source, ran)
     }
@@ -6913,7 +6915,16 @@ impl Interp {
     /// **`inline(always)` for the reason the closure form carries**, and the
     /// measurement there was taken on the whole unit rather than on either
     /// half.
+    ///
+    /// [`DeadlineCounted`](crate::clause::DeadlineCounted) is
+    /// [`Interp::enter_clause`]'s own obligation, taken by the caller for the
+    /// reason that type carries: this half cannot fail, and counting a clause
+    /// against a deadline can.
     #[inline(always)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the added parameter is a zero-sized proof rather than data, and the alternative -- letting this half take the deadline itself -- is the shape whose cost the Deadline doc's table rejects"
+    )]
     pub(crate) fn enter_stepped_clause(
         &mut self,
         echo: Echo,
@@ -6922,6 +6933,7 @@ impl Interp {
         instruction: &Instruction,
         source: Option<&ProgramSource>,
         position: Option<crate::ir::ClausePosition>,
+        counted: crate::clause::DeadlineCounted,
     ) -> SteppedClause {
         // `DATE`/`TIME`'s per-clause clock cache (`activation.rs`'s own doc
         // on `Activation::clock_stale`) is invalidated **unconditionally,
@@ -7041,7 +7053,7 @@ impl Interp {
                 .unwrap_or_else(|| self.clause_state.line()),
             "the chunk's line table disagrees with the plan's for instruction {index}"
         );
-        let entry = self.enter_clause(line);
+        let entry = self.enter_clause(line, counted);
         // **`Echo::Gated` asks whether the setting in force echoes this
         // clause; `Echo::Compiled` is a clause whose chunk already answered
         // that**, and emits the echo as an op of its own

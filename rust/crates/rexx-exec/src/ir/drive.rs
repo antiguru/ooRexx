@@ -804,6 +804,7 @@ impl Interp {
                     // clause after it, and only the second would leave `TRACE
                     // N` unable to switch one off.
                     let echo = if stale { Echo::Gated } else { Echo::Compiled };
+                    let counted = self.count_clause_against_deadline()?;
                     // **The clause unit, entered by its two halves rather than
                     // by its closure form**, which is what puts the region's
                     // ops in this function's own frame instead of a callee's.
@@ -827,6 +828,7 @@ impl Interp {
                         clause,
                         source,
                         chunk.position_at(index),
+                        counted,
                     );
                     // Taken on entry exactly as `step` takes it, because a
                     // promoted clause is a clause and the permission is spent

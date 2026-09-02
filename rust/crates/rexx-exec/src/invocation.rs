@@ -93,6 +93,8 @@
 //! does with it -- the line rule, the `\r\n` collapse, and the position all
 //! the input constructs share -- is `input.rs`.
 
+use std::time::Duration;
+
 /// What a command line supplied to the program being run.
 ///
 /// Constructed by the caller that read the command line -- `bin/rexx-run.rs`
@@ -108,6 +110,10 @@ pub struct Invocation {
     input: ProgramInput,
     /// Which engine runs the program's bodies.
     engine: Engine,
+    /// How long the run may take before the interpreter abandons it, or
+    /// `None` for no bound at all -- which is what every shipped caller
+    /// passes. See [`Invocation::with_deadline`].
+    deadline: Option<Duration>,
 }
 
 /// Which engine runs each body of the program: the tree-walker, or the
@@ -202,6 +208,7 @@ impl Invocation {
             argument: None,
             input: ProgramInput::Nothing,
             engine: Engine::DEFAULT,
+            deadline: None,
         }
     }
 
@@ -224,15 +231,43 @@ impl Invocation {
         Invocation { engine, ..self }
     }
 
-    /// The argument string, if there is one, where `.input` reads from, and
-    /// which engine runs the bodies.
+    /// The same invocation, abandoned if the run is still executing clauses
+    /// `deadline` after it starts.
     ///
-    /// One accessor consuming the whole value rather than three borrowing
-    /// getters: `execute` needs every part and takes ownership of each, and a
-    /// set of getters would either clone the argument bytes or hand out a
-    /// borrow that outlives nothing useful.
-    pub(crate) fn into_parts(self) -> (Option<Vec<u8>>, ProgramInput, Engine) {
-        (self.argument, self.input, self.engine)
+    /// **A field here for the same reason [`Engine`] is one, and the argument
+    /// transfers word for word**: an environment variable is read once per
+    /// process, so it could not give two arms inside one `cargo test`, and the
+    /// harnesses that run a population of programs call
+    /// [`run_program`](crate::run_program) directly rather than spawning an
+    /// interpreter. A deadline is a per-run choice made by the caller that
+    /// knows what it is running.
+    ///
+    /// **What it bounds is narrower than "the run", and the difference is the
+    /// whole of what this is worth**: `clause.rs`'s `Deadline` names what a
+    /// clause-boundary check cannot see -- a park, a spin inside one clause,
+    /// and the parse. A caller needing a bound on those needs one outside the
+    /// interpreter thread.
+    ///
+    /// The run ends with [`DEADLINE_EXIT`](crate::DEADLINE_EXIT) and a line on
+    /// stderr. It is not a Rexx condition: nothing can trap it, it has no
+    /// error number, and an invocation that never calls this cannot produce
+    /// it.
+    pub fn with_deadline(self, deadline: Duration) -> Invocation {
+        Invocation {
+            deadline: Some(deadline),
+            ..self
+        }
+    }
+
+    /// The argument string, if there is one, where `.input` reads from, which
+    /// engine runs the bodies, and how long the run may take.
+    ///
+    /// One accessor consuming the whole value rather than borrowing getters:
+    /// `execute` needs every part and takes ownership of each, and a set of
+    /// getters would either clone the argument bytes or hand out a borrow that
+    /// outlives nothing useful.
+    pub(crate) fn into_parts(self) -> (Option<Vec<u8>>, ProgramInput, Engine, Option<Duration>) {
+        (self.argument, self.input, self.engine, self.deadline)
     }
 }
 

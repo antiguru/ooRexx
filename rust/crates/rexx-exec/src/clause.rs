@@ -132,8 +132,158 @@
 //!   function this module must expose for one legitimate caller is a
 //!   function every other `pub(crate)` caller can also reach.
 
+use std::time::{Duration, Instant};
+
 use crate::run::Flow;
 use crate::{Code, Ended, Failure, Interp, ObjRef};
+
+/// A wall-clock bound on a whole run, honoured at the clause boundary.
+///
+/// # What it catches, and what it cannot
+///
+/// It catches a run that keeps **executing clauses** -- the one crate-side
+/// non-termination this project has found, a `REPLY` whose remainder forwards
+/// back into its own method so that `Interp::run_deferred_replies` drains a
+/// queue each drained body refills (`corpus/oracle-crashes.txt`'s
+/// self-forward entry). Measured on that program, both engines: 100% of a
+/// core with `VmRSS` flat, and no activation depth grows, so
+/// `MAX_ACTIVATION_DEPTH` never fires.
+///
+/// It does **not** catch:
+///
+/// * a run parked on a wait that executes no further clause. Nothing here
+///   reaches a clause boundary, so nothing here is looked at. Whether this
+///   crate has such a shape at all is open -- the known parked shape,
+///   `GUARD ... WHEN` with a false expression, is refused at
+///   `Loud::guard_when_false` before it can park;
+/// * a spin inside one builtin, or inside one clause's own evaluation. The
+///   check runs when a clause *begins*; a clause that never ends is never
+///   re-entered;
+/// * the parse. `execute` parses before it builds an `Interp`, so a
+///   pathological parse is outside this entirely;
+/// * anything after the last clause the run executes -- `UNINIT` dispatch
+///   aside, which runs clauses of its own and so is covered.
+///
+/// A caller that needs a bound on those needs one outside this process's
+/// interpreter thread; `tests/watchdog/mod.rs` is that bound for the sweeps.
+///
+/// **And nothing outside the process survives a native stack overflow**, which
+/// is not non-termination but is the neighbouring failure and is reachable
+/// from Rexx. Measured 2026-09-02, both engines, no deadline set: `zs =
+/// 'interpret zs'` then `interpret zs` prints `has overflowed its stack` and
+/// the process dies at rc 134, because an `INTERPRET` fragment grows the
+/// native stack without growing `activation_depth`, so `MAX_ACTIVATION_DEPTH`
+/// never fires. `on_interpreter_thread`'s own doc names this as the one
+/// failure it cannot report. A deadline **does** cut that program first --
+/// every fragment clause is a clause -- and `deadline.rs`'s shape table
+/// carries it as the row that says why the check is here and not at the
+/// interpreter's loops.
+///
+/// # Why the clause boundary and not the cycles
+///
+/// A deadline honoured at the interpreter's own cycles instead -- a loop's
+/// `Interp::loop_advance`, a `Flow::Signal` transfer, the reply drain -- costs
+/// less, and was built and measured rather than argued about: `emptyloop`
+/// +0.809% against this shape's +1.078% on the compiled stream, and most axes
+/// four times cheaper. It rests on "every unbounded run passes through one of
+/// those", which is an exhaustiveness claim about this interpreter's control
+/// flow that no type can carry, and it is **false**: the `INTERPRET`
+/// recursion above iterates no loop, transfers by no `SIGNAL` and resumes no
+/// reply, and under that shape the same program aborts the process where this
+/// one answers. Every clause being counted is a property the compiler checks,
+/// through [`DeadlineCounted`].
+///
+/// # What the run with no deadline pays
+///
+/// One `sub`-and-branch on [`Interp::clause_countdown`], and nothing else on
+/// the path: the field is decremented per clause and the whole decision --
+/// whether there is a deadline at all, the clock, the reload -- is behind the
+/// zero test, in [`Interp::countdown_reached`], which is `#[cold]` and out of
+/// line. A run with no deadline reaches it once per
+/// [`Deadline::NO_DEADLINE_SPACING`] clauses and does nothing there but
+/// reload, which at that spacing is below one instruction per million
+/// clauses.
+///
+/// **It is not free, and this is what it costs.** `instructions:u` over
+/// `bench-programs`, `--release`, each arm its own binary, interleaved, best
+/// of three, against `6656d5a4f`, both engines:
+///
+/// ```text
+/// emptyloop  ir +1.077%  tree +1.376%   |  dispatch       ir +0.127%  tree +0.329%
+/// varlookup  ir +0.690%  tree +0.858%   |  dispatchclass  ir +0.087%  tree +0.200%
+/// compound   ir +0.278%  tree +0.506%   |  alloc4c        ir +0.195%  tree +0.399%
+/// strings    ir +0.167%  tree +0.359%   |  arith          ir +0.102%  tree +0.029%
+/// ```
+///
+/// Median +0.304%, worst +1.376%. `emptyloop` is the pure clause loop and so
+/// the worst by construction: 100 million instructions on the compiled stream
+/// and 150 million on the tree-walker, over 25 million passes carrying two
+/// clauses each -- two and three instructions per clause. **None of it is
+/// struct layout** -- an arm carrying the fields and no check at all reads
+/// +0.002%.
+///
+/// Two shapes cost more and were rejected on the number: widening the clause
+/// unit itself to carry the failure (`emptyloop` ir +2.966%, `varlookup` ir
+/// +5.640%), and one `Option` test with a `checked_sub` per clause
+/// (+1.887% and +1.036%).
+///
+/// # The countdown
+///
+/// The clock is read once per [`Deadline::CLAUSES_PER_CHECK`] clauses rather
+/// than per clause, because a read is many times what the decrement above
+/// costs and would be the whole expense of the feature. The bound is
+/// therefore honoured to within that many clauses, which is what makes it a
+/// harness bound and not a language timer.
+pub(crate) struct Deadline {
+    /// When the run must stop.
+    at: Instant,
+    /// Whether the clock has already been found past [`Deadline::at`].
+    ///
+    /// **The record that a bound actually fired, which no exit status can
+    /// stand in for.** A path that discards a failure -- `Interp::
+    /// run_one_uninit` is one, and it discards a raised condition and an
+    /// `EXIT` because the oracle's own dispatcher does -- would otherwise let
+    /// an abandoned run report the answer its main body happened to have.
+    /// Asking the clock a second time instead would misreport a run that
+    /// finished legitimately in the instant the deadline passed.
+    expired: bool,
+}
+
+impl Deadline {
+    /// Clauses between two reads of the clock, and so the granularity the
+    /// bound is honoured to.
+    pub(crate) const CLAUSES_PER_CHECK: u32 = 1024;
+
+    /// Clauses between two visits to [`Interp::countdown_reached`] for a run
+    /// with no deadline, where the visit does nothing but reload this.
+    ///
+    /// The largest value the counter can hold, because the only thing it
+    /// buys is how rarely a run that will never be stopped pays for a call.
+    pub(crate) const NO_DEADLINE_SPACING: u32 = u32::MAX;
+
+    /// A bound `limit` from now.
+    pub(crate) fn starting_now(limit: Duration) -> Deadline {
+        Deadline {
+            at: Instant::now() + limit,
+            expired: false,
+        }
+    }
+}
+
+/// Proof that the clause about to be opened has had the deadline counted
+/// against it.
+///
+/// **A token rather than a rule, and the file it is in is why.** This
+/// module's own doc records four rounds of a defect whose shape was a site
+/// that did not do what every clause owes, each round asserting an
+/// exhaustiveness that was false a round later. [`Interp::enter_clause`] and
+/// [`Interp::enter_stepped_clause`] both take one of these and nothing
+/// outside this module can build one, so a site that opens a clause without
+/// counting it does not compile.
+///
+/// It is a zero-sized value: threading it costs nothing at run time, which is
+/// what makes the enforcement free rather than a trade.
+pub(crate) struct DeadlineCounted(());
 
 /// Every piece of state `step_in_temps_frame` sets fresh, unconditionally, on
 /// **every** instruction it steps -- and so every field a caller pushing a
@@ -458,7 +608,8 @@ impl Interp {
         line: usize,
         body: impl FnOnce(&mut Self) -> Result<T, Failure>,
     ) -> Result<ClauseOutcome<T>, Failure> {
-        let entry = self.enter_clause(line);
+        let counted = self.count_clause_against_deadline()?;
+        let entry = self.enter_clause(line, counted);
         let ran = body(self);
         self.leave_clause(entry, code, ran)
     }
@@ -469,8 +620,14 @@ impl Interp {
     /// Half of the clause unit rather than a function in its own right -- see
     /// this module's doc comment for the two entry shapes and for what the
     /// [`ClauseEntry`] does and does not close.
+    ///
+    /// [`DeadlineCounted`] is where the clause's own cost against the
+    /// deadline was taken -- [`Interp::count_clause_against_deadline`] --
+    /// which is one step earlier than this because that step can fail and
+    /// this one cannot.
     #[inline(always)]
-    pub(crate) fn enter_clause(&mut self, line: usize) -> ClauseEntry {
+    pub(crate) fn enter_clause(&mut self, line: usize, counted: DeadlineCounted) -> ClauseEntry {
+        let DeadlineCounted(()) = counted;
         // **The argument stack is empty at every clause boundary**, and this
         // is what keeps that true when a clause is abandoned part-way through
         // pushing a call's run: a trapped `NOVALUE` on a second argument
@@ -533,6 +690,59 @@ impl Interp {
         );
         self.clause_state.current_clause_line = line;
         ClauseEntry(())
+    }
+
+    /// Counts one clause against this run's deadline, and answers the proof
+    /// [`Interp::enter_clause`] needs.
+    ///
+    /// **The whole of what a run with no deadline pays**: one decrement and
+    /// one branch. [`Deadline`]'s own doc has the measurement that chose this
+    /// shape over two others, and what the bound does and does not reach.
+    ///
+    /// The subtraction cannot underflow: every write to
+    /// [`Interp::clause_countdown`] leaves it at least 1, so it is at least 1
+    /// here.
+    #[inline(always)]
+    pub(crate) fn count_clause_against_deadline(&mut self) -> Result<DeadlineCounted, Failure> {
+        self.clause_countdown -= 1;
+        if self.clause_countdown == 0 {
+            self.countdown_reached()?;
+        }
+        Ok(DeadlineCounted(()))
+    }
+
+    /// Reads the clock and either reloads the countdown or ends the run.
+    ///
+    /// Out of line and `#[cold]`, so that the caller's own body carries the
+    /// decrement and the branch and nothing else. A run with no deadline
+    /// reaches this too, and does nothing here but reload.
+    #[cold]
+    #[inline(never)]
+    fn countdown_reached(&mut self) -> Result<(), Failure> {
+        let Some(deadline) = &mut self.deadline else {
+            self.clause_countdown = Deadline::NO_DEADLINE_SPACING;
+            return Ok(());
+        };
+        if deadline.expired || Instant::now() >= deadline.at {
+            // Reloaded to 1, so the very next clause lands here again and
+            // fails too. A run that has outlived its bound does not get to
+            // resume because a caller swallowed one failure.
+            deadline.expired = true;
+            self.clause_countdown = 1;
+            return Err(Failure::Deadline);
+        }
+        self.clause_countdown = Deadline::CLAUSES_PER_CHECK;
+        Ok(())
+    }
+
+    /// Whether this run was cut short by its deadline.
+    ///
+    /// False for a run with no deadline, and false for one that finished
+    /// inside its bound however narrowly -- see [`Deadline::expired`].
+    pub(crate) fn deadline_expired(&self) -> bool {
+        self.deadline
+            .as_ref()
+            .is_some_and(|deadline| deadline.expired)
     }
 
     /// Closes the clause `entry` opened, around `ran` -- everything

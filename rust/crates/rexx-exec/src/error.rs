@@ -2348,12 +2348,14 @@ impl From<&ParseError> for Raised {
     }
 }
 
-/// Either kind of failure a clause can produce: a construct 4a does not
-/// implement (`Loud`) or a real Rexx condition (`Raised`). `step` and
-/// everything above it propagate this rather than either alone, since a
-/// clause containing an expression can fail either way -- `eval`'s own
-/// `ExprKind::Message` arm is `Loud` (not implemented, Phase 5's), its
-/// `1 / 0` arm is `Raised` (implemented, and this is what it does).
+/// What a clause can produce instead of a value: a construct this crate does
+/// not implement (`Loud`), a real Rexx condition (`Raised`), an `EXIT`
+/// travelling through an expression (`Exited`), or a harness bound the run
+/// outlived (`Deadline`). `step` and everything above it propagate this
+/// rather than any one alone, since a clause containing an expression can
+/// fail more than one way -- `eval`'s own `ExprKind::Message` arm is `Loud`
+/// (not implemented, Phase 5's), its `1 / 0` arm is `Raised` (implemented,
+/// and this is what it does).
 #[derive(Debug)]
 pub(crate) enum Failure {
     /// **Boxed, and that is a measurement rather than a habit.** This variant
@@ -2392,6 +2394,20 @@ pub(crate) enum Failure {
     /// finally read, and there it is handled exactly like an ordinary
     /// `Ok(value)`: same `exit_code_for`, no stderr report.
     Exited(Option<ObjRef>),
+    /// The run outlived the deadline its [`Invocation`](crate::Invocation)
+    /// set, and is being abandoned at a clause boundary
+    /// ([`Deadline`](crate::clause::Deadline), whose own doc has what that
+    /// bound does and does not reach).
+    ///
+    /// **A harness bound, not language behaviour, and the type is what keeps
+    /// the two apart.** It carries nothing, so there is no condition name, no
+    /// error number and no substitution to render; `Interp::offer_to_trap`
+    /// declines every failure that is not [`Failure::Raised`], so no
+    /// `SIGNAL ON` can take it, and a `CALL ON` trap never sees a failure at
+    /// all. `execute` renders it as [`DEADLINE_EXIT`](crate::DEADLINE_EXIT)
+    /// with a line on stderr, and a run whose `Invocation` set no deadline
+    /// cannot produce one.
+    Deadline,
 }
 
 impl From<Loud> for Failure {

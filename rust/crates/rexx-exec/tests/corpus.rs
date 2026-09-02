@@ -175,6 +175,7 @@
 //! witness, and its own entry says which indent that is.
 
 mod support;
+mod watchdog;
 
 use std::collections::BTreeMap;
 use std::env;
@@ -243,11 +244,11 @@ fn run_rust(path: &Path) -> Outcome {
     let path_str = path
         .to_str()
         .unwrap_or_else(|| panic!("corpus path {} is not valid UTF-8", path.display()));
-    rexx_exec::run_program(path_str, text, rexx_exec::Invocation::none())
+    watchdog::run_bounded(path_str, text, rexx_exec::Invocation::none())
 }
 
-/// One corpus program that disagreed with the oracle, or one whose oracle
-/// run did not finish.
+/// One corpus program that disagreed with the oracle, or one where either
+/// side's run did not finish.
 struct Mismatch {
     rel_path: String,
     /// The construct named in `rexx-exec: X is not implemented`, when the
@@ -255,8 +256,8 @@ struct Mismatch {
     /// structural failure alike.
     owner: Option<String>,
     reason: String,
-    /// `true` for an oracle run that did not finish, `false` for an ordinary
-    /// byte divergence. Kept as its own field rather than inferred from
+    /// `true` for a run of either side that did not finish, `false` for an
+    /// ordinary byte divergence. Kept as its own field rather than inferred from
     /// `reason`'s text, because a structural failure is red in every mode
     /// and a divergence is red only under the gate -- `corpus_differential`
     /// asserts on this field unconditionally, before the gated assertion
@@ -444,6 +445,23 @@ fn check_case(oracle: &Oracle, corpus_dir: &Path, rel_path: &str) -> Option<Mism
                 "the oracle did not finish: {:?} -- a structural failure, not a byte \
                  comparison",
                 cpp.termination
+            ),
+            structural: true,
+        });
+    }
+
+    // The same reading of the crate side, which `watchdog::run_bounded` gives
+    // it. **Structural rather than a divergence**, because a run that did not
+    // finish produced no answer to compare: leaving it to the byte comparison
+    // would make it red only under the gate, where the oracle's own
+    // non-finish above is red in every mode.
+    if watchdog::did_not_finish(&rust) {
+        return Some(Mismatch {
+            rel_path: rel_path.to_string(),
+            owner: None,
+            reason: format!(
+                "the crate did not finish: {:?} -- a structural failure, not a byte comparison",
+                String::from_utf8_lossy(&rust.stderr).trim_end()
             ),
             structural: true,
         });
@@ -748,7 +766,7 @@ fn corpus_differential() {
         structural.is_empty(),
         "{} corpus program(s) did not finish, a structural failure in every \
          mode rather than a verdict `{GATE_ENV}` could relax: {structural:?}. \
-         See the report above for which `Termination` each one carries.",
+         See the report above for which side each one stopped on.",
         structural.len()
     );
 

@@ -160,6 +160,34 @@ mod environment;
 /// one. This constant remains the single place to change it.
 pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 
+/// The status a run abandoned at its own deadline exits with
+/// ([`Invocation::with_deadline`]).
+///
+/// Every constraint [`NOT_IMPLEMENTED_EXIT`] states applies here for the same
+/// reasons -- outside 157..=253 so it cannot be read as a condition, below 126
+/// so it cannot be read as a shell's `128 + signal`, and not 0, 1, 2, 126 or
+/// 127 -- **and it is a different number from that one**, because the two mean
+/// opposite things to a harness. A not-implemented refusal is a row this crate
+/// is allowed to be blocked on and several harnesses classify it as such; a
+/// deadline is a hard failure of the run. Sharing a code would let a hang be
+/// counted as a construct awaiting implementation.
+///
+/// **No value in 0..=255 is collision-free**, and the same answer applies:
+/// `exit 121` is a status a program can name for itself, and what makes the
+/// choice safe is the harness treating this code as a hard failure whatever
+/// the oracle did, not the number.
+pub const DEADLINE_EXIT: i32 = 121;
+
+/// The stderr line a run abandoned at its deadline leaves behind.
+///
+/// It shares the `rexx-exec: ` prefix with a loud refusal because both are
+/// this interpreter speaking rather than the language, and it says *deadline*
+/// rather than naming a construct so that a reader and a `grep` can tell the
+/// two apart. It names no duration: the caller that set the bound is the one
+/// that knows it, and a message quoting a value it was handed would be one
+/// more thing to keep in step.
+pub const DEADLINE_REPORT: &[u8] = b"rexx-exec: the run exceeded its deadline\n";
+
 /// The name the interpreter's own package answers to -- `PackageClass::
 /// getProgramName`'s answer for internal code (`classes/PackageClass.hpp:147`).
 ///
@@ -3032,6 +3060,23 @@ struct Interp {
     /// like `stress_collect` beside it: it is a property of the whole run,
     /// chosen once by the caller and never varying between activations.
     engine: Engine,
+    /// The wall-clock bound `Interp::count_clause_against_deadline` honours,
+    /// or `None` for the unbounded run every shipped caller asks for.
+    ///
+    /// On the interpreter for `engine`'s own reason, and armed in `execute`
+    /// rather than here: the countdown starts when the program does, not when
+    /// the interpreter is built.
+    deadline: Option<crate::clause::Deadline>,
+    /// Clauses left before `Interp::countdown_reached` runs.
+    ///
+    /// **Separate from `deadline` and never `None`**, which is the whole of
+    /// what the default path costs: one decrement and one branch, with the
+    /// question of whether there is a deadline at all behind them.
+    /// `crate::clause::Deadline`'s own doc has the measurement.
+    ///
+    /// Every write leaves it at least 1, which is what makes the decrement
+    /// unable to underflow.
+    clause_countdown: u32,
     /// The chunk cache (Phase 4e): D16's discipline applied to a second cache
     /// rather than invented afresh for it, under `plans`' own `BodyKey`
     /// **paired with the trace setting the chunk was compiled under**.
@@ -4421,6 +4466,8 @@ impl Interp {
             programs: Vec::new(),
             plans: NameMap::default(),
             engine: Engine::TreeWalker,
+            deadline: None,
+            clause_countdown: crate::clause::Deadline::NO_DEADLINE_SPACING,
             chunks: NameMap::default(),
             chunks_refused: 0,
             deferred: std::collections::VecDeque::new(),
@@ -6967,9 +7014,18 @@ fn execute(
     // doc for what reads it and for the three measured invocations that tell
     // "no argument" from "one empty argument" apart.
     interp.call_context.name = path.as_bytes().to_vec();
-    let (argument, program_input, engine) = invocation.into_parts();
+    let (argument, program_input, engine, deadline) = invocation.into_parts();
     interp.input = Input::new(program_input);
     interp.engine = engine;
+    // Armed here rather than in `Interp::new`, and after the parse, so that
+    // what it bounds is the running of this program. `Interp::bootstrap_library`
+    // below runs clauses of its own and is inside the bound, which is what a
+    // caller asking for a bounded run wants: a bootstrap that did not finish
+    // is a run that did not finish.
+    interp.deadline = deadline.map(crate::clause::Deadline::starting_now);
+    if interp.deadline.is_some() {
+        interp.clause_countdown = crate::clause::Deadline::CLAUSES_PER_CHECK;
+    }
     // **The library bootstrap runs before the command line's own program is
     // installed or run, and before its argument string exists.** The program
     // has already been *parsed* above, which is where a syntax error is
@@ -7047,6 +7103,10 @@ fn execute(
             interp.trace.extend_from_slice(&raised.report(&site));
             raised.exit_code()
         }
+        // No report and no status here: the run may still have deferred
+        // bodies and `UNINIT`s to abandon, and the one place that says a
+        // deadline fired is the guard below them.
+        Err(Failure::Deadline) => 0,
     };
 
     // **After the main body's own report and after its exit status is
@@ -7066,6 +7126,9 @@ fn execute(
             // `Interp::enter_method_body` does; the arm is what makes this
             // match exhaustive and nothing else.
             Failure::Exited(_) => {}
+            // The guard below the `UNINIT` sweep is what reports this, for
+            // the reason the main body's own arm gives.
+            Failure::Deadline => {}
             Failure::Loud(loud) => {
                 interp
                     .trace
@@ -7100,6 +7163,20 @@ fn execute(
             .trace
             .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());
         exit_code = NOT_IMPLEMENTED_EXIT;
+    }
+
+    // **The one place a deadline becomes an answer**, below everything that
+    // runs clauses, so that a run abandoned part-way cannot report the status
+    // its main body happened to reach. It is here rather than in the three
+    // arms above because one of the paths between them discards failures on
+    // purpose: `Interp::run_one_uninit` throws away a raised condition and an
+    // `EXIT` because the oracle's own dispatcher does, and a deadline reaching
+    // it would otherwise vanish. `Interp::deadline_expired` reads the flag the
+    // check itself set, not the clock, so a run that finished inside its bound
+    // is untouched however narrow the margin was.
+    if interp.deadline_expired() {
+        interp.trace.extend_from_slice(DEADLINE_REPORT);
+        exit_code = DEADLINE_EXIT;
     }
 
     // Read after the deferred bodies above, so a collection or a refused chunk

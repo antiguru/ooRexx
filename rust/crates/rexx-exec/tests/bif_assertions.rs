@@ -70,8 +70,10 @@
 //! reaches libtest's thread-local capture sink and not the terminal; see
 //! `corpus.rs`'s module doc for the measurement behind that.
 
+mod watchdog;
+
 use rayon::prelude::*;
-use rexx_exec::{NOT_IMPLEMENTED_EXIT, Outcome, run_program};
+use rexx_exec::{NOT_IMPLEMENTED_EXIT, Outcome};
 use rexx_extract::bif::{DropReason, RaiseRow, extract_bif};
 use rexx_extract::keyword::count_assert_same;
 use rexx_extract::{AssertionRow, Form, RaiseExpectation, find_test_groups};
@@ -301,12 +303,12 @@ fn evaluate(row: &RowKind) -> RowOutcome {
         // evaluate `==` itself: the rendering is what is under test, so the
         // executor's own comparison operator must not be the judge.
         RowKind::Value(r) => {
-            let left = run_program(
+            let left = watchdog::run_bounded(
                 ROW_PATH,
                 program(r.digits, r.form, &r.prelude, &[&r.expr]),
                 rexx_exec::Invocation::none(),
             );
-            let right = run_program(
+            let right = watchdog::run_bounded(
                 ROW_PATH,
                 program(r.digits, r.form, &r.prelude, &[&r.expected]),
                 rexx_exec::Invocation::none(),
@@ -317,7 +319,7 @@ fn evaluate(row: &RowKind) -> RowOutcome {
             let operands: Vec<&str> = r.operands.iter().map(String::as_str).collect();
             classify_raise(
                 r.expect,
-                run_program(
+                watchdog::run_bounded(
                     ROW_PATH,
                     program(r.digits, r.form, &r.prelude, &operands),
                     rexx_exec::Invocation::none(),
