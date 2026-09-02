@@ -708,7 +708,7 @@ impl Interp {
     pub(crate) fn string_value_text(&mut self, value: ObjRef) -> Vec<u8> {
         if matches!(
             self.heap.get(value).map(|object| &object.body),
-            Some(Body::Array(_))
+            Some(Body::Array { .. })
         ) {
             return crate::dispatch::ARRAY_DEFAULT_NAME.to_vec();
         }
@@ -724,7 +724,24 @@ impl Interp {
     /// live until it does.
     pub(crate) fn array_slots(&self, value: ObjRef) -> Option<&[Option<ObjRef>]> {
         match &self.heap.get(value)?.body {
-            Body::Array(slots) => Some(slots),
+            Body::Array { slots, .. } => Some(slots),
+            _ => None,
+        }
+    }
+
+    /// An array's slots and its dimensions array, or `None` for a value that
+    /// is not an array.
+    ///
+    /// The dimensions are `None` for an array no dimension list was fixed
+    /// for, which is not the same as a one-element list -- see [`Body::Array`].
+    ///
+    /// [`Body::Array`]: rexx_core::Body::Array
+    pub(crate) fn array_body(
+        &self,
+        value: ObjRef,
+    ) -> Option<(&[Option<ObjRef>], Option<&[usize]>)> {
+        match &self.heap.get(value)?.body {
+            Body::Array { slots, dimensions } => Some((slots, dimensions.as_deref())),
             _ => None,
         }
     }
@@ -933,7 +950,7 @@ impl Interp {
             Body::Native(native) => Some(native.rendered()),
             // Joined on demand by `to_text` and held nowhere, which is one of
             // the causes of `None` this function's doc names.
-            Body::Array(_) => None,
+            Body::Array { .. } => None,
             // The same cause for an instance nothing has named: `to_text`
             // derives those bytes from the class id and stores them nowhere.
             Body::Instance { name, .. } => name.as_deref(),
@@ -1160,7 +1177,7 @@ impl Interp {
             // it is reached only where this answers `NotNumeric` -- the
             // premise `a_value_the_operator_gap_names_parses_as_no_number`
             // holds.
-            Body::Array(_) | Body::Instance { .. } => Err(NotNumeric),
+            Body::Array { .. } | Body::Instance { .. } => Err(NotNumeric),
             other => {
                 unreachable!(
                     "the value model only creates Text, Num, Stem, Array, Native and Instance, \
@@ -1413,7 +1430,7 @@ impl Redirect {
                 default: Some(default),
                 ..
             } => Redirect::StemDefault(*default),
-            Body::Array(_) => Redirect::Array,
+            Body::Array { .. } => Redirect::Array,
             Body::Instance {
                 class, name: None, ..
             } => Redirect::InstanceDefault(*class),
@@ -1748,7 +1765,7 @@ mod tests {
         // An array's string value is joined on demand and cached nowhere,
         // which is the redirect arm both functions take.
         let joined = interp.text(b"1");
-        let array = interp.alloc_with(BehaviourId::ARRAY, Body::Array(vec![Some(joined), None]));
+        let array = interp.alloc_with(BehaviourId::ARRAY, Body::array(vec![Some(joined), None]));
         values.push(array);
 
         // Both shapes of instance, because `Redirect::of` answers only for

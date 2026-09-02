@@ -732,7 +732,7 @@ impl Interp {
             }
             slots.push(Some(value));
         }
-        let array = self.alloc_with(rexx_core::BehaviourId::ARRAY, Body::Array(slots));
+        let array = self.alloc_with(rexx_core::BehaviourId::ARRAY, Body::array(slots));
         if let Some(rendered) = self.result_text(array) {
             self.trace_result(indent, &rendered);
         }
@@ -1651,7 +1651,7 @@ impl Interp {
             // 97.1; and where a comparison finds one it is `Object`'s own
             // identity test, so `say (a = 1)` is `0` at rc 0 rather than a
             // comparison of `1` against `1`.
-            Body::Array(_) => Some("an array"),
+            Body::Array { .. } => Some("an array"),
             // The oracle sends the operator as a message here too, and it is
             // the send that fails: measured, oracle rc 159, `o + 1` on an
             // instance is `97.1 Object "a K" does not understand message
@@ -4023,7 +4023,7 @@ mod object_operand_tests {
         let one = interp.text(b"1");
         let array = interp.alloc_with(
             rexx_core::BehaviourId::ARRAY,
-            rexx_core::Body::Array(vec![Some(one)]),
+            rexx_core::Body::array(vec![Some(one)]),
         );
         let class = interp
             .classes()

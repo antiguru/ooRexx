@@ -44,13 +44,13 @@ fn arrays_hold_handles_to_other_objects() {
         bytes: Bytes::from_slice(b"a"),
         num: None,
     });
-    let arr = heap.alloc(Body::Array(vec![
+    let arr = heap.alloc(Body::array(vec![
         Some(a),
         Some(ObjRef::small_int(1).unwrap()),
         None,
         Some(ObjRef::NIL),
     ]));
-    let Some(Body::Array(items)) = heap.get(arr).map(|o| &o.body) else {
+    let Some(Body::Array { slots: items, .. }) = heap.get(arr).map(|o| &o.body) else {
         panic!("expected an array")
     };
     assert_eq!(items.len(), 4);

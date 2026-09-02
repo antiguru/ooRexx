@@ -3986,7 +3986,7 @@ impl Interp {
             Decoded::Heap { .. } => {}
         }
         match self.heap.get(value).map(|object| &object.body) {
-            Some(Body::Array(_)) => Conversion::Array,
+            Some(Body::Array { .. }) => Conversion::Array,
             Some(Body::Text { .. } | Body::Num { .. }) => Conversion::Lines,
             // `StemClass::makeArray` is `tailArray`, which is the assigned
             // tails and never the default: measured, `a. = 'dflt'` with no
@@ -8185,7 +8185,7 @@ impl Interp {
             return None;
         }
         match self.heap.get(value).map(|object| &object.body) {
-            Some(Body::Array(_)) => None,
+            Some(Body::Array { .. }) => None,
             _ => Some(kind),
         }
     }
@@ -8226,7 +8226,7 @@ impl Interp {
             return self.hash_collection_indexes(value);
         }
         match self.heap.get(value).map(|object| &object.body) {
-            Some(Body::Array(slots)) => slots.iter().flatten().copied().collect(),
+            Some(Body::Array { slots, .. }) => slots.iter().flatten().copied().collect(),
             _ => vec![value],
         }
     }

@@ -15,7 +15,7 @@ fn a_string_reaches_nothing() {
 fn an_array_reaches_every_element_including_duplicates() {
     let a = ObjRef::heap(3, 0);
     let mut out = Vec::new();
-    Body::Array(vec![Some(a), Some(a), Some(ObjRef::NIL)]).trace(&mut out);
+    Body::array(vec![Some(a), Some(a), Some(ObjRef::NIL)]).trace(&mut out);
     assert_eq!(out, vec![a, a, ObjRef::NIL]);
 }
 
@@ -26,7 +26,7 @@ fn an_array_reaches_past_an_empty_slot_and_not_through_it() {
     let a = ObjRef::heap(3, 0);
     let b = ObjRef::heap(4, 0);
     let mut out = Vec::new();
-    Body::Array(vec![None, Some(a), None, Some(b), None]).trace(&mut out);
+    Body::array(vec![None, Some(a), None, Some(b), None]).trace(&mut out);
     assert_eq!(out, vec![a, b]);
 }
 

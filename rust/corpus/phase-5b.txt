@@ -240,3 +240,20 @@ lang/object_send.rex
 lang/object_send_refusals.rex
 lang/object_send_name_refusal.rex
 lang/object_start.rex
+
+# Task 8: multidimensional `Array`. `methodsbyclass.rex` is the gate row
+# `.Array~new(2, 3)`, `[]`/`[]=` with several subscripts and `~dimension` make
+# agree; its `order` line is the only thing in it that can see which cell a
+# subscript names, because a write and the read that matches it miss together
+# under any injective index mapping. `array_multidimensional.rex` is what the
+# row does not reach: the shapes `~new` builds and what each answers about
+# itself, a read past a dimension against a write past one, the reshape a
+# write past one performs in each dimension, an array taking its shape from
+# the first subscript list it is written through, and the single-dimension
+# `[]=` that extends rather than reshaping.
+# `array_multidimensional_refusals.rex` is the error surface, where 93.924
+# and 93.907 split the same rejected subscript by which index kind it belongs
+# to and 93.925/93.926 count the array's own dimensions.
+gate-tables/concepts/methodsbyclass.rex
+lang/array_multidimensional.rex
+lang/array_multidimensional_refusals.rex

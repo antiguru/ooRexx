@@ -829,6 +829,18 @@ impl Loud {
         }
     }
 
+    /// `~new` sent to a class deriving from `Array`, whose answer would have
+    /// to dispatch against the subclass's behaviour where a `Body::Array`
+    /// carries none.
+    ///
+    /// The oracle answers it: measured, `.array~subclass('K')~new(2,3)~size`
+    /// is `6` at rc 0.
+    fn array_subclass_new() -> Loud {
+        Loud {
+            message: owned_message("~new on a subclass of Array", Some("Phase 5")),
+        }
+    }
+
     /// A `receiver~NAME=` entry-method send that carried no value argument.
     ///
     /// **There is no oracle behaviour to match**, so this is a refusal rather

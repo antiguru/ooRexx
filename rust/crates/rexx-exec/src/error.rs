@@ -1606,12 +1606,34 @@ impl Raised {
     ///
     /// `Error_Incorrect_method_maxsub`, raised by the same function's
     /// `indexCount > 1` branch for a fixed-dimension array
-    /// (`classes/ArrayClass.cpp:1320`-`:1322`). **Not 93.902**, and that is
-    /// what `Arity::Counted` exists for: measured at rc 163, `(1,2)~at(1,2)`
-    /// reports `Too many subscripts for array; 1 expected.` where
-    /// `.environment~at(1,2)`, whose row carries a count, reports 93.902.
+    /// (`classes/ArrayClass.cpp:1320`-`:1322`) and by
+    /// `validateMultiDimensionIndex` for a list longer than the dimensions
+    /// array (`:1424`). **Not 93.902**, and that is what `Arity::Counted`
+    /// exists for: measured at rc 163, `(1,2)~at(1,2)` reports `Too many
+    /// subscripts for array; 1 expected.` where `.environment~at(1,2)`, whose
+    /// row carries a count, reports 93.902.
     pub(crate) fn too_many_subscripts(expected: usize) -> Raised {
         Raised::syntax(93, 926, vec![expected.to_string().into_bytes()])
+    }
+
+    /// 93.925: an array subscript list is shorter than the array's dimension.
+    ///
+    /// `Error_Incorrect_method_minsub`, `validateMultiDimensionIndex`
+    /// (`classes/ArrayClass.cpp:1419`). Measured at rc 163,
+    /// `m = .array~new(2,3)`: `m[1]` reports `Not enough subscripts for
+    /// array; 2 expected.`
+    pub(crate) fn not_enough_subscripts(expected: usize) -> Raised {
+        Raised::syntax(93, 925, vec![expected.to_string().into_bytes()])
+    }
+
+    /// 93.959: an array size or dimension product past
+    /// `ArrayClass::MaxFixedArraySize`. `max` is that bound, which the
+    /// message names.
+    ///
+    /// Measured at rc 163: `.array~new(100000000000000001)` reports `An array
+    /// cannot contain more than 100000000000000000 elements.`
+    pub(crate) fn array_too_big(max: usize) -> Raised {
+        Raised::syntax(93, 959, vec![max.to_string().into_bytes()])
     }
 
     /// 93.907: a method argument is not a positive whole number.

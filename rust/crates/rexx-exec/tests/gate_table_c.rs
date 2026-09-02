@@ -505,8 +505,9 @@ const CONCEPTS: &[Concept] = &[
                     instance for the section's own `matrix[2, 3] = 0` note, and the plan's \
                     handover puts instance construction in 5b",
         control: "route `matrix[2, 3] = 0` to a single-index `[]=`, so the element read back \
-                  is not the one written -- 5b",
-        oracle_lines: 4,
+                  is not the one written; or transpose the index mapping, which the `order` \
+                  line reads and no write-then-read pair can -- 5b",
+        oracle_lines: 5,
     },
 ];
 

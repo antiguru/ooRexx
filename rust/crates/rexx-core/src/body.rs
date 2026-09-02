@@ -144,7 +144,19 @@ pub enum Body {
     /// so the two are indistinguishable through `~at` alone, which is why
     /// the distinction has to live in the body rather than be reconstructed
     /// from what a read answers.
-    Array(Vec<Option<ObjRef>>),
+    ///
+    /// `dimensions` is `ArrayClass`'s own field. `None` is an array no
+    /// dimension list was fixed for; a list of one is single-dimensional all
+    /// the same (`isMultiDimensional` is `dimensions != OREF_NULL &&
+    /// dimensions->size() != 1`, `classes/ArrayClass.hpp:312`) and its
+    /// element is never read, because a single-dimensional array's extent is
+    /// `slots`. Measured, `.array~new(0)~dimension` is `1` where
+    /// `.array~new()~dimension` is `0`, and the first refuses `a[2, 3] = 'x'`
+    /// at 93.926 where the second answers it.
+    Array {
+        slots: Vec<Option<ObjRef>>,
+        dimensions: Option<Box<[usize]>>,
+    },
     /// A user-defined object: the class it belongs to, the behaviour it
     /// dispatches against, the name something gave it, and its instance
     /// variables, one pool per scope (D40).
@@ -557,6 +569,14 @@ impl NativeObject {
 const _: () = assert!(size_of::<Body>() <= 80);
 
 impl Body {
+    /// A single-dimensional array over `slots`.
+    pub fn array(slots: Vec<Option<ObjRef>>) -> Body {
+        Body::Array {
+            slots,
+            dimensions: None,
+        }
+    }
+
     /// Appends every object this one can reach.
     ///
     /// This single exhaustive match replaces the 148 hand-written `live()`
@@ -577,7 +597,7 @@ impl Body {
             }
             // An empty slot reaches nothing, the same as a stem's tombstone
             // above.
-            Body::Array(items) => out.extend(items.iter().filter_map(|item| *item)),
+            Body::Array { slots, .. } => out.extend(slots.iter().filter_map(|item| *item)),
             // Every scope's pool, walked by the storage's own type -- see
             // [`ScopePools::trace`] for why the walk lives there.
             // The class handle is traced for the reason the `Native` arm

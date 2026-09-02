@@ -248,10 +248,23 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // and `:715`, at `A_COUNT` in each row -- the same both-names-one-function
     // shape `MAKESTRING`/`TOSTRING` below have, and for the same reason: a
     // second function is where the two could come to disagree. Measured, the
-    // two agree on every shape `array_index.rex` and
+    // two agree on every shape `array_list_expression.rex` and
     // `array_index_refusals.rex` ask.
     ("Array", "[]", Arity::Counted, native_array_at),
     ("Array", "AT", Arity::Counted, native_array_at),
+    // `ArrayClass::putRexx` under both of its names, `memory/Setup.cpp:714`
+    // and `:721`, the same shape again. `t[i] = v` sends `t~"[]="(v, i)`, so
+    // the value leads the subscript list here too.
+    ("Array", "[]=", Arity::Counted, native_array_put),
+    ("Array", "PUT", Arity::Counted, native_array_put),
+    // `ArrayClass::dimensionRexx`, `memory/Setup.cpp:716`, whose declared
+    // count is 1 and whose argument is optional.
+    (
+        "Array",
+        "DIMENSION",
+        Arity::Fixed(1),
+        native_array_dimension,
+    ),
     ("Array", "ITEMS", Arity::Fixed(0), native_array_items),
     (
         "Array",
@@ -526,6 +539,11 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `memory/Setup.cpp:514`, reached by every class whose own class
     // behaviour declares no `NEW` of its own.
     ("Object", "NEW", Arity::Counted, native_new),
+    // `AddClassMethod("New", ArrayClass::newRexx, A_COUNT)`,
+    // `memory/Setup.cpp:708`. A row of its own for the reason
+    // `StringTable`'s below is one: the answer is a body this crate builds
+    // rather than an instance.
+    ("Array", "NEW", Arity::Counted, native_array_new),
     // `AddClassMethod("New", StringTable::newRexx, A_COUNT)`,
     // `memory/Setup.cpp:875`. A row of its own rather than `Object`'s,
     // because the collection allocates a hash body rather than an instance.
@@ -1343,7 +1361,7 @@ impl Interp {
                 Some(object) => match &object.body {
                     Body::Text { .. } | Body::Num { .. } => Ok(Primitive::String),
                     Body::Stem { .. } => Err("a stem"),
-                    Body::Array(_) => Ok(Primitive::Array),
+                    Body::Array { .. } => Ok(Primitive::Array),
                     Body::Instance {
                         class, behaviour, ..
                     } => Ok(Primitive::Instance {
@@ -2923,7 +2941,7 @@ impl Interp {
         // which is the same rooting every other allocation reached from a
         // send already relies on.
         let frame = self.roots.push_frame();
-        let arguments = self.alloc_with(BehaviourId::ARRAY, Body::Array(args.to_vec()));
+        let arguments = self.alloc_with(BehaviourId::ARRAY, Body::array(args.to_vec()));
         self.roots.push_temp(arguments);
         let missed = self.text(name);
         self.roots.push_temp(missed);
@@ -3532,7 +3550,7 @@ impl Interp {
                     // `ArrayClass::makeString` (`classes/ArrayClass.cpp:1841`),
                     // the items joined by a newline -- **not**
                     // `stringValue()`, which is `an Array`.
-                    Body::Array(_) => None,
+                    Body::Array { .. } => None,
                     _ => return self.make_string_or_none(value),
                 },
             },
@@ -3897,7 +3915,7 @@ fn native_superclasses(
     // (`rexx_core::CLASS_SLOT_BASE`), so the allocation below cannot collect
     // one of them out from under this array.
     Ok(Some(
-        interp.alloc_with(BehaviourId::ARRAY, Body::Array(items)),
+        interp.alloc_with(BehaviourId::ARRAY, Body::array(items)),
     ))
 }
 
@@ -5060,21 +5078,69 @@ fn array_slots_owned(interp: &Interp, receiver: ObjRef) -> Result<Vec<Option<Obj
     Ok(array_slots(interp, receiver)?.to_vec())
 }
 
-/// The one subscript `.Array`'s `[]`/`AT` were given, 1-based, or the refusal
-/// for a subscript list that does not name one.
+/// An array receiver's dimensions array as an owned copy, or the refusal
+/// [`array_slots`] gives for a receiver that is not an array.
 ///
-/// `ArrayClass::validateIndex` (`classes/ArrayClass.cpp:1211`) then
-/// `validateSingleDimensionIndex` (`:1258`), under `IndexAccess`, which is
-/// `RaiseBoundsTooMany` alone (`classes/ArrayClass.hpp:62`). So a subscript
-/// past the end of the array is **not** an error -- measured,
-/// `(1,2)~at(100000000000000001)` answers `The NIL object` even though that is
-/// past `MaxFixedArraySize` -- and only the count and the conversion raise.
+/// `None` is an array no dimension list was fixed for, which is not the same
+/// as a one-element list -- see [`rexx_core::Body::Array`].
+fn array_dimensions(interp: &Interp, receiver: ObjRef) -> Result<Option<Vec<usize>>, Failure> {
+    match interp.array_body(receiver) {
+        Some((_, dimensions)) => Ok(dimensions.map(<[usize]>::to_vec)),
+        None => Err(Loud::receiver_class("a value that is not an array").into()),
+    }
+}
+
+/// `ArrayClass::isFixedDimension` (`classes/ArrayClass.hpp:223`): an array
+/// that can no longer take a shape from a subscript list.
+fn array_is_fixed_dimension(interp: &Interp, receiver: ObjRef) -> Result<bool, Failure> {
+    match interp.array_body(receiver) {
+        Some((slots, dimensions)) => Ok(dimensions.is_some() || !slots.is_empty()),
+        None => Err(Loud::receiver_class("a value that is not an array").into()),
+    }
+}
+
+/// `ArrayClass::MaxFixedArraySize` (`classes/ArrayClass.hpp:329`).
+const MAX_FIXED_ARRAY_SIZE: usize = 100_000_000_000_000_000;
+
+/// The bounds policy a subscript list is validated under -- `IndexAccess`
+/// and `IndexUpdate` (`classes/ArrayClass.hpp:62`-`:63`).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum IndexUse {
+    /// `getRexx`: a subscript past the end answers `.nil`.
+    Get,
+    /// `putRexx`: a subscript past the end grows the array.
+    Put,
+}
+
+impl IndexUse {
+    /// The argument list position the subscript list starts at, which every
+    /// refusal a subscript raises counts from: `putRexx`'s first argument is
+    /// the value, so its list starts one later than `getRexx`'s.
+    fn arg_position(self) -> usize {
+        match self {
+            IndexUse::Get => 1,
+            IndexUse::Put => 2,
+        }
+    }
+}
+
+/// `ArrayClass::validateIndex` (`classes/ArrayClass.cpp:1211`): the flattened
+/// 1-based slot `args` names in `receiver`, or `None` for a subscript out of
+/// bounds under [`IndexUse::Get`].
+///
+/// Under [`IndexUse::Put`] the receiver grows to hold the position, so the
+/// answer is always `Some`.
 ///
 /// **A lone array argument is the subscript list**, spread by taking its item
 /// count alongside its slot array (`:1219`-`:1226`). Measured, that is item
 /// count and not size: `(1,2)~at((1,))` answers `1` where `(1,2)~at((1,2))` is
 /// 93.926 and `(1,2)~at((,))` is 93.901.
-fn array_index(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<usize, Failure> {
+fn array_position(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    index_use: IndexUse,
+) -> Result<Option<usize>, Failure> {
     let spread;
     let subscripts = match args {
         [Some(only)] => match interp.array_slots(*only) {
@@ -5087,26 +5153,109 @@ fn array_index(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<usize, Fa
         },
         _ => args,
     };
+    match array_dimensions(interp, receiver)? {
+        Some(dimensions) if dimensions.len() != 1 => {
+            multi_dimension_position(interp, receiver, subscripts, index_use, &dimensions)
+        }
+        _ => single_dimension_position(interp, receiver, subscripts, index_use),
+    }
+}
+
+/// `ArrayClass::validateSingleDimensionIndex` (`classes/ArrayClass.cpp:1258`).
+///
+/// A subscript past the end of the array is **not** an error under
+/// [`IndexUse::Get`] -- measured, `(1,2)~at(100000000000000001)` answers
+/// `The NIL object` even though that is past `MaxFixedArraySize` -- and only
+/// the count and the conversion raise.
+fn single_dimension_position(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    subscripts: &[Option<ObjRef>],
+    index_use: IndexUse,
+) -> Result<Option<usize>, Failure> {
     match subscripts {
-        [] => Err(Raised::not_enough_method_arguments(1).into()),
-        [Some(only)] => positive_index(interp, *only),
+        [] => Err(Raised::not_enough_method_arguments(index_use.arg_position()).into()),
+        [Some(only)] => {
+            let position = positive_index(interp, *only, index_use.arg_position())?;
+            if position <= array_slots(interp, receiver)?.len() {
+                return Ok(Some(position));
+            }
+            match index_use {
+                IndexUse::Get => Ok(None),
+                IndexUse::Put if position > MAX_FIXED_ARRAY_SIZE => {
+                    Err(Raised::array_too_big(MAX_FIXED_ARRAY_SIZE).into())
+                }
+                IndexUse::Put => {
+                    array_resize(interp, receiver, position)?;
+                    Ok(Some(position))
+                }
+            }
+        }
         // Only the spread above can produce this: an argument list of its own
         // drops a trailing omission, so `~at(,)` arrives as no argument at all
         // and is 93.901 above.
         [None] => Err(Loud::array_index_hole().into()),
-        _ => Err(Raised::too_many_subscripts(1).into()),
+        _ => {
+            if array_is_fixed_dimension(interp, receiver)? {
+                return Err(Raised::too_many_subscripts(1).into());
+            }
+            match index_use {
+                IndexUse::Get => Ok(None),
+                IndexUse::Put => {
+                    let dimensions = array_extend_multi(interp, receiver, subscripts)?;
+                    multi_dimension_position(interp, receiver, subscripts, index_use, &dimensions)
+                }
+            }
+        }
     }
 }
 
-/// One subscript as `RexxInternalObject::requiredPositive`
-/// (`classes/ObjectClass.cpp:1564`) reads it: a whole number of at least 1,
-/// converted under `Numerics::ARGUMENT_DIGITS` rather than under the
-/// activation's own `NUMERIC DIGITS`.
+/// `ArrayClass::validateMultiDimensionIndex` (`classes/ArrayClass.cpp:1361`),
+/// whose offset takes the **first** subscript as the fastest-moving one
+/// (`:1408`-`:1410`).
+///
+/// Measured, oracle rc 0: a 2 by 3 array with `m[i, j]` set to `i || j` at
+/// every cell renders `11 21 12 22 13 23` through `~toString('l', ' ')`.
+fn multi_dimension_position(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    subscripts: &[Option<ObjRef>],
+    index_use: IndexUse,
+    dimensions: &[usize],
+) -> Result<Option<usize>, Failure> {
+    if subscripts.len() < dimensions.len() {
+        return Err(Raised::not_enough_subscripts(dimensions.len()).into());
+    }
+    if subscripts.len() > dimensions.len() {
+        return Err(Raised::too_many_subscripts(dimensions.len()).into());
+    }
+    let mut multiplier = 1;
+    let mut offset = 0;
+    for (at, (subscript, dimension)) in subscripts.iter().zip(dimensions).enumerate() {
+        let position = position_index(interp, *subscript, index_use.arg_position() + at + 1)?;
+        if position > *dimension {
+            return match index_use {
+                IndexUse::Get => Ok(None),
+                IndexUse::Put => {
+                    let grown = array_extend_multi(interp, receiver, subscripts)?;
+                    multi_dimension_position(interp, receiver, subscripts, index_use, &grown)
+                }
+            };
+        }
+        offset += multiplier * (position - 1);
+        multiplier *= dimension;
+    }
+    Ok(Some(offset + 1))
+}
+
+/// A subscript converted under `Numerics::ARGUMENT_DIGITS` rather than under
+/// the activation's own `NUMERIC DIGITS`, or `None` for one that is not a
+/// whole number of at least 1.
 ///
 /// The fixed precision is measured rather than read off the default argument:
 /// `numeric digits 3; say (1,2)~at(1000000)` answers `The NIL object` where a
 /// conversion at 3 digits would have rounded the subscript.
-fn positive_index(interp: &mut Interp, value: ObjRef) -> Result<usize, Failure> {
+fn whole_index(interp: &mut Interp, value: ObjRef) -> Option<usize> {
     // A tagged integer already is the answer when it is narrow enough that
     // the rounding rule would change nothing, the same shortcut
     // `builtin::whole_number` takes against the same width.
@@ -5115,17 +5264,152 @@ fn positive_index(interp: &mut Interp, value: ObjRef) -> Result<usize, Failure> 
         && let Ok(index) = usize::try_from(whole)
         && index > 0
     {
-        return Ok(index);
+        return Some(index);
     }
-    if let Ok(number) = interp.to_number(value)
-        && let Some(whole) = number.whole_value(rexx_num::ARGUMENT_DIGITS)
-        && let Ok(index) = usize::try_from(whole)
-        && index > 0
-    {
-        return Ok(index);
+    let number = interp.to_number(value).ok()?;
+    let index = usize::try_from(number.whole_value(rexx_num::ARGUMENT_DIGITS)?).ok()?;
+    (index > 0).then_some(index)
+}
+
+/// One subscript as `RexxInternalObject::requiredPositive`
+/// (`classes/ObjectClass.cpp:1564`) reads it, `position` naming its place in
+/// the method's own argument list.
+///
+/// Measured at rc 163: `(1,2)~at(0)` reports `Method argument 1 must be a
+/// positive whole number; found "0".` and `(1,2)~put('v',0)` reports the same
+/// for argument 2.
+fn positive_index(interp: &mut Interp, value: ObjRef, position: usize) -> Result<usize, Failure> {
+    match whole_index(interp, value) {
+        Some(index) => Ok(index),
+        None => {
+            let found = interp.string_value_text(value);
+            Err(Raised::method_argument_not_positive(position, &found).into())
+        }
     }
-    let found = interp.string_value_text(value);
-    Err(Raised::method_argument_not_positive(1, &found).into())
+}
+
+/// One subscript of a multidimensional index as `positionArgument`
+/// (`classes/StringClassUtil.cpp:209`) reads it -- the same conversion
+/// [`positive_index`] makes, under a different pair of errors.
+///
+/// Measured at rc 163, `m = .array~new(2,3)`: `m[,2]` reports `Missing
+/// argument in method; argument 2 is required.`, `m[1.5,1]` reports `Invalid
+/// position argument specified; found "1.5".` and `m[.array,1]` reports the
+/// same with `found "The Array class"`. **The second names no position and
+/// renders the argument rather than its converted value.**
+fn position_index(
+    interp: &mut Interp,
+    subscript: Option<ObjRef>,
+    position: usize,
+) -> Result<usize, Failure> {
+    let Some(value) = subscript else {
+        return Err(Raised::missing_method_argument(position).into());
+    };
+    match whole_index(interp, value) {
+        Some(index) => Ok(index),
+        None => {
+            let found = interp.string_value_text(value);
+            Err(Raised::invalid_position(&found).into())
+        }
+    }
+}
+
+/// `ArrayClass::extend` (`classes/ArrayClass.cpp:2034`): grow the receiver to
+/// `size` slots, the added ones empty.
+fn array_resize(interp: &mut Interp, receiver: ObjRef, size: usize) -> Result<(), Failure> {
+    match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
+        Some(Body::Array { slots, .. }) => {
+            slots.resize(size, None);
+            Ok(())
+        }
+        _ => Err(Loud::receiver_class("a value that is not an array").into()),
+    }
+}
+
+/// `ArrayClass::extendMulti` (`classes/ArrayClass.cpp:2434`): grow the
+/// receiver so that every subscript is within bounds, answering the shape it
+/// now has.
+///
+/// Each dimension becomes the larger of the subscript and the extent it had;
+/// an array with no dimensions array takes the subscripts as its shape, and
+/// the C++ reaches that only at size zero. **The subscripts are validated
+/// against `i + 1` here** rather than against the position the caller counts
+/// from (`:2457`, `:2515`), which is visible only in a `93.903`.
+///
+/// **The C++ bounds the product in `createMultidimensional` (`:217`-`:220`)
+/// and not here**; this raises the same 93.959 in both places rather than
+/// wrapping.
+fn array_extend_multi(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    subscripts: &[Option<ObjRef>],
+) -> Result<Vec<usize>, Failure> {
+    let held = array_dimensions(interp, receiver)?;
+    let old = held.filter(|dimensions| dimensions.len() == subscripts.len());
+    let mut dimensions = Vec::with_capacity(subscripts.len());
+    let mut size = 1usize;
+    for (at, subscript) in subscripts.iter().enumerate() {
+        let position = position_index(interp, *subscript, at + 1)?;
+        let dimension = match &old {
+            Some(old) => position.max(old[at]),
+            None => position,
+        };
+        size = size
+            .checked_mul(dimension)
+            .filter(|size| *size <= MAX_FIXED_ARRAY_SIZE)
+            .ok_or_else(|| Failure::from(Raised::array_too_big(MAX_FIXED_ARRAY_SIZE)))?;
+        dimensions.push(dimension);
+    }
+    array_reshape(interp, receiver, &dimensions, size, old.as_deref())?;
+    Ok(dimensions)
+}
+
+/// The element move `ArrayClass::extendMulti` performs: each filled slot goes
+/// to the offset its multidimensional index has under `dimensions`.
+///
+/// `old` is the shape the slots are laid out under, and is `None` for a
+/// receiver that had no compatible shape -- which the C++ reaches only at
+/// size zero, so nothing moves.
+fn array_reshape(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    dimensions: &[usize],
+    size: usize,
+    old: Option<&[usize]>,
+) -> Result<(), Failure> {
+    let slots = array_slots_owned(interp, receiver)?;
+    debug_assert!(
+        old.is_some() || slots.iter().all(Option::is_none),
+        "a reshape with no source shape must have nothing to move"
+    );
+    let mut grown = vec![None; size];
+    if let Some(old) = old {
+        for (position, item) in slots.iter().enumerate() {
+            if item.is_none() {
+                continue;
+            }
+            let mut rest = position;
+            let mut offset = 0;
+            let mut multiplier = 1;
+            for (extent, dimension) in old.iter().zip(dimensions) {
+                offset += multiplier * (rest % extent);
+                rest /= extent;
+                multiplier *= dimension;
+            }
+            grown[offset] = *item;
+        }
+    }
+    match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
+        Some(Body::Array {
+            slots,
+            dimensions: held,
+        }) => {
+            *slots = grown;
+            *held = Some(dimensions.into());
+            Ok(())
+        }
+        _ => Err(Loud::receiver_class("a value that is not an array").into()),
+    }
 }
 
 /// `Array~at(index)` and `Array~[index]`: the item at `index`, or `.nil` for
@@ -5144,11 +5428,194 @@ fn native_array_at(
     // The subscript first, so the slots are borrowed rather than copied: the
     // conversion needs `&mut interp` and the read does not, and reading one
     // slot must not cost a copy of the whole array.
-    let index = array_index(interp, args)?;
+    let Some(index) = array_position(interp, receiver, args, IndexUse::Get)? else {
+        return Ok(Some(ObjRef::NIL));
+    };
     Ok(Some(match array_slots(interp, receiver)?.get(index - 1) {
         Some(Some(item)) => *item,
         Some(None) | None => ObjRef::NIL,
     }))
+}
+
+/// `Array~put(value, index...)` and `Array~[index...] = value`:
+/// `ArrayClass::putRexx` (`classes/ArrayClass.cpp:590`), which requires the
+/// value, validates the rest as the subscript list under `IndexUpdate` and
+/// answers nothing.
+///
+/// Measured at rc 163: `(1,2)~put('v')` reports `Not enough arguments for
+/// method; 2 expected.` and `(1,2)~put(,1)` reports `Missing argument in
+/// method; argument 1 is required.` Measured at rc 0: `a = (1,2)` then
+/// `a~put('v',5)` leaves `a~size` `5` and `a~items` `3`.
+fn native_array_put(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if args.len() < 2 {
+        return Err(Raised::not_enough_method_arguments(2).into());
+    }
+    let Some(value) = args[0] else {
+        return Err(Raised::missing_method_argument(1).into());
+    };
+    let position = array_position(interp, receiver, &args[1..], IndexUse::Put)?
+        .expect("IndexUse::Put grows the array rather than answering out of bounds");
+    match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
+        Some(Body::Array { slots, .. }) => {
+            slots[position - 1] = Some(value);
+            Ok(None)
+        }
+        _ => Err(Loud::receiver_class("a value that is not an array").into()),
+    }
+}
+
+/// `Array~dimension([n])`: how many dimensions the array has, or the extent
+/// of dimension `n` -- `ArrayClass::dimensionRexx`
+/// (`classes/ArrayClass.cpp:1103`), which answers `0` for a dimension the
+/// array does not have.
+///
+/// Measured, oracle rc 0: `.array~new()~dimension` is `0` and its
+/// `~dimension(1)` is `0`; `.array~new(0)~dimension` is `1`;
+/// `.array~new(5)~dimension(1)` is `5` and its `~dimension(2)` is `0`;
+/// `(1,2)~dimension` is `1`; and `.array~new(2,3)` answers `2`, `2`, `3` and
+/// then `0` for `~dimension(3)`.
+fn native_array_dimension(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let size = array_slots(interp, receiver)?.len();
+    let dimensions = array_dimensions(interp, receiver)?;
+    let answer = match args.first().copied().flatten() {
+        None => match &dimensions {
+            Some(dimensions) => dimensions.len(),
+            None if size == 0 => 0,
+            None => 1,
+        },
+        Some(target) => {
+            let position = positive_index(interp, target, 1)?;
+            match &dimensions {
+                Some(dimensions) if dimensions.len() != 1 => {
+                    dimensions.get(position - 1).copied().unwrap_or(0)
+                }
+                _ if position == 1 => size,
+                _ => 0,
+            }
+        }
+    };
+    Ok(Some(interp.counted(answer)))
+}
+
+/// `.Array~new([size])` and `.Array~new(dimension...)`:
+/// `ArrayClass::newRexx` (`classes/ArrayClass.cpp:89`).
+///
+/// One argument that is not an array is the slot count; a lone array
+/// argument, or more than one argument, is the dimension list
+/// (`createMultidimensional`, `:199`), spread the way a subscript list is;
+/// and no argument at all is an empty array whose shape is not yet fixed.
+/// `INIT` is sent with no arguments, because `completeNewObject(temp)`
+/// (`classes/ClassClass.cpp:1882`) takes the default empty list.
+///
+/// Measured, oracle rc 0: `.array~new((2,3))~size` is `6`, and
+/// `.array~new(0)~dimension` is `1` where `.array~new()~dimension` is `0` --
+/// an explicit zero size fixes the shape where an omitted one does not.
+fn native_array_new(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    if class != interp.object_model().array {
+        return Err(Loud::array_subclass_new().into());
+    }
+    let spread;
+    let body = match args {
+        [] => Body::array(Vec::new()),
+        [only] => match only.and_then(|value| interp.array_slots_of(value)) {
+            Some(slots) => {
+                let items = slots.iter().flatten().count();
+                spread = slots[..items].to_vec();
+                multidimensional_body(interp, &spread)?
+            }
+            None => {
+                let size = array_size_argument(interp, *only, 1)?;
+                Body::Array {
+                    slots: vec![None; size],
+                    // `newRexx`'s own `if (totalSize == 0)` (`:125`-`:128`),
+                    // whose one entry nothing reads: an explicit zero size
+                    // fixes the shape, and the entry is not the extent.
+                    dimensions: (size == 0).then(|| Box::from([0].as_slice())),
+                }
+            }
+        },
+        _ => multidimensional_body(interp, args)?,
+    };
+    let object = interp.alloc_with(BehaviourId::ARRAY, body);
+    interp.roots.push_temp(object);
+    let caller = interp.caller();
+    interp.send_message(object, INIT, None, &[], caller)?;
+    Ok(Some(object))
+}
+
+/// `ArrayClass::createMultidimensional` (`classes/ArrayClass.cpp:199`): a
+/// body whose shape is `dimensions` and whose slots are all empty.
+///
+/// A one-element dimension list is a single-dimensional array that still
+/// carries a dimensions array, which is [`rexx_core::Body::Array`]'s own
+/// distinction.
+fn multidimensional_body(
+    interp: &mut Interp,
+    dimensions: &[Option<ObjRef>],
+) -> Result<Body, Failure> {
+    let mut shape = Vec::with_capacity(dimensions.len());
+    let mut size = 1usize;
+    for (at, dimension) in dimensions.iter().enumerate() {
+        let extent = array_size_argument(interp, *dimension, at + 1)?;
+        size = size
+            .checked_mul(extent)
+            .filter(|size| *size <= MAX_FIXED_ARRAY_SIZE)
+            .ok_or_else(|| Failure::from(Raised::array_too_big(MAX_FIXED_ARRAY_SIZE)))?;
+        shape.push(extent);
+    }
+    Ok(Body::Array {
+        slots: vec![None; size],
+        dimensions: Some(shape.into()),
+    })
+}
+
+/// `ArrayClass::validateSize` (`classes/ArrayClass.cpp:178`) over
+/// `nonNegativeArgument` (`classes/StringClassUtil.cpp:167`): a whole number
+/// of at least zero, `MaxFixedArraySize` its upper bound.
+///
+/// Measured at rc 163: `.array~new(-1)` reports `Method argument 1 must be
+/// zero or a positive whole number; found "-1".`, `.array~new(2,'-1.0')`
+/// reports the same for argument 2 and renders the argument rather than its
+/// converted value, `.array~new((,3))` reports `Missing argument in method;
+/// argument 1 is required.` and `.array~new(100000000000000001)` reports `An
+/// array cannot contain more than 100000000000000000 elements.`
+fn array_size_argument(
+    interp: &mut Interp,
+    argument: Option<ObjRef>,
+    position: usize,
+) -> Result<usize, Failure> {
+    let Some(value) = argument else {
+        return Err(Raised::missing_method_argument(position).into());
+    };
+    let size = interp
+        .to_number(value)
+        .ok()
+        .and_then(|number| number.whole_value(rexx_num::ARGUMENT_DIGITS))
+        .and_then(|whole| usize::try_from(whole).ok());
+    match size {
+        Some(size) if size <= MAX_FIXED_ARRAY_SIZE => Ok(size),
+        Some(_) => Err(Raised::array_too_big(MAX_FIXED_ARRAY_SIZE).into()),
+        None => {
+            let found = interp.string_value_text(value);
+            Err(Raised::argument_not_non_negative(position, &found).into())
+        }
+    }
 }
 
 /// `Array~size`: how many slots the array has, empty ones included --
@@ -7795,6 +8262,69 @@ mod tests {
         let (code, stdout, stderr) = both_engines("a = (1,2)\nsay a~at((,))\n");
         assert_eq!((code, stdout.as_str()), (163, ""));
         assert!(stderr.contains("Error 93.901:"), "{stderr:?}");
+    }
+
+    /// The position a subscript refusal names is the subscript's place in the
+    /// **method's own** argument list, which `putRexx`'s leading value moves
+    /// by one -- and which index kind the subscript belongs to decides the
+    /// error as well as the number, because `positionArgument` names no
+    /// position at all where `requiredPositive` does.
+    ///
+    /// The corpus differential compares the numbers these raise; this is what
+    /// compares their substitutions.
+    ///
+    /// Measured, oracle rc 163, `m = .array~new(2,3)`.
+    #[test]
+    fn a_subscript_refusal_names_the_position_its_own_method_counts_from() {
+        for (source, message) in [
+            (
+                "m = .array~new(2,3)\nsay m[,2]\n",
+                "Error 93.903:  Missing argument in method; argument 2 is required.",
+            ),
+            (
+                "m = .array~new(2,3)\nm[,2] = 1\n",
+                "Error 93.903:  Missing argument in method; argument 3 is required.",
+            ),
+            (
+                "a = (1,2)\na~put('v',0)\n",
+                "Error 93.907:  Method argument 2 must be a positive whole number; found \"0\".",
+            ),
+            (
+                "m = .array~new(2,3)\nsay m[1,0]\n",
+                "Error 93.924:  Invalid position argument specified; found \"0\".",
+            ),
+            (
+                "say .array~new(2,'-1.0')~size\n",
+                "Error 93.906:  Method argument 2 must be zero or a positive whole \
+                 number; found \"-1.0\".",
+            ),
+            (
+                "say .array~new(100000000000000001)~size\n",
+                "Error 93.959:  An array cannot contain more than 100000000000000000 elements.",
+            ),
+        ] {
+            let (code, stdout, stderr) = both_engines(source);
+            assert_eq!((code, stdout.as_str()), (163, ""), "{source:?}");
+            assert!(stderr.contains(message), "{source:?} {stderr:?}");
+        }
+    }
+
+    /// `~new` on a class deriving from `Array` is loud, because the answer
+    /// would have to dispatch against the subclass's behaviour and a
+    /// `Body::Array` carries none. The oracle answers it -- measured,
+    /// `.array~subclass('K')~new(2,3)~size` is `6` at rc 0.
+    ///
+    /// The `~id` line is the adjacent success: the subclass itself is built,
+    /// so the refusal is `~new`'s and not `~subclass`'s.
+    #[test]
+    fn new_on_a_subclass_of_array_is_loud() {
+        let (code, stdout, stderr) =
+            both_engines("k = .array~subclass('K')\nsay k~id\nsay k~new(2,3)~size\n");
+        assert_eq!((code, stdout.as_str()), (120, "K\n"));
+        assert_eq!(
+            stderr,
+            "rexx-exec: ~new on a subclass of Array is not implemented (Phase 5)\n"
+        );
     }
 
     /// A name a hash collection's behaviour does not answer is **not** 97.1:

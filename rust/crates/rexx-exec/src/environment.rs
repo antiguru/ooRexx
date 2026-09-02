@@ -786,7 +786,7 @@ impl Interp {
             self.roots.push_temp(text);
             slots.push(Some(text));
         }
-        let array = self.alloc_with(BehaviourId::ARRAY, Body::Array(slots));
+        let array = self.alloc_with(BehaviourId::ARRAY, Body::array(slots));
         self.roots.push_temp(array);
         array
     }

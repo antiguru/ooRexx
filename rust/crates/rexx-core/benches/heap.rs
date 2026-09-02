@@ -32,13 +32,13 @@ fn build_graph() -> (Heap, RootSet) {
                 num: None,
             })));
         }
-        outer.push(Some(heap.alloc(Body::Array(elems))));
+        outer.push(Some(heap.alloc(Body::array(elems))));
     }
 
     for i in 0..(OUTER / 10) {
         let target = outer[OUTER - 1 - i].expect("every slot was filled above");
         if let Some(obj) = heap.get_mut(outer[i].expect("every slot was filled above"))
-            && let Body::Array(items) = &mut obj.body
+            && let Body::Array { slots: items, .. } = &mut obj.body
         {
             items[0] = Some(target);
         }
@@ -63,9 +63,9 @@ fn build_graph() -> (Heap, RootSet) {
             num: None,
         })));
     }
-    outer.push(Some(heap.alloc(Body::Array(root_keys))));
+    outer.push(Some(heap.alloc(Body::array(root_keys))));
 
-    let root = heap.alloc(Body::Array(outer));
+    let root = heap.alloc(Body::array(outer));
     roots.add_global(".ROOT", root);
     (heap, roots)
 }
@@ -91,7 +91,7 @@ fn allocation(c: &mut Criterion) {
         b.iter(|| {
             let mut heap = Heap::new();
             for _ in 0..1_000_000usize {
-                heap.alloc(Body::Array(vec![Some(ObjRef::NIL); 4]));
+                heap.alloc(Body::array(vec![Some(ObjRef::NIL); 4]));
             }
             black_box(heap.live_count())
         })

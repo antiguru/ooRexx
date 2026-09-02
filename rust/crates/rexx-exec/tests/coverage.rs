@@ -1325,6 +1325,14 @@ const EXPECTED_SUBSET_5B: &[&str] = &[
     "lang/object_send_refusals.rex",
     "lang/object_send_name_refusal.rex",
     "lang/object_start.rex",
+    // Task 8: the concept row multidimensional `Array` makes agree, what that
+    // row does not reach -- the shapes `~new` builds, the reshape a write
+    // past a dimension performs, and the single-dimension `[]=` that extends
+    // instead -- and the error surface, where the same rejected subscript is
+    // 93.924 or 93.907 by which index kind it belongs to.
+    "gate-tables/concepts/methodsbyclass.rex",
+    "lang/array_multidimensional.rex",
+    "lang/array_multidimensional_refusals.rex",
 ];
 
 #[test]
