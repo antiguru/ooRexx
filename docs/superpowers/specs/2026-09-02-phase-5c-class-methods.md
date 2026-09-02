@@ -22,6 +22,7 @@ gate table C's largest row kind and the phase's whole subject.
 | of those, `not-covered` | 546 |
 | of those, `unreachable` | 7 |
 | classes carrying a `not-covered` row | 23 |
+| **of those, 5c's after the 5d split** | **452 rows over 20 classes** |
 
 **This phase must not be 1347 steps, and the row count is the wrong unit for planning it.** The rows
 are a *measurement*, and they are already generated. The work divides by **mechanism**, and this
@@ -78,6 +79,9 @@ oracle`), and `class-set.txt`'s header states the escape hatch:
 > `covered` is a class a bare `~new` constructs, **or one opted in with a committed construction
 > program — none is committed today.**
 
+The figures in this section are the whole 546, before the 5d split; 5c owns 452 of them and the
+argument is the same for either number.
+
 **So 5c's criterion is the transition `not-covered` → `covered`, which is a claim that a
 construction program is committed, and cannot be moved by matching a refusal.** Row agreement is
 reported under it, never instead of it. This is D65's "reported, not gated" made specific, and it is
@@ -91,7 +95,7 @@ Method implementations reach the interpreter through **one table** — `dispatch
 list, `(class, method, Arity, fn)`. Measured at `2ca6e53f4`: **59 entries across 10 classes**, of
 which String has three (`LENGTH`, `REVERSE`, `UPPER`).
 
-A plan that adds 546 methods one at a time is a plan with 546 review surfaces. A plan that adds
+A plan that adds 5c's 452 methods one at a time is a plan with 452 review surfaces. A plan that adds
 **one adapter per mechanism plus a table** has one review surface per mechanism, and the table is
 data that `corpus/gate-tables/native-entries/` already gates.
 
@@ -120,17 +124,16 @@ never implements.
 
 ### M1 — construction programs
 
-23 classes, one committed program each, arguments taken from the book's own syntax for that class's
+20 classes, one committed program each, arguments taken from the book's own syntax for that class's
 constructor. **No behaviour change; it is what makes every later task measurable.** Must land first.
 
-`String` is one line. The count per class, from `class-methods.txt`:
+`String` is one line. The count per class, from `class-methods.txt`, with 5d's three excluded:
 
 ```
-String 135  File 60  TimeSpan 57  CircularQueue 49  Package 40  Class 32
-RexxInfo 28  Stream 25  Message 21  Method 20  RexxContext 15  Routine 11
-StackFrame 10  StreamSupplier 9  Supplier 8  Alarm 7  Ticker 6
-VariableReference 4  WeakReference 2  InvertingComparator 2  ColumnComparator 2
-CaselessColumnComparator 2  Singleton 1
+String 135  TimeSpan 57  CircularQueue 49  Package 40  Class 32  RexxInfo 28
+Message 21  Method 20  RexxContext 15  Routine 11  StackFrame 10  Supplier 8
+Alarm 7  Ticker 6  VariableReference 4  WeakReference 2  InvertingComparator 2
+ColumnComparator 2  CaselessColumnComparator 2  Singleton 1
 ```
 
 **Some of these classes are documented as having no public constructor.** `class-set.txt`'s
@@ -236,7 +239,7 @@ ROUND STARTSWITH SUBCHAR SUBWORDS
 **This is the honest count of String's real work: 22 of 132.** The task lists each with its
 book citation and says which it did not build.
 
-### M7..M10 — the remaining classes, grouped by what they touch
+### M7..M9 — the remaining classes, grouped by what they touch
 
 The four groups do not share a mechanism with each other and should not share a task:
 
@@ -244,16 +247,37 @@ The four groups do not share a mechanism with each other and should not share a 
 |---|---|---|
 | **reflection** | `Package` `Method` `Routine` `Class` `RexxContext` `StackFrame` `RexxInfo` `Message` | 177 |
 | **time** | `TimeSpan` `Alarm` `Ticker` | 70 |
-| **collections and misc** | `CircularQueue` `Supplier` `StreamSupplier` `WeakReference` `VariableReference` `Singleton` and the three comparators | 79 |
-| **I/O** | `File` `Stream` | 85 |
+| **collections and misc** | `CircularQueue` `Supplier` `WeakReference` `VariableReference` `Singleton` and the three comparators | 70 |
 
-135 + 177 + 70 + 79 + 85 = **546**, the whole `not-covered` set. `Message` sits with reflection
+135 + 177 + 70 + 70 = **452**, which with 5d's 94 is the whole 546. `Message` sits with reflection
 because a Message object reifies a method call; 5b's spec already assigned `.Message~new` here.
 The first draft of this table omitted it and summed to 525.
 
-**I/O is a candidate for deferral to a later phase and the plan must rule on that explicitly rather
-than let it drift.** It is the only group whose subject is the operating system, its divergences are
-environmental, and 85 rows is not a reason to rush it.
+**I/O is Phase 5d, ruled by Moritz 2026-09-02** -- see the handover below. It is the only group
+whose subject is the operating system and its divergences are environmental, so it gets a phase
+whose spec can be about that rather than a task inside one that is not.
+
+---
+
+## Handover to Phase 5d
+
+**5d owns `File`, `Stream` and `StreamSupplier` — 94 `not-covered` rows.**
+
+`StreamSupplier` is there for a reason found by running it rather than by grouping it. It has no
+public constructor and its only construction route is a `Stream`:
+
+```
+say .StreamSupplier~new                    rc=159  Error 97   (object method not found)
+.stream~new('t.txt')~supplier ~class~id    rc=0    StreamSupplier
+```
+
+So its nine rows cannot leave `not-covered` until `Stream` does, and a 5c that kept them would carry
+a task it could not finish. **5d owes a ruling on whether `StreamSupplier` is `unreachable` in
+`class-set.txt`'s sense** — the book calls it a snapshot of a stream, which is the shape that status
+exists for, but the sentence has to be cited and re-read, not paraphrased.
+
+`Supplier` itself stays in 5c: it is a different class, `.Supplier~new` is documented at
+`utilityclasses.xml:9956`, and its rows do not depend on a stream.
 
 ---
 
@@ -285,18 +309,18 @@ Criteria, each with the instrument that measures it:
 
 | risk | why it bites | mitigation |
 |---|---|---|
-| 546 rows go green with no implementation | the probes die at the constructor and the oracle refuses it too | D70 makes construction the criterion |
+| 452 rows go green with no implementation | the probes die at the constructor and the oracle refuses it too | D70 makes construction the criterion |
 | the BIF adapter assumes receiver position 1 | five measured BIFs put it at 2, one at 2-of-3; the result is rc 0 with a wrong answer | position is a book-sourced column with a transposition control |
-| a task grows to one step per method | 546 rows, 10 mechanisms | D71: one adapter and one table per task; exceptions listed and counted |
-| I/O drags the phase | 85 rows against the OS | rule on deferral in the plan, do not drift |
+| a task grows to one step per method | 452 rows, nine mechanisms | D71: one adapter and one table per task; exceptions listed and counted |
 | the perf axes stay dark through an object-model phase | `alloc.rex` and `heapshape.rex` are rc 120, and per-step thresholds already hid a +32.58% cumulative drift once | gate criterion 5 |
 | construction programs invented to fit | a class documented as having no public constructor | `unreachable` status, grounded in a re-read sentence |
 
 ## Open questions for the plan
 
-1. **Does I/O belong in 5c at all?**
-2. **What is the target `not-covered` count?** A phase that takes it to 0 includes I/O; one that
-   stops at the four mechanical families does not.
-3. **Which of the 23 classes are genuinely `unreachable`** rather than merely unconstructed today?
-4. **Does the native-entry table stay one flat list at ~600 entries**, or does it need per-class
+1. **What is the target `not-covered` count?** 452 is the whole of 5c's set; a phase that stops at
+   the five String mechanisms plus construction is a much smaller one, and both are defensible.
+2. **Which of the 20 classes are genuinely `unreachable`** rather than merely unconstructed today?
+   `StreamSupplier` was one and it turned out to be 5d's; the same question has not been asked of
+   the comparators, `Singleton`, or `VariableReference`.
+3. **Does the native-entry table stay one flat list at ~500 entries**, or does it need per-class
    grouping before it gets there? At 59 today this is cheap to decide and expensive to retrofit.
