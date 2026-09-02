@@ -394,7 +394,7 @@ fn every_unbounded_shape_this_crate_can_take_is_bounded() {
 }
 
 /// Layer 2: a run layer 1 is not watching still comes back, and the answer
-/// says which layer produced it.""
+/// says which layer produced it.
 ///
 /// **This is not a run layer 1 could not see** -- it is the self-forward with
 /// no deadline set, which is the only way to reach this arm in bounded time,
