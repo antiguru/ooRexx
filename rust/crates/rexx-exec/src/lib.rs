@@ -759,6 +759,25 @@ impl Loud {
     /// a rule.** It held for the binary operators, where the operand the
     /// operator was sent to converts the other through `stringValue()`; it
     /// does not hold here, where every position converts on its own.
+    /// `::OPTIONS LOSTDIGITS SYNTAX` over an operand that really does carry
+    /// more digits than the precision in force.
+    ///
+    /// **The option is honoured by refusing, not implemented.** This crate
+    /// has no LOSTDIGITS condition -- `SIGNAL ON LOSTDIGITS` arms nothing --
+    /// so the directive asks for a diagnosis nothing here can produce, and
+    /// answering the operation would be a wrong number where the oracle is
+    /// 98.972. Refusing is not a claim that digit loss was detected for any
+    /// purpose but this one: nothing else in this crate reads the test
+    /// [`Interp::lostdigits_check`] makes.
+    fn lostdigits_option() -> Loud {
+        Loud {
+            message: owned_message(
+                "the LOSTDIGITS condition `::OPTIONS LOSTDIGITS SYNTAX` asks this operand for",
+                Some("Phase 5"),
+            ),
+        }
+    }
+
     fn object_position(position: &str, kind: &str) -> Loud {
         Loud {
             message: owned_message(&format!("{kind} as {position}"), Some("Phase 5")),
@@ -4108,6 +4127,17 @@ struct Interp {
     /// otherwise need its own arming site. Arming at construction costs the
     /// walk to a program that builds an instance and cannot answer wrongly.
     reqstr_armed: bool,
+    /// Whether any program in this run installed `::OPTIONS ... LOSTDIGITS
+    /// SYNTAX`, which is the gate on [`Interp::lostdigits_check`].
+    ///
+    /// **Monotonic and process-wide, the shape [`Interp::reqstr_armed`]
+    /// carries and for its reason**: this is the *fast reject* and not the
+    /// answer. Every arithmetic operand asks it, so it has to be one already
+    /// hot bool rather than a walk to the running activation's own
+    /// `condition_syntax`; the precise, per-activation question is asked only
+    /// once this is set, and a `SIGNAL ON LOSTDIGITS` that turns the
+    /// escalation off leaves this true and costs the walk.
+    lostdigits_armed: bool,
     /// The running program's own location, as `PARSE SOURCE`'s third word.
     ///
     /// The same string `run_program` was handed and `Raised::report`'s
@@ -4444,6 +4474,7 @@ impl Interp {
             elapsed_anchor: None,
             pending_elapsed_reset: false,
             reqstr_armed: false,
+            lostdigits_armed: false,
             program_path: String::new(),
             trace_cache: crate::trace::TraceMode::OFF,
         }
@@ -4888,6 +4919,14 @@ impl Interp {
                         .is_some_and(PackageOptions::escalates_nostring)
                     {
                         self.reqstr_armed = true;
+                    }
+                    // `Interp::lostdigits_armed`'s only write, and the same
+                    // set-once rule: the arithmetic path's gate.
+                    if self
+                        .options_of(id)
+                        .is_some_and(PackageOptions::escalates_lostdigits)
+                    {
+                        self.lostdigits_armed = true;
                     }
                 }
                 _ => {}

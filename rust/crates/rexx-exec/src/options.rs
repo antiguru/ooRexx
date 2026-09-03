@@ -178,6 +178,12 @@ impl PackageOptions {
     pub(crate) fn escalates_nostring(&self) -> bool {
         self.syntax.raises(b"NOSTRING")
     }
+
+    /// Whether `LOSTDIGITS` is one of them, which `Interp::install_directives`
+    /// asks in order to arm the arithmetic path's own gate.
+    pub(crate) fn escalates_lostdigits(&self) -> bool {
+        self.syntax.raises(b"LOSTDIGITS")
+    }
 }
 
 #[cfg(test)]

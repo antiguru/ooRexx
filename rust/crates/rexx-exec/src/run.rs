@@ -4736,6 +4736,58 @@ impl Interp {
         }
     }
 
+    /// Refuses loudly where `::OPTIONS LOSTDIGITS SYNTAX` is in force and
+    /// `operand` really does carry more digits than the precision in force.
+    ///
+    /// **The gate is one already-hot bool and the test is `#[cold]`**, the
+    /// split [`Interp::novalue_check`] measures: every arithmetic operand of
+    /// every program reaches the first line, and only a program that
+    /// installed the directive reaches past it.
+    ///
+    /// **This is not LOSTDIGITS detection for any other purpose.** The
+    /// condition itself is unimplemented -- `SIGNAL ON LOSTDIGITS` arms
+    /// nothing and an untrapped digit loss is silent, both of which the
+    /// oracle does differently -- so the test below exists to decide whether
+    /// to refuse and is read nowhere else. [`Loud::lostdigits_option`] says
+    /// what the refusal claims.
+    #[inline(always)]
+    pub(crate) fn lostdigits_check(&self, operand: &Number) -> Result<(), Failure> {
+        if !self.lostdigits_armed {
+            return Ok(());
+        }
+        self.lostdigits_refusal(operand)
+    }
+
+    /// The two-operand form, so an operator pays the gate once.
+    #[inline(always)]
+    pub(crate) fn lostdigits_check2(&self, left: &Number, right: &Number) -> Result<(), Failure> {
+        if !self.lostdigits_armed {
+            return Ok(());
+        }
+        self.lostdigits_refusal(left)?;
+        self.lostdigits_refusal(right)
+    }
+
+    /// [`Interp::lostdigits_check`]'s armed half: the per-activation setting,
+    /// then the operand's own digit count.
+    ///
+    /// The order matters and is not an economy: `SIGNAL ON LOSTDIGITS` turns
+    /// the escalation off for its activation (`ConditionSyntax::disable_for`),
+    /// so a program that arms a trap is back to this crate's ordinary silent
+    /// answer and must not be refused here.
+    #[cold]
+    #[inline(never)]
+    fn lostdigits_refusal(&self, operand: &Number) -> Result<(), Failure> {
+        if !self.condition_raises_syntax(b"LOSTDIGITS") {
+            return Ok(());
+        }
+        let digits = usize::try_from(self.activation().settings.digits()).unwrap_or(usize::MAX);
+        if operand.digit_count() > digits {
+            return Err(Loud::lostdigits_option().into());
+        }
+        Ok(())
+    }
+
     /// Offers a failure escaping the running activation to that activation's
     /// trap table, and either transfers control or hands the failure back to
     /// keep unwinding.
@@ -8463,6 +8515,11 @@ impl Interp {
     /// doc), wrapped by it so every failing step is blamed once.
     fn header_number_body(&mut self, value: ObjRef, entry_digits: u64) -> Result<Number, Failure> {
         let operand = self.arith_operand(value)?;
+        // The header rounds through a unary `+`, so its three numeric
+        // positions carry an operand exactly as an operator's do -- measured,
+        // `do k = 1 to 123456789` and `... by 123456789` are both 98.972 at
+        // DIGITS 3.
+        self.lostdigits_check(&operand)?;
         Ok(round_via_unary_plus(&operand, entry_digits).map_err(Raised::from)?)
     }
 

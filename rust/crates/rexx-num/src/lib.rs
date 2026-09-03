@@ -464,6 +464,17 @@ impl Number {
     }
 
     #[inline(always)]
+    /// How many significant digits this number stores, trailing zeros
+    /// included -- `NumberString`'s own `digitsCount`
+    /// (`classes/NumberStringClass.hpp`), which is what the interpreter
+    /// compares against `DIGITS` to decide that an operand loses digits.
+    ///
+    /// Trailing zeros count: measured at `NUMERIC DIGITS 3`, `1.20 + 0`
+    /// raises nothing and `1000 + 0` is 98.972.
+    pub fn digit_count(&self) -> usize {
+        self.digits.len()
+    }
+
     pub fn is_zero(&self) -> bool {
         self.digits.iter().all(|d| *d == 0)
     }

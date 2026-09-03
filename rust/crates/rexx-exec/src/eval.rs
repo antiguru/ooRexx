@@ -914,6 +914,7 @@ impl Interp {
         let result = match op {
             PrefixOp::Plus | PrefixOp::Minus => {
                 let number = self.arith_left_operand(op.spelling(), value)?;
+                self.lostdigits_check(&number)?;
                 let digits = self.activation().settings.digits();
                 let form = self.activation().settings.form();
                 let result = if op == PrefixOp::Plus {
@@ -1093,6 +1094,11 @@ impl Interp {
                     return Err(Raised::power_exponent_not_whole(&text).into());
                 }
             };
+            // The base alone: measured, `1.23456789 ** 1` at DIGITS 3 is
+            // 98.972 on the base and `2 ** 1234` is 26.8 on the *exponent*'s
+            // own whole-number conversion, which runs first and never
+            // reaches LOSTDIGITS.
+            self.lostdigits_check(&left_number)?;
             left_number.pow(&exponent, digits)
         } else {
             let right_number = match self.to_number(converted) {
@@ -1102,6 +1108,9 @@ impl Interp {
                     return Err(Raised::nonnumeric(&text).into());
                 }
             };
+            // Left first, which is the oracle's order: measured, `987654321 +
+            // 123456789` at DIGITS 3 names 987654321.
+            self.lostdigits_check2(&left_number, &right_number)?;
             match op {
                 Operator::Plus => left_number.add(&right_number, digits),
                 Operator::Subtract => left_number.sub(&right_number, digits),
@@ -1506,6 +1515,11 @@ impl Interp {
         // point and 1,680,001 of them take this arm, which is 3,360,002
         // renderings not performed.
         if let (Ok(left), Ok(right)) = (&left_number, &right_number) {
+            // The **numeric** arm only: measured, `1.23456789 = 'abc'` at
+            // DIGITS 3 is rc 0 on the oracle, because a comparison that falls
+            // through to the string rule converts no operand at all. A strict
+            // operator never reaches here either.
+            self.lostdigits_check2(left, right)?;
             let holds = rexx_num::compare_numbers(left, right, digits, fuzz, compare_op(op))
                 .map_err(Raised::from)?;
             return Ok(logical(holds));
