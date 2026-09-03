@@ -8007,10 +8007,6 @@ fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
             "::REQUIRES is not implemented (Phase 5)",
         ),
         (
-            b"say 'main ran'\n::options digits 12\n",
-            "::OPTIONS is not implemented (Phase 5)",
-        ),
-        (
             b"say 'main ran'\n::routine z external \"LIBRARY nosuchlib nosuchfn\"\n",
             "::ROUTINE EXTERNAL is not implemented (Phase 7)",
         ),
@@ -8079,10 +8075,11 @@ fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
 /// ```
 ///
 /// So every source but the `::OPTIONS` pair must refuse, and those must reach
-/// the class error. **The halves fail in opposite directions**: dropping
-/// `staged_gap` reddens the refusing rows, and hoisting the whole gap check
-/// to the front instead reddens the `::OPTIONS` rows. One half alone does not
-/// say where the boundary is.
+/// the class error -- which `::OPTIONS` does by installing rather than by
+/// having a stage, so its pair is what says the class pass still answers over
+/// a directive that succeeded. **The halves fail in opposite directions**:
+/// dropping `staged_gap` reddens the refusing rows, and a `::OPTIONS` whose
+/// install raised anything of its own reddens the last two.
 ///
 /// **A refusal here is not a match** -- the oracle answers 43.901 and 98.903,
 /// and this crate answers neither. It is the honest half of the trade

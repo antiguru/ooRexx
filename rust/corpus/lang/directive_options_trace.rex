@@ -1,0 +1,10 @@
+/* ::OPTIONS TRACE: the package's trace setting, in force before the main
+   body's first clause and around a ::ROUTINE's own >I>/<I< pair. */
+x = 1
+call sub
+
+::options trace r
+
+::routine sub
+y = 2
+return

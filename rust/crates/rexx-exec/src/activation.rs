@@ -31,6 +31,7 @@
 //! are set for a callee.
 
 use crate::Interp;
+use crate::options::ConditionSyntax;
 use crate::plan::{BodyKey, Plan, ProgramId};
 use crate::trace::TraceMode;
 use rexx_core::{ObjRef, SlotFrame};
@@ -652,6 +653,19 @@ pub(crate) struct Activation {
     /// callee's from the caller's current value instead of the default.
     /// [`Activation::nested`] is that initialisation.
     pub(crate) settings: Settings,
+    /// Which conditions this activation raises as SYNTAX errors --
+    /// `::OPTIONS <condition> SYNTAX` on its own package, minus whatever a
+    /// `SIGNAL ON`/`OFF` here has turned off since.
+    ///
+    /// **Per activation and mutable, following [`settings`] rather than
+    /// living on the package**, because `RexxActivation::trapOn` writes it:
+    /// `signal on novalue` turns the escalation off so the trap can take the
+    /// condition instead, and it stays off for the rest of that activation.
+    /// Inherited by an internal call like [`settings`], and started afresh
+    /// from the package by a `::ROUTINE` or `::METHOD` like it too.
+    ///
+    /// [`settings`]: Activation::settings
+    pub(crate) condition_syntax: ConditionSyntax,
     /// This activation's own `TRACE` setting (D17).
     ///
     /// **Per activation since Task 3, and one field on `Interp` before
@@ -1030,6 +1044,7 @@ impl Activation {
             trace_entry: TraceEntry::Pending,
             pc: 0,
             settings: Settings::default(),
+            condition_syntax: ConditionSyntax::default(),
             // `NORMAL` and not `OFF`: the two behave identically here and a
             // program can tell them apart, measured -- `say trace()` as the
             // first clause of a program with no `TRACE` instruction prints
@@ -1143,6 +1158,7 @@ impl Activation {
             trace_entry: TraceEntry::Pending,
             pc,
             settings: inherited.settings,
+            condition_syntax: inherited.condition_syntax,
             trace_mode: inherited.trace_mode,
             address: inherited.address,
             traps: inherited.traps,
@@ -1209,6 +1225,7 @@ impl Activation {
             trace_entry: TraceEntry::Pending,
             pc: 0,
             settings: Settings::default(),
+            condition_syntax: ConditionSyntax::default(),
             trace_mode: TraceMode::NORMAL,
             address: AddressState::default(),
             traps: TrapMap::default(),
@@ -1267,6 +1284,7 @@ impl Activation {
             trace_entry: TraceEntry::Pending,
             pc: 0,
             settings: Settings::default(),
+            condition_syntax: ConditionSyntax::default(),
             trace_mode: TraceMode::NORMAL,
             address: AddressState::default(),
             traps: TrapMap::default(),
@@ -1335,6 +1353,7 @@ impl Activation {
             trace_entry: _,
             pc: _,
             settings: _,
+            condition_syntax: _,
             trace_mode: _,
             address: _,
             traps: _,
@@ -1385,6 +1404,7 @@ impl Activation {
 pub(crate) struct Inherited {
     pub(crate) call_type: CallType,
     pub(crate) settings: Settings,
+    pub(crate) condition_syntax: ConditionSyntax,
     pub(crate) trace_mode: TraceMode,
     pub(crate) address: AddressState,
     pub(crate) traps: TrapMap,

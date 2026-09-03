@@ -1,0 +1,24 @@
+count 23
+/* ::OPTIONS NOSTRING SYNTAX: an object with no string value is 98.973 where
+   nothing traps NOSTRING, and the trap still wins where one does. */
+signal on syntax
+say .array
+say 'unreached'
+
+zzznext:
+signal on nostring
+say 'trapped rendering' .array
+say 'unreached too'
+exit
+
+syntax:
+say 'syntax' rc
+signal zzznext
+
+nostring:
+say 'nostring trapped'
+signal off nostring
+say 'after off' .array
+exit
+
+::options nostring syntax

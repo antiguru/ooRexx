@@ -86,7 +86,7 @@ use crate::{
 use rexx_core::{
     BehaviourId, Body, Decoded, FrameId, ObjRef, ScopePools, SlotFrame, VarRefHome, is_class_slot,
 };
-use rexx_num::{ArithError, CompareOp, Number, SettingsError, compare_decoded};
+use rexx_num::{ArithError, CompareOp, Form, Number, SettingsError, compare_decoded};
 use rexx_parse::{
     CodeBody, ConditionTrap, ControlExpr, DirectiveKind, EndStyle, Expr, ExprKind, Forward,
     Fragment, Guard, Instruction, InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting,
@@ -4577,9 +4577,29 @@ impl Interp {
                 self.activation_mut()
                     .traps
                     .insert(trap.condition.clone(), entry);
+                // `RexxActivation::trapOn`'s second half: arming a trap turns
+                // off whatever `::OPTIONS ... SYNTAX` asked for the same
+                // condition, so the trap takes it rather than a SYNTAX error
+                // preempting the trap. `novalue_trapped` is false because the
+                // guard is `trapOff`'s alone.
+                self.activation_mut()
+                    .condition_syntax
+                    .disable_for(&trap.condition, !call, false);
             }
             None => {
                 self.activation_mut().traps.remove(&trap.condition);
+                // `RexxActivation::trapOff`'s second half, with the one guard
+                // that arm carries and `trapOn`'s does not: a `NOVALUE` or
+                // `ANY` trap still in the table keeps `NOVALUE`'s escalation
+                // where it was.
+                let traps = &self.activation().traps;
+                let novalue_trapped = traps.get(b"NOVALUE".as_slice()).is_some()
+                    || traps.get(b"ANY".as_slice()).is_some();
+                self.activation_mut().condition_syntax.disable_for(
+                    &trap.condition,
+                    !call,
+                    novalue_trapped,
+                );
             }
         }
         Ok(Flow::Next)
@@ -4650,24 +4670,70 @@ impl Interp {
     /// Measured with the marginal method -- a body run at N and 2N
     /// iterations, differenced -- `z = a` costs 449 user instructions per
     /// execution undivided and 431 split.
+    ///
+    /// `read` is what the read produced, which for an uninitialised one is
+    /// the derived name -- the substitution `::OPTIONS NOVALUE SYNTAX`'s
+    /// 98.986 needs. It is a handle already in the caller's hand, so the
+    /// hot path pays nothing for carrying it.
     #[inline(always)]
-    pub(crate) fn novalue_check(&self, novalue: Novalue) -> Result<(), Failure> {
+    pub(crate) fn novalue_check(&self, novalue: Novalue, read: ObjRef) -> Result<(), Failure> {
         if novalue == Novalue::Set {
             return Ok(());
         }
-        self.novalue_raised()
+        self.novalue_raised(read)
     }
 
     /// [`Interp::novalue_check`]'s uninitialised half: whether the setting in
-    /// force turns this read into a raised `NOVALUE` rather than the derived
+    /// force turns this read into a raised `NOVALUE`, into
+    /// `::OPTIONS NOVALUE SYNTAX`'s 98.986, or into neither -- the derived
     /// name `read_at` already produced.
+    ///
+    /// **The trap comes first**, measured on both sides: `signal on novalue`
+    /// takes the condition where `::options novalue syntax` is in force, and
+    /// so does `signal on any`, while `signal on syntax` alone takes the
+    /// escalated 98.986.
     #[cold]
     #[inline(never)]
-    fn novalue_raised(&self) -> Result<(), Failure> {
+    fn novalue_raised(&self, read: ObjRef) -> Result<(), Failure> {
         if self.trap_for(b"NOVALUE").is_none_or(|trap| trap.call) {
+            if self.condition_raises_syntax(b"NOVALUE") {
+                return Err(Raised::unassigned_variable(&self.derived_name_text(read)).into());
+            }
             return Ok(());
         }
         Err(Raised::condition(Cow::Borrowed("NOVALUE")).into())
+    }
+
+    /// The bytes of the derived name an uninitialised read answered.
+    ///
+    /// **`Interp::to_text` is the general reader and takes `&mut self`**,
+    /// which [`Interp::novalue_raised`] cannot: its callers hold `self`
+    /// immutably. A derived name is always a string this crate built out of
+    /// bytes it had -- `Interp::derived_name` and `Interp::derived_tail_name`
+    /// are the two builders -- so the two arms below are the whole of it, and
+    /// the debug assertion is what says so when a third shape arrives.
+    fn derived_name_text(&self, read: ObjRef) -> Vec<u8> {
+        match read.decode() {
+            rexx_core::Decoded::Text(inline) => inline.to_vec(),
+            rexx_core::Decoded::Heap { .. } => match self.heap.get(read).map(|object| &object.body)
+            {
+                Some(rexx_core::Body::Text { bytes, .. }) => bytes.to_vec(),
+                other => {
+                    debug_assert!(
+                        false,
+                        "an uninitialised read answered something other than a string: {other:?}"
+                    );
+                    Vec::new()
+                }
+            },
+            other => {
+                debug_assert!(
+                    false,
+                    "an uninitialised read answered something other than a string: {other:?}"
+                );
+                Vec::new()
+            }
+        }
     }
 
     /// Offers a failure escaping the running activation to that activation's
@@ -6138,6 +6204,11 @@ impl Interp {
                 let caller_call_type = caller.call_type;
                 let settings = caller.settings.clone();
                 let trace_mode = caller.trace_mode;
+                // Inherited with `settings` and for its reason: a `SIGNAL ON`
+                // in the caller turned the package's escalation off for the
+                // rest of that activation, and an internal call is still
+                // inside it.
+                let condition_syntax = caller.condition_syntax;
                 let extra = caller.extra.clone();
                 // Cloned with `extra`, and for the same reason: a label
                 // reached without `PROCEDURE` shares the caller's pool, and an
@@ -6174,6 +6245,7 @@ impl Interp {
                     Inherited {
                         call_type: caller_call_type,
                         settings,
+                        condition_syntax,
                         trace_mode,
                         address,
                         traps,
@@ -6210,7 +6282,7 @@ impl Interp {
                     &routine_program.source,
                 );
                 let frame = self.roots.push_slots(plan.len());
-                self.push_activation(Activation::routine(
+                let mut callee = Activation::routine(
                     callee_id,
                     routine_program,
                     installed.program,
@@ -6218,7 +6290,15 @@ impl Interp {
                     plan,
                     frame,
                     call_type,
-                ));
+                );
+                // The routine's own package, which is not always the caller's
+                // -- `installed.program` is where the `::ROUTINE` was
+                // declared. The caller's settings go with it for
+                // `::OPTIONS NUMERIC INHERIT`, the one option that reads
+                // them.
+                self.start_from_package(&mut callee, Some(&self.activation().settings));
+                self.push_activation(callee);
+                self.trace_package_invocation_entry();
             }
         }
 
@@ -9886,7 +9966,7 @@ impl Interp {
                             (value, novalue, Some(resolved))
                         }
                     };
-                    self.novalue_check(novalue)?;
+                    self.novalue_check(novalue, previous)?;
                     self.roots.push_temp(previous);
                     // `>C>` before `>V>`, both self-gated on `intermediates`
                     // like every other value-bearing prefix -- `stem_get`'s
@@ -11197,6 +11277,29 @@ impl Interp {
         self.trace_invocation(">I>", &subject, &package);
     }
 
+    /// `>I>` for a body whose package's `::OPTIONS TRACE` put a
+    /// label-tracing setting in force before its first clause.
+    ///
+    /// **The oracle's second route into the same pair**, and the one
+    /// [`Interp::trace_invocation_entry`] cannot serve: that one needs a
+    /// `TRACE` instruction executing as the body's own first clause, and
+    /// `::OPTIONS TRACE` runs no instruction at all. Measured, `::options
+    /// trace r` in a file whose `::ROUTINE` has no `trace` of its own: the
+    /// oracle prints the `>I>` and `<I<` pair around the routine's clauses.
+    /// `<I<` needs nothing of its own -- [`Interp::trace_invocation_exit`]
+    /// reads the `TraceEntry::Done` this leaves.
+    pub(crate) fn trace_package_invocation_entry(&mut self) {
+        if !self.trace_mode().labels || self.activation().trace_entry != TraceEntry::Pending {
+            return;
+        }
+        let Some(subject) = self.invocation_subject() else {
+            return;
+        };
+        self.activation_mut().trace_entry = TraceEntry::Done;
+        let package = self.program_path.clone().into_bytes();
+        self.trace_invocation(">I>", &subject, &package);
+    }
+
     /// `<I<`, on every way a routine activation can end.
     ///
     /// Called with the callee still on the activation stack, because both
@@ -11397,11 +11500,13 @@ impl Interp {
                     // form's FUZZ check against it, which is the arm the
                     // interpreter runs: it can fail, and the value it names
                     // is the default rather than the setting in force.
-                    None => self
-                        .activation_mut()
-                        .settings
-                        .reset_digits()
-                        .map_err(raised_from_settings)?,
+                    None => {
+                        let default = self.package_default_numeric().digits();
+                        self.activation_mut()
+                            .settings
+                            .reset_digits(default)
+                            .map_err(raised_from_settings)?;
+                    }
                 }
             }
             NumericSetting::Fuzz => match self.numeric_operand(code, expression, "FUZZ")? {
@@ -11414,19 +11519,28 @@ impl Interp {
                         return Err(raised_naming_the_operand(error, &named).into());
                     }
                 }
-                None => self.activation_mut().settings.reset_fuzz(),
+                None => {
+                    let default = self.package_default_numeric().fuzz();
+                    self.activation_mut()
+                        .settings
+                        .reset_fuzz(default)
+                        .map_err(raised_from_settings)?;
+                }
             },
-            NumericSetting::FormDefault | NumericSetting::FormScientific => {
-                self.activation_mut()
-                    .settings
-                    .set_form_str("SCIENTIFIC")
-                    .expect("a hardcoded valid spelling always validates");
+            // **`FormDefault` and `FormScientific` part company once
+            // `::OPTIONS FORM ENGINEERING` moves the package default**:
+            // measured, a bare `numeric form` in such a file answers
+            // `ENGINEERING` where `numeric form scientific` answers
+            // `SCIENTIFIC`.
+            NumericSetting::FormDefault => {
+                let default = self.package_default_numeric().form();
+                self.activation_mut().settings.set_form(default);
+            }
+            NumericSetting::FormScientific => {
+                self.activation_mut().settings.set_form(Form::Scientific);
             }
             NumericSetting::FormEngineering => {
-                self.activation_mut()
-                    .settings
-                    .set_form_str("ENGINEERING")
-                    .expect("a hardcoded valid spelling always validates");
+                self.activation_mut().settings.set_form(Form::Engineering);
             }
             NumericSetting::FormValue => {
                 // The parser only ever produces this with an expression: an
@@ -12738,7 +12852,7 @@ fn raised_naming_the_operand(error: SettingsError, operand: &[u8]) -> Raised {
     raised
 }
 
-fn raised_from_settings(error: SettingsError) -> Raised {
+pub(crate) fn raised_from_settings(error: SettingsError) -> Raised {
     let additional = crate::error::into_substitutions(error.additional());
     let (number, sub): (u16, u16) = match &error {
         SettingsError::InvalidForm { .. } => (25, 11),

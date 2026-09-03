@@ -2522,7 +2522,7 @@ impl Interp {
             .call_context
             .receiver
             .expect("the calling convention replaced directly above carries the receiver");
-        self.push_activation(Activation::method(
+        let mut callee = Activation::method(
             callee_id,
             program,
             installed.program,
@@ -2534,7 +2534,17 @@ impl Interp {
                 scope: resolution.scope,
                 receiver,
             },
-        ));
+        );
+        // The package the `::METHOD` was declared in, exactly as a
+        // `::ROUTINE` starts from its own. `running_activation` rather than
+        // `activation` because a send made outside any activation has no
+        // caller for `::OPTIONS NUMERIC INHERIT` to read.
+        self.start_from_package(
+            &mut callee,
+            self.running_activation().map(|caller| &caller.settings),
+        );
+        self.push_activation(callee);
+        self.trace_package_invocation_entry();
 
         // `SELF` and `SUPER`, the two locals `RexxActivation::run` sets on a
         // method activation before its first instruction
@@ -3465,7 +3475,9 @@ impl Interp {
         // both and a clear latch here means it did not. The gate is the same
         // one `required_string_dispatch` applies, so this fires exactly where
         // that would have raised.
-        if self.trap_for(b"NOSTRING").is_some_and(|trap| !trap.call) {
+        if self.trap_for(b"NOSTRING").is_some_and(|trap| !trap.call)
+            || self.condition_raises_syntax(b"NOSTRING")
+        {
             return false;
         }
         // Limb 1's route: the conversion limbs, run in full, against the
@@ -3538,6 +3550,12 @@ impl Interp {
         // no resumption point.
         if self.trap_for(b"NOSTRING").is_some_and(|trap| !trap.call) {
             return Err(Raised::nostring(&readable).into());
+        }
+        // `::OPTIONS NOSTRING SYNTAX`, and only where nothing trapped: the
+        // trap wins, measured -- `signal on nostring` over `say .array` in
+        // such a file runs the handler, and `signal on syntax` takes 98.973.
+        if self.condition_raises_syntax(b"NOSTRING") {
+            return Err(Raised::nostring_syntax(&readable).into());
         }
         let readable = self.text_built(readable);
         self.roots.push_temp(readable);

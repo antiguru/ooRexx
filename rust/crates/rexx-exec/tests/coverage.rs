@@ -153,8 +153,11 @@ use owners::{
 
 /// Whether `kind` is one of the directive kinds this walker admits without
 /// panicking: `::ROUTINE`, `::METHOD` and `::ATTRIBUTE`, each walked into by
-/// `each_instruction` below, plus `::CLASS` and `::CONSTANT`, which own no
-/// body for it to walk.
+/// `each_instruction` below, plus the ones that own no body for it to walk.
+///
+/// The list is the match below rather than this sentence; the test beside
+/// this function walks every one of `DirectiveKind`'s variants and holds each
+/// against its own arm.
 ///
 /// **Exhaustive over `DirectiveKind`'s own nine variants**
 /// (`rexx-parse/src/ast.rs:1353`-`1368`), not a string comparison against a
@@ -171,10 +174,9 @@ fn is_admitted_directive_kind(kind: &DirectiveKind) -> bool {
         | DirectiveKind::Method(_)
         | DirectiveKind::Attribute(_)
         | DirectiveKind::Constant(_)
+        | DirectiveKind::Options(_)
         | DirectiveKind::Annotate(_) => true,
-        DirectiveKind::Options(_) | DirectiveKind::Requires(_) | DirectiveKind::Resource(_) => {
-            false
-        }
+        DirectiveKind::Requires(_) | DirectiveKind::Resource(_) => false,
     }
 }
 
@@ -225,7 +227,7 @@ fn every_directive_keyword_is_correctly_admitted_or_refused() {
         ("::class c\n", "CLASS", true),
         ("::constant k 1\n", "CONSTANT", true),
         ("::method m\n  return 1\n", "METHOD", true),
-        ("::options noprolog\n", "OPTIONS", false),
+        ("::options noprolog\n", "OPTIONS", true),
         ("::requires \"nosuch\"\n", "REQUIRES", false),
         ("::resource d\nbody\n::END\n", "RESOURCE", false),
         ("::routine r\n  return 1\n", "ROUTINE", true),
@@ -303,7 +305,7 @@ fn the_walker_descends_into_a_method_body_and_an_attribute_body() {
 #[test]
 #[should_panic(expected = "has a `::` directive this walker does not admit")]
 fn an_unadmitted_directive_still_panics() {
-    let p = parse_program(b"::OPTIONS NOPROLOG\n".to_vec()).expect("::OPTIONS NOPROLOG parses");
+    let p = parse_program(b"::REQUIRES \"nosuch\"\n".to_vec()).expect("::REQUIRES parses");
     assert_program_has_only_admitted_directives(Path::new("<phase-5a-task-1-demo>"), &p);
 }
 

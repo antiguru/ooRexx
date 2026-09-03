@@ -1897,6 +1897,29 @@ impl Raised {
         }
     }
 
+    /// 98.973, what `::OPTIONS NOSTRING SYNTAX` turns an untrapped NOSTRING
+    /// into (`Activity::raiseCondition`, `concurrency/Activity.cpp:615`).
+    ///
+    /// `readable` is the same `stringValue()` rendering [`Raised::nostring`]
+    /// makes the condition's description, and it is this message's one
+    /// substitution -- measured, `::options nostring syntax` over `say
+    /// .array` is rc 158 reading `Object "The Array class" does not have a
+    /// string representation.`
+    pub(crate) fn nostring_syntax(readable: &[u8]) -> Raised {
+        Raised::syntax(98, 973, vec![readable.to_vec()])
+    }
+
+    /// 98.986, what `::OPTIONS NOVALUE SYNTAX` turns an untrapped NOVALUE
+    /// into (`RexxActivation::handleNovalueEvent`,
+    /// `execution/RexxActivation.cpp:2648`).
+    ///
+    /// `name` is the variable's derived name, which is what the unset read
+    /// answered -- measured, `::options novalue syntax` over `say zzzundef`
+    /// is rc 158 reading `Reference to unassigned variable "ZZZUNDEF".`
+    pub(crate) fn unassigned_variable(name: &[u8]) -> Raised {
+        Raised::syntax(98, 986, vec![name.to_vec()])
+    }
+
     /// 91.999: a message used where a value was wanted returned none.
     /// `name` is the message as the send spells it, already upcased.
     ///

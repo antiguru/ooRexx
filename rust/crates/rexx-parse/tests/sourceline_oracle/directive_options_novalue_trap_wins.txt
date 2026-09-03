@@ -1,0 +1,27 @@
+count 26
+/* A SIGNAL ON of the same condition turns the ::OPTIONS escalation off for
+   the rest of that activation: the trap takes the first read, and the read
+   inside the handler -- where the trap has been used up and no trap is left
+   -- answers the variable's own derived name rather than escalating. A
+   ::ROUTINE starts from the package again, so its own read does escalate. */
+signal on novalue
+say 'first' zzzunset1
+say 'unreached'
+exit
+
+novalue:
+say 'in handler' zzzunset2
+call sub
+say 'end'
+exit
+
+::options novalue syntax
+
+::routine sub
+say 'a routine starts from the package again'
+signal on syntax
+say zzzunset3
+return
+syntax:
+say 'routine' rc
+return

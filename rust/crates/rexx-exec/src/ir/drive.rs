@@ -1281,7 +1281,9 @@ impl Interp {
                                             SymbolRead::Simple => {
                                                 let (value, novalue) =
                                                     self.read_at(code, *symbol, at);
-                                                if let Err(failure) = self.novalue_check(novalue) {
+                                                if let Err(failure) =
+                                                    self.novalue_check(novalue, value)
+                                                {
                                                     break 'cold Err(failure);
                                                 }
                                                 value

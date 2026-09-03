@@ -416,7 +416,7 @@ impl Interp {
         match read {
             SymbolRead::Simple => {
                 let (value, novalue) = self.read_at(code, id, at);
-                self.novalue_check(novalue)?;
+                self.novalue_check(novalue, value)?;
                 Ok(value)
             }
             SymbolRead::Stem => Ok(self.read_stem_at(code.symbols.name(id).as_bytes(), at)),
@@ -451,7 +451,7 @@ impl Interp {
                 }
                 let (value, novalue) = self.stem_get_at(stem_name, stem_at, &key);
                 self.give_key_buffer(key);
-                self.novalue_check(novalue)?;
+                self.novalue_check(novalue, value)?;
                 Ok(value)
             }
         }

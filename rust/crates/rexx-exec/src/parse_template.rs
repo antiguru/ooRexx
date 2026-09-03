@@ -760,7 +760,7 @@ impl Interp {
         match crate::run::shape_of(name) {
             crate::run::NameShape::Simple => {
                 let (value, novalue) = self.read(code, id);
-                self.novalue_check(novalue)?;
+                self.novalue_check(novalue, value)?;
                 if self.tracing_intermediates() {
                     let text = self.to_text(value).to_vec();
                     self.trace_variable(indent, name, &text);
@@ -791,7 +791,7 @@ impl Interp {
                 }
                 let (value, novalue) = self.stem_get_at(stem_name, stem_at, &key);
                 self.give_key_buffer(key);
-                self.novalue_check(novalue)?;
+                self.novalue_check(novalue, value)?;
                 if self.tracing_intermediates() {
                     let text = self.to_text(value).to_vec();
                     self.trace_variable(indent, name, &text);

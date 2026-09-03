@@ -1,0 +1,27 @@
+count 26
+/* ::OPTIONS DIGITS, FUZZ and FORM: the package's own numeric settings, which
+   every activation of this file's code starts from and which a bare NUMERIC
+   resets to. NOPROLOG and NUMERIC NOINHERIT are here for their acceptance:
+   the first has no reader without ::REQUIRES and the second is the default. */
+say digits() fuzz() form()
+numeric digits 20
+numeric fuzz 7
+numeric form scientific
+say digits() fuzz() form()
+call sub
+o = .k~new
+o~m
+numeric digits
+numeric fuzz
+numeric form
+say digits() fuzz() form()
+
+::options digits 12 fuzz 3 form engineering noprolog numeric noinherit
+
+::routine sub
+say 'routine' digits() fuzz() form()
+return
+
+::class k
+::method m
+say 'method' digits() fuzz() form()

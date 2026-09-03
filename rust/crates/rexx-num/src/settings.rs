@@ -258,8 +258,20 @@ impl Settings {
         self.set_digits_checked(value, not_whole)
     }
 
-    /// `NUMERIC DIGITS` with no operand: the default, and it makes the same
-    /// FUZZ check the operand form makes.
+    /// `::OPTIONS DIGITS n`, whose operand the directive parser has already
+    /// converted with `Numerics::ARGUMENT_DIGITS` rather than with the
+    /// setting in force.
+    ///
+    /// The FUZZ check is the one [`Settings::set_digits_str`] makes, because
+    /// `optionsDirective` makes it too (`DirectiveParser.cpp:988`).
+    pub fn set_digits(&mut self, value: u64) -> Result<(), SettingsError> {
+        self.set_digits_checked(value, || SettingsError::DigitsNotWhole {
+            found: value.to_string(),
+        })
+    }
+
+    /// `NUMERIC DIGITS` with no operand: the package default, and it makes
+    /// the same FUZZ check the operand form makes.
     ///
     /// `NumericInstruction.cpp`'s no-operand arm is
     /// `if (defaultDigits <= context->fuzz())` before `setDigits`, the same
@@ -269,17 +281,21 @@ impl Settings {
     /// rc 223 reading `Value of NUMERIC DIGITS ("9") must exceed value of
     /// NUMERIC FUZZ ("20")`.
     ///
-    /// The ANSI draft agrees: `X3J18-199X` 8.3.15.1 gives the no-operand form
-    /// `Value = 9` and then runs the same
+    /// `default` is the package's own DIGITS, which `::OPTIONS DIGITS` moves
+    /// off nine -- measured, `::options digits 12` then `numeric digits 30`
+    /// then `numeric digits` answers 12.
+    ///
+    /// The ANSI draft agrees for the unmoved default: `X3J18-199X` 8.3.15.1
+    /// gives the no-operand form `Value = 9` and then runs the same
     /// `if Value<=#Fuzz.#Level then #Raise 'SYNTAX',33.1`.
-    pub fn reset_digits(&mut self) -> Result<(), SettingsError> {
-        if crate::DEFAULT_DIGITS <= self.fuzz {
+    pub fn reset_digits(&mut self, default: u64) -> Result<(), SettingsError> {
+        if default <= self.fuzz {
             return Err(SettingsError::FuzzNotBelowDigits {
-                digits: crate::DEFAULT_DIGITS,
+                digits: default,
                 fuzz: self.fuzz,
             });
         }
-        self.digits = crate::DEFAULT_DIGITS;
+        self.digits = default;
         Ok(())
     }
 
@@ -322,18 +338,29 @@ impl Settings {
         self.set_fuzz_checked(value)
     }
 
-    /// `NUMERIC FUZZ` with no operand: zero.
+    /// `::OPTIONS FUZZ n`, the sibling of [`Settings::set_digits`] and
+    /// converted the same way (`DirectiveParser.cpp:1046`).
+    pub fn set_fuzz(&mut self, value: u64) -> Result<(), SettingsError> {
+        self.set_fuzz_checked(value)
+    }
+
+    /// `NUMERIC FUZZ` with no operand: the package default, checked against
+    /// the DIGITS in force.
     ///
-    /// The interpreter guards this arm too -- `if (defaultFuzz >= context->
-    /// digits())` before `setFuzz` -- but **the guard cannot fire here**, and
-    /// that is a property of the default rather than an omission: this crate's
-    /// default fuzz is zero and `set_digits_checked` refuses any DIGITS below
-    /// one, so `0 >= self.digits` is false for every state reachable. The C++
-    /// takes its default from the package, which `::OPTIONS` can move off
-    /// zero; if that ever becomes representable here, this needs the check and
-    /// the signature [`Settings::reset_digits`] has.
-    pub fn reset_fuzz(&mut self) {
-        self.fuzz = 0;
+    /// The interpreter's own guard is `if (defaultFuzz >= context->digits())`
+    /// before `setFuzz`, and it fires once `::OPTIONS FUZZ` moves the default
+    /// off zero: measured, `::options digits 12 fuzz 5` with `numeric fuzz 0`
+    /// and `numeric digits 3` in force makes a bare `numeric fuzz` 33.1 at rc
+    /// 223 reading `("3") ... ("5")`.
+    pub fn reset_fuzz(&mut self, default: u64) -> Result<(), SettingsError> {
+        if default >= self.digits {
+            return Err(SettingsError::FuzzNotBelowDigits {
+                digits: self.digits,
+                fuzz: default,
+            });
+        }
+        self.fuzz = default;
+        Ok(())
     }
 
     /// The half the two share. No `not_whole` closure here: the check below
@@ -373,6 +400,13 @@ impl Settings {
         };
         Ok(())
     }
+
+    /// `::OPTIONS FORM ENGINEERING`/`SCIENTIFIC` and `NUMERIC FORM`'s reset
+    /// to the package default, both of which name the setting rather than
+    /// spell it.
+    pub fn set_form(&mut self, form: Form) {
+        self.form = form;
+    }
 }
 
 #[cfg(test)]
@@ -405,7 +439,7 @@ mod tests {
         assert_eq!(spelled_out.digits(), 30, "a refused set changes nothing");
 
         assert_eq!(
-            settings.reset_digits(),
+            settings.reset_digits(crate::DEFAULT_DIGITS),
             Err(SettingsError::FuzzNotBelowDigits {
                 digits: 9,
                 fuzz: 20
@@ -444,7 +478,9 @@ mod tests {
         digits_reset
             .set_fuzz_str("5")
             .expect("5 is below DIGITS 30");
-        digits_reset.reset_digits().expect("9 exceeds a FUZZ of 5");
+        digits_reset
+            .reset_digits(crate::DEFAULT_DIGITS)
+            .expect("9 exceeds a FUZZ of 5");
         assert_eq!(
             (
                 digits_reset.digits(),
@@ -455,7 +491,7 @@ mod tests {
         );
 
         let mut fuzz_reset = start();
-        fuzz_reset.reset_fuzz();
+        fuzz_reset.reset_fuzz(0).expect("0 is below any DIGITS");
         assert_eq!(
             (fuzz_reset.digits(), fuzz_reset.fuzz(), fuzz_reset.form()),
             (30, 0, Form::Engineering)

@@ -38,6 +38,7 @@
 
 use rexx_classes::{ClassKind, InheritRefusal, MethodId};
 use rexx_core::{Body, Heap, NameMap, ObjRef, RootSet, SlotFrame, SlotRef};
+use rexx_num::Settings;
 use rexx_parse::{
     Access, AnnotationTarget, AttributeDirective, AttributeStyle, ClassDirective, ClassRef,
     CodeBody, ConstantDirective, ConstantValue, Directive, DirectiveKind, Expr, ExprKind,
@@ -135,6 +136,12 @@ mod dispatch;
 // order `PackageClass::findClass` resolves a `.NAME` in, and the one directory
 // chokepoint D45 asks for.
 mod environment;
+
+// `::OPTIONS` (Phase 5c): the numeric, trace and condition settings a file's
+// directives leave on its own package, and which every activation of that
+// package's code starts from.
+mod options;
+use options::PackageOptions;
 
 /// The exit code for a construct this crate does not implement.
 ///
@@ -1641,11 +1648,6 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
         // states, taken because the alternative is silently dropping both
         // that output and the public routines the file imports.
         DirectiveKind::Requires(_) => gap("::REQUIRES", "Phase 5"),
-        // Applies package settings unconditionally, and there is no unused
-        // form: measured, `::options digits 12` makes `digits()` report 12,
-        // and `::options trace labels` makes every `::ROUTINE` in the file
-        // emit its own `>I>`/`<I<` pair.
-        DirectiveKind::Options(_) => gap("::OPTIONS", "Phase 5"),
         // **`ns:name` on any of the keywords that take a class reference.**
         // The namespace is a package this crate does not load, so the target
         // names nothing here whatever it names on the oracle -- unlike a bare
@@ -1660,9 +1662,13 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
         DirectiveKind::Class(class) if class_names_a_namespace(class) => {
             gap("::CLASS naming a namespace", "Phase 5")
         }
+        // `::OPTIONS` installs (`Interp::install_directives`' own walk): it
+        // resolves no name, runs no code, and every setting it writes is one
+        // an activation of this package's code starts from.
         DirectiveKind::Annotate(_)
         | DirectiveKind::Class(_)
         | DirectiveKind::Constant(_)
+        | DirectiveKind::Options(_)
         | DirectiveKind::Resource(_)
         | DirectiveKind::Routine(_) => None,
     }
@@ -3049,6 +3055,15 @@ struct Interp {
     /// `BodyKey { program: ProgramId(0), .. }` stays correct because
     /// `ProgramId(0)`'s program is still here.
     programs: Vec<Rc<Program>>,
+    /// What each program's `::OPTIONS` directives left on its package,
+    /// entered by `Interp::install_directives` and read by every activation
+    /// of that program's code.
+    ///
+    /// **A program with no `::OPTIONS` has no entry**, so the settings a
+    /// program starts from are the language defaults without a lookup
+    /// answering that -- [`Interp::options_of`] is the one reader and its
+    /// `None` is that case.
+    package_options: HashMap<ProgramId, PackageOptions>,
     /// **`NameHasher` and not `RandomState`**, for the reason that alias's own
     /// doc gives and with the same shape of key behind it: a `BodyKey` is a
     /// pair of small integers this interpreter mints itself, so the
@@ -4077,8 +4092,9 @@ struct Interp {
     /// is the arming sites and not a check.** The writes are
     /// `Interp::arm_reqstr_for`, called from every directive install that adds
     /// a name to a class's dictionary, `Interp::exec_condition_trap`'s
-    /// `NOSTRING`/`ANY` arm, and `dispatch.rs`'s `native_new`; the initialiser
-    /// is `false` and nothing clears it. `dispatch.rs`'s
+    /// `NOSTRING`/`ANY` arm, `Interp::install_directives`' `::OPTIONS NOSTRING
+    /// SYNTAX` arm, and `dispatch.rs`'s `native_new`; the initialiser is
+    /// `false` and nothing clears it. `dispatch.rs`'s
     /// `Interp::required_string_latch_holds` runs under `debug_assert` and
     /// tests both limbs' routes, so an arming route added without setting
     /// this reddens the **debug** gate -- both halves proved live by
@@ -4358,6 +4374,7 @@ impl Interp {
             suspended: Vec::new(),
             spare_activations: Vec::new(),
             programs: Vec::new(),
+            package_options: HashMap::new(),
             plans: NameMap::default(),
             engine: Engine::TreeWalker,
             deadline: None,
@@ -4548,6 +4565,56 @@ impl Interp {
         outcome
     }
 
+    /// What `program`'s own `::OPTIONS` directives left on its package, or
+    /// `None` for a program carrying none.
+    fn options_of(&self, program: ProgramId) -> Option<&PackageOptions> {
+        self.package_options.get(&program)
+    }
+
+    /// The numeric settings the running activation's own package declares --
+    /// what a bare `NUMERIC DIGITS`, `FUZZ` or `FORM` there resets to, and
+    /// the language defaults for a package carrying no `::OPTIONS`.
+    pub(crate) fn package_default_numeric(&self) -> Settings {
+        self.options_of(self.activation().program_id)
+            .map_or_else(Settings::default, |options| options.numeric.clone())
+    }
+
+    /// Starts a freshly built activation from its own package's `::OPTIONS`.
+    ///
+    /// `caller` is the numeric settings in force where the call was made,
+    /// which `::OPTIONS NUMERIC INHERIT` selects in place of the package's
+    /// own; `None` is the top-level activation, which has no call site.
+    /// Measured, `::options digits 12 numeric inherit` with `numeric digits
+    /// 20` in the main body: a `::ROUTINE` it calls reports 20, and the main
+    /// body itself reports 12.
+    fn start_from_package(&self, activation: &mut Activation, caller: Option<&Settings>) {
+        let Some(options) = self.options_of(activation.program_id) else {
+            return;
+        };
+        activation.settings = match caller {
+            Some(caller) if options.numeric_inherit => caller.clone(),
+            _ => options.numeric.clone(),
+        };
+        activation.condition_syntax = options.syntax;
+        if let Some(trace) = options.trace {
+            activation.trace_mode = trace;
+        }
+    }
+
+    /// Whether the running activation turns an untrapped raise of `condition`
+    /// into a SYNTAX error -- `::OPTIONS <condition> SYNTAX`, and `ALL` for
+    /// all six at once.
+    ///
+    /// **Asked only where nothing would trap the condition**, which is the
+    /// measured order: `::options novalue syntax` under `signal on novalue`
+    /// traps `NOVALUE`, and under `signal on any` traps `NOVALUE` too, so the
+    /// escalation is what an untrapped raise becomes rather than something
+    /// that preempts a trap.
+    pub(crate) fn condition_raises_syntax(&self, condition: &[u8]) -> bool {
+        self.running_activation()
+            .is_some_and(|activation| activation.condition_syntax.raises(condition))
+    }
+
     /// Installs `program`'s directives and runs its main body, for a program
     /// already registered under `program_id`.
     fn run_loaded(
@@ -4581,13 +4648,12 @@ impl Interp {
 
         let frame = self.roots.push_slots(plan.len());
         let id = self.next_activation_id();
-        self.push_activation(Activation::new(
-            id,
-            Rc::clone(&program),
-            program_id,
-            plan,
-            frame,
-        ));
+        let mut main = Activation::new(id, Rc::clone(&program), program_id, plan, frame);
+        // No call site above a main body, so `::OPTIONS NUMERIC INHERIT` has
+        // nothing to inherit and the package's own settings stand -- measured,
+        // `::options digits 12 numeric inherit` alone in a file reports 12.
+        self.start_from_package(&mut main, None);
+        self.push_activation(main);
 
         // `Returned` and `Exited` are the same thing at the top: measured,
         // `return 5` in a main body with no active call exits 5, exactly like
@@ -4795,6 +4861,33 @@ impl Interp {
                             pairs.retain(|(held, _)| **held != *name);
                             pairs.push((name.into(), annotation.value.clone()));
                         }
+                    }
+                }
+                // **Applied in this walk, so its own refusal is in source
+                // order with the rest.** Measured: the 33.1 below wins over a
+                // duplicate `::ROUTINE` pair standing after it and loses to
+                // one standing before it, and it wins over a `::CLASS` that
+                // cannot resolve on either side of it -- the class pass is
+                // the second walk. `::OPTIONS` itself never resolves a name
+                // and never runs code, so this is the whole of installing it.
+                DirectiveKind::Options(options) => {
+                    let outcome = {
+                        let package = self.package_options.entry(id).or_default();
+                        options.iter().try_for_each(|option| package.apply(option))
+                    };
+                    if let Err(error) = outcome {
+                        self.blame_directive(program, directive);
+                        return Err(run::raised_from_settings(error).into());
+                    }
+                    // The required-string protocol's third arming route:
+                    // `::OPTIONS NOSTRING SYNTAX` turns a rendering into a
+                    // raise exactly as a `NOSTRING` trap does. See
+                    // [`Interp::reqstr_armed`] for why this only ever sets.
+                    if self
+                        .options_of(id)
+                        .is_some_and(PackageOptions::escalates_nostring)
+                    {
+                        self.reqstr_armed = true;
                     }
                 }
                 _ => {}
