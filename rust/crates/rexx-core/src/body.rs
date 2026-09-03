@@ -9,8 +9,8 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-use crate::ObjRef;
 use crate::bytes::Bytes;
+use crate::{ObjRef, SlotRef};
 use rexx_num::{Form, Number};
 use std::collections::HashMap;
 
@@ -210,6 +210,39 @@ pub enum Body {
     /// that is the whole point -- and the collector rewrites the target to
     /// `ObjRef::NIL` once it dies.
     WeakRef(ObjRef),
+    /// The object a `>name` term answers: a variable named rather than read.
+    ///
+    /// **Boxed for [`Body::Native`]'s reason** -- inline it is the widest
+    /// variant there is, and this crate allocates one only where a program
+    /// writes `>name`.
+    VarRef(Box<VarRef>),
+}
+
+/// The variable one [`Body::VarRef`] names.
+///
+/// `name` is what `~name` answers and what a `USE ARG >` kind mismatch
+/// substitutes; it is the spelling the scanner interned, upper case, a stem's
+/// trailing period included.
+#[derive(Clone, Debug)]
+pub struct VarRef {
+    pub name: Box<[u8]>,
+    pub home: VarRefHome,
+}
+
+/// Where the variable a [`VarRef`] names keeps its value.
+///
+/// **A slot position is not one of the arms**, and that is the whole reason
+/// [`crate::RootSet::promote`] exists: a reference is an ordinary value and
+/// may outlive the activation that made it, where a frame slot may not.
+#[derive(Clone, Debug)]
+pub enum VarRefHome {
+    /// Storage outside every frame, which the variable itself also reads and
+    /// writes through for as long as it exists.
+    Cell(SlotRef),
+    /// A name in one of `owner`'s scope pools -- what an `EXPOSE`d variable
+    /// has instead of storage of its own. The object keeps it alive, so
+    /// there is nothing to promote.
+    Instance { owner: ObjRef, scope: ObjRef },
 }
 
 /// Every variable pool one object holds: one per scope that has bound a name
@@ -633,6 +666,17 @@ impl Body {
             // Deliberately reaches nothing: a weak reference must not keep
             // its target alive.
             Body::WeakRef(_) => {}
+            // A cell is rooted by `RootSet::iter`, which is what keeps the
+            // referenced value alive; the owning object of an instance
+            // variable is not, and the reference is the only handle a
+            // program may still have on it.
+            Body::VarRef(reference) => match reference.home {
+                VarRefHome::Cell(_) => {}
+                VarRefHome::Instance { owner, scope } => {
+                    out.push(owner);
+                    out.push(scope);
+                }
+            },
         }
     }
 }

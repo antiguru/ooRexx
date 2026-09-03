@@ -409,7 +409,7 @@ pub(crate) fn arg(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<Ob
         .map(|text| text.first().copied().unwrap_or(0).to_ascii_uppercase());
     match letter {
         None | Some(b'N') => Ok(match supplied {
-            Some(argument) => argument.value(),
+            Some(argument) => argument,
             None => interp.text(b""),
         }),
         Some(b'E') => Ok(interp.text(if supplied.is_some() { b"1" } else { b"0" })),

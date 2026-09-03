@@ -34,7 +34,7 @@
 use crate::Interp;
 use rexx_core::{
     BehaviourId, Body, Bytes, Decoded, INLINE_BYTES, InlineText, NotNumeric, ObjRef, SMALL_INT_MAX,
-    SMALL_INT_MIN,
+    SMALL_INT_MIN, VarRef, VarRefHome,
 };
 use rexx_num::{Form, Number};
 use std::borrow::Cow;
@@ -590,10 +590,19 @@ impl Interp {
             let Some(object) = self.heap.get(value) else {
                 return self.not_in_arena(value).len();
             };
-            Redirect::of(&object.body)
+            self.redirect_of(&object.body)
         };
         match redirect {
             Redirect::StemDefault(default) => return self.text_len_inner(default),
+            Redirect::VarRefValue(referenced) => return self.string_value_text(referenced).len(),
+            Redirect::VarRefUnset => {
+                return match &self.heap.get(value).expect("a live value").body {
+                    Body::VarRef(reference) => reference.name.len(),
+                    other => {
+                        unreachable!("Redirect::VarRefUnset answers a reference, got {other:?}")
+                    }
+                };
+            }
             // Built rather than measured off the object, because an array's
             // string value exists nowhere until something asks for it -- the
             // same position a tagged integer's digits are in, reached one
@@ -824,7 +833,7 @@ impl Interp {
             let Some(object) = self.heap.get(value) else {
                 return Cow::Borrowed(self.not_in_arena(value));
             };
-            Redirect::of(&object.body)
+            self.redirect_of(&object.body)
         };
         match redirect {
             // `Cow::Owned`: the borrow this recursive call returns is tied
@@ -832,6 +841,31 @@ impl Interp {
             // cannot share one lifetime.
             Redirect::StemDefault(default) => {
                 return Cow::Owned(self.to_text(default).into_owned());
+            }
+            // **`string_value_text` and not `to_text`**, which is the
+            // difference between the referent's `stringValue()` and its
+            // string *conversion*, and it is measured rather than reasoned:
+            // `RexxObject::requestString` looks `MAKESTRING` up in the
+            // receiver's own behaviour and a reference's holds no such name,
+            // so the conversion falls through to `stringValue()`. Oracle
+            // rc 0, over a `zz` holding a two-item array: `say 'p' >zz` is
+            // `p an Array` where `say 'p' zz` is `p one` and `two`, and over
+            // an instance whose class defines `makeString`, `say 'p' >k` is
+            // the default name where `say 'p' k` runs the method.
+            Redirect::VarRefValue(referenced) => {
+                return Cow::Owned(self.string_value_text(referenced));
+            }
+            // A variable holding nothing reads as its own derived name,
+            // which for a simple or stem symbol is the reference's own
+            // spelling -- measured, `o = >vr` over an unassigned `vr` prints
+            // `VR`.
+            Redirect::VarRefUnset => {
+                return match &self.heap.get(value).expect("a live value").body {
+                    Body::VarRef(reference) => Cow::Owned(reference.name.to_vec()),
+                    other => {
+                        unreachable!("Redirect::VarRefUnset answers a reference, got {other:?}")
+                    }
+                };
             }
             // An array's string value is built here and stored nowhere, so it
             // is `Cow::Owned` and `try_text` answers `None` for one.
@@ -968,6 +1002,18 @@ impl Interp {
             // The same cause for an instance nothing has named: `to_text`
             // derives those bytes from the class id and stores them nowhere.
             Body::Instance { name, .. } => name.as_deref(),
+            // The variable's own bytes, chased here for the stem default's
+            // reason one arm up; an unset variable borrows the reference's
+            // own name, which is what it renders as.
+            //
+            // **`None` for an array referent**, because `to_text` answers
+            // `an Array` for one and stores those bytes nowhere -- the
+            // position an unnamed instance is in, one indirection later.
+            Body::VarRef(reference) => match self.referenced_value(reference) {
+                Some(referenced) if self.array_slots(referenced).is_some() => None,
+                Some(referenced) => self.try_text(referenced),
+                None => Some(&reference.name),
+            },
             other => unreachable!(
                 "the value model only creates Text, Num, Stem, Array, Native and Instance, \
                  got {other:?}"
@@ -1163,6 +1209,23 @@ impl Interp {
                 match cached {
                     Ok(number) => Ok((**number).clone()),
                     Err(marker) => Err(*marker),
+                }
+            }
+            // `VariableReference::numberValue` is the referenced value's
+            // (`classes/VariableReference.cpp:262`), which is why `>vr + 1`
+            // is `6` and not 41.1 -- measured, oracle rc 0. Read before the
+            // borrow is taken again, the way the stem redirect is.
+            Body::VarRef(_) => {
+                let referenced = match self.as_variable_reference(value) {
+                    Some(reference) => self.referenced_value(reference),
+                    None => None,
+                };
+                match referenced {
+                    Some(referenced) => self.to_number(referenced),
+                    // An unset variable reads as its own name, which parses
+                    // as a number only if the name spells one -- it cannot,
+                    // since a symbol beginning with a digit is a literal.
+                    None => Err(NotNumeric),
                 }
             }
             // A `Body::Stem` with `default: None`, the arm the redirect
@@ -1428,6 +1491,14 @@ enum Carried {
 enum Redirect {
     /// A stem with a default answers *as* that default.
     StemDefault(ObjRef),
+    /// A `>name` reference answers *as* the variable it names, whose value
+    /// is read at the moment of the ask rather than captured -- measured on
+    /// the oracle, `o = >vr` then `vr = 'changed'` leaves `o~value` reading
+    /// `changed`.
+    VarRefValue(ObjRef),
+    /// The same for a reference to a variable holding nothing, which reads
+    /// as its own derived name.
+    VarRefUnset,
     /// An array joins its items, which the arm reads back out of the object.
     Array,
     /// An instance nothing has named, which renders as its class's id with an
@@ -1437,8 +1508,13 @@ enum Redirect {
     None,
 }
 
-impl Redirect {
-    fn of(body: &Body) -> Redirect {
+impl Interp {
+    /// Which value `body` answers *as*, rather than out of its own storage.
+    ///
+    /// `&self` rather than a free function on the body, because a `>name`
+    /// reference keeps no value of its own: the variable it names is read
+    /// here, at the ask.
+    fn redirect_of(&self, body: &Body) -> Redirect {
         match body {
             Body::Stem {
                 default: Some(default),
@@ -1448,7 +1524,52 @@ impl Redirect {
             Body::Instance {
                 class, name: None, ..
             } => Redirect::InstanceDefault(*class),
+            Body::VarRef(reference) => match self.referenced_value(reference) {
+                Some(value) => Redirect::VarRefValue(value),
+                None => Redirect::VarRefUnset,
+            },
             _ => Redirect::None,
+        }
+    }
+
+    /// The value the variable a reference names currently holds, `None` for
+    /// one holding nothing.
+    pub(crate) fn referenced_value(&self, reference: &VarRef) -> Option<ObjRef> {
+        match reference.home {
+            VarRefHome::Cell(cell) => self.roots.slot_value(cell),
+            VarRefHome::Instance { owner, scope } => {
+                match self.heap.get(owner).map(|object| &object.body) {
+                    Some(Body::Instance { pools, .. }) => pools.get(scope, &reference.name),
+                    _ => None,
+                }
+            }
+        }
+    }
+
+    /// [`Interp::referenced_value`] for a reference named by its handle, with
+    /// an unset variable's derived name materialised as a string.
+    ///
+    /// `None` for a value that is not a reference at all, which the two arms
+    /// of the `Option` inside [`Interp::referenced_value`] cannot say.
+    pub(crate) fn referenced_object(&mut self, value: ObjRef) -> Option<ObjRef> {
+        let reference = self.as_variable_reference(value)?;
+        match self.referenced_value(reference) {
+            Some(referenced) => Some(referenced),
+            None => {
+                let name = reference.name.to_vec();
+                Some(self.text_built(name))
+            }
+        }
+    }
+
+    /// The bytes `value`, a `>name` reference, renders as -- the referenced
+    /// variable's `stringValue()`.
+    ///
+    /// The `>name` reference `value` is, or `None` for every other value.
+    pub(crate) fn as_variable_reference(&self, value: ObjRef) -> Option<&VarRef> {
+        match &self.heap.get(value)?.body {
+            Body::VarRef(reference) => Some(reference),
+            _ => None,
         }
     }
 }
@@ -1468,6 +1589,20 @@ impl Rendered {
                 .try_text(self.value)
                 .expect("`render` carried no bytes, so it left them borrowable"),
         }
+    }
+}
+
+/// The bytes a `>name` reference renders as: the referenced variable's
+/// `stringValue()`.
+///
+/// A free function so a caller whose own `match` still borrows the heap can
+/// reach it; [`Interp::to_text`]'s own arm answers the same bytes.
+pub(crate) fn string_value_of_reference(interp: &mut Interp, value: ObjRef) -> Vec<u8> {
+    match interp.referenced_object(value) {
+        Some(referenced) => interp.string_value_text(referenced),
+        // Unreachable as `None`: the one caller has just matched
+        // `Body::VarRef` on this handle.
+        None => Vec::new(),
     }
 }
 

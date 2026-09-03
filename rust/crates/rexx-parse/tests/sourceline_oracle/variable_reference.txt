@@ -1,0 +1,82 @@
+count 81
+/* The object `>name` answers (5c Task 4).                                   */
+/*                                                                           */
+/* What each block would print if the term still evaluated to the referenced */
+/* variable's VALUE, which is what this crate did before this program:       */
+/*                                                                           */
+/*   object    -- ~class~id would be String, and ~name, ~value and ~value=   */
+/*                would each be 97.1 "does not understand message".          */
+/*   render    -- unchanged either way. SAY of a reference prints the        */
+/*                referenced value on both sides, which is why the           */
+/*                divergence was silent: it appears only once a message is   */
+/*                sent to the reference rather than in the SAY that shows    */
+/*                it.                                                        */
+/*   tracks    -- the reference reads the variable at the ask, not at the    */
+/*                >. A captured value would print `first` twice.             */
+/*   unset     -- a variable holding nothing reads as its own derived name,  */
+/*                and DROP puts one back into that state.                    */
+/*   forwards  -- a name the class does not define reaches UNKNOWN, which    */
+/*                sends it to the referenced value.                          */
+/*   escapes   -- a reference outlives the routine whose local it names, and */
+/*                still reads and writes. Storage tied to the frame would    */
+/*                read something else here or fail.                          */
+/*   aliases   -- USE ARG > takes any VariableReference value, however it    */
+/*                reached the call: through a variable rather than written   */
+/*                `>` at the call site.                                      */
+/*   plain     -- a plain USE ARG binds the reference object itself, not the */
+/*                value: the callee's ~class~id says so.                     */
+
+vr = 5
+o = >vr
+say 'object' o~class~id o~name o~value
+say 'object' o~hasMethod('NAME') o~hasMethod('VALUE') o~hasMethod('UNKNOWN') o~hasMethod('REQUEST')
+say 'object' o~isA(.VariableReference) o~objectName
+say 'render' o (o) ('<' || o || '>') o~string
+say 'render' o + 1 (o = 5) (o == 5)
+
+lt = 'less-than'
+say 'spelling' (<lt)~name (<lt)~value
+
+first = 'first'
+tracker = >first
+say 'tracks' tracker~value
+first = 'second'
+say 'tracks' tracker~value
+tracker~value = 'third'
+say 'tracks' first tracker~value
+
+say 'unset' (>neverset)~name (>neverset)~value
+drop first
+say 'unset' tracker~value
+
+say 'forwards' o~length substr(o, 1, 1) length(o)
+say 'forwards' o~request('STRING')~class~id
+
+escaped = maker()
+say 'escapes' escaped~class~id escaped~name escaped~value
+escaped~value = 'written-after-return'
+say 'escapes' escaped~value
+
+held = 'held'
+handle = >held
+call aliaser handle
+say 'aliases' held
+
+call plainly >held
+say 'plain' held
+exit
+
+maker: procedure
+  local = 'made'
+  return >local
+
+aliaser: procedure
+  use arg >bound
+  bound = 'through-a-stored-reference'
+  return
+
+plainly: procedure
+  use arg copied
+  say 'plain' copied~class~id copied~name copied~value
+  copied = 'rebinding the name, not the variable'
+  return

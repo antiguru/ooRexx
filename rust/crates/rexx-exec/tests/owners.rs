@@ -250,10 +250,10 @@ tags!(expr_tag, EXPR_TAGS, ExprKind, {
     // (`eval.rs`) for the resolution order a name still falls through to the
     // loud fallback for.
     ExprKind::Call { .. } => ("Call", Owner::InScope),
-    // `>x`/`<x` evaluates to the referenced variable's value in every ordinary
-    // position (measured, `say >p` prints `p`'s value), and its load-bearing
-    // use is as the argument half of `USE ARG >name`, which `run.rs`'s
-    // `eval_argument` handles at the call site.
+    // `>x`/`<x` answers a `VariableReference`, built by `eval.rs`'s own arm
+    // over `run.rs`'s `Interp::variable_reference`. Every rendering and every
+    // conversion of one answers as the variable it names, which is why
+    // `say >p` still prints `p`'s value.
     ExprKind::VariableReference(_) => ("VariableReference", Owner::InScope),
     // `target~name(...)`, `target~~name(...)` and `target[...]`, resolved
     // and invoked through `dispatch.rs`. See `InstructionKind::Message`

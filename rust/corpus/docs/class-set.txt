@@ -92,7 +92,7 @@ Ticker	class	clsTicker	utilityclasses.xml:10169	not-covered	no construction prog
 TimeSpan	class	clsTimeSpan	utilityclasses.xml:10442	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.TimeSpan~new(1)
 TraceObject	class	clsTraceObject	utilityclasses.xml:11301	covered	a bare ~new constructs an instance on the oracle	.TraceObject~new
 Validate	class	clsValidate	utilityclasses.xml:12201	covered	a bare ~new constructs an instance on the oracle	.Validate~new
-VariableReference	class	clsVariableReference	utilityclasses.xml:12548	not-covered	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:12556-12557 "Calling the new method to create a VariableReference instance is not allowed."	-
+VariableReference	class	clsVariableReference	utilityclasses.xml:12548	covered	a committed construction program answers an instance; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:12556-12557 "Calling the new method to create a VariableReference instance is not allowed."	>vr
 WeakReference	class	clsWeakReference	utilityclasses.xml:12698	covered	a committed construction program answers an instance; a bare ~new raises 93.903 on the oracle	.WeakReference~new(.Object~new)
 InputOutputStream	class	clsInputOutputStream	streamclasses.xml:57	covered	a bare ~new constructs an instance on the oracle	.InputOutputStream~new
 InputStream	class	clsInputStream	streamclasses.xml:103	covered	a bare ~new constructs an instance on the oracle	.InputStream~new

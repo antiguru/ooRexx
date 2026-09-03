@@ -234,6 +234,7 @@ pub const CONSTRUCTION_PROGRAMS: &[(&str, &str)] = &[
     ("STRING", ".String~new('abc')"),
     ("SUPPLIER", ".Supplier~new(.Array~new, .Array~new)"),
     ("TIMESPAN", ".TimeSpan~new(1)"),
+    ("VARIABLEREFERENCE", ">vr"),
     ("WEAKREFERENCE", ".WeakReference~new(.Object~new)"),
 ];
 

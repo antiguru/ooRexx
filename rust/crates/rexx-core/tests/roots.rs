@@ -123,3 +123,81 @@ fn a_nested_register_region_leaves_the_enclosing_one_intact() {
 
     assert_eq!(roots.temp_at(outer_registers, 2), outer_value);
 }
+
+/// A promoted variable keeps answering by name, through the redirect the
+/// promotion leaves behind.
+#[test]
+fn a_promoted_variable_still_reads_and_writes_by_name() {
+    let mut roots = RootSet::new();
+    let frame = roots.push_slots(2);
+    let first = ObjRef::heap(1, 0);
+    roots.set_frame_slot(frame, 0, first);
+    let cell = roots.promote(frame, 0);
+    assert_eq!(roots.frame_slot(frame, 0), Some(first));
+    assert_eq!(roots.slot_value(cell), Some(first));
+    let second = ObjRef::heap(2, 0);
+    roots.set_frame_slot(frame, 0, second);
+    assert_eq!(roots.slot_value(cell), Some(second));
+    roots.set_slot_value(cell, first);
+    assert_eq!(roots.frame_slot(frame, 0), Some(first));
+}
+
+/// Promotion is idempotent, which is what two `>p` terms on one variable
+/// need: a second one answers the same storage rather than a second copy.
+#[test]
+fn promoting_a_variable_twice_answers_one_cell() {
+    let mut roots = RootSet::new();
+    let frame = roots.push_slots(1);
+    roots.set_frame_slot(frame, 0, ObjRef::heap(1, 0));
+    assert_eq!(roots.promote(frame, 0), roots.promote(frame, 0));
+}
+
+/// A cell survives the frame that declared the variable, and stays a root --
+/// the whole reason promotion exists, since a reference is an ordinary value
+/// and may outlive the activation.
+#[test]
+fn a_cell_outlives_the_frame_it_was_promoted_out_of() {
+    let mut roots = RootSet::new();
+    let outer = roots.push_slots(1);
+    let inner = roots.push_slots(1);
+    let held = ObjRef::heap(7, 0);
+    roots.set_frame_slot(inner, 0, held);
+    let cell = roots.promote(inner, 0);
+    roots.pop_slots(inner);
+    assert_eq!(roots.slot_value(cell), Some(held));
+    assert!(roots.iter().any(|r| r == held));
+    let written = ObjRef::heap(8, 0);
+    roots.set_slot_value(cell, written);
+    assert_eq!(roots.slot_value(cell), Some(written));
+    roots.pop_slots(outer);
+}
+
+/// An exposed name promotes the storage it was exposed *from*, so the
+/// exposing frame sees a write through the cell.
+#[test]
+fn promoting_an_exposed_name_promotes_the_storage_behind_it() {
+    let mut roots = RootSet::new();
+    let outer = roots.push_slots(1);
+    let inner = roots.push_slots(1);
+    roots.alias_slot(inner, 0, roots.slot_ref(outer, 0));
+    let cell = roots.promote(inner, 0);
+    let written = ObjRef::heap(3, 0);
+    roots.set_slot_value(cell, written);
+    assert_eq!(roots.frame_slot(outer, 0), Some(written));
+    assert_eq!(roots.frame_slot(inner, 0), Some(written));
+}
+
+/// An alias bound *before* the promotion still reaches the cell, which is
+/// the case `resolve`'s walk exists for: the redirect it recorded points at
+/// a position that is now itself redirected.
+#[test]
+fn an_alias_taken_before_a_promotion_still_reaches_the_cell() {
+    let mut roots = RootSet::new();
+    let outer = roots.push_slots(1);
+    let inner = roots.push_slots(1);
+    roots.alias_slot(inner, 0, roots.slot_ref(outer, 0));
+    let cell = roots.promote(outer, 0);
+    let written = ObjRef::heap(4, 0);
+    roots.set_slot_value(cell, written);
+    assert_eq!(roots.frame_slot(inner, 0), Some(written));
+}

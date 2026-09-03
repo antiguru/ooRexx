@@ -80,11 +80,11 @@ use crate::trace::{
 };
 use crate::value::{exact_small_int, within_digits};
 use crate::{
-    ActiveCondition, Argument, CallContext, Code, Engine, Failure, InstalledRoutine, Interp, Loud,
-    Novalue, PendingTrap, VarHome,
+    ActiveCondition, CallContext, Code, Engine, Failure, InstalledRoutine, Interp, Loud, Novalue,
+    PendingTrap, VarHome,
 };
 use rexx_core::{
-    BehaviourId, Body, Decoded, FrameId, ObjRef, ScopePools, SlotFrame, is_class_slot,
+    BehaviourId, Body, Decoded, FrameId, ObjRef, ScopePools, SlotFrame, VarRefHome, is_class_slot,
 };
 use rexx_num::{ArithError, CompareOp, Number, SettingsError, compare_decoded};
 use rexx_parse::{
@@ -3365,9 +3365,10 @@ impl Interp {
     /// Binds one `USE ARG` target to one argument, or to its default, or to
     /// nothing.
     ///
-    /// The `alias` case is the whole reason `Argument` is not a bare
-    /// `ObjRef`: `>name` needs the *caller's* slot, and only an argument
-    /// written `>something` at the call carries one. It has **three**
+    /// The `alias` case reads the argument's **value**, which carries the
+    /// variable it names: any `VariableReference` binds, however it reached
+    /// the call. Measured, oracle rc 0: `o = >vr` then `call sub o` into
+    /// `use arg >q` aliases exactly as `call sub >vr` does. It has **three**
     /// separate measured refusals -- a supplied argument that is not a
     /// reference is 88.928, an omitted position is 88.931, and a target that
     /// is not currently unset is 98.995 ([`target_is_uninitialised`]).
@@ -3378,7 +3379,7 @@ impl Interp {
         code: &Code<'_>,
         index: usize,
         target: &UseTarget,
-        argument: Option<Argument>,
+        argument: Option<ObjRef>,
         strict: bool,
         in_method: bool,
     ) -> Result<(), Failure> {
@@ -3387,15 +3388,12 @@ impl Interp {
             let Some(argument) = argument else {
                 return Err(Raised::variable_reference_omitted(position).into());
             };
-            let Argument::Reference {
-                target: slot,
-                name: reference,
-                ..
-            } = argument
-            else {
-                let found = self.to_text(argument.value()).to_vec();
+            let Some(bound) = self.as_variable_reference(argument) else {
+                let found = self.to_text(argument).to_vec();
                 return Err(Raised::not_a_variable_reference(position, &found).into());
             };
+            let reference = bound.name.clone();
+            let slot = bound.home.clone();
             let name = self.use_target_name(code, target)?;
             // **The kinds must match, and the check is before the
             // uninitialised one.** Measured: a target that is both
@@ -3428,15 +3426,20 @@ impl Interp {
                 return Err(Raised::variable_reference_not_uninitialised(&name).into());
             }
             match slot {
-                VarHome::Slot(slot) => self.roots.alias_slot(frame, index, slot),
+                VarRefHome::Cell(cell) => self.roots.alias_slot(frame, index, cell),
                 // The same binding `EXPOSE` makes, on this activation's own
                 // slot: the target names the caller's object variable rather
                 // than any frame storage, so there is nothing to alias to.
-                VarHome::Instance(var) => {
+                VarRefHome::Instance { owner, scope } => {
+                    let var = InstanceVar {
+                        owner,
+                        scope,
+                        name: reference.clone(),
+                    };
                     let activation = self.activation_mut();
                     match activation.exposed.iter_mut().find(|(at, _)| *at == index) {
-                        Some(bound) => bound.1 = *var,
-                        None => activation.exposed.push((index, *var)),
+                        Some(bound) => bound.1 = var,
+                        None => activation.exposed.push((index, var)),
                     }
                 }
             }
@@ -3455,7 +3458,7 @@ impl Interp {
         // otherwise drop the target -- measured, an absent target does not
         // keep whatever it held before.
         let value = match argument {
-            Some(argument) => Some(argument.value()),
+            Some(argument) => Some(argument),
             None => match &target.default {
                 Some(default) => {
                     let value = self.eval(code, default)?;
@@ -3929,7 +3932,7 @@ impl Interp {
                         values.push(None);
                     }
                     Some(expr) => {
-                        values.push(Some(self.eval_traced_argument(code, expr)?.value()));
+                        values.push(Some(self.eval_traced_argument(code, expr)?));
                     }
                 }
             }
@@ -3944,9 +3947,7 @@ impl Interp {
             );
             return Ok(());
         }
-        for argument in &self.call_context.arguments {
-            values.push(argument.as_ref().map(crate::Argument::value));
-        }
+        values.extend(self.call_context.arguments.iter().copied());
         // Rooted here rather than relied on through `call_context`, which the
         // collector does not walk.
         for value in values.iter().flatten() {
@@ -4039,6 +4040,16 @@ impl Interp {
                     Conversion::Refused
                 }
             }
+            // **Not the referent's conversion**, which is what
+            // `~request('ARRAY')` answers and is a different route:
+            // `requestArray` looks `MAKEARRAY` up in the receiver's own
+            // behaviour rather than sending it, and a reference's behaviour
+            // holds no such name, so the lookup fails and `TheNilObject` is
+            // the answer. Measured, oracle rc 158: `forward arguments (>v)`
+            // over a `v` holding `'val'` is `98.946`, where the same
+            // instruction over `v` itself is rc 0 -- so this arm may not
+            // chase the way the string conversion beside it does.
+            Some(Body::VarRef(_)) => Conversion::Refused,
             Some(Body::Native(_) | Body::WeakRef(_)) | None => {
                 Conversion::NotBuilt("one of the interpreter's own objects")
             }
@@ -5786,7 +5797,7 @@ impl Interp {
                 Some(expr) if self.leaf_argument(expr) => {
                     Some(self.eval_leaf_argument(code, expr)?)
                 }
-                Some(expr) => Some(self.eval_traced_argument(code, expr)?.value()),
+                Some(expr) => Some(self.eval_traced_argument(code, expr)?),
             };
             self.value_buffer.push(value);
         }
@@ -5913,7 +5924,7 @@ impl Interp {
         // A fresh `Vec` and not a lent one: this path always hands the
         // arguments to the callee, which keeps them, so there is nothing to
         // give back and a pool would allocate on every call anyway.
-        let mut arguments: Vec<Option<Argument>> = Vec::with_capacity(args.len());
+        let mut arguments: Vec<Option<ObjRef>> = Vec::with_capacity(args.len());
         for arg in args {
             match arg {
                 None => {
@@ -5924,7 +5935,7 @@ impl Interp {
                     arguments.push(None);
                 }
                 Some(expr) if self.leaf_argument(expr) => {
-                    arguments.push(Some(Argument::Value(self.eval_leaf_argument(code, expr)?)));
+                    arguments.push(Some(self.eval_leaf_argument(code, expr)?));
                 }
                 Some(expr) => arguments.push(Some(self.eval_traced_argument(code, expr)?)),
             }
@@ -5989,14 +6000,10 @@ impl Interp {
         if let Resolved::Builtin(target) = resolved {
             return builtin::run(self, name, target, values);
         }
-        let arguments = values
-            .iter()
-            .map(|value| value.map(Argument::Value))
-            .collect();
         match self.invoke_call_over(
             resolved,
             name,
-            arguments,
+            values.to_vec(),
             CallType::Function,
             CallEntry::Written,
         )? {
@@ -6019,7 +6026,7 @@ impl Interp {
         &mut self,
         resolved: Resolved,
         name: &[u8],
-        arguments: Vec<Option<Argument>>,
+        arguments: Vec<Option<ObjRef>>,
         call_type: CallType,
         entry: CallEntry,
     ) -> Result<Ended, Failure> {
@@ -6410,40 +6417,29 @@ impl Interp {
         self.invoke_call(code, resolved, name, args, call_type, entry)
     }
 
-    /// Evaluates one call argument, keeping the caller's slot when the
-    /// argument is a variable reference (`>name` or `<name`).
+    /// Builds the object a `>name` or `<name` term answers: the variable
+    /// `inner` names, rather than the value it holds.
     ///
-    /// **Every argument has a value and only some have a slot**, which is
-    /// what `Argument`'s two variants say. A variable reference decays to
-    /// the referenced variable's value everywhere except a `USE ARG >`
-    /// target -- measured, `say >p` prints `p`'s value, and `call sub2 >p`
-    /// into a plain `use arg q` binds that value and leaves the caller's `p`
-    /// alone. So the value is computed here for both variants, by evaluating
-    /// an expression through the ordinary path rather than by reading the
-    /// slot directly, which is what keeps a stem reference rendering the way
-    /// a bare stem read does. **Which** expression is the paragraph below --
-    /// the reference node, not the inner variable; this sentence used to say
-    /// "the inner expression" and contradicted it (review round 1, F6).
+    /// The variable's storage moves into a cell first
+    /// ([`rexx_core::RootSet::promote`]), because the reference is an
+    /// ordinary value and may outlive the activation -- measured on the
+    /// oracle, a `procedure` returning `>v` answers a reference whose
+    /// `~value` still reads `42` and whose `~value =` still writes after the
+    /// return. An `EXPOSE`d name has no slot to promote and needs none: its
+    /// value is in the receiving object's pool, which the reference keeps
+    /// alive itself.
     ///
     /// The inner node is always a `Variable` or a `Stem` (`rexx-parse`'s own
     /// doc on `ExprKind::VariableReference`; anything else is error 20.930 at
-    /// parse time), so it names exactly one slot. The `other` arm is the same
-    /// belt-and-braces shape the `Assignment` arm's own comment describes: a
-    /// guarantee the grammar makes is not one the type system enforces, and
-    /// this crate fails loudly rather than trusting it blindly.
-    ///
-    /// **The value is computed by evaluating the reference node itself, not
-    /// its inner variable** (Task 9). Both spellings reach the identical
-    /// value either way -- `eval_node`'s own `VariableReference` arm is
-    /// `self.eval_node(code, inner)` -- but only the outer call reaches
-    /// `trace_intermediate`'s own `VariableReference` arm, and the two
-    /// differ by a measured line: the oracle traces `>O>   ">" => "PQ"`
-    /// here, where evaluating the inner node through `eval` traced
-    /// `>V>   PQ => "val"` instead.
-    fn eval_argument(&mut self, code: &Code<'_>, expr: &Expr) -> Result<Argument, Failure> {
-        let ExprKind::VariableReference(inner) = &expr.kind else {
-            return Ok(Argument::Value(self.eval(code, expr)?));
-        };
+    /// parse time). The `other` arm is the same belt-and-braces shape the
+    /// `Assignment` arm's own comment describes: a guarantee the grammar
+    /// makes is not one the type system enforces, and this crate fails loudly
+    /// rather than trusting it blindly.
+    pub(crate) fn variable_reference(
+        &mut self,
+        code: &Code<'_>,
+        inner: &Expr,
+    ) -> Result<ObjRef, Failure> {
         let id = match &inner.kind {
             ExprKind::Variable(id) | ExprKind::Stem(id) => *id,
             other => return Err(Loud::expression(other).into()),
@@ -6453,41 +6449,31 @@ impl Interp {
             None => self.slot_of(code.symbols.name(id).as_bytes()),
         };
         let frame = self.activation().frame;
-        // Resolved here, in the caller, where the name's own home is: an
-        // alias the caller itself holds is still addressable, which is what
-        // makes `>p` work when the caller's own `p` came from *its* caller,
-        // and an `EXPOSE` binding is still on this activation, which is what
-        // makes it work on an object variable. Chasing the slot for an
-        // exposed name would hand the callee the empty slot the exposure left
-        // behind.
-        let target = match self.exposure(frame, slot) {
-            Some(var) => VarHome::Instance(Box::new(var.clone())),
-            None => VarHome::Slot(self.roots.slot_ref(frame, slot)),
+        // Resolved here, where the name's own home is: an alias this
+        // activation holds is still addressable, which is what makes `>p`
+        // work when its `p` came from *its* caller, and an `EXPOSE` binding
+        // is on this activation, which is what makes it work on an object
+        // variable. Chasing the slot for an exposed name would name the
+        // empty slot the exposure left behind.
+        let home = match self.exposure(frame, slot) {
+            Some(var) => VarRefHome::Instance {
+                owner: var.owner,
+                scope: var.scope,
+            },
+            None => VarRefHome::Cell(self.roots.promote(frame, slot)),
         };
-        let value = self.eval(code, expr)?;
-        // The referenced variable's own spelling travels with the reference:
-        // it is the reference's *kind* (`P` against `P.`) for the
-        // 88.929/88.930 check, and it is what those two errors substitute.
-        // Read from the caller's own symbol table, here, where it is the
-        // right one.
         let name = code.symbols.name(id).as_bytes().into();
-        Ok(Argument::Reference {
-            target,
-            value,
-            name,
-        })
+        Ok(self.alloc_with(
+            BehaviourId::OBJECT,
+            Body::VarRef(Box::new(rexx_core::VarRef { name, home })),
+        ))
     }
 
     /// One call argument, evaluated, rooted and traced -- the step both call
     /// paths share.
     ///
-    /// The builtin path keeps only [`Argument::value`] and drops the rest at
-    /// once; the label and routine path keeps the whole thing, because a
-    /// `USE ARG >` target needs the slot a `Reference` carries. Sharing the
-    /// step is what keeps `>A>` and the `>O>` line a `>p` argument traces
-    /// identical on both.
-    /// Whether `expr` is an argument this can evaluate without
-    /// [`Interp::eval_argument`]'s wrapper -- see [`eval_leaf_argument`].
+    /// Whether `expr` is an argument this can evaluate without `eval`'s own
+    /// wrapper -- see [`eval_leaf_argument`].
     ///
     /// [`eval_leaf_argument`]: Interp::eval_leaf_argument
     #[inline(always)]
@@ -6516,10 +6502,8 @@ impl Interp {
     /// the hook is skipped, and only once its gate has already answered.
     ///
     /// **A reference argument is not a leaf.** `call sub >v` parses to its
-    /// own expression kind, and the `Argument::Reference` that `USE ARG >`
-    /// writes back through is built by `eval_argument`, which this bypasses
-    /// -- so the three kinds admitted above are exactly the ones that carry
-    /// no reference. Measured against the oracle, `call sub >vv` with a
+    /// own expression kind, which this does not admit, so its `>O>` line is
+    /// still traced. Measured against the oracle, `call sub >vv` with a
     /// `use arg > a` that assigns still writes `vv` in the caller.
     ///
     /// The value is rooted here for the same reason
@@ -6539,10 +6523,10 @@ impl Interp {
         &mut self,
         code: &Code<'_>,
         expr: &Expr,
-    ) -> Result<Argument, Failure> {
-        let argument = self.eval_argument(code, expr)?;
-        self.roots.push_temp(argument.value());
-        if let Some(rendered) = self.intermediate_text(argument.value()) {
+    ) -> Result<ObjRef, Failure> {
+        let argument = self.eval(code, expr)?;
+        self.roots.push_temp(argument);
+        if let Some(rendered) = self.intermediate_text(argument) {
             self.trace_argument(self.clause_state.current_value_indent, &rendered);
         }
         Ok(argument)
@@ -6753,19 +6737,13 @@ impl Interp {
             // reaches `Ended::Returned(Some(_))` with a value to settle.
             Resolved::Builtin(target) => builtin::run(self, name, target, &values[mark..])
                 .map(|value| Ended::Returned(Some(value))),
-            _ => {
-                let arguments = values[mark..]
-                    .iter()
-                    .map(|value| value.map(Argument::Value))
-                    .collect();
-                self.invoke_call_over(
-                    resolved,
-                    name,
-                    arguments,
-                    CallType::Subroutine,
-                    CallEntry::Written,
-                )
-            }
+            _ => self.invoke_call_over(
+                resolved,
+                name,
+                values[mark..].to_vec(),
+                CallType::Subroutine,
+                CallEntry::Written,
+            ),
         };
         values.truncate(mark);
         self.value_buffer = values;

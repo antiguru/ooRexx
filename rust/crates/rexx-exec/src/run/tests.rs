@@ -5446,14 +5446,111 @@ fn use_arg_alias_treats_an_empty_stem_as_uninitialised() {
     assert_eq!(raised.additional, vec![b"ZZ".to_vec()]);
 }
 
-/// A variable reference in an ordinary value position is worth the
-/// referenced variable's value. Measured: `say >p` prints `p`'s value.
+/// A variable reference renders as the referenced variable's value.
+/// Measured: `say >p` prints `p`'s value.
+///
+/// **The rendering, not the object.** `(>p)~class~id` is `VariableReference`
+/// on the oracle, and this pair is what separates the two: a term that
+/// answered the value would satisfy this test and fail the next.
 #[test]
-fn a_variable_reference_decays_to_the_referenced_value() {
+fn a_variable_reference_renders_as_the_referenced_value() {
     let mut interp = Interp::new();
     assert_eq!(
         say_output(&mut interp, b"p = 'orig'\nsay >p"),
         b"orig\n".to_vec()
+    );
+}
+
+/// `>name` answers the variable, not its value: measured, oracle rc 0,
+/// `p = 'orig'; o = >p; say o~class~id o~name o~value` is
+/// `VariableReference P orig`.
+#[test]
+fn a_variable_reference_answers_the_variable() {
+    let mut interp = Interp::new();
+    assert_eq!(
+        say_output(
+            &mut interp,
+            b"p = 'orig'\no = >p\nsay o~class~id o~name o~value",
+        ),
+        b"VariableReference P orig\n".to_vec()
+    );
+}
+
+/// The variable is read at the ask and written through, so a reference and
+/// the variable it names are one piece of storage rather than two.
+#[test]
+fn a_variable_reference_reads_and_writes_the_variable() {
+    let mut interp = Interp::new();
+    assert_eq!(
+        say_output(
+            &mut interp,
+            b"p = 'first'\no = >p\np = 'second'\nsay o~value\n\
+              o~value = 'third'\nsay p",
+        ),
+        b"second\nthird\n".to_vec()
+    );
+}
+
+/// Two references to one variable share its storage, which is what
+/// `RootSet::promote` being idempotent buys: a second `>p` answers a second
+/// object over the same cell.
+#[test]
+fn two_references_to_one_variable_share_it() {
+    let mut interp = Interp::new();
+    assert_eq!(
+        say_output(
+            &mut interp,
+            b"p = 'orig'\nfirst = >p\nsecond = >p\n\
+              first~value = 'through the first'\nsay second~value p",
+        ),
+        b"through the first through the first\n".to_vec()
+    );
+}
+
+/// A reference outlives the activation whose local it names -- measured,
+/// oracle rc 0: a `procedure` returning `>v` answers a reference whose
+/// `~value` reads `42` and whose `~value =` still writes after the return.
+///
+/// **The frame is gone by the time this reads**, so a reference holding a
+/// slot position would name whatever the next activation put there.
+#[test]
+fn a_variable_reference_outlives_its_frame() {
+    let mut interp = Interp::new();
+    assert_eq!(
+        say_output(
+            &mut interp,
+            b"o = ref()\nsay o~name o~value\no~value = 99\nsay o~value\nexit\n\
+              ref: procedure\nv = 42\nreturn >v\n",
+        ),
+        b"V 42\n99\n".to_vec()
+    );
+}
+
+/// A message the class does not define reaches `UNKNOWN`, which sends it to
+/// the referenced value -- `VariableReference::unknownRexx`. Measured, oracle
+/// rc 0: `p = 'abc'; say (>p)~length` is `3`.
+#[test]
+fn a_variable_reference_forwards_an_unknown_message() {
+    let mut interp = Interp::new();
+    assert_eq!(
+        say_output(&mut interp, b"p = 'abc'\nsay (>p)~length"),
+        b"3\n".to_vec()
+    );
+}
+
+/// `USE ARG >` takes the argument's **value**, so a reference that reached
+/// the call through a variable binds exactly as one written `>` at the call
+/// site does. Measured, oracle rc 0.
+#[test]
+fn use_arg_alias_takes_any_variable_reference_value() {
+    let mut interp = Interp::new();
+    assert_eq!(
+        say_output(
+            &mut interp,
+            b"p = 'orig'\no = >p\ncall sub o\nsay p\nexit\n\
+              sub: procedure\nuse arg >q\nq = 'written'\nreturn\n",
+        ),
+        b"written\n".to_vec()
     );
 }
 

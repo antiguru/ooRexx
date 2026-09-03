@@ -27,19 +27,39 @@ pub struct SlotFrame {
     depth: usize,
 }
 
-/// One slot's absolute position in the arena, with any alias already
-/// followed: what `PROCEDURE EXPOSE` and `USE ARG >name` bind a callee's
-/// slot *to*.
+/// One variable's storage, with any alias already followed: what
+/// `PROCEDURE EXPOSE` and `USE ARG >name` bind a callee's slot *to*, and
+/// what a `>name` reference names.
 ///
 /// A newtype rather than a bare `usize` because the two are not
 /// interchangeable at a call site: every other index in this file is
 /// relative to a `SlotFrame`, and an absolute one passed where a relative
 /// one belongs addresses a real slot in some other activation's range
-/// rather than failing. Only [`RootSet::slot_ref`] produces one, and it
-/// chases before returning, so a `SlotRef` is by construction a final
-/// destination and never itself an alias.
+/// rather than failing. Only [`RootSet::slot_ref`] and [`RootSet::promote`]
+/// produce one, and both chase before returning, so a `SlotRef` is by
+/// construction a final destination and never itself an alias.
+///
+/// **It addresses either the frame arena or a cell**, and a cell is the
+/// storage a variable is moved into when a `>name` reference is taken to it:
+/// cells are never truncated, so such a reference stays valid after the
+/// frame that declared the variable is gone.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct SlotRef(usize);
+
+/// Set on the tagged `usize` a [`SlotRef`] and an `aliases` entry carry when
+/// it names a cell rather than a position in `slots`.
+const CELL_TAG: usize = 1 << (usize::BITS - 1);
+
+/// One frame's alias entries, saved across a park by
+/// [`RootSet::take_frame_aliases`] and put back by
+/// [`RootSet::put_frame_aliases`].
+pub struct FrameAliases(Vec<Option<usize>>);
+
+impl SlotRef {
+    fn is_cell(self) -> bool {
+        self.0 & CELL_TAG != 0
+    }
+}
 
 /// Everything the collector starts from.
 ///
@@ -82,9 +102,11 @@ pub struct RootSet {
     /// `a`. A single target frame per callee cannot represent that pair.
     ///
     /// **Aliases are recorded per slot and already chased** ([`SlotRef`]),
-    /// so resolution here follows exactly one link and never loops. The
-    /// chase happens once, at bind time, where the intermediate frame is
-    /// still addressable.
+    /// so resolution here follows exactly one link **except across a
+    /// [`RootSet::promote`]**, which redirects an already-aliased position to
+    /// a cell after other slots have been bound to it; `resolve` therefore
+    /// chases to a fixed point. Every link but the last addresses a lower
+    /// position, so the walk terminates.
     aliases: Vec<Option<usize>>,
     /// How many entries of `aliases` are `Some`.
     ///
@@ -98,6 +120,19 @@ pub struct RootSet {
     /// `bench-programs/varlookup.rex` -3.83%, `compound.rex` -2.90%,
     /// `emptyloop.rex` -2.24%, a fixed-work rexxcps -0.98%.
     alias_count: usize,
+    /// Storage for variables a `>name` reference has been taken to, outside
+    /// every frame and never truncated.
+    ///
+    /// A reference is an ordinary value and may outlive the activation whose
+    /// variable it names -- measured on the oracle, a `procedure` returning
+    /// `>v` answers a reference whose `~value` still reads and writes after
+    /// the return. So the storage moves here at the moment the reference is
+    /// taken ([`RootSet::promote`]) and the frame slot becomes an alias for
+    /// it, which keeps the variable and every reference to it on one cell.
+    ///
+    /// **Nothing frees a cell**, so a program taking a reference to a fresh
+    /// local on each of many calls grows this vector without bound.
+    cells: Vec<Option<ObjRef>>,
     /// The starting offset of every currently pushed frame, in push order.
     /// Its length is also every live frame's `depth` plus one, which is how
     /// `grow_slots` and `pop_slots` recognise the top frame.
@@ -134,6 +169,7 @@ impl RootSet {
             slots: Vec::new(),
             aliases: Vec::new(),
             alias_count: 0,
+            cells: Vec::new(),
             frame_starts: Vec::new(),
             parked: Vec::new(),
             parked_free: Vec::new(),
@@ -343,10 +379,19 @@ impl RootSet {
     /// alias's value out and writing it back as a plain slot would silently
     /// break the sharing, so a caller that copies has to know there is none.
     ///
+    /// **A redirect to a cell does not count**, because [`RootSet::park`]'s
+    /// caller saves and restores those with
+    /// [`RootSet::take_frame_aliases`]; a cell outlives every frame, so
+    /// putting the redirect back rebuilds the sharing a copy would break.
+    ///
     /// Not a capacity or a budget, like [`RootSet::live_frames`] beside it.
     pub fn frame_aliases(&self, frame: SlotFrame) -> usize {
         let end = frame.start + self.frame_len(frame);
-        self.aliases[frame.start..end].iter().flatten().count()
+        self.aliases[frame.start..end]
+            .iter()
+            .flatten()
+            .filter(|target| !SlotRef(**target).is_cell())
+            .count()
     }
 
     /// Closes `frame`, releasing its slots. Frames nest like any stack, so
@@ -386,9 +431,68 @@ impl RootSet {
     /// One step suffices for all depths precisely because every alias this
     /// type records was produced from a `SlotRef` and so was chased when it
     /// was made; there is no chain here to walk, by induction on the order
-    /// the frames were pushed.
+    /// the frames were pushed. [`RootSet::promote`] is the one operation that
+    /// redirects a position other slots may already name, which is why
+    /// `resolve` walks rather than steps.
     pub fn slot_ref(&self, frame: SlotFrame, index: usize) -> SlotRef {
         SlotRef(self.resolve(frame, index))
+    }
+
+    /// Moves slot `index` of `frame` into a cell and answers that cell, so
+    /// that a reference to the variable survives the frame.
+    ///
+    /// Idempotent: a variable already living in a cell answers the same one,
+    /// which is what keeps two references to one variable sharing storage.
+    /// The redirect is written at the *resolved* position, so an exposed name
+    /// promotes the storage it was exposed from rather than its own slot.
+    pub fn promote(&mut self, frame: SlotFrame, index: usize) -> SlotRef {
+        let position = self.resolve(frame, index);
+        if SlotRef(position).is_cell() {
+            return SlotRef(position);
+        }
+        self.cells.push(self.slots[position]);
+        let cell = (self.cells.len() - 1) | CELL_TAG;
+        self.slots[position] = None;
+        if self.aliases[position].is_none() {
+            self.alias_count += 1;
+        }
+        self.aliases[position] = Some(cell);
+        SlotRef(cell)
+    }
+
+    /// Copies out `frame`'s alias entries, for a caller that is about to
+    /// release the frame and re-push it later.
+    ///
+    /// A [`RootSet::promote`] redirect is the reason this exists: it is the
+    /// one binding whose target survives `pop_slots`, so putting it back is
+    /// what keeps the variable and the references to it on one cell across a
+    /// park.
+    pub fn take_frame_aliases(&self, frame: SlotFrame) -> FrameAliases {
+        let end = frame.start + self.frame_len(frame);
+        FrameAliases(self.aliases[frame.start..end].to_vec())
+    }
+
+    /// Puts back what [`RootSet::take_frame_aliases`] copied out, into a
+    /// frame pushed at the same length.
+    pub fn put_frame_aliases(&mut self, frame: SlotFrame, saved: &FrameAliases) {
+        for (index, entry) in saved.0.iter().enumerate() {
+            let Some(target) = *entry else { continue };
+            let at = &mut self.aliases[frame.start + index];
+            if at.is_none() {
+                self.alias_count += 1;
+            }
+            *at = Some(target);
+        }
+    }
+
+    /// Reads the storage `slot` names, `None` for an unassigned variable.
+    pub fn slot_value(&self, slot: SlotRef) -> Option<ObjRef> {
+        self.at(slot.0)
+    }
+
+    /// Writes the storage `slot` names.
+    pub fn set_slot_value(&mut self, slot: SlotRef, value: ObjRef) {
+        self.write(slot.0, Some(value));
     }
 
     /// Makes slot `index` of `frame` an alias for `target`: every later
@@ -443,8 +547,36 @@ impl RootSet {
             );
             return position;
         }
-        // `unwrap_or` and not a loop: see `slot_ref`.
-        self.aliases[position].unwrap_or(position)
+        self.resolve_aliased(position)
+    }
+
+    /// [`RootSet::resolve`]'s slow half, for a caller that has already found
+    /// an alias may be in force.
+    ///
+    /// **Split out so that the three frame accessors can address `slots`
+    /// directly when nothing is aliased.** Their storage test -- frame arena
+    /// or cell -- is on the answer this returns, and a program with neither
+    /// `PROCEDURE EXPOSE` nor `>name` must not pay it: see `alias_count` for
+    /// what one avoided load on this path is worth.
+    ///
+    /// A loop and not `unwrap_or`, for the one case [`SlotRef`]'s induction
+    /// does not cover: [`RootSet::promote`] redirects a position other slots
+    /// may already be bound to. Every slot-to-slot link addresses a lower
+    /// position and a cell is terminal, so this walk ends.
+    #[inline(always)]
+    fn resolve_aliased(&self, position: usize) -> usize {
+        let mut at = position;
+        while at & CELL_TAG == 0 {
+            let Some(target) = self.aliases[at] else {
+                break;
+            };
+            debug_assert!(
+                target & CELL_TAG != 0 || target < at,
+                "alias at {at} points at {target}, which does not descend"
+            );
+            at = target;
+        }
+        at
     }
 
     /// Reads slot `index` within `frame`: `None` for an unassigned or
@@ -466,13 +598,30 @@ impl RootSet {
     /// -2.65% on `varlookup.rex`.
     #[inline(always)]
     pub fn frame_slot(&self, frame: SlotFrame, index: usize) -> Option<ObjRef> {
-        self.slots[self.resolve(frame, index)]
+        let position = frame.start + index;
+        if self.alias_count == 0 {
+            debug_assert!(
+                self.aliases[position].is_none(),
+                "slot {position} redirects while the alias count says none does"
+            );
+            return self.slots[position];
+        }
+        self.at(self.resolve_aliased(position))
     }
 
     #[inline(always)]
     pub fn set_frame_slot(&mut self, frame: SlotFrame, index: usize, value: ObjRef) {
-        let position = self.resolve(frame, index);
-        self.slots[position] = Some(value);
+        let position = frame.start + index;
+        if self.alias_count == 0 {
+            debug_assert!(
+                self.aliases[position].is_none(),
+                "slot {position} redirects while the alias count says none does"
+            );
+            self.slots[position] = Some(value);
+            return;
+        }
+        let position = self.resolve_aliased(position);
+        self.write(position, Some(value));
     }
 
     /// Returns slot `index` within `frame` to the unset state, which is what
@@ -515,7 +664,30 @@ impl RootSet {
     /// nothing.
     pub fn clear_frame_slot(&mut self, frame: SlotFrame, index: usize) {
         let position = self.resolve(frame, index);
-        self.slots[position] = None;
+        self.write(position, None);
+    }
+
+    /// Reads the storage at a tagged position: the frame arena, or a cell.
+    ///
+    /// Reached only where an alias may be in force -- see
+    /// [`RootSet::resolve_aliased`] for why the accessors above do not.
+    #[inline(always)]
+    fn at(&self, position: usize) -> Option<ObjRef> {
+        if position & CELL_TAG == 0 {
+            self.slots[position]
+        } else {
+            self.cells[position & !CELL_TAG]
+        }
+    }
+
+    /// [`RootSet::at`]'s write, in the same position.
+    #[inline(always)]
+    fn write(&mut self, position: usize, value: Option<ObjRef>) {
+        if position & CELL_TAG == 0 {
+            self.slots[position] = value;
+        } else {
+            self.cells[position & !CELL_TAG] = value;
+        }
     }
 
     /// Grows `frame` by one slot for a name its plan never saw -- `DROP (v)`
@@ -597,6 +769,7 @@ impl RootSet {
             .map(|(_, v)| *v)
             .chain(self.temps.iter().copied())
             .chain(self.slots.iter().filter_map(|s| *s))
+            .chain(self.cells.iter().filter_map(|c| *c))
             .chain(self.parked.iter().flatten().flatten().copied())
     }
 }

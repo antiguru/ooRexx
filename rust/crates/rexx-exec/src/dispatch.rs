@@ -567,6 +567,38 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("Supplier", "INIT", Arity::Fixed(2), native_supplier_init),
     // The same donation at `Table` (`memory/Setup.cpp:861`).
     ("Table", "INIT", Arity::Fixed(1), native_capacity_init),
+    // `VariableReference`'s own rows (`memory/Setup.cpp:1298`-`:1302`), the
+    // whole of what its class defines beyond `Object`'s.
+    (
+        "VariableReference",
+        "NAME",
+        Arity::Fixed(0),
+        native_reference_name,
+    ),
+    (
+        "VariableReference",
+        "VALUE",
+        Arity::Fixed(0),
+        native_reference_value,
+    ),
+    (
+        "VariableReference",
+        "VALUE=",
+        Arity::Fixed(1),
+        native_reference_value_set,
+    ),
+    (
+        "VariableReference",
+        "UNKNOWN",
+        Arity::Fixed(2),
+        native_reference_unknown,
+    ),
+    (
+        "VariableReference",
+        "REQUEST",
+        Arity::Fixed(1),
+        native_reference_request,
+    ),
 ];
 
 /// The primitive methods bound to a class's **class** dictionary rather than
@@ -763,6 +795,8 @@ pub(crate) struct ObjectModel {
     rexx_info: ObjRef,
     /// The class `~start` and `~startWith` answer an instance of.
     message: ObjRef,
+    /// The class a `>name` term answers an instance of.
+    variable_reference: ObjRef,
 }
 
 impl ObjectModel {
@@ -875,6 +909,9 @@ impl ObjectModel {
         let message = classes
             .lookup("Message")
             .expect("Message is a native class");
+        let variable_reference = classes
+            .lookup("VariableReference")
+            .expect("VariableReference is a native class");
         ObjectModel {
             classes,
             natives,
@@ -890,6 +927,7 @@ impl ObjectModel {
             context,
             rexx_info,
             message,
+            variable_reference,
         }
     }
 }
@@ -1008,6 +1046,13 @@ enum Primitive {
     /// and a name it holds with no [`NativeMethod`] behind it is this crate's
     /// own gap.
     Message,
+    /// A `Body::VarRef` -- the object a `>name` term answers. Measured,
+    /// `vr = 5; o = >vr; say o~class~id` is `VariableReference`.
+    ///
+    /// **Its behaviour hides `=`, `==`, `\\=`, `\\==`, `<>` and `><`**
+    /// (`memory/Setup.cpp:1307`-`:1312`), so those names miss and reach
+    /// `UNKNOWN`, which forwards them to the referenced value.
+    VariableReference,
     /// The receiver **is** a class object, so its messages resolve against
     /// that class's own class behaviour rather than against any class's
     /// instance behaviour. Measured, `::class K` plus `::method m class`:
@@ -1459,6 +1504,10 @@ impl Interp {
                         behaviour: *behaviour,
                     }),
                     Body::WeakRef(_) => Err("a weak reference"),
+                    // `>name`'s own object. Its behaviour is `Setup.cpp`'s
+                    // whole set, hidden operators included, so a name it
+                    // does not hold reaches `UNKNOWN` on both sides.
+                    Body::VarRef(_) => Ok(Primitive::VariableReference),
                     // The package object `~package` answers. `.Package`'s
                     // instance behaviour here is `Setup.cpp`'s whole set, so a
                     // name it does not hold is a name the running oracle does
@@ -1576,6 +1625,7 @@ impl Interp {
             Primitive::Context => model.context,
             Primitive::RexxInfo => model.rexx_info,
             Primitive::Message => model.message,
+            Primitive::VariableReference => model.variable_reference,
             Primitive::Class(class) => return Ok(Behaviour::ClassSide(class)),
             Primitive::Instance { class, behaviour } => {
                 return Ok(Behaviour::Instance {
@@ -2449,10 +2499,7 @@ impl Interp {
             &mut self.call_context,
             crate::CallContext {
                 name: name.to_vec(),
-                arguments: args
-                    .iter()
-                    .map(|arg| arg.map(crate::Argument::Value))
-                    .collect(),
+                arguments: args.to_vec(),
                 receiver: Some(receiver),
             },
         );
@@ -2589,18 +2636,12 @@ impl Interp {
         let slots: Vec<Option<ObjRef>> = (0..len)
             .map(|index| self.roots.frame_slot(frame, index))
             .collect();
-        // A `VarHome::Slot` in a parked convention would name a position in a
-        // frame that is about to be released, and would address some later
-        // activation's storage on resume. `Interp::enter_method_body` builds
-        // every argument as `Argument::Value`, so none can be here.
-        debug_assert!(
-            context
-                .arguments
-                .iter()
-                .flatten()
-                .all(|argument| matches!(argument, crate::Argument::Value(_))),
-            "a parked method's arguments name a caller's storage"
-        );
+        // The one redirect the assertion above does not count, saved rather
+        // than lost: a `>name` taken on a method's own local moves that
+        // variable into a cell, and a copy that came back as plain storage
+        // would leave the reference reading the cell and the variable
+        // reading the copy.
+        let aliases = self.roots.take_frame_aliases(frame);
         let mut anchor = Vec::new();
         activation.object_roots(&mut anchor);
         context.object_roots(&mut anchor);
@@ -2612,6 +2653,7 @@ impl Interp {
             activation,
             context,
             slots,
+            aliases,
             parked,
         });
     }
@@ -2883,9 +2925,13 @@ impl Interp {
             mut activation,
             context,
             slots,
+            aliases,
             parked,
         } = deferred;
         let frame = self.roots.push_slots(slots.len());
+        // Before the values, so that a promoted variable's write lands in
+        // its cell and not in the slot the redirect stands in front of.
+        self.roots.put_frame_aliases(frame, &aliases);
         for (index, value) in slots.iter().enumerate() {
             if let Some(value) = value {
                 self.roots.set_frame_slot(frame, index, *value);
@@ -3235,7 +3281,7 @@ impl Interp {
         values: &mut Vec<Option<ObjRef>>,
     ) -> Result<(), Failure> {
         if let Some(expr) = assigned {
-            values.push(Some(self.eval_traced_argument(code, expr)?.value()));
+            values.push(Some(self.eval_traced_argument(code, expr)?));
         }
         for arg in args {
             match arg {
@@ -3245,7 +3291,7 @@ impl Interp {
                     self.trace_argument(self.clause_state.current_value_indent, b"");
                     values.push(None);
                 }
-                Some(expr) => values.push(Some(self.eval_traced_argument(code, expr)?.value())),
+                Some(expr) => values.push(Some(self.eval_traced_argument(code, expr)?)),
             }
         }
         Ok(())
@@ -3660,6 +3706,20 @@ impl Interp {
                     // the items joined by a newline -- **not**
                     // `stringValue()`, which is `an Array`.
                     Body::Array { .. } => None,
+                    // **The referent's `stringValue()`, not its
+                    // conversion.** `requestString` looks `MAKESTRING` up in
+                    // the receiver's own behaviour rather than sending it,
+                    // and a reference's behaviour holds no such name, so
+                    // limb 4 answers `VariableReference::stringValue`
+                    // (`classes/VariableReference.cpp:249`), which is the
+                    // referent's. Measured, oracle rc 0: `say 'p' >zz` over a
+                    // two-item array is `p an Array` where `say 'p' zz` joins
+                    // the items. `~request('STRING')` is a different route
+                    // and does forward -- `native_reference_request`.
+                    Body::VarRef(_) => {
+                        let text = crate::value::string_value_of_reference(self, value);
+                        return StringConversion::Bytes(text);
+                    }
                     _ => return self.make_string_or_none(value),
                 },
             },
@@ -4062,6 +4122,7 @@ fn native_class(
         Primitive::Context => model.context,
         Primitive::RexxInfo => model.rexx_info,
         Primitive::Message => model.message,
+        Primitive::VariableReference => model.variable_reference,
         Primitive::Class(class) => model.classes.class_of(class),
         Primitive::Instance { class, .. } => class,
     }))
@@ -5908,6 +5969,150 @@ fn native_hash_unknown(
     Ok(None)
 }
 
+/// `VariableReference~name`: the referenced variable's own spelling --
+/// `VariableReference::getName` (`classes/VariableReference.cpp:150`).
+///
+/// Measured, oracle rc 0: `vr = 5; say (>vr)~name` is `VR`, upper case
+/// whatever the source spelled, and `s. = 0; say (>s.)~name` is `S.`.
+fn native_reference_name(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(reference) = interp.as_variable_reference(receiver) else {
+        return Err(Loud::receiver_class("a value that is not a variable reference").into());
+    };
+    let name = reference.name.to_vec();
+    Ok(Some(interp.text_built(name)))
+}
+
+/// `VariableReference~value`: what the referenced variable holds --
+/// `VariableReference::getValue` (`classes/VariableReference.cpp:161`), whose
+/// `getResolvedValue` answers the variable's derived name when it holds
+/// nothing.
+///
+/// Measured, oracle rc 0: with `vr` unassigned, `(>vr)~value` is `VR`; and
+/// after `vr = 5`, `o = >vr`, `vr = 'changed'`, `o~value` is `changed` --
+/// the read is at the ask and not at the reference.
+fn native_reference_value(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(reference) = interp.as_variable_reference(receiver) else {
+        return Err(Loud::receiver_class("a value that is not a variable reference").into());
+    };
+    match interp.referenced_value(reference) {
+        Some(value) => Ok(Some(value)),
+        None => {
+            let name = reference.name.to_vec();
+            Ok(Some(interp.text_built(name)))
+        }
+    }
+}
+
+/// `VariableReference~value=`: writes the referenced variable --
+/// `VariableReference::setValueRexx` (`classes/VariableReference.cpp:190`),
+/// whose `requiredArgument` is the 93.903 an omitted value raises.
+///
+/// Measured, oracle rc 0: `vr = 5; o = >vr; o~value = 7; say vr` is `7`, and
+/// the same through a reference returned by a `procedure` after its frame is
+/// gone. Its `requiredArgument(v, "VALUE")` names the argument rather than
+/// numbering it: measured, oracle rc 168, `o~"VALUE="()` reports
+/// `88.901 Missing argument; argument VALUE is required.`
+fn native_reference_value_set(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(Some(value)) = args.first().copied() else {
+        return Err(Raised::missing_named_argument("VALUE").into());
+    };
+    let Some(reference) = interp.as_variable_reference(receiver) else {
+        return Err(Loud::receiver_class("a value that is not a variable reference").into());
+    };
+    let home = reference.home.clone();
+    let name = reference.name.clone();
+    // `RexxVariable::setValue` "sorts out the stem vs. simple assignment
+    // bits" (`classes/VariableReference.cpp:184`), so a stem reference
+    // assigns what the bare `stem. = value` assigns rather than storing the
+    // value itself -- a plain value in a stem-named slot is a state nothing
+    // else in this crate can produce.
+    let value = if crate::run::shape_of(&name) == crate::run::NameShape::Stem {
+        interp.stem_assignment_value(&name, value)
+    } else {
+        value
+    };
+    match home {
+        rexx_core::VarRefHome::Cell(cell) => interp.roots.set_slot_value(cell, value),
+        rexx_core::VarRefHome::Instance { owner, scope } => {
+            interp.set_pool_variable(owner, scope, &name, value);
+        }
+    }
+    Ok(None)
+}
+
+/// `VariableReference~unknown(name, arguments)`: forwards to the referenced
+/// value -- `VariableReference::unknownRexx`
+/// (`classes/VariableReference.cpp:205`), which is what makes every message
+/// the class does not define read as one to the variable's value.
+///
+/// The hidden comparison operators reach this too
+/// (`memory/Setup.cpp:1307`-`:1312`). Measured, oracle rc 0: `vr = 5;
+/// o = >vr; say o~length` is `1` and `say o == 5` is `1`.
+fn native_reference_unknown(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(Some(message)) = args.first().copied() else {
+        return Err(Raised::missing_method_argument(1).into());
+    };
+    let message = required_string_argument(interp, message, 1)?;
+    let name = interp.to_text(message).to_vec();
+    let Some(Some(arguments)) = args.get(1).copied() else {
+        return Err(Raised::missing_method_argument(2).into());
+    };
+    let Some(forwarded) = interp.array_slots_of(arguments) else {
+        return Err(unconverted_array_argument(interp, arguments));
+    };
+    let referenced = referenced_receiver(interp, receiver)?;
+    let caller = interp.caller();
+    interp.send_message(referenced, &name, None, &forwarded, caller)
+}
+
+/// `VariableReference~request(class)`: forwards to the referenced value --
+/// `VariableReference::request` (`classes/VariableReference.cpp:359`), which
+/// handles none of them itself.
+///
+/// Measured, oracle rc 0: `vr = 5; say (>vr)~request('STRING')~class~id` is
+/// `String`.
+fn native_reference_request(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let referenced = referenced_receiver(interp, receiver)?;
+    let caller = interp.caller();
+    interp.send_message(referenced, b"REQUEST", None, args, caller)
+}
+
+/// The value a reference receiver names, materialised as an object so that a
+/// message can be sent to it.
+///
+/// `getResolvedValue`'s own answer for an unset variable is its derived name,
+/// which for a simple or stem symbol is the reference's own spelling.
+fn referenced_receiver(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure> {
+    interp
+        .referenced_object(receiver)
+        .ok_or_else(|| Loud::receiver_class("a value that is not a variable reference").into())
+}
+
 /// The refusal for an `~UNKNOWN` argument list that is not already an `Array`.
 ///
 /// `arrayArgument` converts with `requestArray`, which is a `MAKEARRAY` send,
@@ -6090,6 +6295,15 @@ fn native_object_name(
                 }
             }
         },
+        // Derived from the class id rather than read through
+        // `string_value_text`, which for this receiver answers the
+        // *referenced* value: `~objectName` is the reference's own and is
+        // one of the names its `UNKNOWN` never sees. Measured, oracle rc 0:
+        // `vr = 5; o = >vr; say o~objectName` is `a VariableReference` where
+        // `say o~string` is `5`.
+        Primitive::VariableReference => {
+            crate::environment::default_object_name("VariableReference").into_bytes()
+        }
         Primitive::Object
         | Primitive::Array
         | Primitive::Class(_)
@@ -6165,7 +6379,11 @@ fn native_object_name_set(
                 }
             }
         }
-        Primitive::String | Primitive::SmallInt | Primitive::Object | Primitive::Array => {
+        Primitive::String
+        | Primitive::SmallInt
+        | Primitive::Object
+        | Primitive::Array
+        | Primitive::VariableReference => {
             return Err(Loud::native_method(b"OBJECTNAME=", "Object").into());
         }
     }

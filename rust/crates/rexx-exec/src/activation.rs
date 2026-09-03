@@ -961,6 +961,9 @@ pub(crate) struct DeferredReply {
     /// the first half.
     pub(crate) context: crate::CallContext,
     pub(crate) slots: Vec<Option<ObjRef>>,
+    /// The frame's redirects, which a copy of its values does not carry --
+    /// `Interp::park_reply` says which one survives a pop and why.
+    pub(crate) aliases: rexx_core::FrameAliases,
     pub(crate) parked: rexx_core::Parked,
 }
 

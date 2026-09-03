@@ -2556,11 +2556,9 @@ fn expr_owner(kind: &ExprKind) -> Option<&'static str> {
         // `::ROUTINE` raises the oracle's own 43.1 -- exactly the same shape
         // `InstructionKind::Call`'s own comment above describes for `CALL`,
         // with the external file search behind those three being Phase 7's.
-        // `>name`/`<name` decays to the referenced
-        // variable's value in every ordinary position (measured, `say >p`
-        // prints `p`'s value), and its one load-bearing use, as the argument
-        // half of `USE ARG >name`, is handled at the call site by
-        // `run.rs`'s `eval_argument` rather than here.
+        // `>name`/`<name` answers a `VariableReference`, which `eval.rs`'s
+        // own arm builds and `run.rs`'s `Interp::variable_reference` binds to
+        // the variable.
         //
         // **`ExprKind::Message` is `None` too**, for the reason its
         // `InstructionKind` twin above is: `dispatch.rs` resolves and invokes
@@ -4273,7 +4271,7 @@ struct CallContext {
     /// The arguments in source order, an omitted position (`call sub 1,,3`)
     /// left as `None` rather than closed up. Measured: that call into `use
     /// arg p, q, r` gives `[1] [Q] [3]`, so an omission holds its place.
-    arguments: Vec<Option<Argument>>,
+    arguments: Vec<Option<ObjRef>>,
     /// **The receiver, which is part of the calling convention** (D24): the
     /// object a message send was addressed to, and `None` for a call that has
     /// none.
@@ -4292,130 +4290,22 @@ struct CallContext {
 /// Where a variable lives: a frame slot, or a name in a scope pool on some
 /// object.
 ///
-/// **What a `>name` argument has to carry**, and one of the two arms is not
+/// **What `PROCEDURE EXPOSE` has to carry**, and one of the two arms is not
 /// derivable from the other. A `SlotRef` addresses `RootSet` storage, and an
 /// `EXPOSE`d name has none -- its value is in the receiving object's pool, so
-/// a reference resolved as a slot would bind the callee to an empty slot the
-/// caller never reads. Measured: a class method exposing `v`, `call inner >v`
-/// into `use arg >p`, and `p` assigned in the callee -- the oracle reads the
-/// callee's write back through `v` at rc 0.
+/// a name resolved as a slot would bind the callee to an empty slot the
+/// caller never reads. Measured: a class method exposing `v` and calling
+/// `inner: procedure expose v`, which assigns `v` -- the object variable is
+/// what changes.
 ///
-/// **`Instance` is boxed and `Slot` is not, and the asymmetry is measured on
-/// both sides.** This enum is a field of [`Argument`], one of which is built
-/// per evaluated call argument -- `bench-programs/strings.rex` builds nine per
-/// pass -- so an unboxed [`InstanceVar`], at three words plus a `Box<[u8]>`,
-/// widens every argument any program passes. Inline it took `Argument` from 32
-/// bytes to 56 and the `strings` axis to +1.39%/+1.68% `instructions:u`
-/// against this branch's base; boxed, `Argument` is 40 and the axis is
-/// +0.58%/+0.62%, with `compound` unmoved. The pointer chase is paid where a
-/// method reaches an instance variable, which is the rare case, rather than on
-/// every builtin call, which is the common one.
+/// The same two homes reach a `>name` reference through
+/// [`rexx_core::VarRefHome`], which the object carries instead: a reference is
+/// an ordinary value and may outlive the frame, so its slot arm names a cell
+/// rather than a frame position.
 #[derive(Clone, Debug)]
 enum VarHome {
     Slot(SlotRef),
     Instance(Box<InstanceVar>),
-}
-
-/// One evaluated call argument.
-///
-/// Two variants and not a bare `ObjRef`, because `USE ARG >name` needs
-/// something an ordinary value cannot carry: where in the *caller* the
-/// argument's variable lives, so the callee's own variable can be bound to
-/// it. Measured -- `call sub2 >p` into `use arg >q` makes the callee's `q =
-/// 'aliased'` visible as the caller's `p`, while the same call into a plain
-/// `use arg q` merely copies the value. [`VarHome`] is that "where", and it
-/// is not always a slot.
-///
-/// `Reference` carries a value as well as a home, and that is not
-/// redundancy: a variable reference used as an ordinary argument **decays
-/// to the referenced variable's value**, measured -- `say >p` prints `p`'s
-/// value, and `call sub2 >p` into a plain `use arg q` binds that value.
-/// So every argument has a value and only some have a home.
-///
-/// `Reference` also carries the referenced variable's **name**, which is
-/// there for two distinct jobs and neither is cosmetic. Its *shape* is the
-/// reference's kind, and `USE ARG >name` refuses a kind mismatch -- a simple
-/// reference into a stem target is error 88.929 and the reverse is 88.930,
-/// measured. Its *text* is what those two errors substitute: measured with a
-/// variable whose value differs from its name, `p = 'value-not-name'` passed
-/// as `>p` into `use arg >q.` reports `found "P"`, the caller's name, where
-/// 88.928 in the same position reports the argument's value. The two
-/// families disagree about what they name, so the name has to be carried
-/// rather than reconstructed from the value.
-///
-/// Not `Copy`, only `Clone`, because of that owned name. The one read site
-/// (`exec_use_arg`) clones per target, which is one small allocation per
-/// `USE ARG >` position and nothing at all for an ordinary argument.
-#[derive(Clone)]
-enum Argument {
-    Value(ObjRef),
-    Reference {
-        target: VarHome,
-        value: ObjRef,
-        /// The referenced variable's own spelling, upcased as the scanner
-        /// interned it, including a stem's trailing period (`P`, `P.`).
-        name: Box<[u8]>,
-    },
-}
-
-/// **One of these is built per evaluated call argument, so its width is a
-/// property of every call a program makes rather than of the `>name` form.**
-/// `bench-programs/strings.rex` builds nine per pass. Measured across
-/// [`VarHome::Instance`]'s payload being boxed or not: 40 bytes here against
-/// 56 inline, and the `strings` axis at +0.58%/+0.62% `instructions:u`
-/// against +1.39%/+1.68%. An equality rather than a bound, for the reason
-/// `crate::ir::Op`'s own width assertion is one: a variant that outgrows this
-/// widens every argument there is, and that should be a compile error at the
-/// moment it happens rather than a measurement somebody has to take again.
-const _: () = assert!(size_of::<Argument>() == 40);
-
-impl Argument {
-    /// The argument's value, which every form has. `USE ARG` without `>`
-    /// and `ARG()` both want only this.
-    #[inline]
-    fn value(&self) -> ObjRef {
-        match self {
-            Argument::Value(value) | Argument::Reference { value, .. } => *value,
-        }
-    }
-
-    /// Appends every `ObjRef` this argument holds to `out`.
-    ///
-    /// [`CallContext::object_roots`]'s helper, and exhaustive for the same
-    /// reason [`Activation::object_roots`] is: a variant or a field added
-    /// here is a compile error rather than a value that stops being rooted.
-    ///
-    /// **SCHEDULING**, with its caller: it exists for a parked activation and
-    /// nothing else.
-    ///
-    /// [`Activation::object_roots`]: crate::activation::Activation::object_roots
-    fn object_roots(&self, out: &mut Vec<ObjRef>) {
-        match self {
-            Argument::Value(value) => out.push(*value),
-            Argument::Reference {
-                target,
-                value,
-                name: _,
-            } => {
-                out.push(*value);
-                match target {
-                    // An absolute position in the slot arena, which is a root
-                    // already while the frame holding it is open and is not an
-                    // object handle at all.
-                    VarHome::Slot(_) => {}
-                    VarHome::Instance(var) => {
-                        let InstanceVar {
-                            owner,
-                            scope,
-                            name: _,
-                        } = &**var;
-                        out.push(*owner);
-                        out.push(*scope);
-                    }
-                }
-            }
-        }
-    }
 }
 
 impl CallContext {
@@ -4435,9 +4325,7 @@ impl CallContext {
             arguments,
             receiver,
         } = self;
-        for argument in arguments.iter().flatten() {
-            argument.object_roots(out);
-        }
+        out.extend(arguments.iter().flatten().copied());
         out.extend(*receiver);
     }
 }
@@ -4624,7 +4512,7 @@ impl Interp {
     fn enter_library_program(
         &mut self,
         program: &'static rexx_lib::Program,
-        arguments: Option<Vec<Option<Argument>>>,
+        arguments: Option<Vec<Option<ObjRef>>>,
     ) -> Result<Option<ObjRef>, Failure> {
         let parsed = match parse_program(program.source.to_vec()) {
             Ok(parsed) => parsed,
@@ -4645,7 +4533,7 @@ impl Interp {
             // walked by the collector, and the prologue allocates before it
             // reads `rexxPackage`.
             self.roots.push_temp(package);
-            vec![Some(Argument::Value(package))]
+            vec![Some(package)]
         });
         let saved = std::mem::replace(
             &mut self.call_context,
@@ -7058,7 +6946,7 @@ fn execute(
             // collector, so without this the value is unreachable the first time
             // anything allocates.
             interp.roots.push_temp(value);
-            interp.call_context.arguments = vec![Some(Argument::Value(value))];
+            interp.call_context.arguments = vec![Some(value)];
         }
         interp.run(program)
     });

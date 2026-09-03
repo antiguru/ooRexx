@@ -473,7 +473,7 @@ impl Interp {
     /// activation's own.
     fn argument_text(&mut self, at: usize) -> Result<Vec<u8>, Failure> {
         let argument = match self.call_context.arguments.get(at) {
-            Some(Some(argument)) => Some(argument.value()),
+            Some(Some(argument)) => Some(*argument),
             Some(None) | None => None,
         };
         match argument {

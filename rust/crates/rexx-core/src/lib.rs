@@ -29,7 +29,7 @@ mod roots;
 pub use behaviour::BehaviourTable;
 pub use body::{
     BehaviourHandle, BehaviourId, Body, MethodId, NativeObject, NotNumeric, Object, ObjectMethod,
-    ObjectMethods, ScopePools,
+    ObjectMethods, ScopePools, VarRef, VarRefHome,
 };
 pub use bytes::{Bytes, INLINE_BYTES};
 pub use handle::{
@@ -37,7 +37,7 @@ pub use handle::{
     SMALL_INT_MIN, is_class_slot,
 };
 pub use heap::{CollectStats, Heap};
-pub use roots::{FrameId, Parked, RootSet, SlotFrame, SlotRef};
+pub use roots::{FrameAliases, FrameId, Parked, RootSet, SlotFrame, SlotRef};
 
 /// The hasher behind [`NameMap`].
 ///

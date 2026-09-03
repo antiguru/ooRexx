@@ -89,6 +89,7 @@ fn body_variant_name(body: &Body) -> &'static str {
         Body::Instance { .. } => "Body::Instance",
         Body::WeakRef(_) => "Body::WeakRef",
         Body::Native(_) => "Body::Native",
+        Body::VarRef(_) => "Body::VarRef",
     }
 }
 
@@ -742,6 +743,30 @@ impl Interp {
         let mut name = stem_name.to_vec();
         name.extend_from_slice(key);
         self.text(&name)
+    }
+
+    /// What a stem-shaped name is *worth* when `value` is assigned to it:
+    /// `value` itself when it is already a stem, and otherwise a fresh stem
+    /// object carrying it as the new default.
+    ///
+    /// **The half of [`Interp::stem_assign`] that is about the value rather
+    /// than about the variable**, so that `VariableReference~value=` on a
+    /// stem reference writes what the bare assignment would. Measured, oracle
+    /// rc 0: `t. = 0; t.1 = 'one'; p = >t.; p~value = 'replaced'` leaves
+    /// `t.1` reading `replaced`, exactly as `t. = 'replaced'` does -- the
+    /// object is replaced and its tails go with it.
+    pub(crate) fn stem_assignment_value(&mut self, stem_name: &[u8], value: ObjRef) -> ObjRef {
+        if self.is_stem(value) {
+            return value;
+        }
+        self.alloc_with(
+            BehaviourId::STEM,
+            Body::Stem {
+                name: stem_name.into(),
+                default: Some(value),
+                tails: rexx_core::NameMap::default(),
+            },
+        )
     }
 
     /// Whether `value` is currently a heap `Body::Stem`, which is what

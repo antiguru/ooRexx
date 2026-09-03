@@ -329,11 +329,10 @@ impl Interp {
             // call passes the literal `">"` regardless of which byte was
             // written.
             //
-            // Reached because `eval_argument` (`run.rs`) evaluates a
-            // reference argument through `eval` on the *whole* reference
-            // node rather than on its inner variable: doing the latter
-            // traced `>V>   PQ => "val"` here instead, which is this arm's
-            // own adjacent measured failure.
+            // Reached because a reference argument is evaluated through
+            // `eval` on the *whole* reference node rather than on its inner
+            // variable: doing the latter traced `>V>   PQ => "val"` here
+            // instead, which is this arm's own adjacent measured failure.
             ExprKind::VariableReference(inner) => {
                 let (ExprKind::Variable(id) | ExprKind::Stem(id)) = &inner.kind else {
                     // `rexx-parse` admits nothing else inside a reference
@@ -606,20 +605,17 @@ impl Interp {
             // short-circuit and sub-number this arm alone can give it.
             ExprKind::Logical(items) => self.eval_logical_list(code, items),
 
-            // `>name`/`<name` in an ordinary value position **decays to the
-            // referenced variable's value**, measured: `p = 'orig'; say >p`
-            // prints `orig`, and `call sub2 >p` into a plain (non-`>`) `use
-            // arg q` binds `orig` and leaves the caller's `p` untouched. So
-            // there is no reference *object* to build here.
+            // `>name`/`<name` answers a `VariableReference`, the variable
+            // itself rather than its value -- measured, oracle rc 0:
+            // `vr = 5; o = >vr; say o~class~id` is `VariableReference`, and
+            // `o~value = 7` writes `vr`.
             //
-            // What makes `>` more than a no-op is `USE ARG >name`, and that
-            // path never reaches this arm: `Interp::invoke_call` evaluates
-            // a call's arguments through `eval_argument` instead, which
-            // keeps the caller's slot alongside this same value. Only an
-            // argument written `>something` at the call site carries one,
-            // which is why passing a plain symbol to `use arg >q` is error
-            // 88.928 rather than silently aliasing something.
-            ExprKind::VariableReference(inner) => self.eval_node(code, inner),
+            // **`say >p` still prints `p`'s value**, and that is the
+            // object's doing rather than this arm's: every rendering and
+            // every conversion of a reference answers *as* the variable it
+            // names ([`Interp::redirect_of`]), and every message the class
+            // does not define is forwarded to that value by `UNKNOWN`.
+            ExprKind::VariableReference(inner) => self.variable_reference(code, inner),
 
             // `f(...)`/`"f"(...)` (Task 4, 4b) -- see `eval_call`'s own doc.
             ExprKind::Call { target, args } => self.eval_call(code, target, args),
@@ -1671,6 +1667,18 @@ impl Interp {
                 default: Some(default),
                 ..
             } => self.operator_operand_gap(*default),
+            // The redirect one arm up, for the same reason: every operator
+            // reaches the referenced value through `UNKNOWN`, so it is that
+            // value the oracle sends to. Measured, oracle rc 159:
+            // `zz = .array~new(2); say (>zz) + 1` is
+            // `97.1 Object "an Array" does not understand message "+".` --
+            // the array's own answer, substituting the array rather than the
+            // reference.
+            Body::VarRef(reference) => match self.referenced_value(reference) {
+                Some(referenced) => self.operator_operand_gap(referenced),
+                // An unset variable reads as its own name, a string.
+                None => None,
+            },
             _ => None,
         }
     }
