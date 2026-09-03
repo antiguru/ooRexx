@@ -12,9 +12,10 @@ Global Constraints and D9), each sized to run roughly 0.5-2s under `build/bin/re
 | `compound.rex` | Stem/compound-variable access — the workload the compound-variable memo prototype measured at -24% (`[[compound-variable-memo-prototype]]` in project memory); 500 tails is inside its measured 100-10,000 sweet spot |
 | `strings.rex` | `SUBSTR`/`POS`/`CHANGESTR`/concatenation, 3,000,000 iterations |
 | `arith.rex` | Decimal arithmetic, alternating `NUMERIC DIGITS 9` and `NUMERIC DIGITS 20` every iteration so both settings are exercised throughout the run rather than only at startup |
-| `alloc.rex` | Allocation churn: a fresh `.array` and `.string` every iteration, neither retained past it, sized to force multiple collections. Blocked on this crate -- message sends are Phase 5's |
+| `alloc.rex` | Allocation churn: a fresh `.array` and `.string` every iteration, neither retained past it, sized to force multiple collections |
 | `alloc4c.rex` | Allocation churn restricted to the 4c surface (no message sends): a new compound-variable tail and a concatenated string every iteration. Not the same axis as `alloc.rex` -- see its own header for what carries over and what does not |
 | `startup.rex` | `say 1` — cold-start timing (D2's gate), timed separately with `rexx-time`, not through criterion's statistical sampling |
+| `heapshape.rex` | Full-GC pause over a ~1M-object graph. It prints its own figures, so the suite reports those rather than timing the process. **The slot strings are wider than seven bytes on purpose**: a shorter one lives in the Rust handle and allocates nothing, which collapses the graph to ~1,001 objects -- see the program's own comment |
 
 ## Determinism
 
@@ -22,6 +23,10 @@ Same rule as `corpus/`: byte-identical output on every run of the same interpret
 `TIME()`, process IDs, or unordered iteration. Every program in this directory was run under
 `build/bin/rexx` and confirmed to exit 0 with identical output across repeated runs before being
 committed.
+
+`heapshape.rex` is the exception and is the reason `NOT_BENCHMARKED` exists: it calls `TIME()` and
+prints wall figures, so its output varies between runs by construction. Only its `gc_forced=` line
+is byte-stable.
 
 ## Sizing
 

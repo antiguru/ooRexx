@@ -57,6 +57,7 @@
 //! differently. `--pin <cpulist>` confines every child to those CPUs; without
 //! it the wrapper is the one every committed figure was taken through.
 
+use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -141,6 +142,10 @@ enum Role {
     /// actually produced, never omitted -- an axis that quietly leaves the
     /// table is the failure this list exists to prevent.
     Blocked,
+    /// Run on both sides interleaved like a [`Role::Loop`] axis and reported
+    /// from the figures the program prints, because the process wall time is
+    /// the sum of parts the program itself separates.
+    SelfTimed,
 }
 
 /// One benchmark axis: the stem of a file in `rust/bench-programs/`.
@@ -163,7 +168,7 @@ struct Axis {
 const AXES: &[Axis] = &[
     Axis {
         name: "alloc",
-        role: Role::Blocked,
+        role: Role::Loop,
     },
     Axis {
         name: "alloc4c",
@@ -191,7 +196,7 @@ const AXES: &[Axis] = &[
     },
     Axis {
         name: "heapshape",
-        role: Role::Blocked,
+        role: Role::SelfTimed,
     },
     Axis {
         name: "startup",
@@ -385,6 +390,22 @@ fn main() -> ExitCode {
     match &cps {
         Ok(paired) => write_rexxcps(&mut report, paired),
         Err(error) => failures.push(format!("rexxcps: {error}")),
+    }
+
+    let mut self_timed = AXES
+        .iter()
+        .filter(|axis| axis.role == Role::SelfTimed)
+        .peekable();
+    if self_timed.peek().is_some() {
+        let _ = writeln!(report, "### Axes that report their own figures\n");
+    }
+    for axis in self_timed {
+        let path = rexx_bench::program_path(axis.name);
+        eprintln!("measuring {} (its own figures)", axis.name);
+        match measure_interleaved(&oracle, &rust, &path, &workdir, pairs, warmup, &wrapper) {
+            Ok(paired) => write_self_timed(&mut report, axis.name, pairs, &paired),
+            Err(error) => failures.push(format!("{}: {error}", axis.name)),
+        }
     }
 
     for name in write_blocked(&mut report, &rust, &workdir, &wrapper) {
@@ -1240,6 +1261,81 @@ fn write_rexxcps(report: &mut String, paired: &Paired) {
     );
 }
 
+/// Every `label= value` figure one side's sampled runs printed, keyed by
+/// label and in run order.
+///
+/// A run that printed a label the others did not is not dropped: a label whose
+/// sample count differs from the run count is reported with the count it has,
+/// so a program that stopped printing a figure shows a short row rather than
+/// a silently narrower median.
+fn self_timed_figures(runs: &[Vec<u8>]) -> BTreeMap<String, Vec<f64>> {
+    let mut figures: BTreeMap<String, Vec<f64>> = BTreeMap::new();
+    for run in runs {
+        for line in String::from_utf8_lossy(run).lines() {
+            let Some((label, value)) = line.split_once("= ") else {
+                continue;
+            };
+            let Ok(value) = value.trim().parse::<f64>() else {
+                continue;
+            };
+            figures
+                .entry(label.trim().to_string())
+                .or_default()
+                .push(value);
+        }
+    }
+    figures
+}
+
+/// The median of `samples`, which the caller has already checked is not empty.
+fn median_of(samples: &[f64]) -> f64 {
+    let mut sorted = samples.to_vec();
+    sorted.sort_by(f64::total_cmp);
+    sorted[sorted.len() / 2]
+}
+
+/// Reports a [`Role::SelfTimed`] axis from the figures the program printed on
+/// each side rather than from the wall time this harness took.
+///
+/// The run count is printed per row: a figure absent from some runs would
+/// otherwise be a median over fewer samples than the heading claims.
+fn write_self_timed(report: &mut String, name: &str, pairs: usize, paired: &Paired) {
+    let oracle = self_timed_figures(&paired.oracle_stdout);
+    let rust = self_timed_figures(&paired.rust_stdout);
+    let _ = writeln!(
+        report,
+        "`{name}`, {pairs} interleaved pair(s). Every number below is the median of what the \
+         program itself printed; this harness timed nothing here, because the process wall \
+         time is the sum of parts the program separates.\n"
+    );
+    let _ = writeln!(
+        report,
+        "| figure | oracle | this crate | this crate / oracle | runs (oracle, crate) |"
+    );
+    let _ = writeln!(report, "|---|---:|---:|---:|---:|");
+    for (label, oracle_samples) in &oracle {
+        let Some(rust_samples) = rust.get(label) else {
+            let _ = writeln!(report, "| `{label}` | -- | *absent* | -- | -- |");
+            continue;
+        };
+        if oracle_samples.is_empty() || rust_samples.is_empty() {
+            continue;
+        }
+        let (left, right) = (median_of(oracle_samples), median_of(rust_samples));
+        let _ = writeln!(
+            report,
+            "| `{label}` | {left:.6} | {right:.6} | {:.3}x | {}, {} |",
+            right / left,
+            oracle_samples.len(),
+            rust_samples.len()
+        );
+    }
+    for label in rust.keys().filter(|label| !oracle.contains_key(*label)) {
+        let _ = writeln!(report, "| `{label}` | *absent* | -- | -- | -- |");
+    }
+    let _ = writeln!(report);
+}
+
 fn quoted_line(stdout: &[u8], marker: &str) -> String {
     String::from_utf8_lossy(stdout)
         .lines()
@@ -1276,6 +1372,11 @@ fn write_blocked(
 ) -> Vec<String> {
     let mut no_longer_blocked = Vec::new();
     let _ = writeln!(report, "### Axes this crate cannot run\n");
+    let blocked = AXES.iter().filter(|axis| axis.role == Role::Blocked);
+    if blocked.clone().next().is_none() {
+        let _ = writeln!(report, "None: every axis in the list runs on both sides.\n");
+        return no_longer_blocked;
+    }
     let _ = writeln!(
         report,
         "Measured here rather than left out of the table, with the status and message each one \
@@ -1345,7 +1446,8 @@ mod tests {
         }
     }
 
-    /// Every axis declared `Role::Blocked` really does fail on this crate.
+    /// Every axis declared `Role::Blocked` really does fail on this crate, and
+    /// every axis declared `Role::SelfTimed` really does run.
     ///
     /// The names pin is not enough on its own. It catches an axis leaving the
     /// list; it cannot catch an axis staying in the list under a role that has
@@ -1354,8 +1456,14 @@ mod tests {
     /// reached by a different route. Red here forces the decision instead, and
     /// it has fired once: `dispatch.rex` started running when `~new` landed
     /// and this is what said so.
+    ///
+    /// **Both directions, because `Role::Blocked` may be empty.** A test that
+    /// only walked the blocked axes would assert nothing at all once the last
+    /// one starts running, which is the state this list is heading for; the
+    /// self-timed axes are what keep it saying something, and they are the
+    /// cheap ones to run.
     #[test]
-    fn every_blocked_axis_still_fails_on_this_crate() {
+    fn every_declared_runnability_still_holds() {
         let binary = rust_binary_candidates()
             .into_iter()
             .find(|path| path.is_file())
@@ -1379,26 +1487,38 @@ mod tests {
         ));
         fs::create_dir_all(&dir).expect("temporary directory");
 
-        let blocked: Vec<&Axis> = AXES.iter().filter(|a| a.role == Role::Blocked).collect();
+        let checked: Vec<&Axis> = AXES
+            .iter()
+            .filter(|a| matches!(a.role, Role::Blocked | Role::SelfTimed))
+            .collect();
         assert!(
-            !blocked.is_empty(),
-            "no axis is declared Role::Blocked, so this test asserts nothing"
+            !checked.is_empty(),
+            "no axis is declared Role::Blocked or Role::SelfTimed, so this test asserts nothing"
         );
-        for axis in blocked {
+        for axis in checked {
             let path = rexx_bench::program_path(axis.name);
             // Through the same capped, directory-pinned wrapper the suite
-            // uses. `alloc.rex` allocates without bound if it ever starts
-            // running, and an uncapped in-process run of it would take the
-            // machine's memory rather than the test.
+            // uses, so a program that outgrows the cap fails here rather than
+            // taking the machine's memory.
             let completed =
                 run(&side, &path, &dir, &Wrapper::default()).expect("the runner launches");
-            assert!(
-                !completed.succeeded(),
-                "{} is declared Role::Blocked but exited 0. The suite would report it as \
-                 unrunnable and time it with nothing. Give it Role::Loop and a loop bound, \
-                 or decide deliberately that it stays out",
-                axis.name
-            );
+            match axis.role {
+                Role::Blocked => assert!(
+                    !completed.succeeded(),
+                    "{} is declared Role::Blocked but exited 0. The suite would report it as \
+                     unrunnable and time it with nothing. Give it Role::Loop and a loop bound, \
+                     or decide deliberately that it stays out",
+                    axis.name
+                ),
+                _ => assert!(
+                    completed.succeeded(),
+                    "{} is declared Role::SelfTimed but exited {:?}: {}. The suite would report \
+                     its figures as an axis it measured. Give it Role::Blocked",
+                    axis.name,
+                    completed.exit_code,
+                    String::from_utf8_lossy(&completed.stderr).trim()
+                ),
+            }
         }
         fs::remove_dir(&dir).ok();
     }

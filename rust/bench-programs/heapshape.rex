@@ -14,12 +14,25 @@ t0 = time('R')
 do i = 1 to 1000
   a = .array~new(1000)
   do j = 1 to 1000
-    a[j] = "e" || j     /* concatenate: a DISTINCT string per slot. A bare
+    a[j] = "element-" || j   /* concatenate: a DISTINCT string per slot. A bare
                             literal would be one interned object shared by all
-                            1M slots, making the graph ~1001 objects. */
+                            1M slots, making the graph ~1001 objects.
+
+                            WIDER THAN SEVEN BYTES, which is the same collapse
+                            reached a second way: a string of up to
+                            rexx_core::INLINE_TEXT bytes lives in the Rust
+                            handle and allocates nothing, so "e" || j builds a
+                            ~1001-object graph on that side while the oracle
+                            builds ~1,001,001 either way. Measured 2026-09-03,
+                            9 interleaved pairs a variant: with "e" || j the
+                            forced pause is 0.002113 s on the Rust side against
+                            the oracle's 0.016945, and with these widths it is
+                            0.014672 against 0.017411. The oracle's own figure
+                            barely moves, which is what says whose graph
+                            changed. */
   end
   outer[i] = a
-  root["K" || i] = a
+  root["KEYNAME-" || i] = a
 end
 build = time('E')
 

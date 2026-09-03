@@ -619,23 +619,28 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `StringTable`'s below is one: the answer is a body this crate builds
     // rather than an instance.
     ("Array", "NEW", Arity::Counted, native_array_new),
-    // `AddClassMethod("New", StringTable::newRexx, A_COUNT)`,
-    // `memory/Setup.cpp:875`. A row of its own rather than `Object`'s,
-    // because the collection allocates a hash body rather than an instance.
+    // `AddClassMethod("Of", ArrayClass::ofRexx, A_COUNT)`,
+    // `memory/Setup.cpp:709`. The same body as the row above, filled from the
+    // arguments rather than sized from them.
+    ("Array", "OF", Arity::Counted, native_array_of),
+    // `AddClassMethod("New", StringTable::newRexx, A_COUNT)` and
+    // `AddClassMethod("New", DirectoryClass::newRexx, A_COUNT)`,
+    // `memory/Setup.cpp:875` and `:928`. Rows of their own rather than
+    // `Object`'s, because each allocates a hash body rather than an instance.
     (
         "StringTable",
         "NEW",
         Arity::Counted,
-        native_string_table_new,
+        native_hash_collection_new,
     ),
+    ("Directory", "NEW", Arity::Counted, native_directory_new),
     // Every class whose own `newRexx` is an allocation followed by
     // `completeNewObject` and nothing else -- `memory/Setup.cpp:766`, `:821`,
-    // `:902`, `:928`, `:953`, `:982`, `:1006`, `:1327`, `:1350`, `:1618`.
+    // `:902`, `:953`, `:982`, `:1006`, `:1327`, `:1350`, `:1618`.
     // Each allocates a primitive body this crate does not model, so each
     // answers [`native_new`]'s plain instance: the class's own behaviour and
     // the `INIT` send, and nothing that would read the body.
     ("Bag", "NEW", Arity::Counted, native_new),
-    ("Directory", "NEW", Arity::Counted, native_new),
     ("EventSemaphore", "NEW", Arity::Counted, native_new),
     ("IdentityTable", "NEW", Arity::Counted, native_new),
     ("List", "NEW", Arity::Counted, native_new),
@@ -1009,6 +1014,10 @@ enum Primitive {
     Routine,
     /// A `Body::Native` whose class is `.Directory` -- `.environment` and
     /// `.local`. Measured, `.environment~class~id` is `Directory`.
+    ///
+    /// **Identity and not descent, unlike [`Primitive::StringTable`] beside
+    /// it**: [`native_directory_new`] gives a subclass an instance body
+    /// rather than a native one.
     Directory,
     /// A `Body::Native` whose class is `.StringTable` or a subclass of it --
     /// `.methods`, `.routines` and `.resources`, and `.TraceObject~new`.
@@ -4217,10 +4226,19 @@ fn native_is_subclass_of(
 /// `Object~identityHash`.
 ///
 /// **Answers the handle**, which is deviation 4's licence read at this
-/// message: identity in this crate is handle equality, and what its answers
-/// *mean* is 5c's. The oracle's own answer is derived from the object's
-/// address, so no differential row can compare the two -- the corpus cannot
-/// witness this method and `dispatch.rs`'s own tests are the instrument.
+/// message: identity in this crate is handle equality. The oracle's own
+/// answer is derived from the object's address, so no differential row can
+/// compare the two -- the corpus cannot witness this method and
+/// `dispatch.rs`'s own tests are the instrument.
+///
+/// **The divergence is licensed rather than closed, and the oracle is why.**
+/// `RexxObject::identityHash` is `((uintptr_t)this) ^ UINTPTR_MAX`
+/// (`classes/ObjectClass.hpp:340`), rendered as a signed decimal. Measured
+/// 2026-09-03, `say .Object~new~identityHash` over 10 runs answered 10
+/// different values between `-139691328307761` and `-140519509881393`, so the
+/// oracle does not reproduce its own answer across runs and there is nothing
+/// to match; matching the width instead -- 16 characters in 20 of 20 runs --
+/// would pin this machine's mmap address range into this crate.
 fn native_identity_hash(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -5794,6 +5812,36 @@ fn native_array_new(
     Ok(Some(object))
 }
 
+/// `.Array~of(item, ...)`: the arguments as an array's slots, in order --
+/// `ArrayClass::ofRexx` (`classes/ArrayClass.cpp:150`), whose `INIT` send
+/// carries no arguments.
+///
+/// An omitted argument is an empty slot, and an empty argument list fixes the
+/// shape the way an explicit zero size does. Measured, oracle rc 0:
+/// `.array~of(1,,3)` is `~size` `3` and `~items` `2`, and `.array~of()` is
+/// `~dimension` `1` where `.array~new()` is `0`
+/// (`ArrayClass::ArrayClass(objs, count)`, `:314`).
+fn native_array_of(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    if class != interp.object_model().array {
+        return Err(unbuilt_class_method(interp, class, b"OF"));
+    }
+    let body = Body::Array {
+        slots: args.to_vec(),
+        dimensions: args.is_empty().then(|| Box::from([0].as_slice())),
+    };
+    let object = interp.alloc_with(BehaviourId::ARRAY, body);
+    interp.roots.push_temp(object);
+    let caller = interp.caller();
+    interp.send_message(object, INIT, None, &[], caller)?;
+    Ok(Some(object))
+}
+
 /// `ArrayClass::createMultidimensional` (`classes/ArrayClass.cpp:199`): a
 /// body whose shape is `dimensions` and whose slots are all empty.
 ///
@@ -7205,16 +7253,17 @@ fn install_enhancing_object_methods(
     Ok(())
 }
 
-/// `StringTable~new`: an empty string table -- `StringTable::newRexx`
-/// (`memory/Setup.cpp:875`), which allocates and then sends `INIT` with the
-/// whole argument list.
+/// `StringTable~new` and `Directory~new`: an empty hash collection --
+/// `StringTable::newRexx` and `DirectoryClass::newRexx`
+/// (`memory/Setup.cpp:875`, `:928`), each of which allocates and then sends
+/// `INIT` with the whole argument list.
 ///
 /// The `INIT` send is what validates the initial-size argument, and it is a
 /// send rather than a check here so the traceback carries both frames --
 /// measured, oracle rc 163 for `.stringtable~new('abc')`: `Compiled method
 /// "INIT" with scope "StringTable".` above `Compiled method "NEW" with scope
 /// "StringTable".`
-fn native_string_table_new(
+fn native_hash_collection_new(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
@@ -7225,6 +7274,27 @@ fn native_string_table_new(
     let caller = interp.caller();
     interp.send_message(object, INIT, None, args, caller)?;
     Ok(Some(object))
+}
+
+/// `Directory~new`: the hash body above for `.Directory` itself, and
+/// [`native_new`]'s plain instance for a subclass.
+///
+/// **The split is what a `Body::Native` has not got**: a variable pool and an
+/// `UNINIT` registration, each of which a `Directory` subclass can reach and
+/// the oracle answers. What the split costs is the subclass's entry writes,
+/// which refuse. `a_directory_subclass_keeps_the_instance` is the pair.
+fn native_directory_new(
+    interp: &mut Interp,
+    cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    if class == interp.object_model().directory {
+        native_hash_collection_new(interp, cleared, receiver, args)
+    } else {
+        native_new(interp, cleared, receiver, args)
+    }
 }
 
 /// A collection's `~init(size)`: the initial-size argument, validated and
@@ -7279,8 +7349,13 @@ fn optional_length_argument(
 /// message names the class the send went to rather than the one the row is
 /// filed under.
 fn unbuilt_new(interp: &mut Interp, class: ObjRef) -> Failure {
+    unbuilt_class_method(interp, class, b"NEW")
+}
+
+/// [`unbuilt_new`] for a class method under some other name.
+fn unbuilt_class_method(interp: &mut Interp, class: ObjRef, name: &[u8]) -> Failure {
     let id = interp.classes().id_string(class).to_string();
-    Loud::native_method(b"NEW", &id).into()
+    Loud::native_method(name, &id).into()
 }
 
 /// `MutableBuffer~new(string, size, ...)`: an instance carrying neither, and
@@ -8886,6 +8961,54 @@ mod tests {
         );
     }
 
+    /// Every receiver kind answers `~identityHash`, and each line is the
+    /// oracle's own answer, measured 2026-09-03 on three descriptors.
+    ///
+    /// **The rows below are the whole of what the licence leaves standing.**
+    /// The *value* diverges and cannot be closed -- see
+    /// [`native_identity_hash`] -- so a build answering a per-receiver
+    /// constant would satisfy the rendering and still fail the last two rows.
+    #[test]
+    fn identity_hash_answers_every_receiver_kind_as_the_oracle_does() {
+        assert_eq!(
+            both_engines(
+                "numeric digits 20\n\
+                 s. = 1\n\
+                 o = s.\n\
+                 say datatype(o~identityHash, 'W') datatype('abc'~identityHash, 'W')\n\
+                 say datatype(.Object~new~identityHash, 'W') \
+                     datatype(.Array~new~identityHash, 'W') \
+                     datatype(.StringTable~new~identityHash, 'W') \
+                     datatype(.Directory~new~identityHash, 'W')\n\
+                 a = .Object~new\n\
+                 b = .Object~new\n\
+                 say (a~identityHash == a~identityHash) (a~identityHash == b~identityHash)\n"
+            ),
+            (0, "1 1\n1 1 1 1\n1 0\n".to_string(), String::new())
+        );
+    }
+
+    /// Two equal short strings are **one** object here and two on the oracle,
+    /// which is deviation 4's identity half rather than its rendering half.
+    ///
+    /// A string of up to [`rexx_core::INLINE_TEXT`] bytes lives in the handle
+    /// and allocates nothing, so two separate concatenations of equal value
+    /// are the same handle. Measured 2026-09-03, oracle rc 0: both rows below
+    /// are `0` there. The second is the boundary control -- one byte past the
+    /// inline capacity and the two sides agree -- so the divergence is pinned
+    /// to the inline case rather than to `~identityHash` at large.
+    #[test]
+    fn two_equal_inline_strings_share_one_handle() {
+        assert_eq!(
+            both_engines(
+                "j = 5\n\
+                 say ((\"eeeeee\"||j)~identityHash == (\"eeeeee\"||j)~identityHash)\n\
+                 say ((\"eeeeeee\"||j)~identityHash == (\"eeeeeee\"||j)~identityHash)\n"
+            ),
+            (0, "1\n0\n".to_string(), String::new())
+        );
+    }
+
     /// The reflection protocol answers on both engines for a receiver that is
     /// not a class object, which is where `~class` and `~isA` differ from the
     /// `.Class`-scope methods beside them.
@@ -9044,36 +9167,80 @@ mod tests {
         );
     }
 
-    /// A `.Directory~new` answers `.nil` for every index because nothing can
-    /// put an entry in it: this crate builds the instance without the hash
-    /// body, so every write refuses.
+    /// A `.Directory~new` reads `.nil` for every index until something puts
+    /// an entry there, and then reads it back through all three spellings.
     ///
-    /// The pair is the whole test. Reading `.nil` is the oracle's answer for
-    /// an empty directory and a wrong answer for any other, so it is only
-    /// correct while the refusal beside it holds.
+    /// Every line is the oracle's, measured 2026-09-03 on three descriptors.
+    /// Reading `.nil` is its answer for an empty directory and a wrong answer
+    /// for any other, so the first line is only correct while the writes
+    /// beside it land -- and the last is the control: a second directory does
+    /// not see the first one's entries. `~zork` reads and writes under the
+    /// upper-cased name where `~at` and `~put` do not, which is why `d~zork`
+    /// stays `.nil` across the two rows that store `X` and `Y`.
     #[test]
-    fn a_new_directory_reads_nil_for_every_index_and_refuses_every_write() {
+    fn a_new_directory_reads_nil_until_an_entry_is_put_there() {
         assert_eq!(
             both_engines(
                 "d = .Directory~new\n\
-                 say d['X'] d~at('X') d~zork\n"
+                 say d['X'] d~at('X') d~zork\n\
+                 d~put('v','X')\n\
+                 say d['X'] d~at('X') d~zork\n\
+                 d['Y'] = 'w'\n\
+                 say d['Y'] d~at('Y') d~zork\n\
+                 d~zork = 'z'\n\
+                 say d['ZORK'] d~zork d~at('ZORK')\n\
+                 d2 = .Directory~new\n\
+                 say d2['zork'] d2~zork\n"
             ),
             (
                 0,
-                "The NIL object The NIL object The NIL object\n".to_string(),
+                "The NIL object The NIL object The NIL object\n\
+                 v v The NIL object\n\
+                 w w The NIL object\n\
+                 z z z\n\
+                 The NIL object The NIL object\n"
+                    .to_string(),
                 String::new()
             )
         );
-        for write in ["d~put('v','X')", "d['X'] = 'v'", "d~zork = 'v'"] {
-            let (code, stdout, stderr) = both_engines(&format!("d = .Directory~new\n{write}\n"));
-            assert_eq!((code, stdout.as_str()), (120, ""), "{write}");
-            assert_eq!(
-                stderr,
-                "rexx-exec: a message send to a value that is not a hash collection is not \
-                 implemented (Phase 5)\n",
-                "{write}"
-            );
-        }
+    }
+
+    /// A `Directory` subclass keeps [`native_new`]'s instance, so its
+    /// variable pool answers and its entry writes do not.
+    ///
+    /// **The pair is the whole test.** The first is the oracle's, measured
+    /// 2026-09-03: `K 1 5`, where a native body answers `EXPOSE on an object
+    /// with no variable pool` instead. The second is what the split costs and
+    /// the oracle answers `1` for, so unifying the two constructors turns the
+    /// first row red and the second green rather than one of them alone.
+    #[test]
+    fn a_directory_subclass_keeps_the_instance() {
+        assert_eq!(
+            both_engines(
+                "o = .K~new\n\
+                 say o~class~id o~isA(.Directory) o~peek\n\
+                 ::class K subclass Directory\n\
+                 ::method init\n\
+                 \x20 expose n\n\
+                 \x20 n = 5\n\
+                 \x20 self~init:super\n\
+                 ::method peek\n\
+                 \x20 expose n\n\
+                 \x20 return n\n"
+            ),
+            (0, "K 1 5\n".to_string(), String::new())
+        );
+        let (code, stdout, stderr) = both_engines(
+            "o = .Directory~subclass('K')~new\n\
+             o['A'] = 1\n\
+             say o['A']\n",
+        );
+        assert_eq!((code, stdout.as_str()), (120, ""));
+        assert_eq!(
+            stderr,
+            "rexx-exec: a message send to a value that is not a hash collection is not \
+             implemented (Phase 5)\n"
+        );
     }
 
     /// A stem receiver answers `Stem` and renders as its own value, and a
@@ -9183,6 +9350,50 @@ mod tests {
     /// **The one shape of `~at` that has no oracle behaviour to match**, and
     /// the instrument [`Loud::array_index_hole`]'s own doc names.
     ///
+    /// `.Array~of` fills the slots from its arguments, and every line is the
+    /// oracle's, measured 2026-09-03 on three descriptors.
+    ///
+    /// **The omission rows are what separate a real `~of` from a `~new` that
+    /// took the argument count.** An interior omission is a slot with no item
+    /// (`~size` 3, `~items` 2) and a trailing one is not an argument at all
+    /// (`~size` 2), and an empty list fixes the shape where `.array~new()`
+    /// leaves it open.
+    #[test]
+    fn array_of_fills_its_slots_from_its_arguments() {
+        assert_eq!(
+            both_engines(
+                "say .array~of(1,2,3)~size .array~of(1,2,3)~items .array~of(1,2,3)~dimension\n\
+                 say .array~of()~size .array~of()~items .array~of()~dimension\n\
+                 say .array~of(1,,3)~size .array~of(1,,3)~items\n\
+                 say .array~of(1,2,)~size .array~of(1,2,)~items\n\
+                 say .array~of(4,5)[2] .array~of('x')~class~id\n\
+                 a = .array~of(7,8)\n\
+                 a[3] = 9\n\
+                 say a~size a~toString('l', ' ')\n"
+            ),
+            (
+                0,
+                "3 3 1\n0 0 1\n3 2\n2 2\n5 Array\n3 7 8 9\n".to_string(),
+                String::new()
+            )
+        );
+    }
+
+    /// `~of` sent to a subclass of `Array` refuses, where the oracle answers
+    /// it -- the position `native_array_new` is already in for `~new`.
+    ///
+    /// Measured 2026-09-03, oracle rc 0: `.array~subclass('K')~of(1,2)~size`
+    /// is `2`.
+    #[test]
+    fn array_of_on_a_subclass_is_loud() {
+        let (code, stdout, stderr) = both_engines("say .array~subclass('K')~of(1,2)~size\n");
+        assert_eq!((code, stdout.as_str()), (120, ""));
+        assert_eq!(
+            stderr,
+            "rexx-exec: method \"OF\" of class \"K\" is not implemented (Phase 5)\n"
+        );
+    }
+
     /// A lone array argument is spread into the subscript list by item count
     /// with slot array, so an array whose leading slot is empty and whose item
     /// count is one hands the C++ a null subscript and it dies. The program is
