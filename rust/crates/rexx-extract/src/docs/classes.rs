@@ -212,7 +212,7 @@ pub const CONSTRUCTION: &[(&str, &str)] = &[
 
 /// The committed construction program for a class whose bare `~new` raises:
 /// the Rexx expression the instance arm binds `o` to, taken from the book's
-/// own syntax for that class's constructor.
+/// own syntax for obtaining an instance of that class.
 ///
 /// A name here makes the class `covered`, and `covered` means nothing else --
 /// the derived probe opens with this expression rather than with a bare
@@ -229,6 +229,8 @@ pub const CONSTRUCTION_PROGRAMS: &[(&str, &str)] = &[
         ".InvertingComparator~new(.Comparator~new)",
     ),
     ("MESSAGE", ".Message~new(.Object~new, 'STRING')"),
+    ("REXXCONTEXT", ".context"),
+    ("REXXINFO", ".RexxInfo"),
     ("STRING", ".String~new('abc')"),
     ("SUPPLIER", ".Supplier~new(.Array~new, .Array~new)"),
     ("TIMESPAN", ".TimeSpan~new(1)"),
@@ -551,6 +553,10 @@ fn collapse(text: &str) -> String {
 /// A committed [`CONSTRUCTION_PROGRAMS`] entry is what makes a class
 /// `covered` where a bare `~new` raises; it may not be committed for a class
 /// whose sentence makes it [`Status::Unreachable`], which is D73's guard.
+/// [`CONSTRUCTION`] carries no row for the class whose `.environment` entry
+/// is an instance rather than the class object, since the sweep behind it
+/// sends `~new` only to class objects; [`class_rows`] asserts every other
+/// name has one.
 fn coverage_of(
     name: &str,
     sentence: Option<(usize, usize, &'static str, Status)>,
@@ -565,8 +571,8 @@ fn coverage_of(
         .find(|(n, _)| *n == upper)
         .map(|(_, program)| *program);
     assert!(
-        program.is_none() || matches!(construction, Some(code) if code != "new"),
-        "{name} has a committed construction program and a bare ~new that does not raise on \
+        program.is_none() || construction != Some("new"),
+        "{name} has a committed construction program and a bare ~new that constructs on \
          the oracle, so the program is a route to nothing the bare ~new does not already reach"
     );
     if let Some((first, last, text, status)) = sentence {
@@ -1069,7 +1075,8 @@ pub fn class_set_header(stamp: &str, argutil_citation: &str) -> Vec<String> {
              binds `o` to, and it is what `covered` claims: every `covered` row \
              carries one and every other row carries `{NO_PROGRAM}`. A class \
              whose bare ~new constructs carries that bare ~new; one opted in by \
-             CONSTRUCTION_PROGRAMS carries the book's own constructor syntax. \
+             CONSTRUCTION_PROGRAMS carries the book's own syntax for obtaining \
+             an instance. \
              gate_table_c.rs derives the instance-arm probe from this field, so \
              a `covered` status and the program the probe runs cannot say \
              different things."

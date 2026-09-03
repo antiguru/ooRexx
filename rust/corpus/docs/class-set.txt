@@ -26,9 +26,9 @@
 # `o` to, and it is what `covered` claims: every `covered` row carries one
 # and every other row carries `-`. A class whose bare ~new constructs
 # carries that bare ~new; one opted in by CONSTRUCTION_PROGRAMS carries the
-# book's own constructor syntax. gate_table_c.rs derives the instance-arm
-# probe from this field, so a `covered` status and the program the probe
-# runs cannot say different things.
+# book's own syntax for obtaining an instance. gate_table_c.rs derives the
+# instance-arm probe from this field, so a `covered` status and the program
+# the probe runs cannot say different things.
 #
 # Derived by `cargo run -p rexx-extract --bin rexx-extract-docs`, whose
 # module is `src/docs/classes.rs`. Re-derived and compared in both
@@ -81,8 +81,8 @@ MutableBuffer	class	clsMutableBuffer	utilityclasses.xml:4829	covered	a bare ~new
 MutexSemaphore	class	clsMutexSemaphore	utilityclasses.xml:6451	covered	a bare ~new constructs an instance on the oracle	.MutexSemaphore~new
 Orderable	class	clsOrderable	utilityclasses.xml:6649	covered	a bare ~new constructs an instance on the oracle	.Orderable~new
 Pointer	class	clsPointer	utilityclasses.xml:6902	unreachable	the reference says instances come only from native code -- utilityclasses.xml:6910 "can only be created using the native code application programming interfaces."	-
-RexxContext	class	clsRexxContext	utilityclasses.xml:7533	not-covered	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7545 "They cannot be directly created by the user."	-
-RexxInfo	instance	clsRexxInfo	utilityclasses.xml:7934	not-covered	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."	-
+RexxContext	class	clsRexxContext	utilityclasses.xml:7533	covered	a committed construction program answers an instance; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7545 "They cannot be directly created by the user."	.context
+RexxInfo	instance	clsRexxInfo	utilityclasses.xml:7934	covered	a committed construction program answers an instance; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."	.RexxInfo
 RexxQueue	class	clsRexxQueue	utilityclasses.xml:8811	covered	a bare ~new constructs an instance on the oracle	.RexxQueue~new
 Singleton	class	clsSingleton	utilityclasses.xml:9260	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle	-
 StackFrame	class	clsStackFrame	utilityclasses.xml:9396	not-covered	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:9407 "StackFrame instances cannot be directly created by the user."	-

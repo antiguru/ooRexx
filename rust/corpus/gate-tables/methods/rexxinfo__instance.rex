@@ -1,11 +1,11 @@
-/* Table C method rows: RexxInfo, instance arm. corpus/docs/class-set.txt
-   records this class as `not-covered`, because
-   no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied.".
-   So ~new raises and no line below it is reached; the row's evidence
-   is that raise, which is what the row set says there is to have.
+/* Table C method rows: RexxInfo, instance arm -- one line per method
+   corpus/docs/class-methods.txt documents on this arm, asked of the
+   instance `.RexxInfo` answers, in the row set's own order. That
+   expression is corpus/docs/class-set.txt's committed construction
+   program for this class, and carrying one is what `covered` claims.
    Derived by crates/rexx-exec/tests/gate_table_c.rs, which re-derives
    this file on every run and compares it in both directions. */
-o = .RexxInfo~new
+o = .RexxInfo
 say 'instance' o~hasMethod("architecture")
 say 'instance' o~hasMethod("caseSensitiveFiles")
 say 'instance' o~hasMethod("date")
