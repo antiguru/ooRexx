@@ -1416,10 +1416,10 @@ impl Loud {
     ///
     /// `MessageClass::result` waits for the message to complete
     /// (`classes/MessageClass.cpp:279`), and a message nothing has sent never
-    /// does. Measured under an 8-second kill: rc 137, no bytes on any
-    /// descriptor, and 0.00 s of CPU over 8.00 s elapsed -- a block, not a
-    /// spin -- where the same object's `~completed` and `~hasError` both
-    /// answer `0` at rc 0.
+    /// does. Measured off `/proc/<pid>/stat` with the binary launched direct:
+    /// state `S` and 0 utime and stime ticks at 7 s, where a spinning program
+    /// sampled the same way reads `R` and 700. The same object's `~completed`
+    /// and `~hasError` both answer `0` at rc 0.
     ///
     /// **There is no oracle behaviour to match here**, so this is a refusal
     /// rather than an answer: the program is in `corpus/oracle-crashes.txt`
