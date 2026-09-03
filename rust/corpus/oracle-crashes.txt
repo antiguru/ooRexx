@@ -181,10 +181,22 @@ same day as **SF #2085**.
 Effect: **neither a SIGSEGV nor an exhaustion -- an indefinite block**, the
 third mode this file's header names. Measured twice under the standard wrapper
 with `timeout -s KILL 10` added: rc 137 (the kill, not an answer), nothing on
-stdout, nothing on stderr. A third bounded run under `/usr/bin/time -v`
-reports **0.00 s user and 0.00 s system over 5.00 s elapsed**, so the process
-is parked on a wait rather than spinning -- which is what makes "for ever" the
-right reading of it and "slow" the wrong one.
+stdout, nothing on stderr. **That much is direct evidence and is what makes
+"for ever" the right reading and "slow" the wrong one.**
+
+**The "parked rather than spinning" half is predicted, not measured.** It was
+argued here from a `/usr/bin/time -v` run reporting 0.00 s user and system
+over 5.00 s elapsed, and that instrument is now known to be blind to the
+distinction: measured 2026-09-03, `/usr/bin/time -v timeout ... <binary>` run
+against `do forever; nop; end` -- a program `/proc/<pid>/stat` shows in state
+`R` at 700 utime ticks over seven seconds -- also reports `User time 0.00`,
+`System time 0.00`, `Percent of CPU this job got: 0%`. GNU time's `wait4` sees
+only `timeout`. A park and a full-core spin are indistinguishable through it.
+
+`guardWait` blocking on a condition variable is what the cause below predicts,
+and the same prediction held when it was checked directly for this file's
+`Message~result` entry. It has not been checked for this one, because doing so
+means running this program, which this file's own header forbids.
 
 Cause: `RexxInstructionGuard::execute` evaluates the expression and, while it
 is false, loops on `context->guardWait()`
