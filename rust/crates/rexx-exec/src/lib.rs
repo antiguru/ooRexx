@@ -759,25 +759,6 @@ impl Loud {
     /// a rule.** It held for the binary operators, where the operand the
     /// operator was sent to converts the other through `stringValue()`; it
     /// does not hold here, where every position converts on its own.
-    /// `::OPTIONS LOSTDIGITS SYNTAX` over an operand that really does carry
-    /// more digits than the precision in force.
-    ///
-    /// **The option is honoured by refusing, not implemented.** This crate
-    /// has no LOSTDIGITS condition -- `SIGNAL ON LOSTDIGITS` arms nothing --
-    /// so the directive asks for a diagnosis nothing here can produce, and
-    /// answering the operation would be a wrong number where the oracle is
-    /// 98.972. Refusing is not a claim that digit loss was detected for any
-    /// purpose but this one: nothing else in this crate reads the test
-    /// [`Interp::lostdigits_check`] makes.
-    fn lostdigits_option() -> Loud {
-        Loud {
-            message: owned_message(
-                "the LOSTDIGITS condition `::OPTIONS LOSTDIGITS SYNTAX` asks this operand for",
-                Some("Phase 5"),
-            ),
-        }
-    }
-
     fn object_position(position: &str, kind: &str) -> Loud {
         Loud {
             message: owned_message(&format!("{kind} as {position}"), Some("Phase 5")),

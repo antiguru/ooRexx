@@ -696,6 +696,17 @@ impl Raised {
         Raised::syntax(98, 989, vec![id.to_vec()])
     }
 
+    /// 98.972: an arithmetic operand carrying more digits than the precision
+    /// in force, under `::OPTIONS LOSTDIGITS SYNTAX`. One substitution, the
+    /// operand's own string value.
+    ///
+    /// The substitution is the operand's bytes rather than a rendering of the
+    /// number they parsed to: measured, `0001.23456789` keeps its leading
+    /// zeros and `1.23456789e2` reports `1.23456789E2`, not `123.456789`.
+    pub(crate) fn lostdigits(operand: &[u8]) -> Raised {
+        Raised::syntax(98, 972, vec![operand.to_vec()])
+    }
+
     /// 98.942: an `INHERIT` target that is not a `MIXINCLASS`. One
     /// substitution, the target's `~defaultName`.
     ///

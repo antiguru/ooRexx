@@ -914,7 +914,7 @@ impl Interp {
         let result = match op {
             PrefixOp::Plus | PrefixOp::Minus => {
                 let number = self.arith_left_operand(op.spelling(), value)?;
-                self.lostdigits_check(&number)?;
+                self.lostdigits_check(&number, value)?;
                 let digits = self.activation().settings.digits();
                 let form = self.activation().settings.form();
                 let result = if op == PrefixOp::Plus {
@@ -1098,7 +1098,7 @@ impl Interp {
             // 98.972 on the base and `2 ** 1234` is 26.8 on the *exponent*'s
             // own whole-number conversion, which runs first and never
             // reaches LOSTDIGITS.
-            self.lostdigits_check(&left_number)?;
+            self.lostdigits_check(&left_number, left_value)?;
             left_number.pow(&exponent, digits)
         } else {
             let right_number = match self.to_number(converted) {
@@ -1110,7 +1110,7 @@ impl Interp {
             };
             // Left first, which is the oracle's order: measured, `987654321 +
             // 123456789` at DIGITS 3 names 987654321.
-            self.lostdigits_check2(&left_number, &right_number)?;
+            self.lostdigits_check2(&left_number, left_value, &right_number, right_value)?;
             match op {
                 Operator::Plus => left_number.add(&right_number, digits),
                 Operator::Subtract => left_number.sub(&right_number, digits),
@@ -1519,7 +1519,7 @@ impl Interp {
             // DIGITS 3 is rc 0 on the oracle, because a comparison that falls
             // through to the string rule converts no operand at all. A strict
             // operator never reaches here either.
-            self.lostdigits_check2(left, right)?;
+            self.lostdigits_check2(left, left_value, right, right_value)?;
             let holds = rexx_num::compare_numbers(left, right, digits, fuzz, compare_op(op))
                 .map_err(Raised::from)?;
             return Ok(logical(holds));

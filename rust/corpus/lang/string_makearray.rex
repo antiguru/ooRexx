@@ -1,0 +1,27 @@
+/* String~makeArray splits the receiver into lines. LF separates and a
+   trailing one terminates rather than separating; a CR immediately before an
+   LF goes with it while a lone CR is data; and the empty string has no lines.
+   The separators are built at run time because no corpus program may carry a
+   CR byte. Variables avoid the names b and x, which before a quoted string
+   parse as a binary or hexadecimal literal. */
+lf = '0A'x
+crlf = '0D0A'x
+lone = '0D'x
+plain = 'abc'~makearray
+say 'plain' plain~items plain[1]
+say 'empty' ''~makearray~items
+blanks = '  '~makearray
+say 'blanks' blanks~items '[' || blanks[1] || ']'
+one = ('a' || lf || 'q')~makearray
+say 'split' one~items one[1] one[2]
+say 'trailing' ('a' || lf)~makearray~items
+two = (lf || 'a')~makearray
+say 'leading' two~items '[' || two[1] || ']'
+three = ('a' || crlf || 'q')~makearray
+say 'crlf' three~items three[1] three[2]
+four = ('a' || lone || 'q')~makearray
+say 'lonecr' four~items
+five = ('a' || lf || lf || 'q')~makearray
+say 'double' five~items '[' || five[2] || ']'
+say 'class' plain~class~id
+say 'request' 'abc'~request('ARRAY')~items

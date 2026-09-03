@@ -284,107 +284,99 @@ fn the_licensed_list_names_exactly_the_programs_that_can_trace_from_two_threads(
     );
 }
 
-/// **`LOSTDIGITS` is the one escalation this crate cannot honour, so it
-/// refuses the operand instead of answering it.**
+/// `::OPTIONS LOSTDIGITS SYNTAX` raises 98.972 on an operand carrying more
+/// digits than the precision in force, matching the oracle byte for byte.
 ///
-/// The condition itself is unimplemented -- `SIGNAL ON LOSTDIGITS` arms
-/// nothing -- so `::OPTIONS LOSTDIGITS SYNTAX` asks for a diagnosis nothing
-/// here can produce. `Interp::lostdigits_check` answers that by refusing at
-/// rc 120 wherever the oracle would have raised 98.972, which is loud where
-/// answering the operation would be a wrong number.
+/// The rows that must **not** raise are the point of the table rather than
+/// padding: a gate firing on the directive alone rather than on a real digit
+/// loss would raise on `1 + 1`, which the oracle answers cleanly. Each
+/// `Raises` row also asserts the oracle still carries 98.972, so a row cannot
+/// agree over a program that stopped losing digits.
 ///
-/// **The rows that must NOT refuse are the point of the table**, not padding:
-/// a gate that fired on the directive alone rather than on a real digit loss
-/// would refuse `1 + 1`, and every `expect: Runs` row below is a program the
-/// oracle answers cleanly.
-///
-/// Whoever implements the LOSTDIGITS condition deletes this test: every
-/// `Refuses` row becomes an oracle-agreeing 98.972, and `signal-on-trap`
-/// becomes the trap firing.
+/// The two `Diverges` rows are the LOSTDIGITS **condition**, which is a
+/// separate gap: `SIGNAL ON LOSTDIGITS` arms nothing here, and a bare `DO n`
+/// answers 26.2 where the oracle's escalation preempts its own.
 #[test]
-fn lostdigits_is_refused_where_the_oracle_raises_and_nowhere_else() {
+fn lostdigits_raises_98_972_where_the_oracle_does_and_nowhere_else() {
     #[derive(PartialEq, Debug)]
     enum Expect {
-        /// rc 120 here; the oracle raises 98.972.
-        Refuses,
+        /// Byte-identical with the oracle on all three descriptors, and the
+        /// oracle's stderr really does carry 98.972.
+        Raises,
         /// rc 0 on both sides with the same stdout -- the over-fire control.
         Agrees,
         /// Neither: a divergence this task did not close, named in the row.
         Diverges,
     }
-    use Expect::{Agrees, Diverges, Refuses};
+    use Expect::{Agrees, Diverges, Raises};
     let armed = "::options lostdigits syntax\n";
     let cases: &[(&str, &str, Expect)] = &[
         // Every operator whose operand the oracle checks.
-        ("plus", "numeric digits 3\nsay 1.23456789 + 0\n", Refuses),
+        ("plus", "numeric digits 3\nsay 1.23456789 + 0\n", Raises),
         (
             "plus-right",
             "numeric digits 3\nsay 0 + 1.23456789\n",
-            Refuses,
+            Raises,
         ),
-        ("minus", "numeric digits 3\nsay 1.23456789 - 0\n", Refuses),
-        ("times", "numeric digits 3\nsay 1.23456789 * 1\n", Refuses),
-        ("divide", "numeric digits 3\nsay 1.23456789 / 1\n", Refuses),
+        ("minus", "numeric digits 3\nsay 1.23456789 - 0\n", Raises),
+        ("times", "numeric digits 3\nsay 1.23456789 * 1\n", Raises),
+        ("divide", "numeric digits 3\nsay 1.23456789 / 1\n", Raises),
         (
             "remainder",
             "numeric digits 3\nsay 1.23456789 // 1\n",
-            Refuses,
+            Raises,
         ),
-        ("intdiv", "numeric digits 3\nsay 1.23456789 % 1\n", Refuses),
+        ("intdiv", "numeric digits 3\nsay 1.23456789 % 1\n", Raises),
         (
             "power-base",
             "numeric digits 3\nsay 1.23456789 ** 1\n",
-            Refuses,
+            Raises,
         ),
-        (
-            "prefix-plus",
-            "numeric digits 3\nsay +1.23456789\n",
-            Refuses,
-        ),
+        ("prefix-plus", "numeric digits 3\nsay +1.23456789\n", Raises),
         (
             "prefix-minus",
             "numeric digits 3\nsay -1.23456789\n",
-            Refuses,
+            Raises,
         ),
         (
             "compare-eq",
             "numeric digits 3\nsay 1.23456789 = 1\n",
-            Refuses,
+            Raises,
         ),
         (
             "compare-gt",
             "numeric digits 3\nsay 123456789 > 1\n",
-            Refuses,
+            Raises,
         ),
         (
             "do-initial",
             "numeric digits 3\ndo k = 1.23456789 to 2\nleave\nend\n",
-            Refuses,
+            Raises,
         ),
         (
             "do-to",
             "numeric digits 3\ndo k = 1 to 123456789\nleave\nend\n",
-            Refuses,
+            Raises,
         ),
         (
             "do-by",
             "numeric digits 3\ndo k = 1 to 2 by 123456789\nleave\nend\n",
-            Refuses,
+            Raises,
         ),
         (
             "through-a-variable",
             "numeric digits 3\nz = 123456789\nsay z + 0\n",
-            Refuses,
+            Raises,
         ),
         (
             "through-an-argument",
             "numeric digits 3\ncall s 123456789\nexit\ns: use arg a\nsay a + 0\nreturn\n",
-            Refuses,
+            Raises,
         ),
         (
             "all-syntax-spelling",
             "numeric digits 3\nsay 1.23456789 + 0\n",
-            Refuses,
+            Raises,
         ),
         // The over-fire controls: the directive is armed and nothing is lost.
         ("nothing-lost", "numeric digits 3\nsay 1 + 1\n", Agrees),
@@ -478,19 +470,26 @@ fn lostdigits_is_refused_where_the_oracle_raises_and_nowhere_else() {
             let outcome = run_crate(&path, engine);
             let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
             match expect {
-                Refuses => {
-                    assert_eq!(
-                        outcome.exit_code, 120,
-                        "{name} on {engine:?}: expected the loud refusal, got stderr {stderr}"
-                    );
-                    assert!(
-                        stderr.contains("LOSTDIGITS"),
-                        "{name} on {engine:?}: refused for some other reason: {stderr}"
-                    );
+                Raises => {
                     assert!(
                         String::from_utf8_lossy(&cpp.stderr).contains("98.972"),
                         "{name}: the oracle no longer raises LOSTDIGITS here, so this row \
-                         is refusing over nothing"
+                         would agree over nothing"
+                    );
+                    assert_eq!(
+                        stderr,
+                        String::from_utf8_lossy(&cpp.stderr),
+                        "{name} on {engine:?}: stderr differs from the oracle"
+                    );
+                    assert_eq!(
+                        String::from_utf8_lossy(&outcome.stdout),
+                        String::from_utf8_lossy(&cpp.stdout),
+                        "{name} on {engine:?}: stdout differs from the oracle"
+                    );
+                    assert_eq!(
+                        outcome.exit_code,
+                        cpp.expect_exit_code(),
+                        "{name} on {engine:?}: exit status differs from the oracle"
                     );
                 }
                 Agrees => {

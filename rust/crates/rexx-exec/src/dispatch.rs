@@ -535,6 +535,12 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("String", "LENGTH", Arity::Fixed(0), native_length),
     (
         "String",
+        "MAKEARRAY",
+        Arity::Fixed(0),
+        native_string_makearray,
+    ),
+    (
+        "String",
         "MAKESTRING",
         Arity::Fixed(0),
         native_string_make_string,
@@ -7880,6 +7886,48 @@ fn native_file_path_separator(
     Ok(Some(interp.text_built(b":".to_vec())))
 }
 
+/// `String~makeArray`: the receiver's lines, one array element each.
+///
+/// Measured on the oracle: `LF` separates and a trailing one terminates
+/// rather than separating, so `'a' || LF` is one element and
+/// `LF` alone is one empty element; a `CR` immediately before an `LF` is
+/// dropped with it, while a lone `CR` is ordinary data; and the empty string
+/// has no lines at all, answering an array of zero items.
+fn native_string_makearray(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let bytes = interp.to_text(receiver).to_vec();
+    let mut lines: Vec<&[u8]> = Vec::new();
+    if !bytes.is_empty() {
+        let mut rest = bytes.as_slice();
+        while let Some(at) = rest.iter().position(|b| *b == b'\n') {
+            let (line, after) = rest.split_at(at);
+            let line = line.strip_suffix(b"\r").unwrap_or(line);
+            lines.push(line);
+            rest = &after[1..];
+        }
+        if !rest.is_empty() {
+            lines.push(rest);
+        }
+    }
+    let slots: Vec<Option<ObjRef>> = lines
+        .into_iter()
+        .map(|line| Some(interp.text_built(line.to_vec())))
+        .collect();
+    let body = Body::Array {
+        dimensions: slots.is_empty().then(|| Box::from([0].as_slice())),
+        slots,
+    };
+    let object = interp.alloc_with(BehaviourId::ARRAY, body);
+    interp.roots.push_temp(object);
+    let caller = interp.caller();
+    interp.send_message(object, INIT, None, &[], caller)?;
+    Ok(Some(object))
+}
+
 /// `String~reverse`: the receiver's own bytes, last to first.
 fn native_reverse(
     interp: &mut Interp,
@@ -9745,19 +9793,16 @@ mod tests {
     #[test]
     fn a_conversion_this_phase_does_not_model_is_loud_where_the_ones_it_models_answer() {
         for (source, message) in [
-            // `MAKEARRAY` is in these behaviours' dictionaries and this crate
-            // has no code for it. Answering `.nil` here would contradict the
-            // oracle, which converts: measured, oracle rc 0,
-            // `.environment~request("ARRAY")` is an array and
-            // `'abc'~request("ARRAY")` is an Array of one line.
+            // `MAKEARRAY` is in this behaviour's dictionary and this crate
+            // has no code for it. Answering `.nil` would contradict the
+            // oracle, which converts: measured, oracle rc 0 and
+            // `.environment~request("ARRAY")` is an array. `String` is no
+            // longer here -- `native_string_makearray` answers it, and
+            // `string_makearray.rex` compares every shape against the
+            // oracle.
             (
                 "say .environment~request('ARRAY')\n",
                 "rexx-exec: method \"MAKEARRAY\" of class \"Directory\" is not implemented \
-                 (Phase 5)\n",
-            ),
-            (
-                "say 'abc'~request('ARRAY')\n",
-                "rexx-exec: method \"MAKEARRAY\" of class \"String\" is not implemented \
                  (Phase 5)\n",
             ),
             // A receiver with no variable pool to keep a name in. The oracle

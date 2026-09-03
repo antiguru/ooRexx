@@ -4736,54 +4736,60 @@ impl Interp {
         }
     }
 
-    /// Refuses loudly where `::OPTIONS LOSTDIGITS SYNTAX` is in force and
+    /// Raises 98.972 where `::OPTIONS LOSTDIGITS SYNTAX` is in force and
     /// `operand` really does carry more digits than the precision in force.
     ///
-    /// **The gate is one already-hot bool and the test is `#[cold]`**, the
-    /// split [`Interp::novalue_check`] measures: every arithmetic operand of
-    /// every program reaches the first line, and only a program that
-    /// installed the directive reaches past it.
-    ///
-    /// **This is not LOSTDIGITS detection for any other purpose.** The
-    /// condition itself is unimplemented -- `SIGNAL ON LOSTDIGITS` arms
-    /// nothing and an untrapped digit loss is silent, both of which the
-    /// oracle does differently -- so the test below exists to decide whether
-    /// to refuse and is read nowhere else. [`Loud::lostdigits_option`] says
-    /// what the refusal claims.
+    /// The gate is one already-hot bool and the rest is `#[cold]`, the split
+    /// [`Interp::novalue_check`] measures. `value` is the handle the operand's
+    /// bytes come from and is read only on the raising path.
     #[inline(always)]
-    pub(crate) fn lostdigits_check(&self, operand: &Number) -> Result<(), Failure> {
+    pub(crate) fn lostdigits_check(
+        &mut self,
+        operand: &Number,
+        value: ObjRef,
+    ) -> Result<(), Failure> {
         if !self.lostdigits_armed {
             return Ok(());
         }
-        self.lostdigits_refusal(operand)
+        self.lostdigits_raise(operand, value)
     }
 
     /// The two-operand form, so an operator pays the gate once.
+    ///
+    /// Left first, which is the oracle's order: measured, `987654321 +
+    /// 123456789` at DIGITS 3 names `987654321`.
     #[inline(always)]
-    pub(crate) fn lostdigits_check2(&self, left: &Number, right: &Number) -> Result<(), Failure> {
+    pub(crate) fn lostdigits_check2(
+        &mut self,
+        left: &Number,
+        left_value: ObjRef,
+        right: &Number,
+        right_value: ObjRef,
+    ) -> Result<(), Failure> {
         if !self.lostdigits_armed {
             return Ok(());
         }
-        self.lostdigits_refusal(left)?;
-        self.lostdigits_refusal(right)
+        self.lostdigits_raise(left, left_value)?;
+        self.lostdigits_raise(right, right_value)
     }
 
     /// [`Interp::lostdigits_check`]'s armed half: the per-activation setting,
-    /// then the operand's own digit count.
+    /// then the operand's own digit count, then the operand's bytes.
     ///
-    /// The order matters and is not an economy: `SIGNAL ON LOSTDIGITS` turns
-    /// the escalation off for its activation (`ConditionSyntax::disable_for`),
-    /// so a program that arms a trap is back to this crate's ordinary silent
-    /// answer and must not be refused here.
+    /// The order matters: `SIGNAL ON LOSTDIGITS` turns the escalation off for
+    /// its activation (`ConditionSyntax::disable_for`), so a program arming a
+    /// trap is not raised at here, and the bytes are fetched last because
+    /// that step is the only one that allocates.
     #[cold]
     #[inline(never)]
-    fn lostdigits_refusal(&self, operand: &Number) -> Result<(), Failure> {
+    fn lostdigits_raise(&mut self, operand: &Number, value: ObjRef) -> Result<(), Failure> {
         if !self.condition_raises_syntax(b"LOSTDIGITS") {
             return Ok(());
         }
         let digits = usize::try_from(self.activation().settings.digits()).unwrap_or(usize::MAX);
         if operand.digit_count() > digits {
-            return Err(Loud::lostdigits_option().into());
+            let text = self.string_value_text(value);
+            return Err(Raised::lostdigits(&text).into());
         }
         Ok(())
     }
@@ -8519,7 +8525,7 @@ impl Interp {
         // positions carry an operand exactly as an operator's do -- measured,
         // `do k = 1 to 123456789` and `... by 123456789` are both 98.972 at
         // DIGITS 3.
-        self.lostdigits_check(&operand)?;
+        self.lostdigits_check(&operand, value)?;
         Ok(round_via_unary_plus(&operand, entry_digits).map_err(Raised::from)?)
     }
 
