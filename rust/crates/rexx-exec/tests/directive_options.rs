@@ -20,8 +20,13 @@
 //!
 //! Three descriptors compared separately and raw, `directive_options_trace`
 //! included: its `>I>`/`<I<` lines name the program's own path, which is the
-//! same absolute path on both sides, so no normalisation is applied and none
-//! is needed.
+//! same absolute path on both sides.
+//!
+//! **One program's stderr is compared as a multiset of lines rather than as a
+//! sequence**, per Deviation 7 in `docs/superpowers/plans/phase-4-exclusions.txt`:
+//! `REPLY` under a package trace setting has two threads writing trace lines and
+//! their interleaving is not a specified observable. [`CONCURRENTLY_TRACED`] is
+//! the scope, and it is the only relaxation applied anywhere in this file.
 
 mod support;
 
@@ -33,6 +38,23 @@ use support::oracle::locate;
 
 /// The prefix every program this binary runs shares.
 const PREFIX: &str = "directive_options";
+
+/// The programs whose stderr is compared as a multiset of lines rather than as
+/// a sequence, and the only ones -- Deviation 7's scope.
+///
+/// Measured 2026-09-03: thirty oracle runs of this program answered two
+/// distinct stderr orderings from one path and five from another, all of them
+/// the same multiset of lines, while both crate engines answered one ordering
+/// thirty times out of thirty. `REPLY` runs the rest of the method on another
+/// thread and its trace lines interleave with the main thread's.
+const CONCURRENTLY_TRACED: &[&str] = &["directive_options_trace_reply.rex"];
+
+/// The word whose presence in a program's source is what
+/// [`the_licensed_list_names_exactly_the_programs_that_can_trace_from_two_threads`]
+/// holds [`CONCURRENTLY_TRACED`] against. Deliberately a plain substring
+/// search, so a mention in a comment triggers it too: over-triggering costs a
+/// deliberate decision and under-triggering costs a silent flake.
+const SECOND_THREAD: &str = "reply";
 
 /// The directory the programs live in, relative to the corpus root.
 const SUBDIR: &str = "lang";
@@ -65,6 +87,31 @@ fn programs() -> Vec<PathBuf> {
     found
 }
 
+/// Whether `path`'s stderr is compared as a multiset -- membership of
+/// [`CONCURRENTLY_TRACED`], keyed on the file name.
+fn concurrently_traced(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| CONCURRENTLY_TRACED.contains(&name))
+}
+
+/// One side's stderr in the form the comparison uses: the bytes as they came
+/// for an ordinary program, and the same lines sorted for one on
+/// [`CONCURRENTLY_TRACED`].
+///
+/// Splitting on `\n` rather than using `str::lines` keeps the trailing empty
+/// element a final newline produces, so a stderr that lost its last newline
+/// still differs after sorting.
+fn stderr_for_comparison(bytes: &[u8], concurrently_traced: bool) -> String {
+    let text = String::from_utf8_lossy(bytes).into_owned();
+    if !concurrently_traced {
+        return text;
+    }
+    let mut lines: Vec<&str> = text.split('\n').collect();
+    lines.sort_unstable();
+    lines.join("\n")
+}
+
 fn run_crate(path: &Path, engine: Engine) -> Outcome {
     let text = fs::read(path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
     let path_str = path
@@ -92,7 +139,16 @@ fn every_directive_options_program_answers_the_oracle() {
         let path = fs::canonicalize(&path)
             .unwrap_or_else(|e| panic!("cannot resolve {}: {e}", path.display()));
         let name = path.display().to_string();
+        let licensed = concurrently_traced(&path);
         let cpp = oracle.run(&path);
+        // A relaxed comparison over two empty strings would agree with
+        // anything, so the licensed program owes evidence that it wrote the
+        // lines whose order is being discarded.
+        assert!(
+            !licensed || !cpp.stderr.is_empty(),
+            "{name}: on CONCURRENTLY_TRACED and the oracle wrote no stderr, so the \
+             multiset comparison below compares two absences"
+        );
         for engine in [Engine::Ir, Engine::TreeWalker] {
             let outcome = run_crate(&path, engine);
             assert_eq!(
@@ -101,9 +157,14 @@ fn every_directive_options_program_answers_the_oracle() {
                 "{name}: stdout differs from the oracle on {engine:?}"
             );
             assert_eq!(
-                String::from_utf8_lossy(&outcome.stderr),
-                String::from_utf8_lossy(&cpp.stderr),
-                "{name}: stderr differs from the oracle on {engine:?}"
+                stderr_for_comparison(&outcome.stderr, licensed),
+                stderr_for_comparison(&cpp.stderr, licensed),
+                "{name}: stderr differs from the oracle on {engine:?}{}",
+                if licensed {
+                    " (compared as a multiset of lines, Deviation 7)"
+                } else {
+                    ""
+                }
             );
             assert_eq!(
                 outcome.exit_code,
@@ -112,6 +173,115 @@ fn every_directive_options_program_answers_the_oracle() {
             );
         }
     }
+}
+
+/// The multiset comparison discards the ordering of stderr lines and nothing
+/// else.
+///
+/// **Every row is a mutation of one transcript**, so each says which single
+/// property survives sorting: a reordering is accepted, and a changed,
+/// missing, added or duplicated line, or a lost final newline, is still
+/// caught. Without the last of those the split would be `str::lines` and a
+/// truncated stderr would pass.
+///
+/// The unlicensed half of each row is what stops the relaxation from leaking:
+/// the same reordering is a difference when the flag is off.
+#[test]
+fn the_multiset_comparison_discards_ordering_and_nothing_else() {
+    let base = b"     4 *-* say 1\n       >>>   \"1\"\n     5 *-* say 2\n       >>>   \"2\"\n";
+    let reordered = b"     5 *-* say 2\n       >>>   \"2\"\n     4 *-* say 1\n       >>>   \"1\"\n";
+    assert_eq!(
+        stderr_for_comparison(base, true),
+        stderr_for_comparison(reordered, true),
+        "a reordering is what the licence covers and it was not accepted"
+    );
+    assert_ne!(
+        stderr_for_comparison(base, false),
+        stderr_for_comparison(reordered, false),
+        "the same reordering must still differ for a program off the list, or \
+         the licence has leaked to every program in this binary"
+    );
+    for (what, mutated) in [
+        (
+            "a changed line",
+            &b"     4 *-* say 1\n       >>>   \"9\"\n     5 *-* say 2\n       >>>   \"2\"\n"[..],
+        ),
+        (
+            "a missing line",
+            &b"     4 *-* say 1\n     5 *-* say 2\n       >>>   \"2\"\n"[..],
+        ),
+        (
+            "an added line",
+            &b"     4 *-* say 1\n       >>>   \"1\"\n     5 *-* say 2\n       >>>   \"2\"\n     6 *-* say 3\n"[..],
+        ),
+        (
+            "a duplicated line",
+            &b"     4 *-* say 1\n       >>>   \"1\"\n       >>>   \"1\"\n     5 *-* say 2\n       >>>   \"2\"\n"[..],
+        ),
+        (
+            "a lost final newline",
+            &b"     4 *-* say 1\n       >>>   \"1\"\n     5 *-* say 2\n       >>>   \"2\""[..],
+        ),
+    ] {
+        assert_ne!(
+            stderr_for_comparison(base, true),
+            stderr_for_comparison(mutated, true),
+            "{what} survived the multiset comparison"
+        );
+    }
+}
+
+/// [`CONCURRENTLY_TRACED`] names exactly the programs whose source mentions
+/// [`SECOND_THREAD`], in both directions.
+///
+/// A program that gains a `REPLY` later would flake under the sequence
+/// comparison at whatever rate the machine's scheduling gives it; this makes
+/// that a red test and a deliberate decision instead. The other direction
+/// catches a name that has been renamed or deleted out from under the list,
+/// which would leave the licence claiming a scope it no longer has.
+///
+/// The tail assertion is the one that keeps the licence narrow: at least one
+/// program is compared as a sequence, so the strict path is still exercised.
+#[test]
+fn the_licensed_list_names_exactly_the_programs_that_can_trace_from_two_threads() {
+    let found = programs();
+    assert!(
+        !found.is_empty(),
+        "no programs on disk, so this asserted nothing"
+    );
+    let mut licensed = 0usize;
+    let mut strict = 0usize;
+    for path in &found {
+        let source = fs::read_to_string(path)
+            .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+        let mentions = source.to_lowercase().contains(SECOND_THREAD);
+        let listed = concurrently_traced(path);
+        assert_eq!(
+            listed,
+            mentions,
+            "{}: CONCURRENTLY_TRACED says {listed} and the source mentions \
+             {SECOND_THREAD:?} = {mentions}. A program that can trace from a \
+             second thread needs the multiset comparison or it flakes; one \
+             that cannot must keep the sequence comparison.",
+            path.display()
+        );
+        if listed {
+            licensed += 1;
+        } else {
+            strict += 1;
+        }
+    }
+    assert_eq!(
+        licensed,
+        CONCURRENTLY_TRACED.len(),
+        "a name in CONCURRENTLY_TRACED matched no program on disk, so the \
+         licence names a scope it does not have"
+    );
+    assert!(
+        strict > 0,
+        "every program is licensed, so nothing in this binary still compares \
+         stderr as a sequence"
+    );
 }
 
 /// **`LOSTDIGITS` is the one escalation this crate cannot honour, so it

@@ -1325,6 +1325,109 @@ DEVIATIONS -- permanent, chosen
      Transcript, and what else that mutation reddened, in
      `.superpowers/sdd/2026-08-27-phase-5b/task-6-report.md`.
 
+  7. THE INTERLEAVING OF TWO CONCURRENTLY TRACING THREADS IS NOT A SPECIFIED
+     OBSERVABLE, AND ONE PROGRAM'S STDERR IS COMPARED AS A MULTISET OF LINES.
+
+     IMPLEMENTED by 5c Task 7. The harness is
+     `rust/crates/rexx-exec/tests/directive_options.rs`: `CONCURRENTLY_TRACED`
+     names the programs whose stderr is sorted before comparison, on BOTH
+     sides, and `stderr_for_comparison` is the function that does it.
+     Found by Task 7 while gating `Stem`, diagnosed by the team lead, and
+     LICENSED BY THEM, 2026-09-03, as Task 6's owner.
+
+     SCOPE -- ORDERING BETWEEN THREADS ONLY, AND THE BOUNDARY IS LOAD-BEARING.
+     Deliberately narrow, in Deviation 0's register: this is not licence to
+     normalise anything else and must not be cited as precedent for a second
+     relaxation. It covers the ORDER of stderr lines for a program named in
+     `CONCURRENTLY_TRACED`, and nothing else. It does NOT license:
+
+       - a line whose content differs.
+       - a line that is missing, added or duplicated.
+       - a stderr that lost its final newline. The comparison splits on `\n`
+         rather than using `str::lines`, so the empty trailing element a final
+         newline produces survives the sort and a truncation still differs.
+       - any difference in stdout, or in exit status, on either side.
+       - the ordering of stderr lines for any program NOT named in that list.
+
+     A divergence outside that list is a defect and is not covered here.
+
+     AND IT DOES NOT LICENSE ASSERTING NOTHING. A relaxed comparison of two
+     empty strings agrees with anything, so the licensed branch carries a
+     non-emptiness guard: a program on the list whose oracle stderr is empty
+     is an assertion failure naming that, not a pass. A check that goes green
+     over an absence is the failure mode this project meets most often, and
+     that guard is the one line standing between this licence and it.
+
+     WHY. The reference is non-deterministic, so no amount of care on this
+     side makes a raw byte comparison against one fresh oracle run stable.
+     `REPLY` runs the rest of a method on another thread
+     (`corpus/lang/directive_options_trace_reply.rex`), and under `::options
+     trace r` that thread and the main one both write trace lines to the same
+     descriptor. Nothing in `oodocs` specifies which reaches it first. This is
+     the ruling Deviations 5 and 6 already make for collection ordering,
+     applied to a second observable that has the same shape: where the oracle
+     itself answers several orderings, matching one of them is the whole of
+     what is owed.
+
+     WHAT WAS MEASURED, 2026-09-03, one program per run from a fresh empty
+     directory. Thirty oracle runs with both interpreters given the same
+     absolute path answered TWO distinct stderr orderings, 29 and 1; thirty
+     more with the program copied elsewhere answered FIVE. Every one of those
+     seven orderings sorts to the same multiset of lines as the others in its
+     set, and both crate engines answered ONE ordering, thirty times out of
+     thirty, that is a member of the oracle's set. Stdout was byte-identical
+     on all sides in every run, and the exit status was 0 in every run.
+
+     THE TEAM LEAD'S OWN MEASUREMENT SAID TWO ORDERINGS IN TEN RUNS. That is
+     the same finding at a smaller sample; the count of distinct orderings is
+     a property of scheduling under load and not of the program, which is why
+     the row states the multiset identity rather than the number.
+
+     WITNESS, RUNNABLE, AND IT IS NOT A `LICENSED_DIVERGENCES` ROW.
+     `the_multiset_comparison_discards_ordering_and_nothing_else` mutates one
+     transcript six ways and asserts that sorting accepts the reordering and
+     still catches a changed, missing, added or duplicated line and a lost
+     final newline -- and that the same reordering still DIFFERS with the flag
+     off, which is what stops the relaxation leaking to the other programs in
+     that binary. `the_licensed_list_names_exactly_the_programs_that_can_
+     trace_from_two_threads` holds the list against the programs on disk in
+     both directions, so a program that gains a `REPLY` later is a red test
+     rather than a new flake, and asserts that at least one program is still
+     compared as a sequence.
+
+     `tests/licensed_divergences.rs` is the wrong home for this row and the
+     reason is its own contract: that table PINS EXACT BYTES for both sides,
+     which is precisely what a non-deterministic reference cannot supply. A
+     row there would reintroduce the flake it exists to remove, so this
+     deviation carries no `LICENSED DIVERGENCE WITNESS:` marker.
+
+     CONTROL, RECORDED AS RUN. The two comparisons were run INTERLEAVED --
+     twenty-five invocations of
+     `every_directive_options_program_answers_the_oracle` from each of two
+     test binaries, alternating, so the machine load is shared; the binaries
+     differ only in this change
+     (sequence
+     `5412028008e08a1cb329f07ceb130d71715fa5d1251c492ff0aa015bf9bf68d2`,
+     multiset
+     `fc98763c76a1dcd75d49fff7a0329e7b60984679092df31e960010f43f9ac1da`):
+     the sequence comparison was 17 pass / 8 fail and the multiset
+     comparison 25 pass / 0 fail. Interleaving is not optional here. The first,
+     NON-interleaved attempt at diagnosing this compared head at 12/15 against
+     BASE at 15/15 and would have been reported as a regression this change
+     introduced; run alternately the two were 16/4 and 16/4.
+
+     WHAT THIS DOES NOT COVER, AND IT IS A TRAP FOR WHOEVER CLOSES 5c.
+     `directive_options.rs` is a test binary the 5c flip is meant to delete,
+     moving its programs into `corpus/phase-5c.txt`; `corpus.rs` compares a
+     subset program's stderr as a SEQUENCE, so that move reintroduces this
+     flake unless the same scope is carried across. That harness already has
+     the per-program mechanism for it -- `RAW_STDERR_COMPARISON` and
+     `support::oracle::StderrComparison` -- and the shape is a third variant
+     beside `Raw` and the normalised one, listed for
+     `lang/directive_options_trace_reply.rex` alone. It was NOT built here:
+     nothing would run it until that subset file exists, and an unexercised
+     comparison path is the defect this row's own controls exist to prevent.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 
