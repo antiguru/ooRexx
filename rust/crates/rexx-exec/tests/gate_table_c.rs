@@ -201,8 +201,12 @@ fn read_sections() -> Vec<Section> {
 #[derive(Clone, PartialEq, Eq, Debug)]
 enum Construction {
     /// The class is `covered`, and this is the committed expression the
-    /// instance arm constructs with.
-    Constructs(String),
+    /// instance arm constructs with, together with the directive the probe
+    /// carries below its readbacks for an expression that reads one.
+    Constructs {
+        program: String,
+        directive: Option<String>,
+    },
     /// The class is not `covered`, so the instance arm asks a bare `~new`
     /// whose raise is the row's evidence.
     Raises,
@@ -219,7 +223,7 @@ struct ClassRow {
 }
 
 fn read_classes() -> Vec<ClassRow> {
-    read_table("class-set.txt", 7)
+    read_table("class-set.txt", 8)
         .into_iter()
         .map(|row| ClassRow {
             name: row[0].clone(),
@@ -227,25 +231,39 @@ fn read_classes() -> Vec<ClassRow> {
             cite: row[3].clone(),
             status: row[4].clone(),
             reason: row[5].clone(),
-            construction: construction_of(&row[0], &row[4], &row[6]),
+            construction: construction_of(&row[0], &row[4], &row[6], &row[7]),
         })
         .collect()
 }
 
-/// The two fields `covered` is spread across, read back as one value.
+/// The fields `covered` is spread across, read back as one value.
 ///
 /// A panic rather than a structural row: a `covered` class with no program
 /// would leave every instance-arm probe below it derived from a status that
 /// claims a route the row set does not carry, and there is nothing to compare
 /// once that is true.
-fn construction_of(name: &str, status: &str, program: &str) -> Construction {
+fn construction_of(name: &str, status: &str, program: &str, directive: &str) -> Construction {
+    let directive = match directive {
+        NO_PROGRAM => None,
+        directive => Some(directive.to_string()),
+    };
     match (status, program) {
         ("covered", NO_PROGRAM) => panic!(
             "class-set.txt records {name} as `covered` and carries no construction program \
              for it. `covered` is exactly the claim that one is committed"
         ),
-        ("covered", program) => Construction::Constructs(program.to_string()),
-        (_, NO_PROGRAM) => Construction::Raises,
+        ("covered", program) => Construction::Constructs {
+            program: program.to_string(),
+            directive,
+        },
+        (_, NO_PROGRAM) => {
+            assert!(
+                directive.is_none(),
+                "class-set.txt records {name} as `{status}` and carries a construction \
+                 directive for it. Only a `covered` row has a route to an instance"
+            );
+            Construction::Raises
+        }
         (status, program) => panic!(
             "class-set.txt records {name} as `{status}` and carries the construction program \
              {program:?} for it. Only a `covered` row has a route to an instance"
@@ -872,15 +890,26 @@ fn method_probe_text(
              \x20  crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on\n\
              \x20  every run and compares it in both directions. */\n"
         ),
-        (_, Construction::Constructs(program)) => format!(
-            "/* Table C method rows: {class}, instance arm -- one line per method\n\
-             \x20  corpus/docs/class-methods.txt documents on this arm, asked of the\n\
-             \x20  instance `{program}` answers, in the row set's own order. That\n\
-             \x20  expression is corpus/docs/class-set.txt's committed construction\n\
-             \x20  program for this class, and carrying one is what `covered` claims.\n\
-             \x20  Derived by crates/rexx-exec/tests/gate_table_c.rs, which re-derives\n\
-             \x20  this file on every run and compares it in both directions. */\n"
-        ),
+        (_, Construction::Constructs { program, directive }) => {
+            let carries = match directive {
+                None => String::new(),
+                Some(directive) => format!(
+                    "\x20  `{directive}` below the readbacks is that row's `directives` \
+                     field,\n\
+                     \x20  which is what the expression reads.\n"
+                ),
+            };
+            format!(
+                "/* Table C method rows: {class}, instance arm -- one line per method\n\
+                 \x20  corpus/docs/class-methods.txt documents on this arm, asked of the\n\
+                 \x20  instance `{program}` answers, in the row set's own order. That\n\
+                 \x20  expression is corpus/docs/class-set.txt's committed construction\n\
+                 \x20  program for this class, and carrying one is what `covered` claims.\n\
+                 {carries}\
+                 \x20  Derived by crates/rexx-exec/tests/gate_table_c.rs, which re-derives\n\
+                 \x20  this file on every run and compares it in both directions. */\n"
+            )
+        }
         (_, Construction::Raises) => format!(
             "/* Table C method rows: {class}, instance arm. corpus/docs/class-set.txt\n\
              \x20  records this class as `{status}`, because\n\
@@ -900,7 +929,9 @@ fn method_probe_text(
         }
     } else {
         match construction {
-            Construction::Constructs(program) => text.push_str(&format!("o = {program}\n")),
+            Construction::Constructs { program, .. } => {
+                text.push_str(&format!("o = {program}\n"));
+            }
             Construction::Raises => text.push_str(&format!("o = .{class}~new\n")),
         }
         for name in names {
@@ -908,6 +939,13 @@ fn method_probe_text(
                 "say 'instance' o~hasMethod(\"{}\")\n",
                 method_name_literal(name)
             ));
+        }
+        if let Construction::Constructs {
+            directive: Some(directive),
+            ..
+        } = construction
+        {
+            text.push_str(&format!("{directive}\n"));
         }
     }
     text
@@ -1379,18 +1417,24 @@ fn check_interpolated_text(classes: &[ClassRow], structural: &mut Vec<Structural
                 ),
             });
         }
-        let Construction::Constructs(program) = &row.construction else {
+        let Construction::Constructs { program, directive } = &row.construction else {
             continue;
         };
-        if program.contains("*/") || program.contains('\n') || program.trim() != program {
-            structural.push(Structural {
-                subject: format!("class-set.txt row {}", row.name),
-                detail: format!(
-                    "its `construction` is not a single trimmed line free of `*/`, and the \
-                     derived probe writes it into both a Rexx block comment and its own \
-                     `o = ` line: {program:?}"
-                ),
-            });
+        for (field, text) in [
+            ("construction", Some(program)),
+            ("directives", directive.as_ref()),
+        ] {
+            let Some(text) = text else { continue };
+            if text.contains("*/") || text.contains('\n') || text.trim() != text.as_str() {
+                structural.push(Structural {
+                    subject: format!("class-set.txt row {}", row.name),
+                    detail: format!(
+                        "its `{field}` is not a single trimmed line free of `*/`, and the \
+                         derived probe writes it into both a Rexx block comment and its own \
+                         line: {text:?}"
+                    ),
+                });
+            }
         }
     }
 }
@@ -1809,7 +1853,7 @@ fn concept_and_class_gate_table() {
         // alike: every row of it can read `agree` over a question neither
         // side was asked, and the report counts those on every run.
         let shape = match (arm.as_str(), &group.construction) {
-            ("class", _) | (_, Construction::Constructs(_)) => OracleShape::Exactly(rows.len()),
+            ("class", _) | (_, Construction::Constructs { .. }) => OracleShape::Exactly(rows.len()),
             (_, Construction::Raises) => OracleShape::AllOrNothing(rows.len()),
         };
         let shape_held =

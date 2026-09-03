@@ -1,11 +1,11 @@
-/* Table C method rows: Class, instance arm. corpus/docs/class-set.txt
-   records this class as `not-covered`, because
-   no construction program is committed; a bare ~new raises 93.901 on the oracle.
-   So ~new raises and no line below it is reached; the row's evidence
-   is that raise, which is what the row set says there is to have.
+/* Table C method rows: Class, instance arm -- one line per method
+   corpus/docs/class-methods.txt documents on this arm, asked of the
+   instance `.Object~subclass('k')` answers, in the row set's own order. That
+   expression is corpus/docs/class-set.txt's committed construction
+   program for this class, and carrying one is what `covered` claims.
    Derived by crates/rexx-exec/tests/gate_table_c.rs, which re-derives
    this file on every run and compares it in both directions. */
-o = .Class~new
+o = .Object~subclass('k')
 say 'instance' o~hasMethod("=")
 say 'instance' o~hasMethod("==")
 say 'instance' o~hasMethod("<>")

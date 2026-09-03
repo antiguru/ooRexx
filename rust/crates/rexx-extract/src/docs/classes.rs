@@ -95,15 +95,24 @@ impl Status {
     }
 }
 
-/// A class's status together with, for a `covered` class, the Rexx expression
-/// its instance arm binds `o` to.
+/// A committed route to an instance: the Rexx expression a method row's
+/// instance arm binds `o` to, and the directive the probe carries below its
+/// readbacks for a route whose expression needs one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Route {
+    pub expression: String,
+    pub directive: Option<String>,
+}
+
+/// A class's status together with, for a `covered` class, the route its
+/// instance arm constructs with.
 ///
-/// The expression rides inside the status because it is what the status
+/// The route rides inside the status because it is what the status
 /// claims: there is no way to reach [`Coverage::Covered`] without naming the
 /// route the derived probe then constructs with.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Coverage {
-    Covered(String),
+    Covered(Route),
     NotCovered,
     Unreachable,
 }
@@ -120,7 +129,15 @@ impl Coverage {
     /// The construction expression, or `None` for a class that has no route.
     pub fn program(&self) -> Option<&str> {
         match self {
-            Coverage::Covered(program) => Some(program),
+            Coverage::Covered(route) => Some(&route.expression),
+            _ => None,
+        }
+    }
+
+    /// The directive the route needs, or `None` for a route that needs none.
+    pub fn directive(&self) -> Option<&str> {
+        match self {
+            Coverage::Covered(route) => route.directive.as_deref(),
             _ => None,
         }
     }
@@ -223,14 +240,18 @@ pub const CONSTRUCTION_PROGRAMS: &[(&str, &str)] = &[
         ".CaselessColumnComparator~new(3, 100)",
     ),
     ("CIRCULARQUEUE", ".CircularQueue~new(5)"),
+    ("CLASS", ".Object~subclass('k')"),
     ("COLUMNCOMPARATOR", ".ColumnComparator~new(3, 100)"),
     (
         "INVERTINGCOMPARATOR",
         ".InvertingComparator~new(.Comparator~new)",
     ),
     ("MESSAGE", ".Message~new(.Object~new, 'STRING')"),
+    ("METHOD", ".Object~method('objectName')"),
+    ("PACKAGE", ".Class~package"),
     ("REXXCONTEXT", ".context"),
     ("REXXINFO", ".RexxInfo"),
+    ("ROUTINE", ".routines~r"),
     ("STRING", ".String~new('abc')"),
     ("SUPPLIER", ".Supplier~new(.Array~new, .Array~new)"),
     ("TIMESPAN", ".TimeSpan~new(1)"),
@@ -238,8 +259,15 @@ pub const CONSTRUCTION_PROGRAMS: &[(&str, &str)] = &[
     ("WEAKREFERENCE", ".WeakReference~new(.Object~new)"),
 ];
 
-/// What `class-set.txt`'s construction field holds for a class that is not
-/// `covered`, and so has no route to an instance.
+/// The directive a committed construction program needs below the probe's
+/// readbacks, for a route whose expression reads what a directive defines.
+///
+/// `.routines~r` is the reference's own shape (`oneof.xml:457`-`:458`, whose
+/// example pairs `.routines~talk~call(...)` with a `::routine talk` below it).
+pub const CONSTRUCTION_DIRECTIVES: &[(&str, &str)] = &[("ROUTINE", "::routine r")];
+
+/// What `class-set.txt`'s construction and directives fields hold for a row
+/// that has none.
 pub const NO_PROGRAM: &str = "-";
 
 /// A sentence of the reference saying the user cannot construct a class, with
@@ -487,6 +515,13 @@ pub fn class_rows(books: &[Book], argutil_citation: &str) -> Vec<ClassRow> {
              carry -- a program for a name no row derives is never reached and never run"
         );
     }
+    for (class, directive) in CONSTRUCTION_DIRECTIVES {
+        assert!(
+            named.contains(*class),
+            "CONSTRUCTION_DIRECTIVES commits {directive} for {class}, which the class set does \
+             not carry -- a directive for a name no row derives is never reached and never run"
+        );
+    }
     out
 }
 
@@ -571,11 +606,24 @@ fn coverage_of(
         .iter()
         .find(|(n, _)| *n == upper)
         .map(|(_, program)| *program);
+    let directive = CONSTRUCTION_DIRECTIVES
+        .iter()
+        .find(|(n, _)| *n == upper)
+        .map(|(_, directive)| (*directive).to_string());
     assert!(
         program.is_none() || construction != Some("new"),
         "{name} has a committed construction program and a bare ~new that constructs on \
          the oracle, so the program is a route to nothing the bare ~new does not already reach"
     );
+    assert!(
+        directive.is_none() || program.is_some(),
+        "{name} has a committed construction directive and no construction program, so \
+         nothing derives a probe that would carry the directive"
+    );
+    let route = |expression: &str| Route {
+        expression: expression.to_string(),
+        directive: directive.clone(),
+    };
     if let Some((first, last, text, status)) = sentence {
         let at = if first == last {
             format!("{first}")
@@ -595,7 +643,7 @@ fn coverage_of(
         }
         return match program {
             Some(program) => (
-                Coverage::Covered(program.to_string()),
+                Coverage::Covered(route(program)),
                 format!(
                     "a committed construction program answers an instance; the reference \
                      says the user cannot create one and names a Rexx-level route instead \
@@ -614,7 +662,7 @@ fn coverage_of(
     if let Some(program) = program {
         let code = construction.unwrap_or_default();
         return (
-            Coverage::Covered(program.to_string()),
+            Coverage::Covered(route(program)),
             format!(
                 "a committed construction program answers an instance; a bare ~new raises \
                  {code} on the oracle"
@@ -623,7 +671,7 @@ fn coverage_of(
     }
     match construction {
         Some("new") => (
-            Coverage::Covered(format!(".{name}~new")),
+            Coverage::Covered(route(&format!(".{name}~new"))),
             "a bare ~new constructs an instance on the oracle".into(),
         ),
         Some(code) => (
@@ -984,7 +1032,7 @@ pub fn class_set_rows(rows: &[ClassRow]) -> Vec<String> {
     rows.iter()
         .map(|r| {
             format!(
-                "{}\t{}\t{}\t{}:{}\t{}\t{}\t{}",
+                "{}\t{}\t{}\t{}:{}\t{}\t{}\t{}\t{}",
                 r.name,
                 r.entry,
                 r.section,
@@ -992,7 +1040,8 @@ pub fn class_set_rows(rows: &[ClassRow]) -> Vec<String> {
                 r.line,
                 r.coverage.status().as_str(),
                 r.reason,
-                r.coverage.program().unwrap_or(NO_PROGRAM)
+                r.coverage.program().unwrap_or(NO_PROGRAM),
+                r.coverage.directive().unwrap_or(NO_PROGRAM)
             )
         })
         .collect()
@@ -1048,8 +1097,8 @@ pub fn class_set_header(stamp: &str, argutil_citation: &str) -> Vec<String> {
         "fundclasses.xml, collclasses.xml, utilityclasses.xml and".into(),
         "streamclasses.xml.".into(),
         String::new(),
-        "One `name<TAB>entry<TAB>section<TAB>book:line<TAB>status<TAB>reason<TAB>construction`"
-            .into(),
+        "One `name<TAB>entry<TAB>section<TAB>book:line<TAB>status<TAB>reason".into(),
+        "<TAB>construction<TAB>directives`".into(),
         "per line, in book order then document order.".into(),
         String::new(),
         format!(
@@ -1081,6 +1130,12 @@ pub fn class_set_header(stamp: &str, argutil_citation: &str) -> Vec<String> {
              gate_table_c.rs derives the instance-arm probe from this field, so \
              a `covered` status and the program the probe runs cannot say \
              different things."
+        ),
+        String::new(),
+        format!(
+            "`directives` is the directive the probe carries below its \
+             readbacks, for a `covered` row whose expression reads what a \
+             directive defines; every other row carries `{NO_PROGRAM}`."
         ),
         String::new(),
         "Derived by `cargo run -p rexx-extract --bin rexx-extract-docs`, whose".into(),

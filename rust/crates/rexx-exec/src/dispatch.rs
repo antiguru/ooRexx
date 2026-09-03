@@ -1001,9 +1001,15 @@ enum Primitive {
     /// A `Body::Native` whose class is `.Directory` -- `.environment` and
     /// `.local`. Measured, `.environment~class~id` is `Directory`.
     Directory,
-    /// A `Body::Native` whose class is `.StringTable` -- `.methods`,
-    /// `.routines` and `.resources`. Measured, `.methods~class` is
-    /// `The StringTable class`.
+    /// A `Body::Native` whose class is `.StringTable` or a subclass of it --
+    /// `.methods`, `.routines` and `.resources`, and `.TraceObject~new`.
+    /// Measured, `.methods~class` is `The StringTable class` and
+    /// `.TraceObject~new~class~id` is `TraceObject`.
+    ///
+    /// **Carries the object's own class**, because a subclass answers its own
+    /// method set: measured, oracle rc 0,
+    /// `.TraceObject~new~hasMethod("makeString")` is `1` where
+    /// `.StringTable~new~hasMethod("makeString")` is `0`.
     ///
     /// **Separate from [`Primitive::Directory`] even though every method
     /// either answers is the same C++ function**, because `Directory` and
@@ -1013,7 +1019,7 @@ enum Primitive {
     /// reports `"Directory"`.
     ///
     /// **`.context` is not this**; it is [`Primitive::Context`] below.
-    StringTable,
+    StringTable(ObjRef),
     /// A `Body::Native` whose class is `.RexxContext` -- what `.context`
     /// answers. Measured, `.context~class` is `The RexxContext class`.
     Context,
@@ -1550,11 +1556,16 @@ impl Interp {
                     {
                         Ok(Primitive::Directory)
                     }
+                    // Descent rather than identity: `::class "TraceObject"
+                    // subclass StringTable`'s class-side `NEW` forwards to
+                    // this one, and the object it builds carries
+                    // `TraceObject` as its class.
                     Body::Native(native)
-                        if self.object_model.as_ref().map(|model| model.string_table)
-                            == Some(native.class()) =>
+                        if self.object_model.as_ref().is_some_and(|model| {
+                            model.classes.is_a(native.class(), model.string_table)
+                        }) =>
                     {
-                        Ok(Primitive::StringTable)
+                        Ok(Primitive::StringTable(native.class()))
                     }
                     // `.context`. Its class is in the registry, so there is
                     // a behaviour to resolve against, and `RexxContext`'s
@@ -1621,7 +1632,7 @@ impl Interp {
             Primitive::Method => model.method,
             Primitive::Routine => model.routine,
             Primitive::Directory => model.directory,
-            Primitive::StringTable => model.string_table,
+            Primitive::StringTable(class) => class,
             Primitive::Context => model.context,
             Primitive::RexxInfo => model.rexx_info,
             Primitive::Message => model.message,
@@ -4118,7 +4129,7 @@ fn native_class(
         Primitive::Method => model.method,
         Primitive::Routine => model.routine,
         Primitive::Directory => model.directory,
-        Primitive::StringTable => model.string_table,
+        Primitive::StringTable(class) => class,
         Primitive::Context => model.context,
         Primitive::RexxInfo => model.rexx_info,
         Primitive::Message => model.message,
@@ -4582,7 +4593,7 @@ fn native_define_methods(
     };
     if !matches!(
         interp.receiver_kind(table),
-        Ok(Primitive::Directory | Primitive::StringTable)
+        Ok(Primitive::Directory | Primitive::StringTable(_))
     ) {
         return Err(supplier_refusal(interp, table));
     }
@@ -4892,7 +4903,7 @@ fn enhance_class_methods(
 ) -> Result<(), Failure> {
     if !matches!(
         interp.receiver_kind(enhancing),
-        Ok(Primitive::Directory | Primitive::StringTable)
+        Ok(Primitive::Directory | Primitive::StringTable(_))
     ) {
         return Err(supplier_refusal(interp, enhancing));
     }
@@ -6311,7 +6322,7 @@ fn native_object_name(
         | Primitive::Method
         | Primitive::Routine
         | Primitive::Directory
-        | Primitive::StringTable
+        | Primitive::StringTable(_)
         | Primitive::Context
         | Primitive::RexxInfo
         | Primitive::Message => interp.string_value_text(receiver),
@@ -6365,7 +6376,7 @@ fn native_object_name_set(
         | Primitive::Method
         | Primitive::Routine
         | Primitive::Directory
-        | Primitive::StringTable
+        | Primitive::StringTable(_)
         | Primitive::Context
         | Primitive::RexxInfo
         | Primitive::Message => {
@@ -7097,7 +7108,7 @@ fn native_enhanced(
     };
     if !matches!(
         interp.receiver_kind(table),
-        Ok(Primitive::Directory | Primitive::StringTable)
+        Ok(Primitive::Directory | Primitive::StringTable(_))
     ) {
         return Err(supplier_refusal(interp, table));
     }
@@ -8981,6 +8992,38 @@ mod tests {
                 "{write}"
             );
         }
+    }
+
+    /// A `StringTable` subclass answers its own class and its own method set,
+    /// and stores what its constructor puts in it -- `.TraceObject~new` is the
+    /// one the image ships.
+    ///
+    /// **The pair is what makes each half mean something.** `makeString` is a
+    /// name `TraceObject` declares and `StringTable` does not, so a build that
+    /// read the behaviour off `.StringTable` answers `StringTable 0` for the
+    /// first line; and the entries are what separate a genuine collection from
+    /// an object that merely answers the right names. Every value below is the
+    /// oracle's, measured.
+    #[test]
+    fn a_string_table_subclass_answers_its_own_class_methods_and_entries() {
+        assert_eq!(
+            both_engines(
+                "say .TraceObject~new~class~id .TraceObject~new~hasMethod('makeString')\n\
+                 say .StringTable~new~class~id .StringTable~new~hasMethod('makeString')\n"
+            ),
+            (
+                0,
+                "TraceObject 1\nStringTable 0\n".to_string(),
+                String::new()
+            )
+        );
+        assert_eq!(
+            both_engines(
+                "o = .TraceObject~new\n\
+                 say o['OPTION'] o['NUMBER'] o~at('NUMBER') o['TIMESTAMP']~class~id\n"
+            ),
+            (0, "N 1 1 DateTime\n".to_string(), String::new())
+        );
     }
 
     /// A semaphore's `UNINIT` runs at collection rather than at a send, so a

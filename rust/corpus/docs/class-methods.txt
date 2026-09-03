@@ -83,38 +83,38 @@
 #
 # derived-at: oodocs/rexxref/en-US r13198
 
-Class	=	instance	not-covered	mthClassComparisonMethods	fundclasses.xml:134	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	==	instance	not-covered	mthClassComparisonMethods	fundclasses.xml:134	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	<>	instance	not-covered	mthClassComparisonMethods	fundclasses.xml:134	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	><	instance	not-covered	mthClassComparisonMethods	fundclasses.xml:134	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	\=	instance	not-covered	mthClassComparisonMethods	fundclasses.xml:134	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	\==	instance	not-covered	mthClassComparisonMethods	fundclasses.xml:134	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	activate	instance	not-covered	mthClassActivate	fundclasses.xml:194	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	annotation	instance	not-covered	mthClassAnnotation	fundclasses.xml:220	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	annotations	instance	not-covered	mthClassAnnotations	fundclasses.xml:244	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	baseClass	instance	not-covered	mthClassBaseClass	fundclasses.xml:268	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	defaultName	instance	not-covered	mthClassDefaultName	fundclasses.xml:287	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	define	instance	not-covered	mthClassDefine	fundclasses.xml:320	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	defineMethods	instance	not-covered	mthClassDefineMethods	fundclasses.xml:369	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	delete	instance	not-covered	mthClassDelete	fundclasses.xml:414	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	enhanced	instance	not-covered	mthClassEnhanced	fundclasses.xml:457	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	id	instance	not-covered	mthClassId	fundclasses.xml:501	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	inherit	instance	not-covered	mthClassInherit	fundclasses.xml:528	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	isAbstract	instance	not-covered	mthClassIsAbstract	fundclasses.xml:590	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	isMetaclass	instance	not-covered	mthClassIsMetaclass	fundclasses.xml:614	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	isSubclassOf	instance	not-covered	mthClassIsSubclassOf	fundclasses.xml:644	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	metaClass	instance	not-covered	mthClassMetaclass	fundclasses.xml:674	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	method	instance	not-covered	mthClassMethod	fundclasses.xml:700	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	methods	instance	not-covered	mthClassMethods	fundclasses.xml:734	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	mixinClass	instance	not-covered	mthClassMixinClass	fundclasses.xml:788	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	new	class	not-covered	mthClassNew	fundclasses.xml:838	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	package	instance	not-covered	mthClassPackage	fundclasses.xml:881	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	queryMixinClass	instance	not-covered	mthClassQueryMixinClass	fundclasses.xml:904	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	subclass	instance	not-covered	mthClassSubclass	fundclasses.xml:921	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	subclasses	instance	not-covered	mthClassSubclasses	fundclasses.xml:972	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	superClass	instance	not-covered	mthClassSuperclass	fundclasses.xml:991	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	superClasses	instance	not-covered	mthClassSuperclasses	fundclasses.xml:1021	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Class	uninherit	instance	not-covered	mthClassUninherit	fundclasses.xml:1058	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Class	=	instance	covered	mthClassComparisonMethods	fundclasses.xml:134	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	==	instance	covered	mthClassComparisonMethods	fundclasses.xml:134	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	<>	instance	covered	mthClassComparisonMethods	fundclasses.xml:134	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	><	instance	covered	mthClassComparisonMethods	fundclasses.xml:134	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	\=	instance	covered	mthClassComparisonMethods	fundclasses.xml:134	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	\==	instance	covered	mthClassComparisonMethods	fundclasses.xml:134	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	activate	instance	covered	mthClassActivate	fundclasses.xml:194	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	annotation	instance	covered	mthClassAnnotation	fundclasses.xml:220	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	annotations	instance	covered	mthClassAnnotations	fundclasses.xml:244	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	baseClass	instance	covered	mthClassBaseClass	fundclasses.xml:268	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	defaultName	instance	covered	mthClassDefaultName	fundclasses.xml:287	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	define	instance	covered	mthClassDefine	fundclasses.xml:320	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	defineMethods	instance	covered	mthClassDefineMethods	fundclasses.xml:369	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	delete	instance	covered	mthClassDelete	fundclasses.xml:414	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	enhanced	instance	covered	mthClassEnhanced	fundclasses.xml:457	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	id	instance	covered	mthClassId	fundclasses.xml:501	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	inherit	instance	covered	mthClassInherit	fundclasses.xml:528	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	isAbstract	instance	covered	mthClassIsAbstract	fundclasses.xml:590	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	isMetaclass	instance	covered	mthClassIsMetaclass	fundclasses.xml:614	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	isSubclassOf	instance	covered	mthClassIsSubclassOf	fundclasses.xml:644	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	metaClass	instance	covered	mthClassMetaclass	fundclasses.xml:674	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	method	instance	covered	mthClassMethod	fundclasses.xml:700	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	methods	instance	covered	mthClassMethods	fundclasses.xml:734	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	mixinClass	instance	covered	mthClassMixinClass	fundclasses.xml:788	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	new	class	covered	mthClassNew	fundclasses.xml:838	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	package	instance	covered	mthClassPackage	fundclasses.xml:881	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	queryMixinClass	instance	covered	mthClassQueryMixinClass	fundclasses.xml:904	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	subclass	instance	covered	mthClassSubclass	fundclasses.xml:921	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	subclasses	instance	covered	mthClassSubclasses	fundclasses.xml:972	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	superClass	instance	covered	mthClassSuperclass	fundclasses.xml:991	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	superClasses	instance	covered	mthClassSuperclasses	fundclasses.xml:1021	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Class	uninherit	instance	covered	mthClassUninherit	fundclasses.xml:1058	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
 Message	new	class	covered	mthMessageNew	fundclasses.xml:1166	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
 Message	arguments	instance	covered	mthMessageArguments	fundclasses.xml:1228	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
 Message	completed	instance	covered	mthMessageCompleted	fundclasses.xml:1244	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
@@ -136,26 +136,26 @@ Message	target	instance	covered	mthMessageTarget	fundclasses.xml:1904	a committe
 Message	triggered	instance	covered	mthMessageTriggered	fundclasses.xml:1922	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
 Message	wait	instance	covered	mthMessageWait	fundclasses.xml:1970	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
 Message	cancel	instance	covered	mthAlarmNotificationCancel	utilityclasses.xml:371	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
-Method	new	class	not-covered	mthMethodNew	fundclasses.xml:2042	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Method	loadExternalMethod	class	not-covered	mthMethodLoadExternalMethod	fundclasses.xml:2101	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Method	newFile	class	not-covered	mthMethodNewFile	fundclasses.xml:2072	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Method	annotation	instance	not-covered	mthMethodAnnotation	fundclasses.xml:2137	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Method	annotations	instance	not-covered	mthMethodAnnotations	fundclasses.xml:2163	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Method	isAbstract	instance	not-covered	mthMethodIsAbstract	fundclasses.xml:2188	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Method	isAttribute	instance	not-covered	mthMethodIsAttribute	fundclasses.xml:2214	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Method	isConstant	instance	not-covered	mthMethodIsConstant	fundclasses.xml:2236	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Method	isGuarded	instance	not-covered	mthMethodIsGuarded	fundclasses.xml:2259	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Method	isPackage	instance	not-covered	mthMethodIsPackage	fundclasses.xml:2280	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Method	isPrivate	instance	not-covered	mthMethodIsPrivate	fundclasses.xml:2299	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Method	isProtected	instance	not-covered	mthMethodIsProtected	fundclasses.xml:2321	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Method	package	instance	not-covered	mthMethodPackage	fundclasses.xml:2338	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Method	scope	instance	not-covered	mthMethodScope	fundclasses.xml:2358	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Method	setGuarded	instance	not-covered	mthMethodSetGuarded	fundclasses.xml:2390	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Method	setPrivate	instance	not-covered	mthMethodSetPrivate	fundclasses.xml:2413	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Method	setProtected	instance	not-covered	mthMethodSetProtected	fundclasses.xml:2433	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Method	setSecurityManager	instance	not-covered	mthMethodSetSecurityManager	fundclasses.xml:2451	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Method	setUnguarded	instance	not-covered	mthMethodSetUnguarded	fundclasses.xml:2472	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Method	source	instance	not-covered	mthMethodSource	fundclasses.xml:2499	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Method	new	class	covered	mthMethodNew	fundclasses.xml:2042	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Method	loadExternalMethod	class	covered	mthMethodLoadExternalMethod	fundclasses.xml:2101	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Method	newFile	class	covered	mthMethodNewFile	fundclasses.xml:2072	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Method	annotation	instance	covered	mthMethodAnnotation	fundclasses.xml:2137	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Method	annotations	instance	covered	mthMethodAnnotations	fundclasses.xml:2163	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Method	isAbstract	instance	covered	mthMethodIsAbstract	fundclasses.xml:2188	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Method	isAttribute	instance	covered	mthMethodIsAttribute	fundclasses.xml:2214	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Method	isConstant	instance	covered	mthMethodIsConstant	fundclasses.xml:2236	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Method	isGuarded	instance	covered	mthMethodIsGuarded	fundclasses.xml:2259	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Method	isPackage	instance	covered	mthMethodIsPackage	fundclasses.xml:2280	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Method	isPrivate	instance	covered	mthMethodIsPrivate	fundclasses.xml:2299	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Method	isProtected	instance	covered	mthMethodIsProtected	fundclasses.xml:2321	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Method	package	instance	covered	mthMethodPackage	fundclasses.xml:2338	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Method	scope	instance	covered	mthMethodScope	fundclasses.xml:2358	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Method	setGuarded	instance	covered	mthMethodSetGuarded	fundclasses.xml:2390	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Method	setPrivate	instance	covered	mthMethodSetPrivate	fundclasses.xml:2413	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Method	setProtected	instance	covered	mthMethodSetProtected	fundclasses.xml:2433	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Method	setSecurityManager	instance	covered	mthMethodSetSecurityManager	fundclasses.xml:2451	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Method	setUnguarded	instance	covered	mthMethodSetUnguarded	fundclasses.xml:2472	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Method	source	instance	covered	mthMethodSource	fundclasses.xml:2499	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
 Object	new	class	covered	mthObjectNew	fundclasses.xml:2584	a bare ~new constructs an instance on the oracle
 Object	=	instance	covered	mthObjectComparisonMethods	fundclasses.xml:2600	a bare ~new constructs an instance on the oracle
 Object	==	instance	covered	mthObjectComparisonMethods	fundclasses.xml:2600	a bare ~new constructs an instance on the oracle
@@ -188,57 +188,57 @@ Object	start	instance	covered	mthObjectStart	fundclasses.xml:3369	a bare ~new co
 Object	startWith	instance	covered	mthObjectStartWith	fundclasses.xml:3421	a bare ~new constructs an instance on the oracle
 Object	string	instance	covered	mthObjectString	fundclasses.xml:3474	a bare ~new constructs an instance on the oracle
 Object	unsetMethod	instance	covered	mthObjectUnsetMethod	fundclasses.xml:3524	a bare ~new constructs an instance on the oracle
-Package	new	class	not-covered	mthPackageNew	fundclasses.xml:3639	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	defaultOptions	class	not-covered	mthPackageDefaultOptions	fundclasses.xml:3674	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	addClass	instance	not-covered	mthPackageAddClass	fundclasses.xml:3721	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	addPackage	instance	not-covered	mthPackageAddPackage	fundclasses.xml:3739	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	addPublicClass	instance	not-covered	mthPackageAddPublicClass	fundclasses.xml:3767	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	addPublicRoutine	instance	not-covered	mthPackageAddPublicRoutine	fundclasses.xml:3785	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	addRoutine	instance	not-covered	mthPackageAddRoutine	fundclasses.xml:3804	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	annotation	instance	not-covered	mthPackageAnnotation	fundclasses.xml:3825	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	annotations	instance	not-covered	mthPackageAnnotations	fundclasses.xml:3850	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	classes	instance	not-covered	mthPackageClasses	fundclasses.xml:3874	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	definedMethods	instance	not-covered	mthPackageDefinedMethods	fundclasses.xml:3897	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	digits	instance	not-covered	mthPackageDigits	fundclasses.xml:3915	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	findClass	instance	not-covered	mthPackageFindClass	fundclasses.xml:3935	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	findNamespace	instance	not-covered	mthPackageFindNamespace	fundclasses.xml:3970	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	findProgram	instance	not-covered	mthPackageFindProgram	fundclasses.xml:3994	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	findPublicClass	instance	not-covered	mthPackageFindPublicClass	fundclasses.xml:4019	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	findPublicRoutine	instance	not-covered	mthPackageFindPublicRoutine	fundclasses.xml:4045	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	findRoutine	instance	not-covered	mthPackageFindRoutine	fundclasses.xml:4071	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	form	instance	not-covered	mthPackageForm	fundclasses.xml:4091	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	fuzz	instance	not-covered	mthPackageFuzz	fundclasses.xml:4112	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	importedClasses	instance	not-covered	mthPackageImportedClasses	fundclasses.xml:4133	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	importedPackages	instance	not-covered	mthPackageImportedPackages	fundclasses.xml:4154	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	importedRoutines	instance	not-covered	mthPackageImportedRoutines	fundclasses.xml:4171	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	loadLibrary	instance	not-covered	mthPackageLoadLibrary	fundclasses.xml:4188	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	loadPackage	instance	not-covered	mthPackageLoadPackage	fundclasses.xml:4209	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	local	instance	not-covered	mthPackageLocal	fundclasses.xml:4243	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	name	instance	not-covered	mthPackageName	fundclasses.xml:4262	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	namespaces	instance	not-covered	mthPackageNamespaces	fundclasses.xml:4294	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	options	instance	not-covered	mthPackageOptions	fundclasses.xml:4316	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	prolog	instance	not-covered	mthPackageProlog	fundclasses.xml:4431	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	publicClasses	instance	not-covered	mthPackagePublicClasses	fundclasses.xml:4450	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	publicRoutines	instance	not-covered	mthPackagePublicRoutines	fundclasses.xml:4478	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	resource	instance	not-covered	mthPackageResource	fundclasses.xml:4509	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	resources	instance	not-covered	mthPackageResources	fundclasses.xml:4539	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	routines	instance	not-covered	mthPackageRoutines	fundclasses.xml:4572	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	setSecurityManager	instance	not-covered	mthPackageSetSecurityManager	fundclasses.xml:4592	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	source	instance	not-covered	mthPackageSource	fundclasses.xml:4614	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	sourceLine	instance	not-covered	mthPackageSourceLine	fundclasses.xml:4633	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	sourceSize	instance	not-covered	mthPackageSourceSize	fundclasses.xml:4651	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Package	trace	instance	not-covered	mthPackageTrace	fundclasses.xml:4668	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Routine	new	class	not-covered	mthRoutineNew	fundclasses.xml:4736	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Routine	loadExternalRoutine	class	not-covered	mthRoutineLoadExternalRoutine	fundclasses.xml:4792	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Routine	newFile	class	not-covered	mthRoutineNewFile	fundclasses.xml:4765	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Routine	[]	instance	not-covered	mthRoutineCallBrackets	fundclasses.xml:4829	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Routine	annotation	instance	not-covered	mthRoutineAnnotation	fundclasses.xml:4846	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Routine	annotations	instance	not-covered	mthRoutineAnnotations	fundclasses.xml:4872	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Routine	call	instance	not-covered	mthRoutineCall	fundclasses.xml:4896	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Routine	callWith	instance	not-covered	mthRoutineCallWith	fundclasses.xml:4916	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Routine	package	instance	not-covered	mthRoutinePackage	fundclasses.xml:4937	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Routine	setSecurityManager	instance	not-covered	mthRoutineSetSecurityManager	fundclasses.xml:4955	no construction program is committed; a bare ~new raises 88.901 on the oracle
-Routine	source	instance	not-covered	mthRoutineSource	fundclasses.xml:4976	no construction program is committed; a bare ~new raises 88.901 on the oracle
+Package	new	class	covered	mthPackageNew	fundclasses.xml:3639	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	defaultOptions	class	covered	mthPackageDefaultOptions	fundclasses.xml:3674	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	addClass	instance	covered	mthPackageAddClass	fundclasses.xml:3721	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	addPackage	instance	covered	mthPackageAddPackage	fundclasses.xml:3739	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	addPublicClass	instance	covered	mthPackageAddPublicClass	fundclasses.xml:3767	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	addPublicRoutine	instance	covered	mthPackageAddPublicRoutine	fundclasses.xml:3785	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	addRoutine	instance	covered	mthPackageAddRoutine	fundclasses.xml:3804	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	annotation	instance	covered	mthPackageAnnotation	fundclasses.xml:3825	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	annotations	instance	covered	mthPackageAnnotations	fundclasses.xml:3850	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	classes	instance	covered	mthPackageClasses	fundclasses.xml:3874	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	definedMethods	instance	covered	mthPackageDefinedMethods	fundclasses.xml:3897	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	digits	instance	covered	mthPackageDigits	fundclasses.xml:3915	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	findClass	instance	covered	mthPackageFindClass	fundclasses.xml:3935	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	findNamespace	instance	covered	mthPackageFindNamespace	fundclasses.xml:3970	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	findProgram	instance	covered	mthPackageFindProgram	fundclasses.xml:3994	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	findPublicClass	instance	covered	mthPackageFindPublicClass	fundclasses.xml:4019	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	findPublicRoutine	instance	covered	mthPackageFindPublicRoutine	fundclasses.xml:4045	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	findRoutine	instance	covered	mthPackageFindRoutine	fundclasses.xml:4071	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	form	instance	covered	mthPackageForm	fundclasses.xml:4091	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	fuzz	instance	covered	mthPackageFuzz	fundclasses.xml:4112	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	importedClasses	instance	covered	mthPackageImportedClasses	fundclasses.xml:4133	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	importedPackages	instance	covered	mthPackageImportedPackages	fundclasses.xml:4154	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	importedRoutines	instance	covered	mthPackageImportedRoutines	fundclasses.xml:4171	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	loadLibrary	instance	covered	mthPackageLoadLibrary	fundclasses.xml:4188	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	loadPackage	instance	covered	mthPackageLoadPackage	fundclasses.xml:4209	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	local	instance	covered	mthPackageLocal	fundclasses.xml:4243	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	name	instance	covered	mthPackageName	fundclasses.xml:4262	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	namespaces	instance	covered	mthPackageNamespaces	fundclasses.xml:4294	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	options	instance	covered	mthPackageOptions	fundclasses.xml:4316	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	prolog	instance	covered	mthPackageProlog	fundclasses.xml:4431	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	publicClasses	instance	covered	mthPackagePublicClasses	fundclasses.xml:4450	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	publicRoutines	instance	covered	mthPackagePublicRoutines	fundclasses.xml:4478	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	resource	instance	covered	mthPackageResource	fundclasses.xml:4509	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	resources	instance	covered	mthPackageResources	fundclasses.xml:4539	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	routines	instance	covered	mthPackageRoutines	fundclasses.xml:4572	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	setSecurityManager	instance	covered	mthPackageSetSecurityManager	fundclasses.xml:4592	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	source	instance	covered	mthPackageSource	fundclasses.xml:4614	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	sourceLine	instance	covered	mthPackageSourceLine	fundclasses.xml:4633	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	sourceSize	instance	covered	mthPackageSourceSize	fundclasses.xml:4651	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Package	trace	instance	covered	mthPackageTrace	fundclasses.xml:4668	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Routine	new	class	covered	mthRoutineNew	fundclasses.xml:4736	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Routine	loadExternalRoutine	class	covered	mthRoutineLoadExternalRoutine	fundclasses.xml:4792	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Routine	newFile	class	covered	mthRoutineNewFile	fundclasses.xml:4765	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Routine	[]	instance	covered	mthRoutineCallBrackets	fundclasses.xml:4829	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Routine	annotation	instance	covered	mthRoutineAnnotation	fundclasses.xml:4846	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Routine	annotations	instance	covered	mthRoutineAnnotations	fundclasses.xml:4872	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Routine	call	instance	covered	mthRoutineCall	fundclasses.xml:4896	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Routine	callWith	instance	covered	mthRoutineCallWith	fundclasses.xml:4916	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Routine	package	instance	covered	mthRoutinePackage	fundclasses.xml:4937	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Routine	setSecurityManager	instance	covered	mthRoutineSetSecurityManager	fundclasses.xml:4955	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
+Routine	source	instance	covered	mthRoutineSource	fundclasses.xml:4976	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle
 String	new	class	covered	mthStringNew	fundclasses.xml:5152	a committed construction program answers an instance; a bare ~new raises 93.903 on the oracle
 String	alnum	class	covered	mthStringAlnum	fundclasses.xml:5171	a committed construction program answers an instance; a bare ~new raises 93.903 on the oracle
 String	alpha	class	covered	mthStringAlpha	fundclasses.xml:5192	a committed construction program answers an instance; a bare ~new raises 93.903 on the oracle
