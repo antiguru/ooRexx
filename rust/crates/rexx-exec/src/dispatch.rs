@@ -666,6 +666,10 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `memory/Setup.cpp:572`. The one row here whose answer is a value rather
     // than an instance.
     ("String", "NEW", Arity::Counted, native_string_new),
+    // `AddClassMethod("New", StemClass::newRexx, A_COUNT)`,
+    // `memory/Setup.cpp:1371`. A row of its own because the answer is the
+    // `Body::Stem` a bare stem read also produces, not an instance.
+    ("Stem", "NEW", Arity::Counted, native_stem_new),
     // `AddClassMethod("New", MutableBuffer::newRexx, A_COUNT)`,
     // `memory/Setup.cpp:1418`. A row of its own because the arguments are
     // checked before the allocation rather than by `INIT`.
@@ -797,6 +801,9 @@ pub(crate) struct ObjectModel {
     message: ObjRef,
     /// The class a `>name` term answers an instance of.
     variable_reference: ObjRef,
+    /// The class a `Body::Stem` answers, whether a bare stem read produced it
+    /// or `.Stem~new` did.
+    stem: ObjRef,
 }
 
 impl ObjectModel {
@@ -912,6 +919,7 @@ impl ObjectModel {
         let variable_reference = classes
             .lookup("VariableReference")
             .expect("VariableReference is a native class");
+        let stem = classes.lookup("Stem").expect("Stem is a native class");
         ObjectModel {
             classes,
             natives,
@@ -928,6 +936,7 @@ impl ObjectModel {
             rexx_info,
             message,
             variable_reference,
+            stem,
         }
     }
 }
@@ -1059,6 +1068,14 @@ enum Primitive {
     /// (`memory/Setup.cpp:1307`-`:1312`), so those names miss and reach
     /// `UNKNOWN`, which forwards them to the referenced value.
     VariableReference,
+    /// A `Body::Stem` -- what a bare stem read answers and what `.Stem~new`
+    /// builds. Measured, oracle rc 0: `s. = 'd'; o = s.; say o~class~id` is
+    /// `Stem`.
+    ///
+    /// **Its string value is the stem's default, not `a Stem`**, which is
+    /// `classify_string_conversion`'s `Body::Stem` arms rather than this one;
+    /// `~objectName` and `~defaultName` are `a Stem` all the same, measured.
+    Stem,
     /// The receiver **is** a class object, so its messages resolve against
     /// that class's own class behaviour rather than against any class's
     /// instance behaviour. Measured, `::class K` plus `::method m class`:
@@ -1457,13 +1474,9 @@ impl Interp {
     /// Which native class a value answers to, or the value's own shape when
     /// this phase builds no class for it.
     ///
-    /// A stem answers `Stem` on the oracle, and this function has no arm
-    /// that reaches `.Stem` -- a `Body::Stem` is a value kind of its own here
-    /// and nothing maps it onto the class object. So a stem receiver resolves
-    /// nothing and fails loudly rather than answering from the wrong class.
-    /// Every other heap shape that has no class here gets a refusal naming
-    /// itself rather than a shared one, so whichever task makes one reachable
-    /// as a receiver gets a message that says which.
+    /// Every heap shape that has no class here gets a refusal naming itself
+    /// rather than a shared one, so whichever task makes one reachable as a
+    /// receiver gets a message that says which.
     ///
     /// A **class object** is the one heap-tagged handle that answers, and it
     /// answers as itself rather than as an instance of anything: its
@@ -1501,7 +1514,7 @@ impl Interp {
                 None => Err("a value whose object is no longer live"),
                 Some(object) => match &object.body {
                     Body::Text { .. } | Body::Num { .. } => Ok(Primitive::String),
-                    Body::Stem { .. } => Err("a stem"),
+                    Body::Stem { .. } => Ok(Primitive::Stem),
                     Body::Array { .. } => Ok(Primitive::Array),
                     Body::Instance {
                         class, behaviour, ..
@@ -1637,6 +1650,7 @@ impl Interp {
             Primitive::RexxInfo => model.rexx_info,
             Primitive::Message => model.message,
             Primitive::VariableReference => model.variable_reference,
+            Primitive::Stem => model.stem,
             Primitive::Class(class) => return Ok(Behaviour::ClassSide(class)),
             Primitive::Instance { class, behaviour } => {
                 return Ok(Behaviour::Instance {
@@ -4152,6 +4166,7 @@ fn native_class(
         Primitive::RexxInfo => model.rexx_info,
         Primitive::Message => model.message,
         Primitive::VariableReference => model.variable_reference,
+        Primitive::Stem => model.stem,
         Primitive::Class(class) => model.classes.class_of(class),
         Primitive::Instance { class, .. } => class,
     }))
@@ -6333,6 +6348,11 @@ fn native_object_name(
         Primitive::VariableReference => {
             crate::environment::default_object_name("VariableReference").into_bytes()
         }
+        // Derived for the same reason, and the two answers part here too: a
+        // stem's `string_value_text` is its default. Measured, oracle rc 0:
+        // `s. = 'dflt'; o = s.; say o~objectName` is `a Stem` where
+        // `say o~string` is `dflt`.
+        Primitive::Stem => crate::environment::default_object_name("Stem").into_bytes(),
         Primitive::Object
         | Primitive::Array
         | Primitive::Class(_)
@@ -6412,7 +6432,8 @@ fn native_object_name_set(
         | Primitive::SmallInt
         | Primitive::Object
         | Primitive::Array
-        | Primitive::VariableReference => {
+        | Primitive::VariableReference
+        | Primitive::Stem => {
             return Err(Loud::native_method(b"OBJECTNAME=", "Object").into());
         }
     }
@@ -7440,6 +7461,49 @@ fn native_string_new(
     interp.roots.push_temp(object);
     let caller = interp.caller();
     interp.send_message(object, INIT, None, &args[1..], caller)?;
+    Ok(Some(object))
+}
+
+/// `Stem~new(name, ...)`: a stem object whose name is the optional argument
+/// -- `StemClass::newRexx` (`classes/StemClass.cpp:92`).
+///
+/// The constructor sets both `stemName` and `value` from that argument and
+/// leaves the stem dropped (`:118`-`:128`), which is what `default: None`
+/// means here: an unset stem renders as its own name. Measured, oracle rc 0:
+/// `say '[' || .Stem~new || ']'` is `[]` and the same with `('FOO.')` is
+/// `[FOO.]`.
+///
+/// A subclass of `Stem` refuses, for [`native_string_new`]'s reason: the body
+/// this builds carries no class of its own.
+fn native_stem_new(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    let name = match args.first().copied().flatten() {
+        Some(value) => {
+            let text = required_string_argument(interp, value, 1)?;
+            interp.to_text(text).into_owned()
+        }
+        None => Vec::new(),
+    };
+    if class != interp.object_model().stem {
+        return Err(unbuilt_new(interp, class));
+    }
+    let object = interp.alloc_with(
+        rexx_core::BehaviourId::STEM,
+        Body::Stem {
+            name: name.into(),
+            default: None,
+            tails: rexx_core::NameMap::default(),
+        },
+    );
+    interp.roots.push_temp(object);
+    let caller = interp.caller();
+    let rest = args.get(1..).unwrap_or_default();
+    interp.send_message(object, INIT, None, rest, caller)?;
     Ok(Some(object))
 }
 
@@ -9010,6 +9074,60 @@ mod tests {
                 "{write}"
             );
         }
+    }
+
+    /// A stem receiver answers `Stem` and renders as its own value, and a
+    /// `Stem` method with no body refuses loudly rather than answering.
+    ///
+    /// **The halves fail on opposite mistakes.** A stem built as a plain
+    /// instance renders `a Stem` where the oracle renders the default, at
+    /// rc 0 on both sides; a `~objectName` taken from the string value
+    /// answers `dflt` where the oracle answers `a Stem`; and without the
+    /// refusals a `Stem` method with no body would answer from nothing. Every
+    /// value below is the oracle's, measured.
+    #[test]
+    fn a_stem_receiver_answers_stem_and_renders_its_own_value() {
+        assert_eq!(
+            both_engines(
+                "s. = 'dflt'\n\
+                 o = s.\n\
+                 say o~class~id o~isA(.Stem) o~objectName o~defaultName\n\
+                 say o o~string\n"
+            ),
+            (
+                0,
+                "Stem 1 a Stem a Stem\ndflt dflt\n".to_string(),
+                String::new()
+            )
+        );
+        assert_eq!(
+            both_engines(
+                "say '[' || .Stem~new || ']' '[' || .Stem~new('FOO.') || ']'\n\
+                 say .Stem~new~class~id .Stem~new('FOO.')~string\n"
+            ),
+            (0, "[] [FOO.]\nStem FOO.\n".to_string(), String::new())
+        );
+        for (name, send) in [("AT", "o~at(1)"), ("[]", "o[1]"), ("ITEMS", "o~items")] {
+            let (code, stdout, stderr) =
+                both_engines(&format!("s. = 'dflt'\no = s.\nsay {send}\n"));
+            assert_eq!((code, stdout.as_str()), (120, ""), "{send}");
+            assert_eq!(
+                stderr,
+                format!(
+                    "rexx-exec: method {name:?} of class \"Stem\" is not implemented (Phase 5)\n"
+                ),
+                "{send}"
+            );
+        }
+        // A subclass would need the body to carry a class of its own, which
+        // `Body::Stem` does not, so the constructor refuses rather than
+        // answering an object whose `~class~id` is `Stem`.
+        let (code, stdout, stderr) = both_engines("say .K~new~class~id\n::class K subclass Stem\n");
+        assert_eq!((code, stdout.as_str()), (120, ""));
+        assert_eq!(
+            stderr,
+            "rexx-exec: method \"NEW\" of class \"K\" is not implemented (Phase 5)\n"
+        );
     }
 
     /// A `StringTable` subclass answers its own class and its own method set,
