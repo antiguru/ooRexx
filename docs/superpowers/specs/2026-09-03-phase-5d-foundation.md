@@ -275,8 +275,10 @@ D76's gate protects, and this phase is the first to add bodies while that gate e
 7. **`::REQUIRES` of a program file works**, witnessed by a corpus program: a public routine and a
    public class from a required file, the namespace form, a qualified reference, `>N>` under
    `trace i`, and the four-route search order.
-8. **The five gates each 0**, and the corpus headline at its full count — **331 of 331** today, plus
-   whatever this phase commits and the three 5c witnesses Task 1 folds in.
+8. **The five gates each 0**, and the corpus headline at its full count — **354 of 354** after
+   Task 1, plus whatever the rest of this phase commits. (It read **331 of 331** when this document
+   was written; Task 1 filed all 23 programs no subset file named, not only the three interim
+   witnesses.)
 9. **Nothing that previously refused now answers wrongly** — D76's gate, over the whole documented
    set rather than over the rows a task touched.
 

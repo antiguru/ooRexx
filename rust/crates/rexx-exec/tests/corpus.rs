@@ -173,11 +173,20 @@
 //! through DEVIATION 0's normalisation. A program belongs here when the run
 //! of spaces normalisation collapses is the thing the program exists to
 //! witness, and its own entry says which indent that is.
+//!
+//! # DEVIATION 7: one program's stderr is compared as a multiset of lines
+//!
+//! [`CONCURRENTLY_TRACED`] names the programs whose `stderr` is sorted on both
+//! sides before comparison, through `StderrComparison::Multiset`, because two
+//! threads write their trace lines to one descriptor and the order they reach
+//! it is not a specified observable. [`stderr_mode`] is where a program's
+//! comparison is chosen, and the scope, the controls and what the licence does
+//! **not** cover are `phase-4-exclusions.txt`'s Deviation 7.
 
 mod support;
 mod watchdog;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fmt::Write as _;
 use std::fs;
@@ -380,43 +389,71 @@ const RAW_STDERR_COMPARISON: &[&str] = &[
     "lang/method_reply_twice.rex",
 ];
 
-/// Every entry in [`RAW_STDERR_COMPARISON`] is a line some phase subset file
-/// actually names.
+/// Corpus programs whose `stderr` is compared as a multiset of lines, per
+/// DEVIATION 7: `REPLY` under a package trace setting has two threads writing
+/// trace lines and their interleaving is not a specified observable.
 ///
-/// **`check_case` matches by exact string equality against `rel_path`**
-/// (`RAW_STDERR_COMPARISON.contains(&rel_path)`), and nothing else checks
-/// that an entry corresponds to a real subset program. A path with any
-/// spelling difference from its subset line -- a typo, a missing `lang/`
-/// prefix, a stray trailing character -- would silently fail that equality
-/// check and fall through to the `else` branch, so `check_case` would give
-/// it the *normalised* comparison it never asked for: a green run reporting
-/// a byte-for-byte claim that was never actually checked byte for byte,
-/// which is the exact failure this whole mechanism exists to prevent, one
-/// level up. Without this test, only a human reading the diff would catch
+/// Measured 2026-09-03 in `tests/directive_options.rs`, whose
+/// `the_licensed_list_names_exactly_the_programs_that_can_trace_from_two_threads`
+/// holds the same scope against the family's sources: thirty oracle runs of
+/// this program answered seven distinct stderr orderings, all the same
+/// multiset, while both crate engines answered one ordering thirty times.
+const CONCURRENTLY_TRACED: &[&str] = &["lang/directive_options_trace_reply.rex"];
+
+/// The `stderr` comparison one corpus entry gets, and no entry may ask for two.
+///
+/// DEVIATION 0's normalisation is the default; [`RAW_STDERR_COMPARISON`] is
+/// stricter and [`CONCURRENTLY_TRACED`] is weaker, so a path on both lists
+/// would silently take whichever arm is written first.
+fn stderr_mode(rel_path: &str) -> StderrComparison {
+    match (
+        RAW_STDERR_COMPARISON.contains(&rel_path),
+        CONCURRENTLY_TRACED.contains(&rel_path),
+    ) {
+        (true, true) => panic!(
+            "{rel_path} is on both RAW_STDERR_COMPARISON and CONCURRENTLY_TRACED, which ask \
+             for a stricter and a weaker comparison of the same channel"
+        ),
+        (true, false) => StderrComparison::Raw,
+        (false, true) => StderrComparison::Multiset,
+        (false, false) => StderrComparison::Normalized,
+    }
+}
+
+/// Every entry in [`RAW_STDERR_COMPARISON`] and [`CONCURRENTLY_TRACED`] is a
+/// line some phase subset file actually names.
+///
+/// **[`stderr_mode`] matches by exact string equality against `rel_path`**,
+/// and nothing else checks that an entry corresponds to a real subset
+/// program. A path with any spelling difference from its subset line -- a
+/// typo, a missing `lang/` prefix, a stray trailing character -- would
+/// silently fail that equality and fall to the normalised comparison it
+/// never asked for: a green run reporting a claim that was never actually
+/// checked. Without this test, only a human reading the diff would catch
 /// that.
 ///
-/// **`RAW_STDERR_COMPARISON` holds entries, so this test is load-bearing
-/// rather than an iteration over zero rows.** Any entry misspelled relative
-/// to its subset line fails this test with the exact path named, where
-/// without it the same typo would compile, run, and report a passing
-/// byte-for-byte comparison that had silently used the normalised path
-/// instead.
+/// **Both lists hold entries, so this test is load-bearing rather than an
+/// iteration over zero rows.**
 #[test]
-fn raw_stderr_comparison_only_names_programs_the_subset_actually_runs() {
+fn every_opted_in_stderr_comparison_names_a_program_the_subset_runs() {
     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
     let paths: Vec<PathBuf> = SUBSET_FILES
         .iter()
         .map(|name| corpus_dir.join(name))
         .collect();
     let subset = read_subset(&paths.iter().map(PathBuf::as_path).collect::<Vec<_>>());
-    for raw_path in RAW_STDERR_COMPARISON {
-        assert!(
-            subset.iter().any(|entry| entry == raw_path),
-            "{raw_path} is listed in RAW_STDERR_COMPARISON but is not a line in \
-             any phase subset file -- check_case would silently give it the \
-             normalised comparison instead of the raw one it is supposed to opt \
-             into"
-        );
+    for (list, opted_into) in [
+        (RAW_STDERR_COMPARISON, "raw"),
+        (CONCURRENTLY_TRACED, "multiset"),
+    ] {
+        for listed in list {
+            assert!(
+                subset.iter().any(|entry| entry == listed),
+                "{listed} is listed for the {opted_into} stderr comparison but is not a \
+                 line in any phase subset file -- stderr_mode would silently give it the \
+                 normalised comparison instead of the one it is supposed to opt into"
+            );
+        }
     }
 }
 
@@ -469,16 +506,7 @@ fn check_case(oracle: &Oracle, corpus_dir: &Path, rel_path: &str) -> Option<Mism
 
     let rust_exit = wrapped_exit_code(rust.exit_code);
 
-    // DEVIATION 0 applies to the stderr comparison unless `rel_path` opted
-    // out via `RAW_STDERR_COMPARISON` -- see this file's own module doc for
-    // the scope and `tests/support/mod.rs` for the normalising function
-    // itself.
-    let stderr_mode = if RAW_STDERR_COMPARISON.contains(&rel_path) {
-        StderrComparison::Raw
-    } else {
-        StderrComparison::Normalized
-    };
-    let diffs = descriptor_diffs_with(&rust, &cpp, stderr_mode);
+    let diffs = descriptor_diffs_with(&rust, &cpp, stderr_mode(rel_path));
     if diffs.is_empty() {
         return None;
     }
@@ -674,6 +702,7 @@ const SUBSET_FILES: &[&str] = &[
     "phase-4c.txt",
     "phase-5a.txt",
     "phase-5b.txt",
+    "phase-5c.txt",
 ];
 
 /// The phase subset files that exist in the corpus directory, sorted.
@@ -702,7 +731,7 @@ fn phase_subset_files_on_disk() -> Vec<String> {
 /// The differential reads **every** phase subset file the corpus has.
 ///
 /// The pin on *which files* this runner reads, which is a different question
-/// from what any of them contains -- `coverage.rs`'s three
+/// from what any of them contains -- `coverage.rs`'s
 /// `phase_*_subset_matches_the_committed_list` tests pin the contents.
 #[test]
 fn the_differential_reads_every_phase_subset_file() {
@@ -714,6 +743,110 @@ fn the_differential_reads_every_phase_subset_file() {
          programs are never run against the oracle, and the run stays green \
          over whatever is left -- the headline shrinks and nothing asserts on \
          it"
+    );
+}
+
+/// The directory whose programs [`every_lang_program_is_run_or_named_unfiled`]
+/// accounts for.
+const LANG_SUBDIR: &str = "lang";
+
+/// The companion file naming the ones it does not run, and why.
+const UNFILED_FILE: &str = "unfiled.txt";
+
+/// Every `path<TAB>reason` in `corpus/unfiled.txt`.
+fn read_unfiled(corpus_dir: &Path) -> Vec<(String, String)> {
+    let path = corpus_dir.join(UNFILED_FILE);
+    let text =
+        fs::read_to_string(&path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(|line| {
+            let (entry, reason) = line.split_once('\t').unwrap_or_else(|| {
+                panic!("{}: {line:?} is not a `path<TAB>reason`", path.display())
+            });
+            assert!(
+                !reason.trim().is_empty(),
+                "{}: {entry} is named with no reason",
+                path.display()
+            );
+            (entry.to_string(), reason.to_string())
+        })
+        .collect()
+}
+
+/// Every `corpus/lang/*.rex` on disk is either named by a phase subset file or
+/// named by [`UNFILED_FILE`], and never both.
+///
+/// **A program no subset file names is silently unrun.** `SUBSET_FILES` is
+/// pinned against the directory and `coverage.rs` pins each file's contents,
+/// and until this test nothing compared their union against `corpus/lang/` --
+/// found in 5c by committing a witness and watching the differential's
+/// headline not move.
+#[test]
+fn every_lang_program_is_run_or_named_unfiled() {
+    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+    let dir = corpus_dir.join(LANG_SUBDIR);
+    let mut on_disk: BTreeSet<String> = fs::read_dir(&dir)
+        .unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()))
+        .flatten()
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter(|name| name.ends_with(".rex"))
+        .map(|name| format!("{LANG_SUBDIR}/{name}"))
+        .collect();
+    assert!(
+        !on_disk.is_empty(),
+        "{} holds no programs, so this test compared two empty sets",
+        dir.display()
+    );
+
+    let paths: Vec<PathBuf> = SUBSET_FILES
+        .iter()
+        .map(|name| corpus_dir.join(name))
+        .collect();
+    let filed: BTreeSet<String> =
+        read_subset(&paths.iter().map(PathBuf::as_path).collect::<Vec<_>>())
+            .into_iter()
+            .filter(|entry| entry.starts_with(&format!("{LANG_SUBDIR}/")))
+            .collect();
+    let unfiled: Vec<(String, String)> = read_unfiled(&corpus_dir);
+
+    let both: Vec<&String> = unfiled
+        .iter()
+        .map(|(entry, _)| entry)
+        .filter(|entry| filed.contains(*entry))
+        .collect();
+    assert!(
+        both.is_empty(),
+        "{both:?} are named by a phase subset file and by {UNFILED_FILE}. The second says \
+         nothing runs them against the oracle, and the first says something does"
+    );
+
+    for (entry, _) in &unfiled {
+        assert!(
+            on_disk.contains(entry),
+            "{UNFILED_FILE} names {entry}, which is not a program in {}. An exemption for a \
+             path that does not exist protects nothing and hides the one that does",
+            dir.display()
+        );
+    }
+    for entry in &filed {
+        assert!(
+            on_disk.contains(entry),
+            "a phase subset file names {entry}, which is not a program in {}",
+            dir.display()
+        );
+    }
+
+    for entry in filed.iter().chain(unfiled.iter().map(|(entry, _)| entry)) {
+        on_disk.remove(entry);
+    }
+    assert!(
+        on_disk.is_empty(),
+        "{on_disk:?} are in {} and named by no phase subset file, so nothing compares them \
+         against the oracle and the differential's headline does not count them. File each \
+         one, or name it in {UNFILED_FILE} with the reason it is not run",
+        dir.display()
     );
 }
 

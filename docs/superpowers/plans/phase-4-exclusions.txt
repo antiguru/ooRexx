@@ -1416,17 +1416,25 @@ DEVIATIONS -- permanent, chosen
      BASE at 15/15 and would have been reported as a regression this change
      introduced; run alternately the two were 16/4 and 16/4.
 
-     WHAT THIS DOES NOT COVER, AND IT IS A TRAP FOR WHOEVER CLOSES 5c.
-     `directive_options.rs` is a test binary the 5c flip is meant to delete,
-     moving its programs into `corpus/phase-5c.txt`; `corpus.rs` compares a
-     subset program's stderr as a SEQUENCE, so that move reintroduces this
-     flake unless the same scope is carried across. That harness already has
-     the per-program mechanism for it -- `RAW_STDERR_COMPARISON` and
-     `support::oracle::StderrComparison` -- and the shape is a third variant
-     beside `Raw` and the normalised one, listed for
-     `lang/directive_options_trace_reply.rex` alone. It was NOT built here:
-     nothing would run it until that subset file exists, and an unexercised
-     comparison path is the defect this row's own controls exist to prevent.
+     CARRIED ACROSS BY PHASE 5d TASK 1, WHICH IS WHERE 5c CLOSED. The scope
+     now has a second harness: `corpus.rs`'s own `CONCURRENTLY_TRACED` names
+     `lang/directive_options_trace_reply.rex` and `stderr_mode` gives it
+     `StderrComparison::Multiset`, the third variant beside `Raw` and the
+     normalised one, which is what the paragraph this replaces predicted the
+     shape would be. `support::oracle::stderr_multiset` is the one
+     implementation both harnesses sort with, so the control above
+     (`the_multiset_comparison_discards_ordering_and_nothing_else`) is a
+     control over the function `corpus.rs` uses too. A path on both
+     `RAW_STDERR_COMPARISON` and `CONCURRENTLY_TRACED` is a panic naming it,
+     because those ask for a stricter and a weaker comparison of one channel.
+
+     `directive_options.rs` was NOT deleted, against the expectation this row
+     used to record. Its programs are in `corpus/phase-5c.txt` now, and what
+     it still has that the differential does not is `stderr` compared RAW
+     rather than through Deviation 0, both engines rather than the default
+     one, `CONCURRENTLY_TRACED`'s own both-directions scope guard over the
+     family's sources, and the LOSTDIGITS table, which drives programs of its
+     own and has nothing to do with the corpus subset.
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------

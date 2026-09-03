@@ -194,8 +194,11 @@ fn read_rows() -> Vec<Row> {
 /// Every arm's authority, in the order the arms appear:
 ///
 /// * `docs/superpowers/plans/2026-08-17-phase-5a.md`'s handover section hands
-///   `::OPTIONS`, `::RESOURCE`, `::REQUIRES`'s `LIBRARY` and `NAMESPACE`, and
-///   `::ROUTINE`'s option surface to **5c**. Every `::ANNOTATE` row is 5a's:
+///   `::OPTIONS`, `::RESOURCE` and `::ROUTINE`'s option surface to **5c**.
+///   `::REQUIRES`'s two subkeywords were re-owned by D75:
+///   `LIBRARY` to **Phase 7**, beside `::ROUTINE EXTERNAL` above it, because it
+///   needs a native library loader; `NAMESPACE` to **5d**, which builds it.
+///   Every `::ANNOTATE` row is 5a's:
 ///   what a row of this table measures is the install, and the readback of
 ///   each of the six targets is 5a's too -- `.routines~r~annotation(...)` is
 ///   the `ROUTINE` one and `corpus/lang/directive_annotate_targets.rex`
@@ -247,6 +250,8 @@ fn owning_phase(row: &Row) -> Option<&'static str> {
     match (directive, keyword) {
         ("::CLASS", "CLASS") | ("::RESOURCE", "LIBRARY") => Some(PARSE_ERROR_RENDERING),
         ("::ROUTINE", "EXTERNAL") => Some("7"),
+        ("::REQUIRES", "LIBRARY") => Some("7"),
+        ("::REQUIRES", "NAMESPACE") => Some("5d"),
         ("::METHOD" | "::ATTRIBUTE", "DELEGATE") => Some("5b"),
         ("::OPTIONS" | "::RESOURCE" | "::REQUIRES" | "::ROUTINE", _) => Some("5c"),
         ("::ANNOTATE" | "::ATTRIBUTE" | "::CLASS" | "::METHOD", _) => Some("5a"),

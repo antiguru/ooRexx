@@ -3,7 +3,7 @@
 # streamclasses.xml.
 #
 # One `name<TAB>entry<TAB>section<TAB>book:line<TAB>status<TAB>reason
-# <TAB>construction<TAB>directives`
+# <TAB>construction<TAB>directives<TAB>method-owner`
 # per line, in book order then document order.
 #
 # Three departures from the sections, each named rather than mechanical.
@@ -34,72 +34,80 @@
 # `covered` row whose expression reads what a directive defines; every other
 # row carries `-`.
 #
+# `method-owner` is the phase that owes this class's method rows an `agree`,
+# which gate_table_c.rs reads instead of one constant over every method row.
+# `5c` is the default; the classes waiting on the stream and timer entry
+# points carry the phase the native registry files those under, and
+# `deferred-rexxcontext-stackframes` is not a phase and names the work its
+# rows wait on. A row that can never agree is derived from `status` and the
+# arm rather than named here.
+#
 # Derived by `cargo run -p rexx-extract --bin rexx-extract-docs`, whose
 # module is `src/docs/classes.rs`. Re-derived and compared in both
 # directions by `tests/extract_docs.rs`.
 #
 # derived-at: oodocs/rexxref/en-US r13198
 
-Class	class	clsClass	fundclasses.xml:51	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.Object~subclass('k')	-
-Message	class	clsMessage	fundclasses.xml:1093	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.Message~new(.Object~new, 'STRING')	-
-Method	class	clsMethod	fundclasses.xml:1987	covered	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle	.Object~method('objectName')	-
-Object	class	clsObject	fundclasses.xml:2519	covered	a bare ~new constructs an instance on the oracle	.Object~new	-
-Package	class	clsPackage	fundclasses.xml:3561	covered	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle	.Class~package	-
-Routine	class	clsRoutine	fundclasses.xml:4689	covered	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle	.routines~r	::routine r
-String	class	clsString	fundclasses.xml:4996	covered	a committed construction program answers an instance; a bare ~new raises 93.903 on the oracle	.String~new('abc')	-
-Collection	class	clsCollection	collclasses.xml:170	covered	a bare ~new constructs an instance on the oracle	.Collection~new	-
-MapCollection	class	clsMapCollection	collclasses.xml:612	covered	a bare ~new constructs an instance on the oracle	.MapCollection~new	-
-OrderedCollection	class	clsOrderedCollection	collclasses.xml:741	covered	a bare ~new constructs an instance on the oracle	.OrderedCollection~new	-
-SetCollection	class	clsSetCollection	collclasses.xml:1222	covered	a bare ~new constructs an instance on the oracle	.SetCollection~new	-
-Array	class	clsArray	collclasses.xml:1267	covered	a bare ~new constructs an instance on the oracle	.Array~new	-
-Bag	class	clsBag	collclasses.xml:2566	covered	a bare ~new constructs an instance on the oracle	.Bag~new	-
-CircularQueue	class	clsCircularQueue	collclasses.xml:3252	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.CircularQueue~new(5)	-
-Directory	class	clsDirectory	collclasses.xml:3943	covered	a bare ~new constructs an instance on the oracle	.Directory~new	-
-IdentityTable	class	clsIdentityTable	collclasses.xml:4609	covered	a bare ~new constructs an instance on the oracle	.IdentityTable~new	-
-List	class	clsList	collclasses.xml:5000	covered	a bare ~new constructs an instance on the oracle	.List~new	-
-Properties	class	clsProperties	collclasses.xml:5667	covered	a bare ~new constructs an instance on the oracle	.Properties~new	-
-Queue	class	clsQueue	collclasses.xml:5984	covered	a bare ~new constructs an instance on the oracle	.Queue~new	-
-Relation	class	clsRelation	collclasses.xml:6745	covered	a bare ~new constructs an instance on the oracle	.Relation~new	-
-Set	class	clsSet	collclasses.xml:7420	covered	a bare ~new constructs an instance on the oracle	.Set~new	-
-Stem	class	clsStem	collclasses.xml:7964	covered	a bare ~new constructs an instance on the oracle	.Stem~new	-
-StringTable	class	clsStringTable	collclasses.xml:8504	covered	a bare ~new constructs an instance on the oracle	.StringTable~new	-
-Table	class	clsTable	collclasses.xml:9048	covered	a bare ~new constructs an instance on the oracle	.Table~new	-
-Alarm	class	clsAlarm	utilityclasses.xml:51	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle	-	-
-AlarmNotification	class	clsAlarmNotification	utilityclasses.xml:322	covered	a bare ~new constructs an instance on the oracle	.AlarmNotification~new	-
-Buffer	class	clsBuffer	utilityclasses.xml:421	unreachable	the reference says instances come only from native code -- utilityclasses.xml:429 "can only be created using the native code application programming interfaces."	-	-
-Comparable	class	clsComparable	utilityclasses.xml:481	covered	a bare ~new constructs an instance on the oracle	.Comparable~new	-
-Comparator	class	clsComparator	utilityclasses.xml:566	covered	a bare ~new constructs an instance on the oracle	.Comparator~new	-
-CaselessComparator	class	clsCaselessComparator	utilityclasses.xml:639	covered	a bare ~new constructs an instance on the oracle	.CaselessComparator~new	-
-ColumnComparator	class	clsColumnComparator	utilityclasses.xml:708	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.ColumnComparator~new(3, 100)	-
-CaselessColumnComparator	class	clsCaselessColumnComparator	utilityclasses.xml:798	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.CaselessColumnComparator~new(3, 100)	-
-DescendingComparator	class	clsDescendingComparator	utilityclasses.xml:888	covered	a bare ~new constructs an instance on the oracle	.DescendingComparator~new	-
-CaselessDescendingComparator	class	clsCaselessDescendingComparator	utilityclasses.xml:965	covered	a bare ~new constructs an instance on the oracle	.CaselessDescendingComparator~new	-
-InvertingComparator	class	clsInvertingComparator	utilityclasses.xml:1038	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.InvertingComparator~new(.Comparator~new)	-
-NumericComparator	class	clsNumericComparator	utilityclasses.xml:1139	covered	a bare ~new constructs an instance on the oracle	.NumericComparator~new	-
-DateTime	class	clsDateTime	utilityclasses.xml:1234	covered	a bare ~new constructs an instance on the oracle	.DateTime~new	-
-EventSemaphore	class	clsEventSemaphore	utilityclasses.xml:3142	covered	a bare ~new constructs an instance on the oracle	.EventSemaphore~new	-
-File	class	clsFile	utilityclasses.xml:3382	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle	-	-
-MessageNotification	class	clsMessageNotification	utilityclasses.xml:4633	covered	a bare ~new constructs an instance on the oracle	.MessageNotification~new	-
-Monitor	class	clsMonitor	utilityclasses.xml:4701	covered	a bare ~new constructs an instance on the oracle	.Monitor~new	-
-MutableBuffer	class	clsMutableBuffer	utilityclasses.xml:4829	covered	a bare ~new constructs an instance on the oracle	.MutableBuffer~new	-
-MutexSemaphore	class	clsMutexSemaphore	utilityclasses.xml:6451	covered	a bare ~new constructs an instance on the oracle	.MutexSemaphore~new	-
-Orderable	class	clsOrderable	utilityclasses.xml:6649	covered	a bare ~new constructs an instance on the oracle	.Orderable~new	-
-Pointer	class	clsPointer	utilityclasses.xml:6902	unreachable	the reference says instances come only from native code -- utilityclasses.xml:6910 "can only be created using the native code application programming interfaces."	-	-
-RexxContext	class	clsRexxContext	utilityclasses.xml:7533	covered	a committed construction program answers an instance; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7545 "They cannot be directly created by the user."	.context	-
-RexxInfo	instance	clsRexxInfo	utilityclasses.xml:7934	covered	a committed construction program answers an instance; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."	.RexxInfo	-
-RexxQueue	class	clsRexxQueue	utilityclasses.xml:8811	covered	a bare ~new constructs an instance on the oracle	.RexxQueue~new	-
-Singleton	class	clsSingleton	utilityclasses.xml:9260	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle	-	-
-StackFrame	class	clsStackFrame	utilityclasses.xml:9396	not-covered	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:9407 "StackFrame instances cannot be directly created by the user."	-	-
-StreamSupplier	class	clsStreamSupplier	utilityclasses.xml:9754	not-covered	no construction program is committed; a bare ~new raises 97.1 on the oracle	-	-
-Supplier	class	clsSupplier	utilityclasses.xml:9903	covered	a committed construction program answers an instance; a bare ~new raises 93.903 on the oracle	.Supplier~new(.Array~new, .Array~new)	-
-Ticker	class	clsTicker	utilityclasses.xml:10169	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle	-	-
-TimeSpan	class	clsTimeSpan	utilityclasses.xml:10442	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.TimeSpan~new(1)	-
-TraceObject	class	clsTraceObject	utilityclasses.xml:11301	covered	a bare ~new constructs an instance on the oracle	.TraceObject~new	-
-Validate	class	clsValidate	utilityclasses.xml:12201	covered	a bare ~new constructs an instance on the oracle	.Validate~new	-
-VariableReference	class	clsVariableReference	utilityclasses.xml:12548	covered	a committed construction program answers an instance; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:12556-12557 "Calling the new method to create a VariableReference instance is not allowed."	>vr	-
-WeakReference	class	clsWeakReference	utilityclasses.xml:12698	covered	a committed construction program answers an instance; a bare ~new raises 93.903 on the oracle	.WeakReference~new(.Object~new)	-
-InputOutputStream	class	clsInputOutputStream	streamclasses.xml:57	covered	a bare ~new constructs an instance on the oracle	.InputOutputStream~new	-
-InputStream	class	clsInputStream	streamclasses.xml:103	covered	a bare ~new constructs an instance on the oracle	.InputStream~new	-
-OutputStream	class	clsOutputStream	streamclasses.xml:245	covered	a bare ~new constructs an instance on the oracle	.OutputStream~new	-
-Stream	class	clsStream	streamclasses.xml:389	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle	-	-
-ArgUtil	class	-	provide.xml:838	covered	a bare ~new constructs an instance on the oracle	.ArgUtil~new	-
+Class	class	clsClass	fundclasses.xml:51	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.Object~subclass('k')	-	5c
+Message	class	clsMessage	fundclasses.xml:1093	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.Message~new(.Object~new, 'STRING')	-	5c
+Method	class	clsMethod	fundclasses.xml:1987	covered	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle	.Object~method('objectName')	-	5c
+Object	class	clsObject	fundclasses.xml:2519	covered	a bare ~new constructs an instance on the oracle	.Object~new	-	5c
+Package	class	clsPackage	fundclasses.xml:3561	covered	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle	.Class~package	-	5c
+Routine	class	clsRoutine	fundclasses.xml:4689	covered	a committed construction program answers an instance; a bare ~new raises 88.901 on the oracle	.routines~r	::routine r	5c
+String	class	clsString	fundclasses.xml:4996	covered	a committed construction program answers an instance; a bare ~new raises 93.903 on the oracle	.String~new('abc')	-	5c
+Collection	class	clsCollection	collclasses.xml:170	covered	a bare ~new constructs an instance on the oracle	.Collection~new	-	5c
+MapCollection	class	clsMapCollection	collclasses.xml:612	covered	a bare ~new constructs an instance on the oracle	.MapCollection~new	-	5c
+OrderedCollection	class	clsOrderedCollection	collclasses.xml:741	covered	a bare ~new constructs an instance on the oracle	.OrderedCollection~new	-	5c
+SetCollection	class	clsSetCollection	collclasses.xml:1222	covered	a bare ~new constructs an instance on the oracle	.SetCollection~new	-	5c
+Array	class	clsArray	collclasses.xml:1267	covered	a bare ~new constructs an instance on the oracle	.Array~new	-	5c
+Bag	class	clsBag	collclasses.xml:2566	covered	a bare ~new constructs an instance on the oracle	.Bag~new	-	5c
+CircularQueue	class	clsCircularQueue	collclasses.xml:3252	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.CircularQueue~new(5)	-	5c
+Directory	class	clsDirectory	collclasses.xml:3943	covered	a bare ~new constructs an instance on the oracle	.Directory~new	-	5c
+IdentityTable	class	clsIdentityTable	collclasses.xml:4609	covered	a bare ~new constructs an instance on the oracle	.IdentityTable~new	-	5c
+List	class	clsList	collclasses.xml:5000	covered	a bare ~new constructs an instance on the oracle	.List~new	-	5c
+Properties	class	clsProperties	collclasses.xml:5667	covered	a bare ~new constructs an instance on the oracle	.Properties~new	-	5c
+Queue	class	clsQueue	collclasses.xml:5984	covered	a bare ~new constructs an instance on the oracle	.Queue~new	-	5c
+Relation	class	clsRelation	collclasses.xml:6745	covered	a bare ~new constructs an instance on the oracle	.Relation~new	-	5c
+Set	class	clsSet	collclasses.xml:7420	covered	a bare ~new constructs an instance on the oracle	.Set~new	-	5c
+Stem	class	clsStem	collclasses.xml:7964	covered	a bare ~new constructs an instance on the oracle	.Stem~new	-	5c
+StringTable	class	clsStringTable	collclasses.xml:8504	covered	a bare ~new constructs an instance on the oracle	.StringTable~new	-	5c
+Table	class	clsTable	collclasses.xml:9048	covered	a bare ~new constructs an instance on the oracle	.Table~new	-	5c
+Alarm	class	clsAlarm	utilityclasses.xml:51	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle	-	-	6
+AlarmNotification	class	clsAlarmNotification	utilityclasses.xml:322	covered	a bare ~new constructs an instance on the oracle	.AlarmNotification~new	-	5c
+Buffer	class	clsBuffer	utilityclasses.xml:421	unreachable	the reference says instances come only from native code -- utilityclasses.xml:429 "can only be created using the native code application programming interfaces."	-	-	5c
+Comparable	class	clsComparable	utilityclasses.xml:481	covered	a bare ~new constructs an instance on the oracle	.Comparable~new	-	5c
+Comparator	class	clsComparator	utilityclasses.xml:566	covered	a bare ~new constructs an instance on the oracle	.Comparator~new	-	5c
+CaselessComparator	class	clsCaselessComparator	utilityclasses.xml:639	covered	a bare ~new constructs an instance on the oracle	.CaselessComparator~new	-	5c
+ColumnComparator	class	clsColumnComparator	utilityclasses.xml:708	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.ColumnComparator~new(3, 100)	-	5c
+CaselessColumnComparator	class	clsCaselessColumnComparator	utilityclasses.xml:798	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.CaselessColumnComparator~new(3, 100)	-	5c
+DescendingComparator	class	clsDescendingComparator	utilityclasses.xml:888	covered	a bare ~new constructs an instance on the oracle	.DescendingComparator~new	-	5c
+CaselessDescendingComparator	class	clsCaselessDescendingComparator	utilityclasses.xml:965	covered	a bare ~new constructs an instance on the oracle	.CaselessDescendingComparator~new	-	5c
+InvertingComparator	class	clsInvertingComparator	utilityclasses.xml:1038	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.InvertingComparator~new(.Comparator~new)	-	5c
+NumericComparator	class	clsNumericComparator	utilityclasses.xml:1139	covered	a bare ~new constructs an instance on the oracle	.NumericComparator~new	-	5c
+DateTime	class	clsDateTime	utilityclasses.xml:1234	covered	a bare ~new constructs an instance on the oracle	.DateTime~new	-	5c
+EventSemaphore	class	clsEventSemaphore	utilityclasses.xml:3142	covered	a bare ~new constructs an instance on the oracle	.EventSemaphore~new	-	5c
+File	class	clsFile	utilityclasses.xml:3382	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle	-	-	7
+MessageNotification	class	clsMessageNotification	utilityclasses.xml:4633	covered	a bare ~new constructs an instance on the oracle	.MessageNotification~new	-	5c
+Monitor	class	clsMonitor	utilityclasses.xml:4701	covered	a bare ~new constructs an instance on the oracle	.Monitor~new	-	5c
+MutableBuffer	class	clsMutableBuffer	utilityclasses.xml:4829	covered	a bare ~new constructs an instance on the oracle	.MutableBuffer~new	-	5c
+MutexSemaphore	class	clsMutexSemaphore	utilityclasses.xml:6451	covered	a bare ~new constructs an instance on the oracle	.MutexSemaphore~new	-	5c
+Orderable	class	clsOrderable	utilityclasses.xml:6649	covered	a bare ~new constructs an instance on the oracle	.Orderable~new	-	5c
+Pointer	class	clsPointer	utilityclasses.xml:6902	unreachable	the reference says instances come only from native code -- utilityclasses.xml:6910 "can only be created using the native code application programming interfaces."	-	-	5c
+RexxContext	class	clsRexxContext	utilityclasses.xml:7533	covered	a committed construction program answers an instance; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7545 "They cannot be directly created by the user."	.context	-	5c
+RexxInfo	instance	clsRexxInfo	utilityclasses.xml:7934	covered	a committed construction program answers an instance; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:7942 "other instances cannot be created or copied."	.RexxInfo	-	5c
+RexxQueue	class	clsRexxQueue	utilityclasses.xml:8811	covered	a bare ~new constructs an instance on the oracle	.RexxQueue~new	-	5c
+Singleton	class	clsSingleton	utilityclasses.xml:9260	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle	-	-	5c
+StackFrame	class	clsStackFrame	utilityclasses.xml:9396	not-covered	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:9407 "StackFrame instances cannot be directly created by the user."	-	-	deferred-rexxcontext-stackframes
+StreamSupplier	class	clsStreamSupplier	utilityclasses.xml:9754	not-covered	no construction program is committed; a bare ~new raises 97.1 on the oracle	-	-	7
+Supplier	class	clsSupplier	utilityclasses.xml:9903	covered	a committed construction program answers an instance; a bare ~new raises 93.903 on the oracle	.Supplier~new(.Array~new, .Array~new)	-	5c
+Ticker	class	clsTicker	utilityclasses.xml:10169	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle	-	-	6
+TimeSpan	class	clsTimeSpan	utilityclasses.xml:10442	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.TimeSpan~new(1)	-	5c
+TraceObject	class	clsTraceObject	utilityclasses.xml:11301	covered	a bare ~new constructs an instance on the oracle	.TraceObject~new	-	5c
+Validate	class	clsValidate	utilityclasses.xml:12201	covered	a bare ~new constructs an instance on the oracle	.Validate~new	-	5c
+VariableReference	class	clsVariableReference	utilityclasses.xml:12548	covered	a committed construction program answers an instance; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:12556-12557 "Calling the new method to create a VariableReference instance is not allowed."	>vr	-	5c
+WeakReference	class	clsWeakReference	utilityclasses.xml:12698	covered	a committed construction program answers an instance; a bare ~new raises 93.903 on the oracle	.WeakReference~new(.Object~new)	-	5c
+InputOutputStream	class	clsInputOutputStream	streamclasses.xml:57	covered	a bare ~new constructs an instance on the oracle	.InputOutputStream~new	-	5c
+InputStream	class	clsInputStream	streamclasses.xml:103	covered	a bare ~new constructs an instance on the oracle	.InputStream~new	-	5c
+OutputStream	class	clsOutputStream	streamclasses.xml:245	covered	a bare ~new constructs an instance on the oracle	.OutputStream~new	-	5c
+Stream	class	clsStream	streamclasses.xml:389	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle	-	-	7
+ArgUtil	class	-	provide.xml:838	covered	a bare ~new constructs an instance on the oracle	.ArgUtil~new	-	5c

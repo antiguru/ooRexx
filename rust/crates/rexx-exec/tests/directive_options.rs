@@ -11,12 +11,11 @@
 
 //! `corpus/lang/directive_options*.rex` against the oracle, on both engines.
 //!
-//! **A binary of its own rather than lines in a phase subset file**, for the
-//! reason `variable_reference.rs` states: `gate_table_c.rs`'s
-//! `every_closed_phase_this_table_owns_rows_for_is_gated` makes a phase that
-//! has a subset file owe every one of its table C rows an exit status, which
-//! 5c cannot pay while its rows are still landing. Whoever closes 5c moves
-//! these lines into `corpus/phase-5c.txt` and deletes this file.
+//! **Kept beside `corpus/phase-5c.txt`, which names the same programs.** What
+//! this binary has that the differential does not: `stderr` compared **raw**
+//! rather than through DEVIATION 0's normalisation, both engines rather than
+//! the default one, [`CONCURRENTLY_TRACED`]'s scope guard, and the LOSTDIGITS
+//! table below, which drives programs of its own.
 //!
 //! Three descriptors compared separately and raw, `directive_options_trace`
 //! included: its `>I>`/`<I<` lines name the program's own path, which is the
@@ -96,20 +95,13 @@ fn concurrently_traced(path: &Path) -> bool {
 }
 
 /// One side's stderr in the form the comparison uses: the bytes as they came
-/// for an ordinary program, and the same lines sorted for one on
+/// for an ordinary program, and [`support::oracle::stderr_multiset`] for one on
 /// [`CONCURRENTLY_TRACED`].
-///
-/// Splitting on `\n` rather than using `str::lines` keeps the trailing empty
-/// element a final newline produces, so a stderr that lost its last newline
-/// still differs after sorting.
 fn stderr_for_comparison(bytes: &[u8], concurrently_traced: bool) -> String {
-    let text = String::from_utf8_lossy(bytes).into_owned();
-    if !concurrently_traced {
-        return text;
+    if concurrently_traced {
+        return support::oracle::stderr_multiset(bytes);
     }
-    let mut lines: Vec<&str> = text.split('\n').collect();
-    lines.sort_unstable();
-    lines.join("\n")
+    String::from_utf8_lossy(bytes).into_owned()
 }
 
 fn run_crate(path: &Path, engine: Engine) -> Outcome {

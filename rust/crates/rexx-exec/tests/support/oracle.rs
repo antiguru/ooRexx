@@ -589,6 +589,22 @@ pub enum StderrComparison {
     Normalized,
     /// Byte-for-byte, no normalisation at all.
     Raw,
+    /// Byte-for-byte after sorting each side's lines: DEVIATION 7's licence,
+    /// for a program whose trace lines are written by two threads whose
+    /// interleaving is not a specified observable.
+    Multiset,
+}
+
+/// One side's `stderr` in the form [`StderrComparison::Multiset`] compares,
+/// exposed so the licence has one implementation and one control.
+///
+/// `split` on `\n` rather than `str::lines`, so the trailing empty element a
+/// final newline produces survives and a truncated `stderr` still differs.
+pub fn stderr_multiset(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes).into_owned();
+    let mut lines: Vec<&str> = text.split('\n').collect();
+    lines.sort_unstable();
+    lines.join("\n")
 }
 
 /// Which of the three observable channels disagree, in a fixed order.
@@ -665,6 +681,9 @@ pub fn descriptor_diff_with(
                 super::normalize_stderr(&rust.stderr) != super::normalize_stderr(&cpp.stderr)
             }
             StderrComparison::Raw => rust.stderr != cpp.stderr,
+            StderrComparison::Multiset => {
+                stderr_multiset(&rust.stderr) != stderr_multiset(&cpp.stderr)
+            }
         },
         exit_code: wrapped_exit_code(rust.exit_code) != cpp.expect_exit_code(),
     }

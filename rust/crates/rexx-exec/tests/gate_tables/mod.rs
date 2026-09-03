@@ -341,7 +341,7 @@ pub const PHASE_GATE_ENV: &str = "REXX_PHASE_GATE";
 ///
 /// A phase is added here in the commit that closes it, and from then on a
 /// regression in one of its rows is red under [`CORPUS_GATE_ENV`] alone.
-pub const CLOSED_PHASES: &[&str] = &["5a", "5b"];
+pub const CLOSED_PHASES: &[&str] = &["5a", "5b", "5c"];
 
 /// Whether [`CORPUS_GATE_ENV`] is asking for the gate rather than the report.
 pub fn corpus_gate() -> bool {

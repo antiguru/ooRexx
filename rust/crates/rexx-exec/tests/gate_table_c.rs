@@ -27,7 +27,8 @@
 //! * **the `ArgUtil` assertion**, which is a wiring row with **no verdict
 //!   channel** for the reason [`argutil_assertion`] gives in full;
 //! * **method rows**, one per (class, method, arm) in `class-methods.txt`,
-//!   owned by 5c and reported here rather than gated.
+//!   owned by the row's own class through `class-set.txt`'s `method-owner`
+//!   column, except where [`method_row_owner`] derives [`NEVER_AGREES`].
 //!
 //! # The table types no expected bytes, and one expected count
 //!
@@ -220,10 +221,13 @@ struct ClassRow {
     status: String,
     reason: String,
     construction: Construction,
+    /// The row set's `method-owner` column: the phase that owes this class's
+    /// method rows an `agree`.
+    owner: String,
 }
 
 fn read_classes() -> Vec<ClassRow> {
-    read_table("class-set.txt", 8)
+    read_table("class-set.txt", 9)
         .into_iter()
         .map(|row| ClassRow {
             name: row[0].clone(),
@@ -232,6 +236,7 @@ fn read_classes() -> Vec<ClassRow> {
             status: row[4].clone(),
             reason: row[5].clone(),
             construction: construction_of(&row[0], &row[4], &row[6], &row[7]),
+            owner: row[8].clone(),
         })
         .collect()
 }
@@ -583,12 +588,34 @@ const CONCEPTS: &[Concept] = &[
 /// half. There is no class in `class-set.txt` the plan files anywhere else.
 const WIRING_PHASE: &str = "5a";
 
-/// The phase that owes every method row an `agree`.
+/// The owner of a method row that is never expected to agree, deliberately not
+/// spelled like a phase so it can never match [`gate_tables::PHASE_GATE_ENV`]
+/// or sit in [`gate_tables::CLOSED_PHASES`].
+const NEVER_AGREES: &str = "never-expected-to-agree";
+
+/// The `class-set.txt` status [`method_row_owner`] pairs with
+/// [`INSTANCE_ARM`] to read a row as one no run can ever move.
+const UNREACHABLE_STATUS: &str = "unreachable";
+
+/// The `class-methods.txt` arm in that pair.
+const INSTANCE_ARM: &str = "instance";
+
+/// The phase that owes one method row an `agree`: its class's `method-owner`
+/// column, except for a row that can never agree.
 ///
-/// The spec files method rows under 5c, and their instance arm additionally
-/// depends on 5b having landed `~new`. They are reported here and never gated
-/// by a 5a run.
-const METHOD_PHASE: &str = "5c";
+/// **The exception is per (class, arm), not per class.** An `unreachable`
+/// class's instance arm raises at construction before any documented name is
+/// asked; its class arm asks `hasMethod` of the class object, which answers
+/// whether or not an instance can exist -- measured, `Buffer~new` and
+/// `Pointer~new` agree today. Keyed on the class alone this would file those
+/// two as impossible.
+fn method_row_owner<'a>(class: &'a ClassRow, arm: &str, status: &str) -> &'a str {
+    if status == UNREACHABLE_STATUS && arm == INSTANCE_ARM {
+        NEVER_AGREES
+    } else {
+        &class.owner
+    }
+}
 
 /// The probe program for a concept row, as a corpus-relative path.
 fn concept_probe(id: &str) -> String {
@@ -1115,7 +1142,7 @@ struct Measured {
     /// Everything the row's key does not carry: a citation, a phase, a title.
     detail: String,
     probe: String,
-    phase: &'static str,
+    phase: String,
     /// `None` where the oracle did not answer the row's question at all, so
     /// no comparison of the two sides means anything. **The row stays in the
     /// table**: dropping it would leave one row fewer, a lower gated count,
@@ -1530,6 +1557,23 @@ fn argutil_assertion(
     }
 }
 
+/// Every owner the method rows carry.
+///
+/// **Enumerated by running [`method_row_owner`] over the committed row set,
+/// never by listing the values.** The method family's owner is a column rather
+/// than a constant this file can read off, so a listing here would let the
+/// check below go blind to every method row and still pass.
+fn method_row_owners() -> BTreeSet<String> {
+    let classes = read_classes();
+    let by_name: BTreeMap<&str, &ClassRow> =
+        classes.iter().map(|row| (row.name.as_str(), row)).collect();
+    read_method_rows()
+        .iter()
+        .filter_map(|row| by_name.get(row.class.as_str()).map(|class| (class, row)))
+        .map(|(class, row)| method_row_owner(class, &row.arm, &row.status).to_string())
+        .collect()
+}
+
 /// Every phase this table owns rows for whose corpus subset file exists is in
 /// [`CLOSED_PHASES`].
 ///
@@ -1547,14 +1591,25 @@ fn argutil_assertion(
 #[test]
 fn every_closed_phase_this_table_owns_rows_for_is_gated() {
     let corpus = corpus_dir();
-    let ungated: Vec<&str> = CONCEPTS
+    let method_owners = method_row_owners();
+    // The method family's owners come from a file, so an enumeration that read
+    // none of them would leave the filters below iterating the concept and
+    // wiring phases alone and still pass.
+    assert!(
+        !method_owners.is_empty(),
+        "no method row named an owner, so this check no longer covers the family it was \
+         widened for"
+    );
+    let owners: BTreeSet<String> = CONCEPTS
         .iter()
-        .map(|concept| concept.phase)
-        .chain([WIRING_PHASE, METHOD_PHASE])
-        .collect::<BTreeSet<&str>>()
-        .into_iter()
+        .map(|concept| concept.phase.to_string())
+        .chain([WIRING_PHASE.to_string()])
+        .chain(method_owners)
+        .collect();
+    let ungated: Vec<&String> = owners
+        .iter()
         .filter(|phase| corpus.join(format!("phase-{phase}.txt")).is_file())
-        .filter(|phase| !CLOSED_PHASES.contains(phase))
+        .filter(|phase| !CLOSED_PHASES.contains(&phase.as_str()))
         .collect();
     assert!(
         ungated.is_empty(),
@@ -1610,6 +1665,7 @@ fn concept_and_class_gate_table() {
                     status: class.status.clone(),
                     reason: class.reason.clone(),
                     construction: class.construction.clone(),
+                    owner: method_row_owner(class, &row.arm, &row.status).to_string(),
                     rows: vec![index],
                 });
             }
@@ -1714,7 +1770,7 @@ fn concept_and_class_gate_table() {
                 section.depth, section.parent, section.line
             ),
             probe,
-            phase: concept.phase,
+            phase: concept.phase.to_string(),
             verdict: answered.then(|| verdict(ran.differs)),
             loud: ran.crate_loud,
             refused: ran.crate_refused,
@@ -1757,7 +1813,7 @@ fn concept_and_class_gate_table() {
             subject: row.name.clone(),
             detail: format!("{} {} {}", row.entry, row.status, row.cite),
             probe,
-            phase: WIRING_PHASE,
+            phase: WIRING_PHASE.to_string(),
             verdict: answered.then(|| verdict(ran.differs)),
             loud: ran.crate_loud,
             refused: ran.crate_refused,
@@ -1799,7 +1855,7 @@ fn concept_and_class_gate_table() {
             subject,
             detail: format!("provide.xml:{}", edge.line),
             probe,
-            phase: WIRING_PHASE,
+            phase: WIRING_PHASE.to_string(),
             verdict: answered.then(|| verdict(ran.differs)),
             loud: ran.crate_loud,
             refused: ran.crate_refused,
@@ -1813,7 +1869,8 @@ fn concept_and_class_gate_table() {
     }
 
     // One measurement per method row, from one run per (class, arm).
-    let mut method_measured: Vec<(usize, Option<Verdict>, bool, Option<String>)> = Vec::new();
+    let mut method_measured: Vec<(usize, Option<Verdict>, bool, Option<String>, String)> =
+        Vec::new();
     let mut method_programs: Vec<MethodProgram> = Vec::new();
     for group in &method_groups {
         let MethodGroup {
@@ -1885,11 +1942,13 @@ fn concept_and_class_gate_table() {
                 (shape_held && asked).then(|| verdict(differs)),
                 ran.crate_loud,
                 ran.crate_refused.clone(),
+                group.owner.clone(),
             ));
         }
         method_programs.push(MethodProgram {
             class: class.clone(),
             arm: arm.clone(),
+            owner: group.owner.clone(),
             probe,
             rows: rows.clone(),
             loud: ran.crate_loud,
@@ -1904,7 +1963,7 @@ fn concept_and_class_gate_table() {
     }
     let method_verdicts: BTreeMap<usize, Option<Verdict>> = method_measured
         .iter()
-        .map(|(index, verdict, _, _)| (*index, *verdict))
+        .map(|(index, verdict, _, _, _)| (*index, *verdict))
         .collect();
 
     // ---------------------------------------------------------------- report
@@ -1973,11 +2032,11 @@ fn concept_and_class_gate_table() {
             .map(|(verdict, count)| format!("{}={count}", verdict_label(*verdict)))
             .collect();
         report.line(&format!(
-            "  {:<28} {:<9} loud={:<3} {:<4} {:<4} row(s): {:<40} {}",
+            "  {:<28} {:<9} loud={:<3} {:<32} {:<4} row(s): {:<40} {}",
             program.class,
             program.arm,
             if program.loud { "yes" } else { "no" },
-            METHOD_PHASE,
+            program.owner,
             program.rows.len(),
             summary.join(" "),
             program
@@ -2020,17 +2079,17 @@ fn concept_and_class_gate_table() {
     }
 
     let mut by_verdict: BTreeMap<&str, usize> = BTreeMap::new();
-    let mut by_phase: BTreeMap<&str, (usize, usize)> = BTreeMap::new();
+    let mut by_phase: BTreeMap<String, (usize, usize)> = BTreeMap::new();
     let mut by_construct: BTreeMap<String, usize> = BTreeMap::new();
     let mut loud_rows = 0usize;
     let mut gated: Vec<String> = Vec::new();
     let mut record = |verdict: Option<Verdict>,
-                      phase: &'static str,
+                      phase: &str,
                       loud: bool,
                       refused: &Option<String>,
                       probe: &str| {
         *by_verdict.entry(verdict_label(verdict)).or_insert(0) += 1;
-        let entry = by_phase.entry(phase).or_insert((0, 0));
+        let entry = by_phase.entry(phase.to_string()).or_insert((0, 0));
         entry.0 += 1;
         // `unanswered` is not `agree`, so it counts as open and, on a gated
         // phase, as gated. That is the safe direction: a row nothing could
@@ -2049,12 +2108,12 @@ fn concept_and_class_gate_table() {
         }
     };
     for row in &measured {
-        record(row.verdict, row.phase, row.loud, &row.refused, &row.probe);
+        record(row.verdict, &row.phase, row.loud, &row.refused, &row.probe);
     }
-    for (index, verdict, loud, refused) in &method_measured {
+    for (index, verdict, loud, refused, owner) in &method_measured {
         record(
             *verdict,
-            METHOD_PHASE,
+            owner,
             *loud,
             refused,
             &method_probe(&method_rows[*index].class, &method_rows[*index].arm),
@@ -2084,7 +2143,7 @@ fn concept_and_class_gate_table() {
     // line while the table reported them as divergences.
     let unasked = method_measured
         .iter()
-        .filter(|(_, verdict, _, _)| verdict.is_none())
+        .filter(|(_, verdict, _, _, _)| verdict.is_none())
         .count();
     report.line(&format!(
         "  method rows no documented name was asked of, on either side, because their \
@@ -2138,6 +2197,10 @@ struct MethodGroup {
     status: String,
     reason: String,
     construction: Construction,
+    /// The phase that owes every row of this group an `agree`, from
+    /// [`method_row_owner`]. One value per group: the exception it derives is
+    /// keyed on the class's status and the arm, and a group is one (class, arm).
+    owner: String,
     rows: Vec<usize>,
 }
 
@@ -2145,6 +2208,7 @@ struct MethodGroup {
 struct MethodProgram {
     class: String,
     arm: String,
+    owner: String,
     probe: String,
     rows: Vec<usize>,
     loud: bool,

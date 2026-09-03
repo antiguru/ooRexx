@@ -270,6 +270,42 @@ pub const CONSTRUCTION_DIRECTIVES: &[(&str, &str)] = &[("ROUTINE", "::routine r"
 /// that has none.
 pub const NO_PROGRAM: &str = "-";
 
+/// The owner `class-set.txt`'s `method-owner` column carries for a class whose
+/// method rows are not [`DEFAULT_METHOD_OWNER`]'s.
+///
+/// `File`, `Stream` and `StreamSupplier` need `stream_init`, the stream read
+/// path and `file_qualify`, and `Alarm` and `Ticker` need the timer entry
+/// points; `crates/rexx-exec/src/dispatch/native.rs` files those under Phase 7
+/// and Phase 6 respectively. `StackFrame` waits on a `RexxContext` method body
+/// and a `StackFrame` object model, which no phase owns.
+///
+/// A name here that the class set does not carry is a panic in [`class_rows`]:
+/// a typo would otherwise fall silently to the default.
+pub const METHOD_OWNER: &[(&str, &str)] = &[
+    ("Alarm", "6"),
+    ("File", "7"),
+    ("StackFrame", STACK_FRAME_OWNER),
+    ("Stream", "7"),
+    ("StreamSupplier", "7"),
+    ("Ticker", "6"),
+];
+
+/// `StackFrame`'s owner: the `RexxContext` work its rows wait on, deliberately
+/// not spelled like a phase so it can never match `REXX_PHASE_GATE` or sit in
+/// `CLOSED_PHASES`.
+pub const STACK_FRAME_OWNER: &str = "deferred-rexxcontext-stackframes";
+
+/// The owner every class not named by [`METHOD_OWNER`] carries.
+pub const DEFAULT_METHOD_OWNER: &str = "5c";
+
+/// The phase that owes this class's method rows an `agree`.
+pub fn method_owner(name: &str) -> &'static str {
+    METHOD_OWNER
+        .iter()
+        .find(|(class, _)| *class == name)
+        .map_or(DEFAULT_METHOD_OWNER, |(_, owner)| *owner)
+}
+
 /// A sentence of the reference saying the user cannot construct a class, with
 /// the line it is on and the status it grounds.
 ///
@@ -419,6 +455,9 @@ pub struct ClassRow {
     pub entry: &'static str,
     pub coverage: Coverage,
     pub reason: String,
+    /// The phase that owes this class's method rows an `agree`, from
+    /// [`method_owner`].
+    pub owner: &'static str,
 }
 
 /// One row of `class-methods.txt`.
@@ -472,6 +511,7 @@ pub fn class_rows(books: &[Book], argutil_citation: &str) -> Vec<ClassRow> {
             "class"
         };
         let (coverage, reason) = coverage_of(&name, sentences.get(name.as_str()).copied());
+        let owner = method_owner(&name);
         out.push(ClassRow {
             name,
             section: id,
@@ -480,6 +520,7 @@ pub fn class_rows(books: &[Book], argutil_citation: &str) -> Vec<ClassRow> {
             entry,
             coverage,
             reason,
+            owner,
         });
     }
     let (coverage, reason) = coverage_of(UNDOCUMENTED_CLASS, None);
@@ -495,6 +536,7 @@ pub fn class_rows(books: &[Book], argutil_citation: &str) -> Vec<ClassRow> {
         entry: "class",
         coverage,
         reason,
+        owner: method_owner(UNDOCUMENTED_CLASS),
     });
     let derived: BTreeSet<String> = out
         .iter()
@@ -520,6 +562,14 @@ pub fn class_rows(books: &[Book], argutil_citation: &str) -> Vec<ClassRow> {
             named.contains(*class),
             "CONSTRUCTION_DIRECTIVES commits {directive} for {class}, which the class set does \
              not carry -- a directive for a name no row derives is never reached and never run"
+        );
+    }
+    for (class, owner) in METHOD_OWNER {
+        assert!(
+            named.contains(&class.to_ascii_uppercase()),
+            "METHOD_OWNER files {class}'s method rows under {owner}, and the class set does \
+             not carry {class} -- a name no row derives falls silently to \
+             {DEFAULT_METHOD_OWNER}"
         );
     }
     out
@@ -1027,12 +1077,13 @@ pub fn classes_without_method_rows(
         .collect()
 }
 
-/// `name<TAB>entry<TAB>section<TAB>book:line<TAB>status<TAB>reason`.
+/// `name<TAB>entry<TAB>section<TAB>book:line<TAB>status<TAB>reason
+/// <TAB>construction<TAB>directives<TAB>method-owner`.
 pub fn class_set_rows(rows: &[ClassRow]) -> Vec<String> {
     rows.iter()
         .map(|r| {
             format!(
-                "{}\t{}\t{}\t{}:{}\t{}\t{}\t{}\t{}",
+                "{}\t{}\t{}\t{}:{}\t{}\t{}\t{}\t{}\t{}",
                 r.name,
                 r.entry,
                 r.section,
@@ -1041,7 +1092,8 @@ pub fn class_set_rows(rows: &[ClassRow]) -> Vec<String> {
                 r.coverage.status().as_str(),
                 r.reason,
                 r.coverage.program().unwrap_or(NO_PROGRAM),
-                r.coverage.directive().unwrap_or(NO_PROGRAM)
+                r.coverage.directive().unwrap_or(NO_PROGRAM),
+                r.owner
             )
         })
         .collect()
@@ -1098,7 +1150,7 @@ pub fn class_set_header(stamp: &str, argutil_citation: &str) -> Vec<String> {
         "streamclasses.xml.".into(),
         String::new(),
         "One `name<TAB>entry<TAB>section<TAB>book:line<TAB>status<TAB>reason".into(),
-        "<TAB>construction<TAB>directives`".into(),
+        "<TAB>construction<TAB>directives<TAB>method-owner`".into(),
         "per line, in book order then document order.".into(),
         String::new(),
         format!(
@@ -1136,6 +1188,17 @@ pub fn class_set_header(stamp: &str, argutil_citation: &str) -> Vec<String> {
             "`directives` is the directive the probe carries below its \
              readbacks, for a `covered` row whose expression reads what a \
              directive defines; every other row carries `{NO_PROGRAM}`."
+        ),
+        String::new(),
+        format!(
+            "`method-owner` is the phase that owes this class's method rows an \
+             `agree`, which gate_table_c.rs reads instead of one constant over \
+             every method row. `{DEFAULT_METHOD_OWNER}` is the default; the \
+             classes waiting on the stream and timer entry points carry the \
+             phase the native registry files those under, and \
+             `{STACK_FRAME_OWNER}` is not a phase and names the work its rows \
+             wait on. A row that can never agree is derived from `status` and \
+             the arm rather than named here."
         ),
         String::new(),
         "Derived by `cargo run -p rexx-extract --bin rexx-extract-docs`, whose".into(),

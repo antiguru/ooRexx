@@ -140,6 +140,7 @@ const SUBSET_FILES: &[&str] = &[
     "phase-4c.txt",
     "phase-5a.txt",
     "phase-5b.txt",
+    "phase-5c.txt",
 ];
 
 /// The subset programs that allocate nothing, so collect-on-every-allocation
@@ -274,6 +275,14 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     // nothing.
     "lang/directive_method_external_not_a_staged_gap.rex",
     "lang/directive_method_external_source_order.rex",
+    // `::OPTIONS DIGITS` below the package's accumulated `FUZZ`, which raises
+    // 33.1 while the package is still installing, so the main body's first
+    // clause is never reached.
+    "lang/directive_options_digits_below_fuzz.rex",
+    // `::OPTIONS TRACE`, whose two assignments are canonical small integers
+    // that ride in the handle, and whose trace lines are built on the
+    // reporting path rather than out of the arena.
+    "lang/directive_options_trace.rex",
     "lang/do_loop_forms.rex",
     "lang/exit_no_value.rex",
     "lang/exit_with_value.rex",

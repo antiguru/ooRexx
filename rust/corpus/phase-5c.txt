@@ -1,0 +1,56 @@
+# Phase 5c corpus subset -- the union with phase-4a.txt, phase-4b.txt,
+# phase-4c.txt, phase-5a.txt and phase-5b.txt is what the harnesses read, not
+# this file alone. Every entry in those five stays in force.
+#
+# One path per line, relative to this directory (rust/corpus/). Lines starting
+# with # are comments; blank lines are ignored. Same format as the earlier
+# phase files, and read by the same `read_subset`, which unions the files in
+# first-seen order and drops a repeat.
+#
+# Written by Phase 5d's Task 1, which is where 5c closes. While 5c's rows were
+# still landing this file could not exist: gate_table_c.rs's
+# `every_closed_phase_this_table_owns_rows_for_is_gated` makes a committed
+# phase-<id>.txt oblige CLOSED_PHASES to name that phase, and 5c's method rows
+# could not pay that until their owner became a property of the row's class.
+# So 5c's witnesses waited in test binaries instead, and this file is where
+# they land.
+
+# The three interim witnesses, each moved here from the binary that ran it;
+# those binaries are deleted -- variable_reference.rs, stem_object.rs and
+# string_makearray.rs.
+lang/variable_reference.rex
+lang/stem_object.rex
+lang/string_makearray.rex
+
+# `::OPTIONS`, whose whole family 5c delivered. tests/directive_options.rs is
+# NOT deleted and still runs these: it compares stderr raw, on both engines,
+# and carries the LOSTDIGITS table, none of which the differential does.
+# `directive_options_trace_reply` traces from two threads and is on corpus.rs's
+# CONCURRENTLY_TRACED for Deviation 7; the rest are compared as a sequence.
+lang/directive_options.rex
+lang/directive_options_call_on_keeps_it.rex
+lang/directive_options_digits_below_fuzz.rex
+lang/directive_options_internal_call.rex
+lang/directive_options_nostring_syntax.rex
+lang/directive_options_novalue_syntax.rex
+lang/directive_options_novalue_trap_wins.rex
+lang/directive_options_numeric_inherit.rex
+lang/directive_options_signal_off.rex
+lang/directive_options_trace.rex
+lang/directive_options_trace_method.rex
+lang/directive_options_trace_reply.rex
+
+# Phase 3 and Phase 4 programs that were never named by any subset file and so
+# were never run against the oracle here -- the coverage gap
+# `every_lang_program_is_run_or_named_unfiled` closes. They are filed under 5c
+# because this is the file that exists, not because 5c wrote them; nothing ties
+# a subset file's contents to its name. Each was compared against the oracle on
+# all three descriptors and on both engines before being filed.
+lang/call_procedure.rex
+lang/condition_syntax.rex
+lang/do_variants.rex
+lang/gate_variants.rex
+lang/keyword_as_variable.rex
+lang/source_arg.rex
+lang/string_builtins.rex
+lang/whitespace_significant.rex

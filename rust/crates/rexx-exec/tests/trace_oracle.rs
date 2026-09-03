@@ -687,6 +687,7 @@ fn every_live_witness_emits_its_prefix_and_is_run_by_the_corpus() {
         "phase-4c.txt",
         "phase-5a.txt",
         "phase-5b.txt",
+        "phase-5c.txt",
     ] {
         let path = corpus_dir.join(name);
         listed.push_str(

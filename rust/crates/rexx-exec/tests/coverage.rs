@@ -676,6 +676,7 @@ const SUBSET_FILES: &[&str] = &[
     "phase-4c.txt",
     "phase-5a.txt",
     "phase-5b.txt",
+    "phase-5c.txt",
 ];
 
 /// The phase subset files that exist in the corpus directory, sorted.
@@ -1359,6 +1360,57 @@ fn phase_5b_subset_matches_the_committed_list() {
          removing a line from the 5b subset is a plan amendment, and must \
          change both the file and this list together, or a deleted line \
          shrinks every measurement that reads phase-5b.txt with nothing to \
+         notice it"
+    );
+}
+
+/// `phase-5c.txt`'s exact line list, the same device [`EXPECTED_SUBSET_5A`]
+/// and [`EXPECTED_SUBSET_5B`] are for their own files.
+///
+/// Written whole rather than grown a task at a time: 5c's witnesses waited in
+/// test binaries of their own until its method rows could be owned per class,
+/// and Phase 5d's Task 1 is where they land.
+const EXPECTED_SUBSET_5C: &[&str] = &[
+    // The three interim witnesses, each moved here from its own binary.
+    "lang/variable_reference.rex",
+    "lang/stem_object.rex",
+    "lang/string_makearray.rex",
+    // `::OPTIONS`, whose whole family 5c delivered.
+    "lang/directive_options.rex",
+    "lang/directive_options_call_on_keeps_it.rex",
+    "lang/directive_options_digits_below_fuzz.rex",
+    "lang/directive_options_internal_call.rex",
+    "lang/directive_options_nostring_syntax.rex",
+    "lang/directive_options_novalue_syntax.rex",
+    "lang/directive_options_novalue_trap_wins.rex",
+    "lang/directive_options_numeric_inherit.rex",
+    "lang/directive_options_signal_off.rex",
+    "lang/directive_options_trace.rex",
+    "lang/directive_options_trace_method.rex",
+    "lang/directive_options_trace_reply.rex",
+    // The Phase 3 and Phase 4 programs no subset file had ever named, filed
+    // here because this is the file that exists rather than because 5c wrote
+    // them. Each was compared against the oracle before being filed.
+    "lang/call_procedure.rex",
+    "lang/condition_syntax.rex",
+    "lang/do_variants.rex",
+    "lang/gate_variants.rex",
+    "lang/keyword_as_variable.rex",
+    "lang/source_arg.rex",
+    "lang/string_builtins.rex",
+    "lang/whitespace_significant.rex",
+];
+
+#[test]
+fn phase_5c_subset_matches_the_committed_list() {
+    let corpus_dir = corpus_dir();
+    let subset = read_subset(&[&corpus_dir.join("phase-5c.txt")]);
+    assert_eq!(
+        subset, EXPECTED_SUBSET_5C,
+        "phase-5c.txt's entries drifted from EXPECTED_SUBSET_5C -- adding or \
+         removing a line from the 5c subset is a plan amendment, and must \
+         change both the file and this list together, or a deleted line \
+         shrinks every measurement that reads phase-5c.txt with nothing to \
          notice it"
     );
 }

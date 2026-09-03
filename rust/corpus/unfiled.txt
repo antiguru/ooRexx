@@ -1,0 +1,18 @@
+# The corpus/lang programs deliberately named by no phase subset file, each
+# with the reason nothing runs it against the oracle in the differential.
+#
+# `corpus.rs`'s `every_lang_program_is_run_or_named_unfiled` reads this file
+# and the phase subset files together: every `lang/*.rex` on disk must be in
+# one or the other, a program in both is as red as a program in neither, and
+# an entry naming a path that is not on disk is red too.
+#
+# Without this file that check would redden any task that commits a witness
+# ahead of the phase subset file it will eventually live in. 5c carried its
+# three that way in test binaries of their own, which nothing but a reader
+# could see; an entry here is visible to the check instead.
+#
+# One `path<TAB>reason` per line, relative to rust/corpus/. Lines starting
+# with # are comments; blank lines are ignored.
+#
+# An entry here is a debt, not a category: it says the differential does not
+# compare that program against the oracle.
