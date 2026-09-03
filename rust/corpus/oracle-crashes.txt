@@ -342,9 +342,22 @@ for Task 4's brief. **No upstream ticket.**
 Effect: **an indefinite block**, the third mode this file's header names.
 Measured under the standard wrapper with `timeout -s KILL` added: rc 137 (the
 kill, not an answer), nothing on stdout, nothing on stderr, twice at 15 s and
-8 s. A bounded run under `/usr/bin/time -v` reports **0.00 s user and 0.00 s
-system over 8.00 s elapsed**, so the process is parked on a wait rather than
-spinning.
+8 s.
+
+**It is parked, not spinning**, measured by launching the interpreter directly
+-- no `timeout` between the shell and it -- capturing `$!` and sampling
+`/proc/<pid>/stat`: state `S` at three and at seven seconds, **0 utime and 0
+stime ticks over the four seconds between**, one thread, `wchan`
+`futex_do_wait`. Do not use `/usr/bin/time -v timeout ... <binary>` for this:
+GNU time's `wait4` sees only `timeout`, so it reports `timeout`'s rusage and
+prints `0.00` for a program burning a whole core.
+
+The control that makes those zeros mean something, sampled the same way in the
+same run (`CLK_TCK` 100): `do forever; nop; end` reads state `R` with utime 99
+at one second and 700 at seven, where this program reads `S 0 0` at both. And
+the wrapper above was run against **that** spinner to show it cannot tell the
+two apart: it reports `User time 0.00`, `System time 0.00` and `Percent of CPU
+this job got: 0%` over 6.00 s elapsed for the 700-tick program.
 
 Cause: `MessageClass::result` waits for the message to complete
 (`classes/MessageClass.cpp:279`). `Message~new` builds the message without
