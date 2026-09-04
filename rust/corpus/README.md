@@ -66,17 +66,23 @@ class of divergence the project can no longer detect.
 
 ## A program that needs a second file beside it
 
-**A file a corpus program `::REQUIRES` must not itself be a `.rex`.** What
-selects a program here is the extension: `corpus.rs`'s
-`every_lang_program_is_run_or_named_unfiled` holds every `lang/*.rex` against
-the subset union, and a helper dropped in as a `.rex` is then either run as a
-program of its own or counted as one nothing runs. Whatever else walks this
-directory selects on the same extension, so a helper spelled otherwise is
-outside all of it.
+**Two shapes work, and both are honest.** What selects a program here is the
+extension, so a required file spelled `.cls` is outside every scan; and a
+required file spelled `.rex` is simply a corpus program of its own, filed like
+any other. A file opening with a directive has no main body and runs as a
+no-op, which is what makes the second shape available even for a pure library
+-- measured against the oracle and both engines, rc 0 with both descriptors
+empty. (`lang/gate_variants.rex` also prints nothing, but by a different
+mechanism: it has a main body and guards every effect behind `if 0 then`.)
 
-`lang/package_requires.rex` is the first such program, and the convention it
-sets is `.cls`, named without an extension in the directive so that the
-search's own `.cls` step is what finds it. The required file needs no
+**What is not allowed is a `.rex` helper nobody files.** It would be counted as
+a program nothing runs, which is the gap
+`every_lang_program_is_run_or_named_unfiled` exists to close.
+
+`lang/package_requires.rex` is the first program needing a second file, and it
+takes the `.cls` shape because its helpers are class libraries and `.cls` is
+what ooRexx calls one. Naming them without an extension in the directive means
+the search's own `.cls` step is what finds them. A `.cls` helper needs no
 `sourceline_oracle` expectation and appears in no subset file, because no
 scanner sees it.
 

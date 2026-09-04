@@ -167,15 +167,37 @@ Task 5 still owes.
 `corpus/phase-5d.txt` and deletes. `corpus/unfiled.txt` names the program.
 **`corpus/phase-5d.txt` was not created.**
 
-**It is the first corpus program needing a second file beside it, and the two are `.cls`.** Every
-corpus scan selects `*.rex`: `corpus.rs`'s `every_lang_program_is_run_or_named_unfiled`,
-`sourceline_oracle.rs`, `program.rs`'s parse sweep, and the two recursive walks in `run/tests.rs`
-and `plan.rs`. A `.rex` beside the witness would be run as a program of its own or redden the
-first of those; `corpus/lang/package_requires_lib.cls` and `corpus/lang/package_requires_dep.cls`
-are invisible to all five **and** exercise the `.cls` step the search tries first, since the
-witness names them without an extension. Nothing in Task 1's check is weakened: the check reads
-`lang/*.rex`, and the one `.rex` this task adds is named in `corpus/unfiled.txt` with its reason.
-`corpus/README.md` gains the convention.
+**It is the first corpus program needing a second file beside it, and the two are `.cls`.**
+
+**The choice is not a way round Task 1's check, and the reason it could have been one is worth
+recording.** A file whose first clause is a directive has no main body, so it runs as a program and
+answers nothing -- measured, the brief's own `lib.rex` is rc 0 with both descriptors empty on the
+oracle and on both engines. So the required file could have been an ordinary `lang/*.rex` corpus
+program, filed like any other. (`corpus/lang/gate_variants.rex` is this corpus's precedent for a
+program that prints nothing, but it is *not* a witness of this shape: it opens with a main body and
+reaches silence by guarding every effect behind `if 0 then`.) Measured further, on the two files as
+they stand: run standalone they are rc 0 printing `dep prologue` and three lines respectively, both
+engines agreeing with the oracle, so the `.rex` shape was available and would have cost nothing.
+
+**`.cls` is chosen for what it is, not for what it avoids.** These files are class libraries and
+`.cls` is what ooRexx calls one -- the reference's own example is `::requires "rxregexp.cls"` -- and
+naming them without an extension in the directive puts the `.cls` step, the one thing that makes a
+`::REQUIRES` search differ from every other program lookup, inside the byte-for-byte differential as
+well as inside the synthetic tree `each_of_the_four_search_routes_finds_the_required_file` builds.
+**Both reasons in the first version of this paragraph were weaker than they were written, and the
+second was the worse of the two.** The scanner reason was the leading one and should not have been a
+reason at all, since the `.rex` shape was available. The extension reason then looked strong because
+nobody asked what already covered that step -- and
+`each_of_the_four_search_routes_finds_the_required_file` plants a `reqlib.cls` and requires
+`'reqlib'`, so it was covered against the oracle before this witness existed. The correction is not
+that the two reasons were in the wrong order. What the `.rex` shape would have bought instead is a
+standalone differential run of each helper, which is real and small -- the witness already drives
+both files through both interpreters.
+
+The consequence for the scanners is the same either way: every corpus scan selects `*.rex`, so
+`corpus/lang/package_requires_lib.cls` and `corpus/lang/package_requires_dep.cls` are outside all of
+them, and the one `.rex` this task adds is named in `corpus/unfiled.txt` with its reason. Task 1's
+check is exactly as strong as it was. `corpus/README.md` gains the convention.
 
 **Task 6's flip needs nothing extra.** The differential runs the oracle side from the program's own
 directory and the crate side in the test process's, and the required names carry no directory, so
@@ -447,13 +469,30 @@ pidfile. Started after the commit below; the controller reads the statuses and f
 
 | # | command | exit |
 |---|---|---|
-| 1 | `cargo fmt --all --check` | **G1** |
-| 2 | `cargo clippy --workspace --all-targets -- -D warnings` | **G2** |
-| 3 | `cargo test --release --workspace --no-fail-fast` | **G3** |
-| 4 | `REXX_CORPUS_GATE=1 cargo test --release --workspace --no-fail-fast` | **G4** |
-| 5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | **G5** |
-| 6 | `REXX_PHASE_GATE=5c REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **G6** |
-| 7 | `REXX_PHASE_GATE=5d …` (same command) | **G7** |
+| 1 | `cargo fmt --all --check` | **0** |
+| 2 | `cargo clippy --workspace --all-targets -- -D warnings` | **0** |
+| 3 | `cargo test --release --workspace --no-fail-fast` | **0** |
+| 4 | `REXX_CORPUS_GATE=1 cargo test --release --workspace --no-fail-fast` | **0** |
+| 5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | **0** |
+| 6 | `REXX_PHASE_GATE=5c REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **0** |
+| 7 | `REXX_PHASE_GATE=5d …` (same command) | **101** |
 
-**G7 is expected non-zero and is not this task's**: table D's `requires__namespace__subkeyword` row
-is Task 5's, exactly as it was after Tasks 2 and 3.
+**G7 is expected non-zero and is not this task's**, and the run says which row rather than being
+taken on the prediction. `gate_table_d.rs:809`, the only failure in either binary:
+
+```text
+1 row(s) of gate table D owned by a closing or closed phase do not `agree` with the oracle:
+["gate-tables/directives/requires__namespace__subkeyword.rex"].
+```
+
+That is Task 5's row, exactly as it was after Tasks 2 and 3, and it is the row Task 5 closes.
+
+Filled by the controller from the run's own status file, which is the protocol's design: the agent
+commits with `**G1**`-`**G7**` placeholders and stops, and the gated tree is the committed tree by
+construction. Two notes on this run's own instrument, neither affecting the result. The status
+line's `(expected 101, Task 5's row)` suffix is written by `run.sh` unconditionally rather than
+derived from the failure, so it would have read the same had a *different* row failed -- the row
+above is quoted from `g7.out`, not from that suffix. And the docs correction below the gate table
+(`corpus/README.md`'s two-shapes section, and the `.cls` paragraph in "The witness") was applied
+after `finished`, so it is in this commit but was not in the gated tree; both are prose, and no
+gate reads either file.
