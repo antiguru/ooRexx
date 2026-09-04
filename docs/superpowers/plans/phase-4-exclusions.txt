@@ -1479,7 +1479,8 @@ one place a wrong call quietly breaks criterion 5's policing.
                     exactly two forms and both are 4b's, so the whole variant
                     closes rather than staying split. `InstructionKind::Call`
                     stays split although every one of its arms is in scope
-                    too, because the four resolve by four different rules.** A reader who reaches the end of 4b and finds
+                    too, because the four resolve by four different rules.**
+                    A reader who reaches the end of 4b and finds
                     `f(1)` still loud for a builtin name is seeing 4c's own
                     unclosed half, which this row no longer records because
                     `ExprKind::Call` itself is no longer an ExprKind ownership

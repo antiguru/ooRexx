@@ -122,6 +122,29 @@ and over the 33 class names the shipped `.orx` files declare, `0` moved and `0` 
 `.NAME` this crate still answers differently from the oracle in either sweep is `.ENDOFLINE`, a
 pre-existing loud refusal for an `ORACLE_ENVIRONMENT` entry nothing builds.
 
+**The 7 that did not move are the 7 that are not classes**, and naming them matters more than the
+62 does. `ENDOFLINE`, `ENVIRONMENT`, `LOCAL` and `REXXINFO` hold a string, two directories and an
+instance, so step 4's `findPublicClass` misses them and `.local` answers -- on both sides, which is
+why they had nothing to move. `FALSE`, `NIL` and `TRUE` never reach the environment at all:
+`LanguageParser`'s constructor installs a `SpecialDotVariable` retriever for the three
+(`LanguageParser.cpp:781`-`783`), so they are parse-time constants in both implementations and no
+`.local` entry can shadow them whatever the search order is. (`ENDOFLINE` agrees here and diverges
+in the unshadowed sweep above; the shadow is what lets this crate answer without the entry nothing
+builds.)
+
+**That set is byte-identical to the set `rexx:NAME` raises for**, measured by a separate route in a
+sweep taken before this remainder was known. Both sweeps therefore partition the 69 names on the
+same predicate -- *is this entry a class object?* -- reached once through `dot_variable`'s step 4
+and once through `namespace_class`'s `Rexx` arm. That sweep traps its condition and records the
+major code alone, so the sub-code is cited from its own untrapped run: `98.988`, from
+`say rexx:Widget`, `Error 98.988:  Class "WIDGET" not found in namespace "REXX".`, oracle and both
+engines byte-identical on all three descriptors.
+
+**This is the half of the fix that could have failed in the other direction.** Had step 4 read
+`.environment` unfiltered rather than testing for a class, those four non-class names would have
+been promoted four steps and the sweep would have read 62 moved and 4 newly wrong. It reads 62 and
+0, which is what makes the number evidence rather than decoration.
+
 **What else this change newly makes reachable, asked the way Task 4 asked it.** A
 `::REQUIRES ... NAMESPACE` now *runs* the required file, which it did not before, so
 `::OPTIONS NOPROLOG` had to be checked across the new spelling as well: measured, the pair is
@@ -521,15 +544,31 @@ pidfile. Started after the commit below; the controller reads the statuses and f
 
 | # | command | exit |
 |---|---|---|
-| 1 | `cargo fmt --all --check` | **G1** |
-| 2 | `cargo clippy --workspace --all-targets -- -D warnings` | **G2** |
-| 3 | `cargo test --release --workspace --no-fail-fast` | **G3** |
-| 4 | `REXX_CORPUS_GATE=1 cargo test --release --workspace --no-fail-fast` | **G4** |
-| 5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | **G5** |
-| 6 | `REXX_PHASE_GATE=5c REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **G6** |
-| 7 | `REXX_PHASE_GATE=5d …` (same command) | **G7** |
+| 1 | `cargo fmt --all --check` | **0** |
+| 2 | `cargo clippy --workspace --all-targets -- -D warnings` | **0** |
+| 3 | `cargo test --release --workspace --no-fail-fast` | **0** |
+| 4 | `REXX_CORPUS_GATE=1 cargo test --release --workspace --no-fail-fast` | **0** |
+| 5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | **0** |
+| 6 | `REXX_PHASE_GATE=5c REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **0** |
+| 7 | `REXX_PHASE_GATE=5d …` (same command) | **0** |
 
-**G7 was 101 at BASE on `requires__namespace__subkeyword` alone and is expected 0 here.** The
-pre-commit run of gates 6 and 7 over this tree reported `gated by this run: 0 row(s)` on both tables
-under both phase settings; the statuses above are the background run's own and are not filled from
-that.
+**G7 was 101 at BASE on `requires__namespace__subkeyword` alone, and is 0 here.** That is the first
+time this phase has run G7 green: Tasks 2, 3 and 4 each ran it at 101 on that one row, which was the
+row this task owed. From the background run's own `g7.out`, both binaries:
+
+```text
+running 15 tests
+gated by this run: 0 row(s) whose owning phase is closing or closed and whose verdict is not `agree`
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+```
+
+The test count matters as much as the exit code. Task 4's G7 ran the same 15 and reported `14
+passed; 1 failed`, so 15 passing is the same suite reaching a different verdict rather than a
+smaller suite reaching the same one -- a green that came from tests not running would show here as a
+lower count.
+
+Filled by the controller from the background run's status file, per the commit-before-gating
+protocol; the pre-commit run of gates 6 and 7 over this tree agreed but is not what the table above
+reports. The controller also inserted the 7-name residue paragraph in "The silent wrong answer this
+change found, and closed" and rewrapped one 121-column line in `phase-4-exclusions.txt`, both after
+`finished`, so both are in this commit and neither was in the gated tree. No gate reads either.
