@@ -37,6 +37,20 @@ rexx-classes = { path = "../rexx-classes" }
 # differential.
 rexx-lib = { path = "../rexx-lib" }
 
+# The host's local time-zone offset, which `DATE`/`TIME`'s no-argument
+# readings need and `std` has no API for. The oracle's own
+# `SystemInterpreter::getCurrentTime` calls `localtime`; this crate cannot,
+# because that is `unsafe` and the workspace lint is `deny`.
+#
+# **The only external crate `src/` depends on**, so the reasons are here.
+# `default-features = false` drops `oldtime` (a no-op feature since 0.4.30,
+# and what used to pull the `time` 0.1 whose `localtime_r` is
+# RUSTSEC-2020-0071) and `wasmbind`. What is left compiles four crates on
+# this target -- chrono, num-traits, iana-time-zone and the autocfg build
+# helper -- and chrono's own unix path carries no `unsafe` and no libc call:
+# it parses TZif out of `/etc/localtime` itself.
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+
 [dev-dependencies]
 # Case tables as data files rather than `const` arrays in Rust sources, for
 # tables written from Task 6 onward (the plan's Tech Stack section). Test-only.

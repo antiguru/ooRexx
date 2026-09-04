@@ -77,16 +77,20 @@
 //! sample, no more and no less host-dependent than a no-argument `B`/`D`
 //! reading "today"'s own basedate or day-of-year would be.
 //!
-//! This crate reads that clock in UTC, with the time zone offset fixed at
-//! zero. The oracle's own no-argument reading uses the host's local zone;
-//! that is a real, acknowledged divergence for the no-argument forms only
-//! (D11 bars them from every differential comparison this crate has), not
-//! a claim that this crate's "now" is otherwise wrong. Recorded as a
-//! `KNOWN GAP` in `docs/superpowers/plans/phase-4-exclusions.txt`, with the
-//! measured transcripts, because a divergence this wide belongs in the
-//! ledger every builtin's gaps are audited from, not only here. That entry
-//! also names the second limb: [`Timestamp::clear`] never ports
-//! `setTimeZoneOffset`, harmless only while every "now" is fixed at UTC.
+//! **This crate reads that clock in the host's local zone, as the oracle
+//! does.** It did not until 2026-09-04: the offset was fixed at zero, which
+//! made every no-argument reading of either builtin a silent wrong answer
+//! anywhere but UTC, and `docs/superpowers/plans/phase-4-exclusions.txt`
+//! carried it as a `KNOWN GAP` with the transcripts. Both limbs the entry
+//! named are closed -- [`local_offset_micros`] for the clock, and the port of
+//! `setTimeZoneOffset` onto a parsed input value at both `indate`/`intime`
+//! sites. `tests/datetime_zone.rs` is the witness, and pins the zone rather
+//! than the clock because two interpreters launched seconds apart can never
+//! be compared on a reading of *now*.
+//!
+//! The offset comes from `chrono`, the only external crate `src/` depends on;
+//! `crates/rexx-exec/Cargo.toml` carries why. `std` exposes no local-zone API
+//! and the oracle's own `localtime` call is not reachable from safe Rust.
 //!
 //! # A defined answer where the oracle's own is undefined
 //!
@@ -122,8 +126,10 @@
 //! `O` is not part of this family at all: its own input style copies
 //! `current` (`timestamp = current;`, `BUILTIN(TIME)`'s own `'O'` arm)
 //! before adjusting, so it starts from a real calendar date on both sides
-//! and never reaches `clear()`'s `0/0/0` in the first place. Its own
-//! divergence is the UTC-only clock, declared separately.
+//! and never reaches `clear()`'s `0/0/0` in the first place. Its own former
+//! divergence was the UTC-only clock, closed above.
+
+use chrono::{Offset, TimeZone};
 
 use rexx_core::ObjRef;
 use rexx_num::Number;
@@ -217,9 +223,12 @@ struct Timestamp {
     minutes: i64,
     seconds: i64,
     microseconds: i64,
-    /// Microseconds this timestamp's own fields are offset from UTC.
-    /// Always `0` for a clock reading in this crate (the module doc's own
-    /// UTC-only divergence); non-zero only after [`Timestamp::adjust_time_zone`].
+    /// Microseconds this timestamp's own fields are offset from UTC,
+    /// positive east of Greenwich -- `RexxDateTime::timeZoneOffset`.
+    ///
+    /// A clock reading carries the host's zone ([`now`]); a timestamp parsed
+    /// from an input value inherits the current reading's, which is what
+    /// `BuiltinFunctions.cpp` does immediately after its own `clear()`.
     time_zone_offset: i64,
 }
 
@@ -947,14 +956,58 @@ fn now_base_time(interp: &mut Interp) -> i64 {
     micros
 }
 
+/// Microseconds the host's local zone is ahead of UTC at `utc_micros`,
+/// which is [`UNIX_BASE_TIME`]-based like every other reading here.
+///
+/// `SystemInterpreter::getCurrentTime` (`platform/unix/TimeSupport.cpp:81`)
+/// computes the same quantity as `tv.tv_sec - mktime(gmtime(&tv.tv_sec))`,
+/// which is local-minus-UTC and so **positive east of Greenwich** -- for
+/// UTC+2 the oracle's own `TIME('O')` reads `7200000000`.
+///
+/// The offset is taken **at that instant** rather than sampled separately,
+/// so a reading that straddles a DST transition cannot pair one zone's
+/// calendar fields with the other's offset.
+fn local_offset_micros(utc_micros: i64) -> i64 {
+    let unix_micros = utc_micros - UNIX_BASE_TIME;
+    let secs = unix_micros.div_euclid(MICROSECONDS);
+    let nanos = (unix_micros.rem_euclid(MICROSECONDS) * 1_000) as u32;
+    match chrono::Local.timestamp_opt(secs, nanos) {
+        chrono::offset::LocalResult::Single(at) => {
+            i64::from(at.offset().fix().local_minus_utc()) * MICROSECONDS
+        }
+        // An instant the host's zone maps to zero or two local readings --
+        // the hour a DST jump skips, and the hour it repeats. `Ambiguous`
+        // carries both; the earlier is what `localtime` answers for a
+        // repeated hour, and `None` cannot arise from a real clock sample
+        // because a skipped hour never occurs. Neither is a reason to fail
+        // a `DATE` call, so both fall back to the zone's offset now.
+        chrono::offset::LocalResult::Ambiguous(earlier, _) => {
+            i64::from(earlier.offset().fix().local_minus_utc()) * MICROSECONDS
+        }
+        chrono::offset::LocalResult::None => 0,
+    }
+}
+
 /// The clause's own clock reading, decomposed into calendar fields.
+///
+/// **The fields are the host's local time and [`Timestamp::time_zone_offset`]
+/// is the zone that produced them**, which is what `getCurrentTime` fills in:
+/// `localtime` for the calendar, the offset alongside it. A consequence worth
+/// naming because it looks like a defect: `DATE('T')`/`TIME('F')` are then
+/// local-shifted rather than true UTC epoch counts, since
+/// [`Timestamp::base_time`] reads the local fields -- measured, the oracle
+/// answers `1786117069` where the true epoch second is `1786109869`. Matching
+/// that is the point.
 fn now(interp: &mut Interp) -> Timestamp {
     let mut timestamp = Timestamp::clear();
+    let utc = now_base_time(interp);
+    let offset = local_offset_micros(utc);
     // A real wall-clock reading is always within `0..=MAX_BASE_TIME` (the
     // year 1 to 9999 range this crate's own calendar covers), so this
     // always succeeds; the fallback is an inert cleared timestamp for the
     // one host whose own clock is set outside that range.
-    let _ = timestamp.set_base_time(now_base_time(interp));
+    let _ = timestamp.set_base_time(utc + offset);
+    timestamp.time_zone_offset = offset;
     timestamp
 }
 
@@ -1126,6 +1179,12 @@ pub(crate) fn date(
             }
         };
         timestamp = Timestamp::clear();
+        // `BuiltinFunctions.cpp:1114`, immediately after its own `clear()`:
+        // "everything is done using the current timezone offset". Without
+        // this the parsed timestamp carries offset `0` and `TIME('O')`'s
+        // input style answers the wrong zone -- invisible while every "now"
+        // was fixed at UTC, and a silent wrong answer the moment it is not.
+        timestamp.time_zone_offset = current.time_zone_offset;
         let valid = match style2 {
             b'N' => timestamp.parse_normal_date(indate_bytes, input_sep),
             b'B' => whole_number_of(indate_bytes).is_some_and(|n| timestamp.set_base_date(n)),
@@ -1213,6 +1272,8 @@ pub(crate) fn time(
             return Err(Raised::invalid_conversion(name, style).into());
         }
         timestamp = Timestamp::clear();
+        // `BuiltinFunctions.cpp:1375`, the same port as `DATE`'s above.
+        timestamp.time_zone_offset = current.time_zone_offset;
         let valid = match style2 {
             b'N' => timestamp.parse_normal_time(intime_bytes),
             b'C' => timestamp.parse_civil_time(intime_bytes),

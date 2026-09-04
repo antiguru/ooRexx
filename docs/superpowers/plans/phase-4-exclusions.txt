@@ -3970,7 +3970,34 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
 
 
   KNOWN GAP: DATE/TIME READ THE WALL CLOCK IN UTC, NEVER THE HOST'S LOCAL
-  ZONE. `builtin::datetime::real_clock_base_time` builds every no-argument
+  ZONE. CLOSED 2026-09-04, BOTH LIMBS. The clock reads the host's zone
+  through `chrono` -- the only external crate `src/` depends on, its reasons
+  in `crates/rexx-exec/Cargo.toml` -- and the `setTimeZoneOffset` port the
+  second limb below names is in at both `indate`/`intime` sites.
+  `crates/rexx-exec/tests/datetime_zone.rs` is the witness: it pins `TZ` on
+  both children rather than the clock, because a reading of *now* can never
+  be compared byte for byte between two processes launched seconds apart,
+  while `TIME('O')` answers the zone and not the instant. Each limb has its
+  own probe and each was inverted -- with limb 1 reverted only the first
+  fails, with limb 2 reverted only the second.
+  Measured effect on `corpus/method-bodies.txt`: five rows moved `diverge`
+  to `answers` (`DateTime today`, `toTimezone`, `toUtcTime`, `utcDate`,
+  `utcIsoDate`) and none moved away from `answers`. That required
+  `tests/method_bodies.rs` to shift `TZ` on **both** sides rather than the
+  oracle's alone, which its own comment had assigned to whichever task landed
+  a zone-aware body; before that change the fix was invisible to it and the
+  table read no drift at all.
+  Still open and NOT this entry's: `DateTime date` and `timeOfDay` remain
+  `diverge`, and were `diverge-both` before this change as well -- the crate
+  raises 40.19 inside the library's own `DATE` call where the oracle answers.
+  A separate defect that happens to live on the same class.
+  The entry stands as written below because the reasoning is what made the
+  containment argument correct, and `corpus/builtin-probes.txt`'s two rows
+  are still the deterministic forms for the reason it gives.
+
+  THE ORIGINAL ENTRY, AS WRITTEN:
+
+  `builtin::datetime::real_clock_base_time` builds every no-argument
   reading from `SystemTime::now()` with a time-zone offset fixed at zero;
   this crate carries no time-zone database at all. The oracle's own
   `SystemInterpreter::getCurrentTime` reads the host's local zone. Wide by
@@ -4028,6 +4055,11 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
 
   No owner is assigned to closing either limb: a time-zone database is
   Phase 5-or-later infrastructure, not a fix scoped to `DATE`/`TIME`.
+  [Closed 2026-09-04, see the head of this entry. The judgement here was
+  half right: it needed a decision above the task -- an external crate in
+  `src/`, which had none until this -- but not a database of our own, since
+  `chrono` reads the host's TZif and answers the same offset the oracle's
+  `localtime` does, measured across four zones including a negative one.]
 
 
   KNOWN GAP: THE INTERPRETER'S INTERNAL-PACKAGE ROUTINES ARE PROVIDED BY

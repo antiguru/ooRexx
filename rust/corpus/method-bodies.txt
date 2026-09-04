@@ -923,7 +923,7 @@ DateTime	fromUtcIsoDate	class	answers	rc 163
 DateTime	fromWeekNumberDate	class	answers	rc 163
 DateTime	maxDate	class	loud	method "RIGHT" of class "String"
 DateTime	minDate	class	loud	method "RIGHT" of class "String"
-DateTime	today	class	diverge	diverge-stdout
+DateTime	today	class	answers	rc 0
 DateTime	+	instance	answers	rc 0
 DateTime	-	instance	answers	rc 163
 DateTime	addDays	instance	answers	rc 163
@@ -969,11 +969,11 @@ DateTime	string	instance	answers	rc 0
 DateTime	ticks	instance	answers	rc 0
 DateTime	timeOfDay	instance	diverge	diverge-both
 DateTime	toLocalTime	instance	answers	rc 0
-DateTime	toTimezone	instance	diverge	diverge-stdout
-DateTime	toUtcTime	instance	diverge	diverge-stdout
+DateTime	toTimezone	instance	answers	rc 0
+DateTime	toUtcTime	instance	answers	rc 0
 DateTime	usaDate	instance	answers	rc 0
-DateTime	utcDate	instance	diverge	diverge-stdout
-DateTime	utcIsoDate	instance	diverge	diverge-stdout
+DateTime	utcDate	instance	answers	rc 0
+DateTime	utcIsoDate	instance	answers	rc 0
 DateTime	weekDay	instance	answers	rc 0
 DateTime	weekNumber	instance	answers	rc 0
 DateTime	weekNumberDate	instance	loud	method "SUBSTR" of class "String"

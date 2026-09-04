@@ -65,12 +65,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use gate_tables::{
     Descriptors, Report, Structural, assert_no_structural_failures, compare_raw, excerpt, is_loud,
     refused_construct, verdict,
 };
-use rexx_exec::{Engine, Invocation, Outcome};
+use rexx_exec::{Engine, Invocation, Outcome, StackSpan};
 use support::oracle::{CppOutcome, did_not_finish, wrapped_exit_code};
 
 fn corpus_dir() -> PathBuf {
@@ -442,6 +443,39 @@ fn same_outcome(left: &Outcome, right: &Outcome) -> bool {
         && left.stderr == right.stderr
 }
 
+/// This crate's answer to `abs` with `TZ` set, as a subprocess.
+///
+/// **Why a subprocess when every other crate-side run here is in process.**
+/// `TZ` is read per process, and the in-process executor shares this test
+/// binary's environment -- so the only way to ask what this crate answers
+/// under another zone is to run it as its own process. Setting the variable
+/// in this process instead would need `std::env::set_var`, which is `unsafe`
+/// in this edition and races every other test in the binary.
+///
+/// Only the three descriptors are filled: [`compare_raw`] reads no other
+/// field, and a subprocess cannot report a stack span or a collection count
+/// across the boundary anyway.
+fn run_crate_in_zone(abs: &Path, zone: &str) -> Outcome {
+    let out = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
+        .arg(abs)
+        .env("TZ", zone)
+        .output()
+        .unwrap_or_else(|e| {
+            panic!(
+                "failed to run this crate on {} under TZ={zone}: {e}",
+                abs.display()
+            )
+        });
+    Outcome {
+        exit_code: out.status.code().unwrap_or(-1),
+        stdout: out.stdout,
+        stderr: out.stderr,
+        stack: StackSpan::default(),
+        collections: 0,
+        chunks_refused: 0,
+    }
+}
+
 /// A row this crate answered, held between the oracle's first run and the
 /// second pass that decides what its verdict is allowed to be.
 struct Pending {
@@ -786,18 +820,24 @@ fn no_row_started_diverging_or_stopped_answering() {
     // the comparison can turn on the clock and the zone, which is worse,
     // because it makes a row's verdict a fact about when the sweep ran.
     //
-    // So the crate's one answer is held against the oracle under this
-    // machine's zone and under [`SHIFTED_ZONES`], and only agreement with all
-    // three is `answers`. Anything less is a divergence: the crate's answer
-    // is one string, so a zone it fails to match is a zone it is wrong under.
+    // So the crate's answer is held against the oracle under this machine's
+    // zone and under [`SHIFTED_ZONES`], and only agreement with all three is
+    // `answers`.
     //
-    // **What this cannot see, and it will matter later.** The environment is
-    // shifted on the oracle's side only, because the crate runs in process
-    // and `TZ` is read per process. A body that correctly answers differently
-    // per zone would therefore match at most one of the three and read
-    // `diverge` here. Nothing in this crate does that today -- its
-    // `DateTime` bodies ignore the offset, which is the defect above -- and
-    // the task that lands one has to shift both sides rather than trust this.
+    // **Both sides shift, and they did not always.** Until the zone-aware
+    // clock landed, only the oracle's side was shifted, because the crate
+    // runs in process and `TZ` is read per process -- so a body that
+    // correctly answered differently per zone would have matched at most one
+    // of the three and read `diverge`. That is no longer hypothetical:
+    // `DateTime`'s bodies do vary by zone now. Where the oracle's own three
+    // answers differ, this crate is therefore re-run per zone as a
+    // subprocess ([`run_crate_in_zone`]) and compared zone for zone.
+    //
+    // Where the oracle answers the same string in all three -- which is every
+    // row that has nothing to do with the clock -- the in-process answer is
+    // compared against it directly and no subprocess is spawned. That is not
+    // only an optimisation: it keeps the common path exactly as it was, so a
+    // row whose verdict moves is a row whose zone behaviour moved.
     for row in &pending {
         let shifted = [
             (
@@ -820,10 +860,24 @@ fn no_row_started_diverging_or_stopped_answering() {
             });
             continue;
         }
-        let agrees_with = |cpp: &CppOutcome| {
+        let agrees_in_process = |cpp: &CppOutcome| {
             verdict(compare_raw(&row.crate_side, cpp)) == gate_tables::Verdict::Agree
         };
-        if agrees_with(&row.oracle) && shifted.iter().all(|(_, out)| agrees_with(out)) {
+        let oracle_is_zone_invariant = shifted.iter().all(|(_, out)| {
+            out.stdout == row.oracle.stdout
+                && out.stderr == row.oracle.stderr
+                && out.termination == row.oracle.termination
+        });
+        let agrees_everywhere = if oracle_is_zone_invariant {
+            agrees_in_process(&row.oracle) && shifted.iter().all(|(_, out)| agrees_in_process(out))
+        } else {
+            agrees_in_process(&row.oracle)
+                && shifted.iter().all(|(zone, out)| {
+                    let here = run_crate_in_zone(&row.abs, zone);
+                    verdict(compare_raw(&here, out)) == gate_tables::Verdict::Agree
+                })
+        };
+        if agrees_everywhere {
             measured.insert(
                 row.key.clone(),
                 Measured {
