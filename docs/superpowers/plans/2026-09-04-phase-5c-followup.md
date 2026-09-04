@@ -88,20 +88,27 @@ variant carrying `Bytes` plus a capacity, on `Body::Native`'s precedent; or `Nat
 `entries` map. **`rexx-core/src/body.rs` has a width assertion and it is the constraint on all
 three** — read it before proposing anything.
 
-**First, the question nobody has asked**: `String` has its own loud rows and the crate already
-carries byte machinery for `Bytes`. Find out what exists before designing. If `String`'s
-representation already gives most of this, say so and the phase gets smaller.
+**First, the question nobody has asked**: where the byte machinery already is. Task 0 measured
+that it is **not** in `String`'s method surface — `NATIVE_METHODS` binds `LENGTH REVERSE SIGN
+UPPER NEW` for `String` and `'abc'~substr(2)` is rc 120 on both engines. It is in the builtin
+*functions*, `rexx-exec/src/builtin/string.rs` and `word.rs`, with `(interp, name, Args)`
+signatures. Find out whether those factor over a `&[u8]` a buffer can hand them; if they do, say so
+and the phase gets smaller.
 
 **Measure, do not choose on taste.** Build the two live candidates far enough to run an append loop
 and a length loop, and report instructions for each with the sha256 of each binary. The prototype
 lives in a scratch crate under `claude-build-scratch/`, kept until the phase closes and its figures
 reproducible from there — not committed, and not thrown away.
 
-**Read `MutableBufferClass.cpp:100`-`:126` for what `defaultSize` is for.** The C++ carries
-`bufferLength` *and* `defaultSize`, and `getBufferSize` reports the former: measured,
-`.MutableBuffer~new('abcdef', 100)` then `setBufferSize(3)` answers `3`, not the constructor's
-`100`. Whether `defaultSize` is observable anywhere was not established. **Carrying a field nothing
-can observe is its own small trap** — decide deliberately.
+**`defaultSize` is observable and the representation carries it** — Task 0 settled the question
+this paragraph used to leave open. The C++ carries `bufferLength` *and* `defaultSize`;
+`getBufferSize` reports the former, and `setBufferSize(0)` is the one path that reads the latter
+(`MutableBufferClass.cpp:686`-`:691`): it shrinks capacity back to `defaultSize`, which is the
+constructor's second argument or 256. Oracle: `new(copies('x',400))` then `setBufferSize(0)` reads
+`0 256`; with a second argument of `300`, `0 300`; `new('abc',500)` grown to `1203 2000` then
+`setBufferSize(0)`, `0 500`. `delete` and `setText('')` leave capacity alone. Growth is
+`max(needed, 2 * capacity)` (`ensureCapacity`, `:243`): `new('',10)` under seven-byte appends reads
+`10 20 40 40 40 80 80 80`.
 
 ---
 

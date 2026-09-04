@@ -367,10 +367,17 @@ fn method_name_literal(name: &str) -> &str {
 /// verdict turns on the clock. Measured under the documented expression: this
 /// crate's own two engines disagree on the `DateTime` rows whose answer
 /// carries the time, and a row flips between two sweeps.
-const RECEIVER_OVERRIDES: &[(&str, &str)] = &[(
-    "DateTime",
-    ".DateTime~fromIsoDate('2020-01-02T03:04:05.678901')",
-)];
+///
+/// `.MutableBuffer~new` is empty, so a reader of its contents answers the
+/// same on an instance that keeps them and one that does not; the override
+/// gives the rows contents to read back.
+const RECEIVER_OVERRIDES: &[(&str, &str)] = &[
+    (
+        "DateTime",
+        ".DateTime~fromIsoDate('2020-01-02T03:04:05.678901')",
+    ),
+    ("MutableBuffer", ".MutableBuffer~new('abc')"),
+];
 
 /// The expression a row's send is made to, or `None` for the class arm, which
 /// sends to the class object itself.

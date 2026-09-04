@@ -33,7 +33,9 @@ counting the class as built — Phase 7 was scoped on `File`'s 57 `answers` rows
 construct at all, because `File~init` → `normalizePathSyntax` → `.mutableBuffer~new(path)` and then
 `~length`.
 
-**One row of the 52 is `new` (class arm) and answers; the other 51 are instance and are `loud`.**
+**All 52 rows are `loud`: the 51 instance rows, and the class-arm `new` row too, because
+`say .MutableBuffer~new()` renders through `makeString`.** (An earlier version of this sentence said
+the class-arm row answers; Task 0 read the table.)
 
 ---
 
