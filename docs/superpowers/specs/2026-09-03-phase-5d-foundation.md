@@ -393,6 +393,39 @@ would have done Phase 6 and 7's work.
   stream read and write paths and `~open`'s option grammar (`StreamCommandParser.cpp`, 253 lines);
   the stream and platform BIFs, unchanged in `phase-4-exclusions.txt`; and `::REQUIRES LIBRARY`,
   which needs a native library loader.
+* **`DATE()` and `TIME()` answer UTC where the oracle answers local time — Phase 4's, found
+  2026-09-04 and owned by nobody.** Measured on this machine's own zone with no `TZ` override, both
+  engines, rc 0 and empty stderr on both sides:
+
+  ```
+  local 2026-09-04 00:26 CEST
+  oracle   20260904 00:26:05
+  crate    20260903 22:26:05
+  ```
+
+  A silent wrong answer in two of the most-used builtins: wrong for the hours each day the machine's
+  offset spans, and a whole day out under a larger one (`TZ=Etc/GMT-14`, oracle `20260904`, crate
+  `20260903`).
+
+  **Two things hid it, and they reinforced each other.** `builtin-status.txt` marks both
+  `implemented`, and that status is *derived* — but from `builtin-probes.txt`'s
+  `say date('S','2026-08-04','I')` and `say time('S','12:34:56','N')`, which pass an explicit input
+  and **never read the clock**. The probe was made deterministic by avoiding the one path that is
+  wrong. Meanwhile no `corpus/lang/*.rex` calls `date(` or `time(` at all, so the differential has
+  never exercised them either.
+
+  **This is very likely the single cause under six of the method-body table's seven `diverge`
+  rows** — `DateTime`'s `date`, `timeOfDay`, `toTimezone`, `toUtcTime`, `utcDate`, `utcIsoDate`,
+  plus `today`, whose bodies reach `DATE` and `TIME` inside `CoreClasses.orx`. Whoever fixes it
+  should re-run the method-body sweep and expect those rows to move together; if they do not, the
+  offset handling is a second defect.
+
+  **Its witness must not be able to flake at midnight**, which is the trap `DateTime~today` already
+  sprang: a clock-reading row compared once reads correct for twenty-two hours a day. Task 2 built
+  the instrument for exactly this — hold the crate's answer against the oracle under several
+  environments including two twenty-six hours apart, so no instant puts them on the same calendar
+  date. Reuse it rather than inventing a second one.
+
 * **Unowned, and each a real divergence** — inherited from 5c's handover and untouched here:
   `RootSet::promote` leaks one cell per referenced variable instance; `~unknown`'s argument list does
   not send `MAKEARRAY`; a `Directory` subclass's entry writes refuse where the oracle answers;
