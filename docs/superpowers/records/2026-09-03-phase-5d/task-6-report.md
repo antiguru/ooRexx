@@ -112,11 +112,13 @@ thing to find out."* Enumerated from the tree and then measured, one list at a t
 | `coverage.rs` `SUBSET_FILES` | `the_union_reads_every_phase_subset_file` | red |
 | `ir_dual.rs` `SUBSET_FILES` | `the_dual_harness_reads_every_phase_subset_file` | red |
 | `collect_stress.rs` `SUBSET_FILES` | `the_stress_subset_reads_every_phase_subset_file` | red |
-| `trace_oracle.rs`'s literal | **none** | **all five binaries green, exit 0** |
+| `trace_oracle.rs`'s literal | **none, at `63aaeb665`** | **all five binaries green, exit 0** |
 
-`trace_oracle.rs`'s own doc says it is the one call site the four guards do not cover and that a
-future phase's file must be added by hand. That is now measured rather than asserted in prose: it is
-the list that can drift silently, and this task added its entry by hand.
+`trace_oracle.rs`'s own doc said it was the one call site the four guards do not cover and that a
+future phase's file must be added by hand. The measurement above is what that sentence was worth: a
+list nothing compares with the directory, and an instruction to a future reader in place of a check.
+**A second commit gives it the guard** — see "The follow-up commit" below, which is where that row
+changes to red.
 
 `tests/directive_options.rs:14`'s reference to `corpus/phase-5c.txt` is a doc comment about the
 `directive_options*` programs, which are still that file's. It is unaffected and was not touched.
@@ -214,7 +216,7 @@ to the wired tree, run, and reverted — the restores are `git show :<path> > <p
 | C1 | out of `coverage.rs`'s list | its guard reddens, alone | **CONFIRMED** |
 | C1 | out of `ir_dual.rs`'s list | its guard reddens, alone | **CONFIRMED** |
 | C1 | out of `collect_stress.rs`'s list | its guard reddens, alone | **CONFIRMED** |
-| C2 | out of `trace_oracle.rs`'s literal | **no** guard; all five binaries stay green | **CONFIRMED**, exit 0 |
+| C2 | out of `trace_oracle.rs`'s literal | **no** guard; all five binaries stay green | **CONFIRMED**, exit 0 — and the follow-up commit below is what turns this row red |
 
 D3 is the one that answers "did the flip actually do anything". At BASE that program is named by no
 subset file, so the differential's `354` could not have counted it whatever the crate answered;
@@ -458,9 +460,6 @@ each is named by the task that met it.
 
 ### About the instrument itself
 
-* **`trace_oracle.rs`'s subset literal has no directory-listing guard**, measured above: a phase
-  subset file dropped from it leaves the workspace green. The next phase's file has to be added by
-  hand, and nothing will say so if it is not.
 * **Table D's row set has no expected-output column.** A probe rewritten to fail for an unrelated
   reason still writes a report on `stderr` and is not caught; `gate_table_d.rs`'s own module doc
   names the task that would close it.
@@ -542,3 +541,100 @@ The status file's lines are written from each gate's own output rather than from
 A pre-commit run of the same two gate commands over the `git archive` extract of this tree read
 `g6 0` and `g7 0`, with both tables at `gated by this run: 0 row(s)`; that run is quoted above and
 is not what the table here reports.
+
+---
+
+# The follow-up commit: `trace_oracle.rs` gets the guard
+
+**BASE `3c4615ecf`**, the commit that filled the gate table above. This is a second commit with a
+gate run of its own, because it is test code rather than documentation.
+
+**What the first commit shipped was a comment where a check belonged.** The measurement in "the
+brief's own open question" found that `trace_oracle.rs`'s subset list is the one of five with no
+directory-listing guard, and the file's response to that was a sentence asking a future task to
+remember. An instruction is not a control: on this project a *dispatch warning* has failed to
+prevent the very defect it warned about three times running, and a doc comment is weaker than a
+dispatch warning, because nobody is required to read it at the moment it matters. One finding
+earlier the same session, `gate_table_c.rs`'s assertion could not see table D and the answer was to
+write the twin rather than a note — same situation, and the only thing that made this one different
+is that it lives in a file whose subject is trace prefixes, which is why it was missed rather than a
+reason to leave it.
+
+## The change
+
+* the inline literal becomes `const SUBSET_FILES`, with the measurement above in its doc;
+* `phase_subset_files_on_disk()` — a fifth copy of the helper the other four binaries carry, for the
+  reason each of them states: these are integration-test binaries and none can `mod` another;
+* `the_prefix_table_reads_every_phase_subset_file`, which pins the one against the other;
+* `every_live_witness_emits_its_prefix_and_is_run_by_the_corpus` now reads `SUBSET_FILES` rather
+  than its own literal. **That substitution is half the change**: a pin on a constant nothing
+  consumes would pass forever while the test kept a private copy, which is the same defect class as
+  the assertion that could not see its subject;
+* the "must be added by hand" sentence is gone; the explanation stays, because it says why the guard
+  exists.
+
+**The new test asserts the directory listing is non-empty before comparing it.** The non-empty
+literal would have made an empty read fail anyway, but inheriting a property from the line next to
+it is exactly what the `gate_table_c.rs` finding was about, and the assertion says *what happened*
+where a bare `assert_eq!` prints a diff against an empty vector.
+
+**The insertion goes above the whole doc block**, not on the `fn` line: anchoring on a `fn` silently
+reassigns the doc above it to the new item and both `fmt` and `clippy` pass.
+
+## The inversion control
+
+**Predicted before the run**, in `…/scratchpad/task-6/flip/predictions-guard.md`, written after the
+patch was prepared and before it was applied.
+
+| # | prediction | outcome |
+|---|---|---|
+| P0 | `for name in SUBSET_FILES` binds `&&str` and `join` resolves it through the blanket `AsRef` impl, so it builds unchanged | **CONFIRMED** — `fmt` 0, `clippy` 0, no `for &name` or `join(*name)` needed |
+| P1 | with the guard in, `trace_oracle` is exit 0 at **34** tests where the committed tree has 33 | **CONFIRMED** — `ok. 34 passed; 0 failed` |
+| P2a | drop `phase-5d.txt` from `SUBSET_FILES`: `trace_oracle` reddens on `the_prefix_table_reads_every_phase_subset_file` **specifically** | **CONFIRMED** — `FAILED. 33 passed; 1 failed`, that test named |
+| P2b | `corpus`, `coverage`, `ir_dual` and `collect_stress` stay green, their own lists untouched | **CONFIRMED** — 18, 20, 9 and 8 passed, 0 failed |
+| P2c | no *other* `trace_oracle` test reddens, because both `Coverage::WitnessedLive` rows name `lang/routine_dispatch.rex`, which no 5d file names — so this is a pure list mismatch rather than a genuinely narrowed union | **CONFIRMED**, and it is the weaker of the two outcomes; stated in advance for that reason |
+
+```text
+assertion `left == right` failed: this file does not read every phase subset file in rust/corpus/.
+  left: ["phase-4a.txt", …, "phase-5c.txt"]
+ right: ["phase-4a.txt", …, "phase-5c.txt", "phase-5d.txt"]
+```
+
+**The contrast is the point.** The identical mutation at `63aaeb665` left all five binaries green at
+exit 0 — that reading is in the table earlier in this report. Restored from the index with
+`git show :<path>` plus a `touch`, `trace_oracle` is back to `ok. 34 passed`.
+
+## What this commit does not do
+
+* **No corpus program, no subset file and no `CLOSED_PHASES` entry changed.** One file.
+* **The guard checks that the list matches the directory, not that a subset file's contents are
+  right** — `coverage.rs`'s `phase_*_subset_matches_the_committed_list` tests are what pin contents,
+  and this adds no sixth copy of those.
+* **It does not make `trace_oracle.rs` read the subset files the way `corpus.rs` does.** The union
+  here is still a membership set for `Coverage::WitnessedLive` paths and nothing more.
+
+## Files
+
+* `rust/crates/rexx-exec/tests/trace_oracle.rs` — `SUBSET_FILES`, `phase_subset_files_on_disk`,
+  `the_prefix_table_reads_every_phase_subset_file`, and the doc paragraph rewritten
+* `docs/superpowers/records/2026-09-03-phase-5d/task-6-report.md` — this section, plus the two
+  places above where the first commit's prose said the gap was open
+
+## Gates
+
+Same seven commands and the same protocol: committed first, run in the background, statuses written
+unpiped to `…/scratchpad/task-6/flip/logs/gates2/status.txt` with the commit sha as its first line.
+
+| # | command | exit |
+|---|---|---|
+| 1 | `cargo fmt --all --check` | **G1** |
+| 2 | `cargo clippy --workspace --all-targets -- -D warnings` | **G2** |
+| 3 | `cargo test --release --workspace --no-fail-fast` | **G3** |
+| 4 | `REXX_CORPUS_GATE=1 cargo test --release --workspace --no-fail-fast` | **G4** |
+| 5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | **G5** |
+| 6 | `REXX_PHASE_GATE=5c REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **G6** |
+| 7 | `REXX_PHASE_GATE=5d REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **G7** |
+
+**The count that moves this time is `trace_oracle`'s: 33 → 34.** `gate_table_c` stays at 15 and
+`gate_table_d` at 16; neither table's row set is touched, so G6 and G7 should read exactly what the
+first commit's run read.

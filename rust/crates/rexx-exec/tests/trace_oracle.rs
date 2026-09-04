@@ -671,6 +671,69 @@ const PREFIX_COVERAGE: &[(&str, Coverage)] = &[
     ("<I<", Coverage::WitnessedLive(LIVE_INVOCATION_WITNESS)),
 ];
 
+/// The phase subset files this file reads, in union order.
+///
+/// **A named constant pinned against the directory below**, which is the
+/// arrangement `corpus.rs`, `coverage.rs`, `ir_dual.rs` and
+/// `collect_stress.rs` each already have. Measured before the pin was added
+/// here: dropping `phase-5d.txt` from this list left this binary and those
+/// four green, because nothing compared the list with the directory -- so a
+/// phase subset file added and forgotten here would keep the check below
+/// measuring the union as it stood before, and a [`Coverage::WitnessedLive`]
+/// row whose program only that file names would rest on this file's own
+/// output rather than on the oracle.
+const SUBSET_FILES: &[&str] = &[
+    "phase-4a.txt",
+    "phase-4b.txt",
+    "phase-4c.txt",
+    "phase-5a.txt",
+    "phase-5b.txt",
+    "phase-5c.txt",
+    "phase-5d.txt",
+];
+
+/// The phase subset files that exist in the corpus directory, sorted.
+///
+/// Read from the directory rather than listed a second time, so the assertion
+/// below cannot be satisfied by a copy of [`SUBSET_FILES`] edited in the same
+/// change. Duplicated from the four binaries named above rather than shared,
+/// for the reason each of them gives: these are integration-test binaries and
+/// none can `mod` another.
+fn phase_subset_files_on_disk() -> Vec<String> {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+    let entries =
+        std::fs::read_dir(&dir).unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
+    let mut names: Vec<String> = entries
+        .flatten()
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter(|name| name.starts_with("phase-") && name.ends_with(".txt"))
+        .collect();
+    names.sort();
+    names
+}
+
+/// This file reads **every** phase subset file the corpus has.
+#[test]
+fn the_prefix_table_reads_every_phase_subset_file() {
+    let on_disk = phase_subset_files_on_disk();
+    // The listing is the half that can come back empty, and a comparison of
+    // two empty lists is a pass with nothing behind it. Asserted here rather
+    // than left to the non-empty literal below to carry, which is the same
+    // reason `gate_table_d.rs`'s owner check asserts its own enumeration.
+    assert!(
+        !on_disk.is_empty(),
+        "no phase-*.txt in rust/corpus/, so the assertion below compared the list against \
+         nothing"
+    );
+    assert_eq!(
+        SUBSET_FILES, on_disk,
+        "this file does not read every phase subset file in rust/corpus/. A file missing \
+         from SUBSET_FILES leaves the union below as it stood before that file landed, and \
+         a WitnessedLive row whose program only the missing file names then rests on this \
+         file's own output rather than on the oracle"
+    );
+}
+
 /// Each [`Coverage::WitnessedLive`] row's own chain, the analogue of
 /// [`every_witness_still_emits_every_prefix_it_is_named_for`] for a witness
 /// whose expectation lives in the live corpus.
@@ -692,25 +755,14 @@ const PREFIX_COVERAGE: &[(&str, Coverage)] = &[
 /// where the absolute package path stops being a problem, because both
 /// interpreters get the same one.
 ///
-/// **This literal has no directory-listing guard**, unlike the `SUBSET_FILES`
-/// pinned against `phase_subset_files_on_disk()` in `corpus.rs`, `coverage.rs`,
-/// `ir_dual.rs` and `collect_stress.rs`: this file is the one call site those
-/// four do not cover, and a phase subset file added and forgotten *here* would
-/// silently keep this check measuring the union as it stood before. A future
-/// phase's file must be added to this literal by hand for that reason.
+/// The union it reads is [`SUBSET_FILES`], which
+/// [`the_prefix_table_reads_every_phase_subset_file`] holds against the corpus
+/// directory: link 2 is only as wide as that list.
 #[test]
 fn every_live_witness_emits_its_prefix_and_is_run_by_the_corpus() {
     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
     let mut listed = String::new();
-    for name in [
-        "phase-4a.txt",
-        "phase-4b.txt",
-        "phase-4c.txt",
-        "phase-5a.txt",
-        "phase-5b.txt",
-        "phase-5c.txt",
-        "phase-5d.txt",
-    ] {
+    for name in SUBSET_FILES {
         let path = corpus_dir.join(name);
         listed.push_str(
             &std::fs::read_to_string(&path)
