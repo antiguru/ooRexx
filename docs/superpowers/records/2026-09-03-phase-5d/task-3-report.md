@@ -402,13 +402,19 @@ pidfile. Started after the commit below; the controller reads the statuses and f
 
 | # | command | exit |
 |---|---|---|
-| 1 | `cargo fmt --all --check` | **G1** |
-| 2 | `cargo clippy --workspace --all-targets -- -D warnings` | **G2** |
-| 3 | `cargo test --release --workspace --no-fail-fast` | **G3** |
-| 4 | `REXX_CORPUS_GATE=1 cargo test --release --workspace --no-fail-fast` | **G4** |
-| 5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | **G5** |
-| 6 | `REXX_PHASE_GATE=5c REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **G6** |
-| 7 | `REXX_PHASE_GATE=5d …` (same command) | **G7** |
+| 1 | `cargo fmt --all --check` | **0** |
+| 2 | `cargo clippy --workspace --all-targets -- -D warnings` | **0** |
+| 3 | `cargo test --release --workspace --no-fail-fast` | **0** |
+| 4 | `REXX_CORPUS_GATE=1 cargo test --release --workspace --no-fail-fast` | **0** |
+| 5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | **0** |
+| 6 | `REXX_PHASE_GATE=5c REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **0** |
+| 7 | `REXX_PHASE_GATE=5d …` (same command) | **101** |
+
+**Filled in by the controller from the run's own `statuses.txt`, not by the task agent**, under the
+commit-before-gating protocol this task was the first to use: the agent committed at `c1afdb9e9`,
+started the suite in the background and stopped without waiting. The status file pins the commit,
+`c1afdb9e9b8d5527ee34d9270cfe67657060d87c`, so the gated tree is the committed tree by construction.
+The run took 27m45s (08:37:58 to 09:05:43) — the window that lost Task 2.
 
 **G7 is expected non-zero and is not this task's**: table D's `requires__namespace__subkeyword` row
 is Task 5's, exactly as it was after Task 2.

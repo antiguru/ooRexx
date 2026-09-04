@@ -59,6 +59,23 @@ Each rule below has already cost this project a session, a wrong measurement, or
 * **`REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast`**, a **debug** run beside the `--release` ones, and it is not redundant with them: `[profile.release]` sets `debug = true` for the symbols a profiler needs and does not set `debug-assertions`, so every `debug_assert` in this workspace is compiled out of everything a `--release` gate runs -- `Interp::enter_clause`'s tripwire among them, the one that makes a construct resolving an instruction without ending its header clause first announce itself rather than wait for a reviewer's probe, and the temps-frame watermark `SteppedClause` carries. Expected against the tree as committed: exit 0, no failures.
   **Negative control, measured 2026-08-15 at `3492b0b9e`:** deleting `deliver_one_pending_trap`'s `queued_during_delivery` marking loop leaves the gated **release** suite at exit 0 with nothing failing, and under this debug command reddens `ir_dual.rs`'s two-engine cases, `corpus.rs`'s oracle differential and `collect_stress.rs`, every failure a panic at `Interp::enter_clause`'s assertion. **Do not change `[profile.release]` to close this** -- it is pinned because both its consumers are measurements, and its own comment says so.
 * **Read every exit status unpiped, and confirm the command actually ran.** A pipeline reports the last command's status, and a misspelled flag exits non-zero before doing any work -- which reads as failure in one context and is silently skipped in another.
+* **Commit before the full gate run, not after -- and leave the tree frozen until it finishes.**
+  Ruled 2026-09-04. The five gates take about 27 minutes (measured 27m45s at `c1afdb9e9`), and an
+  agent that waits on them times out and does not wake: Phase 5d Task 2 finished every gate at 0,
+  died before committing, and its work had to be recovered from the staged index by the controller.
+  The order that removes the window: fast checks yourself (`fmt`, `clippy`, the test binaries your
+  change touches), **then commit code and report together** with the report's gate cells left as
+  placeholders, **then** start the suite in the background writing each status unpiped to a file as
+  it goes, with the commit sha as that file's first line and a pidfile the waiter keys on -- then
+  report "committed at `<sha>`, gates running, statuses at `<path>`" and stop.
+  **This makes the gated tree the committed tree by construction**, which is stronger evidence than
+  a tree hash recorded before and after the run.
+  **The second half is not optional**: the gates run sequentially over the working tree, so an edit
+  landing between G1 and G7 -- a docs fix, a comment, the controller filling in a report -- is
+  measured by the later gates and silently voids the property. The tree belongs to the gate run
+  until the status file says `finished`, even though the agent has already released it. Task 3
+  voided one benchmark sitting exactly this way, by a two-comment edit that rebuilt the head binary
+  mid-run.
 * **Write a gate line only from output you are looking at.** Never leave a placeholder in the shape
   of a result, intending to fill it in when the run lands: a prospective "exit 0" reads exactly like
   a measured one, and if the run is interrupted the placeholder is what ships. Measured here at
