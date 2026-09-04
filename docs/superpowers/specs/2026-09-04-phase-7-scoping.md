@@ -38,7 +38,7 @@ so nothing caught it. Whatever Phase 7 implements, it should make these say what
 
 ---
 
-## 2. `Stream` is native; `File` is Rexx and is blocked on something else entirely
+## 2. `Stream` is native; `File` is Rexx **and native**, and is blocked on both
 
 `interpreter/RexxClasses/StreamClasses.orx` defines both, and they are not the same kind of work.
 
@@ -67,8 +67,25 @@ The chain is `File~init` (`:526`) → `normalizePathSyntax` (`:581`) → `.mutab
 | `MutableBuffer~string` | `loud` (instance) |
 | `MutableBuffer~delstr` (trailing separator only) | `loud` (instance) |
 
-**So `File`'s 57 rows are gated on five `MutableBuffer` methods, not on file I/O**, and
-`MutableBuffer`'s `method-owner` in `class-set.txt` is `5c` — a phase in `CLOSED_PHASES`.
+**CORRECTED 2026-09-04, by the plan review this survey led to. The sentence that stood here said
+`File`'s rows are gated on five `MutableBuffer` methods "not on file I/O". That is false: they are
+gated on both.** `File~init`'s next line after `normalizePathSyntax` is `self~qualifiedPath`
+(`:527`), unconditional on the one-argument path, and `qualifiedPath` (`:637`) calls `qualifyImpl` —
+which is `EXTERNAL 'LIBRARY REXX file_qualify'` and `deferred("file_qualify", Family::File)` at
+`dispatch/native.rs:276`, owner **Phase 7**. Measured, a `File` subclass overriding `qualifyImpl`
+prints from it *before* the constructor returns.
+
+So implementing `MutableBuffer` moves `.File~new('/tmp')`'s refusal from `MutableBuffer LENGTH` to
+`file_qualify`; it does not make `File` construct. `SysFileSystem::qualifyStreamName` →
+`canonicalizeName` (`platform/unix/SysFileSystem.cpp`) is what stands behind that entry point.
+
+**How the error was made, since it is the same shape twice in one document**: having established
+that `File` is Rexx rather than native, I stopped reading at the method that confirmed it. The
+constructor's next line was on the screen. §3 records the same habit finding `File`'s rows hollow
+only because someone opened the probe.
+
+`MutableBuffer`'s `method-owner` in `class-set.txt` is `5c` — a phase in `CLOSED_PHASES` — and that
+part stands.
 
 ---
 
@@ -148,9 +165,10 @@ the parent plan is blunt about why:
 > plan that schedules it as a Phase 10 nicety cannot reach its own Phase 5 gate.
 
 **So Phase 7's value is unblocking L2** — running the real ooRexx test suite against this crate —
-and the critical path to that is `.File`, which is blocked on five `MutableBuffer` methods, plus
-`SysFileExists` and `SysFileTree`. Stream's twenty-four native entry points are a larger body of
-work and are **not** on that path.
+and the critical path to that is `.File`, which is blocked on five `MutableBuffer` methods **and on
+`file_qualify`, a Phase 7 native entry point** (see §2's correction), plus `SysFileExists` and
+`SysFileTree`. Stream's twenty-four native entry points are a larger body of work and are still not
+on that path, but `File`'s own native entries are.
 
 ---
 
