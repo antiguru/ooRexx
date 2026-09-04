@@ -504,15 +504,36 @@ pidfile. Started after the commit below; the controller reads the statuses and f
 
 | # | command | exit |
 |---|---|---|
-| 1 | `cargo fmt --all --check` | **G1** |
-| 2 | `cargo clippy --workspace --all-targets -- -D warnings` | **G2** |
-| 3 | `cargo test --release --workspace --no-fail-fast` | **G3** |
-| 4 | `REXX_CORPUS_GATE=1 cargo test --release --workspace --no-fail-fast` | **G4** |
-| 5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | **G5** |
-| 6 | `REXX_PHASE_GATE=5c REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **G6** |
-| 7 | `REXX_PHASE_GATE=5d REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **G7** |
+| 1 | `cargo fmt --all --check` | **0** |
+| 2 | `cargo clippy --workspace --all-targets -- -D warnings` | **0** |
+| 3 | `cargo test --release --workspace --no-fail-fast` | **0** |
+| 4 | `REXX_CORPUS_GATE=1 cargo test --release --workspace --no-fail-fast` | **0** |
+| 5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | **0** |
+| 6 | `REXX_PHASE_GATE=5c REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **0** |
+| 7 | `REXX_PHASE_GATE=5d REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **0** |
 
-**G7 must be 0, and the reading to compare it against is Task 5's, not Task 4's.** Task 5 was the
+**All seven are 0, and the counts the paragraph below predicted are the counts the run produced**
+-- `gate_table_c` 15, `gate_table_d` 16, both tables `gated by this run: 0 row(s)`. G7's own
+per-owner breakdown, from the run's output, is what says the phase closed rather than merely passing:
+
+```text
+table C   5a: 135 rows, 0 not yet `agree`      6:  13 rows, 13 not yet `agree`
+          5b:   6 rows, 0 not yet `agree`      7:  94 rows, 82 not yet `agree`
+          5c: 1225 rows, 0 not yet `agree`     deferred-rexxcontext-stackframes: 10 rows, 10
+                                               never-expected-to-agree: 5 rows, 5
+
+table D   5a:  36 rows, 0 not yet `agree`      7:   2 rows, 2 not yet `agree`
+          5b:   2 rows, 0 not yet `agree`      deferred-parse-error-rendering: 2 rows, 2
+          5c:  36 rows, 0 not yet `agree`
+          5d:   1 rows, 0 not yet `agree`
+```
+
+`13 + 82 + 10 + 5 = 110` open rows in table C, every one owned by `6`, `7`, the `StackFrame` owner or
+never-agrees, and **none under a phase in `CLOSED_PHASES`** -- which is this task's expected-after,
+measured rather than asserted. Table D's `5d: 1 rows, 0 not yet agree` is the row Task 5 closed,
+still closed with 5d now named in `CLOSED_PHASES`, which is the direction that could have broken.
+
+**G7 had to be 0, and the reading to compare it against is Task 5's, not Task 4's.** Task 5 was the
 first green G7 this phase; Tasks 2, 3 and 4 each ran it at 101 on
 `requires__namespace__subkeyword`. **The test counts are `15` for `gate_table_c` and `16` for
 `gate_table_d`** — the 16th is this task's new assertion, and a 15 there would mean it did not run.
