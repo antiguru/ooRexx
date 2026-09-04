@@ -8956,13 +8956,12 @@ mod tests {
         );
     }
 
-    /// **`PACKAGE`'s refusing arm, which no program in this phase can
-    /// reach.**
-    ///
-    /// A caller in a second package needs `::REQUIRES`, so the check is
-    /// called directly with the callers the oracle refuses: one with no
-    /// activation at all, and one whose package is not the method's. The
-    /// allowing arm has a corpus program
+    /// **`PACKAGE`'s refusing arm**, called directly with the two callers the
+    /// oracle refuses: one with no activation at all, which no program
+    /// reaches, and one whose package is not the method's, which a
+    /// `::REQUIRES` of a file declaring the method does --
+    /// `corpus/refusal-sites.tsv`'s `package_scope_method` row names that
+    /// program. The allowing arm has a corpus program
     /// (`corpus/lang/method_access_package_and_protected.rex`) and is
     /// asserted here too, so a check that refused everything fails rather
     /// than passing both refusals.

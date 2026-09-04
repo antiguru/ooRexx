@@ -59,6 +59,16 @@ pub(crate) struct PackageOptions {
     /// Which of [`ESCALATABLE`] this package raises as a SYNTAX error, which
     /// every activation of its code starts from and can then turn off.
     pub(crate) syntax: ConditionSyntax,
+    /// `NOPROLOG`, stored negated so that a package naming no `::OPTIONS` has
+    /// its prologue run -- `PackageClass::isPrologEnabled`, which
+    /// `runProlog` reads (`classes/PackageClass.cpp:2131`).
+    ///
+    /// **It selects what a `::REQUIRES` of this file does, not what running
+    /// this file does.** Measured, oracle rc 0 both ways: `::options
+    /// noprolog` beside `say 'main'` still prints the line when the file is
+    /// the program, and suppresses it when another file requires this one --
+    /// the directives install either way.
+    pub(crate) suppress_prolog: bool,
 }
 
 /// Which conditions one activation raises as a SYNTAX error rather than as a
@@ -159,14 +169,7 @@ impl PackageOptions {
                 );
             }
             PackageOption::Condition { which, syntax } => self.syntax.set(*which, *syntax),
-            // Nothing here reads it, and that is a property of `::REQUIRES`
-            // rather than an omission: a package's prolog runs when another
-            // file requires it, `directive_gap` refuses every `::REQUIRES`,
-            // and a program's own prolog runs whichever way this is set --
-            // measured, `::options noprolog` beside `say 'main'` prints the
-            // line on the oracle. Whoever implements `::REQUIRES` owes this
-            // field and the suppression it selects.
-            PackageOption::Prolog(_) => {}
+            PackageOption::Prolog(enabled) => self.suppress_prolog = !*enabled,
             PackageOption::NumericInherit(inherit) => self.numeric_inherit = *inherit,
         }
         Ok(())

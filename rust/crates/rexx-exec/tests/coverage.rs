@@ -175,8 +175,9 @@ fn is_admitted_directive_kind(kind: &DirectiveKind) -> bool {
         | DirectiveKind::Attribute(_)
         | DirectiveKind::Constant(_)
         | DirectiveKind::Options(_)
-        | DirectiveKind::Annotate(_) => true,
-        DirectiveKind::Requires(_) | DirectiveKind::Resource(_) => false,
+        | DirectiveKind::Annotate(_)
+        | DirectiveKind::Requires(_) => true,
+        DirectiveKind::Resource(_) => false,
     }
 }
 
@@ -228,7 +229,7 @@ fn every_directive_keyword_is_correctly_admitted_or_refused() {
         ("::constant k 1\n", "CONSTANT", true),
         ("::method m\n  return 1\n", "METHOD", true),
         ("::options noprolog\n", "OPTIONS", true),
-        ("::requires \"nosuch\"\n", "REQUIRES", false),
+        ("::requires \"nosuch\"\n", "REQUIRES", true),
         ("::resource d\nbody\n::END\n", "RESOURCE", false),
         ("::routine r\n  return 1\n", "ROUTINE", true),
     ];
@@ -305,7 +306,7 @@ fn the_walker_descends_into_a_method_body_and_an_attribute_body() {
 #[test]
 #[should_panic(expected = "has a `::` directive this walker does not admit")]
 fn an_unadmitted_directive_still_panics() {
-    let p = parse_program(b"::REQUIRES \"nosuch\"\n".to_vec()).expect("::REQUIRES parses");
+    let p = parse_program(b"::RESOURCE d\nbody\n::END\n".to_vec()).expect("::RESOURCE parses");
     assert_program_has_only_admitted_directives(Path::new("<phase-5a-task-1-demo>"), &p);
 }
 

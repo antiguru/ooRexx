@@ -1,0 +1,35 @@
+count 34
+/* ::REQUIRES of a program file: the search, the prologue, and the merge.
+   The two required files are .cls rather than .rex so that the extension
+   step is exercised and so that neither is itself a corpus program. */
+say 'main body'
+say pubr()
+say .Widget~new~describe
+say .Widget~new~viaDep
+say depr()
+say .Helper~new~tag
+say 'shared here:' shared()
+say 'own routine:' which()
+say .Coll~new~tag
+say '.Hidden is' .Hidden
+
+signal on syntax name no_private_routine
+say 'UNEXPECTED, the private routine answered:' privr()
+signal after_private_routine
+no_private_routine:
+say 'the private routine is not imported'
+after_private_routine:
+
+parse source os kind rest
+say 'call type here:' kind
+
+::requires 'package_requires_dep'
+::requires 'package_requires_lib'
+::requires 'package_requires_lib'
+
+::routine which
+  return 'the requiring file'
+
+::class Coll
+::method tag
+  return 'the requiring file class'

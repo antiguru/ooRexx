@@ -1468,19 +1468,20 @@ const CALL_SITE_CACHE: bool = true;
 /// indexes the running activation's body, and a chunk is compiled per body and
 /// entered only for an activation of that body (`run_activation` looks its
 /// chunk up under the running activation's own `body_key`). The builtin table
-/// is static. **`Interp::routines` never rebinds a name it has already
-/// bound**: a second `::ROUTINE` directive for one is refused outright with
-/// 99.903 (`install_directives`, `lib.rs`, whose own comment has the oracle
-/// measurement), so a name that resolves to a routine keeps that routine for
-/// the rest of the run however many programs are loaded. And the fourth step
-/// raises rather than resolving, so a failure is never recorded here at all --
-/// a site that raised 43.1 asks again next time.
+/// is static. **The two routine tables a site reads are final before any of
+/// that package's code runs**: `Interp::routines`' own entry for a program is
+/// filled by `install_directives`' first walk, where a second `::ROUTINE` of
+/// one name is refused outright with 99.903, and
+/// `Interp::merged_public_routines`' entry is filled by
+/// `Interp::load_required_packages` in the same call -- before the class pass,
+/// before any `::CONSTANT` expression, and before the main body's first
+/// clause. And the fourth step raises rather than resolving, so a failure is
+/// never recorded here at all -- a site that raised 43.1 asks again next time.
 ///
 /// **The property the table needs is that one, and not "the map is written
-/// once"**, which is a stronger thing that happens to be true today and would
-/// stop being the reason if a `::REQUIRES` or an external-file call ever
-/// installed a routine mid-run. Append-only is what the refusal enforces, and
-/// append-only is enough.
+/// once"**, which stopped being true when `::REQUIRES` began loading packages
+/// mid-run: a later program's install writes entries under its own
+/// `ProgramId`, and a chunk belongs to one body of one program.
 ///
 /// **A `Cell`, and a `Resolved` is what forces it rather than a preference.**
 /// A `Resolved` is wider than any lock-free atomic here can carry, so an atomic

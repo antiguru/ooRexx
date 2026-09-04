@@ -366,6 +366,36 @@ impl Oracle {
         }
     }
 
+    /// [`Oracle::run`] from a chosen working directory and with chosen
+    /// environment entries, for a caller asking a question about how the
+    /// interpreter finds a *second* file.
+    ///
+    /// The default working directory is the program's own, which is right for
+    /// a corpus program and is exactly what a search-order question has to be
+    /// able to vary: `::REQUIRES` looks in the program's directory and in the
+    /// current one, and those are the same place unless a caller separates
+    /// them. `environment` is applied to the child alone.
+    pub fn run_in(&self, path: &Path, cwd: &Path, environment: &[(&str, &str)]) -> CppOutcome {
+        self.invocations.fetch_add(1, Ordering::Relaxed);
+        let mut command = self.wrapped(path, &[]);
+        command.current_dir(cwd);
+        for (name, value) in environment {
+            command.env(name, value);
+        }
+        let child = command
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap_or_else(|e| panic!("failed to spawn the oracle for {}: {e}", path.display()));
+        let (stdout, stderr, termination) = wait_with_deadline(child, path);
+        CppOutcome {
+            stdout,
+            stderr,
+            termination,
+        }
+    }
+
     /// The `sh -c 'ulimit … && exec "$0" "$@"'` invocation, the library path
     /// and the working directory, with standard input left for the caller.
     ///

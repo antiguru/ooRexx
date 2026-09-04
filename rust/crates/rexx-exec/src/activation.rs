@@ -908,6 +908,11 @@ pub(crate) enum CallType {
     Function,
     /// A `::METHOD` or `::ATTRIBUTE` body reached by a message send.
     Method,
+    /// The prologue of a file a `::REQUIRES` loaded, which
+    /// `PackageClass::runProlog` calls under `GlobalNames::REQUIRES`
+    /// (`classes/PackageClass.cpp:2136`). Measured, oracle rc 0: `parse
+    /// source` in such a prologue answers `LINUX REQUIRES <its own path>`.
+    Requires,
 }
 
 impl CallType {
@@ -918,6 +923,7 @@ impl CallType {
             CallType::Subroutine => b"SUBROUTINE",
             CallType::Function => b"FUNCTION",
             CallType::Method => b"METHOD",
+            CallType::Requires => b"REQUIRES",
         }
     }
 }

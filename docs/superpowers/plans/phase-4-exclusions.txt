@@ -639,7 +639,11 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
   It is not silent: it names a phase and exits with NOT_IMPLEMENTED_EXIT,
   which is this file's standing trade -- a declared gap over a wrong answer.
 
-    ::REQUIRES IS REFUSED EVEN WHEN THE FILE IS PRESENT. This one
+    ::REQUIRES IS REFUSED EVEN WHEN THE FILE IS PRESENT. CLOSED BY PHASE 5d
+    TASK 4, which built the four-route search, the install and the prologue;
+    only the LIBRARY and NAMESPACE subkeywords still refuse. The entry stands
+    as written below because the reasoning is what made it an over-refusal
+    rather than an omission. This one
     contradicts a measurement the task brief recorded as a requirement, and
     the reason is a probe the brief did not take: ::REQUIRES does not merely
     make names available, it LOADS AND RUNS the required file's prolog.

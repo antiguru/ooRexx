@@ -64,6 +64,22 @@ divergence, the corpus is at fault, not the differ. **Fix the program; never
 loosen `normalize` to make it pass** — everything normalisation strips is a
 class of divergence the project can no longer detect.
 
+## A program that needs a second file beside it
+
+**A file a corpus program `::REQUIRES` must not itself be a `.rex`.** What
+selects a program here is the extension: `corpus.rs`'s
+`every_lang_program_is_run_or_named_unfiled` holds every `lang/*.rex` against
+the subset union, and a helper dropped in as a `.rex` is then either run as a
+program of its own or counted as one nothing runs. Whatever else walks this
+directory selects on the same extension, so a helper spelled otherwise is
+outside all of it.
+
+`lang/package_requires.rex` is the first such program, and the convention it
+sets is `.cls`, named without an extension in the directive so that the
+search's own `.cls` step is what finds it. The required file needs no
+`sourceline_oracle` expectation and appears in no subset file, because no
+scanner sees it.
+
 ## Running it
 
 ```sh

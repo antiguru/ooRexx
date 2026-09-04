@@ -25,16 +25,16 @@
 //! declares later with no `PUBLIC` keyword.
 //!
 //! The steps this module implements, in the C++'s order: the package's
-//! installed classes, `.local`, `.environment`, then the interpreter's own
-//! reflection names (`RexxActivation::rexxVariable`,
+//! installed classes, the public classes its `::REQUIRES` directives
+//! imported, `.local`, `.environment`, then the interpreter's own reflection
+//! names (`RexxActivation::rexxVariable`,
 //! `execution/RexxActivation.cpp:2842`), then the name's own text with a
 //! period in front of it.
 //!
 //! The steps between those that this crate has nothing to consult are named
-//! rather than skipped silently: public classes imported from another package
-//! (`::REQUIRES`), the `REXX` package's own public classes, and a package
-//! local. Each is a table this crate does not build yet, so each is a lookup
-//! that would find nothing.
+//! rather than skipped silently: the `REXX` package's own public classes and
+//! a package local. Each is a table this crate does not build yet, so each is
+//! a lookup that would find nothing.
 //!
 //! # `.NIL`, `.TRUE` and `.FALSE` never arrive here from an expression
 //!
@@ -557,6 +557,10 @@ impl Interp {
             return Ok(found);
         }
 
+        if let Some(found) = self.imported_class(bare) {
+            return Ok(found);
+        }
+
         if let Some(found) =
             self.directory_lookup(&[EnvScope::Local, EnvScope::Environment], bare)?
         {
@@ -584,21 +588,22 @@ impl Interp {
     /// **with the steps this crate has nothing to consult named rather than
     /// skipped silently**: installed classes, then the package's imported
     /// public classes, then `TheRexxPackage`'s public classes, then the
-    /// package local, then the directories. The **imported** public classes
-    /// need `::REQUIRES`, which is Phase 5c's, and the package local needs
+    /// package local, then the directories. The package local needs
     /// `Package~local`, which nothing here builds. **`TheRexxPackage`'s
     /// public classes are substituted for rather than skipped**:
     /// `MemoryObject::completeSystemClass` (`memory/Setup.cpp:199`-`:206`)
     /// puts every system class into `TheEnvironment` *and* into
     /// `TheRexxPackage` in the same two lines, so the `.environment` step
-    /// answers what that one would. What is left is the running package's
-    /// installed classes, then `.environment`, then the native name table.
+    /// answers what that one would. What is left is the installing package's
+    /// own classes, then its imported public ones, then `.environment`, then
+    /// the native name table.
     ///
-    /// **No program can see the difference today**: measured, a two-file
-    /// probe -- `::requires 'dep.rex'` with a public `::class Comparable` in
-    /// the dependency and `::class K subclass Comparable` in the main file
-    /// -- is `rexx-exec: ::REQUIRES is not implemented (Phase 5)` here where
-    /// the oracle resolves through the imported class.
+    /// **The imported step is asked under `installing`**, the package whose
+    /// `::CLASS` this is, because a directive resolves before any activation
+    /// of that package exists and [`Interp::installed_class`] has none to ask.
+    /// Measured, oracle rc 0: `::requires 'dep.rex'` with a public
+    /// `::class Comparable` in the dependency and `::class K subclass
+    /// Comparable` in the requiring file resolves through the import.
     ///
     /// **`.environment` is the step the interpreter's own library needs and a
     /// program rarely does.** `StreamClasses.orx:506` inherits `Comparable`,
@@ -611,9 +616,20 @@ impl Interp {
     /// A directory entry that is not a class object is stepped over rather
     /// than returned, so a `::CLASS K SUBCLASS ENDOFLINE` still gets its
     /// 98.909 rather than a class-shaped failure further on.
-    pub(crate) fn directive_class(&mut self, upper: &[u8]) -> Option<ObjRef> {
+    pub(crate) fn directive_class(
+        &mut self,
+        installing: ProgramId,
+        upper: &[u8],
+    ) -> Option<ObjRef> {
         if let Some(found) = self.installed_class(upper) {
             return Some(found);
+        }
+        if let Some(found) = self
+            .merged_public_classes
+            .get(&installing)
+            .and_then(|table| table.get(upper))
+        {
+            return Some(*found);
         }
         // `.environment` alone, not `.NAME`'s pair: `ClassDirective`'s own
         // search is the package's classes and then the environment
@@ -662,6 +678,22 @@ impl Interp {
     fn installed_class(&self, upper: &[u8]) -> Option<ObjRef> {
         let program = self.running_program()?;
         self.package_classes.get(&program)?.get(upper).copied()
+    }
+
+    /// A public class the running package's own `::REQUIRES` directives
+    /// imported -- `PackageClass::findPublicClass`, the step between the
+    /// package's own installed classes and the directories.
+    ///
+    /// Measured, oracle rc 0: a required file's `::class Array public` makes
+    /// `say .Array` print `The ARRAY class`, so this step shadows
+    /// `.environment`, while the requiring file's own `::CLASS` of that name
+    /// shadows the import.
+    fn imported_class(&self, upper: &[u8]) -> Option<ObjRef> {
+        let program = self.running_program()?;
+        self.merged_public_classes
+            .get(&program)?
+            .get(upper)
+            .copied()
     }
 
     /// The entry `scope`'s directory holds for `name`, if any.
@@ -1543,21 +1575,19 @@ impl Interp {
     pub(crate) fn package_name(&self, package: ObjRef) -> Option<Vec<u8>> {
         Some(match self.which_package(package)? {
             Package::Rexx => crate::LIBRARY_PACKAGE_NAME.to_vec(),
-            // A program's own package, answered as the *running* program's
-            // path and not as that program's own.
+            // A program's own package, answered as the file that program was
+            // loaded from -- measured, oracle rc 0: a required file's
+            // `.context~package~name` is that file's own path where the
+            // requiring program's is its own.
             //
-            // **A run loads more than one program**: the interpreter's own
-            // library is three of them, and each has a package object of its
-            // own. What keeps that from being a wrong answer is that none of
-            // those objects is reachable from a program -- a program's
-            // `.context~package` is its own, and a class the library
-            // installed answers `Package::Rexx` because
+            // **The interpreter's own library is three more programs**, and
+            // each has a package object of its own that answers the running
+            // program's path here. None is reachable from a program: a
+            // program's `.context~package` is its own, and a class the
+            // library installed answers `Package::Rexx` because
             // `Interp::record_package_class` leaves it out of
-            // `class_packages`. The `ProgramId` is discarded here rather
-            // than looked up because `Interp::programs` holds no path per
-            // program; the day one of those objects becomes reachable, this
-            // is the line that has to grow one.
-            Package::Program(_) => self.program_path.clone().into_bytes(),
+            // `class_packages`.
+            Package::Program(program) => self.package_path(program).as_bytes().to_vec(),
         })
     }
 

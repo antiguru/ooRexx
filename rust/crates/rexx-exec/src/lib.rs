@@ -81,7 +81,7 @@ use plan::{BodyKey, ClassPackage, CompoundName, Package, Plan, ProgramId};
 
 // One activation: everything about the frame currently executing (D16).
 mod activation;
-use activation::{Activation, ActivationId, InstanceVar};
+use activation::{Activation, ActivationId, CallType, InstanceVar};
 use clause::ClauseState;
 
 // `Raised` (the payload of a real Rexx condition) and `Failure` (either a
@@ -142,6 +142,10 @@ mod environment;
 // package's code starts from.
 mod options;
 use options::PackageOptions;
+
+// `::REQUIRES` (Phase 5d): the routes a required file's name is searched over
+// and the extensions appended to it.
+mod require;
 
 /// The exit code for a construct this crate does not implement.
 ///
@@ -1013,6 +1017,22 @@ impl Loud {
         }
     }
 
+    /// A file a `::REQUIRES` found will not parse.
+    ///
+    /// **Loud rather than the oracle's own report**, on the same footing as a
+    /// top-level parse failure: `execute`'s own arm says why a `ParseError`
+    /// cannot be reported byte for byte, and the required file is no
+    /// different. Measured, the oracle answers the syntax error itself, under
+    /// the requiring `::REQUIRES` clause and naming the required file.
+    fn required_source(path: &str, error: &str) -> Loud {
+        Loud {
+            message: owned_message(
+                &format!("{path} does not parse here: {error}"),
+                Some("Phase 5"),
+            ),
+        }
+    }
+
     /// One of the two methods `Setup.cpp` puts on `.Class` for the image
     /// build and `removeSetupMethods` deletes, given something it cannot
     /// use.
@@ -1640,14 +1660,22 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
                 _ => None,
             }
         }
-        // Loads a file and **runs its prolog** before `main`: measured, a
-        // helper whose first clause is `say 'PROLOG RAN'` prints that line
-        // above the requiring program's own output at rc 0. So presence is
-        // use, and this refuses a program the oracle runs whenever the
-        // prolog happens to be empty -- the trade `phase-4-exclusions.txt`
-        // states, taken because the alternative is silently dropping both
-        // that output and the public routines the file imports.
-        DirectiveKind::Requires(_) => gap("::REQUIRES", "Phase 5"),
+        // Loads a shared library rather than a package file, which is Phase
+        // 7's exactly as `::ROUTINE EXTERNAL` above is.
+        DirectiveKind::Requires(requires) if requires.library => {
+            gap("::REQUIRES LIBRARY", "Phase 7")
+        }
+        // Registers the loaded package under a namespace, which nothing here
+        // can then resolve a `ns:Name` against.
+        //
+        // **Refused ahead of the file search, where the oracle searches
+        // first**: measured, `::requires 'zzznofile.rex' namespace ns` is
+        // 43.901 at rc 213 there. Both are refusals of the whole program, and
+        // keeping this one in front of the search is what leaves the form
+        // failing exactly as it did before this phase built the search.
+        DirectiveKind::Requires(requires) if requires.namespace.is_some() => {
+            gap("::REQUIRES NAMESPACE", "Phase 5")
+        }
         // **`ns:name` on any of the keywords that take a class reference.**
         // The namespace is a package this crate does not load, so the target
         // names nothing here whatever it names on the oracle -- unlike a bare
@@ -1669,6 +1697,7 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
         | DirectiveKind::Class(_)
         | DirectiveKind::Constant(_)
         | DirectiveKind::Options(_)
+        | DirectiveKind::Requires(_)
         | DirectiveKind::Resource(_)
         | DirectiveKind::Routine(_) => None,
     }
@@ -1760,25 +1789,27 @@ fn unresolved_external(kind: &DirectiveKind) -> Option<Vec<u8>> {
 /// where that puts the gap check relative to its arms.
 ///
 /// **The cost is a refusal wherever the oracle would have carried on**, and
-/// it is not confined to the class error. With the `::REQUIRES` file present
-/// or the `EXTERNAL` library loadable, the oracle installs the directive and
-/// goes on to whatever the file fails at next, where this crate refuses:
+/// it is not confined to the class error. With the `EXTERNAL` library
+/// loadable, the oracle installs the directive and goes on to whatever the
+/// file fails at next, where this crate refuses:
 ///
 /// ```text
-/// ::class a / ::constant kk (1/0) / ::requires 'helper.rex', present    42.3 rc 214
 /// ::class a / ::constant kk (1/0) / ::routine r external
 ///                              'LIBRARY REXX Filespec'                 42.3 rc 214
 /// ```
 ///
-/// Both rows are probes, both engines, three descriptors: the oracle installs
-/// the directive and reaches the `::CONSTANT`'s own divide, and this crate
-/// answers rc 120 instead. `::ROUTINE` is what keeps the second row a loss --
-/// [`directive_gap`] refuses that directive whatever library it names --
-/// where `corpus/lang/directive_method_external_not_a_staged_gap.rex`, the
-/// same file with a `::METHOD` in that position, is answered here.
+/// A probe, both engines, three descriptors: the oracle installs the directive
+/// and reaches the `::CONSTANT`'s own divide, and this crate answers rc 120
+/// instead. `::ROUTINE` is what keeps it a loss -- [`directive_gap`] refuses
+/// that directive whatever library it names -- where
+/// `corpus/lang/directive_method_external_not_a_staged_gap.rex`, the same file
+/// with a `::METHOD` in that position, is answered here. **The same shape with
+/// a present `::REQUIRES` in that position was the other row and is a loss no
+/// longer**: measured, the same three descriptors, both sides reach the divide
+/// at 42.3 rc 214.
 ///
-/// The rows put the gap **after** the failing directive, which is what makes
-/// them losses: with the gap first this crate refuses whatever the staging.
+/// The row puts the gap **after** the failing directive, which is what makes
+/// it a loss: with the gap first this crate refuses whatever the staging.
 ///
 /// **A resolvable `::ANNOTATE` target is not one of them**, because this
 /// crate resolves one against the accumulated package. Measured, each
@@ -1796,6 +1827,31 @@ fn staged_gap(program: &Program, stage: fn(&DirectiveKind) -> bool) -> Option<Lo
         .iter()
         .filter(|directive| stage(&directive.kind))
         .find_map(|directive| directive_gap(&directive.kind))
+}
+
+/// The classes of the file being installed that a `::CLASS`'s own reference
+/// can resolve against: the index of every `::CLASS` the file declares, and
+/// the object each of the ones installed so far became.
+///
+/// One value rather than two parameters, so that a resolution's inputs travel
+/// together and `Interp::resolve_class_target` stays inside clippy's argument
+/// bound.
+struct FileClasses<'a> {
+    declared: &'a HashMap<Box<[u8]>, usize>,
+    installed: &'a HashMap<usize, ObjRef>,
+}
+
+/// `directive`'s own line number and clause text, as a traceback echoes them.
+fn directive_clause(program: &Rc<Program>, directive: &Directive) -> (usize, Vec<u8>) {
+    let line = program.source.line_of(directive.clause_span.start);
+    let text = program
+        .source
+        .join_span(directive.clause_span.clone())
+        .map_or_else(
+            || b"<clause span outside the retained source>".to_vec(),
+            |bytes| bytes.into_owned(),
+        );
+    (line, text)
 }
 
 /// The directives this one must be installed after: every class it names
@@ -3147,8 +3203,9 @@ struct Interp {
     /// leaves whatever a `REPLY` queued unrun, so a test about an owed body
     /// has to go through `run_program`.
     deferred: std::collections::VecDeque<crate::activation::DeferredReply>,
-    /// Every `::ROUTINE` the running program installs, keyed by its
-    /// **upcased** name and holding its index in `Program::directives`.
+    /// Every `::ROUTINE` a program installs, keyed by the program and then by
+    /// the routine's **upcased** name, holding its index in
+    /// `Program::directives`.
     ///
     /// Upcased on both sides, which is the lookup rule and not a convenience:
     /// measured, `::routine 'zork'` is reached by `call zork`, `call 'zork'`
@@ -3156,12 +3213,45 @@ struct Interp {
     /// `CodeBody::labels` is the opposite -- a quoted target never searches it
     /// at all -- so the two tables cannot share a key rule.
     ///
+    /// **Per program, which is what keeps a required file's own routines out
+    /// of the requiring program's reach.** `PackageClass::findRoutine`
+    /// (`classes/PackageClass.cpp:898`) asks `findLocalRoutine` and then
+    /// `findPublicRoutine`; measured, a non-`PUBLIC` `::ROUTINE` in a required
+    /// file is `Could not find routine "PRIVR".` in the requiring one.
+    ///
     /// Filled by [`Interp::install_directives`] before the main body's first
     /// clause, matching the oracle, which resolves every directive at
     /// translation or install time: measured, a `::ROUTINE` naming a library
     /// it cannot load reports 98.903 with **empty stdout** whether or not the
     /// program ever calls it.
-    routines: HashMap<Box<[u8]>, InstalledRoutine>,
+    routines: HashMap<ProgramId, HashMap<Box<[u8]>, InstalledRoutine>>,
+    /// The subset of [`routines`] a `::ROUTINE ... PUBLIC` filed -- the
+    /// oracle's `publicRoutines`, a second table beside `routines` exactly as
+    /// [`package_public_classes`] is beside [`package_classes`].
+    ///
+    /// [`routines`]: Interp::routines
+    /// [`package_classes`]: Interp::package_classes
+    /// [`package_public_classes`]: Interp::package_public_classes
+    package_public_routines: HashMap<ProgramId, HashMap<Box<[u8]>, InstalledRoutine>>,
+    /// The public routines a program's `::REQUIRES` directives imported --
+    /// `mergedPublicRoutines`, filled by `PackageClass::mergeRequired`
+    /// (`classes/PackageClass.cpp:693`).
+    ///
+    /// **First write wins, and the merge is transitive.** `HashContents::merge`
+    /// leaves an existing entry alone, and a required file's own imports are
+    /// merged in after its own publics -- measured, two required files each
+    /// declaring `::routine which public` answer the first one's, and a
+    /// routine two `::REQUIRES` deep is reachable.
+    merged_public_routines: HashMap<ProgramId, HashMap<Box<[u8]>, InstalledRoutine>>,
+    /// The public classes a program's `::REQUIRES` directives imported --
+    /// `mergedPublicClasses`, merged alongside the routines above and read by
+    /// `PackageClass::findClass` between the package's own installed classes
+    /// and `.local`.
+    ///
+    /// Measured, oracle rc 0: a required file's `::class Array public` makes
+    /// `say .Array` print `The ARRAY class`, so an import shadows
+    /// `.environment`.
+    merged_public_classes: HashMap<ProgramId, HashMap<Box<[u8]>, ObjRef>>,
     /// The object model message dispatch resolves against: `Setup.cpp`'s
     /// native classes, whatever `::CLASS`/`::METHOD`/`::ATTRIBUTE` have
     /// installed beside them, and the primitive methods this crate
@@ -4129,6 +4219,31 @@ struct Interp {
     /// construction path leaves it empty, so a unit test that wants a path
     /// sets one.
     program_path: String,
+    /// The resolved location of each program a `::REQUIRES` loaded, which is
+    /// what that program's own `PARSE SOURCE`, `~package~name` and traceback
+    /// report in place of [`Interp::program_path`].
+    ///
+    /// Measured, oracle rc 0: a required file's prologue reports `LINUX
+    /// REQUIRES <its own path>` where the requiring program reports `LINUX
+    /// COMMAND <its own>`, and a failure inside that prologue reports
+    /// `Error 42 running <the required file> line 1`.
+    required_paths: HashMap<ProgramId, Box<str>>,
+    /// The package each `::REQUIRES` name has already loaded, keyed both by
+    /// the name as written and by the file it resolved to.
+    ///
+    /// **Both keys, because the oracle caches under both and asks the written
+    /// one first** (`InterpreterInstance::addRequiresFile`,
+    /// `runtime/InterpreterInstance.cpp:1000`). Measured, oracle rc 0: two
+    /// files in different directories each `::requires 'lib.rex'` with a
+    /// `lib.rex` of its own beside it, and the second gets the *first* file's
+    /// package.
+    required_packages: HashMap<Box<[u8]>, ProgramId>,
+    /// The resolved paths whose `::REQUIRES` directives are still installing
+    /// -- `Activity`'s own `requiresTable` (`concurrency/Activity.hpp:308`).
+    ///
+    /// A required name that resolves to one of these is 98.952 rather than a
+    /// second load.
+    requires_installing: Vec<Box<str>>,
 }
 
 /// Where one installed `::ROUTINE` lives: which loaded program, and which of
@@ -4394,6 +4509,9 @@ impl Interp {
             chunks_refused: 0,
             deferred: std::collections::VecDeque::new(),
             routines: HashMap::new(),
+            package_public_routines: HashMap::new(),
+            merged_public_routines: HashMap::new(),
+            merged_public_classes: HashMap::new(),
             object_model: None,
             class_variables: HashMap::new(),
             environment: None,
@@ -4457,6 +4575,9 @@ impl Interp {
             reqstr_armed: false,
             lostdigits_armed: false,
             program_path: String::new(),
+            required_paths: HashMap::new(),
+            required_packages: HashMap::new(),
+            requires_installing: Vec::new(),
             trace_cache: crate::trace::TraceMode::OFF,
         }
     }
@@ -4474,7 +4595,7 @@ impl Interp {
         let program = Rc::new(program);
         let program_id = ProgramId(self.programs.len());
         self.programs.push(Rc::clone(&program));
-        self.run_loaded(program, program_id)
+        self.run_loaded(program, program_id, CallType::Command)
     }
 
     /// Runs the interpreter's own Rexx-written library -- `Setup.cpp:1786`'s
@@ -4572,7 +4693,7 @@ impl Interp {
                 receiver: None,
             },
         );
-        let outcome = self.run_loaded(parsed, program_id);
+        let outcome = self.run_loaded(parsed, program_id, CallType::Command);
         self.call_context = saved;
         outcome
     }
@@ -4629,10 +4750,16 @@ impl Interp {
 
     /// Installs `program`'s directives and runs its main body, for a program
     /// already registered under `program_id`.
+    ///
+    /// `call_type` is what `PARSE SOURCE`'s second word answers for that body
+    /// and what selects whether `::OPTIONS NOPROLOG` suppresses it:
+    /// [`CallType::Requires`] for a package a `::REQUIRES` loaded,
+    /// [`CallType::Command`] for a program.
     fn run_loaded(
         &mut self,
         program: Rc<Program>,
         program_id: ProgramId,
+        call_type: CallType,
     ) -> Result<Option<ObjRef>, Failure> {
         // **Before the first clause, and its failures print nothing on
         // stdout.** That is the oracle's own shape rather than a choice
@@ -4642,6 +4769,22 @@ impl Interp {
         // empty. A program whose directives all install runs its main body
         // exactly as one with no directives does.
         self.install_directives(program_id, &program)?;
+
+        // **`::OPTIONS NOPROLOG` suppresses the leading code section of a
+        // package a `::REQUIRES` loaded, and of nothing else** --
+        // `PackageClass::runProlog` installs and stops where
+        // `isPrologEnabled()` is false (`classes/PackageClass.cpp:2131`),
+        // and the top-level program never goes through it. Measured, oracle
+        // rc 0: the same file prints its first clause when it is the program
+        // and does not when another file requires it, its public routines and
+        // classes reachable either way.
+        if call_type == CallType::Requires
+            && self
+                .options_of(program_id)
+                .is_some_and(|options| options.suppress_prolog)
+        {
+            return Ok(None);
+        }
 
         // Note what does *not* happen here: the plan is looked up through
         // `&program.main`, a borrow of the local `Rc`, while `self` is
@@ -4661,6 +4804,7 @@ impl Interp {
         let frame = self.roots.push_slots(plan.len());
         let id = self.next_activation_id();
         let mut main = Activation::new(id, Rc::clone(&program), program_id, plan, frame);
+        main.call_type = call_type;
         // No call site above a main body, so `::OPTIONS NUMERIC INHERIT` has
         // nothing to inherit and the package's own settings stand -- measured,
         // `::options digits 12 numeric inherit` alone in a file reports 12.
@@ -4826,7 +4970,19 @@ impl Interp {
                         program: id,
                         directive: index,
                     };
-                    if self.routines.insert(name, installed).is_some() {
+                    if routine.access == Access::Public {
+                        self.package_public_routines
+                            .entry(id)
+                            .or_default()
+                            .insert(name.clone(), installed);
+                    }
+                    if self
+                        .routines
+                        .entry(id)
+                        .or_default()
+                        .insert(name, installed)
+                        .is_some()
+                    {
                         // A *translation* error on the oracle, not an install
                         // one: measured, two `::routine zork` directives give
                         // `Error 99.903: Duplicate ::ROUTINE directive
@@ -4999,6 +5155,7 @@ impl Interp {
         if let Some(loud) = staged_gap(program, |kind| matches!(kind, DirectiveKind::Requires(_))) {
             return Err(loud.into());
         }
+        self.load_required_packages(id, program)?;
 
         // **The failing-`::CONSTANT` blame target is the class the oracle
         // installed LAST, not the last one in the file and not the nearest
@@ -5097,6 +5254,186 @@ impl Interp {
             self.send_directive_message(id, program, classes[index], dispatch::ACTIVATE, blame)?;
         }
         Ok(())
+    }
+
+    /// The file a package was loaded from: the program's own path, or the
+    /// resolved name a `::REQUIRES` found it under.
+    fn package_path(&self, id: ProgramId) -> &str {
+        match self.required_paths.get(&id) {
+            Some(path) => path,
+            None => &self.program_path,
+        }
+    }
+
+    /// Loads every package this program's `::REQUIRES` directives name, in
+    /// source order, and merges each one's public routines and classes in.
+    ///
+    /// **The package is marked as installing for the whole walk**, which is
+    /// `PackageClass::processInstall`'s own `InstallingPackage`
+    /// (`classes/PackageClass.cpp:1254`): a name resolving back to a package
+    /// on that list is 98.952 rather than a second load.
+    ///
+    /// A failure carries one clause echo per level of the chain, which is
+    /// what `seal_site_level` below the load builds -- the same mechanism a
+    /// failing `::CONSTANT` expression uses for its two.
+    fn load_required_packages(
+        &mut self,
+        id: ProgramId,
+        program: &Rc<Program>,
+    ) -> Result<(), Failure> {
+        if !program
+            .directives
+            .iter()
+            .any(|directive| matches!(directive.kind, DirectiveKind::Requires(_)))
+        {
+            return Ok(());
+        }
+        self.requires_installing.push(self.package_path(id).into());
+        let mut outcome = Ok(());
+        for directive in &program.directives {
+            let DirectiveKind::Requires(requires) = &directive.kind else {
+                continue;
+            };
+            match self.load_requires(id, &requires.name) {
+                Ok(required) => self.merge_required(id, required),
+                Err(failure) => {
+                    self.seal_site_level();
+                    self.blame_directive_in(id, program, directive);
+                    outcome = Err(failure);
+                    break;
+                }
+            }
+        }
+        self.requires_installing.pop();
+        outcome
+    }
+
+    /// The package `name` names, loaded and its prologue run if this is the
+    /// first `::REQUIRES` to reach it.
+    ///
+    /// `InterpreterInstance::loadRequires`
+    /// (`runtime/InterpreterInstance.cpp:1021`): the written name is looked
+    /// up in the cache first, then the resolved one, and only a miss on both
+    /// opens a file. **The circularity check is on a cache hit alone**, which
+    /// is why a file requiring itself loads a second copy before it is
+    /// refused -- measured, the oracle echoes that `::REQUIRES` clause twice.
+    fn load_requires(&mut self, id: ProgramId, name: &[u8]) -> Result<ProgramId, Failure> {
+        if let Some(&loaded) = self.required_packages.get(name) {
+            self.check_not_installing(loaded)?;
+            return Ok(loaded);
+        }
+        let resolved = self.resolve_requires(id, name);
+        if let Some(resolved) = &resolved
+            && let Some(&loaded) = self.required_packages.get(resolved.as_bytes())
+        {
+            self.check_not_installing(loaded)?;
+            self.required_packages.insert(name.into(), loaded);
+            return Ok(loaded);
+        }
+        let Some(resolved) = resolved else {
+            return Err(Raised::requires_file_not_found(name).into());
+        };
+        // The search already answered that this names a regular file, so a
+        // read failing here is a permission or a race rather than a miss --
+        // and the oracle reports the same 43.901 for it, since
+        // `PackageManager::loadRequires` answers `OREF_NULL` either way.
+        let Ok(text) = std::fs::read(&resolved) else {
+            return Err(Raised::requires_file_not_found(name).into());
+        };
+        let parsed = match parse_program(text) {
+            Ok(parsed) => Rc::new(parsed),
+            Err(error) => {
+                return Err(Loud::required_source(&resolved, &format!("{error}")).into());
+            }
+        };
+        let required = ProgramId(self.programs.len());
+        self.programs.push(Rc::clone(&parsed));
+        self.required_paths
+            .insert(required, resolved.as_str().into());
+        // **Cached before the prologue runs, not after**, which is
+        // `addRequiresFile` standing ahead of `runProlog` at
+        // `InterpreterInstance.cpp:1060`: a name reached again from inside
+        // that prologue must find this entry, or the circularity check has
+        // nothing to fire on.
+        self.required_packages.insert(name.into(), required);
+        self.required_packages
+            .insert(resolved.as_bytes().into(), required);
+        self.run_loaded(parsed, required, CallType::Requires)?;
+        Ok(required)
+    }
+
+    /// 98.952 when `loaded`'s own `::REQUIRES` directives are still
+    /// installing, and `Ok` otherwise -- `Activity::checkRequires`
+    /// (`concurrency/Activity.cpp:3702`).
+    fn check_not_installing(&self, loaded: ProgramId) -> Result<(), Failure> {
+        let path = self.package_path(loaded);
+        if self.requires_installing.iter().any(|open| &**open == path) {
+            return Err(Raised::circular_requires(path).into());
+        }
+        Ok(())
+    }
+
+    /// The public routines and classes `from` contributes to `into`: its own
+    /// first, then the ones it imported.
+    ///
+    /// **First write wins**, so the earliest `::REQUIRES` in source order owns
+    /// a name two required files both export -- `HashContents::mergeItem`
+    /// leaves an existing entry alone, and `PackageClass::mergeRequired`
+    /// (`classes/PackageClass.cpp:693`) merges the direct publics ahead of the
+    /// transitive ones for the same reason. Measured, oracle rc 0: two files
+    /// each declaring `::routine which public` and `::class Coll public`, and
+    /// the first `::REQUIRES` answers both.
+    fn merge_required(&mut self, into: ProgramId, from: ProgramId) {
+        let routines: Vec<(Box<[u8]>, InstalledRoutine)> = self
+            .package_public_routines
+            .get(&from)
+            .into_iter()
+            .chain(self.merged_public_routines.get(&from))
+            .flatten()
+            .map(|(name, installed)| (name.clone(), *installed))
+            .collect();
+        let target = self.merged_public_routines.entry(into).or_default();
+        for (name, installed) in routines {
+            target.entry(name).or_insert(installed);
+        }
+        let classes: Vec<(Box<[u8]>, ObjRef)> = self
+            .package_public_classes
+            .get(&from)
+            .into_iter()
+            .chain(self.merged_public_classes.get(&from))
+            .flatten()
+            .map(|(name, class)| (name.clone(), *class))
+            .collect();
+        let target = self.merged_public_classes.entry(into).or_default();
+        for (name, class) in classes {
+            target.entry(name).or_insert(class);
+        }
+    }
+
+    /// The file a `::REQUIRES` of `name` in package `id` resolves to, or
+    /// `None` when no route holds one.
+    ///
+    /// [`require::candidates`] owns the order and is asserted on its own; what
+    /// is here is the environment the search runs in and the test each
+    /// candidate is put to -- `stat` plus `S_ISREG`, which is
+    /// `SysFileSystem::checkCurrentFile` (`platform/unix/SysFileSystem.cpp:435`).
+    fn resolve_requires(&self, id: ProgramId, name: &[u8]) -> Option<String> {
+        let name = std::str::from_utf8(name).ok()?;
+        let program = self.package_path(id);
+        let entries = require::search_entries(
+            require::program_directory(program),
+            std::env::var("REXX_PATH").ok().as_deref(),
+            std::env::var("PATH").ok().as_deref(),
+        );
+        let cwd = std::env::current_dir().ok()?;
+        let cwd = cwd.to_str()?;
+        for candidate in require::candidates(name, &entries, require::program_extension(program)) {
+            let resolved = require::normalize(&candidate, cwd);
+            if std::fs::metadata(&resolved).is_ok_and(|meta| meta.is_file()) {
+                return Some(resolved);
+            }
+        }
+        None
     }
 
     /// Moves what the first walk recorded for one `::CLASS` and for the
@@ -5570,25 +5907,29 @@ impl Interp {
         let DirectiveKind::Class(class) = &directive.kind else {
             return Err(Loud::missing_body().into());
         };
+        let file_classes = FileClasses {
+            declared,
+            installed,
+        };
         let named_metaclass = match &class.metaclass {
             None => None,
             Some(target) => Some(self.resolve_class_target(
+                program_id,
                 program,
                 directive,
                 target,
-                declared,
-                installed,
+                &file_classes,
                 Raised::metaclass_not_found,
             )?),
         };
         let superclass = match &class.subclass {
             None => self.root_and_metaclass().0,
             Some(target) => self.resolve_class_target(
+                program_id,
                 program,
                 directive,
                 target,
-                declared,
-                installed,
+                &file_classes,
                 Raised::class_not_found,
             )?,
         };
@@ -5625,11 +5966,11 @@ impl Interp {
         self.classes().refresh_parent_has_uninit(id);
         for target in &class.inherit {
             let mixin = self.resolve_class_target(
+                program_id,
                 program,
                 directive,
                 target,
-                declared,
-                installed,
+                &file_classes,
                 Raised::class_not_found,
             )?;
             self.inherit_mixin(program, directive, id, mixin)?;
@@ -5746,23 +6087,23 @@ impl Interp {
     /// the lookup itself differs, which is why they share this function.
     fn resolve_class_target(
         &mut self,
+        installing: ProgramId,
         program: &Rc<Program>,
         directive: &Directive,
         target: &ClassRef,
-        declared: &HashMap<Box<[u8]>, usize>,
-        installed: &HashMap<usize, ObjRef>,
+        classes: &FileClasses<'_>,
         not_found: fn(&[u8]) -> Raised,
     ) -> Result<ObjRef, Failure> {
-        match declared.get(target.name.as_ref()) {
+        match classes.declared.get(target.name.as_ref()) {
             // Already installed, because `class_install_order` put it ahead
             // of this one; a `None` here would be that ordering and its
             // caller's loop disagreeing, which is an internal inconsistency
             // and gets this crate's loud refusal rather than a panic.
-            Some(other) => match installed.get(other) {
+            Some(other) => match classes.installed.get(other) {
                 Some(id) => Ok(*id),
                 None => Err(Loud::missing_body().into()),
             },
-            None => match self.directive_class(&target.name) {
+            None => match self.directive_class(installing, &target.name) {
                 Some(id) => Ok(id),
                 None => {
                     self.blame_directive(program, directive);
@@ -6078,12 +6419,12 @@ impl Interp {
         );
     }
 
-    /// `PARSE SOURCE`'s third word: a compiled method's own name, or the
-    /// running program's path.
+    /// `PARSE SOURCE`'s third word: a compiled method's own name, the file a
+    /// `::REQUIRES` loaded this package from, or the running program's path.
     pub(crate) fn program_display_name(&self, program: ProgramId) -> &[u8] {
         match self.compiled_method_names.get(&program) {
             Some(name) => name,
-            None => self.program_path.as_bytes(),
+            None => self.package_path(program).as_bytes(),
         }
     }
 
@@ -6223,18 +6564,34 @@ impl Interp {
     /// and the oracle's own echo for one is flush left (measured, `     2 *-*
     /// ::class foo subclass zzznotaclass`).
     fn blame_directive(&mut self, program: &Rc<Program>, directive: &Directive) {
-        let line = program.source.line_of(directive.clause_span.start);
-        let text = program
-            .source
-            .join_span(directive.clause_span.clone())
-            .map_or_else(
-                || b"<clause span outside the retained source>".to_vec(),
-                |bytes| bytes.into_owned(),
-            );
+        let (line, text) = directive_clause(program, directive);
         self.failure_site = Some(FailureSite::Clause {
             line,
             text,
             indent: 0,
+        });
+    }
+
+    /// [`Interp::blame_directive`] for a directive in the package `id`, whose
+    /// report names that package's own file when a `::REQUIRES` loaded it.
+    ///
+    /// Measured, oracle rc 158 on a pair of mutually requiring files: the
+    /// report's `running <name> line <n>` span names the **inner** file, not
+    /// the program the command line started.
+    fn blame_directive_in(&mut self, id: ProgramId, program: &Rc<Program>, directive: &Directive) {
+        let (line, text) = directive_clause(program, directive);
+        self.failure_site = Some(match self.required_paths.get(&id) {
+            Some(path) => FailureSite::Named {
+                line,
+                indent: 0,
+                text,
+                name: path.as_bytes().to_vec(),
+            },
+            None => FailureSite::Clause {
+                line,
+                text,
+                indent: 0,
+            },
         });
     }
 

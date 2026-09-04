@@ -7978,11 +7978,9 @@ fn the_method_source_shapes_this_task_leaves_refuse_loudly() {
 /// its first clause, and the oracle prints nothing for the ones it also
 /// refuses.
 ///
-/// The `::REQUIRES` row is not the over-refusal case:
-/// no `helper.rex` sits beside these programs, so the oracle refuses that
-/// source too, and the over-refusal (a helper that *is* present) is
-/// measured in the exclusions file instead -- this crate never opens the
-/// file, so the two sources are one case to it.
+/// **`::REQUIRES` has only its two subkeyword forms here.** The plain form
+/// opens the file it names, so it is no longer a gap: a name nothing resolves
+/// is the oracle's own 43.901, asserted by the case below this one.
 #[test]
 fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
     let cases: &[(&[u8], &str)] = &[
@@ -8003,8 +8001,12 @@ fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
             "::CLASS naming a namespace is not implemented (Phase 5)",
         ),
         (
-            b"say 'main ran'\n::requires 'helper.rex'\n",
-            "::REQUIRES is not implemented (Phase 5)",
+            b"say 'main ran'\n::requires zzznolib library\n",
+            "::REQUIRES LIBRARY is not implemented (Phase 7)",
+        ),
+        (
+            b"say 'main ran'\n::requires 'helper.rex' namespace ns\n",
+            "::REQUIRES NAMESPACE is not implemented (Phase 5)",
         ),
         (
             b"say 'main ran'\n::routine z external \"LIBRARY nosuchlib nosuchfn\"\n",
@@ -8081,19 +8083,16 @@ fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
 /// dropping `staged_gap` reddens the refusing rows, and a `::OPTIONS` whose
 /// install raised anything of its own reddens the last two.
 ///
-/// **A refusal here is not a match** -- the oracle answers 43.901 and 98.903,
-/// and this crate answers neither. It is the honest half of the trade
-/// `staged_gap`'s doc states, and the corpus differential cannot see any of
-/// it, because a corpus program is a program both implementations answer and
-/// none of these is one.
+/// **The `::REQUIRES` pair is the one that matches**, since this phase built
+/// the file search: it answers the oracle's own 43.901 at rc 213, echoing the
+/// `::REQUIRES` clause, in either order. The `EXTERNAL` rows still answer a
+/// refusal where the oracle answers 98.903 -- the honest half of the trade
+/// `staged_gap`'s doc states, which the corpus differential cannot see
+/// because a corpus program is one both implementations answer.
 #[test]
 fn a_gap_the_oracle_diagnoses_before_a_class_refuses_ahead_of_the_class_error() {
     let failing_class = "::class a subclass zzznotaclass\n";
     let refusing: &[(&str, &str)] = &[
-        (
-            "::requires 'zzznosuchfile.rex'\n",
-            "::REQUIRES is not implemented (Phase 5)",
-        ),
         (
             "::routine zz external \"LIBRARY nosuchlib nosuchfn\"\n",
             "::ROUTINE EXTERNAL is not implemented (Phase 7)",
@@ -8126,6 +8125,25 @@ fn a_gap_the_oracle_diagnoses_before_a_class_refuses_ahead_of_the_class_error() 
                 "{source}: stderr"
             );
         }
+    }
+    for source in [
+        format!("say 'main ran'\n::requires 'zzznosuchfile.rex'\n{failing_class}"),
+        format!("say 'main ran'\n{failing_class}::requires 'zzznosuchfile.rex'\n"),
+    ] {
+        let outcome = routine_program(source.as_bytes());
+        let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
+        assert_eq!(
+            outcome.exit_code, 213,
+            "{source}: exit code, stderr {stderr}"
+        );
+        assert_eq!(outcome.stdout, b"", "{source}: stdout");
+        assert!(
+            stderr.contains("*-* ::requires 'zzznosuchfile.rex'\n")
+                && stderr.contains(
+                    "Error 43.901:  Could not find file \"zzznosuchfile.rex\" for ::REQUIRES."
+                ),
+            "{source}: stderr {stderr}"
+        );
     }
     for source in [
         format!("say 'main ran'\n::options digits 12\n{failing_class}"),

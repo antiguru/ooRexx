@@ -800,6 +800,28 @@ impl Raised {
         Raised::syntax(98, 911, vec![path.as_bytes().to_vec()])
     }
 
+    /// 43.901: a `::REQUIRES` whose name the four-route search did not find.
+    /// One substitution, **the name as the directive wrote it** rather than
+    /// anything the search built from it.
+    ///
+    /// Measured, rc 213 with stdout empty: `::requires 'lib.rex'` with no such
+    /// file reports `Error 43 running <path> line 2:  Routine not found.` and
+    /// `Error 43.901:  Could not find file "lib.rex" for ::REQUIRES.`
+    pub(crate) fn requires_file_not_found(name: &[u8]) -> Raised {
+        Raised::syntax(43, 901, vec![name.to_vec()])
+    }
+
+    /// 98.952: a `::REQUIRES` naming a package whose own directives are still
+    /// installing. One substitution, the **resolved** path.
+    ///
+    /// Measured, rc 158 with stdout empty, on a pair of files each requiring
+    /// the other and on a file requiring itself: the report echoes one
+    /// `::REQUIRES` clause per level of the chain and names the file the
+    /// second reference resolved to.
+    pub(crate) fn circular_requires(path: &str) -> Raised {
+        Raised::syntax(98, 952, vec![path.as_bytes().to_vec()])
+    }
+
     /// 99.906: a `::CONSTANT` directive's parenthesised expression form with
     /// no `::CLASS` directive anywhere before it in the file. No
     /// substitutions -- the message names neither directive.
@@ -1812,10 +1834,10 @@ impl Raised {
     /// 97.3: the method is `PACKAGE` and the caller is in another package.
     /// The substitutions are [`Raised::no_method`]'s.
     ///
-    /// **Not measured on the oracle as a whole program**, because a caller in
-    /// another package needs `::REQUIRES`. The catalogue's own text is
-    /// `Object "&1" cannot accept package scope message "&2" from a different
-    /// package caller.`
+    /// Measured at rc 159, on a `::class K public` carrying `::method m
+    /// package` in a required file: `o = .K~new; say o~m` reports `Object "a
+    /// K" cannot accept package scope message "M" from a different package
+    /// caller.`
     pub(crate) fn package_scope_method(target: &[u8], name: &[u8]) -> Raised {
         Raised::syntax(97, 3, vec![target.to_vec(), name.to_vec()])
     }

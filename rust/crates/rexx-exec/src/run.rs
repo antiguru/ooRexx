@@ -5828,7 +5828,7 @@ impl Interp {
             None if builtin::is_excluded_builtin(name) => {
                 return Err(Loud::unresolved_call(name).into());
             }
-            None => match self.routines.get(&name.to_ascii_uppercase()[..]).copied() {
+            None => match self.installed_routine(name) {
                 Some(installed) => Resolved::Routine(installed),
                 // **Ahead of the external file search, which is Phase 7's,
                 // and behind everything above it.** `Setup.cpp` resolves
@@ -5856,6 +5856,29 @@ impl Interp {
             },
         };
         Ok(resolved)
+    }
+
+    /// The `::ROUTINE` `name` reaches from the running package: one the
+    /// package declared itself, then one a `::REQUIRES` imported.
+    ///
+    /// `PackageClass::findRoutine` (`classes/PackageClass.cpp:898`), whose two
+    /// steps are `findLocalRoutine` and `findPublicRoutine`. A required file's
+    /// non-`PUBLIC` routine is in neither table for the requiring package --
+    /// measured, `Could not find routine "PRIVR".`
+    fn installed_routine(&self, name: &[u8]) -> Option<InstalledRoutine> {
+        let program = self.running_activation()?.program_id;
+        let upper = name.to_ascii_uppercase();
+        if let Some(found) = self
+            .routines
+            .get(&program)
+            .and_then(|table| table.get(&upper[..]))
+        {
+            return Some(*found);
+        }
+        self.merged_public_routines
+            .get(&program)
+            .and_then(|table| table.get(&upper[..]))
+            .copied()
     }
 
     /// Takes the shared value buffer, empty and ready to build into.
@@ -7451,10 +7474,37 @@ impl Interp {
                 Some(site) => site,
                 None => match self.compiled_method_site(line, &text, indent) {
                     Some(site) => site,
-                    None => FailureSite::Clause { line, text, indent },
+                    None => match self.required_package_site(line, &text, indent) {
+                        Some(site) => site,
+                        None => FailureSite::Clause { line, text, indent },
+                    },
                 },
             });
         }
+    }
+
+    /// The frame a level in a package a `::REQUIRES` loaded contributes, or
+    /// `None` for a level in the program the command line started.
+    ///
+    /// The clause is echoed exactly as [`FailureSite::Clause`] echoes it and
+    /// only the report's `running <name> line <n>` span differs. Measured,
+    /// oracle rc 214: a required file whose first clause is `say 1/0` echoes
+    /// `1 *-* say 1/0` above the requiring `::REQUIRES` clause and reports
+    /// `Error 42 running <the required file> line 1`.
+    fn required_package_site(
+        &self,
+        line: usize,
+        text: &[u8],
+        indent: usize,
+    ) -> Option<FailureSite> {
+        let program_id = self.running_activation()?.program_id;
+        let name = self.required_paths.get(&program_id)?.as_bytes().to_vec();
+        Some(FailureSite::Named {
+            line,
+            indent,
+            text: text.to_vec(),
+            name,
+        })
     }
 
     /// The frame a level inside a method compiled from source text
