@@ -1,0 +1,7 @@
+RC 0
+===STDOUT===
+The NSWIDGET class
+===STDERR===
+     2 *-* say w:NsWidget
+       >N>   W:NSWIDGET => "The NSWIDGET class"
+       >>>   "The NSWIDGET class"

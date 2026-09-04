@@ -56,8 +56,9 @@
 //!   same device `phase-4-exclusions.txt` uses for the builtin exclusion set,
 //!   one level down.
 //!
-//! `ExprKind` had six out-of-scope variants at Task 16 gate time, five of
-//! which were not in the design spec at all -- the spec names only `Message`
+//! `ExprKind` had six out-of-scope variants at Task 16 gate time and has
+//! none now. Five of the six were not in the design spec at all -- the spec
+//! names only `Message`
 //! outright. The other five (`Call`, `QualifiedCall`, `ClassResolver`,
 //! `List`, `VariableReference`) were a judgement call made at Task 16 gate
 //! time by the team lead ("main"), on request, because the spec's only other
@@ -70,13 +71,8 @@
 //! hand, the same relationship `tests/assertions.rs`'s `EXEMPT` list has with
 //! the exclusions file's own builtin set.
 //!
-//! **`ExprKind::Call` is in scope, and is not one of the four below.**
-//! Unlike `InstructionKind::Call`, whose arms `owners.rs` gives a row each
-//! because `Call::Qualified` alone is still loud, `ExprKind::Call`'s own
-//! `CallTarget` has exactly two forms and this crate evaluates both -- there
-//! is no later-phase arm hiding inside it, so the variant closes outright
-//! rather than staying split. That is not a claim that every call target
-//! runs: a builtin-named call still fails loudly, through
+//! **Every `ExprKind` variant is in scope now.** That is not a claim that
+//! every call target runs: a builtin-named call still fails loudly, through
 //! `Loud::unresolved_call` naming `4c`, which is a claim on the resolution
 //! steps rather than on the variant -- see `eval_call`'s own doc
 //! (`eval.rs`) for the order.

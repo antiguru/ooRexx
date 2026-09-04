@@ -25,10 +25,10 @@
 //! and (Task 5, 4b) `ExprKind::VariableReference`, the `>x`/`<x` form, which
 //! evaluates to the referenced variable's own value -- the arm's own comment
 //! has the measurement, and why `USE ARG >name` does not come through here.
-//! `QualifiedCall`, `ClassResolver` and `List` still fail loudly through the
-//! existing, exhaustive `form_name`. `DotVariable` resolves through
-//! `environment.rs` (Phase 5a, D33), whose own doc has the order and the
-//! names it refuses rather than answers.
+//! `QualifiedCall` and `ClassResolver` are `eval_cold`'s own arms, resolved
+//! against the running package's namespace table. `DotVariable` resolves
+//! through `environment.rs` (Phase 5a, D33), whose own doc has the order and
+//! the names it refuses rather than answers.
 //!
 //! **A function here that opens a temps frame and then evaluates through `?`
 //! leaves its own `pop_frame` unreached when that evaluation raises. That is
@@ -372,6 +372,26 @@ impl Interp {
                 let text = self.string_value_text(value);
                 self.trace_function(indent, &name, &text);
             }
+            // `>F>` too, tagged with the routine name **alone** -- measured,
+            // `trace i` over `say w:wroutine()` traces
+            // `>F>   WROUTINE => "wroutine ran"`, with no qualifier on the
+            // tag, which is why this shares the arm above's emitter rather
+            // than `>N>`'s.
+            ExprKind::QualifiedCall { name, .. } => {
+                let name = code.symbols.name(*name).as_bytes().to_vec();
+                let text = self.string_value_text(value);
+                self.trace_function(indent, &name, &text);
+            }
+            // `>N>`, tagged `namespace:class` -- `traceClassResolution`
+            // (`RexxActivation.hpp:358`), whose tag is the two symbols joined
+            // by a colon.
+            ExprKind::ClassResolver { namespace, name } => {
+                let mut tag = code.symbols.name(*namespace).as_bytes().to_vec();
+                tag.push(b':');
+                tag.extend_from_slice(code.symbols.name(*name).as_bytes());
+                let text = self.string_value_text(value);
+                self.trace_namespace(indent, &tag, &text);
+            }
             // **`>M>` is not here**, and that is the one value prefix this
             // hook does not own: the message-assignment form is an
             // instruction that never evaluates its term as an expression, so
@@ -699,6 +719,34 @@ impl Interp {
             // which builds an array of the list's own length and fills the
             // positions that were written.
             ExprKind::List(items) => self.eval_list(code, items),
+            // `ns:Name`, the qualified class lookup
+            // (`ClassResolver::evaluate`,
+            // `expression/ExpressionClassResolver.cpp:123`). The `>N>` line
+            // it owes is this hook's sibling below, in `trace_intermediate`.
+            ExprKind::ClassResolver { namespace, name } => {
+                let namespace = code.symbols.name(*namespace).as_bytes().to_vec();
+                let name = code.symbols.name(*name).as_bytes().to_vec();
+                let package = self.running_program().ok_or_else(Loud::missing_body)?;
+                self.namespace_class(package, &namespace, &name)
+            }
+            // `ns:name(...)`, resolved against that namespace's public
+            // routines alone -- so none of `resolve_call`'s four steps runs,
+            // and a builtin of the same name is never reached. Measured,
+            // `rexx:length('abc')` is 43.902 rather than `3`.
+            ExprKind::QualifiedCall {
+                namespace,
+                name,
+                args,
+            } => {
+                let namespace = code.symbols.name(*namespace).as_bytes().to_vec();
+                let name = code.symbols.name(*name).as_bytes().to_vec();
+                let package = self.running_program().ok_or_else(Loud::missing_body)?;
+                let resolution = self
+                    .namespace_routine(package, &namespace, &name)
+                    .map(Resolved::Routine);
+                let resolved = self.resolved_after_arguments(code, resolution, args)?;
+                self.eval_call_resolved(code, resolved, &name, args)
+            }
             other => Err(Loud::expression(other).into()),
         }
     }

@@ -200,22 +200,22 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     // ---- Phase 5's ----
     InstructionKind::Options { .. } => ("Options", Owner::Phase("Phase 5")),
 },
-// ---- `CALL`, arm-grained, because its arms do not share one owner ----
-// The language is what forces the split rather than a preference: a
-// qualified call resolves a public routine of a named namespace, which needs
-// the object model, so `Call`'s arms cannot all land in one phase however the
-// rest of `CALL` is implemented.
+// ---- `CALL`, still arm-grained although every arm is now in scope ----
+// The four resolve by four different rules -- a label search, a run-time
+// target, a namespace's public routines, and a condition trap -- so a single
+// row would say less than these four do about what has been checked.
 //
-// This grain is what lets `src/lib.rs`'s `instruction_owner` -- which has
-// always had to split `Call`, for the same reason -- be compared against
-// this table row for row, with nothing hand-maintained in between.
+// This grain is what lets `src/lib.rs`'s `instruction_owner` be compared
+// against this table row for row, with nothing hand-maintained in between.
 // `loud.rs`'s `every_out_of_scope_variant_fails_loudly` is that comparison.
 split InstructionKind::Call(c) in (&**c) {
     rexx_parse::Call::Named { .. } => ("Call::Named", Owner::InScope),
     rexx_parse::Call::Dynamic { .. } => ("Call::Dynamic", Owner::InScope),
     rexx_parse::Call::Trap(_) => ("Call::Trap", Owner::InScope),
-    // `CALL ns:name`, mirroring `ExprKind::QualifiedCall`'s own ownership.
-    rexx_parse::Call::Qualified { .. } => ("Call::Qualified", Owner::Phase("Phase 5")),
+    // `CALL ns:name`, resolved against that namespace's public routines --
+    // 98.987 for a namespace nothing registered and 43.902 for a routine it
+    // does not export, both the oracle's own.
+    rexx_parse::Call::Qualified { .. } => ("Call::Qualified", Owner::InScope),
 },
 // ---- `ADDRESS`, split on the same condition `instruction_owner` uses ----
 // One keyword, two jobs. `ADDRESS env`, `ADDRESS VALUE expr` and the bare
@@ -261,9 +261,11 @@ tags!(expr_tag, EXPR_TAGS, ExprKind, {
     ExprKind::Message { .. } => ("Message", Owner::InScope),
     // `(a, b, ...)`, which builds an `.Array` -- `eval.rs`'s `eval_list`.
     ExprKind::List(_) => ("List", Owner::InScope),
-    // ---- the ones that still fail loudly; see coverage.rs's module doc's ownership section ----
-    ExprKind::QualifiedCall { .. } => ("QualifiedCall", Owner::Phase("Phase 5")),
-    ExprKind::ClassResolver { .. } => ("ClassResolver", Owner::Phase("Phase 5")),
+    // `ns:name(...)` and `ns:Name`, resolved through the running package's
+    // own namespace table -- `eval.rs`'s `eval_cold` arms over
+    // `Interp::namespace_routine` and `Interp::namespace_class`.
+    ExprKind::QualifiedCall { .. } => ("QualifiedCall", Owner::InScope),
+    ExprKind::ClassResolver { .. } => ("ClassResolver", Owner::InScope),
 });
 
 tags!(loop_tag, LOOP_TAGS, LoopKind, {
@@ -390,14 +392,10 @@ impl Coverage {
 /// pinned here") tracks for Step 5's own purposes.
 pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     ("InstructionKind", "Command", "Phase 7"),
-    // The two arm-grained rows. `CALL`'s other three arms are in scope, and
-    // so is `ADDRESS`'s other form, so those appear in `INSTRUCTION_TAGS` and
-    // not here.
-    ("InstructionKind", "Call::Qualified", "Phase 5"),
+    // The one arm-grained row. `ADDRESS`'s other form is in scope, and so is
+    // every arm of `CALL`, so those appear in `INSTRUCTION_TAGS` and not here.
     ("InstructionKind", "Address::Command", "Phase 7"),
     ("InstructionKind", "Options", "Phase 5"),
-    ("ExprKind", "QualifiedCall", "Phase 5"),
-    ("ExprKind", "ClassResolver", "Phase 5"),
     ("LoopKind", "With", "Phase 5"),
 ];
 
@@ -516,7 +514,7 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        40
+        41
     );
     assert_eq!(
         INSTRUCTION_TAGS
@@ -537,7 +535,7 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::Phase("Phase 5"))
             .count(),
-        2
+        1
     );
     assert_eq!(
         INSTRUCTION_TAGS
@@ -553,14 +551,14 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        13
+        15
     );
     assert_eq!(
         EXPR_TAGS
             .iter()
             .filter(|(_, o)| matches!(o, Owner::Phase(_)))
             .count(),
-        2
+        0
     );
 
     assert_eq!(LOOP_TAGS.len(), 6);

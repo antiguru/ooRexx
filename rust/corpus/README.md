@@ -84,7 +84,7 @@ takes the `.cls` shape because its helpers are class libraries and `.cls` is
 what ooRexx calls one. Naming them without an extension in the directive means
 the search's own `.cls` step is what finds them. A `.cls` helper needs no
 `sourceline_oracle` expectation and appears in no subset file, because no
-scanner sees it.
+scanner sees it. `lang/package_namespace.rex` follows the same convention.
 
 ## Running it
 

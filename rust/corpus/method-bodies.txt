@@ -175,7 +175,7 @@ Package	importedPackages	instance	loud	method "IMPORTEDPACKAGES" of class "Packa
 Package	importedRoutines	instance	loud	method "IMPORTEDROUTINES" of class "Package"
 Package	loadLibrary	instance	loud	method "LOADLIBRARY" of class "Package"
 Package	loadPackage	instance	loud	method "LOADPACKAGE" of class "Package"
-Package	local	instance	loud	method "LOCAL" of class "Package"
+Package	local	instance	answers	rc 0
 Package	name	instance	answers	rc 0
 Package	namespaces	instance	loud	method "NAMESPACES" of class "Package"
 Package	options	instance	loud	method "OPTIONS" of class "Package"

@@ -2544,8 +2544,26 @@ impl Interp {
                 // (`activation.rs`) for the two measured behaviours that
                 // `bool` selects between.
                 rexx_parse::Call::Trap(trap) => self.exec_condition_trap(trap, true),
-                rexx_parse::Call::Qualified { .. } => {
-                    Err(Loud::instruction(&instruction.kind).into())
+                // `CALL ns:name`, whose target is a public routine of that
+                // namespace and nothing else --
+                // `RexxInstructionQualifiedCall::resolve`
+                // (`instructions/CallInstruction.cpp:443`). It settles
+                // `RESULT` exactly as `Named` does, which is why it joins the
+                // same second half; what it does not do is search labels or
+                // builtins, so it has no `search_labels` to pass.
+                rexx_parse::Call::Qualified {
+                    namespace,
+                    name,
+                    args,
+                } => {
+                    let namespace = code.symbols.name(*namespace).as_bytes().to_vec();
+                    let name = code.symbols.name(*name).as_bytes().to_vec();
+                    let package = self.running_program().ok_or_else(Loud::missing_body)?;
+                    let resolution = self
+                        .namespace_routine(package, &namespace, &name)
+                        .map(Resolved::Routine);
+                    let resolved = self.resolved_after_arguments(code, resolution, args)?;
+                    self.invoke_named_call(code, resolved, &name, args)
                 }
             },
 

@@ -107,18 +107,20 @@ fn an_unset_variable_reads_as_its_own_name() {
 /// what it checks. `call "sub"` replaced it, and would have gone the same way
 /// at 4b's Task 3, which implements `CALL`.
 ///
-/// A **namespace-qualified class lookup** is the current witness, and it
-/// replaced a parenthesised list, which replaced a message send, which
-/// replaced `call "sub"`, which replaced `do i = 1 to 3 / end`. The sentence
-/// that used to stand here claimed `ExprKind::List` was the form furthest from
-/// landing; the task that built the Array implemented it. **No construct is
-/// permanently unimplemented**, so the honest statement is the property rather
-/// than a prediction: this test needs *some* form the executor refuses, and
-/// whichever task implements the current one replaces the witness and the
-/// quoted message together.
+/// The **`OPTIONS` instruction** is the current witness, and it replaced a
+/// namespace-qualified class lookup, which replaced a parenthesised list,
+/// which replaced a message send, which replaced `call "sub"`, which replaced
+/// `do i = 1 to 3 / end`. **No construct is permanently unimplemented**, so
+/// the honest statement is the property rather than a prediction: this test
+/// needs *some* form the executor refuses, and whichever task implements the
+/// current one replaces the witness and the quoted message together.
+///
+/// **The witness had to leave `ExprKind` entirely this time**, which is a
+/// state rather than a preference: `owners.rs`'s `EXPR_TAGS` carries no
+/// `Owner::Phase` row at all now, and its own count assertion is what says so.
 ///
 /// The expected stderr is quoted from a run rather than described:
-/// `rexx-exec: a namespace-qualified class lookup is not implemented (Phase 5)`.
+/// `rexx-exec: OPTIONS is not implemented (Phase 5)`.
 #[test]
 fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
     assert!(
@@ -127,13 +129,13 @@ fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
     );
     let outcome = run_program(
         SPIKE_PATH,
-        b"say ns:Bar\n".to_vec(),
+        b"options 'x'\n".to_vec(),
         rexx_exec::Invocation::none(),
     );
     assert_eq!(outcome.exit_code, NOT_IMPLEMENTED_EXIT);
     assert_eq!(
         String::from_utf8(outcome.stderr).expect("the loud message is ASCII"),
-        "rexx-exec: a namespace-qualified class lookup is not implemented (Phase 5)\n"
+        "rexx-exec: OPTIONS is not implemented (Phase 5)\n"
     );
 }
 
@@ -163,9 +165,9 @@ fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
 /// cannot be added without failing to compile. Auditing coverage from this
 /// test alone would over-read it.
 ///
-/// The one other loud path is bounded for its own reason, checked in review
-/// rather than here, so the size contract holds on both: `Loud::instruction`
-/// returns `keyword()`'s `&'static str` or one of four literals.
+/// The other loud path is `Loud::instruction`, which returns `keyword()`'s
+/// `&'static str` or one of four literals -- and it is the one this test now
+/// exercises, since no `ExprKind` is refused any more.
 ///
 /// There used to be a third, `Loud::parse`, bounded because a `ParseError`
 /// deliberately carries no substitution values. 4b's Task 2 deleted it: a
@@ -173,43 +175,48 @@ fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
 /// than failing loudly, so it is no longer a loud path at all and no longer
 /// has a message whose size this contract governs.
 ///
-/// **A namespace-qualified class lookup, and the choice of witness is the
-/// point.** This test needs a form the executor does not evaluate, and it has
-/// been broken by its own witness being implemented underneath it every time:
-/// it began on `+`, moved to `=` when Task 7 landed arithmetic, went red again
-/// when Task 8 landed comparison, moved to `~`, went red when Phase 5a's
-/// dispatch task landed `~`, moved to `ExprKind::List`, and went red again when
-/// the Array task landed that. The witness is `ExprKind::ClassResolver` now,
-/// whose message is `form_name`'s `&'static "a namespace-qualified class
-/// lookup"`; see [`the_loud_failure_code_cannot_be_confused_with_a_rexx_error`]
-/// for why no choice of witness is permanent and what a task landing this one
-/// owes.
+/// **The `OPTIONS` instruction, and the choice of witness is the point.** This
+/// test needs a form the executor does not run, and it has been broken by its
+/// own witness being implemented underneath it every time: it began on `+`,
+/// moved to `=` when Task 7 landed arithmetic, went red again when Task 8
+/// landed comparison, moved to `~`, went red when Phase 5a's dispatch task
+/// landed `~`, moved to `ExprKind::List`, went red when the Array task landed
+/// that, moved to `ExprKind::ClassResolver`, and went red when Phase 5d's
+/// namespace task landed that. See
+/// [`the_loud_failure_code_cannot_be_confused_with_a_rexx_error`] for why no
+/// choice of witness is permanent and what a task landing this one owes.
 ///
-/// The cost of moving off an operator is that this test no longer reaches
-/// either of the two arms that call `format!`, which are the only two where
-/// the size contract could actually break. That coverage did not go away with
-/// it: `lib.rs`'s `the_two_formatting_arms_do_not_grow_with_the_subtree` calls
-/// `form_name` directly on a 200-deep `Binary` and `Prefix`, which needs no
-/// unimplemented form and so cannot be broken by a later task either.
+/// **The witness is an instruction rather than an expression**, so the path
+/// under test is `Loud::instruction` rather than `Loud::expression`. What the
+/// test still asserts is the same property, and the tree it asserts it over is
+/// the same size: `OPTIONS` takes an expression, so the operand can be three
+/// thousand terms wide while the message stays the keyword.
+///
+/// The cost is that this test reaches neither of `form_name`'s two arms that
+/// call `format!`, which are the only two where its own size contract could
+/// break. That coverage lives in `lib.rs`'s
+/// `the_two_formatting_arms_do_not_grow_with_the_subtree`, which calls
+/// `form_name` directly on a 200-deep `Binary` and `Prefix` and so needs no
+/// unimplemented form at all.
 #[test]
 fn a_loud_failure_message_does_not_grow_with_the_expression() {
     const BOUND: usize = 300;
 
     let small = run_program(
         SPIKE_PATH,
-        b"say ns:Bar\n".to_vec(),
+        b"options 'x'\n".to_vec(),
         rexx_exec::Invocation::none(),
     );
     assert_eq!(small.exit_code, NOT_IMPLEMENTED_EXIT);
 
-    // The same qualified lookup at the end of a three-thousand-term
-    // concatenation: the resolver node is the one that fails, and the tree
-    // it hangs off is what a message formatting the node would print.
-    let mut deep = b"say ".to_vec();
+    // The same refusal over a three-thousand-term concatenation: the
+    // instruction is what fails, and its operand is what a message formatting
+    // the node would print.
+    let mut deep = b"options ".to_vec();
     for _ in 0..3_000 {
         deep.extend_from_slice(b"'a' || ");
     }
-    deep.extend_from_slice(b"ns:Bar\n");
+    deep.extend_from_slice(b"'z'\n");
     let deep = run_program(SPIKE_PATH, deep, rexx_exec::Invocation::none());
     assert_eq!(deep.exit_code, NOT_IMPLEMENTED_EXIT);
 
@@ -224,7 +231,7 @@ fn a_loud_failure_message_does_not_grow_with_the_expression() {
     );
     let stderr = String::from_utf8(deep.stderr).expect("the loud message is ASCII");
     assert!(
-        stderr.contains("a namespace-qualified class lookup"),
+        stderr.contains("OPTIONS"),
         "the message should name the form it could not evaluate, and was {stderr:?}"
     );
 }

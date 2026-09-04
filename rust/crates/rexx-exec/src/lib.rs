@@ -1567,16 +1567,6 @@ fn owned_message(name: &str, owner: Option<&'static str>) -> String {
     }
 }
 
-/// Whether any class reference on this `::CLASS` is namespace-qualified.
-///
-/// Every reference the directive can carry is asked, `METACLASS`'s included:
-/// the qualification is what makes a target unreachable, and which keyword
-/// wrote it down does not change that. [`class_references`] is the one place
-/// that says which references a `::CLASS` has.
-fn class_names_a_namespace(class: &ClassDirective) -> bool {
-    class_references(class).any(|target| target.namespace.is_some())
-}
-
 /// Every class this `::CLASS` names: its `SUBCLASS`/`MIXINCLASS` target (one
 /// slot, `mixin` telling the two apart), its `METACLASS`, and each entry of
 /// its `INHERIT` list.
@@ -1664,31 +1654,6 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
         // 7's exactly as `::ROUTINE EXTERNAL` above is.
         DirectiveKind::Requires(requires) if requires.library => {
             gap("::REQUIRES LIBRARY", "Phase 7")
-        }
-        // Registers the loaded package under a namespace, which nothing here
-        // can then resolve a `ns:Name` against.
-        //
-        // **Refused ahead of the file search, where the oracle searches
-        // first**: measured, `::requires 'zzznofile.rex' namespace ns` is
-        // 43.901 at rc 213 there. Both are refusals of the whole program, and
-        // keeping this one in front of the search is what leaves the form
-        // failing exactly as it did before this phase built the search.
-        DirectiveKind::Requires(requires) if requires.namespace.is_some() => {
-            gap("::REQUIRES NAMESPACE", "Phase 5")
-        }
-        // **`ns:name` on any of the keywords that take a class reference.**
-        // The namespace is a package this crate does not load, so the target
-        // names nothing here whatever it names on the oracle -- unlike a bare
-        // name, which `Interp::install_class_at` resolves against the file's
-        // own classes and then the registry. Measured on `MIXINCLASS ns:`,
-        // `INHERIT ns:` and `METACLASS ns:` alike: the oracle is 98.987
-        // `Namespace "NS" not found in package "<path>"` at rc 158, so the
-        // target is unreachable there too and the divergence is the report
-        // rather than the outcome. A qualified target on any of them answers
-        // here, whichever keyword wrote it -- [`class_names_a_namespace`] is
-        // what asks.
-        DirectiveKind::Class(class) if class_names_a_namespace(class) => {
-            gap("::CLASS naming a namespace", "Phase 5")
         }
         // `::OPTIONS` installs (`Interp::install_directives`' own walk): it
         // resolves no name, runs no code, and every setting it writes is one
@@ -2454,16 +2419,12 @@ fn delegate_variable(kind: &DirectiveKind) -> Option<SymbolId> {
 /// `do_over_a_parenthesised_stem_target_is_also_caught` red, all four
 /// asserting the exact unsuffixed message.
 ///
-/// **Arm-grained for `InstructionKind::Call` and `InstructionKind::Address`,
-/// matching `owners.rs`'s own `split` sections row for row.** Three of
-/// `rexx_parse::Call`'s four arms are implemented and answer `None`, and
-/// `Call::Qualified` is genuinely Phase 5's (a namespace-qualified `CALL`,
-/// mirroring `ExprKind::QualifiedCall`'s own ownership below); `ADDRESS`
-/// splits on whether the instruction carries a command or a `WITH`
-/// redirection, which its own arm below writes out. The two splits differ in
-/// shape because the language does: `Call`'s forms are enum arms and
-/// `Address`'s are struct fields, so one matches a pattern and the other a
-/// `bool`.
+/// **Arm-grained for `InstructionKind::Address`, matching `owners.rs`'s own
+/// `split` section row for row.** It splits on whether the instruction
+/// carries a command or a `WITH` redirection, which its own arm below writes
+/// out. `owners.rs` still splits `InstructionKind::Call` four ways and this
+/// function no longer needs to, because every arm answers `None`; that table
+/// keeps the grain to say which resolution rule each arm was checked under.
 ///
 /// Exhaustive with no `_` arm, matching `Loud::instruction`'s own match: a
 /// new `InstructionKind` variant is a compile error here, not a silent
@@ -2494,23 +2455,16 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // the program with its value exactly as `EXIT` does.
         | InstructionKind::Return { .. }
         | InstructionKind::Nop => None,
-        // **Arm-grained, and three of the four arms are `None`.**
-        // `Call::Named`, `Call::Dynamic` and `Call::Trap` are all implemented,
-        // so any owner string on them would be a false statement in a
-        // table whose only job is to be true -- `Loud::instruction` is not
-        // reached for any of the three, and an owner string nothing
-        // reads is exactly how the third copy of this data drifts. A named
-        // call that resolves to no internal label, no builtin and no
-        // `::ROUTINE` raises the oracle's own 43.1 rather than failing
+        // Every arm is implemented, so any owner string here would be a false
+        // statement in a table whose only job is to be true --
+        // `Loud::instruction` is not reached for any of them, and an owner
+        // string nothing reads is exactly how the third copy of this data
+        // drifts. A named call that resolves to no internal label, no builtin
+        // and no `::ROUTINE` raises the oracle's own 43.1 rather than failing
         // loudly; the one step behind those three that this crate skips is
         // the external file search, which is Phase 7's. So there is no
         // residual claim on the `CALL` keyword here at all.
-        InstructionKind::Call(call) => match &**call {
-            rexx_parse::Call::Named { .. }
-            | rexx_parse::Call::Dynamic { .. }
-            | rexx_parse::Call::Trap(_) => None,
-            rexx_parse::Call::Qualified { .. } => Some("Phase 5"),
-        },
+        InstructionKind::Call(_) => None,
         // `Use` is `None` even
         // though `USE LOCAL` can only ever fail here: it fails with the
         // oracle's own two errors (98.993/99.910), measured, which is an
@@ -2609,10 +2563,8 @@ fn expr_owner(kind: &ExprKind) -> Option<&'static str> {
         | ExprKind::Binary { .. }
         | ExprKind::Logical(_) => None,
         // **`ExprKind::Call` is `None`, not an owner string.** It has
-        // exactly two `CallTarget` forms and this crate evaluates both --
-        // unlike `InstructionKind::Call`, which stays arm-grained because
-        // `Call::Qualified` is loud, this variant has
-        // no later-phase arm hiding inside it, so it closes outright. A
+        // exactly two `CallTarget` forms and this crate evaluates both, so it
+        // closes outright. A
         // name that resolves to no internal label (or a `CallTarget::
         // Literal`, which never searches labels at all), no builtin and no
         // `::ROUTINE` raises the oracle's own 43.1 -- exactly the same shape
@@ -2630,11 +2582,17 @@ fn expr_owner(kind: &ExprKind) -> Option<&'static str> {
         // the array every position of the list is a slot of, and every
         // position is an ordinary expression with nothing later-phase hiding
         // inside it.
+        //
+        // **The two namespace forms are `None` too.** `ns:name(...)` resolves
+        // against the namespace package's public routines and `ns:Name`
+        // against its public classes, and a miss on either is the oracle's own
+        // 43.902/98.988 rather than a refusal.
         ExprKind::Call { .. }
         | ExprKind::VariableReference(_)
         | ExprKind::Message { .. }
-        | ExprKind::List(_) => None,
-        ExprKind::QualifiedCall { .. } | ExprKind::ClassResolver { .. } => Some("Phase 5"),
+        | ExprKind::List(_)
+        | ExprKind::QualifiedCall { .. }
+        | ExprKind::ClassResolver { .. } => None,
     }
 }
 
@@ -3252,6 +3210,31 @@ struct Interp {
     /// `say .Array` print `The ARRAY class`, so an import shadows
     /// `.environment`.
     merged_public_classes: HashMap<ProgramId, HashMap<Box<[u8]>, ObjRef>>,
+    /// The packages a program's `::REQUIRES ... NAMESPACE` directives
+    /// registered, under the upcased qualifier -- `PackageClass::addNamespace`
+    /// (`classes/PackageClass.cpp:2152`), whose key is `name->upper()`.
+    ///
+    /// **A namespace registration does not replace the ordinary merge**:
+    /// measured, oracle rc 0, `::requires 'lib.cls' namespace w` still makes
+    /// the required file's public class answer `.Widget` and its public
+    /// routine answer a bare call. One file may be registered under several
+    /// qualifiers.
+    package_namespaces: HashMap<ProgramId, HashMap<Box<[u8]>, ProgramId>>,
+    /// The `Directory` `Package~local` answers, per package, built on first
+    /// ask -- `PackageClass::getPackageLocal` (`classes/PackageClass.cpp:2131`
+    /// region), which creates it lazily too.
+    ///
+    /// Read by [`Interp::dot_variable`] between the imported public classes
+    /// and `.local`, which is where `PackageClass::findClass`
+    /// (`classes/PackageClass.cpp:1122`) reads `packageLocal`. Measured,
+    /// oracle rc 0: `.context~package~local~zork = 'x'` makes `.zork` answer
+    /// `x` where `.local~zork` alone loses to it.
+    ///
+    /// Keyed by [`crate::plan::Package`] rather than by program, because the
+    /// interpreter's own package has one too and it is the same object on
+    /// every ask -- measured, oracle rc 0, `.Array~package~local` is an empty
+    /// `Directory` and `p~local == p~local` is `1`.
+    package_locals: HashMap<Package, ObjRef>,
     /// The object model message dispatch resolves against: `Setup.cpp`'s
     /// native classes, whatever `::CLASS`/`::METHOD`/`::ATTRIBUTE` have
     /// installed beside them, and the primitive methods this crate
@@ -4260,6 +4243,18 @@ struct InstalledRoutine {
     directive: usize,
 }
 
+/// What a namespace qualifier resolved to.
+///
+/// The `REXX` variant is a package this crate has no [`ProgramId`] for -- the
+/// interpreter's own, whose public classes are `.environment`'s class-valued
+/// entries and whose public routines are empty -- exactly as
+/// [`crate::plan::Package`] is a variant rather than an absent id.
+#[derive(Copy, Clone)]
+enum Namespace {
+    Rexx,
+    Package(ProgramId),
+}
+
 /// Where one installed `::METHOD`/`::ATTRIBUTE` accessor's own body lives --
 /// the same shape as [`InstalledRoutine`], for the same reason: a
 /// [`rexx_classes::MethodId`] alone names neither the program nor the
@@ -4512,6 +4507,8 @@ impl Interp {
             package_public_routines: HashMap::new(),
             merged_public_routines: HashMap::new(),
             merged_public_classes: HashMap::new(),
+            package_namespaces: HashMap::new(),
+            package_locals: HashMap::new(),
             object_model: None,
             class_variables: HashMap::new(),
             environment: None,
@@ -5295,7 +5292,21 @@ impl Interp {
                 continue;
             };
             match self.load_requires(id, &requires.name) {
-                Ok(required) => self.merge_required(id, required),
+                Ok(required) => {
+                    self.merge_required(id, required);
+                    // `RequiresDirective::install`
+                    // (`instructions/RequiresDirective.cpp:137`): the
+                    // registration is what the directive does *after* the
+                    // load and the merge, so a namespace neither narrows the
+                    // merge nor replaces it.
+                    if let Some(namespace) = requires.namespace {
+                        let name = program.symbols.name(namespace).as_bytes().into();
+                        self.package_namespaces
+                            .entry(id)
+                            .or_default()
+                            .insert(name, required);
+                    }
+                }
                 Err(failure) => {
                     self.seal_site_level();
                     self.blame_directive_in(id, program, directive);
@@ -5408,6 +5419,111 @@ impl Interp {
         for (name, class) in classes {
             target.entry(name).or_insert(class);
         }
+    }
+
+    /// The package a namespace qualifier written in `package` names, or `None`
+    /// when nothing registered it.
+    ///
+    /// `PackageClass::findNamespace` (`classes/PackageClass.cpp:784`), whose
+    /// first check is the reserved `REXX` name and whose second is the
+    /// package's own table. `::REQUIRES ... NAMESPACE REXX` cannot reach the
+    /// table -- it is 99.944 at parse time -- so the two cannot collide.
+    fn find_namespace(&self, package: ProgramId, upper: &[u8]) -> Option<Namespace> {
+        if upper == LIBRARY_PACKAGE_NAME {
+            return Some(Namespace::Rexx);
+        }
+        self.package_namespaces
+            .get(&package)?
+            .get(upper)
+            .copied()
+            .map(Namespace::Package)
+    }
+
+    /// The class `namespace:name` names from `package`, or the oracle's own
+    /// refusal for either half missing.
+    ///
+    /// `ClassResolver::lookup`'s qualified branch
+    /// (`expression/ExpressionClassResolver.cpp:170`): the namespace first,
+    /// 98.987 when it is absent, then `findPublicClass` in that package alone,
+    /// 98.988 when that answers nothing. **The unqualified search order is not
+    /// consulted at either step**, so a class the requiring file declares
+    /// itself is not reachable through a qualifier.
+    ///
+    /// The `REXX` namespace reaches [`Interp::rexx_package_class`], the same
+    /// table `.NAME`'s own step 4 reads. Measured, `rexx:RexxInfo` is 98.988
+    /// on the oracle because that name is an instance rather than a class,
+    /// and `.RexxInfo` is not in either of that table's two sources here.
+    fn namespace_class(
+        &mut self,
+        package: ProgramId,
+        namespace: &[u8],
+        name: &[u8],
+    ) -> Result<ObjRef, Failure> {
+        let Some(target) = self.find_namespace(package, namespace) else {
+            let path = self.package_path(package).to_owned();
+            return Err(Raised::namespace_not_found(namespace, &path).into());
+        };
+        let found = match target {
+            Namespace::Rexx => self.rexx_package_class(name),
+            Namespace::Package(program) => self.public_class_of(program, name),
+        };
+        found.ok_or_else(|| Raised::namespace_class_not_found(name, namespace).into())
+    }
+
+    /// `findPublicClass` for one package: its own `::CLASS ... PUBLIC`
+    /// declarations, then the ones it imported (`classes/PackageClass.cpp:760`
+    /// region). Measured, oracle rc 0: a class a *required* file of the
+    /// namespace package declares public is reachable through the qualifier.
+    fn public_class_of(&self, program: ProgramId, upper: &[u8]) -> Option<ObjRef> {
+        if let Some(found) = self
+            .package_public_classes
+            .get(&program)
+            .and_then(|table| table.get(upper))
+        {
+            return Some(*found);
+        }
+        self.merged_public_classes
+            .get(&program)
+            .and_then(|table| table.get(upper))
+            .copied()
+    }
+
+    /// The routine `namespace:name` names from `package`, or the oracle's own
+    /// refusal for either half missing.
+    ///
+    /// `RexxInstructionQualifiedCall::resolve`
+    /// (`instructions/CallInstruction.cpp:443`-`:456`): 98.987 for the
+    /// namespace and 43.902 for the routine, and **`findPublicRoutine` alone**
+    /// -- a non-`PUBLIC` `::ROUTINE` of the namespace package is not
+    /// reachable. Measured, `w:privr()` is 43.902 naming `"PRIVR"` and `"W"`.
+    ///
+    /// **The `REXX` namespace exports no routine**, so every name reaches
+    /// 43.902 there rather than a builtin: measured, `rexx:length('abc')` is
+    /// `Routine "LENGTH" not found in namespace "REXX".`
+    fn namespace_routine(
+        &self,
+        package: ProgramId,
+        namespace: &[u8],
+        name: &[u8],
+    ) -> Result<InstalledRoutine, Failure> {
+        let Some(target) = self.find_namespace(package, namespace) else {
+            let path = self.package_path(package).to_owned();
+            return Err(Raised::namespace_not_found(namespace, &path).into());
+        };
+        let found = match target {
+            Namespace::Rexx => None,
+            Namespace::Package(program) => self
+                .package_public_routines
+                .get(&program)
+                .and_then(|table| table.get(name))
+                .or_else(|| {
+                    self.merged_public_routines
+                        .get(&program)
+                        .and_then(|table| table.get(name))
+                })
+                .copied(),
+        };
+        found.ok_or_else(|| Raised::namespace_routine_not_found(name, namespace).into())
     }
 
     /// The file a `::REQUIRES` of `name` in package `id` resolves to, or
@@ -6085,6 +6201,12 @@ impl Interp {
     /// and `METACLASS`'s is 98.908 where the others are 98.909
     /// (`ClassDirective.cpp:180` against `:191` and `:225`). Nothing about
     /// the lookup itself differs, which is why they share this function.
+    ///
+    /// **A `ns:Name` target takes neither route and reports neither error.**
+    /// `ClassResolver::lookup`'s qualified branch raises 98.987/98.988 itself
+    /// and never reaches `findInstalledClass`, so a qualifier also hides the
+    /// file's own `::CLASS` of that name -- measured on the oracle for
+    /// `SUBCLASS`, `MIXINCLASS`, `METACLASS` and `INHERIT` alike.
     fn resolve_class_target(
         &mut self,
         installing: ProgramId,
@@ -6094,6 +6216,14 @@ impl Interp {
         classes: &FileClasses<'_>,
         not_found: fn(&[u8]) -> Raised,
     ) -> Result<ObjRef, Failure> {
+        if let Some(namespace) = target.namespace {
+            let namespace = program.symbols.name(namespace).as_bytes().to_vec();
+            let found = self.namespace_class(installing, &namespace, &target.name);
+            if found.is_err() {
+                self.blame_directive(program, directive);
+            }
+            return found;
+        }
         match classes.declared.get(target.name.as_ref()) {
             // Already installed, because `class_install_order` put it ahead
             // of this one; a `None` here would be that ordering and its

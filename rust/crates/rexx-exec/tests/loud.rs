@@ -164,6 +164,11 @@ fn table_owner(witness: &Witness) -> &'static str {
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum Category {
     Instruction,
+    /// **Unconstructed, because no `ExprKind` variant is out of scope.**
+    /// `#[expect]` rather than `#[allow]` so that the attribute itself goes red
+    /// the moment a task re-owns one and adds the `EXPR_WITNESSES` row that
+    /// `assert_witness_set_is_complete` would then demand.
+    #[expect(dead_code, reason = "no ExprKind variant is phase-owned today")]
     Expr,
 }
 
@@ -184,14 +189,7 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
         source: "'date'\n",
         category: Category::Instruction,
     },
-    // The two arm-grained tags; see the module doc.
-    Witness {
-        tag: "Call::Qualified",
-        // `CALL ns:name args`, restricted to public routines of that
-        // namespace.
-        source: "call ns:sub\n",
-        category: Category::Instruction,
-    },
+    // The one arm-grained tag; see the module doc.
     // Which variants need a row here is `owners.rs`'s to say, and the
     // assertion below reads it: a variant this crate implements must not
     // carry one, because the row would assert a loud failure that does not
@@ -224,18 +222,12 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
 /// Every out-of-scope `ExprKind`, one witness each, every one wrapped in
 /// `SAY`, which is implemented, so the wrapper is never itself the gap -- see
 /// the module doc's note on `VariableReference`.
-const EXPR_WITNESSES: &[Witness] = &[
-    Witness {
-        tag: "QualifiedCall",
-        source: "say ns:foo(1)\n",
-        category: Category::Expr,
-    },
-    Witness {
-        tag: "ClassResolver",
-        source: "say ns:Bar\n",
-        category: Category::Expr,
-    },
-];
+///
+/// **Empty, and that is a state this table is allowed to be in.** Every
+/// `ExprKind` is in scope, so a row here would assert a loud failure that does
+/// not happen -- which is what `assert_witness_set_is_complete` reads
+/// `owners.rs` to check, in both directions.
+const EXPR_WITNESSES: &[Witness] = &[];
 
 /// Confirms `path`'s program actually constructs `witness.tag` in the
 /// category it claims, before running it. A snippet that parses into the
@@ -354,7 +346,7 @@ fn assert_witness_set_is_complete() {
          InstructionKind variant (per arm, for Call and Address), no more \
          and no fewer"
     );
-    assert_eq!(expected_instructions.len(), 4);
+    assert_eq!(expected_instructions.len(), 3);
 
     let expected_exprs: Vec<&str> = EXPR_TAGS
         .iter()
@@ -370,7 +362,7 @@ fn assert_witness_set_is_complete() {
         "EXPR_WITNESSES must have exactly one entry per out-of-scope ExprKind \
          variant, no more and no fewer"
     );
-    assert_eq!(expected_exprs.len(), 2);
+    assert_eq!(expected_exprs.len(), 0);
 }
 
 #[test]
@@ -385,14 +377,14 @@ fn in_scope_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        40
+        41
     );
     assert_eq!(
         EXPR_TAGS
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        13
+        15
     );
 }
 

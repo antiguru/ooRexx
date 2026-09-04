@@ -26,15 +26,17 @@
 //!
 //! The steps this module implements, in the C++'s order: the package's
 //! installed classes, the public classes its `::REQUIRES` directives
-//! imported, `.local`, `.environment`, then the interpreter's own reflection
-//! names (`RexxActivation::rexxVariable`,
+//! imported, the `REXX` package's own public classes, the package's local
+//! environment directory, `.local`, `.environment`, then the interpreter's
+//! own reflection names (`RexxActivation::rexxVariable`,
 //! `execution/RexxActivation.cpp:2842`), then the name's own text with a
 //! period in front of it.
 //!
-//! The steps between those that this crate has nothing to consult are named
-//! rather than skipped silently: the `REXX` package's own public classes and
-//! a package local. Each is a table this crate does not build yet, so each is
-//! a lookup that would find nothing.
+//! **The `REXX` package's step is separate from `.environment` although the
+//! same two lines of `Setup.cpp` fill both**, and reading the directory
+//! instead was a silent wrong answer: measured, `.local~array = 'x'` makes
+//! `say .array` print `The Array class` on the oracle, because a system class
+//! is found four steps before `.local` is consulted.
 //!
 //! # `.NIL`, `.TRUE` and `.FALSE` never arrive here from an expression
 //!
@@ -561,6 +563,14 @@ impl Interp {
             return Ok(found);
         }
 
+        if let Some(found) = self.rexx_package_class(bare) {
+            return Ok(found);
+        }
+
+        if let Some(found) = self.package_local_entry(bare) {
+            return Ok(found);
+        }
+
         if let Some(found) =
             self.directory_lookup(&[EnvScope::Local, EnvScope::Environment], bare)?
         {
@@ -581,15 +591,23 @@ impl Interp {
         Ok(self.text(dotted))
     }
 
-    /// The class a `::CLASS` directive's `SUBCLASS`, `INHERIT` or `METACLASS`
-    /// keyword names, when the file's own directives do not declare it.
+    /// The class an **unqualified** `::CLASS` directive's `SUBCLASS`,
+    /// `INHERIT` or `METACLASS` keyword names, when the file's own directives
+    /// do not declare it. A `ns:Name` target never comes here --
+    /// `Interp::resolve_class_target` answers it from the namespace table
+    /// instead, which is `ClassResolver::lookup`'s own split.
     ///
     /// `PackageClass::findClass`'s order (`classes/PackageClass.cpp:1081`),
-    /// **with the steps this crate has nothing to consult named rather than
+    /// **with the step this crate has nothing to consult named rather than
     /// skipped silently**: installed classes, then the package's imported
     /// public classes, then `TheRexxPackage`'s public classes, then the
-    /// package local, then the directories. The package local needs
-    /// `Package~local`, which nothing here builds. **`TheRexxPackage`'s
+    /// package local, then the directories. **The package local is the step
+    /// left out**, and it is unobservable here rather than absent: a
+    /// directive installs before its package's first clause runs, and
+    /// `Package~local` is the only route into that directory, so nothing has
+    /// written to it by the time this is asked. `Interp::dot_variable` does
+    /// take the step, because a `.NAME` is evaluated after that point.
+    /// **`TheRexxPackage`'s
     /// public classes are substituted for rather than skipped**:
     /// `MemoryObject::completeSystemClass` (`memory/Setup.cpp:199`-`:206`)
     /// puts every system class into `TheEnvironment` *and* into
@@ -694,6 +712,75 @@ impl Interp {
             .get(&program)?
             .get(upper)
             .copied()
+    }
+
+    /// The running package's own local environment directory entry for `bare`
+    /// -- `packageLocal->get(internalName)` in `PackageClass::findClass`
+    /// (`classes/PackageClass.cpp:1122`), the step between the REXX package's
+    /// public classes and `.local`.
+    ///
+    /// **Any entry, not a class-valued one**, which is what the C++ reads
+    /// there and what makes this step useful to a program at all: measured,
+    /// oracle rc 0, `.context~package~local~zork = 'from package local'`
+    /// makes `.zork` answer that string.
+    ///
+    /// Absent until something asks for the directory, so a program that never
+    /// sends `~local` pays one map lookup and no allocation.
+    fn package_local_entry(&self, bare: &[u8]) -> Option<ObjRef> {
+        let program = self.running_program()?;
+        let directory = *self.package_locals.get(&Package::Program(program))?;
+        self.native_entry(directory, bare)
+    }
+
+    /// A public class of the interpreter's own package --
+    /// `TheRexxPackage->findPublicClass`, step 4 of the documented
+    /// environment-symbol search order (`rexxpg` `classes.xml:838`) and the
+    /// step `PackageClass::findClass` takes between a package's imports and
+    /// its own local (`classes/PackageClass.cpp:1105`).
+    ///
+    /// **Its two sources are the two the oracle files there.**
+    /// `completeSystemClass` (`memory/Setup.cpp:199`-`:206`) puts every
+    /// `Setup.cpp` class in that package, which is
+    /// [`rexx_classes::ClassRegistry`] here, and the shipped `.orx` files'
+    /// own `::CLASS ... PUBLIC` directives install into it, which is
+    /// [`Interp::library_programs`]' public class tables.
+    ///
+    /// **Not `.environment`**, although the same two lines of `Setup.cpp` put
+    /// the system classes in both: a class a *program* writes into
+    /// `.environment` is not in the REXX package, and reading the directory
+    /// would promote it four steps.
+    pub(crate) fn rexx_package_class(&mut self, upper: &[u8]) -> Option<ObjRef> {
+        for program in &self.library_programs {
+            if let Some(found) = self
+                .package_public_classes
+                .get(program)
+                .and_then(|table| table.get(upper))
+            {
+                return Some(*found);
+            }
+        }
+        self.classes().lookup(&String::from_utf8_lossy(upper))
+    }
+
+    /// `Package~local`: the package's own environment directory, allocated on
+    /// the first ask.
+    ///
+    /// **Rooted globally**, because nothing else refers to it between two asks
+    /// -- a program may write an entry, drop every reference, and read it back
+    /// through `.NAME` many clauses later.
+    pub(crate) fn package_local(&mut self, package: Package) -> ObjRef {
+        if let Some(found) = self.package_locals.get(&package).copied() {
+            return found;
+        }
+        let class = self
+            .classes()
+            .lookup("Directory")
+            .expect("Directory is a native class");
+        let directory = self.native_instance(class);
+        self.roots
+            .add_global(&package_local_root_key(package), directory);
+        self.package_locals.insert(package, directory);
+        directory
     }
 
     /// The entry `scope`'s directory holds for `name`, if any.
@@ -1652,6 +1739,12 @@ fn annotation_root_key(site: &Annotated) -> String {
         }
         Annotated::Compiled(count) => format!("annotations of compiled method {count}"),
     }
+}
+
+/// The [`rexx_core::RootSet::add_global`] key one package's own local
+/// environment directory is held under.
+fn package_local_root_key(package: Package) -> String {
+    format!("the package local of {}", package_root_key(package))
 }
 
 /// The [`rexx_core::RootSet::add_global`] key one package table is held under.

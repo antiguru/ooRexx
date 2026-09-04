@@ -7978,35 +7978,16 @@ fn the_method_source_shapes_this_task_leaves_refuse_loudly() {
 /// its first clause, and the oracle prints nothing for the ones it also
 /// refuses.
 ///
-/// **`::REQUIRES` has only its two subkeyword forms here.** The plain form
-/// opens the file it names, so it is no longer a gap: a name nothing resolves
-/// is the oracle's own 43.901, asserted by the case below this one.
+/// **`::REQUIRES` has only its `LIBRARY` form here.** The plain form and the
+/// `NAMESPACE` form both open the file they name, so neither is a gap: a name
+/// nothing resolves is the oracle's own 43.901, asserted by the case below
+/// this one, and a namespace nothing registered is 98.987.
 #[test]
 fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
     let cases: &[(&[u8], &str)] = &[
         (
-            b"say 'main ran'\n::class foo subclass ns:other\n",
-            "::CLASS naming a namespace is not implemented (Phase 5)",
-        ),
-        (
-            b"say 'main ran'\n::class foo mixinclass ns:other\n",
-            "::CLASS naming a namespace is not implemented (Phase 5)",
-        ),
-        (
-            b"say 'main ran'\n::class foo inherit ns:other\n",
-            "::CLASS naming a namespace is not implemented (Phase 5)",
-        ),
-        (
-            b"say 'main ran'\n::class foo metaclass ns:other\n",
-            "::CLASS naming a namespace is not implemented (Phase 5)",
-        ),
-        (
             b"say 'main ran'\n::requires zzznolib library\n",
             "::REQUIRES LIBRARY is not implemented (Phase 7)",
-        ),
-        (
-            b"say 'main ran'\n::requires 'helper.rex' namespace ns\n",
-            "::REQUIRES NAMESPACE is not implemented (Phase 5)",
         ),
         (
             b"say 'main ran'\n::routine z external \"LIBRARY nosuchlib nosuchfn\"\n",
@@ -8163,62 +8144,55 @@ fn a_gap_the_oracle_diagnoses_before_a_class_refuses_ahead_of_the_class_error() 
     }
 }
 
-/// **A `::CLASS` keyword gap is raised inside the class pass, and that is
-/// asserted here rather than left incidental.**
+/// **An unresolvable `::CLASS` keyword is diagnosed inside the class pass,
+/// and that is asserted here rather than left incidental.**
 ///
-/// The `::CLASS` forms [`directive_gap`] still names need no stage of their
-/// own: `Interp::install_class_at` consults it itself, so the refusal is
-/// raised while the classes are being created -- which is where the oracle
-/// diagnoses them too. Nothing asserted that until this test, so a change to
-/// `install_class_at` could have moved them with nothing going red.
+/// A namespace qualifier is the sharpest case: `Interp::resolve_class_target`
+/// answers it from the package's namespace table, so the refusal is raised
+/// while the classes are being created -- which is where the oracle
+/// diagnoses it too. Nothing asserted that until this test, so a change to
+/// `install_class_at` could have moved it with nothing going red.
 ///
 /// Each form appears in two programs and they pin opposite sides:
 ///
-/// * **above a `::CLASS` that cannot install**, the gap must win, because the
-///   class pass reaches the gap's own directive first. Without
-///   `install_class_at`'s check the class error answers instead -- a wrong
-///   answer, since the oracle blames the gap's line.
-/// * **above a cyclic `::CLASS` pair**, the *cycle* must win at 98.911 rc 158,
+/// * **above a `::CLASS` that cannot install**, the qualifier must win at
+///   98.987, because the class pass reaches its own directive first. Blaming
+///   the class error instead is a wrong answer, since the oracle blames the
+///   qualifier's line -- measured, on all four keywords.
+/// * **above a cyclic `::CLASS` pair**, the *cycle* must win at 98.911,
 ///   because `class_install_order` runs before any class is created. Measured
 ///   on the oracle, which agrees. This row is what would redden if one of
 ///   these forms were ever hoisted into the first walk with `::ANNOTATE` and
 ///   the `EXTERNAL` forms, where it does not belong.
+///
+/// Both exit 158, so the exit code alone separates neither from the other nor
+/// from the pre-namespace refusal; the sub-code and the blamed line do.
 #[test]
 fn a_class_keyword_gap_is_raised_inside_the_class_pass() {
     let failing_class = "::class a subclass zzznotaclass\n";
     let cycle = "::class a subclass b\n::class b subclass a\n";
-    let cases: &[(&str, &str)] = &[
-        (
-            "::class q subclass ns:other\n",
-            "::CLASS naming a namespace is not implemented (Phase 5)",
-        ),
-        (
-            "::class q mixinclass ns:other\n",
-            "::CLASS naming a namespace is not implemented (Phase 5)",
-        ),
-        (
-            "::class q inherit ns:other\n",
-            "::CLASS naming a namespace is not implemented (Phase 5)",
-        ),
-        (
-            "::class q metaclass ns:other\n",
-            "::CLASS naming a namespace is not implemented (Phase 5)",
-        ),
+    let cases: &[&str] = &[
+        "::class q subclass ns:other\n",
+        "::class q mixinclass ns:other\n",
+        "::class q inherit ns:other\n",
+        "::class q metaclass ns:other\n",
     ];
-    for (gap, message) in cases {
+    for gap in cases {
         let source = format!("say 'main ran'\n{gap}{failing_class}");
         let outcome = routine_program(source.as_bytes());
+        let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
         assert_eq!(
-            outcome.exit_code,
-            crate::NOT_IMPLEMENTED_EXIT,
-            "{source}: exit code, stderr {}",
-            String::from_utf8_lossy(&outcome.stderr)
+            outcome.exit_code, 158,
+            "{source}: exit code, stderr {stderr}"
         );
         assert_eq!(outcome.stdout, b"", "{source}: stdout");
-        assert_eq!(
-            outcome.stderr,
-            format!("rexx-exec: {message}\n").into_bytes(),
-            "{source}: stderr"
+        assert!(
+            stderr.contains("Error 98.987:  Namespace \"NS\" not found in package"),
+            "{source}: stderr {stderr}"
+        );
+        assert!(
+            stderr.contains(&format!("*-* {}", gap.trim_end())),
+            "{source}: the report does not echo the qualifier's own clause: {stderr}"
         );
 
         let source = format!("say 'main ran'\n{gap}{cycle}");

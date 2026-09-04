@@ -517,6 +517,7 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(0),
         native_annotations,
     ),
+    ("Package", "LOCAL", Arity::Fixed(0), native_package_local),
     ("Package", "NAME", Arity::Fixed(0), native_package_name),
     (
         "Package",
@@ -6436,6 +6437,27 @@ fn native_package(
 ) -> Result<Option<ObjRef>, Failure> {
     let class = class_receiver(interp, receiver)?;
     Ok(Some(interp.package_object_for(class)))
+}
+
+/// `Package~local`: the package's own environment directory, which is
+/// `rexxpg`'s step 5 of the environment-symbol search order and the one route
+/// a program has to it.
+///
+/// Measured, oracle rc 0: empty on the first ask, the same object on every
+/// ask, and an entry written into it answers a `.NAME` ahead of `.local` --
+/// `PackageClass::findClass` reads `packageLocal` between the REXX package's
+/// public classes and `ActivityManager::getLocalEnvironment`
+/// (`classes/PackageClass.cpp:1122`).
+fn native_package_local(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(package) = interp.which_package(receiver) else {
+        return Err(Loud::receiver_class("a package object this crate did not build").into());
+    };
+    Ok(Some(interp.package_local(package)))
 }
 
 /// `Package~name`: the package's own name -- `PackageClass::getProgramName`

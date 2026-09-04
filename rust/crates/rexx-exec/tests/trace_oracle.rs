@@ -49,6 +49,7 @@
 //! | `>R>` | `use_arg_alias.rex` |
 //! | `>M>` | `message_send.rex` |
 //! | `>.>` | `parse_placeholder.rex` |
+//! | `>N>` | `namespace_lookup.rex` |
 //!
 //! **Several witnesses below claim no prefix the table above does not
 //! already cover, and are here for a *content* difference instead** --
@@ -434,6 +435,27 @@ fn message_send_covers_the_message_result_line() {
     check_witness("message_send", &path);
 }
 
+/// `>N>`: a namespace-qualified class lookup, `w:NsWidget` against a
+/// `::REQUIRES ... NAMESPACE w`.
+///
+/// The tag is `namespace:class`, both halves upcased and the pair
+/// **unquoted** -- `traceClassResolution` builds it as
+/// `n->concatWith(c, ':')` and passes `quoteTag` false
+/// (`RexxActivation.hpp:358`), which is what separates this line from `>M>`
+/// beside it.
+///
+/// **The one witness here that needs a second file**, `namespace_lookup_lib
+/// .cls`, which the `::REQUIRES` finds through the program's own directory --
+/// `check_witness` hands `run_program` this file's absolute path, so that
+/// directory is this one. Nothing in the transcript names either path, which
+/// is why the expectation can be committed where `>I>`/`<I<`'s cannot.
+#[test]
+fn namespace_lookup_covers_the_class_resolution_line() {
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/trace_oracle/namespace_lookup.rex");
+    check_witness("namespace_lookup", &path);
+}
+
 /// The module doc's own table, as data: which prefixes each witness is
 /// claimed to cover. See the module doc's own note on why this exists --
 /// found missing by a branch review (H3), which swapped `keyword_while.rex`
@@ -476,6 +498,7 @@ const WITNESS_PREFIXES: &[(&str, &[&str])] = &[
     ),
     ("pull_queue", &["*-*", ">>>", ">=>", ">K>"]),
     ("message_send", &["*-*", ">>>", ">=>", ">L>", ">A>", ">M>"]),
+    ("namespace_lookup", &["*-*", ">>>", ">N>"]),
 ];
 
 /// Every prefix a witness below is expected to reach, between them.
@@ -485,7 +508,7 @@ const WITNESS_PREFIXES: &[(&str, &[&str])] = &[
 /// ever really emit would go unnoticed otherwise).
 const CLAIMED_PREFIXES: &[&str] = &[
     "*-*", ">>>", ">=>", ">L>", ">V>", ">O>", ">K>", ">C>", ">P>", ">E>", ">A>", ">F>", ">R>",
-    ">.>", ">M>",
+    ">.>", ">M>", ">N>",
 ];
 
 fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
@@ -619,8 +642,6 @@ enum Coverage {
 ///   bring this prefix into reach; issuing a command does, and that is the
 ///   half of `ADDRESS` that is not 4c's. See `phase-4-exclusions.txt`'s own
 ///   `+++` row for the transcripts.
-/// * `>N>` -- Phase 5. `traceClassResolution`, a namespace-qualified name,
-///   which needs `::REQUIRES`; `ExprKind::QualifiedCall` is Phase 5's there.
 ///
 /// `>I>` and `<I<` were owned by 4c here and are now witnessed, by
 /// `corpus/lang/routine_dispatch.rex` rather than by a file in this
@@ -644,7 +665,7 @@ const PREFIX_COVERAGE: &[(&str, Coverage)] = &[
     (">A>", Coverage::Witnessed),
     (">=>", Coverage::Witnessed),
     (">I>", Coverage::WitnessedLive(LIVE_INVOCATION_WITNESS)),
-    (">N>", Coverage::Owned("Phase 5")),
+    (">N>", Coverage::Witnessed),
     (">K>", Coverage::Witnessed),
     (">R>", Coverage::Witnessed),
     ("<I<", Coverage::WitnessedLive(LIVE_INVOCATION_WITNESS)),
@@ -732,16 +753,16 @@ const LIVE_INVOCATION_WITNESS: &str = "lang/routine_dispatch.rex";
 /// `Witnessed` and `WitnessedLive` together: both are compared against the
 /// oracle byte for byte, and the split between them is about where the
 /// expectation lives, not about how strict the check is.
-const WITNESSED_PREFIX_COUNT: usize = 17;
+const WITNESSED_PREFIX_COUNT: usize = 18;
 
 /// The rest, each with an owner. `WITNESSED_PREFIX_COUNT` plus this is
 /// asserted to be the whole table, so neither number can drift on its own.
-const OUT_OF_SCOPE_PREFIX_COUNT: usize = 2;
+const OUT_OF_SCOPE_PREFIX_COUNT: usize = 1;
 
 /// The phases an owner may name. A phase that has finished cannot own a
 /// prefix -- whatever it owned is witnessed by then -- so a finished phase's
 /// name does not appear here.
-const OWNER_PHASES: &[&str] = &["Phase 5", "Phase 7"];
+const OWNER_PHASES: &[&str] = &["Phase 7"];
 
 /// Criterion 3's coverage measure, asserted rather than printed.
 ///
@@ -765,7 +786,7 @@ const OWNER_PHASES: &[&str] = &["Phase 5", "Phase 7"];
 ///    table.
 /// 4. Every owner names a phase from [`OWNER_PHASES`].
 #[test]
-fn the_trace_surfaces_coverage_is_seventeen_of_nineteen_with_owners_for_the_rest() {
+fn the_trace_surfaces_coverage_is_eighteen_of_nineteen_with_an_owner_for_the_rest() {
     let mut listed: Vec<&str> = PREFIX_COVERAGE.iter().map(|(prefix, _)| *prefix).collect();
     listed.sort_unstable();
     let before_dedup = listed.len();

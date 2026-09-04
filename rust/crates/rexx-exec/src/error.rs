@@ -444,6 +444,48 @@ impl Raised {
         Raised::syntax(43, 1, vec![name.to_vec()])
     }
 
+    /// 43.902: a `ns:name(...)` or `CALL ns:name` whose namespace resolved and
+    /// whose public routines do not hold `name`. Two substitutions, the
+    /// routine name and the namespace, both upcased by the scanner.
+    ///
+    /// `CallInstruction.cpp:455`, reached after `findPublicRoutine` answers
+    /// nothing. Measured, rc 213 with the earlier output kept: a required
+    /// file's non-`PUBLIC` `::ROUTINE privr` reached as `w:privr()` reports
+    /// `Error 43.902:  Routine "PRIVR" not found in namespace "W".`
+    ///
+    /// **The `REXX` namespace holds no routine at all**, measured:
+    /// `rexx:length('abc')` is this error naming `"LENGTH"` and `"REXX"`,
+    /// not the builtin.
+    pub(crate) fn namespace_routine_not_found(name: &[u8], namespace: &[u8]) -> Raised {
+        Raised::syntax(43, 902, vec![name.to_vec(), namespace.to_vec()])
+    }
+
+    /// 98.987: a namespace qualifier no `::REQUIRES ... NAMESPACE` of the
+    /// running package registered. Two substitutions, the namespace and the
+    /// **package's own path**.
+    ///
+    /// Measured, rc 158: `say q:Widget` with only a `namespace w` registered
+    /// reports `Error 98.987:  Namespace "Q" not found in package
+    /// "<path>".`, and `::class Sub subclass q:Widget` reports the same
+    /// against the requiring file's path from the directive's own clause.
+    pub(crate) fn namespace_not_found(namespace: &[u8], package: &str) -> Raised {
+        Raised::syntax(
+            98,
+            987,
+            vec![namespace.to_vec(), package.as_bytes().to_vec()],
+        )
+    }
+
+    /// 98.988: a namespace that resolved and whose public classes do not hold
+    /// the name. Two substitutions, the class name and the namespace.
+    ///
+    /// Measured, rc 158: a required file's non-`PUBLIC` `::class Hidden`
+    /// reached as `w:Hidden` reports `Error 98.988:  Class "HIDDEN" not found
+    /// in namespace "W".`, and `rexx:Zork` reports the same against `"REXX"`.
+    pub(crate) fn namespace_class_not_found(name: &[u8], namespace: &[u8]) -> Raised {
+        Raised::syntax(98, 988, vec![name.to_vec(), namespace.to_vec()])
+    }
+
     /// 90.998: a `::METHOD ... EXTERNAL 'LIBRARY REXX name'` whose entry
     /// point the `REXX` package does not export. `entry` is the name the
     /// directive resolved against -- its third word, or the method's own name

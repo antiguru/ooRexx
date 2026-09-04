@@ -628,20 +628,23 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
   programs are the witnesses.
 
   A namespace-qualified target on any keyword that takes a class reference --
-  SUBCLASS, MIXINCLASS, INHERIT and METACLASS -- is still refused, under one
-  message that names none of them: the namespace is a package this crate does
-  not load, and the oracle's own answer is 98.987 for every one of those
-  spellings rather than a resolution. Every spelling has an in-crate row in
-  `every_directive_this_crate_cannot_install_refuses_before_the_first_clause`
-  and in `a_class_keyword_gap_is_raised_inside_the_class_pass`.
+  SUBCLASS, MIXINCLASS, INHERIT and METACLASS -- RESOLVES. CLOSED BY PHASE 5d
+  TASK 5, which built the namespace table `::REQUIRES ... NAMESPACE` fills.
+  The entry stood here because the namespace was a package this crate did not
+  load; it loads one now, and a qualifier that names none answers the oracle's
+  own 98.987 rather than a refusal. All four spellings are in
+  `a_class_keyword_gap_is_raised_inside_the_class_pass`, which asserts the
+  sub-code and the blamed clause, and `corpus/lang/package_namespace.rex`
+  carries the resolving side.
 
   THE ONE DELIBERATE OVER-REFUSAL, which rejects a program the oracle runs.
   It is not silent: it names a phase and exits with NOT_IMPLEMENTED_EXIT,
   which is this file's standing trade -- a declared gap over a wrong answer.
 
     ::REQUIRES IS REFUSED EVEN WHEN THE FILE IS PRESENT. CLOSED BY PHASE 5d
-    TASK 4, which built the four-route search, the install and the prologue;
-    only the LIBRARY and NAMESPACE subkeywords still refuse. The entry stands
+    TASK 4, which built the four-route search, the install and the prologue,
+    and by TASK 5, which built NAMESPACE; only the LIBRARY subkeyword still
+    refuses, and it is Phase 7's. The entry stands
     as written below because the reasoning is what made it an over-refusal
     rather than an omission. This one
     contradicts a measurement the task brief recorded as a requirement, and
@@ -1472,13 +1475,11 @@ one place a wrong call quietly breaks criterion 5's policing.
                     after which the variant stopped failing loudly for SOME
                     call target, which was 4b -- an internal-routine call
                     evaluates as soon as 4b lands, and Task 4 is the task that
-                    landed it. **Unlike `InstructionKind::Call`, which stays
-                    split because two of `rexx_parse::Call`'s four arms
-                    (`Trap`, `Qualified`) are still 4b's/Phase 5's own,
-                    `ExprKind::Call`'s `CallTarget` has exactly two forms and
-                    both are 4b's -- there is no later-phase arm left hiding
-                    inside it, so the whole variant closes rather than staying
-                    split.** A reader who reaches the end of 4b and finds
+                    landed it. **`ExprKind::Call`'s `CallTarget` has
+                    exactly two forms and both are 4b's, so the whole variant
+                    closes rather than staying split. `InstructionKind::Call`
+                    stays split although every one of its arms is in scope
+                    too, because the four resolve by four different rules.** A reader who reaches the end of 4b and finds
                     `f(1)` still loud for a builtin name is seeing 4c's own
                     unclosed half, which this row no longer records because
                     `ExprKind::Call` itself is no longer an ExprKind ownership
@@ -1493,20 +1494,18 @@ one place a wrong call quietly breaks criterion 5's policing.
                     20.930 otherwise), and `USE` -- the instruction that reads
                     an argument on the receiving end -- is 4b's.
 
-  QualifiedCall     Phase 5. `ns:name(...)` needs a resolved package/namespace
-                    object; namespaces come from `::REQUIRES`, and "every
-                    directive... [is] Phase 5's" per the split table's
-                    assigned-elsewhere paragraph.
-                    That quoted phrase now carries a carve-out -- the design
-                    spec reads "every directive except ::ROUTINE, which is
-                    4c's" -- and this row is unaffected by it, because what
-                    a QualifiedCall needs is a namespace, namespaces come
-                    from ::REQUIRES, and ::REQUIRES is on the Phase 5 side of
-                    the carve-out.
+  QualifiedCall     CLOSED BY PHASE 5d TASK 5. `ns:name(...)` resolves against
+                    the named namespace's public routines and nothing else --
+                    43.902 for a name it does not export and 98.987 for a
+                    namespace nothing registered, both the oracle's own. The
+                    row is kept rather than deleted, per this section's own
+                    convention: what it recorded was that the variant needed
+                    a namespace, and it did.
 
-  ClassResolver     Phase 5. Explicitly: "environment symbols beyond .nil,
-                    .true and .false are Phase 5's", and this variant is how a
-                    namespace-qualified class name resolves.
+  ClassResolver     CLOSED BY PHASE 5d TASK 5. `ns:Name` resolves against the
+                    same table, answering 98.988 for a class the namespace does
+                    not export. The reserved `rexx:` qualifier reaches the
+                    interpreter's own package.
 
   List              Phase 5. The general form builds an array, which is Phase
                     5's object model -- the same reasoning Task 14b's gap
@@ -1516,8 +1515,10 @@ one place a wrong call quietly breaks criterion 5's policing.
   Message           Phase 5, per the spec directly (see above).
 
 This section is asserted the same way EXCLUSIONS and DEVIATIONS are: the set
-of five still-open names and their owners is fixed, and `coverage.rs`/
-`loud.rs` fail if their own owner table drifts from it. `Call`'s own row is
+of still-open names and their owners is fixed, and `coverage.rs`/
+`loud.rs` fail if their own owner table drifts from it. **Every `ExprKind` row
+above is closed**, which `loud.rs`'s `EXPR_WITNESSES` now records by being
+empty and `owners.rs`'s count assertion by reading zero. `Call`'s own row is
 kept rather than deleted outright, the same "CLOSED DEFECTS" convention
 below applies to a row whose own history is worth a reader tripping over
 rather than losing to a quiet deletion -- removing it needs the same

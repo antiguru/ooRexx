@@ -821,6 +821,22 @@ impl Interp {
         push_tagged(&mut self.trace, ">E>", indent, false, tag, " => ", value);
     }
 
+    /// `>N>` (`TRACE_PREFIX_NAMESPACE`): a namespace-qualified class lookup's
+    /// result, tagged with `namespace:class` and unquoted --
+    /// `traceClassResolution` builds the tag as `n->concatWith(c, ':')` and
+    /// passes `quoteTag` false (`RexxActivation.hpp:358`).
+    ///
+    /// Measured, `trace i` over `say w:Widget`:
+    /// `       >N>   W:WIDGET => "The WIDGET class"`, followed by the `>>>`
+    /// the `SAY` owes. Both halves of the tag arrive upcased, because a
+    /// qualifier and a qualified name are both symbols.
+    pub(crate) fn trace_namespace(&mut self, indent: usize, tag: &[u8], value: &[u8]) {
+        if !self.trace_mode().intermediates {
+            return;
+        }
+        push_tagged(&mut self.trace, ">N>", indent, false, tag, " => ", value);
+    }
+
     /// The `>O>` line one binary operator's result owes, from the value
     /// itself, at the indent the clause in force is tracing values at.
     ///
