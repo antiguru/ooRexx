@@ -627,14 +627,23 @@ unpiped to `…/scratchpad/task-6/flip/logs/gates2/status.txt` with the commit s
 
 | # | command | exit |
 |---|---|---|
-| 1 | `cargo fmt --all --check` | **G1** |
-| 2 | `cargo clippy --workspace --all-targets -- -D warnings` | **G2** |
-| 3 | `cargo test --release --workspace --no-fail-fast` | **G3** |
-| 4 | `REXX_CORPUS_GATE=1 cargo test --release --workspace --no-fail-fast` | **G4** |
-| 5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | **G5** |
-| 6 | `REXX_PHASE_GATE=5c REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **G6** |
-| 7 | `REXX_PHASE_GATE=5d REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **G7** |
+| 1 | `cargo fmt --all --check` | **0** |
+| 2 | `cargo clippy --workspace --all-targets -- -D warnings` | **0** |
+| 3 | `cargo test --release --workspace --no-fail-fast` | **0** |
+| 4 | `REXX_CORPUS_GATE=1 cargo test --release --workspace --no-fail-fast` | **0** |
+| 5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | **0** |
+| 6 | `REXX_PHASE_GATE=5c REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **0** |
+| 7 | `REXX_PHASE_GATE=5d REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **0** |
 
-**The count that moves this time is `trace_oracle`'s: 33 → 34.** `gate_table_c` stays at 15 and
-`gate_table_d` at 16; neither table's row set is touched, so G6 and G7 should read exactly what the
-first commit's run read.
+**The count that moves this time is `trace_oracle`'s: 33 -> 34**, and it did. Across the two runs'
+own G3 output, `33 passed` appears once at `63aaeb665` and not at all at `b5f8898e0`, where
+`34 passed` appears instead -- so the new test is present and running rather than merely counted.
+
+`gate_table_c` stayed at 15 and `gate_table_d` at 16, and G7's per-owner breakdown is identical to
+the first run's line for line: table C `13 + 82 + 10 + 5 = 110` open under `6`, `7`, the
+`StackFrame` owner and never-agrees, table D `5d: 1 rows, 0 not yet agree`. Neither table's row set
+is touched by this commit, so identical was the expected reading and a *changed* one would have
+meant the guard reached further than one file.
+
+Filled by the controller from the second run's status file after `finished`. This is Phase 5d's last
+commit.
