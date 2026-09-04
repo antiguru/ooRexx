@@ -181,3 +181,61 @@ work and are **not** on that path.
   `String`'s 112 loud rows suggest the surrounding machinery may already exist, and that was not
   checked.
 * **No benchmark**, no gate run — nothing in this document changes code.
+
+---
+
+## Decisions taken, 2026-09-04
+
+Moritz decided D-P7-2 and D-P7-4. The other three were my recommendation, put to him with the
+survey and not separately confirmed; they are marked as such so a reader knows which is which.
+
+**D-P7-2 — `MutableBuffer` gets a 5c follow-up of its own, before Phase 7 starts.** Not folded into
+Phase 7. Cleaner ownership, and it fixes the class rather than the five methods `File` happens to
+need. It costs a plan and gate cycle before any stream work begins, which was the trade taken.
+
+**D-P7-4 — Phase 7's gate is the method-body rows plus corpus programs.** `File` and `Stream` rows
+move `loud` → `answers` in `corpus/method-bodies.txt`, and a corpus program per stream operation is
+compared byte for byte against the oracle. Table C's rows cannot be the gate for the reason §3
+gives. L2 starting was offered and not taken, so `SysFileExists`/`SysFileTree` are not gate
+criteria — they stay the phase's purpose without being its exit test.
+
+**D-P7-1 — defer the `SAY`-through-`.OUTPUT` indirection (my recommendation).** Measured, and the
+indirection is real: `.output~destination(.stderr)` moves `SAY`'s output to stderr on the oracle,
+so `SAY` genuinely goes through the Monitor. But `.OUTPUT` is a `Monitor` and not a `Stream`
+(`.output~isA(.Stream)` is `0`; `.STDOUT` is the Stream behind it), and `.OUTPUT`, `.STDOUT`,
+`.STDERR` and `Monitor~destination` are all loud here — so **no program can currently observe the
+difference**, and a loud refusal is a safe answer rather than a wrong one. Implement `.STDOUT` and
+`.STDERR` as Streams, leave `.OUTPUT` and `Monitor` loud, and keep `SAY` direct. Routing `SAY`
+through a Monitor send is a hot-path change and parity is a standing goal; it belongs with `.OUTPUT`
+whenever that is built, as its own scoped change with its own measurement.
+
+**D-P7-3 — `Family::Queue` moves off Phase 7 (my recommendation).** `dispatch/native.rs:139` returns
+`"Phase 7"` for it and the ten entries are the external-queue RXAPI surface.
+
+**D-P7-5 — the excluded-builtin owner message is fixed in Phase 7's first task (my
+recommendation)**, with an assertion so it cannot drift back.
+
+---
+
+## What the `MutableBuffer` follow-up is actually for
+
+Measured after the decision, because it changes the shape of that work:
+
+```text
+.MutableBuffer~new            oracle: The MutableBuffer class    crate: same, rc 0
+say .MutableBuffer~new('abc') oracle: abc                        crate: rc 120 MAKESTRING loud
+~length ~string ~endsWith ~delstr   oracle answers               crate: each loud
+```
+
+**The constructor is built and the 51 instance methods are hollow**, which is 5c's design rather
+than an oversight. `dispatch.rs`'s own doc says why:
+
+> The buffer's contents are not kept, and nothing that would read them answers -- which is what
+> keeps the rendering honest, since the oracle renders a buffer as its contents rather than as a
+> default name
+
+So the constructor deliberately carries no state, and every reader refuses, so that hollowness is a
+declared gap and never a wrong answer. **The follow-up therefore has to give the constructor real
+storage first**; it is not a matter of filling in method bodies against state that already exists.
+`a_constructor_taking_arguments_answers_an_instance_and_refuses_its_state` asserts the current pair
+and will have to change with it.
