@@ -10,6 +10,7 @@ fn an_object_with_uninit_is_reported_rather_than_swept_immediately() {
         name: None,
         pools: ScopePools::new(),
         own: None,
+        native: None,
     });
     assert!(heap.set_uninit(obj), "the handle names a live object");
     let stats = heap.collect(&roots);
@@ -74,6 +75,7 @@ fn a_weak_reference_to_an_uninit_pending_object_is_still_cleared() {
         name: None,
         pools: ScopePools::new(),
         own: None,
+        native: None,
     });
     assert!(heap.set_uninit(target), "the handle names a live object");
     let weak = heap.alloc(Body::WeakRef(target));
@@ -114,6 +116,7 @@ fn an_object_flagged_twice_across_a_clear_is_reported_once() {
         name: None,
         pools: ScopePools::new(),
         own: None,
+        native: None,
     });
     assert!(heap.set_uninit(obj), "the handle names a live object");
     heap.clear_uninit_all(&[obj]);
@@ -141,6 +144,7 @@ fn a_still_unreachable_flagged_object_is_reported_once_and_resurrected_every_tim
         name: None,
         pools: ScopePools::new(),
         own: None,
+        native: None,
     });
     assert!(heap.set_uninit(obj), "the handle names a live object");
     assert_eq!(heap.collect(&roots).pending_uninit, vec![obj]);
@@ -169,6 +173,7 @@ fn taking_the_flagged_objects_clears_every_flag() {
             name: None,
             pools: ScopePools::new(),
             own: None,
+            native: None,
         });
         roots.add_global(&format!(".KEPT{index}"), obj);
         assert!(heap.set_uninit(obj));

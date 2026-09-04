@@ -1,0 +1,54 @@
+count 53
+/* A MutableBuffer keeps the contents and the capacity it is built with:
+   length, string, endsWith, append, delstr, getBufferSize and setBufferSize
+   each answer what the oracle answers. Rendering the buffer itself -- say,
+   concatenation, makeString -- is deliberately absent. */
+buf = .MutableBuffer~new('abcdef')
+say buf~length
+say buf~string
+say buf~endsWith('ef')
+buf~append('ghi')
+say buf~length
+say buf~string
+buf~delstr(9)
+say buf~string
+say .MutableBuffer~new('x', 999)~getBufferSize
+say .MutableBuffer~new(copies('x', 400))~getBufferSize
+buf~setBufferSize(500)
+say buf~length buf~getBufferSize
+/* setBufferSize below the contents truncates them and the capacity follows. */
+cut = .MutableBuffer~new('abcdef', 100)
+cut~setBufferSize(3)
+say cut~length cut~getBufferSize cut~string
+/* setBufferSize(0) empties the buffer and takes the capacity back to the
+   constructor's default, whether that default was given or implied. */
+big = .MutableBuffer~new(copies('x', 400))
+big~setBufferSize(0)
+say big~length big~getBufferSize
+grown = .MutableBuffer~new('abc', 500)
+grown~append(copies('y', 600))
+grown~append(copies('y', 600))
+say grown~length grown~getBufferSize
+grown~setBufferSize(0)
+say grown~length grown~getBufferSize
+/* An append that outgrows the capacity doubles it, or takes what it needs. */
+step = .MutableBuffer~new('', 10)
+sizes = ''
+do 8
+  step~append('1234567')
+  sizes = sizes step~getBufferSize
+end
+say strip(sizes)
+/* append takes several arguments; a delstr start past the end deletes
+   nothing and an omitted start is 1; endsWith is 0 for a suffix that is
+   absent or longer than the contents; the mutators answer the receiver. */
+buf~append('i', 'jk')
+say buf~string buf~length
+buf~delstr(2, 3)
+say buf~string
+buf~delstr(99)
+say buf~string
+say buf~endsWith('k') buf~endsWith('x') buf~endsWith(copies('z', 50))
+say buf~setBufferSize(4)~string
+say buf~delstr(, 2)~string
+say buf~append('h')~length

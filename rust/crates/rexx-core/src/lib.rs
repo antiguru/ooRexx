@@ -28,8 +28,8 @@ mod roots;
 
 pub use behaviour::BehaviourTable;
 pub use body::{
-    BehaviourHandle, BehaviourId, Body, MethodId, NativeObject, NotNumeric, Object, ObjectMethod,
-    ObjectMethods, ScopePools, VarRef, VarRefHome,
+    BehaviourHandle, BehaviourId, Body, BufferState, MethodId, NativeObject, NotNumeric, Object,
+    ObjectMethod, ObjectMethods, ScopePools, VarRef, VarRefHome,
 };
 pub use bytes::{Bytes, INLINE_BYTES};
 pub use handle::{

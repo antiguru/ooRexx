@@ -1082,7 +1082,7 @@ Monitor	unknown	instance	answers	rc 163
 MutableBuffer	new	class	loud	method "MAKESTRING" of class "MutableBuffer"
 MutableBuffer	[]	instance	loud	method "[]" of class "MutableBuffer"
 MutableBuffer	[]=	instance	loud	method "[]=" of class "MutableBuffer"
-MutableBuffer	append	instance	loud	method "APPEND" of class "MutableBuffer"
+MutableBuffer	append	instance	answers	rc 163
 MutableBuffer	caselessChangeStr	instance	loud	method "CASELESSCHANGESTR" of class "MutableBuffer"
 MutableBuffer	caselessContains	instance	loud	method "CASELESSCONTAINS" of class "MutableBuffer"
 MutableBuffer	caselessContainsWord	instance	loud	method "CASELESSCONTAINSWORD" of class "MutableBuffer"
@@ -1099,13 +1099,13 @@ MutableBuffer	contains	instance	loud	method "CONTAINS" of class "MutableBuffer"
 MutableBuffer	containsWord	instance	loud	method "CONTAINSWORD" of class "MutableBuffer"
 MutableBuffer	countStr	instance	loud	method "COUNTSTR" of class "MutableBuffer"
 MutableBuffer	delete	instance	loud	method "DELETE" of class "MutableBuffer"
-MutableBuffer	delStr	instance	loud	method "DELSTR" of class "MutableBuffer"
+MutableBuffer	delStr	instance	loud	method "MAKESTRING" of class "MutableBuffer"
 MutableBuffer	delWord	instance	loud	method "DELWORD" of class "MutableBuffer"
-MutableBuffer	endsWith	instance	loud	method "ENDSWITH" of class "MutableBuffer"
-MutableBuffer	getBufferSize	instance	loud	method "GETBUFFERSIZE" of class "MutableBuffer"
+MutableBuffer	endsWith	instance	answers	rc 168
+MutableBuffer	getBufferSize	instance	answers	rc 0
 MutableBuffer	insert	instance	loud	method "INSERT" of class "MutableBuffer"
 MutableBuffer	lastPos	instance	loud	method "LASTPOS" of class "MutableBuffer"
-MutableBuffer	length	instance	loud	method "LENGTH" of class "MutableBuffer"
+MutableBuffer	length	instance	answers	rc 0
 MutableBuffer	lower	instance	loud	method "LOWER" of class "MutableBuffer"
 MutableBuffer	makeArray	instance	loud	method "MAKEARRAY" of class "MutableBuffer"
 MutableBuffer	makeString	instance	loud	method "MAKESTRING" of class "MutableBuffer"
@@ -1114,11 +1114,11 @@ MutableBuffer	matchChar	instance	loud	method "MATCHCHAR" of class "MutableBuffer
 MutableBuffer	overlay	instance	loud	method "OVERLAY" of class "MutableBuffer"
 MutableBuffer	pos	instance	loud	method "POS" of class "MutableBuffer"
 MutableBuffer	replaceAt	instance	loud	method "REPLACEAT" of class "MutableBuffer"
-MutableBuffer	setBufferSize	instance	loud	method "SETBUFFERSIZE" of class "MutableBuffer"
+MutableBuffer	setBufferSize	instance	answers	rc 163
 MutableBuffer	setText	instance	loud	method "SETTEXT" of class "MutableBuffer"
 MutableBuffer	space	instance	loud	method "SPACE" of class "MutableBuffer"
 MutableBuffer	startsWith	instance	loud	method "STARTSWITH" of class "MutableBuffer"
-MutableBuffer	string	instance	loud	method "STRING" of class "MutableBuffer"
+MutableBuffer	string	instance	answers	rc 0
 MutableBuffer	subChar	instance	loud	method "SUBCHAR" of class "MutableBuffer"
 MutableBuffer	substr	instance	loud	method "SUBSTR" of class "MutableBuffer"
 MutableBuffer	subWord	instance	loud	method "SUBWORD" of class "MutableBuffer"

@@ -4236,6 +4236,7 @@ mod object_operand_tests {
                 name: Some(b"123".to_vec().into_boxed_slice()),
                 pools: rexx_core::ScopePools::new(),
                 own: None,
+                native: None,
             },
         );
         // A stem is in the gap's set only through its default, so it needs

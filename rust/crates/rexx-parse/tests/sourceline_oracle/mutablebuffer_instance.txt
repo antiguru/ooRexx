@@ -1,0 +1,25 @@
+count 24
+/* A MutableBuffer is an ordinary instance around its bytes: a trace value
+   line shows the contents, a name set through objectName= changes what
+   objectName answers and not what string answers, and a subclass keeps an
+   object variable pool of its own. Rendering the buffer through say is
+   deliberately absent. */
+buf = .MutableBuffer~new('abcdef')
+trace i
+x = buf
+trace o
+say x~length
+buf~objectName = 'named'
+say buf~string
+say buf~objectName
+sub = .sub~new('pq')
+say sub~n sub~length
+sub~append('r')
+say sub~n sub~length sub~string
+::class sub subclass MutableBuffer
+::method init
+  expose n
+  n = 42
+::method n
+  expose n
+  return n

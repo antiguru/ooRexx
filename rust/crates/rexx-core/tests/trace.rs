@@ -49,6 +49,7 @@ fn an_instance_reaches_every_scope_and_every_value_but_no_name() {
         name: None,
         pools,
         own: None,
+        native: None,
     }
     .trace(&mut out);
     assert_eq!(out, vec![class, sup, held_by_sup, sub, held_by_sub]);
@@ -69,6 +70,7 @@ fn an_instance_stops_reaching_a_dropped_variable() {
         name: None,
         pools,
         own: None,
+        native: None,
     }
     .trace(&mut out);
     // The scope's pool survives the drop and is still traced; the value it no

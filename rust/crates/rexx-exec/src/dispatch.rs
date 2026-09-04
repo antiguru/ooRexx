@@ -97,7 +97,8 @@ use std::rc::Rc;
 
 use rexx_classes::{ClassKind, ClassRegistry, InheritRefusal, MethodId, MethodSlot};
 use rexx_core::{
-    BehaviourHandle, BehaviourId, Body, Decoded, ObjRef, Object, ObjectMethod, ObjectMethods,
+    BehaviourHandle, BehaviourId, Body, BufferState, Decoded, ObjRef, Object, ObjectMethod,
+    ObjectMethods,
 };
 use rexx_parse::{Access, Expr, Operator};
 
@@ -429,6 +430,50 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // alone, and the scope is a `MethodClass` field rather than a
     // `BaseExecutable` one (`classes/MethodClass.hpp:168`).
     ("Method", "SCOPE", Arity::Fixed(0), native_scope),
+    // `MutableBuffer`'s rows in `memory/Setup.cpp:1416`-`:1479`, each at its
+    // declared count.
+    (
+        "MutableBuffer",
+        "APPEND",
+        Arity::Counted,
+        native_mutable_buffer_append,
+    ),
+    (
+        "MutableBuffer",
+        "DELSTR",
+        Arity::Fixed(2),
+        native_mutable_buffer_delstr,
+    ),
+    (
+        "MutableBuffer",
+        "ENDSWITH",
+        Arity::Fixed(1),
+        native_mutable_buffer_endswith,
+    ),
+    (
+        "MutableBuffer",
+        "GETBUFFERSIZE",
+        Arity::Fixed(0),
+        native_mutable_buffer_getbuffersize,
+    ),
+    (
+        "MutableBuffer",
+        "LENGTH",
+        Arity::Fixed(0),
+        native_mutable_buffer_length,
+    ),
+    (
+        "MutableBuffer",
+        "SETBUFFERSIZE",
+        Arity::Fixed(1),
+        native_mutable_buffer_setbuffersize,
+    ),
+    (
+        "MutableBuffer",
+        "STRING",
+        Arity::Fixed(0),
+        native_mutable_buffer_string,
+    ),
     // `MutexSemaphoreClass::close`, `EventSemaphore`'s partner above.
     ("MutexSemaphore", "UNINIT", Arity::Fixed(0), native_no_op),
     // `Setup.cpp:521`-`:530`, each declared at count 1. These are what an
@@ -4937,6 +4982,7 @@ fn new_instance(interp: &mut Interp, class: ObjRef) -> Result<ObjRef, Failure> {
             name: None,
             pools: rexx_core::ScopePools::new(),
             own: None,
+            native: None,
         },
     );
     // `ProtectedObject p(newObj)` (`ObjectClass.cpp:2637`): the `INIT` send
@@ -7487,29 +7533,70 @@ fn native_capacity_init(
     Ok(None)
 }
 
-/// `optionalLengthArgument` (`runtime/MethodArguments.hpp:327`): an omitted
-/// argument is the default and anything that is not a non-negative whole
-/// number in range is 93.923.
+/// `optionalLengthArgument` (`runtime/MethodArguments.hpp:327`): `None` for
+/// an omitted argument, and anything that is not a non-negative whole number
+/// in range is 93.923.
 fn optional_length_argument(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
     index: usize,
-) -> Result<(), Failure> {
+) -> Result<Option<usize>, Failure> {
     match whole_method_argument(interp, args, index, Raised::invalid_length)? {
-        Some(size) if size >= 0 => {
-            usize_or_refuse(interp, args, index, size, Raised::invalid_length)?;
-        }
-        Some(_) => {
-            return Err(refuse_method_argument(
-                interp,
-                args,
-                index,
-                Raised::invalid_length,
-            ));
-        }
-        None => {}
+        Some(size) if size >= 0 => Ok(Some(usize_or_refuse(
+            interp,
+            args,
+            index,
+            size,
+            Raised::invalid_length,
+        )?)),
+        Some(_) => Err(refuse_method_argument(
+            interp,
+            args,
+            index,
+            Raised::invalid_length,
+        )),
+        None => Ok(None),
     }
-    Ok(())
+}
+
+/// `lengthArgument` (`runtime/MethodArguments.hpp`): [`optional_length_argument`]
+/// with an omitted argument 93.903 -- measured, oracle rc 163:
+/// `.MutableBuffer~new('abc')~setBufferSize` reports `argument 1 is required`.
+fn required_length_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    index: usize,
+) -> Result<usize, Failure> {
+    match optional_length_argument(interp, args, index)? {
+        Some(size) => Ok(size),
+        None => Err(Raised::missing_method_argument(index + 1).into()),
+    }
+}
+
+/// `optionalPositionArgument` (`runtime/MethodArguments.hpp:387`): `None` for
+/// an omitted argument, and anything that is not a positive whole number in
+/// range is 93.924.
+fn optional_position_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    index: usize,
+) -> Result<Option<usize>, Failure> {
+    match whole_method_argument(interp, args, index, Raised::invalid_position)? {
+        Some(position) if position > 0 => Ok(Some(usize_or_refuse(
+            interp,
+            args,
+            index,
+            position,
+            Raised::invalid_position,
+        )?)),
+        Some(_) => Err(refuse_method_argument(
+            interp,
+            args,
+            index,
+            Raised::invalid_position,
+        )),
+        None => Ok(None),
+    }
 }
 
 /// The refusal a constructor that has checked its arguments and cannot build
@@ -7528,21 +7615,16 @@ fn unbuilt_class_method(interp: &mut Interp, class: ObjRef, name: &[u8]) -> Fail
     Loud::native_method(name, &id).into()
 }
 
-/// `MutableBuffer~new(string, size, ...)`: an instance carrying neither, and
-/// both arguments validated as `MutableBuffer::newRexx` validates them
-/// (`classes/MutableBufferClass.cpp:90`).
+/// `MutableBuffer~new(string, size, ...)`: an instance carrying the string
+/// and the capacities `MutableBuffer::newRexx` derives from its arguments
+/// (`classes/MutableBufferClass.cpp:90`): `default_size` is the second
+/// argument or `DEFAULT_BUFFER_LENGTH`, and the capacity is that or the
+/// string's length, whichever is larger.
 ///
 /// **The `INIT` send takes the arguments from the front with the last two
 /// dropped from the count**, `completeNewObject(newBuffer, args, argc > 2 ?
 /// argc - 2 : 0)` (`:134`), which is not the same list as "the arguments past
 /// the second".
-///
-/// The buffer's contents are not kept, and nothing that would read them
-/// answers -- which is what keeps the rendering honest, since the oracle
-/// renders a buffer as its contents rather than as a default name: measured,
-/// rc 0, `say .MutableBuffer~new('abc')` is `abc`.
-/// `a_constructor_taking_arguments_answers_an_instance_and_refuses_its_state`
-/// asserts the pair.
 fn native_mutable_buffer_new(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -7550,16 +7632,182 @@ fn native_mutable_buffer_new(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let class = class_receiver(interp, receiver)?;
+    let mut initial = interp.take_result_buffer();
     if let Some(text) = args.first().copied().flatten() {
-        required_string_argument(interp, text, 1)?;
+        let text = required_string_argument(interp, text, 1)?;
+        initial.extend_from_slice(&interp.to_text(text));
     }
-    optional_length_argument(interp, args, 1)?;
+    let default_size = optional_length_argument(interp, args, 1)?.unwrap_or(BUFFER_DEFAULT_LENGTH);
+    let capacity = default_size.max(initial.len());
+    let mut bytes = Vec::new();
+    bytes
+        .try_reserve_exact(capacity)
+        .map_err(|_| Failure::from(Raised::system_resources()))?;
+    bytes.extend_from_slice(&initial);
+    interp.give_result_buffer(initial);
     let object = new_instance(interp, class)?;
+    let Some(Object {
+        body: Body::Instance { native, .. },
+        ..
+    }) = interp.heap.get_mut(object)
+    else {
+        unreachable!("new_instance allocates a Body::Instance")
+    };
+    *native = Some(Box::new(BufferState {
+        bytes,
+        capacity,
+        default_size,
+    }));
     let caller = interp.caller();
     let kept = args.len().saturating_sub(2);
     let rest: Vec<Option<ObjRef>> = args.iter().take(kept).copied().collect();
     interp.send_message(object, INIT, None, &rest, caller)?;
     Ok(Some(object))
+}
+
+/// `MutableBuffer::DEFAULT_BUFFER_LENGTH` (`classes/MutableBufferClass.hpp:150`).
+const BUFFER_DEFAULT_LENGTH: usize = 256;
+
+/// The receiver's buffer state, or [`Loud::native_method`] for a receiver
+/// that carries none.
+fn buffer_state<'a>(
+    interp: &'a Interp,
+    receiver: ObjRef,
+    name: &[u8],
+) -> Result<&'a BufferState, Failure> {
+    interp
+        .buffer(receiver)
+        .ok_or_else(|| Loud::native_method(name, "MutableBuffer").into())
+}
+
+/// [`buffer_state`] for a method that changes the contents.
+fn buffer_state_mut<'a>(
+    interp: &'a mut Interp,
+    receiver: ObjRef,
+    name: &[u8],
+) -> Result<&'a mut BufferState, Failure> {
+    interp
+        .buffer_mut(receiver)
+        .ok_or_else(|| Loud::native_method(name, "MutableBuffer").into())
+}
+
+/// `MutableBuffer::lengthRexx` (`classes/MutableBufferClass.cpp:310`).
+fn native_mutable_buffer_length(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let length = buffer_state(interp, receiver, b"LENGTH")?.bytes.len();
+    Ok(Some(interp.counted(length)))
+}
+
+/// `MutableBuffer::getBufferSize` (`classes/MutableBufferClass.hpp:91`).
+fn native_mutable_buffer_getbuffersize(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let capacity = buffer_state(interp, receiver, b"GETBUFFERSIZE")?.capacity;
+    Ok(Some(interp.counted(capacity)))
+}
+
+/// `MutableBuffer~string`, `RexxObject::makeStringRexx` reaching
+/// `MutableBuffer::stringValue` (`classes/MutableBufferClass.cpp:740`): a
+/// fresh string of the contents.
+fn native_mutable_buffer_string(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let state = buffer_state(interp, receiver, b"STRING")?;
+    let mut out = interp.take_result_buffer();
+    out.extend_from_slice(&state.bytes);
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `MutableBuffer::endsWithRexx` (`classes/MutableBufferClass.cpp:1569`).
+///
+/// An empty `match` is `0`, `primitiveMatch`'s `len == 0` arm (`:1615`) --
+/// measured, oracle rc 0: `.MutableBuffer~new('abc')~endsWith('')` is `0`.
+fn native_mutable_buffer_endswith(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(argument) = args.first().copied().flatten() else {
+        return Err(Raised::missing_named_argument("match").into());
+    };
+    let argument = required_string_named_argument(interp, argument, "match")?;
+    let mut needle = interp.take_result_buffer();
+    needle.extend_from_slice(&interp.to_text(argument));
+    let state = buffer_state(interp, receiver, b"ENDSWITH")?;
+    let answer = !needle.is_empty() && state.bytes.ends_with(&needle);
+    interp.give_result_buffer(needle);
+    Ok(Some(interp.counted(usize::from(answer))))
+}
+
+/// `MutableBuffer::appendRexx` (`classes/MutableBufferClass.cpp:323`): every
+/// argument a required string, appended in turn; answers the receiver.
+fn native_mutable_buffer_append(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if args.is_empty() {
+        return Err(Raised::missing_method_argument(1).into());
+    }
+    for (index, argument) in args.iter().enumerate() {
+        let Some(argument) = *argument else {
+            return Err(Raised::missing_method_argument(index + 1).into());
+        };
+        let argument = required_string_argument(interp, argument, index + 1)?;
+        let mut piece = interp.take_result_buffer();
+        piece.extend_from_slice(&interp.to_text(argument));
+        let state = buffer_state_mut(interp, receiver, b"APPEND")?;
+        state
+            .ensure_capacity(piece.len())
+            .map_err(|_| Failure::from(Raised::system_resources()))?;
+        state.bytes.extend_from_slice(&piece);
+        interp.give_result_buffer(piece);
+    }
+    Ok(Some(receiver))
+}
+
+/// `MutableBuffer::mydelete` (`classes/MutableBufferClass.cpp:647`): the
+/// position defaults to 1 and the length to the rest of the contents, and a
+/// position past them deletes nothing; answers the receiver.
+fn native_mutable_buffer_delstr(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let begin = optional_position_argument(interp, args, 0)?.unwrap_or(1) - 1;
+    let range = optional_length_argument(interp, args, 1)?;
+    let state = buffer_state_mut(interp, receiver, b"DELSTR")?;
+    crate::builtin::string::delete_range(&mut state.bytes, begin, range);
+    Ok(Some(receiver))
+}
+
+/// `MutableBuffer::setBufferSize` (`classes/MutableBufferClass.cpp:679`),
+/// whose rule [`BufferState::set_buffer_size`] carries; answers the receiver.
+fn native_mutable_buffer_setbuffersize(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let size = required_length_argument(interp, args, 0)?;
+    let state = buffer_state_mut(interp, receiver, b"SETBUFFERSIZE")?;
+    state
+        .set_buffer_size(size)
+        .map_err(|_| Failure::from(Raised::system_resources()))?;
+    Ok(Some(receiver))
 }
 
 /// `Class~new(id, ...)`: the class id is required and this crate builds no
@@ -9322,11 +9570,13 @@ mod tests {
     }
 
     /// The constructors whose argument list carries the instance's whole state
-    /// answer one, and the state itself is refused rather than answered.
+    /// answer one, and the state is either kept and read back or refused,
+    /// never answered from nothing.
     ///
     /// The refusal rows are what stop this from passing over a constructor
     /// that fabricated a body: each names a method that would read what the
-    /// arguments carried, and the crate holds none of it.
+    /// arguments carried, and the crate holds none of it. `MutableBuffer`
+    /// keeps what it is given, so its row reads the state back instead.
     #[test]
     fn a_constructor_taking_arguments_answers_an_instance_and_refuses_its_state() {
         for (program, id, unread) in [
@@ -9341,7 +9591,6 @@ mod tests {
                 "Supplier",
                 "o~available",
             ),
-            (".MutableBuffer~new('abc')", "MutableBuffer", "o~length"),
         ] {
             assert_eq!(
                 both_engines(&format!("o = {program}\nsay o~class~id\n")),
@@ -9352,12 +9601,19 @@ mod tests {
             assert_eq!((code, stdout.as_str()), (120, ""), "{program}");
             assert!(stderr.starts_with("rexx-exec: "), "{program}: {stderr:?}");
         }
-        // The oracle renders a `MutableBuffer` as its contents rather than as
-        // a default name, so the bare rendering has to refuse too: an answer
-        // here would be `a MutableBuffer` where the oracle says `abc`.
+        assert_eq!(
+            both_engines("o = .MutableBuffer~new('abc')\nsay o~class~id\nsay o~length\n"),
+            (0, "MutableBuffer\n3\n".to_string(), String::new())
+        );
+        // `say` reaches a `MutableBuffer` through the required-string
+        // protocol's `MAKESTRING`, which is not bound, so the bare rendering
+        // refuses where the oracle prints `abc`.
         let (code, stdout, stderr) = both_engines("say .MutableBuffer~new('abc')\n");
         assert_eq!((code, stdout.as_str()), (120, ""));
-        assert!(stderr.starts_with("rexx-exec: "), "{stderr:?}");
+        assert!(
+            stderr.starts_with("rexx-exec: method \"MAKESTRING\" of class \"MutableBuffer\""),
+            "{stderr:?}"
+        );
         // `~result` on a message nothing has sent blocks the oracle, so this
         // is a refusal rather than an answer; `~completed` and `~hasError`
         // beside it are the oracle's own `0`.

@@ -3175,6 +3175,7 @@ impl Interp {
                 name: None,
                 pools: ScopePools::new(),
                 own: None,
+                native: None,
             },
         );
         // Rooted before anything else can allocate, the rule `.environment`

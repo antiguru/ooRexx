@@ -135,6 +135,19 @@ fn push_pad(out: &mut Vec<u8>, byte: u8, len: usize) {
     out.resize(out.len() + len, byte);
 }
 
+/// Deletes `range` bytes at 0-based `begin`, or everything from `begin` on
+/// for `None`; a `begin` at or past the end deletes nothing.
+pub(crate) fn delete_range(bytes: &mut Vec<u8>, begin: usize, range: Option<usize>) {
+    if begin >= bytes.len() {
+        return;
+    }
+    let end = match range {
+        Some(range) => begin.saturating_add(range).min(bytes.len()),
+        None => bytes.len(),
+    };
+    bytes.drain(begin..end);
+}
+
 // ---- the shared search primitives ----
 
 /// The 1-based offset of the first `needle` at or after `start` that
@@ -477,7 +490,7 @@ pub(crate) fn substr(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result
 /// `delstr('abcdef')` is the null string and `delstr('abcdef',,2)` is
 /// `cdef`.
 pub(crate) fn delstr(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
-    let string = required_string(interp, args, 1);
+    let mut string = required_string(interp, args, 1);
     let start = whole_number(interp, name, args, 2)?;
     let requested = whole_number(interp, name, args, 3)?;
 
@@ -488,24 +501,9 @@ pub(crate) fn delstr(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result
     // Range-checked before the out-of-range start is answered, which is what
     // the oracle's own ordering does -- measured, `delstr('abc',9,-1)` is
     // 93.923 rather than the unchanged string.
-    let deleted = match requested {
-        Some(value) => length_of(value)?,
-        None => string.len().saturating_sub(start) + 1,
-    };
-
-    if start > string.len() {
-        return Ok(interp.text_built(string));
-    }
-    if start == 1 && deleted >= string.len() {
-        return Ok(interp.text(b""));
-    }
-    let start = start - 1;
-    let tail = start.saturating_add(deleted);
-    let mut out = string[..start].to_vec();
-    if tail < string.len() {
-        out.extend_from_slice(&string[tail..]);
-    }
-    Ok(interp.text_built(out))
+    let deleted = requested.map(length_of).transpose()?;
+    delete_range(&mut string, start - 1, deleted);
+    Ok(interp.text_built(string))
 }
 
 /// `INSERT(new, target [,n] [,length] [,pad])`.

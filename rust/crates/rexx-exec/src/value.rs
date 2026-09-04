@@ -33,8 +33,8 @@
 
 use crate::Interp;
 use rexx_core::{
-    BehaviourId, Body, Bytes, Decoded, INLINE_BYTES, InlineText, NotNumeric, ObjRef, SMALL_INT_MAX,
-    SMALL_INT_MIN, VarRef, VarRefHome,
+    BehaviourId, Body, BufferState, Bytes, Decoded, INLINE_BYTES, InlineText, NotNumeric, ObjRef,
+    SMALL_INT_MAX, SMALL_INT_MIN, VarRef, VarRefHome,
 };
 use rexx_num::{Form, Number};
 use std::borrow::Cow;
@@ -632,6 +632,11 @@ impl Interp {
             } => num_rendering(number, *created_digits, *created_form, text).len(),
             Body::Stem { name, .. } => name.len(),
             Body::Native(native) => native.rendered().len(),
+            // The contents, the arm `to_text` takes in the same position.
+            Body::Instance {
+                native: Some(state),
+                ..
+            } => state.bytes.len(),
             // Reached only with a name set, the arm `to_text` takes in the
             // same position: the redirect above answers for an instance that
             // has none.
@@ -751,6 +756,31 @@ impl Interp {
     ) -> Option<(&[Option<ObjRef>], Option<&[usize]>)> {
         match &self.heap.get(value)?.body {
             Body::Array { slots, dimensions } => Some((slots, dimensions.as_deref())),
+            _ => None,
+        }
+    }
+
+    /// A `MutableBuffer`'s state, borrowed, or `None` for a value that is not
+    /// one.
+    pub(crate) fn buffer(&self, value: ObjRef) -> Option<&BufferState> {
+        match &self.heap.get(value)?.body {
+            Body::Instance {
+                native: Some(state),
+                ..
+            } => Some(state),
+            _ => None,
+        }
+    }
+
+    /// [`Interp::buffer`] for a caller that changes the contents. While the
+    /// borrow is live nothing on `self` can allocate, so nothing can collect
+    /// under it.
+    pub(crate) fn buffer_mut(&mut self, value: ObjRef) -> Option<&mut BufferState> {
+        match &mut self.heap.get_mut(value)?.body {
+            Body::Instance {
+                native: Some(state),
+                ..
+            } => Some(state),
             _ => None,
         }
     }
@@ -912,6 +942,12 @@ impl Interp {
             // directories were given theirs by the prologue and the rest
             // derive theirs from a class id -- `environment.rs` builds both.
             Body::Native(native) => Cow::Borrowed(native.rendered()),
+            // `MutableBuffer::stringValue` (`classes/MutableBufferClass.cpp:740`):
+            // the contents, whether or not `~objectName=` has named the buffer.
+            Body::Instance {
+                native: Some(state),
+                ..
+            } => Cow::Borrowed(state.bytes.as_slice()),
             // Reached only with a name set: the redirect above answers for
             // an instance that has none.
             Body::Instance { name, .. } => match name {
@@ -999,6 +1035,11 @@ impl Interp {
             // Joined on demand by `to_text` and held nowhere, which is one of
             // the causes of `None` this function's doc names.
             Body::Array { .. } => None,
+            // A buffer's contents, as `to_text` answers them.
+            Body::Instance {
+                native: Some(state),
+                ..
+            } => Some(state.bytes.as_slice()),
             // The same cause for an instance nothing has named: `to_text`
             // derives those bytes from the class id and stores them nowhere.
             Body::Instance { name, .. } => name.as_deref(),
@@ -1521,6 +1562,10 @@ impl Interp {
                 ..
             } => Redirect::StemDefault(*default),
             Body::Array { .. } => Redirect::Array,
+            // A buffer's own body holds the text, named or not.
+            Body::Instance {
+                native: Some(_), ..
+            } => Redirect::None,
             Body::Instance {
                 class, name: None, ..
             } => Redirect::InstanceDefault(*class),
@@ -1618,6 +1663,15 @@ mod tests {
     use super::*;
     use rexx_core::INLINE_TEXT;
     use rexx_num::DivOp;
+
+    /// A buffer holding `bytes` at the constructor's default capacity.
+    fn buffer_state(bytes: &[u8]) -> BufferState {
+        BufferState {
+            bytes: bytes.to_vec(),
+            capacity: bytes.len().max(256),
+            default_size: 256,
+        }
+    }
 
     /// `to_text` renders a tagged integer exactly as `i64`'s `Display` does,
     /// and the scratch it renders into is wide enough for every one of them.
@@ -1919,24 +1973,34 @@ mod tests {
 
         // Both shapes of instance, because `Redirect::of` answers only for
         // the unnamed one: the named one reaches the body match, which is the
-        // half of the mirror a redirect arm cannot stand in for.
+        // half of the mirror a redirect arm cannot stand in for. A buffer in
+        // each shape, because it takes neither: its own arm answers the
+        // contents whether or not the instance is named.
         let class = interp
             .classes()
             .lookup("Object")
             .expect("the Object class is registered");
         let behaviour = interp.classes().instance_behaviour_handle(class);
         for name in [None, Some(b"123".to_vec().into_boxed_slice())] {
-            let instance = interp.alloc_with(
-                BehaviourId::OBJECT,
-                Body::Instance {
-                    class,
-                    behaviour,
-                    name,
-                    pools: rexx_core::ScopePools::new(),
-                    own: None,
-                },
-            );
-            values.push(instance);
+            for native in [
+                None,
+                Some(Box::new(buffer_state(
+                    b"held for long enough to need a slot",
+                ))),
+            ] {
+                let instance = interp.alloc_with(
+                    BehaviourId::OBJECT,
+                    Body::Instance {
+                        class,
+                        behaviour,
+                        name: name.clone(),
+                        pools: rexx_core::ScopePools::new(),
+                        own: None,
+                        native,
+                    },
+                );
+                values.push(instance);
+            }
         }
 
         // **`text_len` is asked first, before anything renders**, so that a
@@ -2496,6 +2560,30 @@ mod tests {
         assert!(matches!(inline.decode(), Decoded::Text(_)));
         assert_eq!(interp.try_text(inline), None, "the bytes are the handle");
         assert_eq!(&*interp.to_text(inline), b"held");
+
+        // A buffer's bytes are the object's own storage, borrowable whether
+        // or not the instance is named -- the name never wins over them.
+        let class = interp
+            .classes()
+            .lookup("Object")
+            .expect("the Object class is registered");
+        let behaviour = interp.classes().instance_behaviour_handle(class);
+        for name in [None, Some(b"named".to_vec().into_boxed_slice())] {
+            let buffer = interp.alloc_with(
+                BehaviourId::OBJECT,
+                Body::Instance {
+                    class,
+                    behaviour,
+                    name,
+                    pools: rexx_core::ScopePools::new(),
+                    own: None,
+                    native: Some(Box::new(buffer_state(b"abcdef"))),
+                },
+            );
+            assert_eq!(interp.try_text(buffer), Some(&b"abcdef"[..]));
+            assert_eq!(&*interp.to_text(buffer), b"abcdef");
+            assert_eq!(interp.text_len(buffer), 6);
+        }
     }
 
     /// The other side of that boundary: a value short enough occupies no

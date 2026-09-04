@@ -12,7 +12,7 @@
 use crate::bytes::Bytes;
 use crate::{ObjRef, SlotRef};
 use rexx_num::{Form, Number};
-use std::collections::HashMap;
+use std::collections::{HashMap, TryReserveError};
 
 /// Identifies the behaviour (class + method dictionary) an object responds to.
 ///
@@ -189,12 +189,19 @@ pub enum Body {
     /// attached a method to. Boxed so that an object that never takes one
     /// costs a pointer -- see this module's own width assertion for what a
     /// wider `Body` costs.
+    ///
+    /// `native` is a `MutableBuffer`'s contents and capacities, `None` for
+    /// every other instance. An instance carrying one renders as those
+    /// contents whether or not it is named: measured, after `buf~objectName =
+    /// 'named'` the oracle's `buf~string` is still the contents and only
+    /// `~objectName` is `named`. Boxed for `own`'s reason.
     Instance {
         class: ObjRef,
         behaviour: BehaviourHandle,
         name: Option<Box<[u8]>>,
         pools: ScopePools,
         own: Option<Box<ObjectMethods>>,
+        native: Option<Box<BufferState>>,
     },
     /// An object the interpreter builds for itself rather than one a program
     /// constructs: `.environment`, `.local`, a package's `.methods` table and
@@ -243,6 +250,56 @@ pub enum VarRefHome {
     /// has instead of storage of its own. The object keeps it alive, so
     /// there is nothing to promote.
     Instance { owner: ObjRef, scope: ObjRef },
+}
+
+/// A `MutableBuffer`'s state: its contents, `bufferLength` and `defaultSize`
+/// (`classes/MutableBufferClass.hpp`).
+///
+/// `capacity` is what `getBufferSize` answers and is carried rather than read
+/// off the `Vec`, whose own reservation only follows it. `default_size` is
+/// the constructor's second argument or 256, and `setBufferSize(0)` is its
+/// one reader.
+#[derive(Clone, Debug)]
+pub struct BufferState {
+    pub bytes: Vec<u8>,
+    pub capacity: usize,
+    pub default_size: usize,
+}
+
+impl BufferState {
+    /// `MutableBuffer::ensureCapacity`: room for `added` more bytes, taking
+    /// the larger of what is needed and twice the capacity.
+    pub fn ensure_capacity(&mut self, added: usize) -> Result<(), TryReserveError> {
+        let needed = self.bytes.len().saturating_add(added);
+        if needed > self.capacity {
+            self.capacity = needed.max(self.capacity.saturating_mul(2));
+            self.bytes
+                .try_reserve_exact(self.capacity - self.bytes.len())?;
+        }
+        Ok(())
+    }
+
+    /// `MutableBuffer::setBufferSize`: zero empties the contents and takes
+    /// the capacity back to `default_size`; any other size becomes the
+    /// capacity and truncates contents longer than it.
+    pub fn set_buffer_size(&mut self, size: usize) -> Result<(), TryReserveError> {
+        if size == 0 {
+            self.bytes.clear();
+            if self.capacity > self.default_size {
+                self.capacity = self.default_size;
+                self.bytes.shrink_to(self.default_size);
+            }
+        } else if size != self.capacity {
+            self.bytes.truncate(size);
+            if size > self.bytes.capacity() {
+                self.bytes.try_reserve_exact(size - self.bytes.len())?;
+            } else {
+                self.bytes.shrink_to(size);
+            }
+            self.capacity = size;
+        }
+        Ok(())
+    }
 }
 
 /// Every variable pool one object holds: one per scope that has bound a name
