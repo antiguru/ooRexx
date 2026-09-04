@@ -146,6 +146,20 @@ pub(crate) const fn logical(holds: bool) -> ObjRef {
     if holds { LOGICAL_TRUE } else { LOGICAL_FALSE }
 }
 
+/// What an arithmetic operator's left operand turned out to be.
+///
+/// **`Send` rides [`Interp::to_number`]'s refusal rather than being asked
+/// first**, so the general arithmetic path pays no heap lookup for a shape a
+/// `Body::Num` can never have. The premise is that every value
+/// [`Interp::operator_message_receiver`] names is one that refuses, which is
+/// what `a_value_the_operator_gap_names_parses_as_no_number` holds -- the
+/// same premise [`Interp::compare_values`] already skips its own gap check
+/// on.
+enum ArithOperand {
+    Number(Number),
+    Send(ObjRef),
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum SymbolRead {
     /// `ExprKind::Variable`: one slot, and the derived name when it is unset.
@@ -913,7 +927,12 @@ impl Interp {
     fn apply_prefix_body(&mut self, op: PrefixOp, value: ObjRef) -> Result<ObjRef, Failure> {
         let result = match op {
             PrefixOp::Plus | PrefixOp::Minus => {
-                let number = self.arith_left_operand(op.spelling(), value)?;
+                let number = match self.arith_left_operand(op.spelling(), value)? {
+                    ArithOperand::Number(number) => number,
+                    ArithOperand::Send(target) => {
+                        return self.send_operator(op.spelling(), target, &[]);
+                    }
+                };
                 self.lostdigits_check(&number, value)?;
                 let digits = self.activation().settings.digits();
                 let form = self.activation().settings.form();
@@ -929,6 +948,14 @@ impl Interp {
                 // `\.array` is 97.1 on the oracle, the same message send the
                 // dyadic operators make, and it is asked ahead of the truth
                 // test for the reason [`Interp::logical_values_body`] states.
+                //
+                // **Asked outright here, unlike the two arms above.** `\`
+                // converts through `to_text`, which answers an instance's own
+                // name rather than refusing, so there is no failing
+                // conversion for the send to ride.
+                if let Some(target) = self.operator_message_receiver(value) {
+                    return self.send_operator(op.spelling(), target, &[]);
+                }
                 if let Some(kind) = self.operator_operand_gap(value) {
                     return Err(Loud::operator_operand(op.spelling(), kind).into());
                 }
@@ -1075,7 +1102,12 @@ impl Interp {
         let digits = self.activation().settings.digits();
         let form = self.activation().settings.form();
 
-        let left_number = self.arith_left_operand(op.spelling(), left_value)?;
+        let left_number = match self.arith_left_operand(op.spelling(), left_value)? {
+            ArithOperand::Number(number) => number,
+            ArithOperand::Send(target) => {
+                return self.send_operator(op.spelling(), target, &[Some(right_value)]);
+            }
+        };
 
         // The argument of the operator method the receiver answers, converted
         // after the receiver itself is accepted -- `apply_binary`'s own doc
@@ -1186,10 +1218,13 @@ impl Interp {
     /// still that method failing -- where `say 2` `+ b.` (the receiver `2`,
     /// not a stem) carries none regardless of which operand fails, because
     /// no forwarding happens there at all.
-    fn arith_left_operand(&mut self, op: &str, value: ObjRef) -> Result<Number, Failure> {
+    fn arith_left_operand(&mut self, op: &str, value: ObjRef) -> Result<ArithOperand, Failure> {
         match self.to_number(value) {
-            Ok(number) => Ok(number),
+            Ok(number) => Ok(ArithOperand::Number(number)),
             Err(NotNumeric) => {
+                if let Some(target) = self.operator_message_receiver(value) {
+                    return Ok(ArithOperand::Send(target));
+                }
                 if let Some(kind) = self.operator_operand_gap(value) {
                     return Err(Loud::operator_operand(op, kind).into());
                 }
@@ -1626,6 +1661,80 @@ impl Interp {
         Ok(result)
     }
 
+    /// The object an operator is **sent to as a message**, or `None` for an
+    /// operand the operator converts itself.
+    ///
+    /// `RexxObject`'s own operator methods are each a `messageSend` of the
+    /// operator's spelling (`classes/ObjectClass.cpp:2738`-`:2795`), so an
+    /// instance answers whatever its class defines: measured, a `::METHOD
+    /// "+"` answers `.K~new + 1` where a class without one is 97.1, and
+    /// `.DateTime~new + .TimeSpan~fromSeconds(5)` is a `DateTime`.
+    ///
+    /// Redirects through a stem's default and a variable reference's value
+    /// exactly as [`Interp::operator_operand_gap`] does, and the target is
+    /// the redirected object rather than the stem or the reference --
+    /// measured, `s. = .K~new; say s. + 1` and `zz = .K~new; say (>zz) + 1`
+    /// both reach the instance's own `+`.
+    ///
+    /// **Asked ahead of every other operand test**, because the oracle
+    /// decides on the left operand's class before it touches the right one:
+    /// the argument the method receives is the right operand as it stands,
+    /// not its string value.
+    ///
+    /// Takes one operand and allocates nothing, so it carries no rooting
+    /// precondition of its own.
+    pub(crate) fn operator_message_receiver(&self, value: ObjRef) -> Option<ObjRef> {
+        // A small integer, an inline string and `.nil` all leave on this
+        // line, which is what keeps this off the cost of a comparison
+        // between two numbers.
+        let Decoded::Heap { slot, generation } = value.decode() else {
+            return None;
+        };
+        if is_class_slot(slot, generation) {
+            return None;
+        }
+        match &self.heap.get(value)?.body {
+            Body::Instance { .. } => Some(value),
+            Body::Stem {
+                default: Some(default),
+                ..
+            } => self.operator_message_receiver(*default),
+            Body::VarRef(reference) => self
+                .referenced_value(reference)
+                .and_then(|referenced| self.operator_message_receiver(referenced)),
+            _ => None,
+        }
+    }
+
+    /// Sends an operator to its left operand as a message, for a receiver
+    /// [`Interp::operator_message_receiver`] named.
+    ///
+    /// A prefix operator passes **no** argument at all, which is
+    /// `prefixOperatorMethod`'s own `operand == OREF_NULL ? 0 : 1`
+    /// (`classes/ObjectClass.cpp:2752`) -- measured, `-o` reaches a
+    /// `::METHOD "-"` whose `arg()` is `0` where `o - 1` reaches the same
+    /// method with `1`.
+    ///
+    /// A method that returns nothing is 91.999 here and not `.nil`, which is
+    /// the `result.isNull()` arm of that same macro -- measured, rc 165,
+    /// `Message "+" did not return a result.`
+    ///
+    /// **The receiver and every argument must already be rooted by the
+    /// caller**, for the reason [`Interp::concat_values`] states.
+    fn send_operator(
+        &mut self,
+        spelling: &str,
+        receiver: ObjRef,
+        args: &[Option<ObjRef>],
+    ) -> Result<ObjRef, Failure> {
+        let caller = self.caller();
+        let name = spelling.as_bytes();
+        match self.send_message(receiver, name, None, args, caller)? {
+            Some(result) => Ok(result),
+            None => Err(Raised::no_result(name).into()),
+        }
+    }
+
     /// The noun for an operand no operator here can take, or `None` for one
     /// every operator can.
     ///
@@ -1727,6 +1836,13 @@ impl Interp {
         // `:774`, `:925`). The left operand is the receiver and is not
         // converted at all: measured, `.array + 1` is 97.1 where `1 + .array`
         // is 41.1, and `eval.rs`'s `object_operand_tests` is that half.
+        //
+        // **The send is asked first**, so the argument a receiver's own
+        // operator method gets is the right operand as it stands rather than
+        // the string value the line below would make of it.
+        if let Some(target) = self.operator_message_receiver(left) {
+            return self.send_operator(op.spelling(), target, &[Some(right)]);
+        }
         let right = self.required_string_value(right)?;
         match op {
             Operator::Concatenate | Operator::Abuttal => self.concat_values(left, right, None),
@@ -3958,24 +4074,22 @@ mod object_operand_tests {
         );
     }
 
-    /// An instance is never an operator's left operand, whatever it renders
-    /// as, and a name that spells a number or a truth value does not make it
-    /// one.
+    /// An operator on an instance is the message send the oracle makes, and
+    /// a name that spells a number never converts the receiver.
     ///
-    /// The oracle sends the operator to the left operand as a message and an
-    /// instance answers none: measured, oracle rc 159, an instance named
-    /// `'1'` gives `97.1 Object "1" does not understand message "+".` for
-    /// `o + 1` and the same for `>`, `&` and `\`. This crate's own answer is
-    /// the licensed loud refusal, which no differential row can carry -- so
-    /// this is the instrument for it, and the shapes the oracle *does*
-    /// answer are `corpus/lang/instance_named_operands.rex`.
+    /// The receiver here is named `'1'` on purpose: every row below would
+    /// answer something different if the operator read that rendering as
+    /// text. Measured, oracle rc 159 for the operators `Object` defines no
+    /// method for -- `97.1 Object "1" does not understand message "+".` --
+    /// and rc 0 for the six comparisons it does, each of them **identity**:
+    /// `o = 1` is `0` where a converted receiver would give `1`.
     ///
-    /// **The two adjacent successes are the load-bearing half**, because
-    /// refusing an instance in every position would satisfy the refusals
-    /// alone: to the right of a string's own operator, and in a truth test,
-    /// the oracle converts and so does this.
+    /// **The three adjacent successes are the load-bearing half**, because
+    /// sending every operator would satisfy the rows above and break the
+    /// positions the oracle converts in: to the right of a string's own
+    /// operator, in the concatenation family, and in a truth test.
     #[test]
-    fn a_named_instance_is_never_an_operators_left_operand() {
+    fn an_operator_on_an_instance_is_the_send_the_oracle_makes() {
         let prologue = "o = .K~new\no~objectName = '1'\n";
         let epilogue = "::CLASS K\n";
         for (expression, spelling) in [
@@ -3986,11 +4100,14 @@ mod object_operand_tests {
             ("o // 2", "//"),
             ("o % 2", "%"),
             ("o ** 2", "**"),
-            ("(o = 1)", "="),
-            ("(o \\= 1)", "\\="),
             ("(o > 0)", ">"),
             ("(o < 2)", "<"),
-            ("(o == '1')", "=="),
+            ("(o >= 0)", ">="),
+            ("(o <= 2)", "<="),
+            ("(o >> '0')", ">>"),
+            ("(o << '2')", "<<"),
+            ("(o \\> 0)", "\\>"),
+            ("(o \\< 2)", "\\<"),
             ("(o & 1)", "&"),
             ("(o | 0)", "|"),
             ("(o && 1)", "&&"),
@@ -4000,20 +4117,27 @@ mod object_operand_tests {
         ] {
             let source = format!("{prologue}say {expression}\n{epilogue}");
             let (code, stdout, stderr) = both_engines(source.as_bytes());
-            assert_eq!(
-                code,
-                crate::NOT_IMPLEMENTED_EXIT,
-                "{expression}: {stderr:?}"
-            );
+            assert_eq!(code, 159, "{expression}: {stderr:?}");
             assert_eq!(stdout, "", "{expression}");
             assert!(
                 stderr.contains(&format!(
-                    "the operator `{spelling}` applied to an instance of a user class"
+                    "Object \"1\" does not understand message \"{spelling}\"."
                 )),
                 "{expression} reported {stderr:?}"
             );
         }
-        for (expression, expected) in [("(1 = o)", "1\n"), ("('q' || o)", "q1\n")] {
+        for (expression, expected) in [
+            ("(o = 1)", "0\n"),
+            ("(o == '1')", "0\n"),
+            ("(o \\= 1)", "1\n"),
+            ("(o \\== '1')", "1\n"),
+            ("(o <> 1)", "1\n"),
+            ("(o >< 1)", "1\n"),
+            ("(o || 'q')", "1q\n"),
+            ("(o 'q')", "1 q\n"),
+            ("(1 = o)", "1\n"),
+            ("('q' || o)", "q1\n"),
+        ] {
             let source = format!("{prologue}say {expression}\n{epilogue}");
             let (code, stdout, stderr) = both_engines(source.as_bytes());
             assert_eq!(code, 0, "{expression}: {stderr:?}");
@@ -4027,7 +4151,11 @@ mod object_operand_tests {
 
     /// A value [`Interp::operator_operand_gap`] names parses as no number,
     /// which is what makes [`Interp::compare_values`]'s skip past that gap
-    /// sound rather than merely cheap.
+    /// sound rather than merely cheap -- and the same for
+    /// [`Interp::operator_message_receiver`], which
+    /// [`Interp::arith_left_operand`] asks only where [`Interp::to_number`]
+    /// has already refused. An operand that produced a `Number` and was also
+    /// a send target would have its operator applied to the wrong side.
     ///
     /// The skip reads the gap only when the left operand failed to parse, so
     /// a value that is both a number and a gap is compared where the oracle
@@ -4085,5 +4213,10 @@ mod object_operand_tests {
                 "{value:?}"
             );
         }
+        // The send targets among them, which is the half `arith_left_operand`
+        // rides. `array` is in the gap's set and is not one, so this is not
+        // the same assertion in different words.
+        assert!(interp.operator_message_receiver(named).is_some());
+        assert!(interp.operator_message_receiver(array).is_none());
     }
 }

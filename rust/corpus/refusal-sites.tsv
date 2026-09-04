@@ -138,7 +138,7 @@ Loud	method_body	body	crates/rexx-exec/src/lib.rs:996	off-send-surface	-	-	-
 Loud	method_from_source	send	crates/rexx-exec/src/lib.rs:972	diverges	yes	a method source that is neither a string nor an array	self~setMethod('Z', .nil, 'BOGUS')
 Raised	method_option_not_recognised	send	crates/rexx-exec/src/error.rs:1753	agrees	yes	93.915	(1,2)~makeString('X')
 Raised	method_source_not_all_strings	send	crates/rexx-exec/src/error.rs:1568	agrees	yes	93.952	self~setMethod('Z', (1, .nil))
-Raised	method_target_not_a_number	body	crates/rexx-exec/src/error.rs:2039	off-send-surface	-	-	-
+Raised	method_target_not_a_number	body+send	crates/rexx-exec/src/error.rs:2039	agrees	yes	93.943	'abc'~sign
 Raised	misplaced_whitespace	body	crates/rexx-exec/src/error.rs:1436	off-send-surface	-	-	-
 Raised	missing_annotation_target	body	crates/rexx-exec/src/error.rs:834	off-send-surface	-	-	-
 Raised	missing_argument	body	crates/rexx-exec/src/error.rs:916	off-send-surface	-	-	-

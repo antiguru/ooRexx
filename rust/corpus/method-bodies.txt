@@ -14,7 +14,10 @@
 #            method needing arguments is sent none, so for such a row this is
 #            agreement about an arity error rather than about a result.
 # `diverge`  the send answered and disagreed, and `evidence` names the
-#            channels that moved.
+#            channels that moved in ANY of the three environments below --
+#            a union, because a row that agrees in this machine's zone and
+#            disagrees in another would otherwise carry an evidence value
+#            that changes with the hour.
 # `unstable` the answer a verdict would have rested on is not reproducible,
 #            so neither `answers` nor `diverge` would be a claim the run
 #            made. `evidence` names what moved: `this crate` (its two engine
@@ -116,15 +119,15 @@ Method	setSecurityManager	instance	loud	method "SETSECURITYMANAGER" of class "Me
 Method	setUnguarded	instance	loud	method "SETUNGUARDED" of class "Method"
 Method	source	instance	loud	method "SOURCE" of class "Method"
 Object	new	class	answers	rc 0
-Object	=	instance	loud	method "=" of class "Object"
-Object	==	instance	loud	method "==" of class "Object"
-Object	<>	instance	loud	method "<>" of class "Object"
-Object	><	instance	loud	method "><" of class "Object"
-Object	\=	instance	loud	method "\=" of class "Object"
-Object	\==	instance	loud	method "\==" of class "Object"
-Object	(abuttal)	instance	loud	method "" of class "Object"
-Object	||	instance	loud	method "||" of class "Object"
-Object	(blank)	instance	loud	method " " of class "Object"
+Object	=	instance	answers	rc 163
+Object	==	instance	answers	rc 163
+Object	<>	instance	answers	rc 163
+Object	><	instance	answers	rc 163
+Object	\=	instance	answers	rc 163
+Object	\==	instance	answers	rc 163
+Object	(abuttal)	instance	answers	rc 163
+Object	||	instance	answers	rc 163
+Object	(blank)	instance	answers	rc 163
 Object	class	instance	answers	rc 0
 Object	copy	instance	answers	rc 0
 Object	defaultName	instance	answers	rc 0
@@ -313,7 +316,7 @@ String	replaceAt	instance	loud	method "REPLACEAT" of class "String"
 String	reverse	instance	answers	rc 0
 String	right	instance	loud	method "RIGHT" of class "String"
 String	round	instance	loud	method "ROUND" of class "String"
-String	sign	instance	loud	method "SIGN" of class "String"
+String	sign	instance	answers	rc 163
 String	space	instance	loud	method "SPACE" of class "String"
 String	startsWith	instance	loud	method "STARTSWITH" of class "String"
 String	strip	instance	loud	method "STRIP" of class "String"
@@ -1275,7 +1278,7 @@ TimeSpan	makeString	instance	loud	method "RIGHT" of class "String"
 TimeSpan	microseconds	instance	answers	rc 0
 TimeSpan	minutes	instance	answers	rc 0
 TimeSpan	seconds	instance	answers	rc 0
-TimeSpan	sign	instance	loud	method "SIGN" of class "String"
+TimeSpan	sign	instance	answers	rc 0
 TimeSpan	string	instance	loud	method "RIGHT" of class "String"
 TimeSpan	totalDays	instance	answers	rc 0
 TimeSpan	totalHours	instance	answers	rc 0

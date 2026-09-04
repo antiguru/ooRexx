@@ -5,10 +5,10 @@ count 63
    truth value, and the oracle converts it in some positions and refuses in
    others: `o + 1` and `o & 1` are 97.1 because the operator is a message
    sent to the object, while everything below reaches the object through the
-   required-string protocol instead and answers. The refusals are this
-   crate's own loud ones and no differential row can carry them, so they are
-   asserted by `a_named_instance_is_never_an_operators_left_operand`
-   (`eval.rs`); this program is the half the oracle answers. */
+   required-string protocol instead and answers. The refusals are the
+   oracle's own 97.1 and live in `corpus/lang/operator_methods.rex` beside
+   the operators an instance does answer; this program is the half where no
+   operator is sent to the object at all. */
 
 o = .K~new
 say 'unnamed' datatype(o)

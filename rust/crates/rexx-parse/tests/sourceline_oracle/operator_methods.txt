@@ -1,0 +1,92 @@
+count 91
+/* An operator is a message sent to its LEFT operand, so a class that defines
+   one answers it, a class that defines none inherits Object's, and a name
+   Object does not hold either is 97.1.
+
+   The receiver of the last block is named '1' on purpose: every row there
+   would answer something else if the operator read that rendering as text. */
+
+a = .Vec~new(3)
+b = .Vec~new(4)
+say 'defined' (a + b)~n (a - b)~n (a * 2)~n (-a)~n
+say 'compare' (a = b) (a = .Vec~new(3)) (a < b) (b < a)
+say 'unknown' (a ** 2) (a >> 'z')
+
+p = .Plain~new
+say 'identity' (p = p) (p = .Plain~new) (p == p) (p \= p)
+say 'different' (p \== .Plain~new) (p <> .Plain~new) (p >< p)
+say 'concat' (p || 'x') (p 'x') (p'x') ('x' || p)
+
+s = .Spoken~new
+say 'spoken' (s || 'x') (s 'x') ('x' || s) s
+
+m = .Made~new
+say 'made' (m || 'x') (m 'x')
+
+d = .DateTime~fromIsoDate('2020-01-02T03:04:05.678901')
+t = .TimeSpan~fromSeconds(5)
+say 'datetime' (d + t)~isoDate (d - t)~isoDate
+say 'ordered' (d < d + t) (d = d) (d >= d + t) (d \= d + t)
+say 'timespan' (t + t)~totalSeconds (t * 3)~totalSeconds (t / 5)~totalSeconds
+
+r = .Vec~new(1)
+z. = r
+say 'through' (z. + b)~n
+say 'reference' ((>r) + b)~n
+
+o = .Plain~new
+o~objectName = '1'
+say 'named' (o = 1) (o == '1') (o \= 1) (1 = o) ('q' || o)
+if o then say 'truth yes'
+else say 'truth no'
+
+signal on syntax name refused
+say 'last' (o + 1)
+say 'unreachable'
+exit 0
+
+refused:
+  say 'refused' condition('C') rc
+  exit 0
+
+::CLASS Vec
+::METHOD init
+  expose n
+  use arg n
+::METHOD n
+  expose n
+  return n
+::METHOD '+'
+  expose n
+  use arg other
+  return .Vec~new(n + other~n)
+::METHOD '-'
+  expose n
+  if arg() = 0 then return .Vec~new(0 - n)
+  use arg other
+  return .Vec~new(n - other~n)
+::METHOD '*'
+  expose n
+  use arg factor
+  return .Vec~new(n * factor)
+::METHOD '='
+  expose n
+  use arg other
+  return n = other~n
+::METHOD '<'
+  expose n
+  use arg other
+  return n < other~n
+::METHOD unknown
+  use arg name, args
+  return 'UNK<'name'>'args~items
+
+::CLASS Plain
+
+::CLASS Spoken
+::METHOD string
+  return 'SPOKEN'
+
+::CLASS Made
+::METHOD makeString
+  return 'MADE'

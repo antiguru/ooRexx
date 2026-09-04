@@ -78,7 +78,11 @@ use crate::{Interp, Loud};
 mod convert;
 mod datatype;
 mod datetime;
-mod numeric;
+/// Crate-visible because `String~sign` is the same computation `SIGN` is --
+/// `RexxString::sign` is `ArithmeticMethod(Sign(), "SIGN")`
+/// (`classes/StringClass.cpp:1084`) -- and [`numeric::sign_of`] is what keeps
+/// the builtin and the method from coming to disagree.
+pub(crate) mod numeric;
 mod state;
 /// Crate-visible because the builtins are not the only place this
 /// interpreter searches a haystack for a byte: a `PARSE` template's

@@ -67,7 +67,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use gate_tables::{
-    Report, Structural, assert_no_structural_failures, compare_raw, excerpt, is_loud,
+    Descriptors, Report, Structural, assert_no_structural_failures, compare_raw, excerpt, is_loud,
     refused_construct, verdict,
 };
 use rexx_exec::{Engine, Invocation, Outcome};
@@ -452,6 +452,27 @@ struct Pending {
     oracle: CppOutcome,
 }
 
+/// The channels a `diverge` row moved on **in any of the three
+/// environments**, which is the comparison its verdict rests on.
+///
+/// **Against this machine's zone alone the answer turns on the hour.**
+/// `DateTime today` answers the UTC date here and the local one on the
+/// oracle, so the two agree in this zone for twenty-two hours a day: measured
+/// 2026-09-04, that row derives `agree` at 07:03 CEST and `diverge-stdout`
+/// around local midnight, while its verdict is `diverge` at every hour. A
+/// committed evidence value that moves by itself is a daily gate failure, so
+/// the union is what the table carries.
+fn channels_that_moved_anywhere(row: &Pending, shifted: &[(&str, CppOutcome)]) -> Descriptors {
+    let mut moved = compare_raw(&row.crate_side, &row.oracle);
+    for (_, out) in shifted {
+        let also = compare_raw(&row.crate_side, out);
+        moved.status |= also.status;
+        moved.stdout |= also.stdout;
+        moved.stderr |= also.stderr;
+    }
+    moved
+}
+
 /// Whether two oracle runs of one probe produced the same three descriptors.
 fn same_oracle(left: &CppOutcome, right: &CppOutcome) -> bool {
     left.termination == right.termination
@@ -623,7 +644,10 @@ const TABLE_HEADER: &str = "\
 #            method needing arguments is sent none, so for such a row this is
 #            agreement about an arity error rather than about a result.
 # `diverge`  the send answered and disagreed, and `evidence` names the
-#            channels that moved.
+#            channels that moved in ANY of the three environments below --
+#            a union, because a row that agrees in this machine's zone and
+#            disagrees in another would otherwise carry an evidence value
+#            that changes with the hour.
 # `unstable` the answer a verdict would have rested on is not reproducible,
 #            so neither `answers` nor `diverge` would be a claim the run
 #            made. `evidence` names what moved: `this crate` (its two engine
@@ -830,7 +854,7 @@ fn no_row_started_diverging_or_stopped_answering() {
             if same_oracle(&row.oracle, &again) {
                 Measured {
                     verdict: Body::Diverge,
-                    evidence: verdict(compare_raw(&row.crate_side, &row.oracle))
+                    evidence: verdict(channels_that_moved_anywhere(row, &shifted))
                         .label()
                         .to_string(),
                     detail: Some(format!(

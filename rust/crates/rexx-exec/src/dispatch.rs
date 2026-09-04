@@ -99,7 +99,7 @@ use rexx_classes::{ClassKind, ClassRegistry, InheritRefusal, MethodId, MethodSlo
 use rexx_core::{
     BehaviourHandle, BehaviourId, Body, Decoded, ObjRef, Object, ObjectMethod, ObjectMethods,
 };
-use rexx_parse::{Access, Expr};
+use rexx_parse::{Access, Expr, Operator};
 
 use crate::activation::{
     Activation, DeferredReply, MethodIdentity, ReplyState, TraceEntry, body_of,
@@ -431,6 +431,20 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("Method", "SCOPE", Arity::Fixed(0), native_scope),
     // `MutexSemaphoreClass::close`, `EventSemaphore`'s partner above.
     ("MutexSemaphore", "UNINIT", Arity::Fixed(0), native_no_op),
+    // `Setup.cpp:521`-`:530`, each declared at count 1. These are what an
+    // operator applied to an instance resolves against when its class defines
+    // none of its own; `Interp::operator_message_receiver` is the send, and
+    // the names are `Operator::spelling`'s, which
+    // `corpus/lang/operator_methods.rex` is what holds against the oracle.
+    ("Object", "=", Arity::Fixed(1), native_object_identical),
+    ("Object", "==", Arity::Fixed(1), native_object_identical),
+    ("Object", "\\=", Arity::Fixed(1), native_object_different),
+    ("Object", "\\==", Arity::Fixed(1), native_object_different),
+    ("Object", "<>", Arity::Fixed(1), native_object_different),
+    ("Object", "><", Arity::Fixed(1), native_object_different),
+    ("Object", "||", Arity::Fixed(1), native_object_concat),
+    ("Object", "", Arity::Fixed(1), native_object_concat),
+    ("Object", " ", Arity::Fixed(1), native_object_concat_blank),
     ("Object", "CLASS", Arity::Fixed(0), native_class),
     ("Object", "COPY", Arity::Fixed(0), native_copy),
     (
@@ -546,6 +560,8 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         native_string_make_string,
     ),
     ("String", "REVERSE", Arity::Fixed(0), native_reverse),
+    // `memory/Setup.cpp:648`, at count 0.
+    ("String", "SIGN", Arity::Fixed(0), native_string_sign),
     ("String", "UPPER", Arity::Fixed(2), native_string_upper),
     // `.methods`, `.routines` and `.resources`. The same functions the
     // `Directory` rows above name, because the C++ is the same code reached
@@ -4302,6 +4318,132 @@ fn native_annotations(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     Ok(Some(interp.annotations_of(receiver)?))
+}
+
+/// `String~sign`: `RexxString::sign`, which is
+/// `ArithmeticMethod(Sign(), "SIGN")` (`classes/StringClass.cpp:1084`) and so
+/// is the `SIGN` builtin's own computation on the receiver.
+///
+/// **Landed here because `DateTime~compareTo` reaches it**:
+/// `(utcTimeStamp - othertime)~sign` (`CoreClasses.orx:2517`) is the last step
+/// of every ordering comparison on a `DateTime`, so that class's documented
+/// comparison operators all refused on this one name.
+///
+/// Measured, oracle: `(-12)~sign` is `-1`, `'-0.0'~sign` is `0`, and
+/// `'abc'~sign` is `93.943 SIGN method target must be a number; found "abc".`
+/// at rc 163 under a `Compiled method "SIGN" with scope "String".` line.
+fn native_string_sign(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Ok(value) = interp.to_number(receiver) else {
+        let found = interp.string_value_text(receiver);
+        return Err(Raised::method_target_not_a_number(b"SIGN", &found).into());
+    };
+    Ok(Some(crate::builtin::numeric::sign_of(interp, &value)))
+}
+
+/// The one operand every `Object` operator method requires, or 93.903.
+///
+/// `requiredArgument(other, ARG_ONE)` opens each of them
+/// (`classes/ObjectClass.cpp:452`), and the count in `Setup.cpp:521`-`:530`
+/// is 1 -- so a shorter list is padded and refused here rather than by
+/// [`Interp::invoke`]. Measured, oracle rc 163: `o~'='()` is `93.903 Missing
+/// argument in method; argument 1 is required.` under a `Compiled method "="
+/// with scope "Object".` line.
+fn operator_argument(args: &[Option<ObjRef>]) -> Result<ObjRef, Failure> {
+    match args.first().copied() {
+        Some(Some(argument)) => Ok(argument),
+        _ => Err(Raised::missing_method_argument(1).into()),
+    }
+}
+
+/// `Object~"="` and `Object~"=="`: `RexxObject::equal` and
+/// `RexxObject::strictEqual` (`classes/ObjectClass.cpp:464`, `:448`), each a
+/// direct identity test rather than a comparison of renderings.
+///
+/// Measured, oracle rc 0 on `::CLASS K`: `.K~new = .K~new` is `0`, `o = o` is
+/// `1`, and `o = 'a K'` is `0` against the very text the instance renders as.
+///
+/// Identity here is handle equality, which is deviation 4's licence read the
+/// same way [`native_identity_hash`] reads it.
+fn native_object_identical(
+    _interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let other = operator_argument(args)?;
+    Ok(Some(crate::eval::logical(receiver == other)))
+}
+
+/// `Object~"\="`, `"\=="`, `"<>"` and `"><"`: `RexxObject::notEqual` and
+/// `RexxObject::strictNotEqual` (`classes/ObjectClass.cpp:492`, `:478`),
+/// [`native_object_identical`]'s negation.
+fn native_object_different(
+    _interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let other = operator_argument(args)?;
+    Ok(Some(crate::eval::logical(receiver != other)))
+}
+
+/// `Object~"||"` and `Object~""`: `RexxObject::concatRexx`
+/// (`classes/ObjectClass.cpp:2807`), which is `requestString()` on the
+/// receiver and then that string's own concatenation.
+///
+/// Measured, oracle rc 0: an instance whose class defines `::METHOD string`
+/// returning `'STR'` gives `STRx` for `o || 'x'`, and one that defines
+/// `makeString` gives `MKSx`, where a class defining neither gives its
+/// default name.
+fn native_object_concat(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    concat_through_string_value(interp, Operator::Concatenate, receiver, args)
+}
+
+/// `Object~" "`: `RexxObject::concatBlank` (`classes/ObjectClass.cpp:2823`),
+/// [`native_object_concat`] with the one separating space.
+fn native_object_concat_blank(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    concat_through_string_value(interp, Operator::Blank, receiver, args)
+}
+
+/// The shared body of the two above: the receiver's string value, then
+/// [`Interp::apply_binary`] on it, which is the C++'s
+/// `alias->concatRexx(otherObj)` and converts the other operand exactly as
+/// every other concatenation does.
+///
+/// The alias is rooted because the join allocates and the receiver's own
+/// `STRING` method may have built it.
+fn concat_through_string_value(
+    interp: &mut Interp,
+    op: Operator,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let other = operator_argument(args)?;
+    let frame = interp.roots.push_frame();
+    let joined = interp
+        .required_string_value(receiver)
+        .and_then(|alias| {
+            interp.roots.push_temp(alias);
+            interp.apply_binary(op, alias, other)
+        })
+        .map(Some);
+    interp.roots.pop_frame(frame);
+    joined
 }
 
 /// `Class~method(name)`: the method object `name` names **in this class's own

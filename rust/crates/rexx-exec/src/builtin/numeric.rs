@@ -185,14 +185,21 @@ pub(crate) fn sign(
     name: &'static [u8],
     args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
-    let Numeric { digits, form, .. } = current(interp);
     let value = target_number(interp, name, args)?;
-    // No rounding here, unlike `ABS` above: rounding cannot turn a non-zero
-    // value into a zero one, so `NumberString::Sign`'s own `copyIfNecessary`
-    // can never change the answer. Measured, `sign(-0.0)` is `0` -- every
-    // spelling of zero is unsigned, which is `Number::signum`'s rule.
+    Ok(sign_of(interp, &value))
+}
+
+/// [`sign`]'s answer once its target is a `Number`, shared with `String~sign`
+/// so the builtin and the method cannot come to disagree.
+///
+/// No rounding here, unlike `ABS` above: rounding cannot turn a non-zero
+/// value into a zero one, so `NumberString::Sign`'s own `copyIfNecessary` can
+/// never change the answer. Measured, `sign(-0.0)` is `0` -- every spelling of
+/// zero is unsigned, which is `Number::signum`'s rule.
+pub(crate) fn sign_of(interp: &mut Interp, value: &Number) -> ObjRef {
+    let Numeric { digits, form, .. } = current(interp);
     let answer = Number::parse(&value.signum().to_string()).expect("-1, 0 and 1 are all numbers");
-    Ok(interp.number(answer, saturate(digits), form))
+    interp.number(answer, saturate(digits), form)
 }
 
 // ---- TRUNC and FORMAT ----

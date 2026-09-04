@@ -16,3 +16,5 @@
 #
 # An entry here is a debt, not a category: it says the differential does not
 # compare that program against the oracle.
+
+lang/operator_methods.rex	Phase 5d Task 3's witness for operator dispatch on instances. Run by crates/rexx-exec/tests/operator_methods.rs until 5d closes and corpus/phase-5d.txt exists to name it.
