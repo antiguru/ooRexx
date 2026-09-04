@@ -22,6 +22,15 @@
 #            so neither `answers` nor `diverge` would be a claim the run
 #            made. `evidence` names what moved: `this crate` (its two engine
 #            runs differ) or `the oracle` (its own two runs differ).
+# `unanswered` the send never reached the method, so the run learned nothing
+#            about it. The instance arm of a class class-set.txt gives no
+#            construction expression takes a bare `~new` as its receiver;
+#            that raises, the probe's one `say` line never runs, and both
+#            sides agree on the CONSTRUCTOR. `answers` there would be a claim
+#            about a method nobody asked -- which is what let File's rows read
+#            as fifty working methods while .File~new('/tmp') could not
+#            construct at all. The class arm is unaffected: its receiver is
+#            `.Name` and constructs nothing.
 #
 # `answers` is agreement under THREE environments -- this machine's zone and
 # two more twenty-six hours apart, so that no instant puts them on one
@@ -882,13 +891,13 @@ Table	union	instance	answers	rc 163
 Table	xor	instance	answers	rc 163
 Table	of	class	loud	ARG option "A" answers an Array, which
 Table	putAll	instance	answers	rc 163
-Alarm	attachment	instance	answers	rc 163
-Alarm	cancel	instance	answers	rc 163
-Alarm	canceled	instance	answers	rc 163
-Alarm	cancelled	instance	answers	rc 163
-Alarm	init	instance	answers	rc 163
-Alarm	scheduledTime	instance	answers	rc 163
-Alarm	triggered	instance	answers	rc 163
+Alarm	attachment	instance	unanswered	a bare `~new` raises; the method was never sent
+Alarm	cancel	instance	unanswered	a bare `~new` raises; the method was never sent
+Alarm	canceled	instance	unanswered	a bare `~new` raises; the method was never sent
+Alarm	cancelled	instance	unanswered	a bare `~new` raises; the method was never sent
+Alarm	init	instance	unanswered	a bare `~new` raises; the method was never sent
+Alarm	scheduledTime	instance	unanswered	a bare `~new` raises; the method was never sent
+Alarm	triggered	instance	unanswered	a bare `~new` raises; the method was never sent
 AlarmNotification	cancel	instance	answers	rc 165
 AlarmNotification	triggered	instance	answers	rc 163
 Buffer	new	class	loud	method "NEW" of class "Buffer"
@@ -1015,56 +1024,56 @@ File	separator	class	answers	rc 0
 File	temporaryPath	class	loud	the LIBRARY REXX entry point "file_temporary_path"
 File	writeChars	class	answers	rc 163
 File	writeLines	class	answers	rc 163
-File	absoluteFile	instance	answers	rc 163
-File	absolutePath	instance	answers	rc 163
-File	canRead	instance	answers	rc 163
-File	canWrite	instance	answers	rc 163
-File	compareTo	instance	answers	rc 163
-File	delete	instance	answers	rc 163
-File	exists	instance	answers	rc 163
-File	extension	instance	answers	rc 163
-File	hashCode	instance	answers	rc 163
-File	init	instance	answers	rc 163
-File	isCaseSensitive	instance	answers	rc 163
-File	isDirectory	instance	answers	rc 163
-File	isFile	instance	answers	rc 163
-File	isHidden	instance	answers	rc 163
-File	lastAccessed	instance	answers	rc 163
-File	lastModified	instance	answers	rc 163
-File	length	instance	answers	rc 163
-File	list	instance	answers	rc 163
-File	listFiles	instance	answers	rc 163
-File	makeDir	instance	answers	rc 163
-File	makeDirs	instance	answers	rc 163
-File	makeString	instance	answers	rc 163
-File	name	instance	answers	rc 163
-File	parent	instance	answers	rc 163
-File	parentFile	instance	answers	rc 163
-File	path	instance	answers	rc 163
-File	pathSeparator	instance	answers	rc 163
-File	renameTo	instance	answers	rc 163
-File	separator	instance	answers	rc 163
-File	setReadOnly	instance	answers	rc 163
-File	setWritable	instance	answers	rc 163
-File	string	instance	answers	rc 163
-File	=	instance	answers	rc 163
-File	==	instance	answers	rc 163
-File	<	instance	answers	rc 163
-File	<=	instance	answers	rc 163
-File	<<	instance	answers	rc 163
-File	<<=	instance	answers	rc 163
-File	<>	instance	answers	rc 163
-File	>	instance	answers	rc 163
-File	>=	instance	answers	rc 163
-File	><	instance	answers	rc 163
-File	>>	instance	answers	rc 163
-File	>>=	instance	answers	rc 163
-File	\=	instance	answers	rc 163
-File	\==	instance	answers	rc 163
-File	\<	instance	answers	rc 163
-File	\<<	instance	answers	rc 163
-File	\>	instance	answers	rc 163
-File	\>>	instance	answers	rc 163
+File	absoluteFile	instance	unanswered	a bare `~new` raises; the method was never sent
+File	absolutePath	instance	unanswered	a bare `~new` raises; the method was never sent
+File	canRead	instance	unanswered	a bare `~new` raises; the method was never sent
+File	canWrite	instance	unanswered	a bare `~new` raises; the method was never sent
+File	compareTo	instance	unanswered	a bare `~new` raises; the method was never sent
+File	delete	instance	unanswered	a bare `~new` raises; the method was never sent
+File	exists	instance	unanswered	a bare `~new` raises; the method was never sent
+File	extension	instance	unanswered	a bare `~new` raises; the method was never sent
+File	hashCode	instance	unanswered	a bare `~new` raises; the method was never sent
+File	init	instance	unanswered	a bare `~new` raises; the method was never sent
+File	isCaseSensitive	instance	unanswered	a bare `~new` raises; the method was never sent
+File	isDirectory	instance	unanswered	a bare `~new` raises; the method was never sent
+File	isFile	instance	unanswered	a bare `~new` raises; the method was never sent
+File	isHidden	instance	unanswered	a bare `~new` raises; the method was never sent
+File	lastAccessed	instance	unanswered	a bare `~new` raises; the method was never sent
+File	lastModified	instance	unanswered	a bare `~new` raises; the method was never sent
+File	length	instance	unanswered	a bare `~new` raises; the method was never sent
+File	list	instance	unanswered	a bare `~new` raises; the method was never sent
+File	listFiles	instance	unanswered	a bare `~new` raises; the method was never sent
+File	makeDir	instance	unanswered	a bare `~new` raises; the method was never sent
+File	makeDirs	instance	unanswered	a bare `~new` raises; the method was never sent
+File	makeString	instance	unanswered	a bare `~new` raises; the method was never sent
+File	name	instance	unanswered	a bare `~new` raises; the method was never sent
+File	parent	instance	unanswered	a bare `~new` raises; the method was never sent
+File	parentFile	instance	unanswered	a bare `~new` raises; the method was never sent
+File	path	instance	unanswered	a bare `~new` raises; the method was never sent
+File	pathSeparator	instance	unanswered	a bare `~new` raises; the method was never sent
+File	renameTo	instance	unanswered	a bare `~new` raises; the method was never sent
+File	separator	instance	unanswered	a bare `~new` raises; the method was never sent
+File	setReadOnly	instance	unanswered	a bare `~new` raises; the method was never sent
+File	setWritable	instance	unanswered	a bare `~new` raises; the method was never sent
+File	string	instance	unanswered	a bare `~new` raises; the method was never sent
+File	=	instance	unanswered	a bare `~new` raises; the method was never sent
+File	==	instance	unanswered	a bare `~new` raises; the method was never sent
+File	<	instance	unanswered	a bare `~new` raises; the method was never sent
+File	<=	instance	unanswered	a bare `~new` raises; the method was never sent
+File	<<	instance	unanswered	a bare `~new` raises; the method was never sent
+File	<<=	instance	unanswered	a bare `~new` raises; the method was never sent
+File	<>	instance	unanswered	a bare `~new` raises; the method was never sent
+File	>	instance	unanswered	a bare `~new` raises; the method was never sent
+File	>=	instance	unanswered	a bare `~new` raises; the method was never sent
+File	><	instance	unanswered	a bare `~new` raises; the method was never sent
+File	>>	instance	unanswered	a bare `~new` raises; the method was never sent
+File	>>=	instance	unanswered	a bare `~new` raises; the method was never sent
+File	\=	instance	unanswered	a bare `~new` raises; the method was never sent
+File	\==	instance	unanswered	a bare `~new` raises; the method was never sent
+File	\<	instance	unanswered	a bare `~new` raises; the method was never sent
+File	\<<	instance	unanswered	a bare `~new` raises; the method was never sent
+File	\>	instance	unanswered	a bare `~new` raises; the method was never sent
+File	\>>	instance	unanswered	a bare `~new` raises; the method was never sent
 MessageNotification	messageComplete	instance	answers	rc 163
 Monitor	current	instance	loud	method "PEEK" of class "Queue"
 Monitor	destination	instance	loud	method "PULL" of class "Queue"
@@ -1223,15 +1232,15 @@ StackFrame	string	instance	loud	method "NEW" of class "StackFrame"
 StackFrame	target	instance	loud	method "NEW" of class "StackFrame"
 StackFrame	traceLine	instance	loud	method "NEW" of class "StackFrame"
 StackFrame	type	instance	loud	method "NEW" of class "StackFrame"
-StreamSupplier	available	instance	answers	rc 159
-StreamSupplier	index	instance	answers	rc 159
-StreamSupplier	init	instance	answers	rc 159
-StreamSupplier	item	instance	answers	rc 159
-StreamSupplier	next	instance	answers	rc 159
+StreamSupplier	available	instance	unanswered	a bare `~new` raises; the method was never sent
+StreamSupplier	index	instance	unanswered	a bare `~new` raises; the method was never sent
+StreamSupplier	init	instance	unanswered	a bare `~new` raises; the method was never sent
+StreamSupplier	item	instance	unanswered	a bare `~new` raises; the method was never sent
+StreamSupplier	next	instance	unanswered	a bare `~new` raises; the method was never sent
 StreamSupplier	new	class	answers	rc 159
-StreamSupplier	allIndexes	instance	answers	rc 159
-StreamSupplier	allItems	instance	answers	rc 159
-StreamSupplier	supplier	instance	answers	rc 159
+StreamSupplier	allIndexes	instance	unanswered	a bare `~new` raises; the method was never sent
+StreamSupplier	allItems	instance	unanswered	a bare `~new` raises; the method was never sent
+StreamSupplier	supplier	instance	unanswered	a bare `~new` raises; the method was never sent
 Supplier	new	class	answers	rc 163
 Supplier	allIndexes	instance	loud	method "AVAILABLE" of class "Supplier"
 Supplier	allItems	instance	loud	method "AVAILABLE" of class "Supplier"
@@ -1240,12 +1249,12 @@ Supplier	index	instance	loud	method "INDEX" of class "Supplier"
 Supplier	item	instance	loud	method "ITEM" of class "Supplier"
 Supplier	next	instance	loud	method "NEXT" of class "Supplier"
 Supplier	supplier	instance	answers	rc 0
-Ticker	attachment	instance	answers	rc 163
-Ticker	cancel	instance	answers	rc 163
-Ticker	canceled	instance	answers	rc 163
-Ticker	cancelled	instance	answers	rc 163
-Ticker	init	instance	answers	rc 163
-Ticker	interval	instance	answers	rc 163
+Ticker	attachment	instance	unanswered	a bare `~new` raises; the method was never sent
+Ticker	cancel	instance	unanswered	a bare `~new` raises; the method was never sent
+Ticker	canceled	instance	unanswered	a bare `~new` raises; the method was never sent
+Ticker	cancelled	instance	unanswered	a bare `~new` raises; the method was never sent
+Ticker	init	instance	unanswered	a bare `~new` raises; the method was never sent
+Ticker	interval	instance	unanswered	a bare `~new` raises; the method was never sent
 TimeSpan	init	instance	answers	rc 163
 TimeSpan	new	class	answers	rc 163
 TimeSpan	fromCivilTime	class	answers	rc 163

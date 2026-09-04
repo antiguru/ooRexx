@@ -129,6 +129,16 @@ enum Body {
     /// nothing reproducible to compare and neither `answers` nor `diverge`
     /// would be a claim the run made. The evidence column names the side.
     Unstable,
+    /// **The send never reached the method, so the run learned nothing about
+    /// it** -- the instance arm of a class with no committed construction
+    /// expression, whose receiver is a bare `~new` that raises. The probe's
+    /// one `say` line does not run, both sides agree on the constructor's
+    /// raise, and [`Body::Answers`] would be a claim about a method nobody
+    /// asked.
+    ///
+    /// The evidence column names the constructor, not a status, because there
+    /// is no status of the method to report.
+    Unanswered,
 }
 
 impl Body {
@@ -138,13 +148,20 @@ impl Body {
             Body::Answers => "answers",
             Body::Diverge => "diverge",
             Body::Unstable => "unstable",
+            Body::Unanswered => "unanswered",
         }
     }
 
     /// Every cell there is, for a caller that enumerates them without knowing
     /// how many there are.
     fn all() -> &'static [Body] {
-        &[Body::Loud, Body::Answers, Body::Diverge, Body::Unstable]
+        &[
+            Body::Loud,
+            Body::Answers,
+            Body::Diverge,
+            Body::Unstable,
+            Body::Unanswered,
+        ]
     }
 
     fn parse(text: &str) -> Option<Body> {
@@ -158,10 +175,10 @@ impl Body {
 /// Whether a row moving from `was` to `now` is the regression this table
 /// gates.
 ///
-/// Sixteen literal arms over the square, so exhaustiveness and non-overlap
-/// are the compiler's rather than a claim in a comment. Two rules are in
-/// here: a row that was not diverging may not start, and a row that was
-/// answering may not stop.
+/// One literal arm per ordered pair, so exhaustiveness and non-overlap are
+/// the compiler's rather than a claim in a comment. Two rules are in here: a
+/// row that was not diverging may not start, and a row that was answering may
+/// not stop -- including by losing its evidence.
 fn regressed(was: Body, now: Body) -> bool {
     match (was, now) {
         (Body::Loud, Body::Loud) => false,
@@ -180,6 +197,24 @@ fn regressed(was: Body, now: Body) -> bool {
         (Body::Unstable, Body::Answers) => false,
         (Body::Unstable, Body::Diverge) => true,
         (Body::Unstable, Body::Unstable) => false,
+        // **A row losing its evidence is a regression when it had some.**
+        // `Answers` -> `Unanswered` is a class that used to construct and
+        // stopped, which is the case this arm exists to catch. The 2026-09-04
+        // landing that introduced the verdict moved 71 rows across it, and
+        // did so by writing the committed table in the same commit rather
+        // than by relaxing this -- a definitional change, not a regression.
+        (Body::Answers, Body::Unanswered) => true,
+        (Body::Diverge, Body::Unanswered) => false,
+        (Body::Loud, Body::Unanswered) => false,
+        (Body::Unstable, Body::Unanswered) => false,
+        // Out of `Unanswered` nothing is a regression: the row carried no
+        // claim to lose. Reaching `Diverge` is the exception every other
+        // verdict makes too.
+        (Body::Unanswered, Body::Diverge) => true,
+        (Body::Unanswered, Body::Loud) => false,
+        (Body::Unanswered, Body::Answers) => false,
+        (Body::Unanswered, Body::Unstable) => false,
+        (Body::Unanswered, Body::Unanswered) => false,
     }
 }
 
@@ -482,6 +517,12 @@ struct Pending {
     key: (String, String, String),
     subject: String,
     abs: PathBuf,
+    /// Whether this row's receiver actually builds something. False for the
+    /// instance arm of a class `class-set.txt` gives no construction
+    /// expression, whose bare `~new` raises -- see the `Unanswered` arm of
+    /// the second pass.
+    constructs: bool,
+    arm: String,
     crate_side: Outcome,
     oracle: CppOutcome,
 }
@@ -686,6 +727,15 @@ const TABLE_HEADER: &str = "\
 #            so neither `answers` nor `diverge` would be a claim the run
 #            made. `evidence` names what moved: `this crate` (its two engine
 #            runs differ) or `the oracle` (its own two runs differ).
+# `unanswered` the send never reached the method, so the run learned nothing
+#            about it. The instance arm of a class class-set.txt gives no
+#            construction expression takes a bare `~new` as its receiver;
+#            that raises, the probe's one `say` line never runs, and both
+#            sides agree on the CONSTRUCTOR. `answers` there would be a claim
+#            about a method nobody asked -- which is what let File's rows read
+#            as fifty working methods while .File~new('/tmp') could not
+#            construct at all. The class arm is unaffected: its receiver is
+#            `.Name` and constructs nothing.
 #
 # `answers` is agreement under THREE environments -- this machine's zone and
 # two more twenty-six hours apart, so that no instant puts them on one
@@ -806,6 +856,8 @@ fn no_row_started_diverging_or_stopped_answering() {
             key: row.key(),
             subject,
             abs,
+            constructs: class.construction.is_some(),
+            arm: row.arm.clone(),
             crate_side: crate_side.outcome,
             oracle: cpp,
         });
@@ -878,12 +930,32 @@ fn no_row_started_diverging_or_stopped_answering() {
                 })
         };
         if agrees_everywhere {
+            // **Agreeing is not the same as having been asked.** A class with
+            // no committed construction expression takes a bare `~new` as its
+            // instance receiver, and for these classes that raises -- so the
+            // probe's one `say` line never runs, both sides agree on the
+            // constructor, and the method itself was never sent. Recording
+            // that as `answers` is what let `File`'s rows read as fifty
+            // working methods while `.File~new('/tmp')` could not construct at
+            // all, and a phase was scoped on them.
+            //
+            // The class arm is unaffected: its receiver is `.Name`, which
+            // constructs nothing.
+            let asked = row.arm == "class" || row.constructs;
             measured.insert(
                 row.key.clone(),
-                Measured {
-                    verdict: Body::Answers,
-                    evidence: format!("rc {}", wrapped_exit_code(row.crate_side.exit_code)),
-                    detail: None,
+                if asked {
+                    Measured {
+                        verdict: Body::Answers,
+                        evidence: format!("rc {}", wrapped_exit_code(row.crate_side.exit_code)),
+                        detail: None,
+                    }
+                } else {
+                    Measured {
+                        verdict: Body::Unanswered,
+                        evidence: "a bare `~new` raises; the method was never sent".to_string(),
+                        detail: None,
+                    }
                 },
             );
             continue;
