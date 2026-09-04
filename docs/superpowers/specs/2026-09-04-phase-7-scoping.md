@@ -25,10 +25,10 @@ qualify         1                          rc 120  routine "QUALIFY" ...
 say 'x'         x                          x       rc 0, agrees
 ```
 
-**`SAY` is not stream-backed here**, so the stream work does not have to re-plumb it. On the oracle
-`SAY` writes through `.OUTPUT`; whether this crate must adopt that to match observable behaviour is
-**open decision D-P7-1** below, and it is the one question in this survey whose answer could change
-the phase's shape again.
+**`SAY` is not stream-backed here.** On the oracle it goes through `.OUTPUT` and a program can
+prove it -- see D-P7-1, measured after this section was written and no longer open. The answer
+there is that the two agree today because every route to observing the difference is itself loud,
+so `SAY` stays direct and the stream work is additive.
 
 **The refusal message attributes every excluded builtin to `4c`, and that is wrong for all of
 them.** `run.rs:5846` answers an excluded builtin with `Loud::unresolved_call`, whose owner is the
