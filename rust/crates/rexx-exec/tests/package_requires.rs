@@ -9,29 +9,22 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! `corpus/lang/package_requires.rex` against the oracle, on both engines.
+//! The `::REQUIRES` search, the cycle report and `::OPTIONS NOPROLOG`, each
+//! against the oracle.
 //!
-//! **A binary of its own rather than a line in a phase subset file**, for the
-//! reason `tests/operator_methods.rs` gives: a committed `corpus/phase-5d.txt`
-//! would oblige `CLOSED_PHASES` to name 5d before the phase closes. The
-//! program lives in `corpus/lang/` like any other, `corpus/unfiled.txt`
-//! records that the differential does not run it, and this does. Whoever
-//! closes 5d moves the line into the subset file and deletes this file.
+//! **Kept beside `corpus/phase-5d.txt`, which names
+//! `lang/package_requires.rex`.** That program is the witness for what
+//! `::REQUIRES` imports, and the differential runs it. What this binary has
+//! that no corpus program can express: every row here sets a **working
+//! directory and two environment variables** of its own and writes the
+//! required files into directories it creates, which is the only way to
+//! separate the four search routes from each other.
 //!
-//! **The two files it requires are `.cls`.** Every corpus scan selects
-//! `*.rex`, so a `.rex` beside the witness would either be run as a program of
-//! its own or redden `every_lang_program_is_run_or_named_unfiled`; the `.cls`
-//! spelling keeps them invisible to both and exercises the extension step the
-//! `::REQUIRES` search tries first.
+//! **The required files are `.cls`** here and in the corpus, because every
+//! corpus scan selects `*.rex`; the spelling also exercises the extension step
+//! the search tries first. `corpus/README.md`'s "Two shapes work" is the rule.
 //!
-//! **The crate side runs from the test process's working directory and the
-//! oracle side from the program's own**, which is what `support::oracle` does
-//! for every corpus program. Both find the same files, and that is the
-//! program-directory route doing the work: the required names carry no
-//! directory, and the current directory is not the same on the two sides.
-//!
-//! Three descriptors compared separately and raw. The program writes no
-//! trace, so there is no normalisation to apply and none is applied.
+//! Three descriptors compared separately and raw.
 
 mod support;
 
@@ -39,98 +32,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use rexx_exec::{Engine, Invocation, Outcome, run_program};
 use support::oracle::locate;
-
-/// The program, which is the witness rather than anything in this file.
-const PROGRAM: &str = "corpus/lang/package_requires.rex";
-
-fn program_path() -> PathBuf {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .join(PROGRAM);
-    fs::canonicalize(&path).unwrap_or_else(|e| panic!("cannot resolve {}: {e}", path.display()))
-}
-
-fn run_crate(path: &std::path::Path, engine: Engine) -> Outcome {
-    let text = fs::read(path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
-    let path_str = path
-        .to_str()
-        .unwrap_or_else(|| panic!("{} is not valid UTF-8", path.display()));
-    run_program(path_str, text, Invocation::none().with_engine(engine))
-}
-
-/// The program answers the oracle byte for byte on stdout, stderr and exit
-/// status, on both engines.
-///
-/// **At BASE `310677e47` it exits 120 on its first directive**, `::REQUIRES is
-/// not implemented (Phase 5)`, with stdout empty -- so every line below was
-/// unreachable, the two required files' prologues included.
-///
-/// The lines that would move first if the search or the merge narrowed: the
-/// public routine and public class of the required file, the ones it in turn
-/// imported, `.HIDDEN` rendering as its own name because a non-`PUBLIC`
-/// `::CLASS` is not imported, the private routine raising rather than
-/// answering, and `shared here:` naming the file the **first** `::REQUIRES`
-/// reached rather than the last.
-#[test]
-fn the_package_requires_program_answers_the_oracle() {
-    let path = program_path();
-    let oracle = locate();
-    let cpp = oracle.run(&path);
-    let ir = run_crate(&path, Engine::Ir);
-    let tree_walker = run_crate(&path, Engine::TreeWalker);
-
-    for (engine, outcome) in [(Engine::Ir, &ir), (Engine::TreeWalker, &tree_walker)] {
-        assert_eq!(
-            String::from_utf8_lossy(&outcome.stdout),
-            String::from_utf8_lossy(&cpp.stdout),
-            "{PROGRAM}: stdout differs from the oracle on {engine:?}"
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&outcome.stderr),
-            String::from_utf8_lossy(&cpp.stderr),
-            "{PROGRAM}: stderr differs from the oracle on {engine:?}"
-        );
-        assert_eq!(
-            outcome.exit_code,
-            cpp.expect_exit_code(),
-            "{PROGRAM}: exit status differs from the oracle on {engine:?}"
-        );
-    }
-
-    // Asserted on the runs rather than inferred from the two comparisons
-    // above passing: a program the oracle answers with nothing at all would
-    // satisfy both while the engines had drifted apart.
-    assert!(
-        !cpp.stdout.is_empty(),
-        "{PROGRAM}: the oracle answered nothing, so the comparisons above \
-         compare two absences"
-    );
-    assert_eq!(
-        (&ir.stdout, &ir.stderr, ir.exit_code),
-        (
-            &tree_walker.stdout,
-            &tree_walker.stderr,
-            tree_walker.exit_code
-        ),
-        "{PROGRAM}: the two crate engines disagree"
-    );
-
-    // **The prologue of a file required twice, and required again through a
-    // second file, runs once.** Asserted on the count rather than left to the
-    // byte comparison: a crate that ran it three times and an oracle that ran
-    // it once would differ on every line below it too, and this names which
-    // property failed.
-    let stdout = String::from_utf8_lossy(&ir.stdout);
-    for prologue in ["lib prologue", "dep prologue"] {
-        assert_eq!(
-            stdout.lines().filter(|line| *line == prologue).count(),
-            1,
-            "{PROGRAM}: {prologue:?} did not run exactly once:\n{stdout}"
-        );
-    }
-}
 
 /// One route the search covers, as a directory holding the required file and
 /// the answer that directory's copy gives.

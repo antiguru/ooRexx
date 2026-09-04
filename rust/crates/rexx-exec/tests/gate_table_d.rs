@@ -104,9 +104,9 @@ use std::path::{Path, PathBuf};
 
 use gate_tables::orx::{self, CORE_CLASSES, STREAM_CLASSES};
 use gate_tables::{
-    Descriptors, Report, Structural, Verdict, assert_no_structural_failures, compare_raw, excerpt,
-    is_loud, refused_construct, run_on_both_engines, stdout_lines, verdict, verdict_is_gated,
-    verdict_label,
+    CLOSED_PHASES, Descriptors, Report, Structural, Verdict, assert_no_structural_failures,
+    compare_raw, excerpt, is_loud, refused_construct, run_on_both_engines, stdout_lines, verdict,
+    verdict_is_gated, verdict_label,
 };
 use support::oracle::{did_not_finish, wrapped_exit_code};
 
@@ -263,6 +263,49 @@ fn owning_phase(row: &Row) -> Option<&'static str> {
 /// not spelled like one, so it can never match [`gate_tables::PHASE_GATE_ENV`]
 /// or sit in [`gate_tables::CLOSED_PHASES`].
 const PARSE_ERROR_RENDERING: &str = "deferred-parse-error-rendering";
+
+/// Every phase this table owns rows for whose corpus subset file exists is in
+/// [`gate_tables::CLOSED_PHASES`].
+///
+/// **`gate_table_c.rs` has the same assertion and it cannot reach this table.**
+/// Its enumeration is over the owners *table C's* rows carry, and a phase can
+/// own rows here and none there -- measured, `5d` is such a phase. Without this
+/// copy a `corpus/phase-<id>.txt` could be committed for it, which is the
+/// project's record that its programs agree with the oracle, while
+/// `CLOSED_PHASES` never named it and a verdict of its rows could move with
+/// every gate still exiting 0.
+///
+/// **One direction, and the other needs none**, for the reason table C's own
+/// copy gives: a phase named in `CLOSED_PHASES` before it closes gates rows
+/// that do not agree yet, which the next gate run reports as an exit status.
+#[test]
+fn every_closed_phase_this_table_owns_rows_for_is_gated() {
+    let rows = read_rows();
+    let owners: BTreeSet<String> = rows
+        .iter()
+        .filter_map(owning_phase)
+        .map(str::to_string)
+        .collect();
+    // The owners come from a match over a file's rows, so an enumeration that
+    // read none of them would leave the filter below iterating nothing and
+    // still pass.
+    assert!(
+        !owners.is_empty(),
+        "no row named an owner, so this check no longer covers the table it reads"
+    );
+    let corpus = corpus_dir();
+    let ungated: Vec<&String> = owners
+        .iter()
+        .filter(|phase| corpus.join(format!("phase-{phase}.txt")).is_file())
+        .filter(|phase| !CLOSED_PHASES.contains(&phase.as_str()))
+        .collect();
+    assert!(
+        ungated.is_empty(),
+        "{ungated:?} own rows in gate table D and have a committed corpus subset file, so \
+         their programs agree with the oracle, but CLOSED_PHASES does not name them -- a \
+         verdict of theirs can move and every gate still exits 0"
+    );
+}
 
 /// The rows whose probe the oracle refuses before it reaches its `say`.
 ///

@@ -674,6 +674,7 @@ const SUBSET_FILES: &[&str] = &[
     "phase-5a.txt",
     "phase-5b.txt",
     "phase-5c.txt",
+    "phase-5d.txt",
 ];
 
 /// The phase subset files that exist in the corpus directory, sorted.
@@ -1408,6 +1409,31 @@ fn phase_5c_subset_matches_the_committed_list() {
          removing a line from the 5c subset is a plan amendment, and must \
          change both the file and this list together, or a deleted line \
          shrinks every measurement that reads phase-5c.txt with nothing to \
+         notice it"
+    );
+}
+
+/// `phase-5d.txt`'s exact line list, the same device [`EXPECTED_SUBSET_5A`],
+/// [`EXPECTED_SUBSET_5B`] and [`EXPECTED_SUBSET_5C`] are for their own files.
+const EXPECTED_SUBSET_5D: &[&str] = &[
+    // Task 3's operator-method witness.
+    "lang/operator_methods.rex",
+    // Task 4's `::REQUIRES` witness and Task 5's namespace one, each with two
+    // `.cls` helpers beside it that no corpus scan sees.
+    "lang/package_requires.rex",
+    "lang/package_namespace.rex",
+];
+
+#[test]
+fn phase_5d_subset_matches_the_committed_list() {
+    let corpus_dir = corpus_dir();
+    let subset = read_subset(&[&corpus_dir.join("phase-5d.txt")]);
+    assert_eq!(
+        subset, EXPECTED_SUBSET_5D,
+        "phase-5d.txt's entries drifted from EXPECTED_SUBSET_5D -- adding or \
+         removing a line from the 5d subset is a plan amendment, and must \
+         change both the file and this list together, or a deleted line \
+         shrinks every measurement that reads phase-5d.txt with nothing to \
          notice it"
     );
 }

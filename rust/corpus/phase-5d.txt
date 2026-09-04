@@ -1,0 +1,41 @@
+# Phase 5d corpus subset -- the union with phase-4a.txt, phase-4b.txt,
+# phase-4c.txt, phase-5a.txt, phase-5b.txt and phase-5c.txt is what the
+# harnesses read, not this file alone. Every entry in them stays in force.
+#
+# One path per line, relative to this directory (rust/corpus/). Lines starting
+# with # are comments; blank lines are ignored. Same format as the earlier
+# phase files, and read by the same `read_subset`, which unions the files in
+# first-seen order and drops a repeat.
+#
+# Written by Phase 5d's Task 6, which is where 5d closes. While 5d's rows were
+# still landing this file could not exist: gate_table_d.rs's
+# `every_closed_phase_this_table_owns_rows_for_is_gated` makes a committed
+# phase-<id>.txt oblige CLOSED_PHASES to name that phase, and table D owns
+# 5d's one row. So 5d's witnesses waited in test binaries of their own, named
+# in corpus/unfiled.txt, and this file is where they land.
+
+# Task 3: operator methods on instances. A user class defining `+`, `-`, `*`,
+# a prefix operator and a comparison; the identity default a class defining
+# none inherits; `||` and blank concatenation against a class defining
+# `string` and against one defining `makeString`; the bootstrap's
+# DateTime/TimeSpan arithmetic and ordering; an operand reached through a stem
+# and through a variable reference; a named instance in every position its
+# rendering is the value of; and the refusal that remains for a name `Object`
+# does not hold either.
+lang/operator_methods.rex
+
+# Task 4: `::REQUIRES` of a program file. The two files it requires are
+# `package_requires_lib.cls` and `package_requires_dep.cls`, which are `.cls`
+# so that no corpus scan reads them as programs of their own --
+# corpus/README.md's "Two shapes work" is the rule. tests/package_requires.rs
+# is NOT deleted and still holds what no corpus program can express: the four
+# search routes, the precedence between them, the circular-::REQUIRES report,
+# and `::OPTIONS NOPROLOG` across a package boundary, each of which needs its
+# own working directory and environment.
+lang/package_requires.rex
+
+# Task 5: `::REQUIRES ... NAMESPACE`, the qualified class, routine and
+# directive-keyword lookups it makes reachable, the `rexx:` reserved
+# namespace, and `Package~local`. Its two helpers are `.cls` for the same
+# reason.
+lang/package_namespace.rex

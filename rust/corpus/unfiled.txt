@@ -17,6 +17,3 @@
 # An entry here is a debt, not a category: it says the differential does not
 # compare that program against the oracle.
 
-lang/operator_methods.rex	Phase 5d Task 3's witness for operator dispatch on instances. Run by crates/rexx-exec/tests/operator_methods.rs until 5d closes and corpus/phase-5d.txt exists to name it.
-lang/package_requires.rex	Phase 5d Task 4's witness for ::REQUIRES of a program file. Needs two files beside it (package_requires_lib.cls and package_requires_dep.cls, which are .cls so that no corpus scan reads them as programs). Run by crates/rexx-exec/tests/package_requires.rs until 5d closes and corpus/phase-5d.txt exists to name it.
-lang/package_namespace.rex	Phase 5d Task 5's witness for ::REQUIRES ... NAMESPACE, the qualified lookups and the package local. Needs two files beside it (package_namespace_lib.cls and package_namespace_dep.cls, which are .cls so that no corpus scan reads them as programs). Run by crates/rexx-exec/tests/package_namespace.rs until 5d closes and corpus/phase-5d.txt exists to name it.
