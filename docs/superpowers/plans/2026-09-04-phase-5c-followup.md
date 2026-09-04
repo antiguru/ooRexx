@@ -114,7 +114,14 @@ constructor's second argument or 256. Oracle: `new(copies('x',400))` then `setBu
 
 ## Task 2 — the constructor carries state, and the witness proves it
 
-Implement the chosen representation and the methods the witness needs: `~new` keeping what it is
+**The representation is decided** (Task 1, `records/2026-09-04-phase-5c-followup/task-1-report.md`
+§4): `Body::Instance` gains `native: Option<Box<BufferState>>` with `BufferState { bytes: Vec<u8>,
+capacity: usize, default_size: usize }`; `size_of::<Body>()` stays 80. Rendering per §4.2 — the
+infallible renderings answer the bytes, `MAKESTRING` stays unbound until Task 3. Two more witnesses
+come from Task 1's measurements: `trace i` on `x = buf` shows the contents, and a `MutableBuffer`
+subclass with `EXPOSE` runs.
+
+Implement that representation and the methods the witness needs: `~new` keeping what it is
 given, `~length`, `~string`, `~endsWith`, `~append`, `~delstr`, `~getBufferSize`, `~setBufferSize`.
 
 **Capacity is a real observable and has three behaviours to match**, all measured: it defaults to
@@ -150,7 +157,15 @@ The remaining rows: the caseless family, the word family, the search family, the
 Task 2's program exercises eight names and says nothing about the other 45. A family that lands
 without a witness has landed behind an instrument its own stub could satisfy.
 
-**Whether this is one task or several is still open** — see the review questions below.
+**Several, decided by Task 1 (§5)**: first a commit that extracts the byte cores out of
+`builtin/string.rs` and `word.rs` into plain functions over `&[u8]` (the builtin tests are its
+witness; Task 2 does `delstr`'s as the first instance), then four commits — **readers over cores**
+plus the derived readers (`substr [] pos lastPos countStr verify subWord word wordIndex wordLength
+words wordPos contains containsWord startsWith match matchChar subChar`), **mutators over cores**
+(`insert overlay replaceAt []= changeStr upper lower translate space delWord delete`),
+**caseless** (a comparator through the cores; its witness holds mixed-case data), and
+**conversion** (`makeString string makeArray subWords`, the commit that flips `say buf` and carries
+its own witness). Each commit its own gate run and its own corpus witness.
 
 **The oracle's own `MutableBufferClass.cpp` is the authority**, and `utilityclasses.xml` documents
 the surface. Where they disagree, the oracle wins and the divergence is recorded. Note that `delete`
@@ -220,10 +235,9 @@ construction expression, whatever gets implemented.
 
 ## Open for a second review, if one is taken
 
-1. **Is Task 3 one task or several?** Now that each family needs its own witness, the argument for
-   splitting is stronger than when this plan first asked.
+1. ~~**Is Task 3 one task or several?**~~ Several; decided by Task 1, see Task 3.
 2. **Should Task 0 sweep the other `covered` classes** rather than only fixing `MutableBuffer`'s
    receiver? It is the same one-line mechanism per class and nobody knows how many rows it would
    sharpen.
-3. **Does `defaultSize` need to exist in the representation at all?** Task 1 is told to decide from
-   the C++ rather than inherit an answer.
+3. ~~**Does `defaultSize` need to exist in the representation at all?**~~ Yes; `setBufferSize(0)`
+   reads it. Measured by Task 0, carried by Task 1's recommendation.

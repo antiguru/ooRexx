@@ -91,15 +91,16 @@ that the cost is paid while it still moves nothing and Task 2's table diff stays
 ## Gates
 
 Run from `rust/` by a background job writing each status unpiped to a file as it goes, the commit
-sha as its first line, with a pidfile. Started after the commit; the controller fills this table in
-from that file.
+sha as its first line, with a pidfile. Started after the commit at `fdf4c6624`; the seven exits
+below are read from that file (`…/scratchpad/task0/gates/status.txt`, first line `fdf4c6624`,
+last line `finished`), G1 and G2 on a warm target directory.
 
 | # | command | exit |
 |---|---|---|
-| 1 | `cargo fmt --all --check` | **G1** |
-| 2 | `cargo clippy --workspace --all-targets -- -D warnings` | **G2** |
-| 3 | `cargo test --release --workspace --no-fail-fast` | **G3** |
-| 4 | `REXX_CORPUS_GATE=1 cargo test --release --workspace --no-fail-fast` | **G4** |
-| 5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | **G5** |
-| 6 | `REXX_PHASE_GATE=5c REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **G6** |
-| 7 | `REXX_PHASE_GATE=5d REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **G7** |
+| 1 | `cargo fmt --all --check` | **0** |
+| 2 | `cargo clippy --workspace --all-targets -- -D warnings` | **0** |
+| 3 | `cargo test --release --workspace --no-fail-fast` | **0** |
+| 4 | `REXX_CORPUS_GATE=1 cargo test --release --workspace --no-fail-fast` | **0** |
+| 5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | **0** |
+| 6 | `REXX_PHASE_GATE=5c REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **0** |
+| 7 | `REXX_PHASE_GATE=5d REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **0** |
