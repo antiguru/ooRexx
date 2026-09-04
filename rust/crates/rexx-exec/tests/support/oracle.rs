@@ -342,6 +342,30 @@ impl Oracle {
         }
     }
 
+    /// [`Oracle::run`] with `TZ` set, for a caller asking whether a program's
+    /// answer depends on the clock and zone it is read under.
+    ///
+    /// The variable is set on the child alone; this process's own environment
+    /// is untouched, which matters because the in-process executor a
+    /// differential harness compares against reads the same one.
+    pub fn run_in_zone(&self, path: &Path, zone: &str) -> CppOutcome {
+        self.invocations.fetch_add(1, Ordering::Relaxed);
+        let child = self
+            .wrapped(path, &[])
+            .env("TZ", zone)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap_or_else(|e| panic!("failed to spawn the oracle for {}: {e}", path.display()));
+        let (stdout, stderr, termination) = wait_with_deadline(child, path);
+        CppOutcome {
+            stdout,
+            stderr,
+            termination,
+        }
+    }
+
     /// The `sh -c 'ulimit … && exec "$0" "$@"'` invocation, the library path
     /// and the working directory, with standard input left for the caller.
     ///

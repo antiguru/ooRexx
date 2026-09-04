@@ -86,29 +86,50 @@ class that defines an operator.
 **Sampled 2026-09-03** by sending every documented instance-arm name to a real receiver, one program
 each, and reading the refusal:
 
-| class | instance rows | refuse *"is not implemented"* | reached a body |
-|---|---|---|---|
-| `String` | 118 | **80** | 38 |
-| `Array` | 44 | **27** | 17 |
-| `Directory` | 31 | **18** | 13 |
-| `MutableBuffer` | 51 | **49** | 2 |
-| `Method` | 17 | **14** | 3 |
-| `TimeSpan` | 47 | 4 | 43 |
-| | **308** | **192** | 116 |
+| class | instance rows | refuse *"is not implemented"* | reached a body | Task 2 measured |
+|---|---|---|---|---|
+| `String` | 118 | **80** | 38 | **113** / 5 |
+| `Array` | 44 | **27** | 17 | 27 / 17 |
+| `Directory` | 31 | **18** | 13 | 18 / 13 |
+| `MutableBuffer` | 51 | **49** | 2 | **51** / 0 |
+| `Method` | 17 | **14** | 3 | 14 / 3 |
+| `TimeSpan` | 47 | 4 | 43 | **7** / 40 |
+| | **308** | **192** | 116 | **230** / 78 |
 
-**192 of 308 have no body, and every one of those rows is `agree` in gate table C** — the rows are
-`hasMethod` readbacks, so a hollow class scores full marks.
+**The sample's own figures are three rows wrong, and Task 2's full sweep is the measured pair.**
+`Array`, `Directory` and `Method` reproduce exactly; `String`, `MutableBuffer` and `TimeSpan` do not,
+and the sample's probe form is not the cause — measured, four send forms (`say o~'M'()`, the same
+without the `say`, the bare `o~M`, and a literal receiver) classify `String`'s 74 alphabetically
+named instance rows identically, 69 loud under each. `String` has exactly five instance methods with
+a body here (`length`, `makeArray`, `makeString`, `reverse`, `upper`), which is what
+`NATIVE_METHODS` carries for it. What the sample did instead was not reconstructed; the committed
+`corpus/method-bodies.txt` is the table this phase reads.
 
-**192 is exact, not a floor, and the reason matters for how the instrument gets built.** No arguments
-were passed, and the refusal fires **before** any argument handling: `'abcdef'~substr` with no
-arguments is rc 120 `method "SUBSTR" of class "String" is not implemented`, while an *implemented*
-method sent at the wrong arity raises an ordinary ooRexx error instead —
-`.Array~of(1,2)~at` is rc 163 `Compiled method "AT" with scope "Array"`, which contains no
-"is not implemented". So a zero-argument send classifies `loud` cleanly in both directions and needs
-no knowledge of any method's signature.
+**230 of 308 have no body, and every one of those rows is `agree` in gate table C** — the rows are
+`hasMethod` readbacks, so a hollow class scores full marks. Over the whole documented set the figure
+is **673 of 1347**, of which 642 are instance-arm rows.
 
-`TimeSpan` is the tell at 4 of 47: its bodies are Rexx in `CoreClasses.orx`. The natively-backed
-classes are 60–96% hollow.
+**A zero-argument send classifies `loud` exactly, and the reason matters for how the instrument gets
+built.** No arguments are passed, and the refusal fires **before** any argument handling:
+`'abcdef'~substr` with no arguments is rc 120
+`method "SUBSTR" of class "String" is not implemented`, while an *implemented* method sent at the
+wrong arity raises an ordinary ooRexx error instead — `.Array~of(1,2)~at` is rc 163
+`Compiled method "AT" with scope "Array"`, which contains no "is not implemented". So a
+zero-argument send classifies `loud` cleanly in both directions and needs no knowledge of any
+method's signature.
+
+**Task 2 checked that claim over the whole set rather than over samples**, in two ways. The
+structural half: `Interp::invoke` asks `Interp::invocable` **first**, before the seam and before any
+arity check, and the arity checks live only in the arms where a body was found — so the resolution
+refusal cannot depend on the argument count. The measured half: of the 517 `loud` rows whose refusal
+names the row's own method, **517 of 517** give the identical status and the identical `stderr`
+bytes when re-sent with one argument. Of the other 156 `loud` rows — where the refusal names a
+constructor that raised, or a construct reached *inside* a body that does run — 41 do change with an
+argument, which is the honest limit of what a zero-argument sweep can say.
+
+`TimeSpan` is the tell at 7 of 47: its bodies are Rexx in `CoreClasses.orx`, and all seven of its
+`loud` rows refuse on a `String` or `Object` method those bodies reach rather than on the `TimeSpan`
+method itself. The five natively-backed classes above are 58–100% hollow.
 
 ### 3. The package mechanism
 
@@ -228,6 +249,63 @@ table could carry, and it is a deliberate trade — the gated rule does not rest
 **A table nobody can afford to regenerate rots**, and a stale one asserting `loud` over a row that
 now diverges is worse than none, so the refresh path is part of the deliverable.
 
+### What Task 2 built, and the four points where it went past this section
+
+Committed as `rust/corpus/method-bodies.txt` and derived by
+`rust/crates/rexx-exec/tests/method_bodies.rs`, which re-runs the whole sweep on every run: 2695
+in-process crate runs and 2027 oracle subprocesses. A full refresh is **84 s** in `--release`.
+
+1. **A fourth cell, `unstable`**, for a row whose own answer is not reproducible, so that no
+   verdict rests on an answer that moves by itself. Two occupants, and each needed a different
+   probe: `DateTime new` on the class arm, whose two engine runs differ because its answer is the
+   instant it is evaluated at; and `Object~identityHash`, whose *oracle* runs differ because its
+   answer is derived from an address. Without the first, that row is a permanent structural failure
+   of the two-engine check; without the second, a licensed divergence is reported as a defect.
+2. **`DateTime`'s instance receiver is overridden** to
+   `.DateTime~fromIsoDate('2020-01-02T03:04:05.678901')`, because `class-set.txt`'s `.DateTime~new`
+   is the current instant and makes every value-returning row of that class depend on the clock —
+   measured, fourteen rows disagree between this crate's own two engines under it. Under the fixed
+   receiver the oracle gives one answer for each of those rows over five spread-out passes, which
+   is what makes their divergences real rather than artifacts. Every other class's receiver is
+   `class-set.txt`'s own expression, asserted equal to the one gate table C's committed instance
+   probe constructs.
+3. **The gate covers `answers` too**: a row may not leave it, in either direction. A method that
+   worked and now refuses is a regression, and the rule cost nothing to widen.
+4. **The refresh is `REXX_METHOD_BODIES_REFRESH=1` on the test itself, and it refuses to write a
+   regression** — measured, on a tree with a laundered `loud` row it exits 101 and leaves the
+   committed table byte-identical. Any other drift, the file's own header included, is red until
+   the table is refreshed, so it cannot go stale.
+
+**Every verdict is checked against the environment as well as against the oracle, and that is what
+makes it a verdict.** A comparison is worth nothing where the answer behind it moves on its own, so
+the crate's one answer is held against the oracle under **three** environments — this machine's zone
+and two more twenty-six hours apart, `Etc/GMT+12` and `Etc/GMT-14`, which no instant puts on the
+same calendar date. Only agreement with all three is `answers`; anything less is `diverge`, once the
+oracle has been asked to repeat itself. **`DateTime~today` is why**: this crate answers the UTC date
+where the oracle answers the local one, so against this machine's zone alone the two agree for
+twenty-two hours a day and differ for two, and the row's verdict would have been a fact about when
+the sweep ran. Against a pair never on one date it reads `diverge` at every hour. Measured: of the
+`answers` rows, exactly one changes its oracle answer between those two zones, and it is that one.
+**The environment is shifted on the oracle's side only** — the crate runs in process and `TZ` is per
+process — so a body that correctly answered differently per zone would read `diverge` here. Nothing
+in this crate does today; the task that lands one must shift both sides.
+
+**Seven rows are `diverge` at BASE and every one is a defect this instrument found rather than
+made**, all `DateTime`. `date` and `timeOfDay` raise `40.19` inside `CoreClasses.orx`'s own `DATE`
+and `TIME` calls, where this crate's BIF declines the conversion form those bodies use.
+`toTimezone`, `toUtcTime`, `utcDate`, `utcIsoDate` and `today` ignore the machine's offset — the
+first four answer as though the instance were UTC, and `today` answers the UTC date.
+`Object~identityHash` is **not** among them: it is `unstable`, because the oracle does not
+reproduce it.
+
+**And the number to size the remaining work by is not 673.** Of the 665 `answers` rows, only **117**
+are a documented method answering a *value* the two sides agree on (`rc 0`). The other 548 agree on
+a raise: 466 at `rc 163` (`93.9xx`, incorrect call to method), 53 at `rc 168` (`88.9xx`), 17 at
+`rc 165` (`91.999`, no result returned) and 12 at `rc 159` (`97.2`, a PRIVATE method refused from
+outside). That is a real property — the method exists and its argument checking agrees — and it is
+much weaker than the word `answers` looks. **117 of 1347** is what the documented surface answers
+today.
+
 ---
 
 ## D77. Phase 5 does not implement Phases 6 and 7
@@ -292,7 +370,7 @@ would have done Phase 6 and 7's work.
 
 | risk | why it bites | mitigation |
 |---|---|---|
-| the bodies get chased by row count again | 192 hollow rows are all green, and the 95 open ones are nearly-green for the wrong reasons | D77 names the temptation; D76 replaces the count with an invariant |
+| the bodies get chased by row count again | the hollow rows are all green, and the 95 open ones are nearly-green for the wrong reasons | D77 names the temptation; D76 replaces the count with an invariant |
 | the sweep is too expensive to re-run | a stale table asserting `loud` over a diverging row is worse than none | D76's two passes: `loud` needs no oracle run, so only the non-`loud` third reaches it |
 | `::REQUIRES` grows into a package rewrite | it is the package mechanism: search order, prologue-once, circularity, namespaces, `Package~local` | split across two tasks with the file-loading half first and witnessed on its own |
 | the search path is narrowed | the oracle finds a required file by cwd, program directory, `REXX_PATH` and `PATH`, plus extension appending; a narrower search turns an honest refusal into a loud wrong answer | criterion 7 names the four routes |
@@ -318,7 +396,12 @@ would have done Phase 6 and 7's work.
 * **Unowned, and each a real divergence** — inherited from 5c's handover and untouched here:
   `RootSet::promote` leaks one cell per referenced variable instance; `~unknown`'s argument list does
   not send `MAKEARRAY`; a `Directory` subclass's entry writes refuse where the oracle answers;
-  `identityHash` is licensed rather than matched.
+  `identityHash` is licensed rather than matched. **Task 2's sweep adds seven**, all `DateTime`:
+  `date` and `timeOfDay` raise `40.19` inside `CoreClasses.orx`'s own `DATE`/`TIME` calls, where the
+  crate's BIF declines the conversion form those bodies use; `toTimezone`, `toUtcTime`, `utcDate`
+  and `utcIsoDate` ignore the machine's timezone offset — measured, they agree with the oracle under
+  `TZ=UTC` and diverge under `CEST+0200`; and `today` answers the **UTC** date where the oracle
+  answers the local one, which is invisible for the twenty-two hours a day the two coincide.
 * **`StackFrame`'s 10 rows**, needing a `RexxContext` method body and a `StackFrame` object model.
 * **The corpus-coverage gap**, which Task 1 closes rather than hands on: a `corpus/lang/*.rex` named
   in no phase subset file is silently unrun. **342 on disk, 319 filed, so 23 unrun** — the earlier

@@ -1,0 +1,1391 @@
+# The method-body table (D76): one row per (class, method, arm) of
+# corpus/docs/class-methods.txt, classified by sending the documented name
+# with NO ARGUMENTS to a real receiver -- the class object for the class arm,
+# and class-set.txt's construction expression for the instance arm.
+#
+# One `class<TAB>method<TAB>arm<TAB>verdict<TAB>evidence` per line, in
+# class-methods.txt's own order.
+#
+# `loud`     this crate refused rather than answering, and `evidence` is the
+#            construct its message named. This is the safety property the
+#            gate protects: an unimplemented method is loud, never wrong.
+# `answers`  the send reached a body and agreed with the oracle on all three
+#            descriptors, and `evidence` is the status both sides gave. A
+#            method needing arguments is sent none, so for such a row this is
+#            agreement about an arity error rather than about a result.
+# `diverge`  the send answered and disagreed, and `evidence` names the
+#            channels that moved.
+# `unstable` the answer a verdict would have rested on is not reproducible,
+#            so neither `answers` nor `diverge` would be a claim the run
+#            made. `evidence` names what moved: `this crate` (its two engine
+#            runs differ) or `the oracle` (its own two runs differ).
+#
+# `answers` is agreement under THREE environments -- this machine's zone and
+# two more twenty-six hours apart, so that no instant puts them on one
+# calendar date. Anything less is `diverge`: the crate answers one string, so
+# a zone it fails to match is a zone it is wrong under, and a row that read
+# the wall clock would otherwise agree for twenty-two hours a day and diverge
+# for two.
+#
+# THE GATE IS ONE RULE, and it is red in every mode: a row that was not
+# diverging may not start, and a row that was answering may not stop. A count
+# of implemented bodies is not a criterion.
+# crates/rexx-exec/tests/method_bodies.rs is the derivation; refresh with
+#   REXX_METHOD_BODIES_REFRESH=1 cargo test --release -p rexx-exec \
+#       --test method_bodies
+# which refuses to write a regression rather than laundering one.
+#
+# The classification is of the zero-argument send alone. A `loud` row may
+# answer at another arity, and an `answers` row may refuse at one.
+#
+# It is also a measurement on this machine. Some `DateTime` rows turn on the
+# local timezone: measured, `utcIsoDate` reads `answers` under TZ=UTC and
+# `diverge` under CEST+0200, because the oracle applies the offset and this
+# crate does not.
+Class	=	instance	loud	method "=" of class "Class"
+Class	==	instance	loud	method "==" of class "Class"
+Class	<>	instance	loud	method "<>" of class "Class"
+Class	><	instance	loud	method "><" of class "Class"
+Class	\=	instance	loud	method "\=" of class "Class"
+Class	\==	instance	loud	method "\==" of class "Class"
+Class	activate	instance	answers	rc 165
+Class	annotation	instance	answers	rc 168
+Class	annotations	instance	answers	rc 0
+Class	baseClass	instance	answers	rc 0
+Class	defaultName	instance	answers	rc 0
+Class	define	instance	answers	rc 168
+Class	defineMethods	instance	answers	rc 168
+Class	delete	instance	answers	rc 168
+Class	enhanced	instance	answers	rc 163
+Class	id	instance	answers	rc 0
+Class	inherit	instance	answers	rc 168
+Class	isAbstract	instance	loud	method "ISABSTRACT" of class "Class"
+Class	isMetaclass	instance	loud	method "ISMETACLASS" of class "Class"
+Class	isSubclassOf	instance	answers	rc 168
+Class	metaClass	instance	answers	rc 0
+Class	method	instance	answers	rc 168
+Class	methods	instance	loud	method "METHODS" of class "Class"
+Class	mixinClass	instance	answers	rc 168
+Class	new	class	answers	rc 163
+Class	package	instance	answers	rc 0
+Class	queryMixinClass	instance	loud	method "QUERYMIXINCLASS" of class "Class"
+Class	subclass	instance	answers	rc 168
+Class	subclasses	instance	loud	method "SUBCLASSES" of class "Class"
+Class	superClass	instance	answers	rc 0
+Class	superClasses	instance	answers	rc 0
+Class	uninherit	instance	answers	rc 168
+Message	new	class	answers	rc 163
+Message	arguments	instance	loud	method "ARGUMENTS" of class "Message"
+Message	completed	instance	answers	rc 0
+Message	errorCondition	instance	loud	method "ERRORCONDITION" of class "Message"
+Message	halt	instance	loud	method "HALT" of class "Message"
+Message	hasError	instance	answers	rc 0
+Message	hasResult	instance	loud	method "HASRESULT" of class "Message"
+Message	messageComplete	instance	loud	method "MESSAGECOMPLETE" of class "Message"
+Message	messageName	instance	loud	method "MESSAGENAME" of class "Message"
+Message	notify	instance	loud	method "NOTIFY" of class "Message"
+Message	reply	instance	loud	method "REPLY" of class "Message"
+Message	replyWith	instance	loud	method "REPLYWITH" of class "Message"
+Message	result	instance	loud	`Message~result` on a message whose send has not been made
+Message	send	instance	loud	method "SEND" of class "Message"
+Message	sendWith	instance	loud	method "SENDWITH" of class "Message"
+Message	start	instance	loud	method "START" of class "Message"
+Message	startWith	instance	loud	method "STARTWITH" of class "Message"
+Message	target	instance	loud	method "TARGET" of class "Message"
+Message	triggered	instance	loud	method "TRIGGERED" of class "Message"
+Message	wait	instance	loud	method "WAIT" of class "Message"
+Message	cancel	instance	answers	rc 165
+Method	new	class	answers	rc 168
+Method	loadExternalMethod	class	loud	method "LOADEXTERNALMETHOD" of class "Method"
+Method	newFile	class	loud	method "NEWFILE" of class "Method"
+Method	annotation	instance	answers	rc 168
+Method	annotations	instance	answers	rc 0
+Method	isAbstract	instance	loud	method "ISABSTRACT" of class "Method"
+Method	isAttribute	instance	loud	method "ISATTRIBUTE" of class "Method"
+Method	isConstant	instance	loud	method "ISCONSTANT" of class "Method"
+Method	isGuarded	instance	loud	method "ISGUARDED" of class "Method"
+Method	isPackage	instance	loud	method "ISPACKAGE" of class "Method"
+Method	isPrivate	instance	loud	method "ISPRIVATE" of class "Method"
+Method	isProtected	instance	loud	method "ISPROTECTED" of class "Method"
+Method	package	instance	loud	method "PACKAGE" of class "Method"
+Method	scope	instance	answers	rc 0
+Method	setGuarded	instance	loud	method "SETGUARDED" of class "Method"
+Method	setPrivate	instance	loud	method "SETPRIVATE" of class "Method"
+Method	setProtected	instance	loud	method "SETPROTECTED" of class "Method"
+Method	setSecurityManager	instance	loud	method "SETSECURITYMANAGER" of class "Method"
+Method	setUnguarded	instance	loud	method "SETUNGUARDED" of class "Method"
+Method	source	instance	loud	method "SOURCE" of class "Method"
+Object	new	class	answers	rc 0
+Object	=	instance	loud	method "=" of class "Object"
+Object	==	instance	loud	method "==" of class "Object"
+Object	<>	instance	loud	method "<>" of class "Object"
+Object	><	instance	loud	method "><" of class "Object"
+Object	\=	instance	loud	method "\=" of class "Object"
+Object	\==	instance	loud	method "\==" of class "Object"
+Object	(abuttal)	instance	loud	method "" of class "Object"
+Object	||	instance	loud	method "||" of class "Object"
+Object	(blank)	instance	loud	method " " of class "Object"
+Object	class	instance	answers	rc 0
+Object	copy	instance	answers	rc 0
+Object	defaultName	instance	answers	rc 0
+Object	hashCode	instance	loud	method "HASHCODE" of class "Object"
+Object	hasMethod	instance	answers	rc 163
+Object	identityHash	instance	unstable	the oracle
+Object	instanceMethod	instance	loud	method "INSTANCEMETHOD" of class "Object"
+Object	instanceMethods	instance	loud	method "INSTANCEMETHODS" of class "Object"
+Object	isA	instance	answers	rc 168
+Object	isInstanceOf	instance	loud	method "ISINSTANCEOF" of class "Object"
+Object	isNil	instance	answers	rc 0
+Object	objectName	instance	answers	rc 0
+Object	objectName=	instance	answers	rc 163
+Object	request	instance	answers	rc 163
+Object	run	instance	answers	rc 159
+Object	send	instance	answers	rc 168
+Object	sendWith	instance	answers	rc 168
+Object	setMethod	instance	answers	rc 159
+Object	start	instance	answers	rc 168
+Object	startWith	instance	answers	rc 168
+Object	string	instance	answers	rc 0
+Object	unsetMethod	instance	answers	rc 159
+Package	new	class	answers	rc 168
+Package	defaultOptions	class	loud	method "DEFAULTOPTIONS" of class "Package"
+Package	addClass	instance	answers	rc 168
+Package	addPackage	instance	loud	method "ADDPACKAGE" of class "Package"
+Package	addPublicClass	instance	answers	rc 168
+Package	addPublicRoutine	instance	loud	method "ADDPUBLICROUTINE" of class "Package"
+Package	addRoutine	instance	loud	method "ADDROUTINE" of class "Package"
+Package	annotation	instance	answers	rc 168
+Package	annotations	instance	answers	rc 0
+Package	classes	instance	loud	method "CLASSES" of class "Package"
+Package	definedMethods	instance	loud	method "DEFINEDMETHODS" of class "Package"
+Package	digits	instance	loud	method "DIGITS" of class "Package"
+Package	findClass	instance	loud	method "FINDCLASS" of class "Package"
+Package	findNamespace	instance	loud	method "FINDNAMESPACE" of class "Package"
+Package	findProgram	instance	loud	method "FINDPROGRAM" of class "Package"
+Package	findPublicClass	instance	loud	method "FINDPUBLICCLASS" of class "Package"
+Package	findPublicRoutine	instance	loud	method "FINDPUBLICROUTINE" of class "Package"
+Package	findRoutine	instance	loud	method "FINDROUTINE" of class "Package"
+Package	form	instance	loud	method "FORM" of class "Package"
+Package	fuzz	instance	loud	method "FUZZ" of class "Package"
+Package	importedClasses	instance	loud	method "IMPORTEDCLASSES" of class "Package"
+Package	importedPackages	instance	loud	method "IMPORTEDPACKAGES" of class "Package"
+Package	importedRoutines	instance	loud	method "IMPORTEDROUTINES" of class "Package"
+Package	loadLibrary	instance	loud	method "LOADLIBRARY" of class "Package"
+Package	loadPackage	instance	loud	method "LOADPACKAGE" of class "Package"
+Package	local	instance	loud	method "LOCAL" of class "Package"
+Package	name	instance	answers	rc 0
+Package	namespaces	instance	loud	method "NAMESPACES" of class "Package"
+Package	options	instance	loud	method "OPTIONS" of class "Package"
+Package	prolog	instance	loud	method "PROLOG" of class "Package"
+Package	publicClasses	instance	loud	the REXX package's class table
+Package	publicRoutines	instance	loud	method "PUBLICROUTINES" of class "Package"
+Package	resource	instance	loud	method "RESOURCE" of class "Package"
+Package	resources	instance	loud	method "RESOURCES" of class "Package"
+Package	routines	instance	loud	method "ROUTINES" of class "Package"
+Package	setSecurityManager	instance	loud	method "SETSECURITYMANAGER" of class "Package"
+Package	source	instance	loud	method "SOURCE" of class "Package"
+Package	sourceLine	instance	loud	method "SOURCELINE" of class "Package"
+Package	sourceSize	instance	loud	method "SOURCESIZE" of class "Package"
+Package	trace	instance	loud	method "TRACE" of class "Package"
+Routine	new	class	answers	rc 168
+Routine	loadExternalRoutine	class	loud	method "LOADEXTERNALROUTINE" of class "Routine"
+Routine	newFile	class	loud	method "NEWFILE" of class "Routine"
+Routine	[]	instance	loud	method "[]" of class "Routine"
+Routine	annotation	instance	answers	rc 168
+Routine	annotations	instance	answers	rc 0
+Routine	call	instance	loud	method "CALL" of class "Routine"
+Routine	callWith	instance	loud	method "CALLWITH" of class "Routine"
+Routine	package	instance	loud	method "PACKAGE" of class "Routine"
+Routine	setSecurityManager	instance	loud	method "SETSECURITYMANAGER" of class "Routine"
+Routine	source	instance	loud	method "SOURCE" of class "Routine"
+String	new	class	answers	rc 163
+String	alnum	class	answers	rc 0
+String	alpha	class	answers	rc 0
+String	blank	class	answers	rc 0
+String	cntrl	class	answers	rc 0
+String	cr	class	answers	rc 0
+String	digit	class	answers	rc 0
+String	graph	class	answers	rc 0
+String	lower	class	answers	rc 0
+String	nl	class	answers	rc 0
+String	null	class	answers	rc 0
+String	print	class	answers	rc 0
+String	punct	class	answers	rc 0
+String	space	class	answers	rc 0
+String	tab	class	answers	rc 0
+String	upper	class	answers	rc 0
+String	xdigit	class	answers	rc 0
+String	+	instance	loud	method "+" of class "String"
+String	-	instance	loud	method "-" of class "String"
+String	*	instance	loud	method "*" of class "String"
+String	**	instance	loud	method "**" of class "String"
+String	/	instance	loud	method "/" of class "String"
+String	//	instance	loud	method "//" of class "String"
+String	%	instance	loud	method "%" of class "String"
+String	=	instance	loud	method "=" of class "String"
+String	==	instance	loud	method "==" of class "String"
+String	<	instance	loud	method "<" of class "String"
+String	<=	instance	loud	method "<=" of class "String"
+String	<<	instance	loud	method "<<" of class "String"
+String	<<=	instance	loud	method "<<=" of class "String"
+String	<>	instance	loud	method "<>" of class "String"
+String	>	instance	loud	method ">" of class "String"
+String	>=	instance	loud	method ">=" of class "String"
+String	><	instance	loud	method "><" of class "String"
+String	>>	instance	loud	method ">>" of class "String"
+String	>>=	instance	loud	method ">>=" of class "String"
+String	\=	instance	loud	method "\=" of class "String"
+String	\==	instance	loud	method "\==" of class "String"
+String	\<	instance	loud	method "\<" of class "String"
+String	\<<	instance	loud	method "\<<" of class "String"
+String	\>	instance	loud	method "\>" of class "String"
+String	\>>	instance	loud	method "\>>" of class "String"
+String	(abuttal)	instance	loud	method "" of class "String"
+String	||	instance	loud	method "||" of class "String"
+String	(blank)	instance	loud	method " " of class "String"
+String	\	instance	loud	method "\" of class "String"
+String	&	instance	loud	method "&" of class "String"
+String	&&	instance	loud	method "&&" of class "String"
+String	|	instance	loud	method "|" of class "String"
+String	[]	instance	loud	method "[]" of class "String"
+String	?	instance	loud	method "?" of class "String"
+String	abbrev	instance	loud	method "ABBREV" of class "String"
+String	abs	instance	loud	method "ABS" of class "String"
+String	append	instance	loud	method "APPEND" of class "String"
+String	b2x	instance	loud	method "B2X" of class "String"
+String	bitAnd	instance	loud	method "BITAND" of class "String"
+String	bitOr	instance	loud	method "BITOR" of class "String"
+String	bitXor	instance	loud	method "BITXOR" of class "String"
+String	c2d	instance	loud	method "C2D" of class "String"
+String	c2x	instance	loud	method "C2X" of class "String"
+String	caselessAbbrev	instance	loud	method "CASELESSABBREV" of class "String"
+String	caselessChangeStr	instance	loud	method "CASELESSCHANGESTR" of class "String"
+String	caselessCompare	instance	loud	method "CASELESSCOMPARE" of class "String"
+String	caselessCompareTo	instance	loud	method "CASELESSCOMPARETO" of class "String"
+String	caselessContains	instance	loud	method "CASELESSCONTAINS" of class "String"
+String	caselessContainsWord	instance	loud	method "CASELESSCONTAINSWORD" of class "String"
+String	caselessCountStr	instance	loud	method "CASELESSCOUNTSTR" of class "String"
+String	caselessEndsWith	instance	loud	method "CASELESSENDSWITH" of class "String"
+String	caselessEquals	instance	loud	method "CASELESSEQUALS" of class "String"
+String	caselessLastPos	instance	loud	method "CASELESSLASTPOS" of class "String"
+String	caselessMatch	instance	loud	method "CASELESSMATCH" of class "String"
+String	caselessMatchChar	instance	loud	method "CASELESSMATCHCHAR" of class "String"
+String	caselessPos	instance	loud	method "CASELESSPOS" of class "String"
+String	caselessStartsWith	instance	loud	method "CASELESSSTARTSWITH" of class "String"
+String	caselessWordPos	instance	loud	method "CASELESSWORDPOS" of class "String"
+String	ceiling	instance	loud	method "CEILING" of class "String"
+String	center	instance	loud	method "CENTER" of class "String"
+String	centre	instance	loud	method "CENTRE" of class "String"
+String	changeStr	instance	loud	method "CHANGESTR" of class "String"
+String	compare	instance	loud	method "COMPARE" of class "String"
+String	compareTo	instance	loud	method "COMPARETO" of class "String"
+String	contains	instance	loud	method "CONTAINS" of class "String"
+String	containsWord	instance	loud	method "CONTAINSWORD" of class "String"
+String	copies	instance	loud	method "COPIES" of class "String"
+String	countStr	instance	loud	method "COUNTSTR" of class "String"
+String	d2c	instance	loud	method "D2C" of class "String"
+String	d2x	instance	loud	method "D2X" of class "String"
+String	dataType	instance	loud	method "DATATYPE" of class "String"
+String	decodeBase64	instance	loud	method "DECODEBASE64" of class "String"
+String	delStr	instance	loud	method "DELSTR" of class "String"
+String	delWord	instance	loud	method "DELWORD" of class "String"
+String	encodeBase64	instance	loud	method "ENCODEBASE64" of class "String"
+String	endsWith	instance	loud	method "ENDSWITH" of class "String"
+String	equals	instance	loud	method "EQUALS" of class "String"
+String	floor	instance	loud	method "FLOOR" of class "String"
+String	format	instance	loud	method "FORMAT" of class "String"
+String	hashCode	instance	loud	method "HASHCODE" of class "Object"
+String	insert	instance	loud	method "INSERT" of class "String"
+String	lastPos	instance	loud	method "LASTPOS" of class "String"
+String	left	instance	loud	method "LEFT" of class "String"
+String	length	instance	answers	rc 0
+String	lower	instance	loud	method "LOWER" of class "String"
+String	makeArray	instance	answers	rc 0
+String	makeString	instance	answers	rc 0
+String	match	instance	loud	method "MATCH" of class "String"
+String	matchChar	instance	loud	method "MATCHCHAR" of class "String"
+String	max	instance	loud	method "MAX" of class "String"
+String	min	instance	loud	method "MIN" of class "String"
+String	modulo	instance	loud	method "MODULO" of class "String"
+String	overlay	instance	loud	method "OVERLAY" of class "String"
+String	pos	instance	loud	method "POS" of class "String"
+String	replaceAt	instance	loud	method "REPLACEAT" of class "String"
+String	reverse	instance	answers	rc 0
+String	right	instance	loud	method "RIGHT" of class "String"
+String	round	instance	loud	method "ROUND" of class "String"
+String	sign	instance	loud	method "SIGN" of class "String"
+String	space	instance	loud	method "SPACE" of class "String"
+String	startsWith	instance	loud	method "STARTSWITH" of class "String"
+String	strip	instance	loud	method "STRIP" of class "String"
+String	subChar	instance	loud	method "SUBCHAR" of class "String"
+String	substr	instance	loud	method "SUBSTR" of class "String"
+String	subWord	instance	loud	method "SUBWORD" of class "String"
+String	subWords	instance	loud	method "SUBWORDS" of class "String"
+String	translate	instance	loud	method "TRANSLATE" of class "String"
+String	trunc	instance	loud	method "TRUNC" of class "String"
+String	upper	instance	answers	rc 0
+String	verify	instance	loud	method "VERIFY" of class "String"
+String	word	instance	loud	method "WORD" of class "String"
+String	wordIndex	instance	loud	method "WORDINDEX" of class "String"
+String	wordLength	instance	loud	method "WORDLENGTH" of class "String"
+String	wordPos	instance	loud	method "WORDPOS" of class "String"
+String	words	instance	loud	method "WORDS" of class "String"
+String	x2b	instance	loud	method "X2B" of class "String"
+String	x2c	instance	loud	method "X2C" of class "String"
+String	x2d	instance	loud	method "X2D" of class "String"
+Collection	[]	instance	answers	rc 163
+Collection	[]=	instance	answers	rc 163
+Collection	allIndexes	instance	answers	rc 163
+Collection	allItems	instance	answers	rc 163
+Collection	at	instance	answers	rc 163
+Collection	difference	instance	answers	rc 163
+Collection	disjoint	instance	answers	rc 163
+Collection	equivalent	instance	answers	rc 163
+Collection	hasIndex	instance	answers	rc 163
+Collection	hasItem	instance	answers	rc 163
+Collection	index	instance	answers	rc 163
+Collection	intersection	instance	answers	rc 163
+Collection	items	instance	answers	rc 163
+Collection	makeArray	instance	answers	rc 163
+Collection	put	instance	answers	rc 163
+Collection	subset	instance	answers	rc 163
+Collection	supplier	instance	answers	rc 163
+Collection	union	instance	answers	rc 163
+Collection	xor	instance	answers	rc 163
+MapCollection	of	class	loud	ARG option "A" answers an Array, which
+MapCollection	makeArray	instance	answers	rc 163
+MapCollection	putAll	instance	answers	rc 163
+MapCollection	[]	instance	answers	rc 163
+MapCollection	[]=	instance	answers	rc 163
+MapCollection	allIndexes	instance	answers	rc 163
+MapCollection	allItems	instance	answers	rc 163
+MapCollection	at	instance	answers	rc 163
+MapCollection	difference	instance	answers	rc 163
+MapCollection	disjoint	instance	answers	rc 163
+MapCollection	equivalent	instance	answers	rc 163
+MapCollection	hasIndex	instance	answers	rc 163
+MapCollection	hasItem	instance	answers	rc 163
+MapCollection	index	instance	answers	rc 163
+MapCollection	intersection	instance	answers	rc 163
+MapCollection	items	instance	answers	rc 163
+MapCollection	put	instance	answers	rc 163
+MapCollection	subset	instance	answers	rc 163
+MapCollection	supplier	instance	answers	rc 163
+MapCollection	union	instance	answers	rc 163
+MapCollection	xor	instance	answers	rc 163
+OrderedCollection	append	instance	answers	rc 163
+OrderedCollection	appendAll	instance	answers	rc 163
+OrderedCollection	delete	instance	answers	rc 163
+OrderedCollection	difference	instance	answers	rc 163
+OrderedCollection	first	instance	answers	rc 163
+OrderedCollection	firstItem	instance	answers	rc 163
+OrderedCollection	insert	instance	answers	rc 163
+OrderedCollection	intersection	instance	answers	rc 163
+OrderedCollection	last	instance	answers	rc 163
+OrderedCollection	lastItem	instance	answers	rc 163
+OrderedCollection	next	instance	answers	rc 163
+OrderedCollection	previous	instance	answers	rc 163
+OrderedCollection	section	instance	answers	rc 163
+OrderedCollection	sort	instance	answers	rc 163
+OrderedCollection	sortWith	instance	answers	rc 163
+OrderedCollection	stableSort	instance	answers	rc 163
+OrderedCollection	stableSortWith	instance	answers	rc 163
+OrderedCollection	subset	instance	answers	rc 163
+OrderedCollection	union	instance	answers	rc 163
+OrderedCollection	xor	instance	answers	rc 163
+OrderedCollection	[]	instance	answers	rc 163
+OrderedCollection	[]=	instance	answers	rc 163
+OrderedCollection	allIndexes	instance	answers	rc 163
+OrderedCollection	allItems	instance	answers	rc 163
+OrderedCollection	at	instance	answers	rc 163
+OrderedCollection	disjoint	instance	answers	rc 163
+OrderedCollection	equivalent	instance	answers	rc 163
+OrderedCollection	hasIndex	instance	answers	rc 163
+OrderedCollection	hasItem	instance	answers	rc 163
+OrderedCollection	index	instance	answers	rc 163
+OrderedCollection	items	instance	answers	rc 163
+OrderedCollection	makeArray	instance	answers	rc 163
+OrderedCollection	put	instance	answers	rc 163
+OrderedCollection	supplier	instance	answers	rc 163
+SetCollection	[]	instance	answers	rc 163
+SetCollection	[]=	instance	answers	rc 163
+SetCollection	allIndexes	instance	answers	rc 163
+SetCollection	allItems	instance	answers	rc 163
+SetCollection	at	instance	answers	rc 163
+SetCollection	difference	instance	answers	rc 163
+SetCollection	disjoint	instance	answers	rc 163
+SetCollection	equivalent	instance	answers	rc 163
+SetCollection	hasIndex	instance	answers	rc 163
+SetCollection	hasItem	instance	answers	rc 163
+SetCollection	index	instance	answers	rc 163
+SetCollection	intersection	instance	answers	rc 163
+SetCollection	items	instance	answers	rc 163
+SetCollection	makeArray	instance	answers	rc 163
+SetCollection	put	instance	answers	rc 163
+SetCollection	subset	instance	answers	rc 163
+SetCollection	supplier	instance	answers	rc 163
+SetCollection	union	instance	answers	rc 163
+SetCollection	xor	instance	answers	rc 163
+Array	new	class	answers	rc 0
+Array	of	class	answers	rc 0
+Array	[]	instance	answers	rc 163
+Array	[]=	instance	answers	rc 163
+Array	allIndexes	instance	loud	method "ALLINDEXES" of class "Array"
+Array	allItems	instance	loud	method "ALLITEMS" of class "Array"
+Array	append	instance	loud	method "APPEND" of class "Array"
+Array	at	instance	answers	rc 163
+Array	delete	instance	loud	method "DELETE" of class "Array"
+Array	dimension	instance	answers	rc 0
+Array	dimensions	instance	loud	method "DIMENSIONS" of class "Array"
+Array	empty	instance	loud	method "EMPTY" of class "Array"
+Array	fill	instance	loud	method "FILL" of class "Array"
+Array	first	instance	loud	method "FIRST" of class "Array"
+Array	firstItem	instance	loud	method "FIRSTITEM" of class "Array"
+Array	hasIndex	instance	loud	method "HASINDEX" of class "Array"
+Array	hasItem	instance	loud	method "HASITEM" of class "Array"
+Array	index	instance	loud	method "INDEX" of class "Array"
+Array	insert	instance	loud	method "INSERT" of class "Array"
+Array	isEmpty	instance	loud	method "ISEMPTY" of class "Array"
+Array	items	instance	answers	rc 0
+Array	last	instance	loud	method "LAST" of class "Array"
+Array	lastItem	instance	loud	method "LASTITEM" of class "Array"
+Array	makeArray	instance	loud	method "MAKEARRAY" of class "Array"
+Array	makeString	instance	answers	rc 0
+Array	next	instance	loud	method "NEXT" of class "Array"
+Array	previous	instance	loud	method "PREVIOUS" of class "Array"
+Array	put	instance	answers	rc 163
+Array	remove	instance	loud	method "REMOVE" of class "Array"
+Array	removeItem	instance	loud	method "REMOVEITEM" of class "Array"
+Array	section	instance	loud	method "SECTION" of class "Array"
+Array	size	instance	answers	rc 0
+Array	sort	instance	loud	method "SORT" of class "Array"
+Array	sortWith	instance	loud	method "SORTWITH" of class "Array"
+Array	stableSort	instance	loud	method "STABLESORT" of class "Array"
+Array	stableSortWith	instance	loud	method "STABLESORTWITH" of class "Array"
+Array	supplier	instance	loud	method "SUPPLIER" of class "Array"
+Array	toString	instance	answers	rc 0
+Array	difference	instance	answers	rc 163
+Array	disjoint	instance	answers	rc 163
+Array	equivalent	instance	answers	rc 163
+Array	intersection	instance	answers	rc 163
+Array	subset	instance	answers	rc 163
+Array	union	instance	answers	rc 163
+Array	xor	instance	answers	rc 163
+Array	appendAll	instance	answers	rc 163
+Bag	new	class	answers	rc 0
+Bag	of	class	loud	method "OF" of class "Bag"
+Bag	[]	instance	answers	rc 168
+Bag	[]=	instance	answers	rc 168
+Bag	allAt	instance	loud	method "ALLAT" of class "Bag"
+Bag	allIndex	instance	loud	method "ALLINDEX" of class "Bag"
+Bag	allIndexes	instance	loud	method "ALLINDEXES" of class "Bag"
+Bag	allItems	instance	loud	method "ALLITEMS" of class "Bag"
+Bag	at	instance	answers	rc 168
+Bag	difference	instance	answers	rc 163
+Bag	empty	instance	loud	method "EMPTY" of class "Bag"
+Bag	hasIndex	instance	loud	method "HASINDEX" of class "Bag"
+Bag	hasItem	instance	loud	method "HASITEM" of class "Bag"
+Bag	index	instance	loud	method "INDEX" of class "Bag"
+Bag	intersection	instance	answers	rc 163
+Bag	isEmpty	instance	loud	method "ISEMPTY" of class "Bag"
+Bag	items	instance	loud	method "ITEMS" of class "Bag"
+Bag	makeArray	instance	loud	method "MAKEARRAY" of class "Bag"
+Bag	put	instance	answers	rc 168
+Bag	putAll	instance	answers	rc 163
+Bag	remove	instance	loud	method "REMOVE" of class "Bag"
+Bag	removeAll	instance	loud	method "REMOVEALL" of class "Bag"
+Bag	removeItem	instance	loud	method "REMOVEITEM" of class "Bag"
+Bag	subset	instance	answers	rc 163
+Bag	supplier	instance	loud	method "SUPPLIER" of class "Bag"
+Bag	union	instance	answers	rc 163
+Bag	uniqueIndexes	instance	loud	method "UNIQUEINDEXES" of class "Bag"
+Bag	xor	instance	answers	rc 163
+Bag	disjoint	instance	answers	rc 163
+Bag	equivalent	instance	answers	rc 163
+CircularQueue	of	class	loud	method "CASELESSSTARTSWITH" of class "String"
+CircularQueue	append	instance	answers	rc 163
+CircularQueue	init	instance	answers	rc 163
+CircularQueue	insert	instance	loud	method "INSERT" of class "Queue"
+CircularQueue	intersection	instance	answers	rc 163
+CircularQueue	makeArray	instance	loud	method "LEFT" of class "String"
+CircularQueue	makeString	instance	loud	method "CASELESSSTARTSWITH" of class "String"
+CircularQueue	push	instance	answers	rc 163
+CircularQueue	queue	instance	answers	rc 163
+CircularQueue	resize	instance	answers	rc 163
+CircularQueue	section	instance	answers	rc 163
+CircularQueue	size	instance	answers	rc 0
+CircularQueue	string	instance	loud	method "CASELESSSTARTSWITH" of class "String"
+CircularQueue	supplier	instance	loud	method "LEFT" of class "String"
+CircularQueue	union	instance	answers	rc 163
+CircularQueue	xor	instance	answers	rc 163
+CircularQueue	[]	instance	loud	a message send to a value that is not an array
+CircularQueue	[]=	instance	loud	method "[]=" of class "Queue"
+CircularQueue	allIndexes	instance	loud	method "ALLINDEXES" of class "Queue"
+CircularQueue	allItems	instance	loud	method "ALLITEMS" of class "Queue"
+CircularQueue	at	instance	loud	a message send to a value that is not an array
+CircularQueue	difference	instance	answers	rc 163
+CircularQueue	disjoint	instance	answers	rc 163
+CircularQueue	equivalent	instance	answers	rc 163
+CircularQueue	hasIndex	instance	loud	method "HASINDEX" of class "Queue"
+CircularQueue	hasItem	instance	loud	method "HASITEM" of class "Queue"
+CircularQueue	index	instance	loud	method "INDEX" of class "Queue"
+CircularQueue	items	instance	loud	a message send to a value that is not an array
+CircularQueue	put	instance	loud	method "PUT" of class "Queue"
+CircularQueue	subset	instance	answers	rc 163
+CircularQueue	appendAll	instance	answers	rc 163
+CircularQueue	delete	instance	loud	method "DELETE" of class "Queue"
+CircularQueue	first	instance	loud	method "FIRST" of class "Queue"
+CircularQueue	firstItem	instance	loud	method "FIRSTITEM" of class "Queue"
+CircularQueue	last	instance	loud	method "LAST" of class "Queue"
+CircularQueue	lastItem	instance	loud	method "LASTITEM" of class "Queue"
+CircularQueue	next	instance	loud	method "NEXT" of class "Queue"
+CircularQueue	previous	instance	loud	method "PREVIOUS" of class "Queue"
+CircularQueue	sort	instance	loud	method "LEFT" of class "String"
+CircularQueue	sortWith	instance	answers	rc 163
+CircularQueue	stableSort	instance	loud	method "LEFT" of class "String"
+CircularQueue	stableSortWith	instance	answers	rc 163
+CircularQueue	new	class	answers	rc 163
+CircularQueue	empty	instance	loud	method "EMPTY" of class "Queue"
+CircularQueue	isEmpty	instance	loud	method "ISEMPTY" of class "Queue"
+CircularQueue	peek	instance	loud	method "PEEK" of class "Queue"
+CircularQueue	pull	instance	loud	method "PULL" of class "Queue"
+CircularQueue	remove	instance	loud	method "REMOVE" of class "Queue"
+CircularQueue	removeItem	instance	loud	method "REMOVEITEM" of class "Queue"
+Directory	new	class	answers	rc 0
+Directory	[]	instance	answers	rc 168
+Directory	[]=	instance	answers	rc 168
+Directory	allIndexes	instance	loud	method "ALLINDEXES" of class "Directory"
+Directory	allItems	instance	loud	method "ALLITEMS" of class "Directory"
+Directory	at	instance	answers	rc 168
+Directory	empty	instance	loud	method "EMPTY" of class "Directory"
+Directory	entry	instance	loud	method "ENTRY" of class "Directory"
+Directory	hasEntry	instance	loud	method "HASENTRY" of class "Directory"
+Directory	hasIndex	instance	loud	method "HASINDEX" of class "Directory"
+Directory	hasItem	instance	loud	method "HASITEM" of class "Directory"
+Directory	index	instance	loud	method "INDEX" of class "Directory"
+Directory	isEmpty	instance	loud	method "ISEMPTY" of class "Directory"
+Directory	items	instance	loud	method "ITEMS" of class "Directory"
+Directory	makeArray	instance	loud	method "MAKEARRAY" of class "Directory"
+Directory	put	instance	answers	rc 168
+Directory	remove	instance	loud	method "REMOVE" of class "Directory"
+Directory	removeEntry	instance	loud	method "REMOVEENTRY" of class "Directory"
+Directory	removeItem	instance	loud	method "REMOVEITEM" of class "Directory"
+Directory	setEntry	instance	loud	method "SETENTRY" of class "Directory"
+Directory	setMethod	instance	loud	method "SETMETHOD" of class "Directory"
+Directory	supplier	instance	loud	method "SUPPLIER" of class "Directory"
+Directory	unknown	instance	answers	rc 163
+Directory	unsetMethod	instance	loud	method "UNSETMETHOD" of class "Directory"
+Directory	difference	instance	answers	rc 163
+Directory	disjoint	instance	answers	rc 163
+Directory	equivalent	instance	answers	rc 163
+Directory	intersection	instance	answers	rc 163
+Directory	subset	instance	answers	rc 163
+Directory	union	instance	answers	rc 163
+Directory	xor	instance	answers	rc 163
+Directory	of	class	loud	ARG option "A" answers an Array, which
+Directory	putAll	instance	answers	rc 163
+IdentityTable	new	class	answers	rc 0
+IdentityTable	[]	instance	answers	rc 168
+IdentityTable	[]=	instance	answers	rc 168
+IdentityTable	allIndexes	instance	loud	method "ALLINDEXES" of class "IdentityTable"
+IdentityTable	allItems	instance	loud	method "ALLITEMS" of class "IdentityTable"
+IdentityTable	at	instance	answers	rc 168
+IdentityTable	empty	instance	loud	method "EMPTY" of class "IdentityTable"
+IdentityTable	hasIndex	instance	loud	method "HASINDEX" of class "IdentityTable"
+IdentityTable	hasItem	instance	loud	method "HASITEM" of class "IdentityTable"
+IdentityTable	index	instance	loud	method "INDEX" of class "IdentityTable"
+IdentityTable	isEmpty	instance	loud	method "ISEMPTY" of class "IdentityTable"
+IdentityTable	items	instance	loud	method "ITEMS" of class "IdentityTable"
+IdentityTable	makeArray	instance	loud	method "MAKEARRAY" of class "IdentityTable"
+IdentityTable	put	instance	answers	rc 168
+IdentityTable	remove	instance	loud	method "REMOVE" of class "IdentityTable"
+IdentityTable	removeItem	instance	loud	method "REMOVEITEM" of class "IdentityTable"
+IdentityTable	supplier	instance	loud	method "SUPPLIER" of class "IdentityTable"
+IdentityTable	difference	instance	answers	rc 163
+IdentityTable	disjoint	instance	answers	rc 163
+IdentityTable	equivalent	instance	answers	rc 163
+IdentityTable	intersection	instance	answers	rc 163
+IdentityTable	subset	instance	answers	rc 163
+IdentityTable	union	instance	answers	rc 163
+IdentityTable	xor	instance	answers	rc 163
+IdentityTable	of	class	loud	ARG option "A" answers an Array, which
+IdentityTable	putAll	instance	answers	rc 163
+List	new	class	answers	rc 0
+List	of	class	loud	method "OF" of class "List"
+List	[]	instance	loud	method "[]" of class "List"
+List	[]=	instance	loud	method "[]=" of class "List"
+List	allIndexes	instance	loud	method "ALLINDEXES" of class "List"
+List	allItems	instance	loud	method "ALLITEMS" of class "List"
+List	append	instance	loud	method "APPEND" of class "List"
+List	at	instance	loud	method "AT" of class "List"
+List	delete	instance	loud	method "DELETE" of class "List"
+List	empty	instance	loud	method "EMPTY" of class "List"
+List	first	instance	loud	method "FIRST" of class "List"
+List	firstItem	instance	loud	method "FIRSTITEM" of class "List"
+List	hasIndex	instance	loud	method "HASINDEX" of class "List"
+List	hasItem	instance	loud	method "HASITEM" of class "List"
+List	index	instance	loud	method "INDEX" of class "List"
+List	insert	instance	loud	method "INSERT" of class "List"
+List	isEmpty	instance	loud	method "ISEMPTY" of class "List"
+List	items	instance	loud	method "ITEMS" of class "List"
+List	last	instance	loud	method "LAST" of class "List"
+List	lastItem	instance	loud	method "LASTITEM" of class "List"
+List	makeArray	instance	loud	method "MAKEARRAY" of class "List"
+List	next	instance	loud	method "NEXT" of class "List"
+List	previous	instance	loud	method "PREVIOUS" of class "List"
+List	put	instance	loud	method "PUT" of class "List"
+List	remove	instance	loud	method "REMOVE" of class "List"
+List	removeItem	instance	loud	method "REMOVEITEM" of class "List"
+List	section	instance	loud	method "SECTION" of class "List"
+List	supplier	instance	loud	method "SUPPLIER" of class "List"
+List	difference	instance	answers	rc 163
+List	disjoint	instance	answers	rc 163
+List	equivalent	instance	answers	rc 163
+List	intersection	instance	answers	rc 163
+List	subset	instance	answers	rc 163
+List	union	instance	answers	rc 163
+List	xor	instance	answers	rc 163
+List	appendAll	instance	answers	rc 163
+List	sort	instance	loud	method "MAKEARRAY" of class "List"
+List	sortWith	instance	answers	rc 163
+List	stableSort	instance	loud	method "MAKEARRAY" of class "List"
+List	stableSortWith	instance	answers	rc 163
+Properties	load	class	answers	rc 163
+Properties	[]=	instance	answers	rc 163
+Properties	getLogical	instance	answers	rc 163
+Properties	getProperty	instance	answers	rc 163
+Properties	getWhole	instance	answers	rc 163
+Properties	load	instance	answers	rc 163
+Properties	put	instance	answers	rc 163
+Properties	save	instance	answers	rc 163
+Properties	setLogical	instance	answers	rc 163
+Properties	setProperty	instance	answers	rc 163
+Properties	setWhole	instance	answers	rc 163
+Properties	[]	instance	answers	rc 168
+Properties	allIndexes	instance	loud	method "ALLINDEXES" of class "Directory"
+Properties	allItems	instance	loud	method "ALLITEMS" of class "Directory"
+Properties	at	instance	answers	rc 168
+Properties	difference	instance	answers	rc 163
+Properties	disjoint	instance	answers	rc 163
+Properties	equivalent	instance	answers	rc 163
+Properties	hasIndex	instance	loud	method "HASINDEX" of class "Directory"
+Properties	hasItem	instance	loud	method "HASITEM" of class "Directory"
+Properties	index	instance	loud	method "INDEX" of class "Directory"
+Properties	intersection	instance	answers	rc 163
+Properties	items	instance	loud	method "ITEMS" of class "Directory"
+Properties	makeArray	instance	loud	method "MAKEARRAY" of class "Directory"
+Properties	subset	instance	answers	rc 163
+Properties	supplier	instance	loud	method "SUPPLIER" of class "Directory"
+Properties	union	instance	answers	rc 163
+Properties	xor	instance	answers	rc 163
+Properties	of	class	loud	ARG option "A" answers an Array, which
+Properties	putAll	instance	answers	rc 163
+Properties	new	class	answers	rc 0
+Properties	empty	instance	loud	method "EMPTY" of class "Directory"
+Properties	entry	instance	loud	method "ENTRY" of class "Directory"
+Properties	hasEntry	instance	loud	method "HASENTRY" of class "Directory"
+Properties	isEmpty	instance	loud	method "ISEMPTY" of class "Directory"
+Properties	remove	instance	loud	method "REMOVE" of class "Directory"
+Properties	removeEntry	instance	loud	method "REMOVEENTRY" of class "Directory"
+Properties	removeItem	instance	loud	method "REMOVEITEM" of class "Directory"
+Properties	setEntry	instance	loud	method "SETENTRY" of class "Directory"
+Properties	setMethod	instance	loud	method "SETMETHOD" of class "Directory"
+Properties	unknown	instance	answers	rc 163
+Properties	unsetMethod	instance	loud	method "UNSETMETHOD" of class "Directory"
+Queue	new	class	answers	rc 0
+Queue	of	class	loud	method "OF" of class "Queue"
+Queue	[]	instance	loud	a message send to a value that is not an array
+Queue	[]=	instance	loud	method "[]=" of class "Queue"
+Queue	allIndexes	instance	loud	method "ALLINDEXES" of class "Queue"
+Queue	allItems	instance	loud	method "ALLITEMS" of class "Queue"
+Queue	append	instance	loud	method "APPEND" of class "Queue"
+Queue	at	instance	loud	a message send to a value that is not an array
+Queue	delete	instance	loud	method "DELETE" of class "Queue"
+Queue	empty	instance	loud	method "EMPTY" of class "Queue"
+Queue	first	instance	loud	method "FIRST" of class "Queue"
+Queue	firstItem	instance	loud	method "FIRSTITEM" of class "Queue"
+Queue	hasIndex	instance	loud	method "HASINDEX" of class "Queue"
+Queue	hasItem	instance	loud	method "HASITEM" of class "Queue"
+Queue	index	instance	loud	method "INDEX" of class "Queue"
+Queue	insert	instance	loud	method "INSERT" of class "Queue"
+Queue	isEmpty	instance	loud	method "ISEMPTY" of class "Queue"
+Queue	items	instance	loud	a message send to a value that is not an array
+Queue	last	instance	loud	method "LAST" of class "Queue"
+Queue	lastItem	instance	loud	method "LASTITEM" of class "Queue"
+Queue	makeArray	instance	loud	method "MAKEARRAY" of class "Queue"
+Queue	next	instance	loud	method "NEXT" of class "Queue"
+Queue	peek	instance	loud	method "PEEK" of class "Queue"
+Queue	previous	instance	loud	method "PREVIOUS" of class "Queue"
+Queue	pull	instance	loud	method "PULL" of class "Queue"
+Queue	push	instance	loud	method "PUSH" of class "Queue"
+Queue	put	instance	loud	method "PUT" of class "Queue"
+Queue	queue	instance	loud	method "QUEUE" of class "Queue"
+Queue	remove	instance	loud	method "REMOVE" of class "Queue"
+Queue	removeItem	instance	loud	method "REMOVEITEM" of class "Queue"
+Queue	section	instance	loud	method "SECTION" of class "Queue"
+Queue	size	instance	loud	method "SIZE" of class "Queue"
+Queue	supplier	instance	loud	method "SUPPLIER" of class "Queue"
+Queue	difference	instance	answers	rc 163
+Queue	disjoint	instance	answers	rc 163
+Queue	equivalent	instance	answers	rc 163
+Queue	intersection	instance	answers	rc 163
+Queue	subset	instance	answers	rc 163
+Queue	union	instance	answers	rc 163
+Queue	xor	instance	answers	rc 163
+Queue	appendAll	instance	answers	rc 163
+Queue	sort	instance	loud	method "MAKEARRAY" of class "Queue"
+Queue	sortWith	instance	answers	rc 163
+Queue	stableSort	instance	loud	method "MAKEARRAY" of class "Queue"
+Queue	stableSortWith	instance	answers	rc 163
+Relation	new	class	answers	rc 0
+Relation	[]	instance	answers	rc 168
+Relation	[]=	instance	answers	rc 168
+Relation	allAt	instance	loud	method "ALLAT" of class "Relation"
+Relation	allIndex	instance	loud	method "ALLINDEX" of class "Relation"
+Relation	allIndexes	instance	loud	method "ALLINDEXES" of class "Relation"
+Relation	allItems	instance	loud	method "ALLITEMS" of class "Relation"
+Relation	at	instance	answers	rc 168
+Relation	difference	instance	answers	rc 163
+Relation	empty	instance	loud	method "EMPTY" of class "Relation"
+Relation	hasIndex	instance	loud	method "HASINDEX" of class "Relation"
+Relation	hasItem	instance	loud	method "HASITEM" of class "Relation"
+Relation	index	instance	loud	method "INDEX" of class "Relation"
+Relation	intersection	instance	answers	rc 163
+Relation	isEmpty	instance	loud	method "ISEMPTY" of class "Relation"
+Relation	items	instance	loud	method "ITEMS" of class "Relation"
+Relation	makeArray	instance	loud	method "MAKEARRAY" of class "Relation"
+Relation	put	instance	answers	rc 168
+Relation	remove	instance	loud	method "REMOVE" of class "Relation"
+Relation	removeAll	instance	loud	method "REMOVEALL" of class "Relation"
+Relation	removeItem	instance	loud	method "REMOVEITEM" of class "Relation"
+Relation	subset	instance	answers	rc 163
+Relation	supplier	instance	loud	method "SUPPLIER" of class "Relation"
+Relation	union	instance	answers	rc 163
+Relation	uniqueIndexes	instance	loud	method "UNIQUEINDEXES" of class "Relation"
+Relation	xor	instance	answers	rc 163
+Relation	disjoint	instance	answers	rc 163
+Relation	equivalent	instance	answers	rc 163
+Relation	of	class	loud	ARG option "A" answers an Array, which
+Relation	putAll	instance	answers	rc 163
+Set	new	class	answers	rc 0
+Set	of	class	loud	method "OF" of class "Set"
+Set	[]	instance	answers	rc 168
+Set	[]=	instance	answers	rc 168
+Set	allIndexes	instance	loud	method "ALLINDEXES" of class "Set"
+Set	allItems	instance	loud	method "ALLITEMS" of class "Set"
+Set	at	instance	answers	rc 168
+Set	empty	instance	loud	method "EMPTY" of class "Set"
+Set	hasIndex	instance	loud	method "HASINDEX" of class "Set"
+Set	hasItem	instance	loud	method "HASITEM" of class "Set"
+Set	index	instance	loud	method "INDEX" of class "Set"
+Set	intersection	instance	answers	rc 163
+Set	isEmpty	instance	loud	method "ISEMPTY" of class "Set"
+Set	items	instance	loud	method "ITEMS" of class "Set"
+Set	makeArray	instance	loud	method "MAKEARRAY" of class "Set"
+Set	put	instance	answers	rc 168
+Set	putAll	instance	answers	rc 163
+Set	remove	instance	loud	method "REMOVE" of class "Set"
+Set	removeItem	instance	loud	method "REMOVEITEM" of class "Set"
+Set	subset	instance	answers	rc 163
+Set	supplier	instance	loud	method "SUPPLIER" of class "Set"
+Set	union	instance	answers	rc 163
+Set	xor	instance	answers	rc 163
+Set	difference	instance	answers	rc 163
+Set	disjoint	instance	answers	rc 163
+Set	equivalent	instance	answers	rc 163
+Stem	new	class	answers	rc 0
+Stem	[]	instance	loud	method "[]" of class "Stem"
+Stem	[]=	instance	loud	method "[]=" of class "Stem"
+Stem	allIndexes	instance	loud	method "ALLINDEXES" of class "Stem"
+Stem	allItems	instance	loud	method "ALLITEMS" of class "Stem"
+Stem	at	instance	loud	method "AT" of class "Stem"
+Stem	empty	instance	loud	method "EMPTY" of class "Stem"
+Stem	hasIndex	instance	loud	method "HASINDEX" of class "Stem"
+Stem	hasItem	instance	loud	method "HASITEM" of class "Stem"
+Stem	index	instance	loud	method "INDEX" of class "Stem"
+Stem	isEmpty	instance	loud	method "ISEMPTY" of class "Stem"
+Stem	items	instance	loud	method "ITEMS" of class "Stem"
+Stem	makeArray	instance	loud	method "MAKEARRAY" of class "Stem"
+Stem	put	instance	loud	method "PUT" of class "Stem"
+Stem	remove	instance	loud	method "REMOVE" of class "Stem"
+Stem	removeItem	instance	loud	method "REMOVEITEM" of class "Stem"
+Stem	request	instance	loud	method "REQUEST" of class "Stem"
+Stem	supplier	instance	loud	method "SUPPLIER" of class "Stem"
+Stem	toDirectory	instance	loud	method "TODIRECTORY" of class "Stem"
+Stem	unknown	instance	loud	method "UNKNOWN" of class "Stem"
+Stem	difference	instance	answers	rc 163
+Stem	disjoint	instance	answers	rc 163
+Stem	equivalent	instance	answers	rc 163
+Stem	intersection	instance	answers	rc 163
+Stem	subset	instance	answers	rc 163
+Stem	union	instance	answers	rc 163
+Stem	xor	instance	answers	rc 163
+Stem	of	class	loud	ARG option "A" answers an Array, which
+Stem	putAll	instance	answers	rc 163
+StringTable	new	class	answers	rc 0
+StringTable	[]	instance	answers	rc 168
+StringTable	[]=	instance	answers	rc 168
+StringTable	allIndexes	instance	loud	method "ALLINDEXES" of class "StringTable"
+StringTable	allItems	instance	loud	method "ALLITEMS" of class "StringTable"
+StringTable	at	instance	answers	rc 168
+StringTable	empty	instance	loud	method "EMPTY" of class "StringTable"
+StringTable	entry	instance	loud	method "ENTRY" of class "StringTable"
+StringTable	hasEntry	instance	loud	method "HASENTRY" of class "StringTable"
+StringTable	hasIndex	instance	loud	method "HASINDEX" of class "StringTable"
+StringTable	hasItem	instance	loud	method "HASITEM" of class "StringTable"
+StringTable	index	instance	loud	method "INDEX" of class "StringTable"
+StringTable	isEmpty	instance	loud	method "ISEMPTY" of class "StringTable"
+StringTable	items	instance	loud	method "ITEMS" of class "StringTable"
+StringTable	makeArray	instance	loud	method "MAKEARRAY" of class "StringTable"
+StringTable	put	instance	answers	rc 168
+StringTable	remove	instance	loud	method "REMOVE" of class "StringTable"
+StringTable	removeEntry	instance	loud	method "REMOVEENTRY" of class "StringTable"
+StringTable	removeItem	instance	loud	method "REMOVEITEM" of class "StringTable"
+StringTable	setEntry	instance	loud	method "SETENTRY" of class "StringTable"
+StringTable	supplier	instance	loud	method "SUPPLIER" of class "StringTable"
+StringTable	unknown	instance	answers	rc 163
+StringTable	difference	instance	answers	rc 163
+StringTable	disjoint	instance	answers	rc 163
+StringTable	equivalent	instance	answers	rc 163
+StringTable	intersection	instance	answers	rc 163
+StringTable	subset	instance	answers	rc 163
+StringTable	union	instance	answers	rc 163
+StringTable	xor	instance	answers	rc 163
+StringTable	of	class	loud	ARG option "A" answers an Array, which
+StringTable	putAll	instance	answers	rc 163
+Table	new	class	answers	rc 0
+Table	[]	instance	answers	rc 168
+Table	[]=	instance	answers	rc 168
+Table	allIndexes	instance	loud	method "ALLINDEXES" of class "Table"
+Table	allItems	instance	loud	method "ALLITEMS" of class "Table"
+Table	at	instance	answers	rc 168
+Table	empty	instance	loud	method "EMPTY" of class "Table"
+Table	hasIndex	instance	loud	method "HASINDEX" of class "Table"
+Table	hasItem	instance	loud	method "HASITEM" of class "Table"
+Table	index	instance	loud	method "INDEX" of class "Table"
+Table	isEmpty	instance	loud	method "ISEMPTY" of class "Table"
+Table	items	instance	loud	method "ITEMS" of class "Table"
+Table	makeArray	instance	loud	method "MAKEARRAY" of class "Table"
+Table	put	instance	answers	rc 168
+Table	remove	instance	loud	method "REMOVE" of class "Table"
+Table	removeItem	instance	loud	method "REMOVEITEM" of class "Table"
+Table	supplier	instance	loud	method "SUPPLIER" of class "Table"
+Table	difference	instance	answers	rc 163
+Table	disjoint	instance	answers	rc 163
+Table	equivalent	instance	answers	rc 163
+Table	intersection	instance	answers	rc 163
+Table	subset	instance	answers	rc 163
+Table	union	instance	answers	rc 163
+Table	xor	instance	answers	rc 163
+Table	of	class	loud	ARG option "A" answers an Array, which
+Table	putAll	instance	answers	rc 163
+Alarm	attachment	instance	answers	rc 163
+Alarm	cancel	instance	answers	rc 163
+Alarm	canceled	instance	answers	rc 163
+Alarm	cancelled	instance	answers	rc 163
+Alarm	init	instance	answers	rc 163
+Alarm	scheduledTime	instance	answers	rc 163
+Alarm	triggered	instance	answers	rc 163
+AlarmNotification	cancel	instance	answers	rc 165
+AlarmNotification	triggered	instance	answers	rc 163
+Buffer	new	class	loud	method "NEW" of class "Buffer"
+Comparable	compareTo	instance	answers	rc 163
+Comparator	compare	instance	answers	rc 163
+CaselessComparator	compare	instance	answers	rc 163
+ColumnComparator	compare	instance	answers	rc 163
+ColumnComparator	init	instance	answers	rc 163
+CaselessColumnComparator	compare	instance	answers	rc 163
+CaselessColumnComparator	init	instance	answers	rc 163
+DescendingComparator	compare	instance	answers	rc 163
+CaselessDescendingComparator	compare	instance	answers	rc 163
+InvertingComparator	compare	instance	answers	rc 163
+InvertingComparator	init	instance	answers	rc 163
+NumericComparator	compare	instance	answers	rc 163
+NumericComparator	init	instance	answers	rc 165
+DateTime	init	instance	answers	rc 165
+DateTime	new	class	unstable	this crate
+DateTime	fromBaseDate	class	answers	rc 163
+DateTime	fromCivilTime	class	answers	rc 163
+DateTime	fromEuropeanDate	class	answers	rc 163
+DateTime	fromIsoDate	class	answers	rc 163
+DateTime	fromLongTime	class	answers	rc 163
+DateTime	fromNormalDate	class	answers	rc 163
+DateTime	fromNormalTime	class	answers	rc 163
+DateTime	fromOrderedDate	class	answers	rc 163
+DateTime	fromOrdinalDate	class	answers	rc 163
+DateTime	fromStandardDate	class	answers	rc 163
+DateTime	fromTicks	class	answers	rc 163
+DateTime	fromUsaDate	class	answers	rc 163
+DateTime	fromUtcIsoDate	class	answers	rc 163
+DateTime	fromWeekNumberDate	class	answers	rc 163
+DateTime	maxDate	class	loud	method "RIGHT" of class "String"
+DateTime	minDate	class	loud	method "RIGHT" of class "String"
+DateTime	today	class	diverge	diverge-stdout
+DateTime	+	instance	answers	rc 0
+DateTime	-	instance	answers	rc 163
+DateTime	addDays	instance	answers	rc 163
+DateTime	addHours	instance	answers	rc 163
+DateTime	addMicroseconds	instance	answers	rc 163
+DateTime	addMinutes	instance	answers	rc 163
+DateTime	addSeconds	instance	answers	rc 163
+DateTime	addWeeks	instance	answers	rc 163
+DateTime	addYears	instance	answers	rc 163
+DateTime	baseDate	instance	answers	rc 0
+DateTime	civilTime	instance	answers	rc 0
+DateTime	compareTo	instance	answers	rc 163
+DateTime	date	instance	diverge	diverge-both
+DateTime	day	instance	loud	method "SUBSTR" of class "String"
+DateTime	dayMicroseconds	instance	answers	rc 0
+DateTime	dayMinutes	instance	answers	rc 0
+DateTime	dayName	instance	answers	rc 0
+DateTime	daySeconds	instance	answers	rc 0
+DateTime	daysInMonth	instance	loud	method "SUBSTR" of class "String"
+DateTime	daysInYear	instance	loud	method "SUBSTR" of class "String"
+DateTime	elapsed	instance	loud	method "RIGHT" of class "String"
+DateTime	europeanDate	instance	answers	rc 0
+DateTime	fullDate	instance	answers	rc 0
+DateTime	hashCode	instance	loud	method "HASHCODE" of class "Object"
+DateTime	hours	instance	answers	rc 0
+DateTime	isLeapYear	instance	loud	method "SUBSTR" of class "String"
+DateTime	isoDate	instance	answers	rc 0
+DateTime	languageDate	instance	answers	rc 0
+DateTime	longTime	instance	answers	rc 0
+DateTime	makeString	instance	answers	rc 0
+DateTime	microseconds	instance	answers	rc 0
+DateTime	minutes	instance	answers	rc 0
+DateTime	month	instance	loud	method "SUBSTR" of class "String"
+DateTime	monthName	instance	answers	rc 0
+DateTime	normalDate	instance	answers	rc 0
+DateTime	normalTime	instance	answers	rc 0
+DateTime	offset	instance	loud	method "RIGHT" of class "String"
+DateTime	orderedDate	instance	answers	rc 0
+DateTime	ordinalDate	instance	loud	method "SUBSTR" of class "String"
+DateTime	seconds	instance	answers	rc 0
+DateTime	standardDate	instance	answers	rc 0
+DateTime	string	instance	answers	rc 0
+DateTime	ticks	instance	answers	rc 0
+DateTime	timeOfDay	instance	diverge	diverge-both
+DateTime	toLocalTime	instance	answers	rc 0
+DateTime	toTimezone	instance	diverge	diverge-stdout
+DateTime	toUtcTime	instance	diverge	diverge-stdout
+DateTime	usaDate	instance	answers	rc 0
+DateTime	utcDate	instance	diverge	diverge-stdout
+DateTime	utcIsoDate	instance	diverge	diverge-stdout
+DateTime	weekDay	instance	answers	rc 0
+DateTime	weekNumber	instance	answers	rc 0
+DateTime	weekNumberDate	instance	loud	method "SUBSTR" of class "String"
+DateTime	weekNumberYear	instance	loud	method "SUBSTR" of class "String"
+DateTime	weeksInYear	instance	loud	method "SUBSTR" of class "String"
+DateTime	year	instance	loud	method "SUBSTR" of class "String"
+DateTime	yearDay	instance	answers	rc 0
+DateTime	=	instance	answers	rc 163
+DateTime	==	instance	answers	rc 163
+DateTime	<	instance	answers	rc 163
+DateTime	<=	instance	answers	rc 163
+DateTime	<<	instance	answers	rc 163
+DateTime	<<=	instance	answers	rc 163
+DateTime	<>	instance	answers	rc 163
+DateTime	>	instance	answers	rc 163
+DateTime	>=	instance	answers	rc 163
+DateTime	><	instance	answers	rc 163
+DateTime	>>	instance	answers	rc 163
+DateTime	>>=	instance	answers	rc 163
+DateTime	\=	instance	answers	rc 163
+DateTime	\==	instance	answers	rc 163
+DateTime	\<	instance	answers	rc 163
+DateTime	\<<	instance	answers	rc 163
+DateTime	\>	instance	answers	rc 163
+DateTime	\>>	instance	answers	rc 163
+EventSemaphore	new	class	answers	rc 0
+EventSemaphore	isPosted	instance	loud	method "ISPOSTED" of class "EventSemaphore"
+EventSemaphore	post	instance	loud	method "POST" of class "EventSemaphore"
+EventSemaphore	reset	instance	loud	method "RESET" of class "EventSemaphore"
+EventSemaphore	uninit	instance	answers	rc 165
+EventSemaphore	wait	instance	loud	method "WAIT" of class "EventSemaphore"
+File	isCaseSensitive	class	loud	the LIBRARY REXX entry point "file_case_sensitive"
+File	listRoots	class	loud	the LIBRARY REXX entry point "file_list_roots"
+File	pathSeparator	class	answers	rc 0
+File	readChars	class	answers	rc 163
+File	readLines	class	answers	rc 163
+File	searchPath	class	answers	rc 163
+File	separator	class	answers	rc 0
+File	temporaryPath	class	loud	the LIBRARY REXX entry point "file_temporary_path"
+File	writeChars	class	answers	rc 163
+File	writeLines	class	answers	rc 163
+File	absoluteFile	instance	answers	rc 163
+File	absolutePath	instance	answers	rc 163
+File	canRead	instance	answers	rc 163
+File	canWrite	instance	answers	rc 163
+File	compareTo	instance	answers	rc 163
+File	delete	instance	answers	rc 163
+File	exists	instance	answers	rc 163
+File	extension	instance	answers	rc 163
+File	hashCode	instance	answers	rc 163
+File	init	instance	answers	rc 163
+File	isCaseSensitive	instance	answers	rc 163
+File	isDirectory	instance	answers	rc 163
+File	isFile	instance	answers	rc 163
+File	isHidden	instance	answers	rc 163
+File	lastAccessed	instance	answers	rc 163
+File	lastModified	instance	answers	rc 163
+File	length	instance	answers	rc 163
+File	list	instance	answers	rc 163
+File	listFiles	instance	answers	rc 163
+File	makeDir	instance	answers	rc 163
+File	makeDirs	instance	answers	rc 163
+File	makeString	instance	answers	rc 163
+File	name	instance	answers	rc 163
+File	parent	instance	answers	rc 163
+File	parentFile	instance	answers	rc 163
+File	path	instance	answers	rc 163
+File	pathSeparator	instance	answers	rc 163
+File	renameTo	instance	answers	rc 163
+File	separator	instance	answers	rc 163
+File	setReadOnly	instance	answers	rc 163
+File	setWritable	instance	answers	rc 163
+File	string	instance	answers	rc 163
+File	=	instance	answers	rc 163
+File	==	instance	answers	rc 163
+File	<	instance	answers	rc 163
+File	<=	instance	answers	rc 163
+File	<<	instance	answers	rc 163
+File	<<=	instance	answers	rc 163
+File	<>	instance	answers	rc 163
+File	>	instance	answers	rc 163
+File	>=	instance	answers	rc 163
+File	><	instance	answers	rc 163
+File	>>	instance	answers	rc 163
+File	>>=	instance	answers	rc 163
+File	\=	instance	answers	rc 163
+File	\==	instance	answers	rc 163
+File	\<	instance	answers	rc 163
+File	\<<	instance	answers	rc 163
+File	\>	instance	answers	rc 163
+File	\>>	instance	answers	rc 163
+MessageNotification	messageComplete	instance	answers	rc 163
+Monitor	current	instance	loud	method "PEEK" of class "Queue"
+Monitor	destination	instance	loud	method "PULL" of class "Queue"
+Monitor	init	instance	answers	rc 165
+Monitor	unknown	instance	answers	rc 163
+MutableBuffer	new	class	loud	method "MAKESTRING" of class "MutableBuffer"
+MutableBuffer	[]	instance	loud	method "[]" of class "MutableBuffer"
+MutableBuffer	[]=	instance	loud	method "[]=" of class "MutableBuffer"
+MutableBuffer	append	instance	loud	method "APPEND" of class "MutableBuffer"
+MutableBuffer	caselessChangeStr	instance	loud	method "CASELESSCHANGESTR" of class "MutableBuffer"
+MutableBuffer	caselessContains	instance	loud	method "CASELESSCONTAINS" of class "MutableBuffer"
+MutableBuffer	caselessContainsWord	instance	loud	method "CASELESSCONTAINSWORD" of class "MutableBuffer"
+MutableBuffer	caselessCountStr	instance	loud	method "CASELESSCOUNTSTR" of class "MutableBuffer"
+MutableBuffer	caselessEndsWith	instance	loud	method "CASELESSENDSWITH" of class "MutableBuffer"
+MutableBuffer	caselessLastPos	instance	loud	method "CASELESSLASTPOS" of class "MutableBuffer"
+MutableBuffer	caselessMatch	instance	loud	method "CASELESSMATCH" of class "MutableBuffer"
+MutableBuffer	caselessMatchChar	instance	loud	method "CASELESSMATCHCHAR" of class "MutableBuffer"
+MutableBuffer	caselessPos	instance	loud	method "CASELESSPOS" of class "MutableBuffer"
+MutableBuffer	caselessStartsWith	instance	loud	method "CASELESSSTARTSWITH" of class "MutableBuffer"
+MutableBuffer	caselessWordPos	instance	loud	method "CASELESSWORDPOS" of class "MutableBuffer"
+MutableBuffer	changeStr	instance	loud	method "CHANGESTR" of class "MutableBuffer"
+MutableBuffer	contains	instance	loud	method "CONTAINS" of class "MutableBuffer"
+MutableBuffer	containsWord	instance	loud	method "CONTAINSWORD" of class "MutableBuffer"
+MutableBuffer	countStr	instance	loud	method "COUNTSTR" of class "MutableBuffer"
+MutableBuffer	delete	instance	loud	method "DELETE" of class "MutableBuffer"
+MutableBuffer	delStr	instance	loud	method "DELSTR" of class "MutableBuffer"
+MutableBuffer	delWord	instance	loud	method "DELWORD" of class "MutableBuffer"
+MutableBuffer	endsWith	instance	loud	method "ENDSWITH" of class "MutableBuffer"
+MutableBuffer	getBufferSize	instance	loud	method "GETBUFFERSIZE" of class "MutableBuffer"
+MutableBuffer	insert	instance	loud	method "INSERT" of class "MutableBuffer"
+MutableBuffer	lastPos	instance	loud	method "LASTPOS" of class "MutableBuffer"
+MutableBuffer	length	instance	loud	method "LENGTH" of class "MutableBuffer"
+MutableBuffer	lower	instance	loud	method "LOWER" of class "MutableBuffer"
+MutableBuffer	makeArray	instance	loud	method "MAKEARRAY" of class "MutableBuffer"
+MutableBuffer	makeString	instance	loud	method "MAKESTRING" of class "MutableBuffer"
+MutableBuffer	match	instance	loud	method "MATCH" of class "MutableBuffer"
+MutableBuffer	matchChar	instance	loud	method "MATCHCHAR" of class "MutableBuffer"
+MutableBuffer	overlay	instance	loud	method "OVERLAY" of class "MutableBuffer"
+MutableBuffer	pos	instance	loud	method "POS" of class "MutableBuffer"
+MutableBuffer	replaceAt	instance	loud	method "REPLACEAT" of class "MutableBuffer"
+MutableBuffer	setBufferSize	instance	loud	method "SETBUFFERSIZE" of class "MutableBuffer"
+MutableBuffer	setText	instance	loud	method "SETTEXT" of class "MutableBuffer"
+MutableBuffer	space	instance	loud	method "SPACE" of class "MutableBuffer"
+MutableBuffer	startsWith	instance	loud	method "STARTSWITH" of class "MutableBuffer"
+MutableBuffer	string	instance	loud	method "STRING" of class "MutableBuffer"
+MutableBuffer	subChar	instance	loud	method "SUBCHAR" of class "MutableBuffer"
+MutableBuffer	substr	instance	loud	method "SUBSTR" of class "MutableBuffer"
+MutableBuffer	subWord	instance	loud	method "SUBWORD" of class "MutableBuffer"
+MutableBuffer	subWords	instance	loud	method "SUBWORDS" of class "MutableBuffer"
+MutableBuffer	translate	instance	loud	method "TRANSLATE" of class "MutableBuffer"
+MutableBuffer	upper	instance	loud	method "UPPER" of class "MutableBuffer"
+MutableBuffer	verify	instance	loud	method "VERIFY" of class "MutableBuffer"
+MutableBuffer	word	instance	loud	method "WORD" of class "MutableBuffer"
+MutableBuffer	wordIndex	instance	loud	method "WORDINDEX" of class "MutableBuffer"
+MutableBuffer	wordLength	instance	loud	method "WORDLENGTH" of class "MutableBuffer"
+MutableBuffer	wordPos	instance	loud	method "WORDPOS" of class "MutableBuffer"
+MutableBuffer	words	instance	loud	method "WORDS" of class "MutableBuffer"
+MutexSemaphore	new	class	answers	rc 0
+MutexSemaphore	acquire	instance	loud	method "ACQUIRE" of class "MutexSemaphore"
+MutexSemaphore	release	instance	loud	method "RELEASE" of class "MutexSemaphore"
+MutexSemaphore	uninit	instance	answers	rc 165
+Orderable	=	instance	answers	rc 163
+Orderable	==	instance	answers	rc 163
+Orderable	<	instance	answers	rc 163
+Orderable	<=	instance	answers	rc 163
+Orderable	<<	instance	answers	rc 163
+Orderable	<<=	instance	answers	rc 163
+Orderable	<>	instance	answers	rc 163
+Orderable	>	instance	answers	rc 163
+Orderable	>=	instance	answers	rc 163
+Orderable	><	instance	answers	rc 163
+Orderable	>>	instance	answers	rc 163
+Orderable	>>=	instance	answers	rc 163
+Orderable	\=	instance	answers	rc 163
+Orderable	\==	instance	answers	rc 163
+Orderable	\<	instance	answers	rc 163
+Orderable	\<<	instance	answers	rc 163
+Orderable	\>	instance	answers	rc 163
+Orderable	\>>	instance	answers	rc 163
+Orderable	compareTo	instance	answers	rc 163
+Pointer	new	class	loud	method "NEW" of class "Pointer"
+Pointer	=	instance	loud	method "NEW" of class "Pointer"
+Pointer	==	instance	loud	method "NEW" of class "Pointer"
+Pointer	\=	instance	loud	method "NEW" of class "Pointer"
+Pointer	\==	instance	loud	method "NEW" of class "Pointer"
+Pointer	isNull	instance	loud	method "NEW" of class "Pointer"
+RexxContext	args	instance	loud	method "ARGS" of class "RexxContext"
+RexxContext	condition	instance	loud	method "CONDITION" of class "RexxContext"
+RexxContext	digits	instance	loud	method "DIGITS" of class "RexxContext"
+RexxContext	executable	instance	loud	method "EXECUTABLE" of class "RexxContext"
+RexxContext	form	instance	loud	method "FORM" of class "RexxContext"
+RexxContext	fuzz	instance	loud	method "FUZZ" of class "RexxContext"
+RexxContext	interpreter	instance	loud	method "INTERPRETER" of class "RexxContext"
+RexxContext	invocation	instance	loud	method "INVOCATION" of class "RexxContext"
+RexxContext	line	instance	loud	method "LINE" of class "RexxContext"
+RexxContext	name	instance	loud	method "NAME" of class "RexxContext"
+RexxContext	package	instance	answers	rc 0
+RexxContext	rs	instance	loud	method "RS" of class "RexxContext"
+RexxContext	stackFrames	instance	loud	method "STACKFRAMES" of class "RexxContext"
+RexxContext	thread	instance	loud	method "THREAD" of class "RexxContext"
+RexxContext	variables	instance	loud	method "VARIABLES" of class "RexxContext"
+RexxInfo	architecture	instance	loud	method "ARCHITECTURE" of class "RexxInfo"
+RexxInfo	caseSensitiveFiles	instance	loud	method "CASESENSITIVEFILES" of class "RexxInfo"
+RexxInfo	date	instance	loud	method "DATE" of class "RexxInfo"
+RexxInfo	debug	instance	loud	method "DEBUG" of class "RexxInfo"
+RexxInfo	digits	instance	loud	method "DIGITS" of class "RexxInfo"
+RexxInfo	directorySeparator	instance	loud	method "DIRECTORYSEPARATOR" of class "RexxInfo"
+RexxInfo	endofline	instance	loud	method "ENDOFLINE" of class "RexxInfo"
+RexxInfo	executable	instance	loud	method "EXECUTABLE" of class "RexxInfo"
+RexxInfo	form	instance	loud	method "FORM" of class "RexxInfo"
+RexxInfo	fuzz	instance	loud	method "FUZZ" of class "RexxInfo"
+RexxInfo	internalDigits	instance	loud	method "INTERNALDIGITS" of class "RexxInfo"
+RexxInfo	internalMaxNumber	instance	loud	method "INTERNALMAXNUMBER" of class "RexxInfo"
+RexxInfo	internalMinNumber	instance	loud	method "INTERNALMINNUMBER" of class "RexxInfo"
+RexxInfo	languageLevel	instance	loud	method "LANGUAGELEVEL" of class "RexxInfo"
+RexxInfo	libraryPath	instance	loud	method "LIBRARYPATH" of class "RexxInfo"
+RexxInfo	majorVersion	instance	loud	method "MAJORVERSION" of class "RexxInfo"
+RexxInfo	maxArraySize	instance	loud	method "MAXARRAYSIZE" of class "RexxInfo"
+RexxInfo	maxExponent	instance	loud	method "MAXEXPONENT" of class "RexxInfo"
+RexxInfo	maxPathLength	instance	loud	method "MAXPATHLENGTH" of class "RexxInfo"
+RexxInfo	minExponent	instance	loud	method "MINEXPONENT" of class "RexxInfo"
+RexxInfo	modification	instance	loud	method "MODIFICATION" of class "RexxInfo"
+RexxInfo	name	instance	loud	method "NAME" of class "RexxInfo"
+RexxInfo	package	instance	loud	method "PACKAGE" of class "RexxInfo"
+RexxInfo	pathSeparator	instance	loud	method "PATHSEPARATOR" of class "RexxInfo"
+RexxInfo	platform	instance	loud	method "PLATFORM" of class "RexxInfo"
+RexxInfo	release	instance	loud	method "RELEASE" of class "RexxInfo"
+RexxInfo	revision	instance	loud	method "REVISION" of class "RexxInfo"
+RexxInfo	version	instance	loud	method "VERSION" of class "RexxInfo"
+RexxQueue	new	class	answers	rc 0
+RexxQueue	create	class	loud	the LIBRARY REXX entry point "rexx_create_queue"
+RexxQueue	delete	class	loud	the LIBRARY REXX entry point "rexx_delete_queue"
+RexxQueue	exists	class	loud	the LIBRARY REXX entry point "rexx_queue_exists"
+RexxQueue	open	class	loud	the LIBRARY REXX entry point "rexx_open_queue"
+RexxQueue	delete	instance	loud	the LIBRARY REXX entry point "rexx_delete_queue"
+RexxQueue	empty	instance	loud	the LIBRARY REXX entry point "rexx_clear_queue"
+RexxQueue	get	instance	answers	rc 0
+RexxQueue	init	instance	answers	rc 165
+RexxQueue	lineIn	instance	loud	the LIBRARY REXX entry point "rexx_linein_queue"
+RexxQueue	lineOut	instance	loud	the LIBRARY REXX entry point "rexx_queue_queue"
+RexxQueue	makeArray	instance	loud	the LIBRARY REXX entry point "rexx_query_queue"
+RexxQueue	pull	instance	loud	the LIBRARY REXX entry point "rexx_pull_queue"
+RexxQueue	push	instance	loud	the LIBRARY REXX entry point "rexx_push_queue"
+RexxQueue	queue	instance	loud	the LIBRARY REXX entry point "rexx_queue_queue"
+RexxQueue	queued	instance	loud	the LIBRARY REXX entry point "rexx_query_queue"
+RexxQueue	say	instance	loud	the LIBRARY REXX entry point "rexx_queue_queue"
+RexxQueue	set	instance	answers	rc 163
+Singleton	new	class	answers	rc 163
+StackFrame	arguments	instance	loud	method "NEW" of class "StackFrame"
+StackFrame	context	instance	loud	method "NEW" of class "StackFrame"
+StackFrame	invocation	instance	loud	method "NEW" of class "StackFrame"
+StackFrame	line	instance	loud	method "NEW" of class "StackFrame"
+StackFrame	makeString	instance	loud	method "NEW" of class "StackFrame"
+StackFrame	name	instance	loud	method "NEW" of class "StackFrame"
+StackFrame	string	instance	loud	method "NEW" of class "StackFrame"
+StackFrame	target	instance	loud	method "NEW" of class "StackFrame"
+StackFrame	traceLine	instance	loud	method "NEW" of class "StackFrame"
+StackFrame	type	instance	loud	method "NEW" of class "StackFrame"
+StreamSupplier	available	instance	answers	rc 159
+StreamSupplier	index	instance	answers	rc 159
+StreamSupplier	init	instance	answers	rc 159
+StreamSupplier	item	instance	answers	rc 159
+StreamSupplier	next	instance	answers	rc 159
+StreamSupplier	new	class	answers	rc 159
+StreamSupplier	allIndexes	instance	answers	rc 159
+StreamSupplier	allItems	instance	answers	rc 159
+StreamSupplier	supplier	instance	answers	rc 159
+Supplier	new	class	answers	rc 163
+Supplier	allIndexes	instance	loud	method "AVAILABLE" of class "Supplier"
+Supplier	allItems	instance	loud	method "AVAILABLE" of class "Supplier"
+Supplier	available	instance	loud	method "AVAILABLE" of class "Supplier"
+Supplier	index	instance	loud	method "INDEX" of class "Supplier"
+Supplier	item	instance	loud	method "ITEM" of class "Supplier"
+Supplier	next	instance	loud	method "NEXT" of class "Supplier"
+Supplier	supplier	instance	answers	rc 0
+Ticker	attachment	instance	answers	rc 163
+Ticker	cancel	instance	answers	rc 163
+Ticker	canceled	instance	answers	rc 163
+Ticker	cancelled	instance	answers	rc 163
+Ticker	init	instance	answers	rc 163
+Ticker	interval	instance	answers	rc 163
+TimeSpan	init	instance	answers	rc 163
+TimeSpan	new	class	answers	rc 163
+TimeSpan	fromCivilTime	class	answers	rc 163
+TimeSpan	fromDays	class	answers	rc 163
+TimeSpan	fromHours	class	answers	rc 163
+TimeSpan	fromLongTime	class	answers	rc 163
+TimeSpan	fromMicroseconds	class	answers	rc 163
+TimeSpan	fromMinutes	class	answers	rc 163
+TimeSpan	fromNormalTime	class	answers	rc 163
+TimeSpan	fromSeconds	class	answers	rc 163
+TimeSpan	fromStringFormat	class	answers	rc 163
+TimeSpan	+	instance	loud	method "RIGHT" of class "String"
+TimeSpan	-	instance	loud	method "RIGHT" of class "String"
+TimeSpan	*	instance	answers	rc 163
+TimeSpan	/	instance	answers	rc 163
+TimeSpan	//	instance	answers	rc 163
+TimeSpan	%	instance	answers	rc 163
+TimeSpan	addDays	instance	answers	rc 163
+TimeSpan	addHours	instance	answers	rc 163
+TimeSpan	addMicroseconds	instance	answers	rc 163
+TimeSpan	addMinutes	instance	answers	rc 163
+TimeSpan	addSeconds	instance	answers	rc 163
+TimeSpan	addWeeks	instance	answers	rc 163
+TimeSpan	compareTo	instance	answers	rc 163
+TimeSpan	days	instance	answers	rc 0
+TimeSpan	duration	instance	loud	method "RIGHT" of class "String"
+TimeSpan	hashCode	instance	loud	method "HASHCODE" of class "Object"
+TimeSpan	hours	instance	answers	rc 0
+TimeSpan	makeString	instance	loud	method "RIGHT" of class "String"
+TimeSpan	microseconds	instance	answers	rc 0
+TimeSpan	minutes	instance	answers	rc 0
+TimeSpan	seconds	instance	answers	rc 0
+TimeSpan	sign	instance	loud	method "SIGN" of class "String"
+TimeSpan	string	instance	loud	method "RIGHT" of class "String"
+TimeSpan	totalDays	instance	answers	rc 0
+TimeSpan	totalHours	instance	answers	rc 0
+TimeSpan	totalMicroseconds	instance	answers	rc 0
+TimeSpan	totalMinutes	instance	answers	rc 0
+TimeSpan	totalSeconds	instance	answers	rc 0
+TimeSpan	=	instance	answers	rc 163
+TimeSpan	==	instance	answers	rc 163
+TimeSpan	<	instance	answers	rc 163
+TimeSpan	<=	instance	answers	rc 163
+TimeSpan	<<	instance	answers	rc 163
+TimeSpan	<<=	instance	answers	rc 163
+TimeSpan	<>	instance	answers	rc 163
+TimeSpan	>	instance	answers	rc 163
+TimeSpan	>=	instance	answers	rc 163
+TimeSpan	><	instance	answers	rc 163
+TimeSpan	>>	instance	answers	rc 163
+TimeSpan	>>=	instance	answers	rc 163
+TimeSpan	\=	instance	answers	rc 163
+TimeSpan	\==	instance	answers	rc 163
+TimeSpan	\<	instance	answers	rc 163
+TimeSpan	\<<	instance	answers	rc 163
+TimeSpan	\>	instance	answers	rc 163
+TimeSpan	\>>	instance	answers	rc 163
+TraceObject	activate	class	answers	rc 165
+TraceObject	collector	class	answers	rc 0
+TraceObject	collector=	class	answers	rc 163
+TraceObject	counter	class	answers	rc 0
+TraceObject	makeStringImpl	class	answers	rc 163
+TraceObject	new	class	answers	rc 0
+TraceObject	notify	class	answers	rc 0
+TraceObject	notify=	class	answers	rc 163
+TraceObject	option	class	answers	rc 0
+TraceObject	option=	class	answers	rc 163
+TraceObject	setMakeString	class	answers	rc 163
+TraceObject	unsetMakeString	class	answers	rc 165
+TraceObject	compareTo	instance	loud	method "[]" of class "String"
+TraceObject	makeString	instance	answers	rc 0
+Validate	classType	class	answers	rc 163
+Validate	length	class	answers	rc 163
+Validate	logical	class	answers	rc 163
+Validate	nonNegativeNumber	class	answers	rc 163
+Validate	nonNegativeWholeNumber	class	answers	rc 163
+Validate	number	class	answers	rc 163
+Validate	numberRange	class	answers	rc 163
+Validate	position	class	answers	rc 163
+Validate	positiveNumber	class	answers	rc 163
+Validate	positiveWholeNumber	class	answers	rc 163
+Validate	requestClassType	class	answers	rc 163
+Validate	wholeNumber	class	answers	rc 163
+Validate	wholeNumberRange	class	answers	rc 163
+VariableReference	name	instance	answers	rc 0
+VariableReference	request	instance	answers	rc 163
+VariableReference	unknown	instance	answers	rc 163
+VariableReference	value	instance	answers	rc 0
+WeakReference	new	class	answers	rc 163
+WeakReference	value	instance	loud	method "VALUE" of class "WeakReference"
+InputOutputStream	arrayOut	instance	answers	rc 163
+InputOutputStream	charIn	instance	answers	rc 163
+InputOutputStream	charOut	instance	answers	rc 163
+InputOutputStream	chars	instance	answers	rc 163
+InputOutputStream	close	instance	answers	rc 165
+InputOutputStream	lineIn	instance	answers	rc 163
+InputOutputStream	lineOut	instance	answers	rc 163
+InputOutputStream	lines	instance	answers	rc 163
+InputOutputStream	open	instance	answers	rc 165
+InputOutputStream	position	instance	answers	rc 163
+InputOutputStream	arrayIn	instance	answers	rc 163
+InputStream	arrayIn	instance	answers	rc 163
+InputStream	charIn	instance	answers	rc 163
+InputStream	charOut	instance	answers	rc 163
+InputStream	chars	instance	answers	rc 163
+InputStream	close	instance	answers	rc 165
+InputStream	lineIn	instance	answers	rc 163
+InputStream	lineOut	instance	answers	rc 163
+InputStream	lines	instance	answers	rc 163
+InputStream	open	instance	answers	rc 165
+InputStream	position	instance	answers	rc 163
+OutputStream	arrayOut	instance	answers	rc 163
+OutputStream	charIn	instance	answers	rc 163
+OutputStream	charOut	instance	answers	rc 163
+OutputStream	chars	instance	answers	rc 163
+OutputStream	close	instance	answers	rc 165
+OutputStream	lineIn	instance	answers	rc 163
+OutputStream	lineOut	instance	answers	rc 163
+OutputStream	lines	instance	answers	rc 163
+OutputStream	open	instance	answers	rc 165
+OutputStream	position	instance	answers	rc 163
+Stream	new	class	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	arrayIn	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	arrayOut	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	charIn	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	charOut	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	chars	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	close	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	command	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	description	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	flush	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	init	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	lineIn	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	lineOut	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	lines	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	makeArray	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	open	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	position	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	qualify	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	query	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	say	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	seek	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	state	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	string	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	supplier	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	uninit	instance	loud	the LIBRARY REXX entry point "stream_uninit"
