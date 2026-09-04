@@ -1298,7 +1298,20 @@ pub(crate) fn time(
 
     match style {
         b'E' | b'R' => {
-            let text = elapsed_reading(interp, current.utc_base_time(), style == b'R');
+            // **The raw clock, not [`Timestamp::utc_base_time`].** The anchor
+            // this is differenced against is [`Activation::cached_clock`],
+            // which is what [`real_clock_base_time`] returned -- so the
+            // reading has to be the same quantity or the difference carries
+            // the zone. `utc_base_time` is `base_time() + time_zone_offset`,
+            // faithful to `RexxDateTime::getUTCBaseTime`, and with the local
+            // calendar fields [`now`] now builds that is the UTC instant plus
+            // *twice* the offset. The oracle cancels it by differencing two
+            // values of its own formula; this cancels it by differencing two
+            // raw readings. Measured before the fix: `TIME('R')` in a callee
+            // leaked 14400.000001 seconds into the caller at UTC+2, which is
+            // two offsets, not one.
+            let reading = now_base_time(interp);
+            let text = elapsed_reading(interp, reading, style == b'R');
             Ok(interp.text(&text))
         }
         b'C' => Ok(interp.text(&timestamp.format_civil())),
