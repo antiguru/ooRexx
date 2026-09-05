@@ -5387,3 +5387,15 @@ Output was verified byte-identical between `base` and the built binary on all el
 **All seven gates 0** at `a16baeaa3`, 17:00:02 to 17:14:05. G4 (`REXX_CORPUS_GATE=1 cargo test --release --workspace --no-fail-fast`, the corpus control that can go red) ran 111 suites, 2072 passed, 0 failed, and the differential read `363 of 363 matching`.
 
 **`method_bodies.rs` is the gate that mattered here and it is green.** That test compares `corpus/method-bodies.txt` row for row against a fresh run, and its subject -- the flattened method dictionary -- is the map whose iteration order this change replaced. A verdict that moved because the order moved would have reddened it. Nothing moved.
+
+#### Entry 75, addendum: a `strings` win that is not attributable
+
+Re-running the nine-axis oracle comparison after the change, the ratio table read `alloc` 2.945x, `dispatchclass` 2.316x, `dispatch` 1.992x, `strings` 1.553x, `arith` 1.126x, `varlookup` 0.717x, `compound` 0.625x, `emptyloop` 0.607x, `alloc4c` 0.581x -- against 3.544x, 2.776x, 2.318x, **1.702x**, 1.139x, 0.726x, 0.622x, 0.610x, 0.582x before it. **Read as a before-and-after that says `strings` gained 8.8%, and it does not.**
+
+The two tables are separate sittings, which this file's own configuration block says are not comparable. Interleaving the two binaries directly gives `strings` base 1447/1432/1452 ms against landed 1340/1360/1362 -- a consistent-looking 6.3% -- with `emptyloop` flat beside it. But the instruction count for that axis is **-0.14%**, which is the fixed startup constant and nothing else, and `strings.rex` sends no messages at all: it is `SUBSTR`, `POS`, `CHANGESTR` and concatenation, none of which reach a method dictionary.
+
+Staging both arms at **one fixed path** -- the `argv[0]` control -- the landed arm alone spans 1343 to 1439 ms across three reps, as wide as the gap being attributed to it. So the effect is inside the arm's own spread.
+
+**Not attributable, which is a different and better claim than unexplained.** This is the same artifact recorded against `arith` and `emptyloop` earlier in this file: a deterministic-per-binary wall movement at a standstill instruction count, which nothing semantic picks. The instruction count settled it in one run where three interleaved wall rounds could not.
+
+**The standing to quote is the post-change table above, as one sitting's measurement.** Four of nine axes faster than the oracle; `alloc` the worst at 2.9x and never yet the subject of a round.
