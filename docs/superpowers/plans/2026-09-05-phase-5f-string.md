@@ -101,21 +101,46 @@ because the receiver is empty. The 5c follow-up review left this open as its que
 
 ---
 
-## Task 1 — the 40 rows `MutableBuffer` already implements
+## Task 1 — the 41 rows `MutableBuffer` already implements
 
 The cheapest block and the largest. `native_mutable_buffer_*` already wrote both halves against the
 93.9xx surface this phase needs: the argument layer and the call into `builtin::string`/`word`'s byte
-cores. Only the byte source differs — `buffer_state(interp, receiver, b"SUBSTR")?.bytes` there,
-`interp.to_text(receiver)` here.
+cores.
 
-**Extract the shared half rather than copying it.** A body that takes `&[u8]` and the argument list
-serves both receivers; `MutableBuffer`'s native becomes the buffer's byte source plus that call, and
-`String`'s becomes `to_text` plus the same call. Copying gives 40 chances for the two receivers to
-drift apart on an error message, and the corpus programs would have to catch every one.
+**41, not 40, and `[]` is the row that hid.** The intersection is computed from
+`corpus/method-bodies.txt` — `MutableBuffer`'s `answers` names against `String`'s `loud` names — and a
+first pass took it from the *function* names in `dispatch.rs` instead, where the method `[]` is spelt
+`native_mutable_buffer_brackets` and so fell out of the intersection and into Task 2's operator
+bucket. Task 2 is 33.
 
-`append pos lastPos verify word words changeStr insert overlay translate space subChar substr subWord
-subWords delStr delWord contains startsWith endsWith match matchChar replaceAt lower wordIndex
-wordLength wordPos countStr containsWord`, and the eleven `caseless*` of those.
+**Two contracts, not one, and only 30 rows share a body.** Measured on the oracle:
+
+```text
+'abcdef'~insert('XY', 2)                    abXYcdef, and the receiver is still abcdef
+.MutableBuffer~new('abcdef')~insert('XY',2) returns the receiver; the buffer is abXYcdef after
+```
+
+The same holds for `append changeStr delStr replaceAt`, checked one by one. So:
+
+* **30 reader rows** — `[] pos lastPos verify word words countStr contains containsWord startsWith
+  endsWith match matchChar subChar substr subWord subWords wordIndex wordLength wordPos`, and the
+  eleven `caseless*` — differ from their `MutableBuffer` twin **only in the byte source**:
+  `buffer_state(interp, receiver, b"SUBSTR")?.bytes` there, `interp.to_text(receiver)` here.
+* **11 mutator rows** — `append caselessChangeStr changeStr delStr delWord insert lower overlay
+  replaceAt space translate`, the ones whose `MutableBuffer` native reaches `buffer_state_mut` —
+  share the core and the argument layer and **not** the return contract. `String` builds a new value;
+  the buffer writes itself and answers the receiver.
+
+**Extract the shared half rather than copying it.** For the 30 that is a whole body parameterised by
+its byte source. For the 11 it is the argument layer and the core call, with two endings. Copying
+gives 41 chances for the two receivers to drift apart on an error message, and the corpus programs
+would have to catch every one.
+
+**The borrow decides the shape and is worth stating before anyone fights it.** `to_text` is
+`&mut Interp` where `buffer_state` is `&Interp`, and `take_result_buffer` is `&self` with interior
+mutability. So a shared body takes the result buffer *first*, then the byte source, and drops the
+byte borrow before `text_built`. Resolving the bytes into an owned `Vec` instead would put an
+allocation on every send, which is what entry 75 has just finished taking out of this path.
 
 **Several commits, each its own family, each its own gate run, each filing its own witness** — the
 5c follow-up's Task 3 shape, for its reason: one program exercising eight names says nothing about
@@ -128,7 +153,7 @@ divergence introduced *by* the extraction reads as a `String` defect. Run
 
 ---
 
-## Task 2 — the 34 operator rows
+## Task 2 — the 33 operator rows
 
 D85 put them in scope; D83 is the open shape question and it is a question about *stderr*.
 
@@ -150,13 +175,14 @@ Measured on this crate, the frame already appears for a raising native send, byt
 oracle on both engines (`b~substr` on a `MutableBuffer`). **So the machinery exists and the question
 is only whether a route through `apply_binary` stays inside it.** Run that before choosing.
 
-**The witness must make each of the 34 raise as well as succeed**, because the extra line appears
+**The witness must make each of the 33 raise as well as succeed**, because the extra line appears
 only on a failing operand and a program of successful sends cannot see it.
 
-`+ - * ** / // % = == \= \== < <= << <<= <> > >= >< >> >>= \< \<< \> \>> \ & && | || [] ?`, abuttal
-and blank. `[]` and `?` are not arithmetic and get their own reading.
+`+ - * ** / // % = == \= \== < <= << <<= <> > >= >< >> >>= \< \<< \> \>> \ & && | || ?`, abuttal and
+blank. `?` is not arithmetic and gets its own reading. **`[]` is not here** — it is Task 1's, because
+`MutableBuffer` already implements it.
 
-**Six of the 34 crash the oracle, and this task decides what the table does about it.** Measured by
+**Six of the 33 crash the oracle, and this task decides what the table does about it.** Measured by
 Task 0 and recorded as `corpus/oracle-crashes.txt`'s newest entry: `say "abc"~"<<"` is a silent
 SIGSEGV at rc 139, and so are `<<=`, `>>`, `>>=`, `\<<` and `\>>`, because
 `RexxString::primitiveStrictComp` dereferences a missing argument with no check

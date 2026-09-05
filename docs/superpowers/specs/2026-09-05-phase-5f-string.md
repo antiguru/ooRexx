@@ -43,16 +43,16 @@ The 112 rows are four kinds of work, not one. Measured by name against
 
 | n | kind | what exists already |
 |---|---|---|
-| 40 | a `native_mutable_buffer_*` body already implements it | `append pos lastPos verify word words changeStr insert overlay translate space subChar substr subWord subWords delStr delWord contains startsWith endsWith match matchChar replaceAt lower wordIndex wordLength wordPos countStr containsWord`, and the eleven `caseless*` of those |
+| 41 | a `native_mutable_buffer_*` body already implements it | `[] append pos lastPos verify word words changeStr insert overlay translate space subChar substr subWord subWords delStr delWord contains startsWith endsWith match matchChar replaceAt lower wordIndex wordLength wordPos countStr containsWord`, and the eleven `caseless*` of those |
 | 25 | an implemented BIF already computes the **value**, and none of its error surface | `abbrev abs b2x bitAnd bitOr bitXor c2d c2x center centre compare copies d2c d2x dataType format left max min right strip trunc x2b x2c x2d` |
-| 34 | operator as a message | `+ - * ** / // % = == \= \== < <= << <<= <> > >= >< >> >>= \< \<< \> \>> \ & && \| \|\| [] ?`, abuttal and blank |
+| 33 | operator as a message | `+ - * ** / // % = == \= \== < <= << <<= <> > >= >< >> >>= \< \<< \> \>> \ & && \| \|\| ?`, abuttal and blank |
 | 13 | neither: a body to write | `caselessAbbrev caselessCompare caselessCompareTo caselessEquals ceiling compareTo decodeBase64 encodeBase64 equals floor hashCode modulo round` |
 
 **`hashCode` is `Object`'s, not `String`'s** — its evidence column says
 `method "HASHCODE" of class "Object"`, so it is an inherited row appearing under `String`'s arm and
 implementing it moves rows on every class that inherits it. Whoever lands it says so.
 
-**The 40 and the 25 are not equally cheap, and measuring that is what the table above hides.** A
+**The 41 and the 25 are not equally cheap, and measuring that is what the table above hides.** A
 method and its like-named builtin agree on the answer and on nothing else. Measured on `left`, all
 four runs on the oracle:
 
@@ -75,9 +75,14 @@ plain `&[u8]`.
 
 That is the real ranking inside the phase, cheapest first:
 
-* **the 40** — the method-side argument layer *and* the core both exist, because
-  `native_mutable_buffer_*` wrote them against this same 93.9xx surface. Only the byte source changes;
-* **the 34** — `apply_binary` computes them and `operator_argument` is the argument layer;
+* **the 41** — the method-side argument layer *and* the core both exist, because
+  `native_mutable_buffer_*` wrote them against this same 93.9xx surface. **Only 30 of them share a
+  body, though.** Measured on the oracle: `'abcdef'~insert('XY',2)` answers `abXYcdef` and leaves the
+  receiver `abcdef`, where `.MutableBuffer~new('abcdef')~insert('XY',2)` returns *the receiver* and
+  the buffer is `abXYcdef` afterwards. So the eleven whose `MutableBuffer` native reaches
+  `buffer_state_mut` — `append caselessChangeStr changeStr delStr delWord insert lower overlay
+  replaceAt space translate` — share the core and the argument layer and **not** the return contract;
+* **the 33** — `apply_binary` computes them and `operator_argument` is the argument layer;
 * **the 25** — the core exists for some and the method-side argument layer exists for none. Each row
   is a small piece of hand work measured against the oracle;
 * **the 13** — nothing exists.
@@ -89,7 +94,7 @@ missing is the receiver, and for a quarter of them, the argument layer.
 
 ## D-numbers
 
-**D83 — how the 34 operator rows reach an answer.** `eval::apply_binary(op, left, right)`
+**D83 — how the 33 operator rows reach an answer.** `eval::apply_binary(op, left, right)`
 (`eval.rs:1872`) already computes every one of them, and `Object` already has native operator methods
 built on `operator_argument(args)` (`dispatch.rs:4666`) — so the machinery is there twice. Two shapes:
 one native per operator name forwarding to `apply_binary`, or one native that carries its `Operator`
@@ -105,7 +110,7 @@ Error 41.1 ... rc 215              Error 41.1 ... identical, rc 215
 
 A route through `apply_binary` that does not push a method frame drops that line, and drops it only
 on a *failing* operand — so a program of successful operator sends cannot witness it. §3's programs
-have to make each of the 34 raise as well as succeed.
+have to make each of the 33 raise as well as succeed.
 
 **The crate already emits that frame for a native method, on both engines.** Measured, and the three
 outputs are byte-identical:
@@ -147,7 +152,7 @@ plan says why**: the raiser is one shared implementation, already byte-identical
 rows exercising it exercise one code path 87 times. It is not coverage. It stays in §3 as a **drift**
 check and carries no positive claim.
 
-**D85 — whether the 34 operator rows are in scope.** 5e's §5 records them as a deliberate exclusion
+**D85 — whether the 33 operator rows are in scope.** 5e's §5 records them as a deliberate exclusion
 (*"Task 3 left `String`'s operator-message rows"*), so including them reopens a recorded decision, and
 D83 says they are the one part with an unmeasured risk. Splitting them into their own phase keeps the
 other 78 clean. **Decided 2026-09-05 by Moritz: in scope.** All 112, operator rows included, and 5e's
@@ -171,7 +176,7 @@ and `5f` is this document's name rather than a value any table carries.
    arguments, byte-identical to the oracle on all three descriptors, both engines.** This is the
    gate. `corpus/lang/mutablebuffer_{readers,mutators,caseless,conversion,state,instance}.rex` are
    the shape to copy — one program per family, filed by the commit that writes it, never at the end.
-   Every row in §2's table appears in one of them, including each of the 40 reused `MutableBuffer`
+   Every row in §2's table appears in one of them, including each of the 41 reused `MutableBuffer`
    bodies: *reused* is a claim about the code, and `String`'s behaviour is what the oracle is asked
    about.
 
@@ -200,7 +205,7 @@ table will read `answers` either way.
 
 ## 5. Risks
 
-* **The 40 reused bodies are the largest block and the least examined.** They were written against a
+* **The 41 reused bodies are the largest block and the least examined.** They were written against a
   `MutableBuffer` receiver, and a divergence in one of them reads as a `String` defect. The corpus
   programs are what separate the two; a row that only ever ran under `MutableBuffer` has been tested
   once, not twice.
@@ -211,4 +216,4 @@ table will read `answers` either way.
   one, or nothing witnesses this at all.
 * **D83's extra traceback line is measured on the oracle and unmeasured on this crate.** Whether
   `apply_binary` reached through a send already pushes that frame is the first thing to run, before
-  any of the 34 rows are written — and it is visible only on a raising operand.
+  any of the 33 rows are written — and it is visible only on a raising operand.
