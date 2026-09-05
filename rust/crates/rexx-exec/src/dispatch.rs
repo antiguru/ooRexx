@@ -166,6 +166,10 @@ use seam::Cleared;
 // parameter list names a type only this module can.
 pub(crate) mod native;
 
+// `String`'s primitive methods, whose rows are chained into
+// `ObjectModel::build` beside `NATIVE_METHODS` rather than merged into it.
+mod string;
+
 /// One primitive method's implementation.
 ///
 /// The [`Cleared`] parameter is the seam's own enforcement and is never read
@@ -1185,7 +1189,11 @@ impl ObjectModel {
         extra: &[(&str, &str, Arity, NativeMethod)],
     ) -> ObjectModel {
         let mut natives = HashMap::new();
-        for (class_id, method_name, arity, run) in NATIVE_METHODS.iter().chain(extra) {
+        for (class_id, method_name, arity, run) in NATIVE_METHODS
+            .iter()
+            .chain(string::NATIVE_METHODS)
+            .chain(extra)
+        {
             let class = classes.lookup(class_id).unwrap_or_else(|| {
                 panic!("NATIVE_METHODS names class {class_id:?}, which is not in the registry")
             });
