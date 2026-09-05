@@ -5381,3 +5381,9 @@ Accepted, and the hypothesis is confirmed by its own route: the profile named th
 **What is deliberately not in this change.** `rexx-core`'s `Behaviour::methods` is `HashMap<String, MethodId>`, and `rexx-exec`'s `Interp` carries a dozen more `RandomState` maps keyed by `Box<[u8]>` and `ProgramId`. They are the same defect and were left alone: this entry's numbers attribute a change to three files in one crate, and widening it would have bought a larger number that nothing here could apportion. They are the next entry's, with their own measurement.
 
 Output was verified byte-identical between `base` and the built binary on all eleven bench programs (`heapshape`'s `gc_forced=` line only, its wall figures varying by construction) before any figure above was taken.
+
+#### Entry 75's gate reading
+
+**All seven gates 0** at `a16baeaa3`, 17:00:02 to 17:14:05. G4 (`REXX_CORPUS_GATE=1 cargo test --release --workspace --no-fail-fast`, the corpus control that can go red) ran 111 suites, 2072 passed, 0 failed, and the differential read `363 of 363 matching`.
+
+**`method_bodies.rs` is the gate that mattered here and it is green.** That test compares `corpus/method-bodies.txt` row for row against a fresh run, and its subject -- the flattened method dictionary -- is the map whose iteration order this change replaced. A verdict that moved because the order moved would have reddened it. Nothing moved.
