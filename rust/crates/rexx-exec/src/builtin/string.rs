@@ -477,6 +477,61 @@ fn count_with(
     count
 }
 
+/// `StringUtil::makearray`'s default separator (`classes/support/StringUtil.cpp:545`):
+/// the lines of `text`.
+///
+/// An `LF` separates and a trailing one terminates rather than separating, a
+/// `CR` immediately before an `LF` is dropped with it, a lone `CR` is
+/// ordinary data, and the empty text has no lines at all.
+pub(crate) fn line_slices(text: &[u8]) -> Vec<&[u8]> {
+    let mut lines = Vec::new();
+    let mut rest = text;
+    while let Some(at) = rest.iter().position(|byte| *byte == b'\n') {
+        let (line, after) = rest.split_at(at);
+        lines.push(line.strip_suffix(b"\r").unwrap_or(line));
+        rest = &after[1..];
+    }
+    if !rest.is_empty() {
+        lines.push(rest);
+    }
+    lines
+}
+
+/// `StringUtil::makearray` with an explicit separator
+/// (`classes/support/StringUtil.cpp:552`-`:640`): the pieces of `text`
+/// between occurrences of `separator`.
+///
+/// The `CR` rule of [`line_slices`] does not apply here -- `checkCR` is
+/// cleared as soon as a separator is given -- an empty `separator` answers
+/// one piece per byte, and a `separator` longer than `text` leaves the whole
+/// text as one piece.
+pub(crate) fn split_slices<'a>(text: &'a [u8], separator: &[u8]) -> Vec<&'a [u8]> {
+    if separator.is_empty() {
+        return text.chunks(1).collect();
+    }
+    // The C++ scans up to `start + length - sepSize + 1`, which for a
+    // separator longer than the text lies behind the start and stops the scan
+    // before its `memcmp` can read past the end.
+    let limit = match text.len().checked_sub(separator.len()) {
+        Some(room) => room + 1,
+        None => 0,
+    };
+    let mut pieces = Vec::new();
+    let mut start = 0usize;
+    while start < limit {
+        let Some(at) = (start..limit).find(|at| &text[*at..*at + separator.len()] == separator)
+        else {
+            break;
+        };
+        pieces.push(&text[start..at]);
+        start = at + separator.len();
+    }
+    if start < text.len() {
+        pieces.push(&text[start..]);
+    }
+    pieces
+}
+
 /// Whether `byte` is one of `set`'s.
 fn in_set(byte: u8, set: &[u8]) -> bool {
     set.contains(&byte)

@@ -596,6 +596,18 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     (
         "MutableBuffer",
+        "MAKEARRAY",
+        Arity::Fixed(1),
+        native_mutable_buffer_makearray,
+    ),
+    (
+        "MutableBuffer",
+        "MAKESTRING",
+        Arity::Fixed(0),
+        native_mutable_buffer_makestring,
+    ),
+    (
+        "MutableBuffer",
         "MATCH",
         Arity::Fixed(4),
         native_mutable_buffer_match,
@@ -632,6 +644,12 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     (
         "MutableBuffer",
+        "SETTEXT",
+        Arity::Fixed(1),
+        native_mutable_buffer_settext,
+    ),
+    (
+        "MutableBuffer",
         "SPACE",
         Arity::Fixed(2),
         native_mutable_buffer_space,
@@ -665,6 +683,12 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         "SUBWORD",
         Arity::Fixed(2),
         native_mutable_buffer_subword,
+    ),
+    (
+        "MutableBuffer",
+        "SUBWORDS",
+        Arity::Fixed(2),
+        native_mutable_buffer_subwords,
     ),
     (
         "MutableBuffer",
@@ -7938,6 +7962,23 @@ fn optional_string_method_argument(
     Ok(interp.to_text(text).into_owned())
 }
 
+/// [`optional_string_method_argument`] where an omitted argument has to stay
+/// distinguishable from the null string, which is
+/// `StringUtil::makearray`'s own `separator != OREF_NULL` test
+/// (`classes/support/StringUtil.cpp:552`): `None` for an omitted argument,
+/// and 88.909 for a value without a string value.
+fn optional_string_or_none_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    index: usize,
+) -> Result<Option<Vec<u8>>, Failure> {
+    let Some(value) = args.get(index).copied().flatten() else {
+        return Ok(None);
+    };
+    let text = required_string_argument(interp, value, index + 1)?;
+    Ok(Some(interp.to_text(text).into_owned()))
+}
+
 /// `nonNegativeArgument` (`classes/StringClassUtil.cpp:167`): `None` for an
 /// omitted argument, and anything that is not a non-negative whole number in
 /// range is 93.906 -- measured, oracle rc 163:
@@ -8163,6 +8204,29 @@ fn native_mutable_buffer_string(
     Ok(Some(interp.text_built(out)))
 }
 
+/// `MutableBuffer~makeString`, `RexxObject::makeStringRexx`
+/// (`classes/ObjectClass.cpp:2846`) reaching `MutableBuffer::makeString`
+/// (`classes/MutableBufferClass.cpp:717`): a fresh string of the contents.
+/// `Setup.cpp:1446` and `:1473` bind that one C++ entry under both `String`
+/// and `makeString`.
+///
+/// This is what the required-string protocol reaches, so it is what `say buf`
+/// and `length(buf)` answer from. The receiver-side comparison does not come
+/// here at all -- `buf == 'abc'` sends `==` to the buffer and
+/// [`native_object_identical`] answers it, which is the oracle's `0` against
+/// `'abc' == buf`'s `1`.
+fn native_mutable_buffer_makestring(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let state = buffer_state(interp, receiver, b"MAKESTRING")?;
+    let mut out = interp.take_result_buffer();
+    out.extend_from_slice(&state.bytes);
+    Ok(Some(interp.text_built(out)))
+}
+
 /// `MutableBuffer::endsWithRexx` (`classes/MutableBufferClass.cpp:1569`).
 ///
 /// An empty `match` is `0`, `primitiveMatch`'s `len == 0` arm (`:1615`) --
@@ -8285,6 +8349,30 @@ fn native_mutable_buffer_setbuffersize(
     state
         .set_buffer_size(size)
         .map_err(|_| Failure::from(Raised::system_resources()))?;
+    Ok(Some(receiver))
+}
+
+/// `MutableBuffer::setTextRexx` (`classes/MutableBufferClass.cpp:355`)
+/// reaching `setText` (`:369`): the contents become the argument's; answers
+/// the receiver.
+///
+/// **The length is zeroed before the capacity is raised**, which is what
+/// `setText` does before it appends, so the size `ensureCapacity` needs is
+/// the argument's own length and not the sum -- measured, oracle rc 0:
+/// `.MutableBuffer~new('abc', 10)~setText(copies('y',40))` reads
+/// `getBufferSize` `40` where raising for the sum would read `43`.
+fn native_mutable_buffer_settext(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let new = string_method_argument(interp, args, 0)?;
+    let state = buffer_state_mut(interp, receiver, b"SETTEXT")?;
+    state.bytes.clear();
+    buffer_capacity(state, new.len())?;
+    state.bytes.extend_from_slice(&new);
+    interp.give_result_buffer(new);
     Ok(Some(receiver))
 }
 
@@ -8521,6 +8609,82 @@ fn native_mutable_buffer_subword(
     let mut out = interp.take_result_buffer();
     out.extend_from_slice(&state.bytes[found]);
     Ok(Some(interp.text_built(out)))
+}
+
+/// A fresh `Array` holding one string per element of `pieces`.
+///
+/// An empty result carries no dimensions, which is `~dimension` `0` --
+/// measured, oracle rc 0: `.MutableBuffer~new('')~makeArray~dimension` is `0`
+/// where a one-line buffer's is `1`.
+///
+/// Each string is rooted as it is built, because [`Interp::alloc_with`]
+/// collects before it allocates and a string already made is reachable from
+/// nothing until the array carries it.
+fn array_of_texts(interp: &mut Interp, pieces: Vec<Vec<u8>>) -> Result<ObjRef, Failure> {
+    let frame = interp.roots.push_frame();
+    let mut slots = Vec::with_capacity(pieces.len());
+    for piece in pieces {
+        let value = interp.text_built(piece);
+        interp.roots.push_temp(value);
+        slots.push(Some(value));
+    }
+    let object = interp.alloc_with(
+        BehaviourId::ARRAY,
+        Body::Array {
+            dimensions: None,
+            slots,
+        },
+    );
+    interp.roots.pop_frame(frame);
+    interp.roots.push_temp(object);
+    let caller = interp.caller();
+    interp.send_message(object, INIT, None, &[], caller)?;
+    Ok(object)
+}
+
+/// `MutableBuffer::subWords` (`classes/MutableBufferClass.cpp:1778`) over
+/// `StringUtil::subWords` (`classes/support/StringUtil.cpp:1405`): an
+/// **`Array`** of the words from `position`, at most `count` of them.
+///
+/// Both arguments are converted before the contents are looked at, so
+/// `subWords(9, .nil)` is 93.923 rather than the empty array a start past the
+/// last word answers -- measured, oracle rc 163.
+fn native_mutable_buffer_subwords(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let position = optional_position_argument(interp, args, 0)?.unwrap_or(1);
+    let count = optional_length_argument(interp, args, 1)?.unwrap_or(usize::MAX);
+    let state = buffer_state(interp, receiver, b"SUBWORDS")?;
+    let words: Vec<Vec<u8>> = crate::builtin::word::word_slices(&state.bytes)
+        .into_iter()
+        .skip(position - 1)
+        .take(count)
+        .map(<[u8]>::to_vec)
+        .collect();
+    Ok(Some(array_of_texts(interp, words)?))
+}
+
+/// `MutableBuffer::makeArrayRexx` (`classes/MutableBufferClass.cpp:927`) over
+/// `StringUtil::makearray` (`classes/support/StringUtil.cpp:545`): an
+/// `Array` of the contents split on line ends, or on `separator` where one is
+/// given.
+fn native_mutable_buffer_makearray(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let separator = optional_string_or_none_argument(interp, args, 0)?;
+    let state = buffer_state(interp, receiver, b"MAKEARRAY")?;
+    let pieces = match &separator {
+        Some(separator) => crate::builtin::string::split_slices(&state.bytes, separator),
+        None => crate::builtin::string::line_slices(&state.bytes),
+    };
+    let pieces: Vec<Vec<u8>> = pieces.into_iter().map(<[u8]>::to_vec).collect();
+    Ok(Some(array_of_texts(interp, pieces)?))
 }
 
 /// `MutableBuffer::word` (`classes/MutableBufferClass.cpp:1791`).
@@ -9669,19 +9833,7 @@ fn native_string_makearray(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let bytes = interp.to_text(receiver).to_vec();
-    let mut lines: Vec<&[u8]> = Vec::new();
-    if !bytes.is_empty() {
-        let mut rest = bytes.as_slice();
-        while let Some(at) = rest.iter().position(|b| *b == b'\n') {
-            let (line, after) = rest.split_at(at);
-            let line = line.strip_suffix(b"\r").unwrap_or(line);
-            lines.push(line);
-            rest = &after[1..];
-        }
-        if !rest.is_empty() {
-            lines.push(rest);
-        }
-    }
+    let lines = crate::builtin::string::line_slices(&bytes);
     let slots: Vec<Option<ObjRef>> = lines
         .into_iter()
         .map(|line| Some(interp.text_built(line.to_vec())))
@@ -10963,13 +11115,19 @@ mod tests {
             (0, "MutableBuffer\n3\n".to_string(), String::new())
         );
         // `say` reaches a `MutableBuffer` through the required-string
-        // protocol's `MAKESTRING`, which is not bound, so the bare rendering
-        // refuses where the oracle prints `abc`.
-        let (code, stdout, stderr) = both_engines("say .MutableBuffer~new('abc')\n");
-        assert_eq!((code, stdout.as_str()), (120, ""));
-        assert!(
-            stderr.starts_with("rexx-exec: method \"MAKESTRING\" of class \"MutableBuffer\""),
-            "{stderr:?}"
+        // protocol's `MAKESTRING`, which answers the contents; the
+        // receiver-side comparison stays an identity test, which is the
+        // oracle's `0` beside the `1` the other operand order answers.
+        assert_eq!(
+            both_engines("say .MutableBuffer~new('abc')\n"),
+            (0, "abc\n".to_string(), String::new())
+        );
+        assert_eq!(
+            both_engines(
+                "buf = .MutableBuffer~new('abc')\n\
+                 say (buf == 'abc') ('abc' == buf) (buf = 'abc') ('abc' = buf)\n"
+            ),
+            (0, "0 1 0 1\n".to_string(), String::new())
         );
         // `~result` on a message nothing has sent blocks the oracle, so this
         // is a refusal rather than an answer; `~completed` and `~hasError`

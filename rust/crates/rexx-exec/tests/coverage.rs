@@ -1403,6 +1403,7 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/mutablebuffer_readers.rex",
     "lang/mutablebuffer_mutators.rex",
     "lang/mutablebuffer_caseless.rex",
+    "lang/mutablebuffer_conversion.rex",
 ];
 
 #[test]

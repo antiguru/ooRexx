@@ -1079,7 +1079,7 @@ Monitor	current	instance	loud	method "PEEK" of class "Queue"
 Monitor	destination	instance	loud	method "PULL" of class "Queue"
 Monitor	init	instance	answers	rc 165
 Monitor	unknown	instance	answers	rc 163
-MutableBuffer	new	class	loud	method "MAKESTRING" of class "MutableBuffer"
+MutableBuffer	new	class	answers	rc 0
 MutableBuffer	[]	instance	answers	rc 163
 MutableBuffer	[]=	instance	answers	rc 168
 MutableBuffer	append	instance	answers	rc 163
@@ -1098,33 +1098,33 @@ MutableBuffer	changeStr	instance	answers	rc 163
 MutableBuffer	contains	instance	answers	rc 163
 MutableBuffer	containsWord	instance	answers	rc 163
 MutableBuffer	countStr	instance	answers	rc 163
-MutableBuffer	delete	instance	loud	method "MAKESTRING" of class "MutableBuffer"
-MutableBuffer	delStr	instance	loud	method "MAKESTRING" of class "MutableBuffer"
+MutableBuffer	delete	instance	answers	rc 0
+MutableBuffer	delStr	instance	answers	rc 0
 MutableBuffer	delWord	instance	answers	rc 163
 MutableBuffer	endsWith	instance	answers	rc 168
 MutableBuffer	getBufferSize	instance	answers	rc 0
 MutableBuffer	insert	instance	answers	rc 163
 MutableBuffer	lastPos	instance	answers	rc 163
 MutableBuffer	length	instance	answers	rc 0
-MutableBuffer	lower	instance	loud	method "MAKESTRING" of class "MutableBuffer"
-MutableBuffer	makeArray	instance	loud	method "MAKEARRAY" of class "MutableBuffer"
-MutableBuffer	makeString	instance	loud	method "MAKESTRING" of class "MutableBuffer"
+MutableBuffer	lower	instance	answers	rc 0
+MutableBuffer	makeArray	instance	answers	rc 0
+MutableBuffer	makeString	instance	answers	rc 0
 MutableBuffer	match	instance	answers	rc 163
 MutableBuffer	matchChar	instance	answers	rc 163
 MutableBuffer	overlay	instance	answers	rc 163
 MutableBuffer	pos	instance	answers	rc 163
 MutableBuffer	replaceAt	instance	answers	rc 168
 MutableBuffer	setBufferSize	instance	answers	rc 163
-MutableBuffer	setText	instance	loud	method "SETTEXT" of class "MutableBuffer"
-MutableBuffer	space	instance	loud	method "MAKESTRING" of class "MutableBuffer"
+MutableBuffer	setText	instance	answers	rc 163
+MutableBuffer	space	instance	answers	rc 0
 MutableBuffer	startsWith	instance	answers	rc 168
 MutableBuffer	string	instance	answers	rc 0
 MutableBuffer	subChar	instance	answers	rc 163
 MutableBuffer	substr	instance	answers	rc 163
 MutableBuffer	subWord	instance	answers	rc 163
-MutableBuffer	subWords	instance	loud	method "SUBWORDS" of class "MutableBuffer"
-MutableBuffer	translate	instance	loud	method "MAKESTRING" of class "MutableBuffer"
-MutableBuffer	upper	instance	loud	method "MAKESTRING" of class "MutableBuffer"
+MutableBuffer	subWords	instance	answers	rc 0
+MutableBuffer	translate	instance	answers	rc 0
+MutableBuffer	upper	instance	answers	rc 0
 MutableBuffer	verify	instance	answers	rc 163
 MutableBuffer	word	instance	answers	rc 163
 MutableBuffer	wordIndex	instance	answers	rc 163
