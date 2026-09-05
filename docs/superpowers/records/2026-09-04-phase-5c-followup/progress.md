@@ -60,3 +60,13 @@ verification of the whole set and the close.
 **Carried to the conversion commit**: `'abc' == buf` and `length(buf)` reach the buffer through the
 required-string protocol (`MAKESTRING`), while `buf == 'abc'` is Object identity on the oracle —
 binding `MAKESTRING` must not turn the latter into a string compare.
+
+Follow-up committed `3f7bc73c4`; **all seven gates 0** (`scratchpad/task2-review/gates/status.txt`,
+first line `3f7bc73c4…`, last line `finished`). The tree is green again with the witnesses gated.
+
+## Task 3a — the byte cores leave the builtins
+
+Dispatched at `3f7bc73c4` + this ledger commit; brief `task-3a-brief.md`. A refactor with no
+behaviour change: the string algorithms a buffer method needs become plain functions over bytes, on
+`delete_range`'s model; the builtin tests and the differential are the controls, one mutation per
+extracted core.
