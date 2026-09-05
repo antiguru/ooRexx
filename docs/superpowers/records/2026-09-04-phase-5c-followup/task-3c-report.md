@@ -338,8 +338,21 @@ each applied by `$S/mut/mutate.py`, which refuses unless the replaced text occur
 Every build is `--profile mutation` (`target/mutation/`); after each mutation the edited file is
 restored from a copy, `cmp`-checked and `touch`ed. Each mutant's `target/mutation/rexx-run` sha256
 is recorded: `5bfcb2be794eb737`, `846162ab0eeac50f`, `a73b395404897caa`, `9cff8298ba26c4bc`,
-`ab811adb45069b49`, `0f364d3e1da81f1a` -- six distinct values, so no run measured a stale binary --
-and M2b's is `846162ab0eeac50f` again, the same mutation over an unchanged source. **The release
+`ab811adb45069b49`, `0f364d3e1da81f1a`, and M2b's is `846162ab0eeac50f` again.
+
+> **Corrected 2026-09-05, after Task 3d.** The sentence that stood here -- "six distinct values, so
+> no run measured a stale binary" -- does not follow, and the sha it rests on is the wrong artifact.
+> The differential never runs `target/mutation/rexx-run`: `corpus.rs`'s `run_rust` calls
+> `watchdog::run_bounded(.., Invocation::none())` in this process, so a mutation reaches the test
+> through the relinked test executable. And the value was read straight after `--lib`, which does
+> not build that binary; `method_bodies.rs:501`'s `env!("CARGO_BIN_EXE_rexx-run")` does, so each
+> iteration most likely read the binary the PREVIOUS iteration built. Distinctness is explained by
+> that off-by-one, not by freshness. **The red and green readings in the table below are
+> unaffected**, because they come from the in-process differential and from `method_bodies`, not
+> from this sha. Task 3d replaced the instrument with the sha256 of the corpus test executable read
+> after the corpus run, and demonstrated it distinguishes two mutants before quoting it. The tell
+> was Task 3d's M1 recording `846162ab0eeac50f` -- this file's value, for a different task mutating
+> different sources. **The release
 binary reads `062f3e5e868f643f…` before the run, after every restore, and after a full rebuild at
 the end**, which is also the control that the restores were byte-exact.
 

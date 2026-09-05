@@ -166,3 +166,56 @@ expressions, each observable through `getBufferSize`. Growing: `insert`, `overla
 **Paused here at Moritz's request.** Task 3d (the caseless family) and Task 3e (the conversions,
 which flip `say buf`) are not dispatched.
 
+## Task 3d -- the caseless family
+
+Dispatched at `3403c98f7`; brief `task-3d-brief.md`. The eleven caseless rows over the byte cores,
+witness `mutablebuffer_caseless.rex` filed in the same commit.
+
+Committed `ac26c1dc2`; **all seven gates 0** (`scratchpad/task3d/gates/status.txt`, first line
+`ac26c1dc2…`, last line `finished`; G4 and G5 read `362 of 362 matching`). Controller review from
+the raw files: nine files, all eleven caseless rows move to `answers`, the `diverge` total stays 7,
+and `refusal-sites.tsv` is genuinely absent from the diff -- the first commit in this family that
+adds no `error.rs` constructor.
+
+**The brief's pre-dispatch measurement was the task's spine.** A caseless method is not its twin
+with the bytes folded: over `.MutableBuffer~new('axan')`, `pos('an', 1, 3)` is 3 and
+`caselessPos('an', 1, 3)` is 0, because the case-sensitive scan reproduces an upstream window
+overrun and the caseless one walks probes one at a time. The plan had sketched this task as "a
+comparator through the cores", which would have reproduced the overrun in the caseless path. The
+agent then bounded the trap by measurement: it reaches `CASELESSPOS`, `CASELESSCONTAINS`,
+`CASELESSCOUNTSTR` and `CASELESSCHANGESTR`, and every other name is the fold. Over 24,696 argument
+sets, `pos` and `caselessPos` disagree on 122, all of them lower-case data and so all of them the
+overrun rather than the fold; its first control for the `countStr`/`changeStr` pair varied nothing
+that mattered and it rebuilt the control rather than keeping the 0.
+
+**The mutation instrument was blind and was replaced mid-task.** Both this task and Task 3c recorded
+a per-mutant sha of `target/mutation/rexx-run` read straight after `--lib`. `--lib` does not build
+that binary, and the differential never runs it -- `corpus.rs`'s `run_rust` calls
+`watchdog::run_bounded(.., Invocation::none())` in process. Task 3d's M1 recorded the value Task 3c
+reports for its M2, which is what exposed it: two tasks mutating different sources cannot build the
+same binary. The instrument is now the sha of the corpus test executable, read after the corpus run
+and shown to distinguish two mutants before its numbers were quoted; eight recorded values, eight
+distinct. **`task-3c-report.md` is corrected in this commit**; its red and green readings are
+unaffected, since those come from the in-process differential and from `method_bodies`.
+
+Seven mutations: six sole-catcher reds (`361 of 362` with the witness, `361 of 361` without), and
+M7, the deliberate adds-no-coverage control, which reddens `lang/mutablebuffer_readers.rex` and does
+not move the new witness at all. Field level, after the controller asked whether one field was
+carrying all six: predicted first-moving line for all six from the code, measured for M1, M4 and M6,
+each confirming its prediction over three disjoint groups of lines. M6's prediction had been wrong
+in the agent's own arithmetic; it left the prediction file as written and corrected it in the report
+rather than editing a prediction after its run.
+
+**M1b is the control shape a later task should copy.** The without-witness run exits 101 on
+`every_lang_program_is_run_or_named_unfiled` when the line is merely removed from `phase-5c.txt`,
+which reads as a contradiction beside `361 of 361 matching`. Moving the line into
+`corpus/unfiled.txt` instead satisfies `corpus.rs:845` and the control then reads rc 0, `361 of 361`,
+0 failing tests -- exit status and matching line saying the same thing.
+
+**Falsified, and mine**: the brief asserted `caselessChangeStr`'s method-bodies row would stay `loud`
+at `MAKESTRING`. Sent no arguments it raises 93.903 first and never reaches the receiver, so it
+moves to `answers` like its siblings. The plan never carried that sentence; Task 3e's brief must not
+inherit it.
+
+Refusals: 70 probes, 140 probe-engine pairs, 0 mismatching on all three descriptors.
+
