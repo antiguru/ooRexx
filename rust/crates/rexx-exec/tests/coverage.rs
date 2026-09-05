@@ -1397,6 +1397,9 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/source_arg.rex",
     "lang/string_builtins.rex",
     "lang/whitespace_significant.rex",
+    // The 5c follow-up's `MutableBuffer` witnesses, filed as each task lands.
+    "lang/mutablebuffer_state.rex",
+    "lang/mutablebuffer_instance.rex",
 ];
 
 #[test]

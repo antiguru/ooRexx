@@ -430,10 +430,20 @@ sha as its first line, with a pidfile. Statuses at `$S/gates/status.txt`.
 
 | # | command | exit |
 |---|---|---|
-| 1 | `cargo fmt --all --check` | **G1** |
-| 2 | `cargo clippy --workspace --all-targets -- -D warnings` | **G2** |
-| 3 | `cargo test --release --workspace --no-fail-fast` | **G3** |
-| 4 | `REXX_CORPUS_GATE=1 cargo test --release --workspace --no-fail-fast` | **G4** |
-| 5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | **G5** |
-| 6 | `REXX_PHASE_GATE=5c REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **G6** |
-| 7 | `REXX_PHASE_GATE=5d REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **G7** |
+| 1 | `cargo fmt --all --check` | **0** |
+| 2 | `cargo clippy --workspace --all-targets -- -D warnings` | **0** |
+| 3 | `cargo test --release --workspace --no-fail-fast` | **101** |
+| 4 | `REXX_CORPUS_GATE=1 cargo test --release --workspace --no-fail-fast` | **101** |
+| 5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | **101** |
+| 6 | `REXX_PHASE_GATE=5c REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **0** |
+| 7 | `REXX_PHASE_GATE=5d REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test gate_table_c --test gate_table_d --no-fail-fast` | **0** |
+
+**Read by the controller from `$S/gates/status.txt`** (first line `2d533034a…`, last line
+`finished`). **G3, G4 and G5 are 101 on one test**, the same in all three:
+`refusal_sites.rs`'s `the_table_holds_every_constructor_the_source_defines` — `corpus/refusal-sites.tsv`
+cites every `Raised`/`Loud` constructor's definition by `file:line`, and this task's one-line
+`native: None` at `run.rs:3175` moved 19 `run.rs` definitions down by one. Parsed from the panic:
+19 rows in the source not in the table, 19 in the table not in the source, the same 19 `(kind,
+name)` pairs, every delta `+1`, no constructor added or removed, no surface changed. The fast
+checks did not run that binary. Re-derived by the controller in the follow-up commit; nothing else
+in G3–G5 failed.

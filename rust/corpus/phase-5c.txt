@@ -54,3 +54,6 @@ lang/keyword_as_variable.rex
 lang/source_arg.rex
 lang/string_builtins.rex
 lang/whitespace_significant.rex
+
+lang/mutablebuffer_state.rex
+lang/mutablebuffer_instance.rex

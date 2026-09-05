@@ -17,5 +17,3 @@
 # An entry here is a debt, not a category: it says the differential does not
 # compare that program against the oracle.
 
-lang/mutablebuffer_state.rex	Task 4 files it into phase-5c.txt
-lang/mutablebuffer_instance.rex	Task 4 files it into phase-5c.txt
