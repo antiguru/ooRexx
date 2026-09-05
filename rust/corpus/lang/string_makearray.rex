@@ -25,3 +25,6 @@ five = ('a' || lf || lf || 'q')~makearray
 say 'double' five~items '[' || five[2] || ']'
 say 'class' plain~class~id
 say 'request' 'abc'~request('ARRAY')~items
+say 'emptydim' ''~makearray~dimension
+say 'onedim' 'a'~makearray~dimension
+say 'emptydim1' ''~makearray~dimension(1)

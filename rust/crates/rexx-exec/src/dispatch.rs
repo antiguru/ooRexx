@@ -9838,8 +9838,10 @@ fn native_string_makearray(
         .into_iter()
         .map(|line| Some(interp.text_built(line.to_vec())))
         .collect();
+    // Measured, oracle: `''~makeArray~dimension` is 0, so an empty result
+    // carries no dimensions rather than one of size 0.
     let body = Body::Array {
-        dimensions: slots.is_empty().then(|| Box::from([0].as_slice())),
+        dimensions: None,
         slots,
     };
     let object = interp.alloc_with(BehaviourId::ARRAY, body);

@@ -1,4 +1,4 @@
-count 27
+count 30
 /* String~makeArray splits the receiver into lines. LF separates and a
    trailing one terminates rather than separating; a CR immediately before an
    LF goes with it while a lone CR is data; and the empty string has no lines.
@@ -26,3 +26,6 @@ five = ('a' || lf || lf || 'q')~makearray
 say 'double' five~items '[' || five[2] || ']'
 say 'class' plain~class~id
 say 'request' 'abc'~request('ARRAY')~items
+say 'emptydim' ''~makearray~dimension
+say 'onedim' 'a'~makearray~dimension
+say 'emptydim1' ''~makearray~dimension(1)
