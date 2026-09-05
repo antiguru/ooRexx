@@ -100,3 +100,29 @@ unchanged.
 Dispatched at `bce8e56d7` + this ledger commit; brief `task-3b-brief.md`. Eighteen readers bound over
 Task 3a's cores, witness `mutablebuffer_readers.rex` filed in the same commit, mutations under
 `--profile mutation`, STRICT corpus as the catcher.
+
+**The agent died at 09:42 on a usage limit** (`You've hit your session limit · resets 11:40am`),
+with its work uncommitted: the witness written and oracle-confirmed, byte-identical on both engines
+against the WIP build, the BASE negative control read, every refusal measured (208 probe-engine
+pairs), eighteen bodies in `dispatch.rs`, `Raised::incorrect_pad` in `error.rs`, the witness filed
+and its `sourceline_oracle` companion generated, the report written through §2.3. The interrupted
+session also left `target/release/rexx-run` missing -- cargo removes the old output before linking.
+The controller backed the tree up to `scratchpad/task3b/wip-backup/`, rebuilt the binary (sha256
+`695dd78e…`, the same the agent recorded), re-verified the witness independently, and finished the
+task inline: fast checks, the pin inversion, five mutations under `--profile mutation`, the
+method-body refresh against the prediction the agent had already written (which matched the
+controller's own), the report's remaining sections, the commit and the gates.
+
+Committed `1cefd7daa`; **all seven gates 0** (`scratchpad/task3b/gates/status.txt`, first line
+`1cefd7daa…`, last line `finished`; G4 and G5 read `360 of 360 matching`).
+
+The fast checks found one red, the same shape the Task 2 follow-up hit: `corpus/refusal-sites.tsv`
+cites each constructor by file and line, and `Raised::incorrect_pad` pushed the 64 error.rs
+definitions below it down by 13 lines. Re-derived from the test's own panic by script; the new
+`incorrect_pad` send row was probed against the oracle before it was written. Five mutations, five
+red, all on the witness: M3 is the only one the zero-argument method-body probe can also see, and
+M4 is red by a panic rather than a mismatch, because deleting `verify_bytes`'s start-past-the-end
+guard makes the slice index out of range instead of returning a wrong answer. The
+`corpus/method-bodies.txt` refresh matched both the agent's and the controller's independently
+written predictions: 18 rows loud to answers, none to diverge.
+
