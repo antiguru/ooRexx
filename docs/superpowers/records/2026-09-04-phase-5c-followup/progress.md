@@ -219,3 +219,40 @@ inherit it.
 
 Refusals: 70 probes, 140 probe-engine pairs, 0 mismatching on all three descriptors.
 
+## Task 3e -- the conversions, and the commit that flips `say buf`
+
+Dispatched at `4ac617074`; brief `task-3e-brief.md`. `MAKESTRING`, `MAKEARRAY`, `SUBWORDS` and
+`SETTEXT`, witness `mutablebuffer_conversion.rex` filed in the same commit.
+
+Committed `81501184d`; **all seven gates 0** (`scratchpad/task3e/gates/status.txt`, first line
+`81501184d…`, last line `finished`; G4 and G5 read `363 of 363 matching`). **This closes the
+`MutableBuffer` rows of `corpus/method-bodies.txt`**: controller review from the raw file finds no
+row left at anything but `answers`, and the `diverge` total is 7 before and after. All eleven `loud`
+rows moved as predicted -- ten at rc 0, `setText` at rc 163 -- seven of them only because the probe's
+own `say` had been reaching `MAKESTRING`.
+
+Three measurements taken before dispatch shaped the task, and each contradicted the plan's one-line
+sketch of it: `subWords` answers an **Array**, not a string (`~class` is `The Array class`, and over
+`'a b  c'` the value renders across two lines); `makeArray` splits on line ends and takes a count-1
+argument where `String`'s takes none; and the receiver-side comparison stays an identity compare for
+the non-strict `=` as well as `==` -- `buf = 'abc'` is `0`, which the plan did not record. Eight
+mutations, nine distinct corpus-test-executable shas including both unmutated controls, and the
+final control reproducing the first control's sha at `363 of 363`.
+
+Two dispositions:
+
+* **`setText` was in no family list.** The plan's mutator list omitted it and no later task claimed
+  it; Task 3e bound it as the last unbound instance row. **The plan's list is corrected in this
+  commit** rather than left as a correction living only in a report.
+* **A pre-existing `String` divergence, found and deliberately not fixed here.**
+  `''~makeArray~dimension` is `0` on the oracle and `1` here, on both engines -- verified by the
+  controller independently, alongside `''~makeArray~items`, `'a'~makeArray~dimension` and
+  `.array~new()~dimension`, which all agree. It is `dispatch.rs:9842`'s
+  `dimensions: slots.is_empty().then(..)`, and the fix touches only the empty case because a
+  non-empty result already passes `None`. The agent left it because it changes a `String` row inside
+  a commit gated on `MutableBuffer` rows, which was the right call; it lands as its own commit with
+  its own gate run, with a line in the existing `corpus/lang/string_makearray.rex`.
+
+One prediction was partly falsified and is recorded as such: M3 also reddens `--test method_bodies`,
+which its prediction did not name.
+

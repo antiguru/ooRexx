@@ -173,7 +173,9 @@ without a witness has landed behind an instrument its own stub could satisfy.
 witness; Task 2 does `delstr`'s as the first instance), then four commits — **readers over cores**
 plus the derived readers (`substr [] pos lastPos countStr verify subWord word wordIndex wordLength
 words wordPos contains containsWord startsWith match matchChar subChar`), **mutators over cores**
-(`insert overlay replaceAt []= changeStr upper lower translate space delWord delete`),
+(`insert overlay replaceAt []= changeStr upper lower translate space delWord delete`; **this list
+omitted `setText`, corrected 2026-09-05 after Task 3e, which bound it as the last unbound instance
+row -- it belonged here**),
 **caseless** (a comparator through the cores; its witness holds mixed-case data), and
 **conversion** (`makeString string makeArray subWords`, the commit that flips `say buf` and carries
 its own witness). Each commit its own gate run and its own corpus witness, **filed in that commit** (see Task 2).
