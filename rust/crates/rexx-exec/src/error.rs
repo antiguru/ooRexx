@@ -1331,6 +1331,19 @@ impl Raised {
         Raised::syntax(93, 924, vec![found.to_vec()])
     }
 
+    /// 93.922: a method's pad argument is a string that is not exactly one
+    /// byte. `found` is the argument's own rendered bytes, at the same rc 163
+    /// as [`invalid_length`] and [`invalid_position`] -- measured,
+    /// `.MutableBuffer~new('abcabc')~substr(1, 2, 'xx')` reports `Incorrect
+    /// pad or character argument specified; found "xx".`, and `''` and `12`
+    /// report `found ""` and `found "12"`.
+    ///
+    /// [`invalid_length`]: Raised::invalid_length
+    /// [`invalid_position`]: Raised::invalid_position
+    pub(crate) fn incorrect_pad(found: &[u8]) -> Raised {
+        Raised::syntax(93, 922, vec![found.to_vec()])
+    }
+
     /// 93.906: a count argument converted to a whole number but is negative.
     /// `position` is 1-based **in the underlying method's argument list**,
     /// which is the builtin's own list less the positions the method takes

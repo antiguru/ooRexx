@@ -203,7 +203,7 @@ pub(crate) fn delete_range(bytes: &mut Vec<u8>, begin: usize, range: Option<usiz
 /// divergence is confined to a needle whose last byte is `'00'x` searched to
 /// the end of the haystack, which is the only way the overrun position can
 /// fall past it.
-fn find_forward(haystack: &[u8], needle: &[u8], start: usize, range: usize) -> usize {
+pub(crate) fn find_forward(haystack: &[u8], needle: &[u8], start: usize, range: usize) -> usize {
     // `haystack.len() - start` underflows for a start past the end, which is
     // exactly the case the guard below rejects; taking the saturating
     // difference first keeps the two independent.
@@ -341,7 +341,7 @@ pub(crate) fn find_byte(hay: &[u8], byte: u8) -> Option<usize> {
 /// 0 and `lastpos('345','Y3Y345YYYYYY',8,5)` is 4, exactly where "must fully
 /// fit" places the boundary and one range short of where `find_forward`'s
 /// overrun would have let the same decoy through.
-fn find_backward(haystack: &[u8], needle: &[u8], start: usize, range: usize) -> usize {
+pub(crate) fn find_backward(haystack: &[u8], needle: &[u8], start: usize, range: usize) -> usize {
     if needle.is_empty() || haystack.is_empty() || needle.len() > range {
         return 0;
     }
@@ -360,7 +360,7 @@ fn find_backward(haystack: &[u8], needle: &[u8], start: usize, range: usize) -> 
 /// How many non-overlapping `needle`s `haystack` holds, stopping at `limit`.
 ///
 /// Non-overlapping is measured: `countstr('aa','aaaa')` is 2, not 3.
-fn count_occurrences(haystack: &[u8], needle: &[u8], limit: usize) -> usize {
+pub(crate) fn count_occurrences(haystack: &[u8], needle: &[u8], limit: usize) -> usize {
     if needle.is_empty() || needle.len() > haystack.len() || limit == 0 {
         return 0;
     }

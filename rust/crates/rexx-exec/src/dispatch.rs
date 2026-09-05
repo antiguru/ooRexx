@@ -434,9 +434,33 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // declared count.
     (
         "MutableBuffer",
+        "[]",
+        Arity::Fixed(2),
+        native_mutable_buffer_brackets,
+    ),
+    (
+        "MutableBuffer",
         "APPEND",
         Arity::Counted,
         native_mutable_buffer_append,
+    ),
+    (
+        "MutableBuffer",
+        "CONTAINS",
+        Arity::Fixed(3),
+        native_mutable_buffer_contains,
+    ),
+    (
+        "MutableBuffer",
+        "CONTAINSWORD",
+        Arity::Fixed(2),
+        native_mutable_buffer_containsword,
+    ),
+    (
+        "MutableBuffer",
+        "COUNTSTR",
+        Arity::Fixed(1),
+        native_mutable_buffer_countstr,
     ),
     (
         "MutableBuffer",
@@ -458,9 +482,33 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     (
         "MutableBuffer",
+        "LASTPOS",
+        Arity::Fixed(3),
+        native_mutable_buffer_lastpos,
+    ),
+    (
+        "MutableBuffer",
         "LENGTH",
         Arity::Fixed(0),
         native_mutable_buffer_length,
+    ),
+    (
+        "MutableBuffer",
+        "MATCH",
+        Arity::Fixed(4),
+        native_mutable_buffer_match,
+    ),
+    (
+        "MutableBuffer",
+        "MATCHCHAR",
+        Arity::Fixed(2),
+        native_mutable_buffer_matchchar,
+    ),
+    (
+        "MutableBuffer",
+        "POS",
+        Arity::Fixed(3),
+        native_mutable_buffer_pos,
     ),
     (
         "MutableBuffer",
@@ -470,9 +518,69 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     (
         "MutableBuffer",
+        "STARTSWITH",
+        Arity::Fixed(1),
+        native_mutable_buffer_startswith,
+    ),
+    (
+        "MutableBuffer",
         "STRING",
         Arity::Fixed(0),
         native_mutable_buffer_string,
+    ),
+    (
+        "MutableBuffer",
+        "SUBCHAR",
+        Arity::Fixed(1),
+        native_mutable_buffer_subchar,
+    ),
+    (
+        "MutableBuffer",
+        "SUBSTR",
+        Arity::Fixed(3),
+        native_mutable_buffer_substr,
+    ),
+    (
+        "MutableBuffer",
+        "SUBWORD",
+        Arity::Fixed(2),
+        native_mutable_buffer_subword,
+    ),
+    (
+        "MutableBuffer",
+        "VERIFY",
+        Arity::Fixed(4),
+        native_mutable_buffer_verify,
+    ),
+    (
+        "MutableBuffer",
+        "WORD",
+        Arity::Fixed(1),
+        native_mutable_buffer_word,
+    ),
+    (
+        "MutableBuffer",
+        "WORDINDEX",
+        Arity::Fixed(1),
+        native_mutable_buffer_wordindex,
+    ),
+    (
+        "MutableBuffer",
+        "WORDLENGTH",
+        Arity::Fixed(1),
+        native_mutable_buffer_wordlength,
+    ),
+    (
+        "MutableBuffer",
+        "WORDPOS",
+        Arity::Fixed(2),
+        native_mutable_buffer_wordpos,
+    ),
+    (
+        "MutableBuffer",
+        "WORDS",
+        Arity::Fixed(0),
+        native_mutable_buffer_words,
     ),
     // `MutexSemaphoreClass::close`, `EventSemaphore`'s partner above.
     ("MutexSemaphore", "UNINIT", Arity::Fixed(0), native_no_op),
@@ -7599,6 +7707,88 @@ fn optional_position_argument(
     }
 }
 
+/// `positionArgument` (`runtime/MethodArguments.hpp`): [`optional_position_argument`]
+/// with an omitted argument 93.903 -- measured, oracle rc 163:
+/// `.MutableBuffer~new('abcabc')~substr` reports `argument 1 is required`.
+fn required_position_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    index: usize,
+) -> Result<usize, Failure> {
+    match optional_position_argument(interp, args, index)? {
+        Some(position) => Ok(position),
+        None => Err(Raised::missing_method_argument(index + 1).into()),
+    }
+}
+
+/// `stringArgument` by position (`runtime/MethodArguments.hpp:136`), the
+/// bytes copied into the lent result buffer: omitted is 93.903 and a value
+/// without a string value is 88.909.
+fn string_method_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    index: usize,
+) -> Result<Vec<u8>, Failure> {
+    let Some(value) = args.get(index).copied().flatten() else {
+        return Err(Raised::missing_method_argument(index + 1).into());
+    };
+    let text = required_string_argument(interp, value, index + 1)?;
+    let mut bytes = interp.take_result_buffer();
+    bytes.extend_from_slice(&interp.to_text(text));
+    Ok(bytes)
+}
+
+/// `optionalPadArgument` (`classes/StringClassUtil.cpp:261`): `None` for an
+/// omitted argument, 88.909 for one without a string value, and 93.922 for a
+/// string that is not one byte -- measured, oracle rc 163:
+/// `.MutableBuffer~new('abcabc')~substr(1, 2, 'xx')` reports `found "xx"`.
+fn pad_method_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    index: usize,
+) -> Result<Option<u8>, Failure> {
+    let Some(value) = args.get(index).copied().flatten() else {
+        return Ok(None);
+    };
+    let text = required_string_argument(interp, value, index + 1)?;
+    let pad = match interp.to_text(text).as_ref() {
+        [byte] => Some(*byte),
+        _ => None,
+    };
+    match pad {
+        Some(byte) => Ok(Some(byte)),
+        None => Err(Raised::incorrect_pad(&interp.string_value_text(value)).into()),
+    }
+}
+
+/// `optionalOptionArgument` with a valid set (`classes/StringClassUtil.cpp:341`):
+/// `None` for an omitted argument, 88.909 for one without a string value,
+/// and 93.915 for the null string or a first byte outside `valid`, compared
+/// case-folded; the `0x00` byte is admitted as the builtin's is -- measured,
+/// oracle rc 163: `.MutableBuffer~new('abcabc')~verify('a', 'X')` reports
+/// `must be one of "MN"; found "X"`, and rc 0: `~verify('abc', '00'x)` is `1`.
+fn option_method_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    index: usize,
+    valid: &str,
+) -> Result<Option<u8>, Failure> {
+    let Some(value) = args.get(index).copied().flatten() else {
+        return Ok(None);
+    };
+    let text = required_string_argument(interp, value, index + 1)?;
+    let letter = interp
+        .to_text(text)
+        .first()
+        .map(|byte| byte.to_ascii_uppercase());
+    match letter {
+        Some(letter) if letter == 0 || valid.as_bytes().contains(&letter) => Ok(Some(letter)),
+        _ => Err(
+            Raised::method_option_not_recognised(valid, &interp.string_value_text(value)).into(),
+        ),
+    }
+}
+
 /// The refusal a constructor that has checked its arguments and cannot build
 /// the primitive body answers.
 ///
@@ -7808,6 +7998,353 @@ fn native_mutable_buffer_setbuffersize(
         .set_buffer_size(size)
         .map_err(|_| Failure::from(Raised::system_resources()))?;
     Ok(Some(receiver))
+}
+
+/// `MutableBuffer::substr` (`classes/MutableBufferClass.cpp:770`),
+/// `StringUtil::substr`'s padding form.
+fn native_mutable_buffer_substr(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let start = required_position_argument(interp, args, 0)? - 1;
+    let length = optional_length_argument(interp, args, 1)?;
+    let pad = pad_method_argument(interp, args, 2)?.unwrap_or(b' ');
+    let state = buffer_state(interp, receiver, b"SUBSTR")?;
+    let mut out = interp.take_result_buffer();
+    crate::builtin::string::substr_bytes(&mut out, &state.bytes, start, length, pad)?;
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `MutableBuffer::brackets` (`classes/MutableBufferClass.cpp:787`),
+/// `StringUtil::substr`'s two-argument form: the length defaults to one
+/// byte, is capped at the end of the contents, and nothing pads -- measured,
+/// oracle rc 0: `.MutableBuffer~new('abcabc')[2]` is `b` and `[5, 10]` is `bc`.
+fn native_mutable_buffer_brackets(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let start = required_position_argument(interp, args, 0)? - 1;
+    let length = optional_length_argument(interp, args, 1)?.unwrap_or(1);
+    let state = buffer_state(interp, receiver, b"[]")?;
+    let capped = length.min(state.bytes.len().saturating_sub(start));
+    let mut out = interp.take_result_buffer();
+    crate::builtin::string::substr_bytes(&mut out, &state.bytes, start, Some(capped), b' ')?;
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `StringUtil::posRexx`'s argument handling and search, shared by `POS` and
+/// `CONTAINS` (`classes/MutableBufferClass.cpp:803`, `:819`): the 1-based
+/// position of `needle`, or 0.
+fn buffer_pos(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    name: &[u8],
+) -> Result<usize, Failure> {
+    let needle = string_method_argument(interp, args, 0)?;
+    let start = optional_position_argument(interp, args, 1)?.unwrap_or(1);
+    let range = optional_length_argument(interp, args, 2)?;
+    let state = buffer_state(interp, receiver, name)?;
+    let range = range.unwrap_or(state.bytes.len().saturating_sub(start) + 1);
+    let found = crate::builtin::string::find_forward(&state.bytes, &needle, start - 1, range);
+    interp.give_result_buffer(needle);
+    Ok(found)
+}
+
+/// `MutableBuffer::posRexx` (`classes/MutableBufferClass.cpp:803`).
+fn native_mutable_buffer_pos(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let found = buffer_pos(interp, receiver, args, b"POS")?;
+    Ok(Some(interp.counted(found)))
+}
+
+/// `MutableBuffer::containsRexx` (`classes/MutableBufferClass.cpp:819`).
+fn native_mutable_buffer_contains(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let found = buffer_pos(interp, receiver, args, b"CONTAINS")?;
+    Ok(Some(interp.counted(usize::from(found > 0))))
+}
+
+/// `MutableBuffer::lastPos` (`classes/MutableBufferClass.cpp:835`) through
+/// `StringUtil::lastPosRexx`: the start and the range each default to the
+/// whole length.
+fn native_mutable_buffer_lastpos(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let needle = string_method_argument(interp, args, 0)?;
+    let start = optional_position_argument(interp, args, 1)?;
+    let range = optional_length_argument(interp, args, 2)?;
+    let state = buffer_state(interp, receiver, b"LASTPOS")?;
+    let length = state.bytes.len();
+    let found = crate::builtin::string::find_backward(
+        &state.bytes,
+        &needle,
+        start.unwrap_or(length),
+        range.unwrap_or(length),
+    );
+    interp.give_result_buffer(needle);
+    Ok(Some(interp.counted(found)))
+}
+
+/// `MutableBuffer::countStrRexx` (`classes/MutableBufferClass.cpp:940`).
+fn native_mutable_buffer_countstr(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let needle = string_method_argument(interp, args, 0)?;
+    let state = buffer_state(interp, receiver, b"COUNTSTR")?;
+    let count = crate::builtin::string::count_occurrences(&state.bytes, &needle, usize::MAX);
+    interp.give_result_buffer(needle);
+    Ok(Some(interp.counted(count)))
+}
+
+/// `MutableBuffer::verify` (`classes/MutableBufferClass.cpp:1744`) through
+/// `StringUtil::verify`, which builds an integer on every path -- a start past
+/// the end included, where the builtin answers text.
+fn native_mutable_buffer_verify(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let reference = string_method_argument(interp, args, 0)?;
+    let option = option_method_argument(interp, args, 1, "MN")?.unwrap_or(b'N');
+    let start = optional_position_argument(interp, args, 2)?.unwrap_or(1) - 1;
+    let range = optional_length_argument(interp, args, 3)?;
+    let state = buffer_state(interp, receiver, b"VERIFY")?;
+    let answer =
+        crate::builtin::string::verify_bytes(&state.bytes, &reference, option, start, range);
+    interp.give_result_buffer(reference);
+    Ok(Some(interp.counted(answer)))
+}
+
+/// `MutableBuffer::subWord` (`classes/MutableBufferClass.cpp:1758`).
+fn native_mutable_buffer_subword(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let position = required_position_argument(interp, args, 0)?;
+    let count = optional_length_argument(interp, args, 1)?;
+    let state = buffer_state(interp, receiver, b"SUBWORD")?;
+    let found = crate::builtin::word::subword_range(&state.bytes, position, count);
+    let mut out = interp.take_result_buffer();
+    out.extend_from_slice(&state.bytes[found]);
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `MutableBuffer::word` (`classes/MutableBufferClass.cpp:1791`).
+fn native_mutable_buffer_word(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let position = required_position_argument(interp, args, 0)?;
+    let state = buffer_state(interp, receiver, b"WORD")?;
+    let found = crate::builtin::word::word_range(&state.bytes, position).unwrap_or(0..0);
+    let mut out = interp.take_result_buffer();
+    out.extend_from_slice(&state.bytes[found]);
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `MutableBuffer::wordIndex` (`classes/MutableBufferClass.cpp:1805`).
+fn native_mutable_buffer_wordindex(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let position = required_position_argument(interp, args, 0)?;
+    let state = buffer_state(interp, receiver, b"WORDINDEX")?;
+    let index =
+        crate::builtin::word::word_range(&state.bytes, position).map_or(0, |word| word.start + 1);
+    Ok(Some(interp.counted(index)))
+}
+
+/// `MutableBuffer::wordLength` (`classes/MutableBufferClass.cpp:1820`).
+fn native_mutable_buffer_wordlength(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let position = required_position_argument(interp, args, 0)?;
+    let state = buffer_state(interp, receiver, b"WORDLENGTH")?;
+    let length =
+        crate::builtin::word::word_range(&state.bytes, position).map_or(0, |word| word.len());
+    Ok(Some(interp.counted(length)))
+}
+
+/// `MutableBuffer::words` (`classes/MutableBufferClass.cpp:1830`).
+fn native_mutable_buffer_words(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let count = crate::builtin::word::word_count(&buffer_state(interp, receiver, b"WORDS")?.bytes);
+    Ok(Some(interp.counted(count)))
+}
+
+/// `StringUtil::wordPos`'s argument handling and search, shared by `WORDPOS`
+/// and `CONTAINSWORD` (`classes/MutableBufferClass.cpp:1845`, `:1859`).
+fn buffer_wordpos(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    name: &[u8],
+) -> Result<usize, Failure> {
+    let phrase = string_method_argument(interp, args, 0)?;
+    let start = optional_position_argument(interp, args, 1)?.unwrap_or(1);
+    let state = buffer_state(interp, receiver, name)?;
+    let found = crate::builtin::word::wordpos_bytes(&phrase, &state.bytes, start);
+    interp.give_result_buffer(phrase);
+    Ok(found)
+}
+
+/// `MutableBuffer::wordPos` (`classes/MutableBufferClass.cpp:1845`).
+fn native_mutable_buffer_wordpos(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let found = buffer_wordpos(interp, receiver, args, b"WORDPOS")?;
+    Ok(Some(interp.counted(found)))
+}
+
+/// `MutableBuffer::containsWord` (`classes/MutableBufferClass.cpp:1859`).
+fn native_mutable_buffer_containsword(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let found = buffer_wordpos(interp, receiver, args, b"CONTAINSWORD")?;
+    Ok(Some(interp.counted(usize::from(found > 0))))
+}
+
+/// `MutableBuffer::startsWithRexx` (`classes/MutableBufferClass.cpp:1541`):
+/// `ENDSWITH`'s twin, an empty `match` likewise `0`.
+fn native_mutable_buffer_startswith(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(argument) = args.first().copied().flatten() else {
+        return Err(Raised::missing_named_argument("match").into());
+    };
+    let argument = required_string_named_argument(interp, argument, "match")?;
+    let mut needle = interp.take_result_buffer();
+    needle.extend_from_slice(&interp.to_text(argument));
+    let state = buffer_state(interp, receiver, b"STARTSWITH")?;
+    let answer = !needle.is_empty() && state.bytes.starts_with(&needle);
+    interp.give_result_buffer(needle);
+    Ok(Some(interp.counted(usize::from(answer))))
+}
+
+/// `MutableBuffer::match` (`classes/MutableBufferClass.cpp:1460`): a start
+/// past the contents is `0` before `other` is looked at -- measured, oracle
+/// rc 0: `.MutableBuffer~new('abcabc')~match(99, .nil)` is `0`.
+fn native_mutable_buffer_match(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let start = required_position_argument(interp, args, 0)?;
+    if start > buffer_state(interp, receiver, b"MATCH")?.bytes.len() {
+        return Ok(Some(interp.counted(0)));
+    }
+    let other = string_method_argument(interp, args, 1)?;
+    let answer = match_region(interp, receiver, args, start, &other);
+    interp.give_result_buffer(other);
+    Ok(Some(interp.counted(usize::from(answer?))))
+}
+
+/// The rest of `MutableBuffer::match` once `start` is inside the contents:
+/// an explicit offset past `other` is `0` before the length is looked at, a
+/// length past `other` is `0`, and `primitiveMatch` (`:1615`) then compares
+/// the two regions -- measured, oracle rc 0: `~match(1, 'abc', 4, -1)` is `0`.
+fn match_region(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    start: usize,
+    other: &[u8],
+) -> Result<bool, Failure> {
+    let offset = optional_position_argument(interp, args, 2)?;
+    if offset.is_some_and(|offset| offset > other.len()) {
+        return Ok(false);
+    }
+    let offset = offset.unwrap_or(1);
+    let length = optional_length_argument(interp, args, 3)?.unwrap_or(other.len() + 1 - offset);
+    if length == 0 || offset.saturating_add(length) - 1 > other.len() {
+        return Ok(false);
+    }
+    let state = buffer_state(interp, receiver, b"MATCH")?;
+    let region = state
+        .bytes
+        .get(start - 1..(start - 1).saturating_add(length));
+    Ok(region == Some(&other[offset - 1..offset - 1 + length]))
+}
+
+/// `MutableBuffer::matchChar` (`classes/MutableBufferClass.cpp:1668`): a
+/// position past the contents is `0` before the set is looked at -- measured,
+/// oracle rc 0: `.MutableBuffer~new('abcabc')~matchChar(99, .nil)` is `0`.
+fn native_mutable_buffer_matchchar(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let position = required_position_argument(interp, args, 0)?;
+    if position > buffer_state(interp, receiver, b"MATCHCHAR")?.bytes.len() {
+        return Ok(Some(interp.counted(0)));
+    }
+    let set = string_method_argument(interp, args, 1)?;
+    let state = buffer_state(interp, receiver, b"MATCHCHAR")?;
+    let answer = state
+        .bytes
+        .get(position - 1)
+        .is_some_and(|byte| set.contains(byte));
+    interp.give_result_buffer(set);
+    Ok(Some(interp.counted(usize::from(answer))))
+}
+
+/// `MutableBuffer::subchar` (`classes/MutableBufferClass.cpp:914`): the one
+/// byte at the position, or the null string past the end.
+fn native_mutable_buffer_subchar(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let position = required_position_argument(interp, args, 0)?;
+    let state = buffer_state(interp, receiver, b"SUBCHAR")?;
+    let mut out = interp.take_result_buffer();
+    out.extend(state.bytes.get(position - 1));
+    Ok(Some(interp.text_built(out)))
 }
 
 /// `Class~new(id, ...)`: the class id is required and this crate builds no

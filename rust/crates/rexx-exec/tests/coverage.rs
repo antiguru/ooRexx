@@ -1400,6 +1400,7 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     // The 5c follow-up's `MutableBuffer` witnesses, filed as each task lands.
     "lang/mutablebuffer_state.rex",
     "lang/mutablebuffer_instance.rex",
+    "lang/mutablebuffer_readers.rex",
 ];
 
 #[test]
