@@ -1083,17 +1083,17 @@ MutableBuffer	new	class	loud	method "MAKESTRING" of class "MutableBuffer"
 MutableBuffer	[]	instance	answers	rc 163
 MutableBuffer	[]=	instance	answers	rc 168
 MutableBuffer	append	instance	answers	rc 163
-MutableBuffer	caselessChangeStr	instance	loud	method "CASELESSCHANGESTR" of class "MutableBuffer"
-MutableBuffer	caselessContains	instance	loud	method "CASELESSCONTAINS" of class "MutableBuffer"
-MutableBuffer	caselessContainsWord	instance	loud	method "CASELESSCONTAINSWORD" of class "MutableBuffer"
-MutableBuffer	caselessCountStr	instance	loud	method "CASELESSCOUNTSTR" of class "MutableBuffer"
-MutableBuffer	caselessEndsWith	instance	loud	method "CASELESSENDSWITH" of class "MutableBuffer"
-MutableBuffer	caselessLastPos	instance	loud	method "CASELESSLASTPOS" of class "MutableBuffer"
-MutableBuffer	caselessMatch	instance	loud	method "CASELESSMATCH" of class "MutableBuffer"
-MutableBuffer	caselessMatchChar	instance	loud	method "CASELESSMATCHCHAR" of class "MutableBuffer"
-MutableBuffer	caselessPos	instance	loud	method "CASELESSPOS" of class "MutableBuffer"
-MutableBuffer	caselessStartsWith	instance	loud	method "CASELESSSTARTSWITH" of class "MutableBuffer"
-MutableBuffer	caselessWordPos	instance	loud	method "CASELESSWORDPOS" of class "MutableBuffer"
+MutableBuffer	caselessChangeStr	instance	answers	rc 163
+MutableBuffer	caselessContains	instance	answers	rc 163
+MutableBuffer	caselessContainsWord	instance	answers	rc 163
+MutableBuffer	caselessCountStr	instance	answers	rc 163
+MutableBuffer	caselessEndsWith	instance	answers	rc 168
+MutableBuffer	caselessLastPos	instance	answers	rc 163
+MutableBuffer	caselessMatch	instance	answers	rc 163
+MutableBuffer	caselessMatchChar	instance	answers	rc 163
+MutableBuffer	caselessPos	instance	answers	rc 163
+MutableBuffer	caselessStartsWith	instance	answers	rc 168
+MutableBuffer	caselessWordPos	instance	answers	rc 163
 MutableBuffer	changeStr	instance	answers	rc 163
 MutableBuffer	contains	instance	answers	rc 163
 MutableBuffer	containsWord	instance	answers	rc 163

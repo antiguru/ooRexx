@@ -1,0 +1,84 @@
+/* MutableBuffer's eleven caseless methods, over mixed-case data.
+   Each name gets a match only the caseless scan finds, a match its
+   case-sensitive twin finds too, and a miss; the argument defaults are read
+   where a wrong default would change the printed value. */
+
+buf = .MutableBuffer~new('MiXeD case MIXED Case mixed')
+say 'len' buf~length buf~string
+
+/* CASELESSPOS.  The start defaults to 1 and the range to what follows it. */
+say 'pos' buf~pos('mixed') buf~caselessPos('mixed') buf~pos('case') buf~caselessPos('case') buf~caselessPos('zebra')
+say 'posd' buf~caselessPos('mixed', 2) buf~caselessPos('mixed', 23) buf~caselessPos('MIXED', 12, 5) buf~caselessPos('MIXED', 12, 4)
+say 'pose' buf~caselessPos('') buf~caselessPos('mixed', 28) buf~caselessPos('m', 27, 0)
+
+/* POS reproduces an upstream window overrun and CASELESSPOS does not, in
+   both directions: a lower-case haystack and an upper-case one. */
+low = .MutableBuffer~new('axan')
+say 'over1' low~pos('an', 1, 3) low~caselessPos('an', 1, 3) low~caselessPos('AN', 1, 3)
+say 'over2' low~pos('an', 1, 4) low~caselessPos('an', 1, 4) low~caselessPos('AN', 1, 4)
+upp = .MutableBuffer~new('AXAN')
+say 'over3' upp~pos('AN', 1, 3) upp~caselessPos('AN', 1, 3) upp~caselessPos('an', 1, 3)
+say 'over4' upp~pos('AN', 1, 4) upp~caselessPos('AN', 1, 4) upp~caselessPos('an', 1, 4)
+
+/* CASELESSCONTAINS shares CASELESSPOS's scan and so misses the overrun too. */
+say 'con' buf~contains('MIXED case') buf~caselessContains('MIXED case') buf~contains('mixed') buf~caselessContains('mixed') buf~caselessContains('zebra')
+say 'con2' low~contains('an', 1, 3) low~caselessContains('an', 1, 3) buf~caselessContains('mixed', 24) buf~caselessContains('')
+
+/* CASELESSLASTPOS.  Start and range both default to the whole length; the
+   decoy pins that the whole match must fall inside the window. */
+say 'last' buf~lastPos('mixed', 22) buf~caselessLastPos('mixed', 22) buf~lastPos('mixed') buf~caselessLastPos('mixed') buf~caselessLastPos('zebra')
+say 'last2' buf~caselessLastPos('mixed', , 5) buf~caselessLastPos('mixed', , 4)
+dec = .MutableBuffer~new('yAyaBcYYYYYY')
+say 'last3' dec~lastPos('abc', 8, 4) dec~caselessLastPos('abc', 8, 4) dec~caselessLastPos('abc', 8, 5)
+
+/* CASELESSCOUNTSTR.  The count is unbounded. */
+say 'cnt' buf~countStr('mixed') buf~caselessCountStr('mixed') buf~countStr('ase') buf~caselessCountStr('ase') buf~caselessCountStr('zebra')
+say 'cnt2' buf~caselessCountStr('CASE') buf~caselessCountStr('') buf~caselessCountStr('mixed case')
+
+/* CASELESSWORDPOS and CASELESSCONTAINSWORD.  The start defaults to 1. */
+say 'wp' buf~wordPos('mixed') buf~caselessWordPos('mixed') buf~wordPos('case') buf~caselessWordPos('case') buf~caselessWordPos('zebra')
+say 'wp2' buf~caselessWordPos('MIXED CASE') buf~caselessWordPos('mixed', 2) buf~caselessWordPos('mixed', 6)
+say 'cw' buf~containsWord('MIXED case') buf~caselessContainsWord('MIXED case') buf~containsWord('mixed') buf~caselessContainsWord('mixed') buf~caselessContainsWord('zebra')
+say 'cw2' buf~caselessContainsWord('case mixed') buf~caselessContainsWord('case', 4) buf~caselessContainsWord('mi')
+
+/* CASELESSMATCH.  The offset defaults to 1 and the length to the rest of the
+   compare string; a start past the contents answers before the string
+   argument is converted. */
+say 'mat' buf~match(1, 'mixed') buf~caselessMatch(1, 'mixed') buf~match(1, 'MiXeD') buf~caselessMatch(1, 'MiXeD') buf~caselessMatch(1, 'zebra')
+say 'mat2' buf~caselessMatch(1, 'mixedX') buf~caselessMatch(23, 'mixed') buf~caselessMatch(6, 'x')
+say 'mat3' buf~caselessMatch(1, 'zmixedz', 2, 5) buf~caselessMatch(1, 'zmixedz', 2) buf~caselessMatch(99, .nil)
+
+/* CASELESSMATCHCHAR, the same order over a set of bytes. */
+say 'mc' buf~matchChar(1, 'aeim') buf~caselessMatchChar(1, 'aeim') buf~matchChar(1, 'aeiM') buf~caselessMatchChar(1, 'aeiM') buf~caselessMatchChar(1, 'xyz')
+say 'mc2' buf~caselessMatchChar(3, 'X') buf~caselessMatchChar(3, '') buf~caselessMatchChar(99, .nil)
+
+/* CASELESSSTARTSWITH and CASELESSENDSWITH, over the same buffer. */
+say 'sw' buf~startsWith('mixed') buf~caselessStartsWith('mixed') buf~startsWith('MiXeD') buf~caselessStartsWith('MiXeD') buf~caselessStartsWith('zebra')
+say 'sw2' buf~caselessStartsWith('') buf~caselessStartsWith('mixed case MIXED Case mixedX')
+say 'ew' buf~endsWith('MIXED') buf~caselessEndsWith('MIXED') buf~endsWith('mixed') buf~caselessEndsWith('mixed') buf~caselessEndsWith('zebra')
+say 'ew2' buf~caselessEndsWith('') buf~caselessEndsWith('XMiXeD case MIXED Case mixed')
+
+/* CASELESSCHANGESTR mutates and answers the receiver, over all three
+   length branches; the count defaults to every occurrence. */
+same = .MutableBuffer~new('aXaXA')
+say 'chg1' same~changeStr('a', 'Q')~string
+same2 = .MutableBuffer~new('aXaXA')
+say 'chg2' same2~caselessChangeStr('a', 'Q')~string same2~length
+both = .MutableBuffer~new('aXaXA')
+say 'chg3' both~changeStr('X', 'Y')~string
+both2 = .MutableBuffer~new('aXaXA')
+say 'chg4' both2~caselessChangeStr('X', 'Y')~string
+short = .MutableBuffer~new('abABaB')
+say 'chg5' short~caselessChangeStr('ab', '')~string short~length
+long = .MutableBuffer~new('abABaB')
+say 'chg6' long~caselessChangeStr('ab', 'ZZZ')~string long~length
+miss = .MutableBuffer~new('aXaXA')
+say 'chg7' miss~caselessChangeStr('zebra', 'Q')~string miss~caselessChangeStr('a', 'Q', 0)~string
+cap = .MutableBuffer~new('aAaA')
+say 'chg8' cap~caselessChangeStr('A', 'bb', 2)~string cap~length
+
+/* The growth past the current capacity, read back through getBufferSize. */
+grow = .MutableBuffer~new('aBc', 10)
+say 'grow1' grow~caselessChangeStr('B', copies('q', 40))~length grow~getBufferSize
+grow2 = .MutableBuffer~new('aBcaBc')
+say 'grow2' grow2~caselessChangeStr('b', copies('q', 200))~length grow2~getBufferSize

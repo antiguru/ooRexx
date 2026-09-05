@@ -452,6 +452,72 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     (
         "MutableBuffer",
+        "CASELESSCHANGESTR",
+        Arity::Fixed(3),
+        native_mutable_buffer_caselesschangestr,
+    ),
+    (
+        "MutableBuffer",
+        "CASELESSCONTAINS",
+        Arity::Fixed(3),
+        native_mutable_buffer_caselesscontains,
+    ),
+    (
+        "MutableBuffer",
+        "CASELESSCONTAINSWORD",
+        Arity::Fixed(2),
+        native_mutable_buffer_caselesscontainsword,
+    ),
+    (
+        "MutableBuffer",
+        "CASELESSCOUNTSTR",
+        Arity::Fixed(1),
+        native_mutable_buffer_caselesscountstr,
+    ),
+    (
+        "MutableBuffer",
+        "CASELESSENDSWITH",
+        Arity::Fixed(1),
+        native_mutable_buffer_caselessendswith,
+    ),
+    (
+        "MutableBuffer",
+        "CASELESSLASTPOS",
+        Arity::Fixed(3),
+        native_mutable_buffer_caselesslastpos,
+    ),
+    (
+        "MutableBuffer",
+        "CASELESSMATCH",
+        Arity::Fixed(4),
+        native_mutable_buffer_caselessmatch,
+    ),
+    (
+        "MutableBuffer",
+        "CASELESSMATCHCHAR",
+        Arity::Fixed(2),
+        native_mutable_buffer_caselessmatchchar,
+    ),
+    (
+        "MutableBuffer",
+        "CASELESSPOS",
+        Arity::Fixed(3),
+        native_mutable_buffer_caselesspos,
+    ),
+    (
+        "MutableBuffer",
+        "CASELESSSTARTSWITH",
+        Arity::Fixed(1),
+        native_mutable_buffer_caselessstartswith,
+    ),
+    (
+        "MutableBuffer",
+        "CASELESSWORDPOS",
+        Arity::Fixed(2),
+        native_mutable_buffer_caselesswordpos,
+    ),
+    (
+        "MutableBuffer",
         "CHANGESTR",
         Arity::Fixed(3),
         native_mutable_buffer_changestr,
@@ -8119,6 +8185,26 @@ fn native_mutable_buffer_endswith(
     Ok(Some(interp.counted(usize::from(answer))))
 }
 
+/// `MutableBuffer::caselessEndsWithRexx` (`classes/MutableBufferClass.cpp:1590`):
+/// `ENDSWITH`'s region compare, folded, an empty `match` likewise `0`.
+fn native_mutable_buffer_caselessendswith(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let needle = named_string_argument(interp, args, 0, "match")?;
+    let state = buffer_state(interp, receiver, b"CASELESSENDSWITH")?;
+    let answer = !needle.is_empty()
+        && state
+            .bytes
+            .len()
+            .checked_sub(needle.len())
+            .is_some_and(|at| crate::builtin::string::caseless_eq(&state.bytes[at..], &needle));
+    interp.give_result_buffer(needle);
+    Ok(Some(interp.counted(usize::from(answer))))
+}
+
 /// `MutableBuffer::appendRexx` (`classes/MutableBufferClass.cpp:323`): every
 /// argument a required string, appended in turn; answers the receiver.
 fn native_mutable_buffer_append(
@@ -8279,6 +8365,52 @@ fn native_mutable_buffer_contains(
     Ok(Some(interp.counted(usize::from(found > 0))))
 }
 
+/// `StringUtil::caselessPos`'s argument handling and search, shared by
+/// `CASELESSPOS` and `CASELESSCONTAINS` (`classes/MutableBufferClass.cpp:851`,
+/// `:869`), whose defaults are `posRexx`'s.
+///
+/// **The core is [`crate::builtin::string::caseless_find_forward`] and not
+/// [`crate::builtin::string::find_forward`] with a folded compare**: the two
+/// oracle scans answer differently for the same arguments, measured there.
+fn buffer_caseless_pos(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    name: &[u8],
+) -> Result<usize, Failure> {
+    let needle = string_method_argument(interp, args, 0)?;
+    let start = optional_position_argument(interp, args, 1)?.unwrap_or(1);
+    let range = optional_length_argument(interp, args, 2)?;
+    let state = buffer_state(interp, receiver, name)?;
+    let range = range.unwrap_or(state.bytes.len().saturating_sub(start) + 1);
+    let found =
+        crate::builtin::string::caseless_find_forward(&state.bytes, &needle, start - 1, range);
+    interp.give_result_buffer(needle);
+    Ok(found)
+}
+
+/// `MutableBuffer::caselessPos` (`classes/MutableBufferClass.cpp:851`).
+fn native_mutable_buffer_caselesspos(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let found = buffer_caseless_pos(interp, receiver, args, b"CASELESSPOS")?;
+    Ok(Some(interp.counted(found)))
+}
+
+/// `MutableBuffer::caselessContains` (`classes/MutableBufferClass.cpp:869`).
+fn native_mutable_buffer_caselesscontains(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let found = buffer_caseless_pos(interp, receiver, args, b"CASELESSCONTAINS")?;
+    Ok(Some(interp.counted(usize::from(found > 0))))
+}
+
 /// `MutableBuffer::lastPos` (`classes/MutableBufferClass.cpp:835`) through
 /// `StringUtil::lastPosRexx`: the start and the range each default to the
 /// whole length.
@@ -8303,6 +8435,29 @@ fn native_mutable_buffer_lastpos(
     Ok(Some(interp.counted(found)))
 }
 
+/// `MutableBuffer::caselessLastPos` (`classes/MutableBufferClass.cpp:890`):
+/// `LASTPOS`'s scan and defaults, the compare folded.
+fn native_mutable_buffer_caselesslastpos(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let needle = string_method_argument(interp, args, 0)?;
+    let start = optional_position_argument(interp, args, 1)?;
+    let range = optional_length_argument(interp, args, 2)?;
+    let state = buffer_state(interp, receiver, b"CASELESSLASTPOS")?;
+    let length = state.bytes.len();
+    let found = crate::builtin::string::caseless_find_backward(
+        &state.bytes,
+        &needle,
+        start.unwrap_or(length),
+        range.unwrap_or(length),
+    );
+    interp.give_result_buffer(needle);
+    Ok(Some(interp.counted(found)))
+}
+
 /// `MutableBuffer::countStrRexx` (`classes/MutableBufferClass.cpp:940`).
 fn native_mutable_buffer_countstr(
     interp: &mut Interp,
@@ -8313,6 +8468,21 @@ fn native_mutable_buffer_countstr(
     let needle = string_method_argument(interp, args, 0)?;
     let state = buffer_state(interp, receiver, b"COUNTSTR")?;
     let count = crate::builtin::string::count_occurrences(&state.bytes, &needle, usize::MAX);
+    interp.give_result_buffer(needle);
+    Ok(Some(interp.counted(count)))
+}
+
+/// `MutableBuffer::caselessCountStrRexx` (`classes/MutableBufferClass.cpp:955`).
+fn native_mutable_buffer_caselesscountstr(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let needle = string_method_argument(interp, args, 0)?;
+    let state = buffer_state(interp, receiver, b"CASELESSCOUNTSTR")?;
+    let count =
+        crate::builtin::string::caseless_count_occurrences(&state.bytes, &needle, usize::MAX);
     interp.give_result_buffer(needle);
     Ok(Some(interp.counted(count)))
 }
@@ -8445,6 +8615,45 @@ fn native_mutable_buffer_containsword(
     Ok(Some(interp.counted(usize::from(found > 0))))
 }
 
+/// `StringUtil::caselessWordPos`'s argument handling and search, shared by
+/// `CASELESSWORDPOS` and `CASELESSCONTAINSWORD`
+/// (`classes/MutableBufferClass.cpp:1873`, `:1887`).
+fn buffer_caseless_wordpos(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    name: &[u8],
+) -> Result<usize, Failure> {
+    let phrase = string_method_argument(interp, args, 0)?;
+    let start = optional_position_argument(interp, args, 1)?.unwrap_or(1);
+    let state = buffer_state(interp, receiver, name)?;
+    let found = crate::builtin::word::caseless_wordpos_bytes(&phrase, &state.bytes, start);
+    interp.give_result_buffer(phrase);
+    Ok(found)
+}
+
+/// `MutableBuffer::caselessWordPos` (`classes/MutableBufferClass.cpp:1873`).
+fn native_mutable_buffer_caselesswordpos(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let found = buffer_caseless_wordpos(interp, receiver, args, b"CASELESSWORDPOS")?;
+    Ok(Some(interp.counted(found)))
+}
+
+/// `MutableBuffer::caselessContainsWord` (`classes/MutableBufferClass.cpp:1887`).
+fn native_mutable_buffer_caselesscontainsword(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let found = buffer_caseless_wordpos(interp, receiver, args, b"CASELESSCONTAINSWORD")?;
+    Ok(Some(interp.counted(usize::from(found > 0))))
+}
+
 /// `MutableBuffer::startsWithRexx` (`classes/MutableBufferClass.cpp:1541`):
 /// `ENDSWITH`'s twin, an empty `match` likewise `0`.
 fn native_mutable_buffer_startswith(
@@ -8465,6 +8674,25 @@ fn native_mutable_buffer_startswith(
     Ok(Some(interp.counted(usize::from(answer))))
 }
 
+/// `MutableBuffer::caselessStartsWithRexx` (`classes/MutableBufferClass.cpp:1555`):
+/// `STARTSWITH`'s region compare, folded, an empty `match` likewise `0`.
+fn native_mutable_buffer_caselessstartswith(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let needle = named_string_argument(interp, args, 0, "match")?;
+    let state = buffer_state(interp, receiver, b"CASELESSSTARTSWITH")?;
+    let answer = !needle.is_empty()
+        && state
+            .bytes
+            .get(..needle.len())
+            .is_some_and(|front| crate::builtin::string::caseless_eq(front, &needle));
+    interp.give_result_buffer(needle);
+    Ok(Some(interp.counted(usize::from(answer))))
+}
+
 /// `MutableBuffer::match` (`classes/MutableBufferClass.cpp:1460`): a start
 /// past the contents is `0` before `other` is looked at -- measured, oracle
 /// rc 0: `.MutableBuffer~new('abcabc')~match(99, .nil)` is `0`.
@@ -8479,7 +8707,39 @@ fn native_mutable_buffer_match(
         return Ok(Some(interp.counted(0)));
     }
     let other = string_method_argument(interp, args, 1)?;
-    let answer = match_region(interp, receiver, args, start, &other);
+    let answer = match_region(interp, receiver, args, start, &other, b"MATCH", <[u8]>::eq);
+    interp.give_result_buffer(other);
+    Ok(Some(interp.counted(usize::from(answer?))))
+}
+
+/// `MutableBuffer::caselessMatch` (`classes/MutableBufferClass.cpp:1505`):
+/// `MATCH`'s scan, `primitiveCaselessMatch` (`:1642`) the only difference,
+/// and the same order -- measured, oracle rc 0:
+/// `.MutableBuffer~new('aBcaBc')~caselessMatch(99, .nil)` is `0`.
+fn native_mutable_buffer_caselessmatch(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let start = required_position_argument(interp, args, 0)?;
+    if start
+        > buffer_state(interp, receiver, b"CASELESSMATCH")?
+            .bytes
+            .len()
+    {
+        return Ok(Some(interp.counted(0)));
+    }
+    let other = string_method_argument(interp, args, 1)?;
+    let answer = match_region(
+        interp,
+        receiver,
+        args,
+        start,
+        &other,
+        b"CASELESSMATCH",
+        crate::builtin::string::caseless_eq,
+    );
     interp.give_result_buffer(other);
     Ok(Some(interp.counted(usize::from(answer?))))
 }
@@ -8488,12 +8748,16 @@ fn native_mutable_buffer_match(
 /// an explicit offset past `other` is `0` before the length is looked at, a
 /// length past `other` is `0`, and `primitiveMatch` (`:1615`) then compares
 /// the two regions -- measured, oracle rc 0: `~match(1, 'abc', 4, -1)` is `0`.
+/// `matches` is what separates the two spellings; everything above it,
+/// `caselessMatch`'s argument order included, is shared.
 fn match_region(
     interp: &mut Interp,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
     start: usize,
     other: &[u8],
+    name: &[u8],
+    matches: fn(&[u8], &[u8]) -> bool,
 ) -> Result<bool, Failure> {
     let offset = optional_position_argument(interp, args, 2)?;
     if offset.is_some_and(|offset| offset > other.len()) {
@@ -8504,11 +8768,11 @@ fn match_region(
     if length == 0 || offset.saturating_add(length) - 1 > other.len() {
         return Ok(false);
     }
-    let state = buffer_state(interp, receiver, b"MATCH")?;
+    let state = buffer_state(interp, receiver, name)?;
     let region = state
         .bytes
         .get(start - 1..(start - 1).saturating_add(length));
-    Ok(region == Some(&other[offset - 1..offset - 1 + length]))
+    Ok(region.is_some_and(|region| matches(region, &other[offset - 1..offset - 1 + length])))
 }
 
 /// `MutableBuffer::matchChar` (`classes/MutableBufferClass.cpp:1668`): a
@@ -8530,6 +8794,34 @@ fn native_mutable_buffer_matchchar(
         .bytes
         .get(position - 1)
         .is_some_and(|byte| set.contains(byte));
+    interp.give_result_buffer(set);
+    Ok(Some(interp.counted(usize::from(answer))))
+}
+
+/// `MutableBuffer::caselessMatchChar` (`classes/MutableBufferClass.cpp:1705`):
+/// `MATCHCHAR`'s scan with both sides folded, and the same order -- measured,
+/// oracle rc 0: `.MutableBuffer~new('aBcaBc')~caselessMatchChar(99, .nil)` is
+/// `0`.
+fn native_mutable_buffer_caselessmatchchar(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let position = required_position_argument(interp, args, 0)?;
+    if position
+        > buffer_state(interp, receiver, b"CASELESSMATCHCHAR")?
+            .bytes
+            .len()
+    {
+        return Ok(Some(interp.counted(0)));
+    }
+    let set = string_method_argument(interp, args, 1)?;
+    let state = buffer_state(interp, receiver, b"CASELESSMATCHCHAR")?;
+    let answer = state.bytes.get(position - 1).is_some_and(|byte| {
+        let byte = byte.to_ascii_uppercase();
+        set.iter().any(|member| member.to_ascii_uppercase() == byte)
+    });
     interp.give_result_buffer(set);
     Ok(Some(interp.counted(usize::from(answer))))
 }
@@ -8706,6 +8998,44 @@ fn native_mutable_buffer_changestr(
         }
     }
     crate::builtin::string::changestr_bytes(&mut out, &state.bytes, &needle, &replacement, limit)?;
+    replace_buffer_contents(state, &out);
+    interp.give_result_buffer(out);
+    Ok(Some(receiver))
+}
+
+/// `MutableBuffer::caselessChangeStr` (`classes/MutableBufferClass.cpp:1136`):
+/// `CHANGESTR`'s three length branches with the search folded, and the same
+/// capacity rule -- only the growing branch calls `ensureCapacity`, and what
+/// it passes is the result's own length. Measured, oracle rc 0:
+/// `.MutableBuffer~new('aBc', 10)~caselessChangeStr('B', copies('q', 40))`
+/// reads `42 45`, where a buffer built at the 256 default reads `404 512`.
+fn native_mutable_buffer_caselesschangestr(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let needle = string_method_argument(interp, args, 0)?;
+    let replacement = string_method_argument(interp, args, 1)?;
+    let limit = optional_non_negative_argument(interp, args, 2)?.unwrap_or(usize::MAX);
+    let mut out = interp.take_result_buffer();
+    let state = buffer_state_mut(interp, receiver, b"CASELESSCHANGESTR")?;
+    if !needle.is_empty() && limit > 0 && replacement.len() > needle.len() {
+        let matches =
+            crate::builtin::string::caseless_count_occurrences(&state.bytes, &needle, limit);
+        if matches > 0 {
+            let growth = matches.saturating_mul(replacement.len() - needle.len());
+            let result_length = state.bytes.len().saturating_add(growth);
+            buffer_capacity(state, result_length)?;
+        }
+    }
+    crate::builtin::string::caseless_changestr_bytes(
+        &mut out,
+        &state.bytes,
+        &needle,
+        &replacement,
+        limit,
+    )?;
     replace_buffer_contents(state, &out);
     interp.give_result_buffer(out);
     Ok(Some(receiver))

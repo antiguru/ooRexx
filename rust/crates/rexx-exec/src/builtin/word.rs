@@ -234,6 +234,27 @@ pub(crate) fn delword_bytes(bytes: &mut Vec<u8>, position: usize, count: Option<
 /// `WORDPOS`'s body: which word of `string`, counting from the `start`th
 /// (1-based), begins a run matching `phrase`'s words, or 0.
 pub(crate) fn wordpos_bytes(phrase: &[u8], string: &[u8], start: usize) -> usize {
+    wordpos_with(phrase, string, start, <[u8]>::eq)
+}
+
+/// [`wordpos_bytes`] with ASCII case folded away,
+/// `StringUtil::caselessWordPos` (`classes/support/StringUtil.cpp:1651`).
+///
+/// The twin shares its scan: the C++'s two word searches are one function bar
+/// `WordIterator::compare` against `::caselessCompare`
+/// (`classes/StringClass.hpp:269`, `:289`), and both of those reject a length
+/// mismatch before comparing a byte.
+pub(crate) fn caseless_wordpos_bytes(phrase: &[u8], string: &[u8], start: usize) -> usize {
+    wordpos_with(phrase, string, start, crate::builtin::string::caseless_eq)
+}
+
+/// The word search both spellings run, `matches` the only difference.
+fn wordpos_with(
+    phrase: &[u8],
+    string: &[u8],
+    start: usize,
+    matches: impl Fn(&[u8], &[u8]) -> bool,
+) -> usize {
     let needle = word_slices(phrase);
     let haystack = word_slices(string);
     // Both guards earn their place, and for different reasons. An empty
@@ -246,7 +267,12 @@ pub(crate) fn wordpos_bytes(phrase: &[u8], string: &[u8], start: usize) -> usize
         0
     } else {
         (start..=haystack.len() - needle.len() + 1)
-            .find(|at| haystack[at - 1..at - 1 + needle.len()] == needle[..])
+            .find(|at| {
+                haystack[at - 1..at - 1 + needle.len()]
+                    .iter()
+                    .zip(&needle)
+                    .all(|(found, wanted)| matches(found, wanted))
+            })
             .unwrap_or(0)
     }
 }

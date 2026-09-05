@@ -342,6 +342,37 @@ pub(crate) fn find_byte(hay: &[u8], byte: u8) -> Option<usize> {
 /// fit" places the boundary and one range short of where `find_forward`'s
 /// overrun would have let the same decoy through.
 pub(crate) fn find_backward(haystack: &[u8], needle: &[u8], start: usize, range: usize) -> usize {
+    find_backward_with(haystack, needle, start, range, <[u8]>::eq)
+}
+
+/// [`find_backward`] with ASCII case folded away, `StringUtil::caselessLastPos`
+/// (`classes/support/StringUtil.cpp:418-478`).
+///
+/// **This twin does share its scan**, which is the opposite of what
+/// [`caseless_find_forward`] records and had to be measured rather than
+/// assumed: the C++'s two backward primitives are one function bar the
+/// comparator -- both clip the window once and walk a fixed candidate count
+/// backward -- so folding the compare is the whole difference. Measured over
+/// `.MutableBuffer~new('yAyaBcYYYYYY')`, the decoy that pins "the whole match
+/// must fall inside the window" lands identically on both:
+/// `caselessLastPos('abc',8,4)` is 0 and `caselessLastPos('abc',8,5)` is 4.
+pub(crate) fn caseless_find_backward(
+    haystack: &[u8],
+    needle: &[u8],
+    start: usize,
+    range: usize,
+) -> usize {
+    find_backward_with(haystack, needle, start, range, caseless_eq)
+}
+
+/// The backward search both spellings run, `matches` the only difference.
+fn find_backward_with(
+    haystack: &[u8],
+    needle: &[u8],
+    start: usize,
+    range: usize,
+    matches: impl Fn(&[u8], &[u8]) -> bool,
+) -> usize {
     if needle.is_empty() || haystack.is_empty() || needle.len() > range {
         return 0;
     }
@@ -353,21 +384,90 @@ pub(crate) fn find_backward(haystack: &[u8], needle: &[u8], start: usize, range:
     }
     window
         .windows(needle.len())
-        .rposition(|candidate| candidate == needle)
+        .rposition(|candidate| matches(candidate, needle))
         .map_or(0, |offset| end - range + offset + 1)
+}
+
+/// Whether two byte runs are equal with ASCII case folded away.
+///
+/// `StringUtil::caselessCompare` (`classes/support/StringUtil.cpp:654`)
+/// compares through `Utilities::toUpper` (`common/Utilities.hpp:52`), which
+/// shifts `a`-`z` and nothing else -- a byte at or above `0x80` is a negative
+/// `char` there and is left alone, which is [`u8::to_ascii_uppercase`]'s rule
+/// too, so the folding is the same one [`case_shift_bytes`] already applies.
+/// `eq_ignore_ascii_case` folds to lower rather than to upper and that is the
+/// same equivalence: each shifts exactly `{X, x}` together and moves nothing
+/// else.
+pub(crate) fn caseless_eq(left: &[u8], right: &[u8]) -> bool {
+    left.eq_ignore_ascii_case(right)
+}
+
+/// The 1-based offset of the first `needle` at or after `start` and within
+/// `range` bytes of it, with ASCII case folded away, or 0.
+///
+/// **This is not [`find_forward`] with a folded compare, and the difference is
+/// the overrun.** `StringUtil::caselessPos`
+/// (`classes/support/StringUtil.cpp:268-303`) walks `range - needle + 1`
+/// probes one at a time from the start of the window and cannot reach past
+/// it, where `pos` recomputes its `memchr` length from each rejected
+/// candidate and can. Measured, oracle rc 0, over `.MutableBuffer~new('axan')`:
+/// `pos('an',1,3)` is 3 and `caselessPos('an',1,3)` is 0 -- one search, one
+/// set of arguments, two answers. So DEVIATION 3 has no counterpart here
+/// either: the position one past the window is never probed, and there is no
+/// terminator byte to decline to invent.
+pub(crate) fn caseless_find_forward(
+    haystack: &[u8],
+    needle: &[u8],
+    start: usize,
+    range: usize,
+) -> usize {
+    let range = range.min(haystack.len().saturating_sub(start));
+    if start >= haystack.len() || needle.len() > range || needle.is_empty() {
+        return 0;
+    }
+    let window = &haystack[start..start + range];
+    window
+        .windows(needle.len())
+        .position(|candidate| caseless_eq(candidate, needle))
+        .map_or(0, |offset| start + offset + 1)
 }
 
 /// How many non-overlapping `needle`s `haystack` holds, stopping at `limit`.
 ///
 /// Non-overlapping is measured: `countstr('aa','aaaa')` is 2, not 3.
 pub(crate) fn count_occurrences(haystack: &[u8], needle: &[u8], limit: usize) -> usize {
+    count_with(haystack, needle, limit, find_forward)
+}
+
+/// [`count_occurrences`] with ASCII case folded away,
+/// `StringUtil::caselessCountStr` (`classes/support/StringUtil.cpp:1220`).
+///
+/// **The inner search is [`caseless_find_forward`] and not the folded form of
+/// [`find_forward`]**, because that is which one the C++ calls. Both callers
+/// search the whole remainder, and at that range the overrun position always
+/// falls one past the haystack, so no argument distinguishes the two --
+/// measured on the oracle over every haystack of up to five bytes and every
+/// needle of up to three drawn from `ab`, `countStr` and `caselessCountStr`
+/// agree on all 882, where the same loop with upper-case needles disagrees on
+/// 768.
+pub(crate) fn caseless_count_occurrences(haystack: &[u8], needle: &[u8], limit: usize) -> usize {
+    count_with(haystack, needle, limit, caseless_find_forward)
+}
+
+/// The counting loop both spellings run, `find` the only difference.
+fn count_with(
+    haystack: &[u8],
+    needle: &[u8],
+    limit: usize,
+    find: impl Fn(&[u8], &[u8], usize, usize) -> usize,
+) -> usize {
     if needle.is_empty() || needle.len() > haystack.len() || limit == 0 {
         return 0;
     }
     let mut count = 0;
     let mut next = 0;
     while count < limit {
-        let found = find_forward(haystack, needle, next, haystack.len());
+        let found = find(haystack, needle, next, haystack.len());
         if found == 0 {
             break;
         }
@@ -873,6 +973,43 @@ pub(crate) fn changestr_bytes(
     replacement: &[u8],
     limit: usize,
 ) -> Result<(), Raised> {
+    changestr_with(out, haystack, needle, replacement, limit, find_forward)
+}
+
+/// [`changestr_bytes`] with ASCII case folded away,
+/// `MutableBuffer::caselessChangeStr` (`classes/MutableBufferClass.cpp:1136`).
+///
+/// The C++ writes the three length branches out twice and the second copy
+/// differs from the first only in calling `caselessPos` and
+/// `caselessCountStr`, so the search is the parameter and the rebuild is
+/// shared -- and the search is [`caseless_find_forward`], not a folded
+/// [`find_forward`], for [`caseless_count_occurrences`]'s reason.
+pub(crate) fn caseless_changestr_bytes(
+    out: &mut Vec<u8>,
+    haystack: &[u8],
+    needle: &[u8],
+    replacement: &[u8],
+    limit: usize,
+) -> Result<(), Raised> {
+    changestr_with(
+        out,
+        haystack,
+        needle,
+        replacement,
+        limit,
+        caseless_find_forward,
+    )
+}
+
+/// The rebuild both spellings run, `find` the only difference.
+fn changestr_with(
+    out: &mut Vec<u8>,
+    haystack: &[u8],
+    needle: &[u8],
+    replacement: &[u8],
+    limit: usize,
+    find: impl Fn(&[u8], &[u8], usize, usize) -> usize,
+) -> Result<(), Raised> {
     // **One search, and the answer written as it is found.** Sizing the result
     // before writing it means counting the occurrences first, and counting
     // runs `find_forward` from each occurrence to the next exactly as writing
@@ -888,7 +1025,7 @@ pub(crate) fn changestr_bytes(
     let mut next = 0;
     let mut changes = 0;
     while changes < limit {
-        let found = find_forward(haystack, needle, next, haystack.len());
+        let found = find(haystack, needle, next, haystack.len());
         if found == 0 {
             break;
         }
