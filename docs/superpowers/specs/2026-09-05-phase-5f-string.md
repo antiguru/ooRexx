@@ -44,7 +44,7 @@ The 112 rows are four kinds of work, not one. Measured by name against
 | n | kind | what exists already |
 |---|---|---|
 | 40 | a `native_mutable_buffer_*` body already implements it | `append pos lastPos verify word words changeStr insert overlay translate space subChar substr subWord subWords delStr delWord contains startsWith endsWith match matchChar replaceAt lower wordIndex wordLength wordPos countStr containsWord`, and the eleven `caseless*` of those |
-| 25 | an implemented BIF already computes it | `abbrev abs b2x bitAnd bitOr bitXor c2d c2x center centre compare copies d2c d2x dataType format left max min right strip trunc x2b x2c x2d` |
+| 25 | an implemented BIF already computes the **value**, and none of its error surface | `abbrev abs b2x bitAnd bitOr bitXor c2d c2x center centre compare copies d2c d2x dataType format left max min right strip trunc x2b x2c x2d` |
 | 34 | operator as a message | `+ - * ** / // % = == \= \== < <= << <<= <> > >= >< >> >>= \< \<< \> \>> \ & && \| \|\| [] ?`, abuttal and blank |
 | 13 | neither: a body to write | `caselessAbbrev caselessCompare caselessCompareTo caselessEquals ceiling compareTo decodeBase64 encodeBase64 equals floor hashCode modulo round` |
 
@@ -52,8 +52,38 @@ The 112 rows are four kinds of work, not one. Measured by name against
 `method "HASHCODE" of class "Object"`, so it is an inherited row appearing under `String`'s arm and
 implementing it moves rows on every class that inherits it. Whoever lands it says so.
 
-The first 65 are the argument for doing `String` before anything else in the 540: the core is
-written, tested against the oracle, and shipped. What is missing is the receiver.
+**The 40 and the 25 are not equally cheap, and measuring that is what the table above hides.** A
+method and its like-named builtin agree on the answer and on nothing else. Measured on `left`, all
+four runs on the oracle:
+
+```text
+'abc'~left        93.903  Missing argument in method; argument 1 is required.      rc 163
+left('abc')       40.3    Not enough arguments in invocation of LEFT; minimum
+                          expected is 2.                                           rc 216
+'abc'~left('x')   93.923  Invalid length argument specified; found "x".            rc 163
+left('abc','x')   40.12   LEFT argument 2 must be a whole number; found "x".       rc 216
+```
+
+Different error number, different message, different exit status — and the argument *numbering*
+shifts, because the receiver is the builtin's first argument and is not an argument of the method at
+all. **So "route the receiver into the builtin" is wrong for all 25 rows.** What is reusable is the
+value computation, and only where it has already been lifted out of the builtin's argument handling:
+Task 3a of the 5c follow-up extracted `substr_bytes insert_bytes overlay_bytes space_bytes
+changestr_bytes translate_bytes verify_bytes case_shift_bytes` into `builtin/string.rs` and
+`word_count word_range subword_range delword_bytes wordpos_bytes word_slices` into `word.rs`, over
+plain `&[u8]`.
+
+That is the real ranking inside the phase, cheapest first:
+
+* **the 40** — the method-side argument layer *and* the core both exist, because
+  `native_mutable_buffer_*` wrote them against this same 93.9xx surface. Only the byte source changes;
+* **the 34** — `apply_binary` computes them and `operator_argument` is the argument layer;
+* **the 25** — the core exists for some and the method-side argument layer exists for none. Each row
+  is a small piece of hand work measured against the oracle;
+* **the 13** — nothing exists.
+
+The first 74 are still the argument for doing `String` before anything else in the 540. What is
+missing is the receiver, and for a quarter of them, the argument layer.
 
 ---
 
