@@ -42,7 +42,8 @@
 
 use super::{
     Arity, Cleared, Failure, Interp, NativeMethod, ObjRef, backward_search,
-    backward_search_arguments, forward_search, forward_search_arguments, wordpos_arguments,
+    backward_search_arguments, ends_with, forward_search, forward_search_arguments,
+    match_region_arguments, match_region_over, starts_with, wordpos_arguments,
 };
 
 /// `RexxString::posRexx` (`classes/StringClassMisc.cpp:581`).
@@ -291,6 +292,171 @@ fn string_wordpos(
     Ok(found)
 }
 
+/// `RexxString::startsWithRexx` (`classes/StringClassMisc.cpp:874`).
+fn native_string_startswith(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_at_an_end(interp, receiver, args, starts_with, <[u8]>::eq)
+}
+
+/// `RexxString::caselessStartsWithRexx` (`classes/StringClassMisc.cpp:888`).
+fn native_string_caselessstartswith(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_at_an_end(
+        interp,
+        receiver,
+        args,
+        starts_with,
+        crate::builtin::string::caseless_eq,
+    )
+}
+
+/// `RexxString::endsWithRexx` (`classes/StringClassMisc.cpp:902`).
+fn native_string_endswith(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_at_an_end(interp, receiver, args, ends_with, <[u8]>::eq)
+}
+
+/// `RexxString::caselessEndsWithRexx` (`classes/StringClassMisc.cpp:923`).
+fn native_string_caselessendswith(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_at_an_end(
+        interp,
+        receiver,
+        args,
+        ends_with,
+        crate::builtin::string::caseless_eq,
+    )
+}
+
+/// [`starts_with`] or [`ends_with`] over the receiver's own text.
+///
+/// **The argument is named, and a missing one is 88.901 at rc 168** rather
+/// than the 93.903 at rc 163 every other method in this file raises -- the
+/// C++ takes it through `stringArgument(other, "match")`, so the name reaches
+/// the message. Measured, oracle: `'abc'~startsWith` is
+/// `Missing argument; argument match is required.`
+fn string_at_an_end(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    at: fn(&[u8], &[u8], fn(&[u8], &[u8]) -> bool) -> bool,
+    matches: fn(&[u8], &[u8]) -> bool,
+) -> Result<Option<ObjRef>, Failure> {
+    let needle = super::named_string_argument(interp, args, 0, "match")?;
+    let answer = {
+        let bytes = interp.to_text(receiver);
+        at(&bytes, &needle, matches)
+    };
+    interp.give_result_buffer(needle);
+    Ok(Some(crate::eval::logical(answer)))
+}
+
+/// `RexxString::match` (`classes/StringClassMisc.cpp:792`).
+fn native_string_match(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_match(interp, receiver, args, <[u8]>::eq)
+}
+
+/// `RexxString::caselessMatch` (`classes/StringClassMisc.cpp:837`).
+fn native_string_caselessmatch(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_match(interp, receiver, args, crate::builtin::string::caseless_eq)
+}
+
+/// [`match_region_over`] over the receiver's own text.
+///
+/// **A start past the end answers `0` before the second argument is read**,
+/// so a bad `other` there is not a refusal. Measured, oracle rc 0:
+/// `'abcabc'~match(99, .nil)` is `0`.
+fn string_match(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    matches: fn(&[u8], &[u8]) -> bool,
+) -> Result<Option<ObjRef>, Failure> {
+    let start = super::required_position_argument(interp, args, 0)?;
+    if start > interp.text_len(receiver) {
+        return Ok(Some(crate::eval::logical(false)));
+    }
+    let other = super::string_method_argument(interp, args, 1)?;
+    let region = match_region_arguments(interp, args, other.len())?;
+    let answer = {
+        let bytes = interp.to_text(receiver);
+        match_region_over(&bytes, start, &other, region, matches)
+    };
+    interp.give_result_buffer(other);
+    Ok(Some(crate::eval::logical(answer)))
+}
+
+/// `RexxString::matchChar` (`classes/StringClassMisc.cpp:1001`).
+fn native_string_matchchar(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_matchchar(interp, receiver, args, u8::eq)
+}
+
+/// `RexxString::caselessMatchChar` (`classes/StringClassMisc.cpp:1038`).
+fn native_string_caselessmatchchar(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_matchchar(interp, receiver, args, u8::eq_ignore_ascii_case)
+}
+
+/// Whether the byte at `position` is in the set, over the receiver's own text.
+///
+/// **A position past the end answers `0` before the set is read**, the same
+/// order [`string_match`] keeps.
+fn string_matchchar(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    matches: fn(&u8, &u8) -> bool,
+) -> Result<Option<ObjRef>, Failure> {
+    let position = super::required_position_argument(interp, args, 0)?;
+    if position > interp.text_len(receiver) {
+        return Ok(Some(crate::eval::logical(false)));
+    }
+    let set = super::string_method_argument(interp, args, 1)?;
+    let answer = {
+        let bytes = interp.to_text(receiver);
+        bytes
+            .get(position - 1)
+            .is_some_and(|byte| set.iter().any(|member| matches(member, byte)))
+    };
+    interp.give_result_buffer(set);
+    Ok(Some(crate::eval::logical(answer)))
+}
+
 /// `String`'s rows, in the shape [`super::NATIVE_METHODS`] uses.
 pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     (
@@ -313,15 +479,39 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     (
         "String",
+        "CASELESSENDSWITH",
+        Arity::Fixed(1),
+        native_string_caselessendswith,
+    ),
+    (
+        "String",
         "CASELESSLASTPOS",
         Arity::Fixed(3),
         native_string_caselesslastpos,
     ),
     (
         "String",
+        "CASELESSMATCH",
+        Arity::Fixed(4),
+        native_string_caselessmatch,
+    ),
+    (
+        "String",
+        "CASELESSMATCHCHAR",
+        Arity::Fixed(2),
+        native_string_caselessmatchchar,
+    ),
+    (
+        "String",
         "CASELESSPOS",
         Arity::Fixed(3),
         native_string_caselesspos,
+    ),
+    (
+        "String",
+        "CASELESSSTARTSWITH",
+        Arity::Fixed(1),
+        native_string_caselessstartswith,
     ),
     (
         "String",
@@ -347,7 +537,26 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(1),
         native_string_countstr,
     ),
+    (
+        "String",
+        "ENDSWITH",
+        Arity::Fixed(1),
+        native_string_endswith,
+    ),
     ("String", "LASTPOS", Arity::Fixed(3), native_string_lastpos),
+    ("String", "MATCH", Arity::Fixed(4), native_string_match),
+    (
+        "String",
+        "MATCHCHAR",
+        Arity::Fixed(2),
+        native_string_matchchar,
+    ),
     ("String", "POS", Arity::Fixed(3), native_string_pos),
+    (
+        "String",
+        "STARTSWITH",
+        Arity::Fixed(1),
+        native_string_startswith,
+    ),
     ("String", "WORDPOS", Arity::Fixed(2), native_string_wordpos),
 ];

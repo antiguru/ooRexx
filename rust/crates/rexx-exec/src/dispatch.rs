@@ -8245,14 +8245,9 @@ fn native_mutable_buffer_endswith(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let Some(argument) = args.first().copied().flatten() else {
-        return Err(Raised::missing_named_argument("match").into());
-    };
-    let argument = required_string_named_argument(interp, argument, "match")?;
-    let mut needle = interp.take_result_buffer();
-    needle.extend_from_slice(&interp.to_text(argument));
+    let needle = named_string_argument(interp, args, 0, "match")?;
     let state = buffer_state(interp, receiver, b"ENDSWITH")?;
-    let answer = !needle.is_empty() && state.bytes.ends_with(&needle);
+    let answer = ends_with(&state.bytes, &needle, <[u8]>::eq);
     interp.give_result_buffer(needle);
     Ok(Some(interp.counted(usize::from(answer))))
 }
@@ -8267,12 +8262,7 @@ fn native_mutable_buffer_caselessendswith(
 ) -> Result<Option<ObjRef>, Failure> {
     let needle = named_string_argument(interp, args, 0, "match")?;
     let state = buffer_state(interp, receiver, b"CASELESSENDSWITH")?;
-    let answer = !needle.is_empty()
-        && state
-            .bytes
-            .len()
-            .checked_sub(needle.len())
-            .is_some_and(|at| crate::builtin::string::caseless_eq(&state.bytes[at..], &needle));
+    let answer = ends_with(&state.bytes, &needle, crate::builtin::string::caseless_eq);
     interp.give_result_buffer(needle);
     Ok(Some(interp.counted(usize::from(answer))))
 }
@@ -8915,6 +8905,31 @@ fn native_mutable_buffer_caselesscontainsword(
     Ok(Some(interp.counted(usize::from(found > 0))))
 }
 
+/// `STARTSWITH` and its caseless twin over any bytes: an empty `match`
+/// answers `0` on both, which is why this is not `slice::starts_with`.
+///
+/// `matches` is `<[u8]>::eq` or [`crate::builtin::string::caseless_eq`], the
+/// only difference between the two spellings.
+pub(super) fn starts_with(
+    haystack: &[u8],
+    needle: &[u8],
+    matches: fn(&[u8], &[u8]) -> bool,
+) -> bool {
+    !needle.is_empty()
+        && haystack
+            .get(..needle.len())
+            .is_some_and(|front| matches(front, needle))
+}
+
+/// [`starts_with`] from the other end.
+pub(super) fn ends_with(haystack: &[u8], needle: &[u8], matches: fn(&[u8], &[u8]) -> bool) -> bool {
+    !needle.is_empty()
+        && haystack
+            .len()
+            .checked_sub(needle.len())
+            .is_some_and(|at| matches(&haystack[at..], needle))
+}
+
 /// `MutableBuffer::startsWithRexx` (`classes/MutableBufferClass.cpp:1541`):
 /// `ENDSWITH`'s twin, an empty `match` likewise `0`.
 fn native_mutable_buffer_startswith(
@@ -8923,14 +8938,9 @@ fn native_mutable_buffer_startswith(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let Some(argument) = args.first().copied().flatten() else {
-        return Err(Raised::missing_named_argument("match").into());
-    };
-    let argument = required_string_named_argument(interp, argument, "match")?;
-    let mut needle = interp.take_result_buffer();
-    needle.extend_from_slice(&interp.to_text(argument));
+    let needle = named_string_argument(interp, args, 0, "match")?;
     let state = buffer_state(interp, receiver, b"STARTSWITH")?;
-    let answer = !needle.is_empty() && state.bytes.starts_with(&needle);
+    let answer = starts_with(&state.bytes, &needle, <[u8]>::eq);
     interp.give_result_buffer(needle);
     Ok(Some(interp.counted(usize::from(answer))))
 }
@@ -8945,11 +8955,7 @@ fn native_mutable_buffer_caselessstartswith(
 ) -> Result<Option<ObjRef>, Failure> {
     let needle = named_string_argument(interp, args, 0, "match")?;
     let state = buffer_state(interp, receiver, b"CASELESSSTARTSWITH")?;
-    let answer = !needle.is_empty()
-        && state
-            .bytes
-            .get(..needle.len())
-            .is_some_and(|front| crate::builtin::string::caseless_eq(front, &needle));
+    let answer = starts_with(&state.bytes, &needle, crate::builtin::string::caseless_eq);
     interp.give_result_buffer(needle);
     Ok(Some(interp.counted(usize::from(answer))))
 }
@@ -9005,12 +9011,52 @@ fn native_mutable_buffer_caselessmatch(
     Ok(Some(interp.counted(usize::from(answer?))))
 }
 
-/// The rest of `MutableBuffer::match` once `start` is inside the contents:
-/// an explicit offset past `other` is `0` before the length is looked at, a
-/// length past `other` is `0`, and `primitiveMatch` (`:1615`) then compares
-/// the two regions -- measured, oracle rc 0: `~match(1, 'abc', 4, -1)` is `0`.
-/// `matches` is what separates the two spellings; everything above it,
-/// `caselessMatch`'s argument order included, is shared.
+/// The rest of `match`'s arguments once `start` is inside the receiver: an
+/// explicit offset past `other` is `0` before the length is looked at, and a
+/// length past `other` is `0` -- measured, oracle rc 0: `~match(1, 'abc', 4,
+/// -1)` is `0`. `None` is those two answers; `Some` is the region of `other`
+/// to compare.
+///
+/// **Shared by both receivers, and reading these arguments is all it does** --
+/// the receiver is not touched here, which is what lets a `String` and a
+/// `MutableBuffer` reach the same code with the borrow each of them needs.
+pub(super) fn match_region_arguments(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    other_len: usize,
+) -> Result<Option<(usize, usize)>, Failure> {
+    let offset = optional_position_argument(interp, args, 2)?;
+    if offset.is_some_and(|offset| offset > other_len) {
+        return Ok(None);
+    }
+    let offset = offset.unwrap_or(1);
+    let length = optional_length_argument(interp, args, 3)?.unwrap_or(other_len + 1 - offset);
+    if length == 0 || offset.saturating_add(length) - 1 > other_len {
+        return Ok(None);
+    }
+    Ok(Some((offset, length)))
+}
+
+/// [`match_region_arguments`]' comparison, once the receiver's bytes are in
+/// hand: `primitiveMatch` (`classes/MutableBufferClass.cpp:1615`) compares the
+/// two regions, and `matches` is what separates the two spellings.
+pub(super) fn match_region_over(
+    haystack: &[u8],
+    start: usize,
+    other: &[u8],
+    region: Option<(usize, usize)>,
+    matches: fn(&[u8], &[u8]) -> bool,
+) -> bool {
+    let Some((offset, length)) = region else {
+        return false;
+    };
+    haystack
+        .get(start - 1..(start - 1).saturating_add(length))
+        .is_some_and(|region| matches(region, &other[offset - 1..offset - 1 + length]))
+}
+
+/// [`match_region_arguments`] and [`match_region_over`] over a buffer's
+/// contents.
 fn match_region(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -9020,20 +9066,15 @@ fn match_region(
     name: &[u8],
     matches: fn(&[u8], &[u8]) -> bool,
 ) -> Result<bool, Failure> {
-    let offset = optional_position_argument(interp, args, 2)?;
-    if offset.is_some_and(|offset| offset > other.len()) {
-        return Ok(false);
-    }
-    let offset = offset.unwrap_or(1);
-    let length = optional_length_argument(interp, args, 3)?.unwrap_or(other.len() + 1 - offset);
-    if length == 0 || offset.saturating_add(length) - 1 > other.len() {
-        return Ok(false);
-    }
+    let region = match_region_arguments(interp, args, other.len())?;
     let state = buffer_state(interp, receiver, name)?;
-    let region = state
-        .bytes
-        .get(start - 1..(start - 1).saturating_add(length));
-    Ok(region.is_some_and(|region| matches(region, &other[offset - 1..offset - 1 + length])))
+    Ok(match_region_over(
+        &state.bytes,
+        start,
+        other,
+        region,
+        matches,
+    ))
 }
 
 /// `MutableBuffer::matchChar` (`classes/MutableBufferClass.cpp:1668`): a

@@ -1,0 +1,21 @@
+count 20
+/* String's region tests -- startsWith, caselessStartsWith, endsWith,
+   caselessEndsWith, match, caselessMatch, matchChar and caselessMatchChar.
+   An empty argument never matches, and a start or a position past the end
+   answers 0 rather than refusing. */
+s = 'abcABCabc'
+say s~startsWith('abc') s~startsWith('abcABCabc') s~startsWith('abcABCabcd') s~startsWith('b') s~startsWith('')
+say s~caselessStartsWith('ABC') s~caselessStartsWith('abc') s~caselessStartsWith('x') s~caselessStartsWith('')
+say s~endsWith('abc') s~endsWith('ABCabc') s~endsWith('x') s~endsWith('') s~endsWith('abcABCabc')
+say s~caselessEndsWith('ABC') s~caselessEndsWith('abc') s~caselessEndsWith('x') s~caselessEndsWith('')
+/* match takes an offset into `other` and a length, and both are bounded by
+   `other` rather than by the receiver. */
+say s~match(1, 'abc') s~match(4, 'ABC') s~match(2, 'abc') s~match(4, 'xABC', 2) s~match(4, 'xABCx', 2, 3) s~match(7, 'abc') s~match(10, 'a')
+say s~match(1, '') s~match(1, 'abc', 4) s~match(1, 'abc', 2, 3) s~match(1, 'abc', 4, 0)
+say s~caselessMatch(1, 'ABC') s~caselessMatch(4, 'abc') s~caselessMatch(2, 'abc') s~caselessMatch(10, 'a')
+say s~matchChar(1, 'xa') s~matchChar(2, 'xa') s~matchChar(9, 'c') s~matchChar(10, 'c') s~matchChar(3, '') s~matchChar(5, 'abc')
+say s~caselessMatchChar(1, 'XA') s~caselessMatchChar(4, 'a') s~caselessMatchChar(10, 'c')
+say ''~startsWith('a') ''~endsWith('a') ''~match(1, 'a') ''~matchChar(1, 'a')
+/* Each answers a String. */
+say s~startsWith('abc')~class~id s~match(1, 'abc')~class~id
+say s

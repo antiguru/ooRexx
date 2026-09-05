@@ -1409,6 +1409,8 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/string_search_refusals.rex",
     "lang/string_counts.rex",
     "lang/string_counts_refusals.rex",
+    "lang/string_match.rex",
+    "lang/string_match_refusals.rex",
 ];
 
 #[test]

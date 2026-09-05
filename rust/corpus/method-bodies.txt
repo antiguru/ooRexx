@@ -277,13 +277,13 @@ String	caselessCompareTo	instance	loud	method "CASELESSCOMPARETO" of class "Stri
 String	caselessContains	instance	answers	rc 163
 String	caselessContainsWord	instance	answers	rc 163
 String	caselessCountStr	instance	answers	rc 163
-String	caselessEndsWith	instance	loud	method "CASELESSENDSWITH" of class "String"
+String	caselessEndsWith	instance	answers	rc 168
 String	caselessEquals	instance	loud	method "CASELESSEQUALS" of class "String"
 String	caselessLastPos	instance	answers	rc 163
-String	caselessMatch	instance	loud	method "CASELESSMATCH" of class "String"
-String	caselessMatchChar	instance	loud	method "CASELESSMATCHCHAR" of class "String"
+String	caselessMatch	instance	answers	rc 163
+String	caselessMatchChar	instance	answers	rc 163
 String	caselessPos	instance	answers	rc 163
-String	caselessStartsWith	instance	loud	method "CASELESSSTARTSWITH" of class "String"
+String	caselessStartsWith	instance	answers	rc 168
 String	caselessWordPos	instance	answers	rc 163
 String	ceiling	instance	loud	method "CEILING" of class "String"
 String	center	instance	loud	method "CENTER" of class "String"
@@ -302,7 +302,7 @@ String	decodeBase64	instance	loud	method "DECODEBASE64" of class "String"
 String	delStr	instance	loud	method "DELSTR" of class "String"
 String	delWord	instance	loud	method "DELWORD" of class "String"
 String	encodeBase64	instance	loud	method "ENCODEBASE64" of class "String"
-String	endsWith	instance	loud	method "ENDSWITH" of class "String"
+String	endsWith	instance	answers	rc 168
 String	equals	instance	loud	method "EQUALS" of class "String"
 String	floor	instance	loud	method "FLOOR" of class "String"
 String	format	instance	loud	method "FORMAT" of class "String"
@@ -314,8 +314,8 @@ String	length	instance	answers	rc 0
 String	lower	instance	loud	method "LOWER" of class "String"
 String	makeArray	instance	answers	rc 0
 String	makeString	instance	answers	rc 0
-String	match	instance	loud	method "MATCH" of class "String"
-String	matchChar	instance	loud	method "MATCHCHAR" of class "String"
+String	match	instance	answers	rc 163
+String	matchChar	instance	answers	rc 163
 String	max	instance	loud	method "MAX" of class "String"
 String	min	instance	loud	method "MIN" of class "String"
 String	modulo	instance	loud	method "MODULO" of class "String"
@@ -327,7 +327,7 @@ String	right	instance	loud	method "RIGHT" of class "String"
 String	round	instance	loud	method "ROUND" of class "String"
 String	sign	instance	answers	rc 163
 String	space	instance	loud	method "SPACE" of class "String"
-String	startsWith	instance	loud	method "STARTSWITH" of class "String"
+String	startsWith	instance	answers	rc 168
 String	strip	instance	loud	method "STRIP" of class "String"
 String	subChar	instance	loud	method "SUBCHAR" of class "String"
 String	substr	instance	loud	method "SUBSTR" of class "String"
@@ -514,19 +514,19 @@ Bag	uniqueIndexes	instance	loud	method "UNIQUEINDEXES" of class "Bag"
 Bag	xor	instance	answers	rc 163
 Bag	disjoint	instance	answers	rc 163
 Bag	equivalent	instance	answers	rc 163
-CircularQueue	of	class	loud	method "CASELESSSTARTSWITH" of class "String"
+CircularQueue	of	class	loud	method "LEFT" of class "String"
 CircularQueue	append	instance	answers	rc 163
 CircularQueue	init	instance	answers	rc 163
 CircularQueue	insert	instance	loud	method "INSERT" of class "Queue"
 CircularQueue	intersection	instance	answers	rc 163
 CircularQueue	makeArray	instance	loud	method "LEFT" of class "String"
-CircularQueue	makeString	instance	loud	method "CASELESSSTARTSWITH" of class "String"
+CircularQueue	makeString	instance	loud	method "LEFT" of class "String"
 CircularQueue	push	instance	answers	rc 163
 CircularQueue	queue	instance	answers	rc 163
 CircularQueue	resize	instance	answers	rc 163
 CircularQueue	section	instance	answers	rc 163
 CircularQueue	size	instance	answers	rc 0
-CircularQueue	string	instance	loud	method "CASELESSSTARTSWITH" of class "String"
+CircularQueue	string	instance	loud	method "LEFT" of class "String"
 CircularQueue	supplier	instance	loud	method "LEFT" of class "String"
 CircularQueue	union	instance	answers	rc 163
 CircularQueue	xor	instance	answers	rc 163

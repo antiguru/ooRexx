@@ -1,0 +1,58 @@
+/* The region tests' refusals, and the one place this phase's argument layer
+ * changes shape.
+ *
+ * startsWith and endsWith take a **named** argument, so a missing one is
+ * 88.901 `Missing argument; argument match is required.` at rc 168, not the
+ * 93.903 at rc 163 every other method in this family raises, and .nil is
+ * 88.909 rather than a conversion error.
+ *
+ * match and matchChar answer 0 for a start past the end **before** the second
+ * argument is read, so that order is what a bad `other` there does not reach.
+ * A start of 0 is 93.924 because a position is 1-based.
+ *
+ * The final send is untrapped so the 88.901 text and the frame line naming the
+ * scope are compared as bytes. rc 168, not 163.
+ */
+
+signal on syntax name trapped
+s = 'abcABCabc'
+n = 0
+
+next:
+n = n + 1
+select
+  when n = 1 then say n 'answered' s~startsWith
+  when n = 2 then say n 'answered' s~startsWith('a', 'b')
+  when n = 3 then say n 'answered' s~caselessStartsWith
+  when n = 4 then say n 'answered' s~endsWith
+  when n = 5 then say n 'answered' s~caselessEndsWith
+  when n = 6 then say n 'answered' s~match
+  when n = 7 then say n 'answered' s~match(1)
+  when n = 8 then say n 'answered' s~match('x', 'a')
+  when n = 9 then say n 'answered' s~match(0, 'a')
+  when n = 10 then say n 'answered' s~match(1, 'abc', 'x')
+  when n = 11 then say n 'answered' s~match(1, 'abc', 0)
+  when n = 12 then say n 'answered' s~match(1, 'abc', 1, 'x')
+  when n = 13 then say n 'answered' s~match(1, 'abc', 1, 2, 3)
+  when n = 14 then say n 'answered' s~caselessMatch(1)
+  when n = 15 then say n 'answered' s~matchChar
+  when n = 16 then say n 'answered' s~matchChar(1)
+  when n = 17 then say n 'answered' s~matchChar('x', 'a')
+  when n = 18 then say n 'answered' s~matchChar(0, 'a')
+  when n = 19 then say n 'answered' s~caselessMatchChar(1)
+  when n = 20 then say n 'answered' s~startsWith(.nil)
+  /* The same two at a MutableBuffer receiver, whose rows share this layer. */
+  when n = 21 then say n 'answered' .MutableBuffer~new('abc')~startsWith
+  when n = 22 then say n 'answered' .MutableBuffer~new('abc')~match(0, 'a')
+  otherwise signal done
+end
+signal next
+
+trapped:
+say n 'raised' rc'.'condition('E')
+signal on syntax name trapped
+signal next
+
+done:
+signal off syntax
+say s~startsWith
