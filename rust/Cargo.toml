@@ -131,3 +131,17 @@ debug = true
 # touched the interpreter.
 lto = "fat"
 codegen-units = 1
+
+# The debug-assertion gate (`REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace`)
+# exists for the `debug_assert`s the release profile compiles out; optimised, it
+# keeps `debug-assertions` and `overflow-checks` from `dev`. Measured: 957 s of
+# run time unoptimised against 246 s under release. Moritz, 2026-09-05.
+[profile.test]
+opt-level = 3
+
+# Mutation runs build here rather than in `release`: thin LTO relinks faster,
+# and a separate target directory means a mutant binary never overwrites the
+# one the witnesses run on. Moritz, 2026-09-05.
+[profile.mutation]
+inherits = "release"
+lto = "thin"
