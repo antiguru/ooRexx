@@ -9,12 +9,18 @@ for `String`, `CLOSED_PHASES` stays `["5a","5b","5c","5d"]`, and `5f` is these d
 rather than a value anything reads. He answered D85 the same day: **all 112 rows, operator rows
 included**, reopening 5e's Task 3 exclusion deliberately.
 
-**`String`'s receiver needs no `RECEIVER_OVERRIDES` entry.** The 5c follow-up's review left open
-whether the documented receivers make rows unfalsifiable and named `String` among the classes to
-check; `class-set.txt:57` gives `.String~new('abc')`, which is not empty, so `length` is 3 against 0
-and the ten unfakeable rows that override bought `MutableBuffer` are already unfakeable here. Task 0
-confirms this by running rather than by reading, and reports the number for the other classes named
-there if the loop is cheap.
+**`String`'s receiver needs no `RECEIVER_OVERRIDES` entry, measured.** The 5c follow-up's review
+left open whether the documented receivers make rows unfalsifiable and named `String` among the
+classes to check. Task 0 ran it: sending every documented instance name with no arguments to
+`.String~new('abc')` and to `.String~new('')` and diffing, **21 of the 112 rows answer differently**
+-- `b2x bitAnd bitOr bitXor c2d c2x decodeBase64 encodeBase64 hashCode length lower makeString
+reverse space strip translate upper words x2b x2c x2d`. The documented receiver already has teeth.
+
+**The open question's answer for the empty collections is smaller than it looks**, and Task 0
+reports it: a populated receiver would sharpen **Queue 10 of 43, Array 11 of 44, List 7 of 38** rows.
+The rest cannot discriminate at any receiver, because a zero-argument send to a method that needs
+arguments never reaches the receiver's contents. Whether those thirty-odd rows are worth an override
+each is not this phase's call.
 
 BASE for Task 0 is the commit this plan lands in.
 
@@ -149,6 +155,17 @@ only on a failing operand and a program of successful sends cannot see it.
 
 `+ - * ** / // % = == \= \== < <= << <<= <> > >= >< >> >>= \< \<< \> \>> \ & && | || [] ?`, abuttal
 and blank. `[]` and `?` are not arithmetic and get their own reading.
+
+**Six of the 34 crash the oracle, and this task decides what the table does about it.** Measured by
+Task 0 and recorded as `corpus/oracle-crashes.txt`'s newest entry: `say "abc"~"<<"` is a silent
+SIGSEGV at rc 139, and so are `<<=`, `>>`, `>>=`, `\<<` and `\>>`, because
+`RexxString::primitiveStrictComp` dereferences a missing argument with no check
+(`classes/StringClass.cpp:920`-`:923`) where the other twelve comparison operators go through
+`RexxString::comp`'s `requiredArgument` (`:762`). The rows are `loud` today and reach that verdict in
+`method_bodies.rs`'s crate-only pass, so nothing runs the oracle on them; **the commit that binds any
+of the six sends the refresh to the oracle and turns the row into a `Structural` failure** -- "the
+oracle did not finish" -- which is red and correct and still red. Decide how the table carries a row
+whose oracle answer cannot be obtained before writing the bodies, not after.
 
 ---
 

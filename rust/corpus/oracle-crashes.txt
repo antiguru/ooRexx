@@ -395,3 +395,57 @@ upstream ticket.** The wait is what `~result` is specified to do, and whether
 an interpreter should detect that no activity can ever satisfy a particular
 one is the design question entry 7 already puts and this project has not put
 to the maintainers.
+
+--------------------------------------------------------------------------
+
+A strict *ordering* comparison sent to a string with no argument
+
+    say "abc"~"<<"
+
+Effect: SIGSEGV, rc 139, deterministic (measured 3 runs of 3), stdout and
+stderr both empty.
+
+The family is exactly six, and the boundary is sharp. All six of `<<`, `<<=`,
+`>>`, `>>=`, `\<<` and `\>>` crash this way. The other twelve comparison
+operators sent identically -- `=`, `==`, `<`, `<=`, `>`, `>=`, `<>`, `><`,
+`\=`, `\==`, `\<`, `\>` -- are a clean `Error 93.903: Missing argument in
+method; argument 1 is required.` at rc 163. **Strict equality is clean and
+strict ordering is not**, so "strict" is not the axis.
+
+It is the receiver's class and not the operator. `1~"<<"` is the same clean
+93.903 at rc 163, and `.Object~new~"<<"` is `Error 97.1` at rc 159 because
+`Object` has no such method.
+
+Cause: `RexxString::primitiveStrictComp` opens by dereferencing its argument
+with no check at all -- `RexxObject *other = otherObj->requestString();`
+(`classes/StringClass.cpp:920`-`:923`) -- and the six operator methods are the
+ones that route to it: `strictGreaterThan` (`:1297`), `strictLessThan`
+(`:1303`), and the two at `:1311` and `:1317`. A method sent without its
+argument arrives with `OREF_NULL`, and that is a virtual call on a null
+pointer.
+
+The twelve clean ones go through `RexxString::comp` (`:753`), whose first
+statement is `requiredArgument(other, ARG_ONE)` (`:762`). The `CompareOperator`
+macro they all share (`:1248`) guards only `.nil`, so it is not what saves
+them.
+
+**The checked twin already exists and is the one the operators do not call.**
+`RexxString::strictComp` (`:874`) carries a body identical to
+`primitiveStrictComp`'s and opens `RexxString *other = stringArgument(otherObj,
+ARG_ONE);` (`:879`). The comment above `primitiveStrictComp` says it is for
+calls "by either the Interger or NumberString class", which is a statement
+about intended callers rather than a check, and the operator methods use it
+anyway. So the upstream fix is a one-liner either way: guard the argument
+there, or route those six methods to the twin.
+
+Consequence for this crate: these six are among `String`'s documented instance
+rows, and `corpus/method-bodies.txt` classifies a row by sending its name with
+no arguments. Today they are `loud`, and that verdict is reached in the
+crate-only pass without running the oracle at all. **The first commit that
+implements any of them makes the refresh reach the oracle for that row**, where
+`method_bodies.rs` will record a `Structural` failure -- "the oracle did not
+finish" -- rather than a verdict. That is the instrument behaving correctly and
+it is still red, so whoever binds these six decides first how the table is to
+carry a row whose oracle answer cannot be obtained.
+
+Found 2026-09-05 building the Phase 5f receiver sweep. **No upstream ticket.**
