@@ -1,7 +1,7 @@
 # Phase 5f Task 0 — the module, the wiring, and the receiver check
 
 Plan: `docs/superpowers/plans/2026-09-05-phase-5f-string.md`.
-BASE `b6d7d1af1`. Landed at **`GATECOMMIT`**.
+BASE `b6d7d1af1`. Landed at **`62ad72548`**.
 
 **No method was added and no behaviour changed.** `crates/rexx-exec/src/dispatch/string.rs` holds an
 empty `NATIVE_METHODS` slice, chained into `ObjectModel::build` beside `dispatch.rs`'s own.
@@ -86,8 +86,11 @@ of the six bodies.
 |---|---|
 | G1 `cargo fmt --all --check` | rc 0 |
 | G2 `cargo clippy --workspace --all-targets -- -D warnings` | rc 0, zero warnings |
-| G3 | **G3** |
-| G4 | **G4** |
-| G5 | **G5** |
-| G6 | **G6** |
-| G7 | **G7** |
+| G3 `cargo test --release --workspace --no-fail-fast` | rc 0 |
+| G4 same with `REXX_CORPUS_GATE=1` | rc 0, 111 suites, 2072 passed, 0 failed, strict corpus `363 of 363 matching` |
+| G5 `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace` | rc 0 |
+| G6 `REXX_PHASE_GATE=5c` | rc 0 |
+| G7 `REXX_PHASE_GATE=5d` | rc 0 |
+
+Run at `62ad72548`, 20:26:12 to 20:40:18. `method_bodies.rs` ran and was green, which is the drift
+gate on the table this phase will move.
