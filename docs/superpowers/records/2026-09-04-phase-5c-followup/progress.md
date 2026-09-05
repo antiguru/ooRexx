@@ -88,3 +88,15 @@ with `lto = "thin"` — mutation harnesses build with `--profile mutation`, in t
 `target/mutation/`, so a mutation run can no longer leave a stale binary in `target/release/`. No
 harness parallelisation now; a performance round comes soon, and the crate's 30 ms startup against
 the oracle's 4.5 ms (method-dictionary hashing, measured under `perf`) is its first candidate.
+
+Profiles landed at `bce8e56d7`, **all seven gates 0**. G5 read **5 min including the one-off full
+rebuild of the test profile**, against 15–20 min before; the whole suite 14 min against 27.
+`debug_assertions` confirmed present under `--profile test` and absent under `--release` by
+`cargo rustc … --print cfg`; `target/mutation/rexx-run` built with the release binary's sha256
+unchanged.
+
+## Task 3b — the readers, over the cores
+
+Dispatched at `bce8e56d7` + this ledger commit; brief `task-3b-brief.md`. Eighteen readers bound over
+Task 3a's cores, witness `mutablebuffer_readers.rex` filed in the same commit, mutations under
+`--profile mutation`, STRICT corpus as the catcher.
