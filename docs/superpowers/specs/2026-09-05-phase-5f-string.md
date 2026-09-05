@@ -75,7 +75,20 @@ Error 41.1 ... rc 215              Error 41.1 ... identical, rc 215
 
 A route through `apply_binary` that does not push a method frame drops that line, and drops it only
 on a *failing* operand — so a program of successful operator sends cannot witness it. §3's programs
-have to make each of the 34 raise as well as succeed. Measure this before choosing the shape.
+have to make each of the 34 raise as well as succeed.
+
+**The crate already emits that frame for a native method, on both engines.** Measured, and the three
+outputs are byte-identical:
+
+```text
+b = .MutableBuffer~new('abc'); say b~substr
+       *-* Compiled method "SUBSTR" with scope "MutableBuffer".
+Error 93.903 ... rc 163      REXX_ENGINE=ir, REXX_ENGINE=tree-walker, oracle
+```
+
+So the frame comes from the send machinery and not from any body, and the risk is narrowed to an
+operator native that leaves that machinery. That is what makes D83 a shape question rather than a
+feature question.
 
 **D84 — what the gate is, because the verdict column cannot see a stub.** `Arity::Fixed(n)` is a
 **maximum**: it refuses more than `n` with 93.902 and *pads a shorter list with nulls*
@@ -88,46 +101,58 @@ Error 93.903:  Missing argument in method; argument 1 is required.       rc 163
 ```
 
 `method-bodies.txt` sends **no arguments**. A row therefore moves `loud` → `answers` as soon as the
-crate raises 93.903 correctly — **with no body at all**. This is not hypothetical: of `MutableBuffer`'s
-51 instance rows, **32 are `answers rc 163`**, 13 are `rc 0` and 6 are `rc 168`. Nearly two thirds of
-what 5e's stated gate witnessed is agreement about a missing argument.
+crate raises 93.903 correctly — **with no body at all**. Measured here: of `MutableBuffer`'s 51
+instance rows, **32 are `answers rc 163`**, 13 are `rc 0` and 6 are `rc 168`.
 
-5e's *practice* was right where its stated gate was not — it added six `corpus/lang/mutablebuffer_*.rex`
-programs that pass real arguments. **This phase states that as the gate rather than leaving it a
-habit.** See §3.
+**This was already found, and the criterion was already retired.** `2026-09-04-phase-5c-followup.md`'s
+gate section says so, and its plan review went further than measuring — it *built* the stub: 51 rows
+bound to seven functions, about 90 lines, the constructor still discarding its argument, all 51 rows
+agreeing on all three descriptors on both engines. Its words are the ruling this phase inherits:
+*"A criterion a stub satisfies is not a criterion, and this is the third time the same idea has failed
+here"* — `hasMethod` readbacks, then "the row answers", then "the row answers a zero-argument send".
+
+An earlier draft of this spec proposed the verdict column as an instrument that covers the
+missing-argument path *"which nothing else in this phase provides"*. **That is wrong and the same
+plan says why**: the raiser is one shared implementation, already byte-identical to the oracle, so 87
+rows exercising it exercise one code path 87 times. It is not coverage. It stays in §3 as a **drift**
+check and carries no positive claim.
 
 **D85 — whether the 34 operator rows are in scope.** 5e's §5 records them as a deliberate exclusion
 (*"Task 3 left `String`'s operator-message rows"*), so including them reopens a recorded decision, and
 D83 says they are the one part with an unmeasured risk. Splitting them into their own phase keeps the
-other 78 clean. **Moritz's call.** The gate below is stated per-row so a partial landing is visible.
+other 78 clean. **Decided 2026-09-05 by Moritz: in scope.** All 112, operator rows included, and 5e's
+Task 3 exclusion is reopened deliberately. The gate below is stated per-row so a partial landing is
+visible.
 
 **D86 — the phase's id and the `method-owner` column.** 5e faced this as D81 and the tree answers it:
 `CLOSED_PHASES` is `["5a","5b","5c","5d"]` (`gate_tables/mod.rs:344`) and `MutableBuffer`'s row still
 reads `5c` (`class-set.txt:92`), so 5e re-owned nothing and ran as a 5c follow-up. `String`'s row reads
-`5c` too (`class-set.txt:57`). **Default: do the same, change no committed table.** Named 5f here only
-so the spec has a name.
+`5c` too (`class-set.txt:57`). **Decided 2026-09-05 by Moritz: do the same, change no committed
+table.** `class-set.txt`'s ninth column keeps saying `5c` for `String`, `CLOSED_PHASES` gains nothing,
+and `5f` is this document's name rather than a value any table carries.
 
 ---
 
 ## 3. The gate
 
-Two instruments, and **neither alone is sufficient**, because they measure disjoint halves:
+**The gate is the corpus programs. The verdict column is a drift check beside them, not a criterion.**
 
-1. **`corpus/method-bodies.txt`: all 112 rows move `loud` → `answers`, none moves to `diverge`.**
-   Per D84 this witnesses the *missing-argument path only* — which is real coverage that nothing else
-   in this phase provides, since the programs below all pass arguments. It is necessary and it is not
-   the phase.
+1. **New `corpus/lang/string_*.rex` differential programs calling every one of the 112 with real
+   arguments, byte-identical to the oracle on all three descriptors, both engines.** This is the
+   gate. `corpus/lang/mutablebuffer_{readers,mutators,caseless,conversion,state,instance}.rex` are
+   the shape to copy — one program per family, filed by the commit that writes it, never at the end.
+   Every row in §2's table appears in one of them, including each of the 40 reused `MutableBuffer`
+   bodies: *reused* is a claim about the code, and `String`'s behaviour is what the oracle is asked
+   about.
 
-2. **New `corpus/lang/string_*.rex` differential programs calling every one of the 112 with real
-   arguments, byte-identical to the oracle on all three descriptors.** This is what witnesses a body.
-   `corpus/lang/mutablebuffer_{readers,mutators,caseless,conversion,state,instance}.rex` are the shape
-   to copy. Every row in §2's table appears in one of them, including each of the 40 reused
-   `MutableBuffer` bodies — *reused* is a claim about the code, not about `String`'s behaviour, and
-   `String`'s behaviour is what the oracle is asked about.
+2. **`corpus/method-bodies.txt`: no `String` row moves to `diverge`.** Drift only. Per D84 the
+   direction `loud` → `answers` is ungated progress and a stub satisfies it, so it is reported and
+   not required.
 
-**Shown to fail**: replace one landed body with a `todo!()`-free stub that raises 93.903 and nothing
-else. Instrument 1 must stay green and instrument 2 must go red. If instrument 2 stays green the
-program set does not cover that row, and the row is unwitnessed however the table reads.
+**Shown to fail**: replace one landed body with a stub that raises 93.903 and nothing else.
+Instrument 1 must go red. If it stays green the program set does not cover that row, and the row is
+unwitnessed however the table reads — which is the only failure mode that matters here, because the
+table will read `answers` either way.
 
 ---
 
@@ -150,9 +175,10 @@ program set does not cover that row, and the row is unwitnessed however the tabl
   programs are what separate the two; a row that only ever ran under `MutableBuffer` has been tested
   once, not twice.
 * **`hashCode` moves rows on classes this phase is not about**, per §2.
-* **112 hand-written missing-argument checks is 112 chances to write the wrong error number.**
-  Instrument 1 is precisely the one that sees them, which is the reason it stays in §3 rather than
-  being replaced by the corpus programs.
+* **112 hand-written missing-argument checks is 112 chances to write the wrong error number** — and
+  §3 says the verdict column cannot be trusted to see them, because the shared raiser makes every
+  such row agree for free. The corpus programs have to send a short argument list as well as a good
+  one, or nothing witnesses this at all.
 * **D83's extra traceback line is measured on the oracle and unmeasured on this crate.** Whether
   `apply_binary` reached through a send already pushes that frame is the first thing to run, before
   any of the 34 rows are written — and it is visible only on a raising operand.
