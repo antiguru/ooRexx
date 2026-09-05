@@ -68,6 +68,19 @@ Every task, no exceptions.
 * **Every family's witness sends a short argument list as well as a good one.** The shared
   missing-argument raiser makes those rows agree in `method-bodies.txt` for free, so nothing but a
   corpus program witnesses a wrong error number.
+* **Every family owes four bookkeeping steps, and Task 1a paid all four late.** Its fast checks were
+  `fmt`, `clippy`, `--test corpus` and `--test coverage`, and G3 came back rc 101 on three suites
+  none of them runs. Each family must, in the same commit as its code:
+  1. file both witnesses in `corpus/phase-5c.txt` **and** `EXPECTED_SUBSET_5C`, which that
+     assertion requires together;
+  2. generate a `crates/rexx-parse/tests/sourceline_oracle/<name>.txt` per new corpus program, with
+     the driver in that module's own comment;
+  3. refresh `corpus/method-bodies.txt` under `REXX_METHOD_BODIES_REFRESH=1` for the rows it moved;
+  4. add its file to `dispatch_seam.rs`'s `CLEARANCE_CONSUMERS` if it is a new one -- it will not be,
+     while every family lands in `dispatch/string.rs`.
+
+  **And the fast checks are `cargo test --release --workspace --no-fail-fast`, not a chosen subset.**
+  It is 12 minutes and it is the whole of what G3 runs.
 
 ---
 
