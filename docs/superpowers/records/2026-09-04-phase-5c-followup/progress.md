@@ -70,3 +70,21 @@ Dispatched at `3f7bc73c4` + this ledger commit; brief `task-3a-brief.md`. A refa
 behaviour change: the string algorithms a buffer method needs become plain functions over bytes, on
 `delete_range`'s model; the builtin tests and the differential are the controls, one mutation per
 extracted core.
+
+Committed `641e76b84`; **all seven gates 0**. Controller review: the string.rs and word.rs diffs read
+in full — a mechanical lift, `overlay_bytes` the one rewritten body and covered by M3 and the
+splicing rows; 14 mutations, every core caught in `--lib`, spot checks of the raw files match the
+report (restored shas identical to after-refactor, M7b 779/0, M1 `358 of 359`, M6 = M6s). Two
+findings written into the plan: **the plain `--test corpus` binary is report mode and cannot go red**
+— `REXX_CORPUS_GATE=1` is the catcher (my Task 3a brief cited the wrong signal); and
+`MutableBuffer~verify` answers `counted` on every path while the builtin's past-the-end zero is an
+untagged text (open, `task-3a-report.md` §6.1).
+
+## Between Task 3a and Task 3b — Moritz's profile rulings (2026-09-05, ~08:00)
+
+`[profile.test] opt-level = 3` — G5 keeps `debug-assertions` and stops paying the unoptimised run
+time (957 s against 246 s release, measured across three gate runs). `[profile.mutation]` = release
+with `lto = "thin"` — mutation harnesses build with `--profile mutation`, in their own
+`target/mutation/`, so a mutation run can no longer leave a stale binary in `target/release/`. No
+harness parallelisation now; a performance round comes soon, and the crate's 30 ms startup against
+the oracle's 4.5 ms (method-dictionary hashing, measured under `perf`) is its first candidate.

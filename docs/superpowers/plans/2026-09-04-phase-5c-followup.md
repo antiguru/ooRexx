@@ -52,6 +52,12 @@ Every task, no exceptions.
   not staged unless the task deliberately changed it.
 * **A method that exists and does nothing is not implemented** — `rust/CLAUDE.md`, and this phase
   exists because of it. Do not add a name that answers nothing to close a row.
+* **The corpus control that can go red is `REXX_CORPUS_GATE=1`.** The plain `--test corpus` binary
+  is report mode — `corpus_differential` asserts `!gate || mismatches.is_empty()` — so it exits 0 on
+  a divergence and prints `N of M matching` to stderr. Measured by Task 3a: M1 exited 0 at `358 of
+  359`. Cite the STRICT run and the matching line, never the plain exit.
+* **Mutation runs build with `--profile mutation`** (release plus thin LTO, own `target/mutation/`),
+  so the release binary the witnesses run on is never a mutant's.
 
 ---
 
@@ -171,6 +177,13 @@ words wordPos contains containsWord startsWith match matchChar subChar`), **muta
 **caseless** (a comparator through the cores; its witness holds mixed-case data), and
 **conversion** (`makeString string makeArray subWords`, the commit that flips `say buf` and carries
 its own witness). Each commit its own gate run and its own corpus witness, **filed in that commit** (see Task 2).
+**The cores landed at `641e76b84`** (Task 3a): `substr_bytes insert_bytes overlay_bytes space_bytes
+changestr_bytes translate_bytes verify_bytes case_shift_bytes` in `builtin/string.rs`;
+`word_count word_range subword_range delword_bytes wordpos_bytes word_slices` in `builtin/word.rs`;
+a byte `start` is 0-based, a word `position` 1-based, an omitted length `Option<usize>`.
+`MutableBuffer~verify` answers `counted` on every path and is the only caller that reaches
+`verify_bytes`'s start-past-the-end guard; whether the builtin follows is open
+(`task-3a-report.md` §6.1).
 The conversion commit carries one more constraint, measured after Task 2: `buf == 'abc'` is Object
 identity on the oracle (`0`) while `'abc' == buf` and `length(buf)` request the buffer's string
 (`1`, `3`) — binding `MAKESTRING` must leave the receiver-side comparison an identity compare.
