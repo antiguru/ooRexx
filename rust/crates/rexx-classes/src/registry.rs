@@ -31,17 +31,20 @@
 use crate::class_graph::{ClassGraph, ClassKind, InheritRefusal};
 use crate::method_dict::MethodSlot;
 use rexx_core::MethodId;
+use rexx_core::NameMap;
 use rexx_core::{BehaviourHandle, ObjRef};
-use std::collections::HashMap;
 
+/// Every map here is a [`NameMap`], for the reason
+/// [`crate::MethodDict`] states: they are all written once per class while
+/// the library is being built, before a program's first clause runs.
 pub struct ClassRegistry {
     graph: ClassGraph,
     next_id: u32,
     next_method: u32,
     /// Id string as declared (`~id`), keyed by identity.
-    names: HashMap<ObjRef, String>,
+    names: NameMap<ObjRef, String>,
     /// `~defaultName`, keyed by identity -- see [`ClassRegistry::default_name`].
-    default_names: HashMap<ObjRef, String>,
+    default_names: NameMap<ObjRef, String>,
     /// `~objectName=`'s store for a class object, keyed by identity, holding
     /// only the classes something has renamed.
     ///
@@ -49,14 +52,14 @@ pub struct ClassRegistry {
     /// the declared form after a rename, and because a class identity is the
     /// one handle the arena does not hold, so there is no object to put the
     /// name in -- every other renameable object carries its own.
-    object_names: HashMap<ObjRef, String>,
+    object_names: NameMap<ObjRef, String>,
     /// Uppercased name -> identity, the registry's own lookup direction --
     /// oracle's `TheEnvironment->put(classObj, getUpperGlobalName(name))`.
-    by_name: HashMap<String, ObjRef>,
+    by_name: NameMap<String, ObjRef>,
     /// The same direction for the kernel directory -- oracle's
     /// `addToSystem(name, classObj)`, a second table `.NAME` never reaches.
     /// See [`ClassRegistry::define_system_class`].
-    by_system_name: HashMap<String, ObjRef>,
+    by_system_name: NameMap<String, ObjRef>,
     /// `Setup.cpp`'s `AddPrivateMethod` rows, in mint order -- see
     /// [`ClassRegistry::private_native_methods`].
     private_native_methods: Vec<MethodId>,
@@ -74,11 +77,11 @@ impl ClassRegistry {
             graph: ClassGraph::new(),
             next_id: 0,
             next_method: 0,
-            names: HashMap::new(),
-            default_names: HashMap::new(),
-            object_names: HashMap::new(),
-            by_name: HashMap::new(),
-            by_system_name: HashMap::new(),
+            names: NameMap::default(),
+            default_names: NameMap::default(),
+            object_names: NameMap::default(),
+            by_name: NameMap::default(),
+            by_system_name: NameMap::default(),
             private_native_methods: Vec::new(),
         }
     }

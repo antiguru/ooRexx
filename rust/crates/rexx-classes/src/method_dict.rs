@@ -34,8 +34,8 @@
 //! rc 0: `.Stem~method("==")` prints `The NIL object` where
 //! `.Queue~method("SORT")` raises 97.1.
 
-use rexx_core::{MethodId, ObjRef};
-use std::collections::{BTreeSet, HashMap};
+use rexx_core::{MethodId, NameMap, ObjRef};
+use std::collections::BTreeSet;
 
 /// One entry under one name. Several of these can share a name when more
 /// than one class in the ancestor chain defines it -- that is exactly the
@@ -82,11 +82,23 @@ impl MethodSlot {
 /// appears in that scope's own snapshot -- and it is also where
 /// `resolveSuperScope`'s "immediate superscope" comes from: the snapshot's
 /// last entry.
+///
+/// Both maps are [`NameMap`] for the reason its own `NameHasher` states, and
+/// the class library is where that reason is sharpest: building it inserts
+/// every method of every class into a flattened dictionary per class per
+/// side, before a program's first clause runs. Measured on `startup.rex`
+/// (`say 1`), `RandomState` here cost **17.5%** of the whole process's
+/// retired instructions.
+///
+/// **A fixed seed also makes `entries` iterate the same way every run**,
+/// where `RandomState` did not. Nothing depended on the old variation: a
+/// corpus program is required to print the same bytes on every run, so an
+/// output reading this order would already have been unstable.
 #[derive(Clone, Default)]
 pub struct MethodDict {
-    entries: HashMap<String, Vec<MethodSlot>>,
+    entries: NameMap<String, Vec<MethodSlot>>,
     scope_list: Vec<ObjRef>,
-    scope_orders: HashMap<ObjRef, Vec<ObjRef>>,
+    scope_orders: NameMap<ObjRef, Vec<ObjRef>>,
 }
 
 impl MethodDict {
@@ -205,10 +217,16 @@ impl MethodDict {
     /// oracle's `getMethod`, which `RexxClass::method` reads and
     /// `methodLookup` filters.
     pub fn slot(&self, name: &str) -> Option<MethodSlot> {
-        self.entries
-            .get(&name.to_ascii_uppercase())
-            .and_then(|l| l.first())
-            .copied()
+        // Every send arrives here, and the uppercase copy was an allocation
+        // per send. `to_ascii_uppercase` changes a name exactly when it
+        // holds an ASCII lower-case byte, so the two arms answer alike and
+        // the common one -- a name the scanner already upcased -- borrows.
+        let list = if name.bytes().any(|b| b.is_ascii_lowercase()) {
+            self.entries.get(&name.to_ascii_uppercase())
+        } else {
+            self.entries.get(name)
+        };
+        list.and_then(|l| l.first()).copied()
     }
 
     /// Overlay `source`'s methods on top of this dictionary's own -- the

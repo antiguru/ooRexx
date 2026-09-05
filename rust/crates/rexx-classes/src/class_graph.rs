@@ -49,8 +49,9 @@
 
 use crate::method_dict::{MethodDict, MethodSlot};
 use rexx_core::MethodId;
+use rexx_core::NameMap;
 use rexx_core::{BehaviourHandle, ObjRef};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 
 /// Whether a class was declared with `SUBCLASS`/plain inheritance or with
 /// `MIXINCLASS`. The only difference this makes is `base_class`: a
@@ -251,7 +252,9 @@ struct ClassDef {
 /// undisturbed however its class is mutated afterwards.
 #[derive(Default)]
 pub struct ClassGraph {
-    classes: HashMap<ObjRef, ClassDef>,
+    /// [`NameMap`] for `MethodDict`'s reason: the cascade reads this map
+    /// once per superclass per class while the library is being built.
+    classes: NameMap<ObjRef, ClassDef>,
     behaviours: Vec<Behaviour>,
     /// Oracle's uninit table restricted to class objects -- the entries
     /// `RexxClass::checkUninit`'s `requiresUninit()` (`ClassClass.cpp:1224`)
@@ -503,7 +506,7 @@ impl ClassGraph {
     /// list, which is what `inherit`'s base-class check for a `mixinclass
     /// class` mixin reads.
     fn cascade_build(
-        classes: &HashMap<ObjRef, ClassDef>,
+        classes: &NameMap<ObjRef, ClassDef>,
         behaviours: &[Behaviour],
         class: ObjRef,
         target: &mut MethodDict,

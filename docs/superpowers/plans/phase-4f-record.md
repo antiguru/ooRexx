@@ -5330,3 +5330,54 @@ Both facts are in the test now. Its values are written with a decimal point so t
 **The counters are now one per op.** Sharing one made the `Op::Const` test read 3 -- its own literal plus the header's two constant symbols -- which is the same confusion the test's own subject had, arriving from the other direction.
 
 `cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings` clean; the debug gate fails 30, identical set to the baseline.
+
+### Entry 75 -- the class library's method dictionaries were SipHashed and re-allocated, and startup is where it showed
+
+**The instrument is not this record's pinned one, and this entry says so rather than letting the difference pass as a result.** `rexx-bench-suite` was not used. Each figure is `perf stat -e instructions` around one direct `REXX_ENGINE=ir <binary> <program>` invocation, best of three reps, the arms alternating *within* each rep, run from a fresh empty directory with no `ulimit` wrapper and no pinning. Instruction counts against this crate's own earlier self are what the configuration block's own text says they are good for; the wall times below are from the same executions and are quoted only where they part from the counts.
+
+#### Cause, named before measuring
+
+`startup.rex` (`say 1`) retires **179,444,303** instructions where the oracle retires **14,786,368** -- **12.1x** -- and spends 26 of its 30 ms in user time, so it is computing rather than linking. A `perf record -F 4999 -g` over 150 runs (23,292 samples) says what it computes: `MethodDict::add_method` 18.4% inclusive, `hash_one::<&String>` 25.4%, `reserve_rehash` over `HashMap<String, Vec<MethodSlot>>` 16.1%, glibc malloc/free about 20% self, `mprotect` and page faults about 12%. `rexx_parse::parse` -- the program itself -- is 7.4%.
+
+Two facts in `rexx-classes` explain that shape. `MethodDict`'s `entries` and `scope_orders`, `ClassGraph`'s `classes` and all five of `ClassRegistry`'s maps were `std::collections::HashMap` with `RandomState`, and building the library inserts every method of every class into a flattened dictionary per class per side before a program's first clause runs. And `MethodDict::add_method` and `MethodDict::slot` each open with `name.to_ascii_uppercase()`, an allocation -- `slot` being the path *every message send* takes.
+
+**`rexx-core` had already made this decision and measured it**: `NameHasher` is `rustc_hash::FxBuildHasher`, chosen there over `seahash` and `foldhash` on retired instructions, for the variable-name maps. The class library was simply never converted.
+
+Predicted: startup and the two dispatch axes move; the arithmetic, string, variable and compound axes move by the startup constant and by nothing else. **No magnitude was pre-registered** -- the control below is what stands in for one, and it was observed rather than predicted.
+
+#### Measured, and the two halves separated
+
+Three binaries, distinct sha256, built from `git archive 1ea7ebbf4` into separate trees with separate `CARGO_TARGET_DIR`s: `base` (unchanged), `p1` (the hasher swap alone), `proto` (the hasher swap plus a `slot` that skips the uppercase copy when the name holds no ASCII lower-case byte).
+
+| axis | base | p1 | proto |
+|---|---:|---:|---:|
+| `startup` instructions | 180,618,046 | 149,077,660 (**-17.46%**) | 148,840,461 (**-17.59%**) |
+| `startup` wall | 29.667 ms | 24.551 ms (-17.24%) | 24.905 ms (-16.05%) |
+| `alloc` instructions | 49,948,159,259 | 44,215,723,057 (-11.48%) | 42,154,542,029 (**-15.60%**) |
+| `alloc` wall | 4.140 s | 3.549 s (-14.28%) | 3.393 s (**-18.03%**) |
+| `dispatch` instructions | 32,066,996,293 | 30,624,812,329 (-4.50%) | 30,054,413,277 (**-6.28%**) |
+| `dispatch` wall | 2.644 s | 2.403 s (-9.13%) | 2.294 s (**-13.27%**) |
+| `dispatchclass` instructions | 27,786,866,154 | 25,394,087,956 (-8.61%) | 24,937,880,046 (**-10.25%**) |
+| `dispatchclass` wall | 2.424 s | 2.055 s (-15.23%) | 1.997 s (**-17.62%**) |
+
+**The hasher is the whole of startup and the `slot` allocation is none of it** -- startup inserts, it does not look up. On the three axes that send messages the two halves are both real, and **the wall win is consistently larger than the instruction win** on them: removing a malloc/free pair per send removes cache and page-fault pressure that instruction counts do not see.
+
+#### The control the four quiet axes carry
+
+Over all nine axes the prototype reads `alloc4c` -0.77%, `emptyloop` -0.33%, `compound` -0.29%, `arith` -0.24%, `varlookup` -0.19% and `strings` -0.14%. In absolute terms those deltas are 32.78M, 32.01M, 32.10M, 31.02M, 31.69M and 31.18M instructions -- against a startup saving of **31.59M**. Every one of them is the fixed startup constant and nothing else, to within 4%.
+
+**That is the evidence that the change is confined to class setup and dispatch.** An axis that spends its life in `rexx-num`, in `builtin::string` or in variable lookup should pay the new startup cost and nothing further, and each of them does, individually, rather than on average.
+
+#### Where this crate stands against the oracle, same session, different instrument
+
+Not comparable with any section of `perf-baseline.md` -- that file's sections come from `rexx-bench-suite` and these do not. Three interleaved reps, wall clock, both sides rc 0 with byte-identical stdout, before this change: `alloc` 4008/1144 ms, `dispatchclass` 2438/889, `dispatch` 2651/1174, `strings` 1457/852, `arith` 1318/1158, `varlookup` 857/1180, `compound` 709/1137, `alloc4c` 618/1022, `emptyloop` 543/893. **Four of nine axes are faster than the oracle.**
+
+All eleven `bench-programs/*.rex` now run rc 0 on this crate. The 2026-09-02 note recording `alloc.rex` and `heapshape.rex` as rc 120 on `.Array~of` and `.Directory~new` is closed by Phase 5c; the allocation and heap-shape axes are live again, and `alloc` is the worst axis on the board.
+
+#### Disposition
+
+Accepted, and the hypothesis is confirmed by its own route: the profile named the method dictionary, the hasher swap moved startup by what the profile predicted for it, and the axes that touch neither moved by the startup constant alone.
+
+**What is deliberately not in this change.** `rexx-core`'s `Behaviour::methods` is `HashMap<String, MethodId>`, and `rexx-exec`'s `Interp` carries a dozen more `RandomState` maps keyed by `Box<[u8]>` and `ProgramId`. They are the same defect and were left alone: this entry's numbers attribute a change to three files in one crate, and widening it would have bought a larger number that nothing here could apportion. They are the next entry's, with their own measurement.
+
+Output was verified byte-identical between `base` and the built binary on all eleven bench programs (`heapshape`'s `gc_forced=` line only, its wall figures varying by construction) before any figure above was taken.
