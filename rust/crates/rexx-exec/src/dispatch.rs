@@ -8420,21 +8420,89 @@ fn native_mutable_buffer_brackets(
     Ok(Some(interp.text_built(out)))
 }
 
-/// `StringUtil::posRexx`'s argument handling and search, shared by `POS` and
-/// `CONTAINS` (`classes/MutableBufferClass.cpp:803`, `:819`): the 1-based
-/// position of `needle`, or 0.
+/// `StringUtil::posRexx`'s argument handling: the needle, a 1-based start
+/// defaulting to the first byte, and an optional range.
+///
+/// **Shared by both receivers, which is what the C++ does too.**
+/// `RexxString::posRexx` (`classes/StringClassMisc.cpp:581`) and
+/// `MutableBuffer::posRexx` (`classes/MutableBufferClass.cpp:803`) each
+/// forward to `StringUtil::posRexx(getStringData(), getLength(), ...)`
+/// (`classes/support/StringUtil.cpp:184`), so the two differ in where the
+/// bytes come from and in nothing else. Every error a bad argument raises is
+/// raised here, once.
+pub(super) fn forward_search_arguments(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+) -> Result<(Vec<u8>, usize, Option<usize>), Failure> {
+    let needle = string_method_argument(interp, args, 0)?;
+    let start = optional_position_argument(interp, args, 1)?.unwrap_or(1);
+    let range = optional_length_argument(interp, args, 2)?;
+    Ok((needle, start, range))
+}
+
+/// [`forward_search_arguments`]' search: the 1-based position of `needle`, or
+/// 0, with an omitted range reaching the end of `haystack`.
+///
+/// `scan` is [`crate::builtin::string::find_forward`] or its caseless twin.
+/// **The caseless one is not the plain scan with a folded compare** -- the two
+/// oracle scans answer differently for the same arguments, measured at
+/// `caseless_find_forward`'s own doc.
+pub(super) fn forward_search(
+    haystack: &[u8],
+    needle: &[u8],
+    start: usize,
+    range: Option<usize>,
+    scan: fn(&[u8], &[u8], usize, usize) -> usize,
+) -> usize {
+    let range = range.unwrap_or(haystack.len().saturating_sub(start) + 1);
+    scan(haystack, needle, start - 1, range)
+}
+
+/// `StringUtil::lastPosRexx`'s argument handling: the needle, and a start and
+/// range that each default to the receiver's whole length rather than to a
+/// fixed number, so both stay `None` here.
+pub(super) fn backward_search_arguments(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+) -> Result<(Vec<u8>, Option<usize>, Option<usize>), Failure> {
+    let needle = string_method_argument(interp, args, 0)?;
+    let start = optional_position_argument(interp, args, 1)?;
+    let range = optional_length_argument(interp, args, 2)?;
+    Ok((needle, start, range))
+}
+
+/// [`backward_search_arguments`]' search, with both defaults taken from
+/// `haystack`.
+pub(super) fn backward_search(
+    haystack: &[u8],
+    needle: &[u8],
+    start: Option<usize>,
+    range: Option<usize>,
+    scan: fn(&[u8], &[u8], usize, usize) -> usize,
+) -> usize {
+    let length = haystack.len();
+    scan(
+        haystack,
+        needle,
+        start.unwrap_or(length),
+        range.unwrap_or(length),
+    )
+}
+
+/// [`forward_search`] over a buffer's contents, for the `MutableBuffer` rows
+/// that answer a position: `POS` and `CONTAINS`
+/// (`classes/MutableBufferClass.cpp:803`, `:819`) and their caseless twins
+/// (`:851`, `:869`).
 fn buffer_pos(
     interp: &mut Interp,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
     name: &[u8],
+    scan: fn(&[u8], &[u8], usize, usize) -> usize,
 ) -> Result<usize, Failure> {
-    let needle = string_method_argument(interp, args, 0)?;
-    let start = optional_position_argument(interp, args, 1)?.unwrap_or(1);
-    let range = optional_length_argument(interp, args, 2)?;
+    let (needle, start, range) = forward_search_arguments(interp, args)?;
     let state = buffer_state(interp, receiver, name)?;
-    let range = range.unwrap_or(state.bytes.len().saturating_sub(start) + 1);
-    let found = crate::builtin::string::find_forward(&state.bytes, &needle, start - 1, range);
+    let found = forward_search(&state.bytes, &needle, start, range, scan);
     interp.give_result_buffer(needle);
     Ok(found)
 }
@@ -8446,7 +8514,13 @@ fn native_mutable_buffer_pos(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let found = buffer_pos(interp, receiver, args, b"POS")?;
+    let found = buffer_pos(
+        interp,
+        receiver,
+        args,
+        b"POS",
+        crate::builtin::string::find_forward,
+    )?;
     Ok(Some(interp.counted(found)))
 }
 
@@ -8457,32 +8531,14 @@ fn native_mutable_buffer_contains(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let found = buffer_pos(interp, receiver, args, b"CONTAINS")?;
+    let found = buffer_pos(
+        interp,
+        receiver,
+        args,
+        b"CONTAINS",
+        crate::builtin::string::find_forward,
+    )?;
     Ok(Some(interp.counted(usize::from(found > 0))))
-}
-
-/// `StringUtil::caselessPos`'s argument handling and search, shared by
-/// `CASELESSPOS` and `CASELESSCONTAINS` (`classes/MutableBufferClass.cpp:851`,
-/// `:869`), whose defaults are `posRexx`'s.
-///
-/// **The core is [`crate::builtin::string::caseless_find_forward`] and not
-/// [`crate::builtin::string::find_forward`] with a folded compare**: the two
-/// oracle scans answer differently for the same arguments, measured there.
-fn buffer_caseless_pos(
-    interp: &mut Interp,
-    receiver: ObjRef,
-    args: &[Option<ObjRef>],
-    name: &[u8],
-) -> Result<usize, Failure> {
-    let needle = string_method_argument(interp, args, 0)?;
-    let start = optional_position_argument(interp, args, 1)?.unwrap_or(1);
-    let range = optional_length_argument(interp, args, 2)?;
-    let state = buffer_state(interp, receiver, name)?;
-    let range = range.unwrap_or(state.bytes.len().saturating_sub(start) + 1);
-    let found =
-        crate::builtin::string::caseless_find_forward(&state.bytes, &needle, start - 1, range);
-    interp.give_result_buffer(needle);
-    Ok(found)
 }
 
 /// `MutableBuffer::caselessPos` (`classes/MutableBufferClass.cpp:851`).
@@ -8492,7 +8548,13 @@ fn native_mutable_buffer_caselesspos(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let found = buffer_caseless_pos(interp, receiver, args, b"CASELESSPOS")?;
+    let found = buffer_pos(
+        interp,
+        receiver,
+        args,
+        b"CASELESSPOS",
+        crate::builtin::string::caseless_find_forward,
+    )?;
     Ok(Some(interp.counted(found)))
 }
 
@@ -8503,7 +8565,13 @@ fn native_mutable_buffer_caselesscontains(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let found = buffer_caseless_pos(interp, receiver, args, b"CASELESSCONTAINS")?;
+    let found = buffer_pos(
+        interp,
+        receiver,
+        args,
+        b"CASELESSCONTAINS",
+        crate::builtin::string::caseless_find_forward,
+    )?;
     Ok(Some(interp.counted(usize::from(found > 0))))
 }
 
@@ -8516,16 +8584,14 @@ fn native_mutable_buffer_lastpos(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let needle = string_method_argument(interp, args, 0)?;
-    let start = optional_position_argument(interp, args, 1)?;
-    let range = optional_length_argument(interp, args, 2)?;
+    let (needle, start, range) = backward_search_arguments(interp, args)?;
     let state = buffer_state(interp, receiver, b"LASTPOS")?;
-    let length = state.bytes.len();
-    let found = crate::builtin::string::find_backward(
+    let found = backward_search(
         &state.bytes,
         &needle,
-        start.unwrap_or(length),
-        range.unwrap_or(length),
+        start,
+        range,
+        crate::builtin::string::find_backward,
     );
     interp.give_result_buffer(needle);
     Ok(Some(interp.counted(found)))
@@ -8539,16 +8605,14 @@ fn native_mutable_buffer_caselesslastpos(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let needle = string_method_argument(interp, args, 0)?;
-    let start = optional_position_argument(interp, args, 1)?;
-    let range = optional_length_argument(interp, args, 2)?;
+    let (needle, start, range) = backward_search_arguments(interp, args)?;
     let state = buffer_state(interp, receiver, b"CASELESSLASTPOS")?;
-    let length = state.bytes.len();
-    let found = crate::builtin::string::caseless_find_backward(
+    let found = backward_search(
         &state.bytes,
         &needle,
-        start.unwrap_or(length),
-        range.unwrap_or(length),
+        start,
+        range,
+        crate::builtin::string::caseless_find_backward,
     );
     interp.give_result_buffer(needle);
     Ok(Some(interp.counted(found)))

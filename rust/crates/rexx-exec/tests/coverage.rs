@@ -1404,6 +1404,9 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/mutablebuffer_mutators.rex",
     "lang/mutablebuffer_caseless.rex",
     "lang/mutablebuffer_conversion.rex",
+    // Phase 5f's `String` witnesses, filed as each family lands.
+    "lang/string_search.rex",
+    "lang/string_search_refusals.rex",
 ];
 
 #[test]

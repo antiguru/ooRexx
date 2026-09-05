@@ -1,0 +1,27 @@
+/* String's forward and backward searches -- pos, caselessPos, contains,
+   caselessContains, lastPos and caselessLastPos -- each answer what the
+   oracle answers. The receiver is a plain string, so nothing here can
+   change it; that is the whole difference from the MutableBuffer rows,
+   which share these searches through StringUtil's own entry points. */
+s = 'abcABCabc'
+/* pos with a start and a range. An empty needle never matches, a start past
+   the end is 0, and a range that ends before the needle would fit is 0. */
+say s~pos('abc') s~pos('abc', 2) s~pos('abc', 2, 3) s~pos('abc', 2, 9) s~pos('x') s~pos('') s~pos('abc', 10) s~pos('c', 9)
+say s~pos('ABC') s~pos('ABC', 5) s~pos('abcABCabc') s~pos('abcABCabcd') s~pos('a', 1, 0) s~pos('a', 7)
+/* caselessPos is a different scan, not this one with a folded compare. */
+say s~caselessPos('ABC') s~caselessPos('abc', 2) s~caselessPos('aBc', 4, 3) s~caselessPos('aBc', 4, 2) s~caselessPos('x') s~caselessPos('')
+/* contains is pos as a truth value, and answers a String. */
+say s~contains('ABC') s~contains('x') s~contains('abc', 4) s~contains('abc', 4, 3) s~contains('') s~contains('ABC')~class~id
+say s~caselessContains('ABC') s~caselessContains('x') s~caselessContains('AbC', 2) s~caselessContains('')
+/* lastPos: the start and the range each default to the whole length, and the
+   start is where the match must end rather than where it begins. */
+say s~lastPos('abc') s~lastPos('abc', 6) s~lastPos('abc', 9, 3) s~lastPos('abc', 9, 2) s~lastPos('x') s~lastPos('')
+say s~lastPos('abc', 99) s~lastPos('a', 1) s~lastPos('c', 3) s~lastPos('abcABCabc') s~lastPos('ABC', 6)
+say s~caselessLastPos('ABC') s~caselessLastPos('abc', 6) s~caselessLastPos('AbC', 9, 3) s~caselessLastPos('x') s~caselessLastPos('')
+/* An empty receiver answers 0 everywhere rather than refusing. */
+say ''~pos('a') ''~lastPos('a') ''~contains('a') ''~caselessPos('a') ''~caselessLastPos('a') ''~caselessContains('a')
+say ''~pos('') ''~lastPos('')
+/* A number is a string here, and is searched as its own characters. */
+say 12321~pos('2') 12321~lastPos('2') 12321~contains('32')
+/* The receiver is unchanged by any of it. */
+say s

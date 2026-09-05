@@ -61,3 +61,6 @@ lang/mutablebuffer_readers.rex
 lang/mutablebuffer_mutators.rex
 lang/mutablebuffer_caseless.rex
 lang/mutablebuffer_conversion.rex
+
+lang/string_search.rex
+lang/string_search_refusals.rex
