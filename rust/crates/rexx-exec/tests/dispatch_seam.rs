@@ -355,17 +355,27 @@ fn the_protected_question_is_asked_only_inside_the_seam() {
     );
 }
 
-/// **Every consumer of the seam's token is written in `dispatch.rs`**, which
-/// is what lets the item read below bound the producers *and* the file above
-/// bound the consumers.
+/// The files that may name the seam's token, listed rather than matched by
+/// prefix so that adding one is an edit to this line.
 ///
-/// The token's type is `pub(super)` inside `mod seam`, so `dispatch.rs` is
-/// the widest scope that can name it -- but "widest scope" is a fact about
-/// the module tree, and this asserts the fact about the tree as it stands:
-/// no other file in the crate names `Cleared` in code. (`run.rs` uses the
+/// **`dispatch/` is not a wildcard here.** A prefix match would let any new
+/// child of the module take a clearance without anyone deciding that it may,
+/// which is the whole of what [`the_seam_token_is_named_only_by_the_dispatch_module`]
+/// checks.
+const CLEARANCE_CONSUMERS: &[&str] = &["src/dispatch.rs", "src/dispatch/string.rs"];
+
+/// **Every consumer of the seam's token is written in one of
+/// [`CLEARANCE_CONSUMERS`]**, which is what lets the item read below bound the
+/// producers *and* those files bound the consumers.
+///
+/// The token's type is `pub(super)` inside `mod seam`, so the `dispatch`
+/// module *tree* is the widest scope that can name it -- the file `dispatch.rs`
+/// is narrower than that, and a child module can name it too. "Widest scope" is
+/// a fact about the module tree; this asserts the fact about the tree as it
+/// stands, which is a shorter list than the scope allows. (`run.rs` uses the
 /// word in prose, which is why whole-line comments are stripped.) A second
 /// invocation path funded by a clearance would therefore have to be written
-/// alongside the ones that exist, in the one file this test already reads.
+/// alongside the ones that exist, in a file this test already reads.
 ///
 /// It does not, and cannot, stop a path that takes **no** clearance; the
 /// module doc's own list says so.
@@ -375,13 +385,13 @@ fn the_seam_token_is_named_only_by_the_dispatch_module() {
     let sites = code_occurrences(&token);
     let elsewhere: Vec<&String> = sites
         .iter()
-        .filter(|site| !site.contains("dispatch.rs"))
+        .filter(|site| !CLEARANCE_CONSUMERS.iter().any(|file| site.contains(file)))
         .collect();
     assert!(
         elsewhere.is_empty(),
-        "the seam's token is named in code outside `dispatch.rs`, at {elsewhere:?}, \
-         so the functions that can consume a clearance are no longer bounded by \
-         reading that one file"
+        "the seam's token is named in code outside {CLEARANCE_CONSUMERS:?}, at \
+         {elsewhere:?}, so the functions that can consume a clearance are no \
+         longer bounded by reading those files"
     );
     assert!(
         sites.len() >= 2,
