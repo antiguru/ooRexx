@@ -1,0 +1,21 @@
+/* String's counting and word searches -- countStr, caselessCountStr, wordPos,
+   caselessWordPos, containsWord and caselessContainsWord. The counts are
+   non-overlapping; a word search matches whole blank-delimited words, so a
+   phrase's internal spacing does not have to match the receiver's. */
+s = 'abcABCabc'
+say s~countStr('abc') s~countStr('ABC') s~countStr('x') s~countStr('') s~countStr('abcABCabc') s~countStr('a')
+say 'aaaa'~countStr('aa') 'aaaa'~countStr('a') ''~countStr('a') ''~countStr('')
+say s~caselessCountStr('abc') s~caselessCountStr('ABC') s~caselessCountStr('x') s~caselessCountStr('')
+say 'aAaA'~caselessCountStr('aa') 'aAaA'~caselessCountStr('Aa')
+/* Leading, repeated and trailing blanks, and a word the phrase spans. */
+w = '  now is  the TIME  '
+say w~wordPos('the TIME') w~wordPos('the') w~wordPos('is', 3) w~wordPos('now', 1) w~wordPos('xx') w~wordPos('')
+say w~wordPos('the   TIME') w~wordPos('TIME', 4) w~wordPos('TIME', 5) w~wordPos('now is')
+say w~caselessWordPos('THE time') w~caselessWordPos('time') w~caselessWordPos('IS', 3) w~caselessWordPos('xx') w~caselessWordPos('')
+say w~containsWord('is') w~containsWord('is', 3) w~containsWord('the TIME') w~containsWord('tim') w~containsWord('')
+say w~caselessContainsWord('IS') w~caselessContainsWord('TiMe') w~caselessContainsWord('tim') w~caselessContainsWord('')
+say ''~wordPos('a') ''~containsWord('a') '   '~wordPos('a')
+/* A count answers a String and so does a truth value. */
+say s~countStr('abc')~class~id w~containsWord('is')~class~id
+/* Neither receiver changed. */
+say s w

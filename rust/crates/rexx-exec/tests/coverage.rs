@@ -1407,6 +1407,8 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     // Phase 5f's `String` witnesses, filed as each family lands.
     "lang/string_search.rex",
     "lang/string_search_refusals.rex",
+    "lang/string_counts.rex",
+    "lang/string_counts_refusals.rex",
 ];
 
 #[test]

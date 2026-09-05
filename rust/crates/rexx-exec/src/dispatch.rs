@@ -8813,18 +8813,36 @@ fn native_mutable_buffer_words(
     Ok(Some(interp.counted(count)))
 }
 
-/// `StringUtil::wordPos`'s argument handling and search, shared by `WORDPOS`
-/// and `CONTAINSWORD` (`classes/MutableBufferClass.cpp:1845`, `:1859`).
+/// `StringUtil::wordPos`'s argument handling: the phrase, and a 1-based start
+/// defaulting to the first word.
+///
+/// **Shared by both receivers**, as `StringUtil::wordPos`
+/// (`classes/support/StringUtil.cpp:1565`) is: `RexxString::wordPos`
+/// (`classes/StringClassWord.cpp:256`) and `MutableBuffer::wordPos`
+/// (`classes/MutableBufferClass.cpp:1845`) pass it their own bytes and nothing
+/// else.
+pub(super) fn wordpos_arguments(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+) -> Result<(Vec<u8>, usize), Failure> {
+    let phrase = string_method_argument(interp, args, 0)?;
+    let start = optional_position_argument(interp, args, 1)?.unwrap_or(1);
+    Ok((phrase, start))
+}
+
+/// [`wordpos_arguments`]' search over a buffer's contents, shared by
+/// `WORDPOS` and `CONTAINSWORD` (`classes/MutableBufferClass.cpp:1845`,
+/// `:1859`) and their caseless twins (`:1873`, `:1887`).
 fn buffer_wordpos(
     interp: &mut Interp,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
     name: &[u8],
+    scan: fn(&[u8], &[u8], usize) -> usize,
 ) -> Result<usize, Failure> {
-    let phrase = string_method_argument(interp, args, 0)?;
-    let start = optional_position_argument(interp, args, 1)?.unwrap_or(1);
+    let (phrase, start) = wordpos_arguments(interp, args)?;
     let state = buffer_state(interp, receiver, name)?;
-    let found = crate::builtin::word::wordpos_bytes(&phrase, &state.bytes, start);
+    let found = scan(&phrase, &state.bytes, start);
     interp.give_result_buffer(phrase);
     Ok(found)
 }
@@ -8836,7 +8854,13 @@ fn native_mutable_buffer_wordpos(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let found = buffer_wordpos(interp, receiver, args, b"WORDPOS")?;
+    let found = buffer_wordpos(
+        interp,
+        receiver,
+        args,
+        b"WORDPOS",
+        crate::builtin::word::wordpos_bytes,
+    )?;
     Ok(Some(interp.counted(found)))
 }
 
@@ -8847,25 +8871,14 @@ fn native_mutable_buffer_containsword(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let found = buffer_wordpos(interp, receiver, args, b"CONTAINSWORD")?;
+    let found = buffer_wordpos(
+        interp,
+        receiver,
+        args,
+        b"CONTAINSWORD",
+        crate::builtin::word::wordpos_bytes,
+    )?;
     Ok(Some(interp.counted(usize::from(found > 0))))
-}
-
-/// `StringUtil::caselessWordPos`'s argument handling and search, shared by
-/// `CASELESSWORDPOS` and `CASELESSCONTAINSWORD`
-/// (`classes/MutableBufferClass.cpp:1873`, `:1887`).
-fn buffer_caseless_wordpos(
-    interp: &mut Interp,
-    receiver: ObjRef,
-    args: &[Option<ObjRef>],
-    name: &[u8],
-) -> Result<usize, Failure> {
-    let phrase = string_method_argument(interp, args, 0)?;
-    let start = optional_position_argument(interp, args, 1)?.unwrap_or(1);
-    let state = buffer_state(interp, receiver, name)?;
-    let found = crate::builtin::word::caseless_wordpos_bytes(&phrase, &state.bytes, start);
-    interp.give_result_buffer(phrase);
-    Ok(found)
 }
 
 /// `MutableBuffer::caselessWordPos` (`classes/MutableBufferClass.cpp:1873`).
@@ -8875,7 +8888,13 @@ fn native_mutable_buffer_caselesswordpos(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let found = buffer_caseless_wordpos(interp, receiver, args, b"CASELESSWORDPOS")?;
+    let found = buffer_wordpos(
+        interp,
+        receiver,
+        args,
+        b"CASELESSWORDPOS",
+        crate::builtin::word::caseless_wordpos_bytes,
+    )?;
     Ok(Some(interp.counted(found)))
 }
 
@@ -8886,7 +8905,13 @@ fn native_mutable_buffer_caselesscontainsword(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let found = buffer_caseless_wordpos(interp, receiver, args, b"CASELESSCONTAINSWORD")?;
+    let found = buffer_wordpos(
+        interp,
+        receiver,
+        args,
+        b"CASELESSCONTAINSWORD",
+        crate::builtin::word::caseless_wordpos_bytes,
+    )?;
     Ok(Some(interp.counted(usize::from(found > 0))))
 }
 

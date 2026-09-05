@@ -42,7 +42,7 @@
 
 use super::{
     Arity, Cleared, Failure, Interp, NativeMethod, ObjRef, backward_search,
-    backward_search_arguments, forward_search, forward_search_arguments,
+    backward_search_arguments, forward_search, forward_search_arguments, wordpos_arguments,
 };
 
 /// `RexxString::posRexx` (`classes/StringClassMisc.cpp:581`).
@@ -169,6 +169,128 @@ fn string_lastpos(
     Ok(found)
 }
 
+/// `RexxString::countStrRexx` (`classes/StringClassMisc.cpp:419`).
+fn native_string_countstr(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let count = string_countstr(
+        interp,
+        receiver,
+        args,
+        crate::builtin::string::count_occurrences,
+    )?;
+    Ok(Some(interp.counted(count)))
+}
+
+/// `RexxString::caselessCountStrRexx` (`classes/StringClassMisc.cpp:434`).
+fn native_string_caselesscountstr(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let count = string_countstr(
+        interp,
+        receiver,
+        args,
+        crate::builtin::string::caseless_count_occurrences,
+    )?;
+    Ok(Some(interp.counted(count)))
+}
+
+/// The non-overlapping count of `needle` in the receiver's own text.
+///
+/// The limit is unbounded: `countStrRexx` passes `Numerics::MAX_WHOLENUMBER`
+/// (`classes/StringClassMisc.cpp:423`), which no count over a string can reach.
+fn string_countstr(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    count: fn(&[u8], &[u8], usize) -> usize,
+) -> Result<usize, Failure> {
+    let needle = super::string_method_argument(interp, args, 0)?;
+    let found = {
+        let bytes = interp.to_text(receiver);
+        count(&bytes, &needle, usize::MAX)
+    };
+    interp.give_result_buffer(needle);
+    Ok(found)
+}
+
+/// `RexxString::wordPos` (`classes/StringClassWord.cpp:256`).
+fn native_string_wordpos(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let found = string_wordpos(interp, receiver, args, crate::builtin::word::wordpos_bytes)?;
+    Ok(Some(interp.counted(found)))
+}
+
+/// `RexxString::caselessWordPos` (`classes/StringClassWord.cpp:284`).
+fn native_string_caselesswordpos(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let found = string_wordpos(
+        interp,
+        receiver,
+        args,
+        crate::builtin::word::caseless_wordpos_bytes,
+    )?;
+    Ok(Some(interp.counted(found)))
+}
+
+/// `RexxString::containsWord` (`classes/StringClassWord.cpp:270`): `WORDPOS`'s
+/// search reported as a boolean.
+fn native_string_containsword(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let found = string_wordpos(interp, receiver, args, crate::builtin::word::wordpos_bytes)?;
+    Ok(Some(crate::eval::logical(found > 0)))
+}
+
+/// `RexxString::caselessContainsWord` (`classes/StringClassWord.cpp:298`).
+fn native_string_caselesscontainsword(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let found = string_wordpos(
+        interp,
+        receiver,
+        args,
+        crate::builtin::word::caseless_wordpos_bytes,
+    )?;
+    Ok(Some(crate::eval::logical(found > 0)))
+}
+
+/// [`wordpos_arguments`]' search over the receiver's own text.
+fn string_wordpos(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    scan: fn(&[u8], &[u8], usize) -> usize,
+) -> Result<usize, Failure> {
+    let (phrase, start) = wordpos_arguments(interp, args)?;
+    let found = {
+        let bytes = interp.to_text(receiver);
+        scan(&phrase, &bytes, start)
+    };
+    interp.give_result_buffer(phrase);
+    Ok(found)
+}
+
 /// `String`'s rows, in the shape [`super::NATIVE_METHODS`] uses.
 pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     (
@@ -176,6 +298,18 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         "CASELESSCONTAINS",
         Arity::Fixed(3),
         native_string_caselesscontains,
+    ),
+    (
+        "String",
+        "CASELESSCONTAINSWORD",
+        Arity::Fixed(2),
+        native_string_caselesscontainsword,
+    ),
+    (
+        "String",
+        "CASELESSCOUNTSTR",
+        Arity::Fixed(1),
+        native_string_caselesscountstr,
     ),
     (
         "String",
@@ -191,10 +325,29 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     (
         "String",
+        "CASELESSWORDPOS",
+        Arity::Fixed(2),
+        native_string_caselesswordpos,
+    ),
+    (
+        "String",
         "CONTAINS",
         Arity::Fixed(3),
         native_string_contains,
     ),
+    (
+        "String",
+        "CONTAINSWORD",
+        Arity::Fixed(2),
+        native_string_containsword,
+    ),
+    (
+        "String",
+        "COUNTSTR",
+        Arity::Fixed(1),
+        native_string_countstr,
+    ),
     ("String", "LASTPOS", Arity::Fixed(3), native_string_lastpos),
     ("String", "POS", Arity::Fixed(3), native_string_pos),
+    ("String", "WORDPOS", Arity::Fixed(2), native_string_wordpos),
 ];

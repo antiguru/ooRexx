@@ -64,3 +64,5 @@ lang/mutablebuffer_conversion.rex
 
 lang/string_search.rex
 lang/string_search_refusals.rex
+lang/string_counts.rex
+lang/string_counts_refusals.rex
