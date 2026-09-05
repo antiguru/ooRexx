@@ -126,3 +126,43 @@ guard makes the slice index out of range instead of returning a wrong answer. Th
 `corpus/method-bodies.txt` refresh matched both the agent's and the controller's independently
 written predictions: 18 rows loud to answers, none to diverge.
 
+## Task 3c -- the mutators, over the cores
+
+Dispatched at `3c4585cb4`; brief `task-3c-brief.md`. Eleven rows (`insert overlay replaceAt []=
+changeStr upper lower translate space delWord delete`) over Task 3a's cores, witness
+`mutablebuffer_mutators.rex` filed in the same commit.
+
+Committed `b1cab6dc3`; **all seven gates 0** (`scratchpad/task3c/gates/status.txt`, first line
+`b1cab6dc3…`, last line `finished`; G4 and G5 read `361 of 361 matching`). Controller review from
+the raw files: the eleven method-body rows move with no new `diverge` (the file's `diverge` total
+is 7 before and after), and five of them stay `loud` with their evidence changing from the method's
+own name to `MAKESTRING`, which is what a mutator answering the receiver does to a probe that
+`say`s the result.
+
+Three readings worth carrying:
+
+* **The brief was wrong that `buf~string` is unavailable.** Task 2 bound `STRING`, and the binding
+  is in `dispatch.rs` at `3c4585cb4`, two commits before the agent started. The controller's
+  pre-dispatch check of that brief caught a different error in it (it told the agent to work out
+  whether a native body can answer its receiver, which `DELSTR` and `APPEND` already do) and missed
+  this one. The brief also said `replaceAt` is `overlay_bytes`'s neighbourhood; it splices, and the
+  body is `substr_bytes` for the padded front plus the replacement plus the tail.
+* **A predicted-red mutation came back green, and that is what found the hole.** The overlay
+  pad-default mutation survived because no line of the witness observed a default pad byte for
+  `insert`, `overlay`, `replaceAt` or `[]=`: the growth cases reach the padding path but print only
+  the length and the capacity. Four `say` lines were added, the same mutation re-ran red, and the
+  widened witness is what is committed. The prediction had cited a witness line that did not exist,
+  written from the exploration program rather than from the witness.
+* **The growth mutation is red but adds no coverage.** Defeating `ensure_capacity` is caught by
+  Task 2's `mutablebuffer_state.rex` alone; the without-the-witness run measured it.
+
+`replaceAt` uses the C++ *named* argument overloads, so its refusals are 88.910, 88.911 and 88.912
+at rc 168 where the positional ones are 93.92x at rc 163; three new raisers in `error.rs` carry
+them. Capacity growth is not one rule: the five `ensureCapacity` call sites pass different
+expressions, each observable through `getBufferSize`. Growing: `insert`, `overlay`, `replaceAt`,
+`[]=`, `changeStr` (longer branch), `space` (pad over one byte). Not growing: `upper`, `lower`,
+`translate`, `delWord`, `delete`.
+
+**Paused here at Moritz's request.** Task 3d (the caseless family) and Task 3e (the conversions,
+which flip `say buf`) are not dispatched.
+
