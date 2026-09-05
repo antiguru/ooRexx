@@ -440,9 +440,21 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     (
         "MutableBuffer",
+        "[]=",
+        Arity::Fixed(3),
+        native_mutable_buffer_bracketsequal,
+    ),
+    (
+        "MutableBuffer",
         "APPEND",
         Arity::Counted,
         native_mutable_buffer_append,
+    ),
+    (
+        "MutableBuffer",
+        "CHANGESTR",
+        Arity::Fixed(3),
+        native_mutable_buffer_changestr,
     ),
     (
         "MutableBuffer",
@@ -464,9 +476,21 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     (
         "MutableBuffer",
+        "DELETE",
+        Arity::Fixed(2),
+        native_mutable_buffer_delete,
+    ),
+    (
+        "MutableBuffer",
         "DELSTR",
         Arity::Fixed(2),
         native_mutable_buffer_delstr,
+    ),
+    (
+        "MutableBuffer",
+        "DELWORD",
+        Arity::Fixed(2),
+        native_mutable_buffer_delword,
     ),
     (
         "MutableBuffer",
@@ -482,6 +506,12 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     (
         "MutableBuffer",
+        "INSERT",
+        Arity::Fixed(4),
+        native_mutable_buffer_insert,
+    ),
+    (
+        "MutableBuffer",
         "LASTPOS",
         Arity::Fixed(3),
         native_mutable_buffer_lastpos,
@@ -491,6 +521,12 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         "LENGTH",
         Arity::Fixed(0),
         native_mutable_buffer_length,
+    ),
+    (
+        "MutableBuffer",
+        "LOWER",
+        Arity::Fixed(2),
+        native_mutable_buffer_lower,
     ),
     (
         "MutableBuffer",
@@ -506,15 +542,33 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     (
         "MutableBuffer",
+        "OVERLAY",
+        Arity::Fixed(4),
+        native_mutable_buffer_overlay,
+    ),
+    (
+        "MutableBuffer",
         "POS",
         Arity::Fixed(3),
         native_mutable_buffer_pos,
     ),
     (
         "MutableBuffer",
+        "REPLACEAT",
+        Arity::Fixed(4),
+        native_mutable_buffer_replaceat,
+    ),
+    (
+        "MutableBuffer",
         "SETBUFFERSIZE",
         Arity::Fixed(1),
         native_mutable_buffer_setbuffersize,
+    ),
+    (
+        "MutableBuffer",
+        "SPACE",
+        Arity::Fixed(2),
+        native_mutable_buffer_space,
     ),
     (
         "MutableBuffer",
@@ -545,6 +599,18 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         "SUBWORD",
         Arity::Fixed(2),
         native_mutable_buffer_subword,
+    ),
+    (
+        "MutableBuffer",
+        "TRANSLATE",
+        Arity::Fixed(5),
+        native_mutable_buffer_translate,
+    ),
+    (
+        "MutableBuffer",
+        "UPPER",
+        Arity::Fixed(2),
+        native_mutable_buffer_upper,
     ),
     (
         "MutableBuffer",
@@ -7789,6 +7855,119 @@ fn option_method_argument(
     }
 }
 
+/// `optionalStringArgument` by position (`runtime/MethodArguments.hpp:186`):
+/// the null string for an omitted argument, and 88.909 for a value without a
+/// string value -- measured, oracle rc 0:
+/// `.MutableBuffer~new('abcdef')~translate('ABC')` answers six blanks, the
+/// empty input table reading each byte as its own index.
+fn optional_string_method_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    index: usize,
+) -> Result<Vec<u8>, Failure> {
+    let Some(value) = args.get(index).copied().flatten() else {
+        return Ok(Vec::new());
+    };
+    let text = required_string_argument(interp, value, index + 1)?;
+    Ok(interp.to_text(text).into_owned())
+}
+
+/// `nonNegativeArgument` (`classes/StringClassUtil.cpp:167`): `None` for an
+/// omitted argument, and anything that is not a non-negative whole number in
+/// range is 93.906 -- measured, oracle rc 163:
+/// `.MutableBuffer~new('abcdef')~insert('a', -1)` reports `Method argument 2
+/// must be zero or a positive whole number; found "-1"`.
+fn optional_non_negative_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    index: usize,
+) -> Result<Option<usize>, Failure> {
+    let raise = move |found: &[u8]| Raised::argument_not_non_negative(index + 1, found);
+    match whole_method_argument(interp, args, index, raise)? {
+        Some(value) if value >= 0 => Ok(Some(usize_or_refuse(interp, args, index, value, raise)?)),
+        Some(_) => Err(refuse_method_argument(interp, args, index, raise)),
+        None => Ok(None),
+    }
+}
+
+/// `stringArgument`'s named overload (`runtime/MethodArguments.hpp:161`), the
+/// bytes copied into the lent result buffer: omitted is 88.901 and a value
+/// without a string value is 88.909.
+fn named_string_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    index: usize,
+    argument: &'static str,
+) -> Result<Vec<u8>, Failure> {
+    let Some(value) = args.get(index).copied().flatten() else {
+        return Err(Raised::missing_named_argument(argument).into());
+    };
+    let text = required_string_named_argument(interp, value, argument)?;
+    let mut bytes = interp.take_result_buffer();
+    bytes.extend_from_slice(&interp.to_text(text));
+    Ok(bytes)
+}
+
+/// `positionArgument`'s named overload (`classes/StringClassUtil.cpp:225`):
+/// omitted is 88.901 and anything that is not a positive whole number in
+/// range is 88.912.
+fn named_position_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    index: usize,
+    argument: &'static str,
+) -> Result<usize, Failure> {
+    let raise = move |found: &[u8]| Raised::named_argument_invalid_position(argument, found);
+    match whole_method_argument(interp, args, index, raise)? {
+        Some(position) if position > 0 => usize_or_refuse(interp, args, index, position, raise),
+        Some(_) => Err(refuse_method_argument(interp, args, index, raise)),
+        None => Err(Raised::missing_named_argument(argument).into()),
+    }
+}
+
+/// `optionalLengthArgument`'s named overload
+/// (`runtime/MethodArguments.hpp:344`): `None` for an omitted argument, and
+/// anything that is not a non-negative whole number in range is 88.911.
+fn optional_named_length_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    index: usize,
+    argument: &'static str,
+) -> Result<Option<usize>, Failure> {
+    let raise = move |found: &[u8]| Raised::named_argument_invalid_length(argument, found);
+    match whole_method_argument(interp, args, index, raise)? {
+        Some(size) if size >= 0 => Ok(Some(usize_or_refuse(interp, args, index, size, raise)?)),
+        Some(_) => Err(refuse_method_argument(interp, args, index, raise)),
+        None => Ok(None),
+    }
+}
+
+/// `optionalPadArgument`'s named overload
+/// (`classes/StringClassUtil.cpp:275`): `None` for an omitted argument,
+/// 88.909 for one without a string value, and 88.910 for a string that is not
+/// one byte.
+fn named_pad_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    index: usize,
+    argument: &'static str,
+) -> Result<Option<u8>, Failure> {
+    let Some(value) = args.get(index).copied().flatten() else {
+        return Ok(None);
+    };
+    let text = required_string_named_argument(interp, value, argument)?;
+    let pad = match interp.to_text(text).as_ref() {
+        [byte] => Some(*byte),
+        _ => None,
+    };
+    match pad {
+        Some(byte) => Ok(Some(byte)),
+        None => Err(
+            Raised::named_argument_invalid_pad(argument, &interp.string_value_text(value)).into(),
+        ),
+    }
+}
+
 /// The refusal a constructor that has checked its arguments and cannot build
 /// the primitive body answers.
 ///
@@ -7971,17 +8150,40 @@ fn native_mutable_buffer_append(
 /// `MutableBuffer::mydelete` (`classes/MutableBufferClass.cpp:647`): the
 /// position defaults to 1 and the length to the rest of the contents, and a
 /// position past them deletes nothing; answers the receiver.
+///
+/// `Setup.cpp:1427` and `:1428` bind this one C++ method under both `Delete`
+/// and `DelStr`, and `name` is what the two rows differ in.
+fn buffer_delete(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    name: &[u8],
+) -> Result<Option<ObjRef>, Failure> {
+    let begin = optional_position_argument(interp, args, 0)?.unwrap_or(1) - 1;
+    let range = optional_length_argument(interp, args, 1)?;
+    let state = buffer_state_mut(interp, receiver, name)?;
+    crate::builtin::string::delete_range(&mut state.bytes, begin, range);
+    Ok(Some(receiver))
+}
+
+/// `MutableBuffer~delStr`, [`buffer_delete`].
 fn native_mutable_buffer_delstr(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let begin = optional_position_argument(interp, args, 0)?.unwrap_or(1) - 1;
-    let range = optional_length_argument(interp, args, 1)?;
-    let state = buffer_state_mut(interp, receiver, b"DELSTR")?;
-    crate::builtin::string::delete_range(&mut state.bytes, begin, range);
-    Ok(Some(receiver))
+    buffer_delete(interp, receiver, args, b"DELSTR")
+}
+
+/// `MutableBuffer~delete`, [`buffer_delete`].
+fn native_mutable_buffer_delete(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    buffer_delete(interp, receiver, args, b"DELETE")
 }
 
 /// `MutableBuffer::setBufferSize` (`classes/MutableBufferClass.cpp:679`),
@@ -8345,6 +8547,294 @@ fn native_mutable_buffer_subchar(
     let mut out = interp.take_result_buffer();
     out.extend(state.bytes.get(position - 1));
     Ok(Some(interp.text_built(out)))
+}
+
+/// A mutator's rebuilt contents written back over the receiver's own, the
+/// capacity already raised for them.
+///
+/// `BufferState::ensure_capacity` has reserved at least `built.len()`, so the
+/// copy cannot be what grows the allocation.
+fn replace_buffer_contents(state: &mut BufferState, built: &[u8]) {
+    state.bytes.clear();
+    state.bytes.extend_from_slice(built);
+}
+
+/// [`BufferState::ensure_capacity`]'s refusal, the oracle's 5.1.
+fn buffer_capacity(state: &mut BufferState, added: usize) -> Result<(), Failure> {
+    state
+        .ensure_capacity(added)
+        .map_err(|_| Failure::from(Raised::system_resources()))
+}
+
+/// `MutableBuffer::insert` (`classes/MutableBufferClass.cpp:420`): the
+/// position is a 0-based count defaulting to 0, a position past the contents
+/// pads the gap, and the length pads the insertion; answers the receiver.
+fn native_mutable_buffer_insert(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let new = string_method_argument(interp, args, 0)?;
+    let begin = optional_non_negative_argument(interp, args, 1)?.unwrap_or(0);
+    let length = optional_length_argument(interp, args, 2)?;
+    let pad = pad_method_argument(interp, args, 3)?.unwrap_or(b' ');
+    let mut out = interp.take_result_buffer();
+    let state = buffer_state_mut(interp, receiver, b"INSERT")?;
+    let insert_length = length.unwrap_or(new.len());
+    let added = insert_length.saturating_add(begin.saturating_sub(state.bytes.len()));
+    buffer_capacity(state, added)?;
+    crate::builtin::string::insert_bytes(&mut out, &state.bytes, &new, begin, length, pad)?;
+    replace_buffer_contents(state, &out);
+    interp.give_result_buffer(out);
+    Ok(Some(receiver))
+}
+
+/// `MutableBuffer::overlay` (`classes/MutableBufferClass.cpp:493`): the
+/// position is 1-based and defaults to 1, and the capacity is raised for the
+/// position plus the overlay length rather than for the result; answers the
+/// receiver.
+///
+/// Measured, oracle rc 0: `.MutableBuffer~new('abc', 10)~overlay('Z', 60)`
+/// reads `60 63`, so the capacity outruns the contents by the original
+/// length.
+fn native_mutable_buffer_overlay(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let new = string_method_argument(interp, args, 0)?;
+    let begin = optional_position_argument(interp, args, 1)?.unwrap_or(1) - 1;
+    let length = optional_length_argument(interp, args, 2)?;
+    let pad = pad_method_argument(interp, args, 3)?.unwrap_or(b' ');
+    let mut out = interp.take_result_buffer();
+    let state = buffer_state_mut(interp, receiver, b"OVERLAY")?;
+    let overlay_length = length.unwrap_or(new.len());
+    buffer_capacity(state, begin.saturating_add(overlay_length))?;
+    crate::builtin::string::overlay_bytes(&mut out, &state.bytes, &new, begin, length, pad)?;
+    replace_buffer_contents(state, &out);
+    interp.give_result_buffer(out);
+    Ok(Some(receiver))
+}
+
+/// `MutableBuffer::replaceAt` (`classes/MutableBufferClass.cpp:570`): the
+/// range from the 1-based position is excised and the replacement spliced in
+/// whole, so the contents shift where the two lengths differ; answers the
+/// receiver.
+///
+/// `Setup.cpp:1425` and `:1426` bind this and `bracketsEqual`
+/// (`MutableBufferClass.cpp:545`), which is this with the pad left to its
+/// default, and `name` is what the two rows differ in.
+fn buffer_replace_at(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    name: &[u8],
+) -> Result<Option<ObjRef>, Failure> {
+    let new = named_string_argument(interp, args, 0, "new")?;
+    let begin = named_position_argument(interp, args, 1, "position")? - 1;
+    let length = optional_named_length_argument(interp, args, 2, "length")?;
+    let pad = named_pad_argument(interp, args, 3, "pad")?.unwrap_or(b' ');
+    let mut out = interp.take_result_buffer();
+    let state = buffer_state_mut(interp, receiver, name)?;
+    let contents = state.bytes.len();
+    let mut replaced = length.unwrap_or(new.len());
+    if begin > contents {
+        replaced = 0;
+    } else if begin.saturating_add(replaced) > contents {
+        replaced = contents - begin;
+    }
+    let kept = if begin > contents { begin } else { contents };
+    let final_length = kept - replaced + new.len();
+    buffer_capacity(state, final_length)?;
+    out.try_reserve(final_length)
+        .map_err(|_| Failure::from(Raised::system_resources()))?;
+    crate::builtin::string::substr_bytes(&mut out, &state.bytes, 0, Some(begin), pad)?;
+    out.extend_from_slice(&new);
+    out.extend_from_slice(&state.bytes[(begin + replaced).min(contents)..]);
+    replace_buffer_contents(state, &out);
+    interp.give_result_buffer(out);
+    Ok(Some(receiver))
+}
+
+/// `MutableBuffer~replaceAt`, [`buffer_replace_at`].
+fn native_mutable_buffer_replaceat(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    buffer_replace_at(interp, receiver, args, b"REPLACEAT")
+}
+
+/// `MutableBuffer~'[]='`, [`buffer_replace_at`].
+fn native_mutable_buffer_bracketsequal(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    buffer_replace_at(interp, receiver, args, b"[]=")
+}
+
+/// `MutableBuffer::changeStr` (`classes/MutableBufferClass.cpp:971`): answers
+/// the receiver, and raises the capacity only on the branch where the
+/// replacement is longer than the needle (`:1081`).
+///
+/// Measured, oracle rc 0:
+/// `.MutableBuffer~new('abc', 10)~changeStr('b', copies('q', 50))` reads
+/// `52 55`, where the equal-length and shorter branches leave the capacity
+/// where it was.
+fn native_mutable_buffer_changestr(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let needle = string_method_argument(interp, args, 0)?;
+    let replacement = string_method_argument(interp, args, 1)?;
+    let limit = optional_non_negative_argument(interp, args, 2)?.unwrap_or(usize::MAX);
+    let mut out = interp.take_result_buffer();
+    let state = buffer_state_mut(interp, receiver, b"CHANGESTR")?;
+    if !needle.is_empty() && limit > 0 && replacement.len() > needle.len() {
+        let matches = crate::builtin::string::count_occurrences(&state.bytes, &needle, limit);
+        if matches > 0 {
+            let growth = matches.saturating_mul(replacement.len() - needle.len());
+            let result_length = state.bytes.len().saturating_add(growth);
+            buffer_capacity(state, result_length)?;
+        }
+    }
+    crate::builtin::string::changestr_bytes(&mut out, &state.bytes, &needle, &replacement, limit)?;
+    replace_buffer_contents(state, &out);
+    interp.give_result_buffer(out);
+    Ok(Some(receiver))
+}
+
+/// `MutableBuffer::upper` and `::lower` (`classes/MutableBufferClass.cpp:1341`,
+/// `:1301`), and `::translate`'s no-table form: the bytes within the range
+/// case-shifted in place, with `first` the argument index the position is
+/// read from; answers the receiver.
+fn buffer_case_shift(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    first: usize,
+    name: &[u8],
+    shift: fn(&u8) -> u8,
+) -> Result<Option<ObjRef>, Failure> {
+    let start = optional_position_argument(interp, args, first)?.unwrap_or(1) - 1;
+    let range = optional_length_argument(interp, args, first + 1)?;
+    let state = buffer_state_mut(interp, receiver, name)?;
+    crate::builtin::string::case_shift_bytes(&mut state.bytes, start, range, shift);
+    Ok(Some(receiver))
+}
+
+/// `MutableBuffer~upper`, [`buffer_case_shift`].
+fn native_mutable_buffer_upper(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    buffer_case_shift(interp, receiver, args, 0, b"UPPER", u8::to_ascii_uppercase)
+}
+
+/// `MutableBuffer~lower`, [`buffer_case_shift`].
+fn native_mutable_buffer_lower(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    buffer_case_shift(interp, receiver, args, 0, b"LOWER", u8::to_ascii_lowercase)
+}
+
+/// `MutableBuffer::translate` (`classes/MutableBufferClass.cpp:1382`): each
+/// byte within the range that the input table holds -- or every byte, read as
+/// its own index, where that table is the null string -- becomes the output
+/// table's byte at that index, or the pad past its end; answers the receiver.
+///
+/// **With all three table arguments omitted this is `upper`**, taking its
+/// position and length from arguments four and five (`:1385`-`:1388`) --
+/// measured, oracle rc 0:
+/// `.MutableBuffer~new('abcdef')~translate(, , , 2, 3)` is `aBCDef`.
+fn native_mutable_buffer_translate(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if args.iter().take(3).all(Option::is_none) {
+        return buffer_case_shift(
+            interp,
+            receiver,
+            args,
+            3,
+            b"TRANSLATE",
+            u8::to_ascii_uppercase,
+        );
+    }
+    let out_table = optional_string_method_argument(interp, args, 0)?;
+    let in_table = optional_string_method_argument(interp, args, 1)?;
+    let pad = pad_method_argument(interp, args, 2)?.unwrap_or(b' ');
+    let start = optional_position_argument(interp, args, 3)?.unwrap_or(1) - 1;
+    let range = optional_length_argument(interp, args, 4)?;
+    let state = buffer_state_mut(interp, receiver, b"TRANSLATE")?;
+    let in_table = if in_table.is_empty() {
+        None
+    } else {
+        Some(in_table.as_slice())
+    };
+    crate::builtin::string::translate_bytes(
+        &mut state.bytes,
+        &out_table,
+        in_table,
+        pad,
+        start,
+        range,
+    );
+    Ok(Some(receiver))
+}
+
+/// `MutableBuffer::space` (`classes/MutableBufferClass.cpp:1962`): the words
+/// rejoined by the pad, and the capacity raised from the single-blank form's
+/// length rather than from the original (`:2031`, `:2038`); answers the
+/// receiver.
+fn native_mutable_buffer_space(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let gap = optional_length_argument(interp, args, 0)?.unwrap_or(1);
+    let pad = pad_method_argument(interp, args, 1)?.unwrap_or(b' ');
+    let mut out = interp.take_result_buffer();
+    let state = buffer_state_mut(interp, receiver, b"SPACE")?;
+    crate::builtin::string::space_bytes(&mut out, &state.bytes, gap, pad)?;
+    let gaps = crate::builtin::word::word_count(&state.bytes).saturating_sub(1);
+    let growth = gaps.saturating_mul(gap.saturating_sub(1));
+    state.bytes.truncate(out.len() - growth);
+    buffer_capacity(state, growth)?;
+    replace_buffer_contents(state, &out);
+    interp.give_result_buffer(out);
+    Ok(Some(receiver))
+}
+
+/// `MutableBuffer::delWord` (`classes/MutableBufferClass.cpp:1901`): the words
+/// from the 1-based position, with the blanks after the last of them, removed
+/// in place; answers the receiver.
+fn native_mutable_buffer_delword(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let position = required_position_argument(interp, args, 0)?;
+    let count = optional_length_argument(interp, args, 1)?;
+    let state = buffer_state_mut(interp, receiver, b"DELWORD")?;
+    crate::builtin::word::delword_bytes(&mut state.bytes, position, count);
+    Ok(Some(receiver))
 }
 
 /// `Class~new(id, ...)`: the class id is required and this crate builds no
@@ -8732,7 +9222,7 @@ fn whole_method_argument(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
     index: usize,
-    raise: fn(&[u8]) -> Raised,
+    raise: impl Fn(&[u8]) -> Raised + Copy,
 ) -> Result<Option<i64>, Failure> {
     let Some(Some(value)) = args.get(index).copied() else {
         return Ok(None);
@@ -8752,7 +9242,7 @@ fn refuse_method_argument(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
     index: usize,
-    raise: fn(&[u8]) -> Raised,
+    raise: impl Fn(&[u8]) -> Raised,
 ) -> Failure {
     let found = match args.get(index).copied().flatten() {
         Some(value) => interp.string_value_text(value),
@@ -8770,7 +9260,7 @@ fn usize_or_refuse(
     args: &[Option<ObjRef>],
     index: usize,
     value: i64,
-    raise: fn(&[u8]) -> Raised,
+    raise: impl Fn(&[u8]) -> Raised,
 ) -> Result<usize, Failure> {
     usize::try_from(value).map_err(|_| refuse_method_argument(interp, args, index, raise))
 }

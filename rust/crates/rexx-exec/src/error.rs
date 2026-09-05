@@ -1821,6 +1821,51 @@ impl Raised {
         Raised::syntax(88, 909, vec![argument.as_bytes().to_vec()])
     }
 
+    /// 88.910: a pad argument the oracle names rather than numbers is a
+    /// string that is not exactly one byte. `found` is the argument's own
+    /// rendered bytes.
+    ///
+    /// `padArgument`'s named overload (`classes/StringClassUtil.cpp:275`),
+    /// where the positional overload's is [`incorrect_pad`]'s 93.922.
+    /// Measured at rc 168:
+    /// `.MutableBuffer~new('abcdef')~replaceAt('a', 1, 1, 'xx')` reports
+    /// `Argument pad is an invalid pad or character argument; found "xx".`
+    ///
+    /// [`incorrect_pad`]: Raised::incorrect_pad
+    pub(crate) fn named_argument_invalid_pad(argument: &str, found: &[u8]) -> Raised {
+        Raised::syntax(88, 910, vec![argument.as_bytes().to_vec(), found.to_vec()])
+    }
+
+    /// 88.911: a length argument the oracle names rather than numbers did not
+    /// convert to a non-negative whole number. `found` is the argument's own
+    /// rendered bytes.
+    ///
+    /// `lengthArgument`'s named overload (`classes/StringClassUtil.cpp:87`),
+    /// where the positional overload's is [`invalid_length`]'s 93.923.
+    /// Measured at rc 168:
+    /// `.MutableBuffer~new('abcdef')~replaceAt('a', 1, '-1.0')` reports
+    /// `Argument length is an invalid length value; found "-1.0".`
+    ///
+    /// [`invalid_length`]: Raised::invalid_length
+    pub(crate) fn named_argument_invalid_length(argument: &str, found: &[u8]) -> Raised {
+        Raised::syntax(88, 911, vec![argument.as_bytes().to_vec(), found.to_vec()])
+    }
+
+    /// 88.912: a position argument the oracle names rather than numbers did
+    /// not convert to a positive whole number. `found` is the argument's own
+    /// rendered bytes.
+    ///
+    /// `positionArgument`'s named overload
+    /// (`classes/StringClassUtil.cpp:225`), where the positional overload's
+    /// is [`invalid_position`]'s 93.924. Measured at rc 168:
+    /// `.MutableBuffer~new('abcdef')~replaceAt('a', '0.0')` reports `Argument
+    /// position is an invalid position value; found "0.0".`
+    ///
+    /// [`invalid_position`]: Raised::invalid_position
+    pub(crate) fn named_argument_invalid_position(argument: &str, found: &[u8]) -> Raised {
+        Raised::syntax(88, 912, vec![argument.as_bytes().to_vec(), found.to_vec()])
+    }
+
     /// 93.915: a method's option argument is not one of the letters it
     /// accepts. `options` is the accepted set as the oracle spells it and
     /// `found` is the argument's own rendered bytes.
