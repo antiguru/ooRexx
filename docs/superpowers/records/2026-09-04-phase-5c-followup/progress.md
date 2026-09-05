@@ -256,3 +256,47 @@ Two dispositions:
 One prediction was partly falsified and is recorded as such: M3 also reddens `--test method_bodies`,
 which its prediction did not name.
 
+## The `String~makeArray` fix, between Task 3e and Task 4
+
+Committed `44114f49f`; **all seven gates 0** (`scratchpad/dimfix/gates/status.txt`; G4 and G5 read
+`363 of 363 matching`). `''~makeArray~dimension` was `1` here and is `0` on the oracle, on both
+engines -- `native_string_makearray` gave an empty result one dimension of size 0 where the oracle's
+empty result has `.array~new()`'s shape. Only the empty case moves; a non-empty result already
+passed `None`. Three lines went into the existing `corpus/lang/string_makearray.rex` with its
+companion regenerated, and the inversion control (fix reverted, witness kept) reads `362 of 363`
+naming that program and nothing else. Task 3e found it and correctly declined to fix a `String` row
+inside a commit gated on `MutableBuffer` rows.
+
+One process note: the batched fast-check command was killed for memory partway through, having
+already printed a green strict-corpus line. A killed run and a passing one look identical in a
+truncated log, which is why each remaining check was re-run separately against a status file.
+
+## Task 4 -- the witnesses, verified in a clean extract
+
+Run by the controller rather than an implementing agent: it builds nothing and its content is
+verification. Report `task-4-report.md`, everything enumerated from the tree as the plan demands.
+
+Six `MutableBuffer` witnesses on disk, all six named in `phase-5c.txt`, none also in `unfiled.txt`,
+all six carrying a `sourceline_oracle` companion. `phase-5c.txt` and `EXPECTED_SUBSET_5C` agree line
+for line, 29 entries each, and every one exists on disk. In a `git archive 44114f49f` extract with
+its own `CARGO_TARGET_DIR`: strict corpus rc 0 at **`363 of 363 matching`**, coverage 20 passed,
+sourceline 1 passed. That the extract compiled its own tree is measured rather than assumed -- 28
+`Compiling` lines, `rexx-exec` compiled from the extract's path, the test binary reported under the
+extract's own target directory -- because a build that never happened reads exactly like a fast
+green one.
+
+No `CLOSED_PHASES` change, no new subset file, no `SUBSET_FILES` row: the plan's head rules them out
+and nothing needed them.
+
+## The phase, closed
+
+Tasks 0, 1, 2 and its follow-up, 3a, 3b, 3c, 3d, 3e, the `String~makeArray` fix, and Task 4 have all
+landed, each with all seven gates 0. **The `MutableBuffer` rows of `corpus/method-bodies.txt` are
+closed**: no row reads anything but `answers`, and the file's `diverge` total is 7, the value it
+carried before the phase began.
+
+Still open, and Moritz's to call: the receiver sweep over the other 13 collection classes (105 rows,
+moves 0 today); the performance round, with the crate's 30 ms startup against the oracle's 4.5 ms as
+its first candidate; and `MutableBuffer~verify`'s `counted` against the builtin's untagged
+past-the-end zero (`task-3a-report.md` §6.1).
+
