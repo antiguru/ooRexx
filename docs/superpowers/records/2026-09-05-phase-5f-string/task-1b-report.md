@@ -1,7 +1,7 @@
 # Phase 5f Task 1b — the counting and word-search family
 
 Plan: `docs/superpowers/plans/2026-09-05-phase-5f-string.md`, Task 1's second family.
-BASE `a246b692d`. Landed at **`GATECOMMIT`**.
+BASE `a246b692d`. Landed at `228911e54`.
 
 Six more rows: `countStr caselessCountStr wordPos caselessWordPos containsWord caselessContainsWord`.
 
@@ -60,8 +60,11 @@ they run rather than only parse.
 |---|---|
 | G1 `cargo fmt --all --check` | rc 0 |
 | G2 `cargo clippy --workspace --all-targets -- -D warnings` | rc 0, zero warnings |
-| G3 `cargo test --release --workspace --no-fail-fast` | **G3** |
-| G4 | **G4** |
-| G5 | **G5** |
-| G6 | **G6** |
-| G7 | **G7** |
+| G3 `cargo test --release --workspace --no-fail-fast` | rc 0 |
+| G4 same with `REXX_CORPUS_GATE=1` | rc 0, strict corpus `367 of 367 matching` |
+| G5 `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace` | rc 0 |
+| G6 `REXX_PHASE_GATE=5c` | rc 0 |
+| G7 `REXX_PHASE_GATE=5d` | rc 0 |
+
+Run at `228911e54`, 01:22:18 to 01:36:35. The full workspace run was also green *before* the commit
+this time, which is the step Task 1a skipped.
