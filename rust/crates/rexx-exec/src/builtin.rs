@@ -90,7 +90,7 @@ mod state;
 /// copy of a scan whose correctness argument is as delicate as that one's
 /// is the wrong way to give it one.
 pub(crate) mod string;
-mod word;
+pub(crate) mod word;
 
 /// What a builtin's code looks like: the interpreter, the row's own name and
 /// the already-evaluated arguments.

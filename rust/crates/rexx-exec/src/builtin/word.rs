@@ -69,7 +69,7 @@ use std::ops::Range;
 
 use rexx_core::ObjRef;
 
-use super::{Args, buffer, length_of, position_of, required_render, required_string, whole_number};
+use super::{Args, length_of, position_of, required_render, required_string, whole_number};
 use crate::Interp;
 use crate::error::Failure;
 
@@ -164,13 +164,91 @@ impl<'a> Words<'a> {
 /// For a caller that wants the words themselves rather than a position in
 /// them. A caller needing only a count or an index scans [`Words`] directly
 /// and allocates nothing.
-pub(super) fn word_slices(text: &[u8]) -> Vec<&[u8]> {
+pub(crate) fn word_slices(text: &[u8]) -> Vec<&[u8]> {
     let mut scan = Words::new(text);
     let mut found = Vec::new();
     while scan.step() {
         found.push(&text[scan.word.clone()]);
     }
     found
+}
+
+/// `WORDS`'s body: how many words `text` holds.
+pub(crate) fn word_count(text: &[u8]) -> usize {
+    let mut scan = Words::new(text);
+    let mut count = 0usize;
+    while scan.step() {
+        count += 1;
+    }
+    count
+}
+
+/// `WORD`, `WORDINDEX` and `WORDLENGTH`'s body: where the `position`th
+/// (1-based) word of `text` lies, or `None` past the last.
+pub(crate) fn word_range(text: &[u8], position: usize) -> Option<Range<usize>> {
+    let mut scan = Words::new(text);
+    if scan.skip(position) {
+        Some(scan.word.clone())
+    } else {
+        None
+    }
+}
+
+/// `SUBWORD`'s body: the slice of `text` from the `position`th (1-based) word
+/// to the end of the `count`th from there, empty past the last word or for a
+/// `count` of zero; a `count` of `None` reaches the last word.
+pub(crate) fn subword_range(text: &[u8], position: usize, count: Option<usize>) -> Range<usize> {
+    let count = count.unwrap_or(ALL_REMAINING_WORDS);
+    let mut scan = Words::new(text);
+    if count == 0 || !scan.skip(position) {
+        return 0..0;
+    }
+    let start = scan.word.start;
+    // Whether this reaches `count` words or runs out, `scan.word` is the
+    // last word taken either way, which is what ends the slice at a word
+    // rather than at the end of the string.
+    scan.skip(count - 1);
+    start..scan.word.end
+}
+
+/// `DELWORD`'s body: removes `count` words of `bytes` from the `position`th
+/// (1-based) together with the blanks after the last of them; a `count` of
+/// `None` removes every remaining word.
+pub(crate) fn delword_bytes(bytes: &mut Vec<u8>, position: usize, count: Option<usize>) {
+    let count = count.unwrap_or(ALL_REMAINING_WORDS);
+    let mut scan = Words::new(bytes);
+    if count == 0 || !scan.skip(position) {
+        return;
+    }
+    let front = scan.word.start;
+    // The C++ asks for the blanks only when the skip reached its count
+    // (`RexxString::delWord`); unconditionally is the same thing here,
+    // because a [`Words::step`] that fails leaves the scan at the end of the
+    // string and there is nothing left for the skip to consume.
+    scan.skip(count - 1);
+    scan.skip_blanks();
+    let rest = scan.next;
+    bytes.drain(front..rest);
+}
+
+/// `WORDPOS`'s body: which word of `string`, counting from the `start`th
+/// (1-based), begins a run matching `phrase`'s words, or 0.
+pub(crate) fn wordpos_bytes(phrase: &[u8], string: &[u8], start: usize) -> usize {
+    let needle = word_slices(phrase);
+    let haystack = word_slices(string);
+    // Both guards earn their place, and for different reasons. An empty
+    // phrase would otherwise match at every position, since the empty slice
+    // equals the empty needle -- the oracle answers 0. A phrase with more
+    // words than the string is what the subtraction below cannot survive.
+    // A `start` past the last candidate needs no guard of its own: the range
+    // is then simply empty.
+    if needle.is_empty() || needle.len() > haystack.len() {
+        0
+    } else {
+        (start..=haystack.len() - needle.len() + 1)
+            .find(|at| haystack[at - 1..at - 1 + needle.len()] == needle[..])
+            .unwrap_or(0)
+    }
 }
 
 /// `WORDS(string)`: how many blank-delimited words the argument holds.
@@ -180,11 +258,7 @@ pub(super) fn word_slices(text: &[u8]) -> Vec<&[u8]> {
 /// `words('  a b  ')` and `words('a    b')` are both 2.
 pub(crate) fn words(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
-    let mut scan = Words::new(&string);
-    let mut count = 0usize;
-    while scan.step() {
-        count += 1;
-    }
+    let count = word_count(&string);
     Ok(interp.counted(count))
 }
 
@@ -217,15 +291,7 @@ pub(crate) fn word(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<O
     // costs no allocation at all.
     let position = position_of(converted_position(interp, name, args, 2)?)?;
     let string = required_render(interp, args, 1);
-    let found = {
-        let text = string.text(interp);
-        let mut scan = Words::new(text);
-        if scan.skip(position) {
-            scan.word.clone()
-        } else {
-            0..0
-        }
-    };
+    let found = word_range(string.text(interp), position).unwrap_or(0..0);
     let mut out = interp.take_result_buffer();
     out.extend_from_slice(&string.text(interp)[found]);
     Ok(interp.text_built(out))
@@ -245,12 +311,7 @@ pub(crate) fn word_index(
     let string = required_string(interp, args, 1);
     let position = position_of(converted_position(interp, name, args, 2)?)?;
 
-    let mut scan = Words::new(&string);
-    let index = if scan.skip(position) {
-        scan.word.start + 1
-    } else {
-        0
-    };
+    let index = word_range(&string, position).map_or(0, |word| word.start + 1);
     Ok(interp.counted(index))
 }
 
@@ -263,12 +324,7 @@ pub(crate) fn word_length(
     let string = required_string(interp, args, 1);
     let position = position_of(converted_position(interp, name, args, 2)?)?;
 
-    let mut scan = Words::new(&string);
-    let length = if scan.skip(position) {
-        scan.word.len()
-    } else {
-        0
-    };
+    let length = word_range(&string, position).map_or(0, |word| word.len());
     Ok(interp.counted(length))
 }
 
@@ -296,23 +352,10 @@ pub(crate) fn subword(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Resul
     let n = converted_position(interp, name, args, 2)?;
     let requested = whole_number(interp, name, args, 3)?;
     let position = position_of(n)?;
-    let count = match requested {
-        Some(value) => length_of(value)?,
-        None => ALL_REMAINING_WORDS,
-    };
+    let count = requested.map(length_of).transpose()?;
 
-    let mut scan = Words::new(&string);
-    let found: &[u8] = if count == 0 || !scan.skip(position) {
-        b""
-    } else {
-        let start = scan.word.start;
-        // Whether this reaches `count` words or runs out, `scan.word` is the
-        // last word taken either way, which is what ends the slice at a word
-        // rather than at the end of the string.
-        scan.skip(count - 1);
-        &string[start..scan.word.end]
-    };
-    Ok(interp.text(found))
+    let found = subword_range(&string, position, count);
+    Ok(interp.text(&string[found]))
 }
 
 /// `DELWORD(string, n [,length])`: the argument with `length` words from the
@@ -331,32 +374,14 @@ pub(crate) fn subword(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Resul
 /// position check, the same way `SUBWORD`'s is: measured,
 /// `delword('delWord','30'x,'30'x)` is 93.924 at rc 163.
 pub(crate) fn delword(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
-    let string = required_string(interp, args, 1);
+    let mut string = required_string(interp, args, 1);
     let n = converted_position(interp, name, args, 2)?;
     let requested = whole_number(interp, name, args, 3)?;
     let position = position_of(n)?;
-    let count = match requested {
-        Some(value) => length_of(value)?,
-        None => ALL_REMAINING_WORDS,
-    };
+    let count = requested.map(length_of).transpose()?;
 
-    let mut scan = Words::new(&string);
-    if count == 0 || !scan.skip(position) {
-        return Ok(interp.text(&string));
-    }
-    let front = scan.word.start;
-    // The C++ asks for the blanks only when the skip reached its count
-    // (`RexxString::delWord`); unconditionally is the same thing here,
-    // because a [`Words::step`] that fails leaves the scan at the end of the
-    // string and there is nothing left for the skip to consume.
-    scan.skip(count - 1);
-    scan.skip_blanks();
-    let rest = scan.next;
-
-    let mut out = buffer(interp, front + (string.len() - rest))?;
-    out.extend_from_slice(&string[..front]);
-    out.extend_from_slice(&string[rest..]);
-    Ok(interp.text_built(out))
+    delword_bytes(&mut string, position, count);
+    Ok(interp.text_built(string))
 }
 
 /// `WORDPOS(phrase, string [,start])`: which word of `string` begins a run
@@ -385,21 +410,7 @@ pub(crate) fn word_pos(
         None => 1,
     };
 
-    let needle = word_slices(&phrase);
-    let haystack = word_slices(&string);
-    // Both guards earn their place, and for different reasons. An empty
-    // phrase would otherwise match at every position, since the empty slice
-    // equals the empty needle -- the oracle answers 0. A phrase with more
-    // words than the string is what the subtraction below cannot survive.
-    // A `start` past the last candidate needs no guard of its own: the range
-    // is then simply empty.
-    let found = if needle.is_empty() || needle.len() > haystack.len() {
-        0
-    } else {
-        (start..=haystack.len() - needle.len() + 1)
-            .find(|at| haystack[at - 1..at - 1 + needle.len()] == needle[..])
-            .unwrap_or(0)
-    };
+    let found = wordpos_bytes(&phrase, &string, start);
     Ok(interp.counted(found))
 }
 

@@ -135,6 +135,12 @@ fn push_pad(out: &mut Vec<u8>, byte: u8, len: usize) {
     out.resize(out.len() + len, byte);
 }
 
+/// Room for `additional` more bytes in `out`, or the oracle's 5.1.
+fn reserve(out: &mut Vec<u8>, additional: usize) -> Result<(), Raised> {
+    out.try_reserve(additional)
+        .map_err(|_| Raised::system_resources())
+}
+
 /// Deletes `range` bytes at 0-based `begin`, or everything from `begin` on
 /// for `None`; a `begin` at or past the end deletes nothing.
 pub(crate) fn delete_range(bytes: &mut Vec<u8>, begin: usize, range: Option<usize>) {
@@ -454,6 +460,24 @@ pub(crate) fn right(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<
     Ok(interp.text_built(out))
 }
 
+/// `SUBSTR`'s body: `length` bytes of `string` from 0-based `start`, padded
+/// with `pad`, appended to `out`; `None` is everything from `start` on.
+pub(crate) fn substr_bytes(
+    out: &mut Vec<u8>,
+    string: &[u8],
+    start: usize,
+    length: Option<usize>,
+    pad: u8,
+) -> Result<(), Raised> {
+    let available = string.len().saturating_sub(start);
+    let length = length.unwrap_or(available);
+    let kept = length.min(available);
+    reserve(out, length)?;
+    out.extend_from_slice(&string[start.min(string.len())..][..kept]);
+    push_pad(out, pad, length - kept);
+    Ok(())
+}
+
 /// `SUBSTR(string, n [,length] [,pad])`.
 ///
 /// **A start past the end is not an error**, unlike a start of zero:
@@ -464,22 +488,11 @@ pub(crate) fn substr(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result
     let requested = whole_number(interp, name, args, 3)?;
     let pad = pad_byte(interp, name, args, 4)?.unwrap_or(b' ');
     let string = required_render(interp, args, 1);
-    let string = string.text(interp);
 
     let start = position_of(start)? - 1;
-    // The default is everything from the start position on, which is nothing
-    // at all once the position is past the end.
-    let length = match requested {
-        Some(value) => length_of(value)?,
-        None => string.len().saturating_sub(start),
-    };
-    if length == 0 {
-        return Ok(interp.text(b""));
-    }
-    let kept = length.min(string.len().saturating_sub(start));
-    let mut out = buffer(interp, length)?;
-    out.extend_from_slice(&string[start.min(string.len())..][..kept]);
-    push_pad(&mut out, pad, length - kept);
+    let length = requested.map(length_of).transpose()?;
+    let mut out = interp.take_result_buffer();
+    substr_bytes(&mut out, string.text(interp), start, length, pad)?;
     Ok(interp.text_built(out))
 }
 
@@ -506,6 +519,41 @@ pub(crate) fn delstr(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result
     Ok(interp.text_built(string))
 }
 
+/// `INSERT`'s body: `new`, padded or cut to `length` bytes, spliced into
+/// `target` after its first `start` bytes and appended to `out`; `None` is
+/// `new`'s own length.
+pub(crate) fn insert_bytes(
+    out: &mut Vec<u8>,
+    target: &[u8],
+    new: &[u8],
+    start: usize,
+    length: Option<usize>,
+    pad: u8,
+) -> Result<(), Raised> {
+    let insert_len = length.unwrap_or(new.len());
+    let (lead_pad, front, back) = if start == 0 {
+        (0, 0, target.len())
+    } else if start >= target.len() {
+        (start - target.len(), target.len(), 0)
+    } else {
+        (0, start, target.len() - start)
+    };
+    let copied = new.len().min(insert_len);
+
+    let total = target
+        .len()
+        .checked_add(insert_len)
+        .and_then(|size| size.checked_add(lead_pad))
+        .ok_or_else(Raised::system_resources)?;
+    reserve(out, total)?;
+    out.extend_from_slice(&target[..front]);
+    push_pad(out, pad, lead_pad);
+    out.extend_from_slice(&new[..copied]);
+    push_pad(out, pad, insert_len - copied);
+    out.extend_from_slice(&target[front..front + back]);
+    Ok(())
+}
+
 /// `INSERT(new, target [,n] [,length] [,pad])`.
 ///
 /// **`n` is a count of characters to skip, not a position**, which is why
@@ -523,32 +571,41 @@ pub(crate) fn insert(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result
         Some(value) => count_of(value, 2)?,
         None => 0,
     };
-    let insert_len = match requested {
-        Some(value) => length_of(value)?,
-        None => new.len(),
-    };
-
-    let (lead_pad, front, back) = if start == 0 {
-        (0, 0, target.len())
-    } else if start >= target.len() {
-        (start - target.len(), target.len(), 0)
-    } else {
-        (0, start, target.len() - start)
-    };
-    let copied = new.len().min(insert_len);
-
-    let total = target
-        .len()
-        .checked_add(insert_len)
-        .and_then(|size| size.checked_add(lead_pad))
-        .ok_or_else(|| Failure::from(Raised::system_resources()))?;
-    let mut out = buffer(interp, total)?;
-    out.extend_from_slice(&target[..front]);
-    push_pad(&mut out, pad, lead_pad);
-    out.extend_from_slice(&new[..copied]);
-    push_pad(&mut out, pad, insert_len - copied);
-    out.extend_from_slice(&target[front..front + back]);
+    let length = requested.map(length_of).transpose()?;
+    let mut out = interp.take_result_buffer();
+    insert_bytes(&mut out, &target, &new, start, length, pad)?;
     Ok(interp.text_built(out))
+}
+
+/// `OVERLAY`'s body: `new`, padded or cut to `length` bytes, written over
+/// `target` from 0-based `start`, padding out to `start` first when that is
+/// past the end, appended to `out`; `None` is `new`'s own length.
+pub(crate) fn overlay_bytes(
+    out: &mut Vec<u8>,
+    target: &[u8],
+    new: &[u8],
+    start: usize,
+    length: Option<usize>,
+    pad: u8,
+) -> Result<(), Raised> {
+    let overlay_len = length.unwrap_or(new.len());
+    let (copied, back_pad) = if overlay_len > new.len() {
+        (new.len(), overlay_len - new.len())
+    } else {
+        (overlay_len, 0)
+    };
+    let front = start.min(target.len());
+    let front_pad = start - front;
+    let span_end = start.saturating_add(overlay_len);
+    let back = target.len().saturating_sub(span_end);
+
+    reserve(out, front + back + front_pad + overlay_len)?;
+    out.extend_from_slice(&target[..front]);
+    push_pad(out, pad, front_pad);
+    out.extend_from_slice(&new[..copied]);
+    push_pad(out, pad, back_pad);
+    out.extend_from_slice(&target[target.len() - back..]);
+    Ok(())
 }
 
 /// `OVERLAY(new, target [,n] [,length] [,pad])`.
@@ -568,45 +625,10 @@ pub(crate) fn overlay(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Resul
     let start = match start {
         Some(value) => position_of(value)?,
         None => 1,
-    };
-    let overlay_len = match requested {
-        Some(value) => length_of(value)?,
-        None => new.len(),
-    };
-
-    let (copied, back_pad) = if overlay_len > new.len() {
-        (new.len(), overlay_len - new.len())
-    } else {
-        (overlay_len, 0)
-    };
-
-    let mut front_pad = 0;
-    let mut front = start - 1;
-    // The tail begins one past the overlaid span and is empty whenever that
-    // span reaches the end, which is also the only case in which the
-    // subtraction would have gone negative.
-    let span_end = start.saturating_add(overlay_len).saturating_sub(1);
-    let mut back = target.len().saturating_sub(span_end);
-    if start > target.len() {
-        front_pad = start - target.len() - 1;
-        front = target.len();
-    }
-    if span_end.saturating_add(1) > target.len() {
-        back = 0;
-    }
-
-    let total = front + back + front_pad + overlay_len;
-    let mut out = buffer(interp, total)?;
-    out.extend_from_slice(&target[..front]);
-    push_pad(&mut out, pad, front_pad);
-    out.extend_from_slice(&new[..copied]);
-    push_pad(&mut out, pad, back_pad);
-    if back > 0 {
-        // `span_end` can be past the end of the target -- an overlay
-        // starting or finishing beyond it -- and that is exactly when there
-        // is no tail, so the index is only ever formed when it is in range.
-        out.extend_from_slice(&target[span_end..span_end + back]);
-    }
+    } - 1;
+    let length = requested.map(length_of).transpose()?;
+    let mut out = interp.take_result_buffer();
+    overlay_bytes(&mut out, &target, &new, start, length, pad)?;
     Ok(interp.text_built(out))
 }
 
@@ -707,6 +729,35 @@ pub(crate) fn strip(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result
     Ok(interp.text(kept))
 }
 
+/// `SPACE`'s body: the words of `string` joined by `gap` copies of `pad`,
+/// appended to `out`.
+pub(crate) fn space_bytes(
+    out: &mut Vec<u8>,
+    string: &[u8],
+    gap: usize,
+    pad: u8,
+) -> Result<(), Raised> {
+    // The same scan the word builtins use, so `SPACE`'s idea of a word
+    // boundary is not a second statement of the rule free to disagree.
+    let words = super::word::word_slices(string);
+    if words.is_empty() {
+        return Ok(());
+    }
+    let content: usize = words.iter().map(|word| word.len()).sum();
+    let total = gap
+        .checked_mul(words.len() - 1)
+        .and_then(|padding| padding.checked_add(content))
+        .ok_or_else(Raised::system_resources)?;
+    reserve(out, total)?;
+    for (index, word) in words.iter().enumerate() {
+        if index > 0 {
+            push_pad(out, pad, gap);
+        }
+        out.extend_from_slice(word);
+    }
+    Ok(())
+}
+
 /// `SPACE(string [,n] [,pad])`: the words of `string` rejoined with `n`
 /// copies of `pad`.
 pub(crate) fn space(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
@@ -718,24 +769,8 @@ pub(crate) fn space(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<
         Some(value) => length_of(value)?,
         None => 1,
     };
-    // The same scan the seven word builtins use, so `SPACE`'s idea of a word
-    // boundary is not a second statement of the rule free to disagree.
-    let words = super::word::word_slices(&string);
-    if words.is_empty() {
-        return Ok(interp.text(b""));
-    }
-    let content: usize = words.iter().map(|word| word.len()).sum();
-    let total = gap
-        .checked_mul(words.len() - 1)
-        .and_then(|padding| padding.checked_add(content))
-        .ok_or_else(|| Failure::from(Raised::system_resources()))?;
-    let mut out = buffer(interp, total)?;
-    for (index, word) in words.iter().enumerate() {
-        if index > 0 {
-            push_pad(&mut out, pad, gap);
-        }
-        out.extend_from_slice(word);
-    }
+    let mut out = interp.take_result_buffer();
+    space_bytes(&mut out, &string, gap, pad)?;
     Ok(interp.text_built(out))
 }
 
@@ -829,24 +864,15 @@ pub(crate) fn countstr(
     Ok(interp.counted(count))
 }
 
-/// `CHANGESTR(needle, haystack, newneedle [,count])`.
-pub(crate) fn changestr(
-    interp: &mut Interp,
-    name: &[u8],
-    args: Args<'_>,
-) -> Result<ObjRef, Failure> {
-    let requested = whole_number(interp, name, args, 4)?;
-    let needle = required_render(interp, args, 1);
-    let haystack = required_render(interp, args, 2);
-    let replacement = required_render(interp, args, 3);
-    let needle = needle.text(interp);
-    let haystack = haystack.text(interp);
-    let replacement = replacement.text(interp);
-
-    let limit = match requested {
-        Some(value) => count_of(value, 3)?,
-        None => usize::MAX,
-    };
+/// `CHANGESTR`'s body: `haystack` with its first `limit` `needle`s replaced
+/// by `replacement`, appended to `out`.
+pub(crate) fn changestr_bytes(
+    out: &mut Vec<u8>,
+    haystack: &[u8],
+    needle: &[u8],
+    replacement: &[u8],
+    limit: usize,
+) -> Result<(), Raised> {
     // **One search, and the answer written as it is found.** Sizing the result
     // before writing it means counting the occurrences first, and counting
     // runs `find_forward` from each occurrence to the next exactly as writing
@@ -855,18 +881,10 @@ pub(crate) fn changestr(
     // three million times, that second search is 2.4% of the whole program's
     // `instructions:u`.
     //
-    // **The lent buffer, like every other sized result in this module.** A
-    // fresh `Vec` here was not merely one allocation: `text_built` hands
-    // whatever it is given back to the pool, so a fresh one *replaced* the
-    // shared buffer with a tighter one on every call, and the next caller
-    // wanting a byte more grew it again. Measured on
-    // `bench-programs/strings.rex`, that pair was the whole of what the
-    // program still allocated.
-    //
     // The haystack is the floor rather than the answer's own length, which is
     // not known until the search has run: a result that never grows past it is
     // one that changed nothing or shortened, and those reserve once.
-    let mut out = buffer(interp, haystack.len())?;
+    reserve(out, haystack.len())?;
     let mut next = 0;
     let mut changes = 0;
     while changes < limit {
@@ -881,8 +899,7 @@ pub(crate) fn changestr(
         // process where the oracle raises 5.1, so the room for what is about
         // to be written is taken here and the extends below cannot be what
         // grows the buffer.
-        out.try_reserve(kept.len() + replacement.len())
-            .map_err(|_| Failure::from(Raised::system_resources()))?;
+        reserve(out, kept.len() + replacement.len())?;
         out.extend_from_slice(kept);
         out.extend_from_slice(replacement);
         next = found - 1 + needle.len();
@@ -893,9 +910,41 @@ pub(crate) fn changestr(
     // is what CHANGESTR answers when the needle is absent, when the needle is
     // the null string and when the requested count is 0.
     let rest = &haystack[next..];
-    out.try_reserve(rest.len())
-        .map_err(|_| Failure::from(Raised::system_resources()))?;
+    reserve(out, rest.len())?;
     out.extend_from_slice(rest);
+    Ok(())
+}
+
+/// `CHANGESTR(needle, haystack, newneedle [,count])`.
+pub(crate) fn changestr(
+    interp: &mut Interp,
+    name: &[u8],
+    args: Args<'_>,
+) -> Result<ObjRef, Failure> {
+    let requested = whole_number(interp, name, args, 4)?;
+    let needle = required_render(interp, args, 1);
+    let haystack = required_render(interp, args, 2);
+    let replacement = required_render(interp, args, 3);
+
+    let limit = match requested {
+        Some(value) => count_of(value, 3)?,
+        None => usize::MAX,
+    };
+    // **The lent buffer, like every other sized result in this module.** A
+    // fresh `Vec` here was not merely one allocation: `text_built` hands
+    // whatever it is given back to the pool, so a fresh one *replaced* the
+    // shared buffer with a tighter one on every call, and the next caller
+    // wanting a byte more grew it again. Measured on
+    // `bench-programs/strings.rex`, that pair was the whole of what the
+    // program still allocated.
+    let mut out = interp.take_result_buffer();
+    changestr_bytes(
+        &mut out,
+        haystack.text(interp),
+        needle.text(interp),
+        replacement.text(interp),
+        limit,
+    )?;
     Ok(interp.text_built(out))
 }
 
@@ -934,7 +983,7 @@ pub(crate) fn translate(
     name: &[u8],
     args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
-    let string = required_string(interp, args, 1);
+    let mut string = required_string(interp, args, 1);
     let out_table = optional_string(interp, args, 2);
     let in_table = optional_string(interp, args, 3);
     let pad = pad_byte(interp, name, args, 4)?;
@@ -942,7 +991,7 @@ pub(crate) fn translate(
     let range = whole_number(interp, name, args, 6)?;
 
     if out_table.is_none() && in_table.is_none() && pad.is_none() {
-        return case_shifted(interp, &string, start, range, u8::to_ascii_uppercase);
+        return case_shifted(interp, string, start, range, u8::to_ascii_uppercase);
     }
     let out_table = out_table.unwrap_or_default();
     let pad = pad.unwrap_or(b' ');
@@ -950,19 +999,36 @@ pub(crate) fn translate(
     let start = match start {
         Some(value) => position_of(value)?,
         None => 1,
-    };
-    let range = match range {
-        Some(value) => length_of(value)?,
-        None => string.len().saturating_sub(start) + 1,
-    };
-    if start > string.len() || range == 0 {
-        return Ok(interp.text_built(string));
-    }
-    let range = range.min(string.len() - start + 1);
+    } - 1;
+    let range = range.map(length_of).transpose()?;
+    translate_bytes(
+        &mut string,
+        &out_table,
+        in_table.as_deref(),
+        pad,
+        start,
+        range,
+    );
+    Ok(interp.text_built(string))
+}
 
-    let mut result = string.clone();
-    for byte in &mut result[start - 1..start - 1 + range] {
-        let index = match &in_table {
+/// `TRANSLATE`'s body with a table: each byte of `bytes` within `range` of
+/// 0-based `start` that `in_table` holds -- or every byte, read as its own
+/// index, for `None` -- becomes `out_table`'s byte at that index, or `pad`
+/// past its end; a `range` of `None` reaches the end.
+pub(crate) fn translate_bytes(
+    bytes: &mut [u8],
+    out_table: &[u8],
+    in_table: Option<&[u8]>,
+    pad: u8,
+    start: usize,
+    range: Option<usize>,
+) {
+    let Some(window) = window(bytes, start, range) else {
+        return;
+    };
+    for byte in window {
+        let index = match in_table {
             Some(table) => table.iter().position(|entry| entry == byte),
             None => Some(usize::from(*byte)),
         };
@@ -970,7 +1036,17 @@ pub(crate) fn translate(
             *byte = out_table.get(index).copied().unwrap_or(pad);
         }
     }
-    Ok(interp.text_built(result))
+}
+
+/// The bytes within `range` of 0-based `start`, clipped to the end, or `None`
+/// for a `start` at or past it; a `range` of `None` reaches the end.
+fn window(bytes: &mut [u8], start: usize, range: Option<usize>) -> Option<&mut [u8]> {
+    if start >= bytes.len() {
+        return None;
+    }
+    let available = bytes.len() - start;
+    let range = range.map_or(available, |range| range.min(available));
+    Some(&mut bytes[start..start + range])
 }
 
 /// `VERIFY(string, reference [,option] [,start] [,range])`.
@@ -1001,28 +1077,43 @@ pub(crate) fn verify(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result
     let start = match start {
         Some(value) => position_of(value)?,
         None => 1,
-    };
-    let range = match range {
-        Some(value) => length_of(value)?,
-        None => string.len().saturating_sub(start) + 1,
-    };
+    } - 1;
+    let range = range.map(length_of).transpose()?;
 
-    if start > string.len() {
+    // Answered as text rather than through `counted`, unlike every other
+    // zero this function answers.
+    if start >= string.len() {
         return Ok(interp.text(b"0"));
     }
-    let range = range.min(string.len() - start + 1);
-    let answer = if reference.is_empty() {
-        // `if (opt == VERIFY_MATCH) return 0; else return startPos;`
-        if option == b'M' { 0 } else { start }
-    } else {
-        // `if (opt == VERIFY_NOMATCH) ... else ...`, the other letter.
-        let matching = option != b'N';
-        string[start - 1..start - 1 + range]
-            .iter()
-            .position(|&byte| in_set(byte, &reference) == matching)
-            .map_or(0, |offset| start + offset)
-    };
+    let answer = verify_bytes(&string, &reference, option, start, range);
     Ok(interp.counted(answer))
+}
+
+/// `VERIFY`'s body: the 1-based offset of the first byte within `range` of
+/// 0-based `start` that `reference` does not hold (`option` `N`) or does hold
+/// (any other letter), or 0; a `range` of `None` reaches the end.
+pub(crate) fn verify_bytes(
+    string: &[u8],
+    reference: &[u8],
+    option: u8,
+    start: usize,
+    range: Option<usize>,
+) -> usize {
+    if start >= string.len() {
+        return 0;
+    }
+    let available = string.len() - start;
+    let range = range.map_or(available, |range| range.min(available));
+    if reference.is_empty() {
+        // `if (opt == VERIFY_MATCH) return 0; else return startPos;`
+        return if option == b'M' { 0 } else { start + 1 };
+    }
+    // `if (opt == VERIFY_NOMATCH) ... else ...`, the other letter.
+    let matching = option != b'N';
+    string[start..start + range]
+        .iter()
+        .position(|&byte| in_set(byte, reference) == matching)
+        .map_or(0, |offset| start + 1 + offset)
 }
 
 /// `LOWER(string [,n] [,length])`.
@@ -1030,7 +1121,7 @@ pub(crate) fn lower(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<
     let string = required_string(interp, args, 1);
     let start = whole_number(interp, name, args, 2)?;
     let range = whole_number(interp, name, args, 3)?;
-    case_shifted(interp, &string, start, range, u8::to_ascii_lowercase)
+    case_shifted(interp, string, start, range, u8::to_ascii_lowercase)
 }
 
 /// `UPPER(string [,n] [,length])`.
@@ -1038,7 +1129,7 @@ pub(crate) fn upper(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<
     let string = required_string(interp, args, 1);
     let start = whole_number(interp, name, args, 2)?;
     let range = whole_number(interp, name, args, 3)?;
-    case_shifted(interp, &string, start, range, u8::to_ascii_uppercase)
+    case_shifted(interp, string, start, range, u8::to_ascii_uppercase)
 }
 
 /// The body `LOWER`, `UPPER` and `TRANSLATE`'s no-table form share.
@@ -1055,7 +1146,7 @@ pub(crate) fn upper(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<
 /// argument unchanged.
 fn case_shifted(
     interp: &mut Interp,
-    string: &[u8],
+    mut string: Vec<u8>,
     start: Option<i64>,
     range: Option<i64>,
     shift: fn(&u8) -> u8,
@@ -1064,22 +1155,24 @@ fn case_shifted(
         Some(value) => position_of(value)?,
         None => 1,
     } - 1;
-    let range = match range {
-        Some(value) => length_of(value)?,
-        None => string.len(),
-    };
-    if start >= string.len() {
-        return Ok(interp.text(string));
+    let range = range.map(length_of).transpose()?;
+    case_shift_bytes(&mut string, start, range, shift);
+    Ok(interp.text_built(string))
+}
+
+/// `UPPER` and `LOWER`'s body: `shift` applied to the bytes within `range` of
+/// 0-based `start`; a `range` of `None` reaches the end.
+pub(crate) fn case_shift_bytes(
+    bytes: &mut [u8],
+    start: usize,
+    range: Option<usize>,
+    shift: fn(&u8) -> u8,
+) {
+    if let Some(window) = window(bytes, start, range) {
+        for byte in window {
+            *byte = shift(byte);
+        }
     }
-    let range = range.min(string.len() - start);
-    if range == 0 {
-        return Ok(interp.text(string));
-    }
-    let mut result = string.to_vec();
-    for byte in &mut result[start..start + range] {
-        *byte = shift(byte);
-    }
-    Ok(interp.text_built(result))
 }
 
 #[cfg(test)]
