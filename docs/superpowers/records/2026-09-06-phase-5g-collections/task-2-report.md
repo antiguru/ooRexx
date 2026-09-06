@@ -96,4 +96,6 @@ Fast checks: `cargo fmt --all --check` clean, `cargo clippy --workspace
 --all-targets -- -D warnings` clean, `cargo test --release --workspace
 --no-fail-fast` exit 0, 2124 passed, no suite failing.
 
-**G1** **G2** **G3** **G4** **G5** **G6** **G7**
+Seven gates over the committed tree at `7b01dbfd2`, from
+`scratchpad/gates-5g2.status`: G1 0, G2 0, G3 0, G4 0, G5 0, G6 0, G7 0, with
+`failed-suites=0` on each suite-running gate.
