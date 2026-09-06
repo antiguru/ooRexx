@@ -228,6 +228,24 @@ of the six sends the refresh to the oracle and turns the row into a `Structural`
 oracle did not finish" -- which is red and correct and still red. Decide how the table carries a row
 whose oracle answer cannot be obtained before writing the bodies, not after.
 
+**D87, decided 2026-09-06: a verdict of its own, `uncomparable`, and a committed list of the sends
+that earn it.** The alternatives were leaving the six unbound, which D85 forecloses, and reusing
+`unanswered`, which would be false -- that verdict means *the send never reached the method*, and
+here the send reaches it and answers. What is missing is the other side.
+
+The classification order is **crate-loud first, then the list, then the oracle**: a row this crate
+still refuses stays `loud`, which is the more informative verdict, and only a row this crate answers
+can become `uncomparable`. That is what lets the instrument land while it still moves nothing --
+all six are `loud` today -- and it is Task 0's pattern for the same reason.
+
+The list is a const beside `RECEIVER_OVERRIDES`, checked the same way: every `(class, method)` pair
+it names must be a real row, and each entry cites the `corpus/oracle-crashes.txt` entry it comes
+from. It names a property of the oracle rather than of this tree, so it cannot rot from our side.
+
+`regressed` treats it as `unanswered` is treated: `answers` -> `uncomparable` is a row losing its
+evidence and so a regression; nothing else into it is; out of it nothing is, because the row never
+carried a claim about the oracle.
+
 ---
 
 ## Task 3 — the 25 rows with a builtin behind them
