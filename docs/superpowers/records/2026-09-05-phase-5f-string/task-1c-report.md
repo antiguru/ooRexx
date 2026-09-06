@@ -1,7 +1,7 @@
 # Phase 5f Task 1c — the region tests
 
 Plan: `docs/superpowers/plans/2026-09-05-phase-5f-string.md`, Task 1's third family.
-BASE `8330c3890`. Landed at **`GATECOMMIT`**.
+BASE `8330c3890`. Landed at `fd3cae315`.
 
 Eight more rows: `startsWith caselessStartsWith endsWith caselessEndsWith match caselessMatch
 matchChar caselessMatchChar`.
@@ -84,8 +84,10 @@ and without the `.nil` row nothing here would have gone red on stdout at all.
 |---|---|
 | G1 `cargo fmt --all --check` | rc 0 |
 | G2 `cargo clippy --workspace --all-targets -- -D warnings` | rc 0, zero warnings |
-| G3 `cargo test --release --workspace --no-fail-fast` | **G3** |
-| G4 | **G4** |
-| G5 | **G5** |
-| G6 | **G6** |
-| G7 | **G7** |
+| G3 `cargo test --release --workspace --no-fail-fast` | rc 0 |
+| G4 same with `REXX_CORPUS_GATE=1` | rc 0, strict corpus `369 of 369 matching` |
+| G5 `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace` | rc 0 |
+| G6 `REXX_PHASE_GATE=5c` | rc 0 |
+| G7 `REXX_PHASE_GATE=5d` | rc 0 |
+
+Run at `fd3cae315`, 01:57:45 to 02:12:02.
