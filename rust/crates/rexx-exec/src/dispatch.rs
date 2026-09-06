@@ -8407,6 +8407,46 @@ pub(super) fn conversion_length_argument(
     optional_length_argument(interp, args, 0)
 }
 
+/// `BITAND`/`BITOR`/`BITXOR`'s optional operand and optional pad.
+///
+/// Neither is required and the operand has no length rule, so the pad is the
+/// only thing here that can be wrong: 93.922 for anything but exactly one
+/// byte, 88.909 for a value with no string value. **The pad is answered
+/// undefaulted**, because each operation's default is its own identity byte
+/// and only the caller knows which operation it is.
+pub(super) fn bit_arguments(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+) -> Result<(Vec<u8>, Option<u8>), Failure> {
+    let other = optional_string_method_argument(interp, args, 0)?;
+    let pad = pad_method_argument(interp, args, 1)?;
+    Ok((other, pad))
+}
+
+/// `DATATYPE`'s option letter, or `None` when it is omitted.
+///
+/// **Not [`option_method_argument`]**, which substitutes the whole option
+/// string into its 93.915. `DATATYPE` substitutes the LETTER: measured,
+/// `'5'~dataType('Zonk')` reports `found "Z"` where `'  ab  '~strip('Zonk')`
+/// reports `found "Zonk"`. An empty option has no first letter and reports
+/// the NUL byte, which the report renders `?`.
+pub(super) fn datatype_option_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+) -> Result<Option<u8>, Failure> {
+    let Some(value) = args.first().copied().flatten() else {
+        return Ok(None);
+    };
+    let text = required_string_argument(interp, value, 1)?;
+    let letter = interp
+        .to_text(text)
+        .first()
+        .copied()
+        .unwrap_or(0)
+        .to_ascii_uppercase();
+    Ok(Some(letter))
+}
+
 /// `STRIP`'s option and character set.
 ///
 /// The option is `"BLT"`, defaulting to `B`, and an unrecognised letter is

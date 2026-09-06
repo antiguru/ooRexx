@@ -265,9 +265,9 @@ String	abbrev	instance	answers	rc 163
 String	abs	instance	loud	method "ABS" of class "String"
 String	append	instance	answers	rc 163
 String	b2x	instance	answers	rc 163
-String	bitAnd	instance	loud	method "BITAND" of class "String"
-String	bitOr	instance	loud	method "BITOR" of class "String"
-String	bitXor	instance	loud	method "BITXOR" of class "String"
+String	bitAnd	instance	answers	rc 0
+String	bitOr	instance	answers	rc 0
+String	bitXor	instance	answers	rc 0
 String	c2d	instance	answers	rc 0
 String	c2x	instance	answers	rc 0
 String	caselessAbbrev	instance	loud	method "CASELESSABBREV" of class "String"
@@ -297,7 +297,7 @@ String	copies	instance	answers	rc 163
 String	countStr	instance	answers	rc 163
 String	d2c	instance	answers	rc 163
 String	d2x	instance	answers	rc 163
-String	dataType	instance	loud	method "DATATYPE" of class "String"
+String	dataType	instance	answers	rc 0
 String	decodeBase64	instance	loud	method "DECODEBASE64" of class "String"
 String	delStr	instance	answers	rc 0
 String	delWord	instance	answers	rc 163

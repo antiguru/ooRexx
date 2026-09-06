@@ -255,7 +255,7 @@ fn grouped(text: &[u8], set: fn(u8) -> bool, modulus: usize) -> bool {
 
 /// The 13 letters `DATATYPE`'s option argument accepts, spelled exactly as
 /// `StringUtil::dataType`'s own 93.915 message does.
-const DATATYPE_OPTIONS: &str = "ABILMNOSUVWX9";
+pub(crate) const DATATYPE_OPTIONS: &str = "ABILMNOSUVWX9";
 
 /// `DATATYPE(string)` / `DATATYPE(string, type)`: what kind of data a string
 /// holds, or whether it matches one named type.
@@ -271,28 +271,53 @@ pub(crate) fn datatype(
 ) -> Result<ObjRef, Failure> {
     let text = required_string(interp, args, 1);
     let Some(option) = optional_string(interp, args, 2) else {
-        let is_number = parse_number(&text).is_some();
-        return Ok(interp.text(if is_number { b"NUM" } else { b"CHAR" }));
+        return Ok(interp.text(datatype_kind(&text)));
     };
     // An empty option's first byte is `0x00`, which matches none of the
-    // thirteen letters below and falls straight to the `_` arm -- the same
+    // thirteen letters below and falls straight to the `None` arm -- the same
     // path a bad letter takes, and the byte `error.rs`'s `displayable`
     // turns into `?` when the report line it landed in gets printed.
     let letter = option.first().copied().unwrap_or(0).to_ascii_uppercase();
+    let Some(matched) = datatype_matches(interp, &text, letter) else {
+        return Err(Raised::invalid_option(DATATYPE_OPTIONS, &[letter]).into());
+    };
+    Ok(interp.text(if matched { b"1" } else { b"0" }))
+}
+
+/// `DATATYPE`'s answer with no option, shared with `String~dataType`.
+pub(crate) fn datatype_kind(text: &[u8]) -> &'static [u8] {
+    if parse_number(text).is_some() {
+        b"NUM"
+    } else {
+        b"CHAR"
+    }
+}
+
+/// Whether `text` is of the kind `letter` names, shared with
+/// `String~dataType`, or `None` when `letter` is not one of the thirteen.
+///
+/// **The refusal is the caller's**, and the two callers do not spell it the
+/// same way: both raise 93.915 naming the letter rather than the whole option
+/// -- `DATATYPE` is the one option argument in this interpreter that does --
+/// but the method reaches it through its own reader.
+///
+/// `letter` is already uppercased. An empty option arrives here as `0`, which
+/// matches nothing and so answers `None`.
+pub(crate) fn datatype_matches(interp: &Interp, text: &[u8], letter: u8) -> Option<bool> {
     let matched = match letter {
         b'A' => !text.is_empty() && text.iter().all(u8::is_ascii_alphanumeric),
-        b'B' => text.is_empty() || grouped(&text, |b| matches!(b, b'0' | b'1'), 4),
-        b'I' => parse_number(&text)
+        b'B' => text.is_empty() || grouped(text, |b| matches!(b, b'0' | b'1'), 4),
+        b'I' => parse_number(text)
             .and_then(|n| n.whole_value(rexx_num::ARGUMENT_DIGITS))
             .is_some(),
         b'L' => !text.is_empty() && text.iter().all(u8::is_ascii_lowercase),
         b'M' => !text.is_empty() && text.iter().all(u8::is_ascii_alphabetic),
-        b'N' => parse_number(&text).is_some(),
+        b'N' => parse_number(text).is_some(),
         b'O' => text.len() == 1 && matches!(text[0], b'0' | b'1'),
-        b'S' => classify(&text) != SymbolKind::Bad,
+        b'S' => classify(text) != SymbolKind::Bad,
         b'U' => !text.is_empty() && text.iter().all(u8::is_ascii_uppercase),
         b'V' => matches!(
-            classify(&text),
+            classify(text),
             SymbolKind::Name | SymbolKind::Stem | SymbolKind::CompoundName
         ),
         // `W`'s precision is the *running* `NUMERIC DIGITS`, where `I`'s and
@@ -302,17 +327,17 @@ pub(crate) fn datatype(
         // conversion (`classes/support/StringUtil.cpp:1076`-`1097`).
         b'W' => {
             let digits = interp.activation().settings.digits();
-            parse_number(&text)
+            parse_number(text)
                 .and_then(|n| n.whole_value(digits as usize))
                 .is_some()
         }
-        b'X' => text.is_empty() || grouped(&text, |b| b.is_ascii_hexdigit(), 2),
-        b'9' => parse_number(&text)
+        b'X' => text.is_empty() || grouped(text, |b| b.is_ascii_hexdigit(), 2),
+        b'9' => parse_number(text)
             .and_then(|n| n.whole_value(rexx_num::DEFAULT_DIGITS as usize))
             .is_some(),
-        _ => return Err(Raised::invalid_option(DATATYPE_OPTIONS, &[letter]).into()),
+        _ => return None,
     };
-    Ok(interp.text(if matched { b"1" } else { b"0" }))
+    Some(matched)
 }
 
 /// Whether `name`'s own slot currently holds a value, growing the slot if it

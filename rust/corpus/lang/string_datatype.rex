@@ -1,0 +1,22 @@
+/* DATATYPE as a method: `AddMethod("Datatype", RexxString::dataType, 1)`
+ * (memory/Setup.cpp:584).
+ *
+ * With no option it answers the word NUM or CHAR; with one it answers the text
+ * 1 or 0. Only the option's FIRST letter is read, case-insensitively, so
+ * 'Nonsense' is 'N'.
+ *
+ * W's precision is the running NUMERIC DIGITS where I's and 9's are the two
+ * fixed ones, which is the last line here.
+ */
+
+say '5'~dataType 'abc'~dataType ''~dataType ' 5 '~dataType
+say '5'~dataType('N') 'abc'~dataType('N') '5'~dataType('n') '5'~dataType('Nonsense')
+say 'abc'~dataType('A') 'ab1'~dataType('A') 'a b'~dataType('A') ''~dataType('A')
+say '1011'~dataType('B') '1011 0000'~dataType('B') '2'~dataType('B') ''~dataType('B')
+say '5'~dataType('I') '5.5'~dataType('I') '1e3'~dataType('I') '5'~dataType('9')
+say 'abc'~dataType('L') 'ABC'~dataType('L') 'abc'~dataType('U') 'ABC'~dataType('U')
+say 'abc'~dataType('M') 'ab1'~dataType('M') '0'~dataType('O') '2'~dataType('O')
+say 'a.b'~dataType('S') 'a b'~dataType('S') 'a.b'~dataType('V') '1a'~dataType('V')
+say '41'~dataType('X') 'zz'~dataType('X') 'abc'~dataType('X') ''~dataType('X')
+numeric digits 2
+say '1e3'~dataType('W') '1e3'~dataType('I') '1e3'~dataType('9') '123'~dataType('W')

@@ -80,7 +80,11 @@ use crate::{Interp, Loud};
 /// of `memory/Setup.cpp:634`-`:641` -- and the cores here are what keep the
 /// two forms from coming to disagree about a grouping rule or a sign.
 pub(crate) mod convert;
-mod datatype;
+/// Crate-visible because `String~dataType` is the same test `DATATYPE` is --
+/// `AddMethod("Datatype", RexxString::dataType, 1)` (`memory/Setup.cpp:584`)
+/// -- and the thirteen letters are what the two forms must not come to
+/// disagree about. The refusal is not shared: only the letter test is.
+pub(crate) mod datatype;
 mod datetime;
 /// Crate-visible because `String~sign` is the same computation `SIGN` is --
 /// `RexxString::sign` is `ArithmeticMethod(Sign(), "SIGN")`

@@ -267,11 +267,26 @@ fn bit_operation(
     // the pad path and the default pad leaves it alone.
     let second = optional_string(interp, args, 2).unwrap_or_default();
     let pad = pad_byte(interp, name, args, 3)?.unwrap_or(default_pad);
+    let out = bit_operation_over(interp, &first, &second, pad, operation)?;
+    Ok(interp.text_built(out))
+}
 
+/// One bit operation once both strings and the pad are in hand, shared with
+/// `String~bitAnd`, `~bitOr` and `~bitXor`.
+///
+/// The caller supplies the pad already defaulted, because the default is the
+/// operation's own identity and only the caller knows which operation it is.
+pub(crate) fn bit_operation_over(
+    interp: &Interp,
+    first: &[u8],
+    second: &[u8],
+    pad: u8,
+    operation: fn(u8, u8) -> u8,
+) -> Result<Vec<u8>, Failure> {
     let (long, short) = if first.len() <= second.len() {
-        (&second, &first)
+        (second, first)
     } else {
-        (&first, &second)
+        (first, second)
     };
     let mut out = buffer(interp, long.len())?;
     out.extend_from_slice(long);
@@ -281,8 +296,13 @@ fn bit_operation(
             None => operation(*byte, pad),
         };
     }
-    Ok(interp.text_built(out))
+    Ok(out)
 }
+
+/// The default pad of each bit operation, which is its own identity byte.
+pub(crate) const BITAND_PAD: u8 = 0xff;
+/// See [`BITAND_PAD`].
+pub(crate) const BITOR_PAD: u8 = 0x00;
 
 /// `BITAND(string1 [,string2] [,pad])`, whose default pad is `'ff'x`.
 pub(crate) fn bitand(
@@ -290,7 +310,7 @@ pub(crate) fn bitand(
     name: &'static [u8],
     args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
-    bit_operation(interp, name, args, |a, b| a & b, 0xff)
+    bit_operation(interp, name, args, |a, b| a & b, BITAND_PAD)
 }
 
 /// `BITOR(string1 [,string2] [,pad])`, whose default pad is `'00'x`.
@@ -299,7 +319,7 @@ pub(crate) fn bitor(
     name: &'static [u8],
     args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
-    bit_operation(interp, name, args, |a, b| a | b, 0x00)
+    bit_operation(interp, name, args, |a, b| a | b, BITOR_PAD)
 }
 
 /// `BITXOR(string1 [,string2] [,pad])`, whose default pad is `'00'x`.
@@ -308,7 +328,7 @@ pub(crate) fn bitxor(
     name: &'static [u8],
     args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
-    bit_operation(interp, name, args, |a, b| a ^ b, 0x00)
+    bit_operation(interp, name, args, |a, b| a ^ b, BITOR_PAD)
 }
 
 // ---- the transliterating four ----

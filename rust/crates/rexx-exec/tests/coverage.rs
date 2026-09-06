@@ -1431,6 +1431,10 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/string_compare_refusals.rex",
     "lang/string_convert.rex",
     "lang/string_convert_refusals.rex",
+    "lang/string_bits.rex",
+    "lang/string_bits_refusals.rex",
+    "lang/string_datatype.rex",
+    "lang/string_datatype_refusals.rex",
 ];
 
 #[test]

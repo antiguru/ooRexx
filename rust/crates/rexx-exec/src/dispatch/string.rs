@@ -42,13 +42,14 @@
 
 use super::{
     Arity, Cleared, Failure, Interp, NativeMethod, ObjRef, abbrev_arguments, backward_search,
-    backward_search_arguments, case_shift_arguments, changestr_arguments, compare_arguments,
-    conversion_length_argument, copies_argument, delete_arguments, delword_arguments, ends_with,
-    forward_search, forward_search_arguments, insert_arguments, match_region_arguments,
-    match_region_over, overlay_arguments, pad_arguments, replace_at_bytes, replace_at_plan,
-    space_arguments, starts_with, strip_arguments, substr_arguments, translate_arguments,
-    translate_in_table, verify_arguments, wordpos_arguments,
+    backward_search_arguments, bit_arguments, case_shift_arguments, changestr_arguments,
+    compare_arguments, conversion_length_argument, copies_argument, datatype_option_argument,
+    delete_arguments, delword_arguments, ends_with, forward_search, forward_search_arguments,
+    insert_arguments, match_region_arguments, match_region_over, overlay_arguments, pad_arguments,
+    replace_at_bytes, replace_at_plan, space_arguments, starts_with, strip_arguments,
+    substr_arguments, translate_arguments, translate_in_table, verify_arguments, wordpos_arguments,
 };
+use crate::builtin::convert;
 use crate::error::Raised;
 use crate::eval::logical_value;
 use rexx_parse::Operator;
@@ -1601,6 +1602,86 @@ fn string_d2x_d2c(
     Ok(Some(value))
 }
 
+/// `String~"BITAND"`, `RexxString::bitAnd`.
+fn native_string_bitand(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_bit_operation(interp, receiver, args, |a, b| a & b, convert::BITAND_PAD)
+}
+
+/// `String~"BITOR"`, `RexxString::bitOr`.
+fn native_string_bitor(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_bit_operation(interp, receiver, args, |a, b| a | b, convert::BITOR_PAD)
+}
+
+/// `String~"BITXOR"`, `RexxString::bitXor`.
+fn native_string_bitxor(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_bit_operation(interp, receiver, args, |a, b| a ^ b, convert::BITOR_PAD)
+}
+
+/// One bit operation sent as a message.
+///
+/// The receiver is the builtin's first string and the operand its second, so
+/// an omitted operand is the null string: every byte of the receiver reaches
+/// the pad path, and the pad's default is the operation's identity, which is
+/// why `'abc'~bitAnd` answers `abc`.
+fn string_bit_operation(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    operation: fn(u8, u8) -> u8,
+    default_pad: u8,
+) -> Result<Option<ObjRef>, Failure> {
+    let (other, pad) = bit_arguments(interp, args)?;
+    let bytes = interp.to_text(receiver).to_vec();
+    let out = convert::bit_operation_over(
+        interp,
+        &bytes,
+        &other,
+        pad.unwrap_or(default_pad),
+        operation,
+    )?;
+    let answer = interp.text_built(out);
+    interp.give_result_buffer(other);
+    Ok(Some(answer))
+}
+
+/// `String~"DATATYPE"`, `RexxString::dataType`.
+fn native_string_datatype(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let letter = datatype_option_argument(interp, args)?;
+    let bytes = interp.to_text(receiver).to_vec();
+    let Some(letter) = letter else {
+        let kind = crate::builtin::datatype::datatype_kind(&bytes);
+        return Ok(Some(interp.text(kind)));
+    };
+    let Some(matched) = crate::builtin::datatype::datatype_matches(interp, &bytes, letter) else {
+        return Err(Raised::method_option_not_recognised(
+            crate::builtin::datatype::DATATYPE_OPTIONS,
+            &[letter],
+        )
+        .into());
+    };
+    Ok(Some(interp.text(if matched { b"1" } else { b"0" })))
+}
+
 /// `String`'s rows, in the shape [`super::NATIVE_METHODS`] uses.
 pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("String", "", Arity::Fixed(1), native_string_op_abuttal),
@@ -1669,6 +1750,9 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("String", "?", Arity::Fixed(2), native_string_op_choice),
     ("String", "ABBREV", Arity::Fixed(2), native_string_abbrev),
     ("String", "B2X", Arity::Fixed(0), native_string_b2x),
+    ("String", "BITAND", Arity::Fixed(2), native_string_bitand),
+    ("String", "BITOR", Arity::Fixed(2), native_string_bitor),
+    ("String", "BITXOR", Arity::Fixed(2), native_string_bitxor),
     ("String", "APPEND", Arity::Fixed(1), native_string_append),
     ("String", "C2D", Arity::Fixed(1), native_string_c2d),
     ("String", "C2X", Arity::Fixed(0), native_string_c2x),
@@ -1677,6 +1761,12 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("String", "CENTRE", Arity::Fixed(2), native_string_center),
     ("String", "COPIES", Arity::Fixed(1), native_string_copies),
     ("String", "D2C", Arity::Fixed(1), native_string_d2c),
+    (
+        "String",
+        "DATATYPE",
+        Arity::Fixed(1),
+        native_string_datatype,
+    ),
     ("String", "D2X", Arity::Fixed(1), native_string_d2x),
     ("String", "LEFT", Arity::Fixed(2), native_string_left),
     ("String", "RIGHT", Arity::Fixed(2), native_string_right),
