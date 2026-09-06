@@ -1,7 +1,7 @@
 # Phase 5f Task 2a — a verdict for a row the oracle cannot be asked about
 
 Plan: `docs/superpowers/plans/2026-09-05-phase-5f-string.md`, D87.
-BASE `009230209`. Landed at **`GATECOMMIT`**.
+BASE `009230209`. Landed at `3612d48eb`.
 
 **Lands alone, ahead of any operator body, and moves no row.**
 
@@ -63,8 +63,10 @@ carried a claim about the oracle. It cannot reach `diverge`, which needs two sid
 |---|---|
 | G1 `cargo fmt --all --check` | rc 0 |
 | G2 `cargo clippy --workspace --all-targets -- -D warnings` | rc 0, zero warnings |
-| G3 `cargo test --release --workspace --no-fail-fast` | **G3** |
-| G4 | **G4** |
-| G5 | **G5** |
-| G6 | **G6** |
-| G7 | **G7** |
+| G3 `cargo test --release --workspace --no-fail-fast` | rc 0 |
+| G4 same with `REXX_CORPUS_GATE=1` | rc 0 |
+| G5 `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace` | rc 0 |
+| G6 `REXX_PHASE_GATE=5c` | rc 0 |
+| G7 `REXX_PHASE_GATE=5d` | rc 0 |
+
+Run at `3612d48eb`, 04:31:27 to 04:44:14.
