@@ -1,7 +1,7 @@
 # Phase 5f Task 4a — the comparison family
 
 Plan: `docs/superpowers/plans/2026-09-05-phase-5f-string.md`, Task 4.
-BASE `e171f6e2f`. Landed at `PENDING`.
+BASE `e171f6e2f`. Landed at `1bdf13ed1`.
 
 `EQUALS CASELESSEQUALS COMPARETO CASELESSCOMPARETO CASELESSABBREV
 CASELESSCOMPARE`. String now reads 122 `answers`, 6 `uncomparable`, 7 `loud`:
@@ -81,13 +81,13 @@ the file to the scratchpad and back.
 
 | | |
 |---|---|
-| G1 `cargo fmt --all --check` | PENDING |
-| G2 `cargo clippy --workspace --all-targets -- -D warnings` | PENDING |
-| G3 `cargo test --release --workspace --no-fail-fast` | PENDING |
-| G4 same with `REXX_CORPUS_GATE=1` | PENDING |
-| G5 `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace` | PENDING |
-| G6 `REXX_PHASE_GATE=5c` | PENDING |
-| G7 `REXX_PHASE_GATE=5d` | PENDING |
+| G1 `cargo fmt --all --check` | rc 0 |
+| G2 `cargo clippy --workspace --all-targets -- -D warnings` | rc 0, zero warnings |
+| G3 `cargo test --release --workspace --no-fail-fast` | rc 0 |
+| G4 same with `REXX_CORPUS_GATE=1` | rc 0 |
+| G5 `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace` | rc 0 |
+| G6 `REXX_PHASE_GATE=5c` | rc 0 |
+| G7 `REXX_PHASE_GATE=5d` | rc 0 |
 
 `collect_stress.rs`'s `NO_ALLOCATION_PROGRAMS` gains `lang/string_caseless.rex`:
 every answer in it is `1`, `0`, `-1` or a counted integer, all of which fit in a
