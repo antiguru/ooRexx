@@ -263,7 +263,7 @@ String	[]	instance	answers	rc 163
 String	?	instance	loud	method "?" of class "String"
 String	abbrev	instance	loud	method "ABBREV" of class "String"
 String	abs	instance	loud	method "ABS" of class "String"
-String	append	instance	loud	method "APPEND" of class "String"
+String	append	instance	answers	rc 163
 String	b2x	instance	loud	method "B2X" of class "String"
 String	bitAnd	instance	loud	method "BITAND" of class "String"
 String	bitOr	instance	loud	method "BITOR" of class "String"
@@ -271,7 +271,7 @@ String	bitXor	instance	loud	method "BITXOR" of class "String"
 String	c2d	instance	loud	method "C2D" of class "String"
 String	c2x	instance	loud	method "C2X" of class "String"
 String	caselessAbbrev	instance	loud	method "CASELESSABBREV" of class "String"
-String	caselessChangeStr	instance	loud	method "CASELESSCHANGESTR" of class "String"
+String	caselessChangeStr	instance	answers	rc 163
 String	caselessCompare	instance	loud	method "CASELESSCOMPARE" of class "String"
 String	caselessCompareTo	instance	loud	method "CASELESSCOMPARETO" of class "String"
 String	caselessContains	instance	answers	rc 163
@@ -288,7 +288,7 @@ String	caselessWordPos	instance	answers	rc 163
 String	ceiling	instance	loud	method "CEILING" of class "String"
 String	center	instance	loud	method "CENTER" of class "String"
 String	centre	instance	loud	method "CENTRE" of class "String"
-String	changeStr	instance	loud	method "CHANGESTR" of class "String"
+String	changeStr	instance	answers	rc 163
 String	compare	instance	loud	method "COMPARE" of class "String"
 String	compareTo	instance	loud	method "COMPARETO" of class "String"
 String	contains	instance	answers	rc 163
@@ -311,7 +311,7 @@ String	insert	instance	answers	rc 163
 String	lastPos	instance	answers	rc 163
 String	left	instance	loud	method "LEFT" of class "String"
 String	length	instance	answers	rc 0
-String	lower	instance	loud	method "LOWER" of class "String"
+String	lower	instance	answers	rc 0
 String	makeArray	instance	answers	rc 0
 String	makeString	instance	answers	rc 0
 String	match	instance	answers	rc 163
@@ -326,14 +326,14 @@ String	reverse	instance	answers	rc 0
 String	right	instance	loud	method "RIGHT" of class "String"
 String	round	instance	loud	method "ROUND" of class "String"
 String	sign	instance	answers	rc 163
-String	space	instance	loud	method "SPACE" of class "String"
+String	space	instance	answers	rc 0
 String	startsWith	instance	answers	rc 168
 String	strip	instance	loud	method "STRIP" of class "String"
 String	subChar	instance	answers	rc 163
 String	substr	instance	answers	rc 163
 String	subWord	instance	answers	rc 163
 String	subWords	instance	answers	rc 0
-String	translate	instance	loud	method "TRANSLATE" of class "String"
+String	translate	instance	answers	rc 0
 String	trunc	instance	loud	method "TRUNC" of class "String"
 String	upper	instance	answers	rc 0
 String	verify	instance	answers	rc 163

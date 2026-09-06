@@ -1,0 +1,62 @@
+count 61
+/* The whole-string rewrites' refusals, and the second row of the shared set
+ * that shares nothing with its MutableBuffer twin.
+ *
+ * append is RexxString::concatRexx registered under a second name with arity
+ * one (memory/Setup.cpp:578), so a String appends exactly one argument and
+ * renders it; MutableBuffer::appendRexx is A_COUNT (:1422) and takes as many
+ * as it is given. The pair below is what pins that: the same two-argument
+ * send is 93.902 at a String and answers at a MutableBuffer.
+ *
+ * The final send is untrapped so the 93.903 text and the frame line naming the
+ * scope are compared as bytes. rc 163.
+ */
+
+signal on syntax name trapped
+s = 'abcABCabc'
+w = '  now is  the time  '
+n = 0
+
+next:
+n = n + 1
+select
+  when n = 1 then say n 'answered' s~changeStr
+  when n = 2 then say n 'answered' s~changeStr('a')
+  when n = 3 then say n 'answered' s~changeStr('a', 'b', 'x')
+  when n = 4 then say n 'answered' s~changeStr('a', 'b', -1)
+  when n = 5 then say n 'answered' s~changeStr('a', 'b', 1, 2)
+  when n = 6 then say n 'answered' s~caselessChangeStr
+  when n = 7 then say n 'answered' s~caselessChangeStr('a')
+  when n = 8 then say n 'answered' s~translate('X', 'a', 'ab')
+  when n = 9 then say n 'answered' s~translate('X', 'a', ' ', 'x')
+  when n = 10 then say n 'answered' s~translate('X', 'a', ' ', 1, 'x')
+  when n = 11 then say n 'answered' s~translate('X', 'a', ' ', 1, 1, 6)
+  when n = 12 then say n 'answered' s~lower('x')
+  when n = 13 then say n 'answered' s~lower(0)
+  when n = 14 then say n 'answered' s~lower(1, 'x')
+  when n = 15 then say n 'answered' s~lower(1, 1, 2)
+  when n = 16 then say n 'answered' w~space('x')
+  when n = 17 then say n 'answered' w~space(-1)
+  when n = 18 then say n 'answered' w~space(1, 'ab')
+  when n = 19 then say n 'answered' w~space(1, ' ', 3)
+  when n = 20 then say n 'answered' s~append
+  /* append at both receivers, one pair per row. */
+  when n = 21 then say n 'str' s~append('X', 'Y')
+  when n = 22 then say n 'buf' .MutableBuffer~new('abc')~append('X', 'Y')~string
+  when n = 23 then say n 'str' s~append(.nil)
+  when n = 24 then say n 'buf' .MutableBuffer~new('abc')~append(.nil)~string
+  /* changeStr, for contrast: the two receivers agree here. */
+  when n = 25 then say n 'str' s~changeStr('a', 'b', 'x')
+  when n = 26 then say n 'buf' .MutableBuffer~new('abc')~changeStr('a', 'b', 'x')
+  otherwise signal done
+end
+signal next
+
+trapped:
+say n 'raised' rc'.'condition('E')
+signal on syntax name trapped
+signal next
+
+done:
+signal off syntax
+say s~changeStr

@@ -42,10 +42,11 @@
 
 use super::{
     Arity, Cleared, Failure, Interp, NativeMethod, ObjRef, backward_search,
-    backward_search_arguments, delete_arguments, delword_arguments, ends_with, forward_search,
-    forward_search_arguments, insert_arguments, match_region_arguments, match_region_over,
-    overlay_arguments, replace_at_bytes, replace_at_plan, starts_with, substr_arguments,
-    verify_arguments, wordpos_arguments,
+    backward_search_arguments, case_shift_arguments, changestr_arguments, delete_arguments,
+    delword_arguments, ends_with, forward_search, forward_search_arguments, insert_arguments,
+    match_region_arguments, match_region_over, overlay_arguments, replace_at_bytes,
+    replace_at_plan, space_arguments, starts_with, substr_arguments, translate_arguments,
+    translate_in_table, verify_arguments, wordpos_arguments,
 };
 
 /// `RexxString::posRexx` (`classes/StringClassMisc.cpp:581`).
@@ -736,8 +737,171 @@ fn native_string_delword(
     Ok(Some(interp.text_built(out)))
 }
 
+/// `RexxString::changeStr` (`classes/StringClassMisc.cpp:451`).
+fn native_string_changestr(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_changestr(
+        interp,
+        receiver,
+        args,
+        crate::builtin::string::changestr_bytes,
+    )
+}
+
+/// `RexxString::caselessChangeStr` (`classes/StringClassMisc.cpp:516`).
+fn native_string_caselesschangestr(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_changestr(
+        interp,
+        receiver,
+        args,
+        crate::builtin::string::caseless_changestr_bytes,
+    )
+}
+
+/// Every occurrence of the needle replaced, into a new string.
+type ChangeStr = fn(&mut Vec<u8>, &[u8], &[u8], &[u8], usize) -> Result<(), super::Raised>;
+
+/// [`changestr_arguments`]' replacement over the receiver's own text.
+fn string_changestr(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    change: ChangeStr,
+) -> Result<Option<ObjRef>, Failure> {
+    let (needle, replacement, limit) = changestr_arguments(interp, args)?;
+    let mut out = interp.take_result_buffer();
+    {
+        let bytes = interp.to_text(receiver);
+        change(&mut out, &bytes, &needle, &replacement, limit)?;
+    }
+    interp.give_result_buffer(needle);
+    interp.give_result_buffer(replacement);
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `RexxString::translate` (`classes/StringClassMisc.cpp:681`).
+///
+/// **With no tables, pad or start it is an upper-case shift**, and the range
+/// arguments move to positions 3 and 4 -- measured, oracle rc 0:
+/// `'abcABCabc'~translate` is `ABCABCABC`.
+fn native_string_translate(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if args.iter().take(3).all(Option::is_none) {
+        return string_case_shift(interp, receiver, args, 3, u8::to_ascii_uppercase);
+    }
+    let (out_table, in_table, pad, start, range) = translate_arguments(interp, args)?;
+    let mut out = interp.take_result_buffer();
+    {
+        let bytes = interp.to_text(receiver);
+        out.extend_from_slice(&bytes);
+    }
+    crate::builtin::string::translate_bytes(
+        &mut out,
+        &out_table,
+        translate_in_table(&in_table),
+        pad,
+        start,
+        range,
+    );
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `RexxString::lowerRexx` (`classes/StringClass.cpp:1732`).
+fn native_string_lower(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_case_shift(interp, receiver, args, 0, u8::to_ascii_lowercase)
+}
+
+/// A case shift over the receiver's own text, answering a new string.
+fn string_case_shift(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    first: usize,
+    shift: fn(&u8) -> u8,
+) -> Result<Option<ObjRef>, Failure> {
+    let (start, range) = case_shift_arguments(interp, args, first)?;
+    let mut out = interp.take_result_buffer();
+    {
+        let bytes = interp.to_text(receiver);
+        out.extend_from_slice(&bytes);
+    }
+    crate::builtin::string::case_shift_bytes(&mut out, start, range, shift);
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `RexxString::space` (`classes/StringClassWord.cpp:121`).
+fn native_string_space(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let (gap, pad) = space_arguments(interp, args)?;
+    let mut out = interp.take_result_buffer();
+    {
+        let bytes = interp.to_text(receiver);
+        crate::builtin::string::space_bytes(&mut out, &bytes, gap, pad)?;
+    }
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `String~append`, which is **`RexxString::concatRexx` under a second name**
+/// -- `AddMethod("Append", RexxString::concatRexx, 1)`
+/// (`memory/Setup.cpp:578`), so it concatenates and takes exactly one
+/// argument. It routes to [`Interp::apply_binary`] for that reason rather
+/// than reading its argument as a string: concatenation *renders* what it is
+/// given, so `.nil` becomes `The NIL object` where a string argument would be
+/// refused at 88.909.
+///
+/// **It shares nothing with `MutableBuffer~append`**, which is
+/// `MutableBuffer::appendRexx` at `A_COUNT` (`memory/Setup.cpp:1422`): that one
+/// is variadic and writes the buffer. Measured, oracle:
+/// `.MutableBuffer~new('abc')~append('X', 'Y')` is `abcXY` where
+/// `'abc'~append('X', 'Y')` is 93.902, and `'abc'~append(.nil)` answers
+/// `abcThe NIL object` because concatenation renders its argument.
+fn native_string_append(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(tail) = args.first().copied().flatten() else {
+        return Err(super::Raised::missing_method_argument(1).into());
+    };
+    Ok(Some(interp.apply_binary(
+        rexx_parse::Operator::Concatenate,
+        receiver,
+        tail,
+    )?))
+}
+
 /// `String`'s rows, in the shape [`super::NATIVE_METHODS`] uses.
 pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
+    ("String", "APPEND", Arity::Fixed(1), native_string_append),
+    (
+        "String",
+        "CASELESSCHANGESTR",
+        Arity::Fixed(3),
+        native_string_caselesschangestr,
+    ),
     (
         "String",
         "CASELESSCONTAINS",
@@ -800,6 +964,12 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     (
         "String",
+        "CHANGESTR",
+        Arity::Fixed(3),
+        native_string_changestr,
+    ),
+    (
+        "String",
         "CONTAINS",
         Arity::Fixed(3),
         native_string_contains,
@@ -826,6 +996,7 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     ("String", "INSERT", Arity::Fixed(4), native_string_insert),
     ("String", "LASTPOS", Arity::Fixed(3), native_string_lastpos),
+    ("String", "LOWER", Arity::Fixed(2), native_string_lower),
     ("String", "MATCH", Arity::Fixed(4), native_string_match),
     (
         "String",
@@ -841,6 +1012,7 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(4),
         native_string_replaceat,
     ),
+    ("String", "SPACE", Arity::Fixed(2), native_string_space),
     (
         "String",
         "STARTSWITH",
@@ -855,6 +1027,12 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         "SUBWORDS",
         Arity::Fixed(2),
         native_string_subwords,
+    ),
+    (
+        "String",
+        "TRANSLATE",
+        Arity::Fixed(5),
+        native_string_translate,
     ),
     ("String", "VERIFY", Arity::Fixed(4), native_string_verify),
     ("String", "WORD", Arity::Fixed(1), native_string_word),

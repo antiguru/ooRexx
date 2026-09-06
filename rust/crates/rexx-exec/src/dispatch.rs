@@ -9193,6 +9193,65 @@ fn buffer_capacity(state: &mut BufferState, added: usize) -> Result<(), Failure>
         .map_err(|_| Failure::from(Raised::system_resources()))
 }
 
+/// `changeStr`'s arguments: needle, replacement, and a count defaulting to
+/// every occurrence.
+pub(super) fn changestr_arguments(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+) -> Result<(Vec<u8>, Vec<u8>, usize), Failure> {
+    let needle = string_method_argument(interp, args, 0)?;
+    let replacement = string_method_argument(interp, args, 1)?;
+    let limit = optional_non_negative_argument(interp, args, 2)?.unwrap_or(usize::MAX);
+    Ok((needle, replacement, limit))
+}
+
+/// `space`'s arguments: the gap between words, defaulting to one, and a pad.
+pub(super) fn space_arguments(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+) -> Result<(usize, u8), Failure> {
+    let gap = optional_length_argument(interp, args, 0)?.unwrap_or(1);
+    let pad = pad_method_argument(interp, args, 1)?.unwrap_or(b' ');
+    Ok((gap, pad))
+}
+
+/// The `(start, range)` a case shift takes, from `first` onwards.
+///
+/// `first` is 0 for `upper` and `lower` and 3 for `translate`'s no-table form,
+/// which is a case shift wearing `translate`'s argument positions.
+pub(super) fn case_shift_arguments(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    first: usize,
+) -> Result<(usize, Option<usize>), Failure> {
+    let start = optional_position_argument(interp, args, first)?.unwrap_or(1) - 1;
+    let range = optional_length_argument(interp, args, first + 1)?;
+    Ok((start, range))
+}
+
+/// `translate`'s arguments: the output table, the input table, a pad, a
+/// 0-based start and an optional range.
+pub(super) fn translate_arguments(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+) -> Result<(Vec<u8>, Vec<u8>, u8, usize, Option<usize>), Failure> {
+    let out_table = optional_string_method_argument(interp, args, 0)?;
+    let in_table = optional_string_method_argument(interp, args, 1)?;
+    let pad = pad_method_argument(interp, args, 2)?.unwrap_or(b' ');
+    let start = optional_position_argument(interp, args, 3)?.unwrap_or(1) - 1;
+    let range = optional_length_argument(interp, args, 4)?;
+    Ok((out_table, in_table, pad, start, range))
+}
+
+/// An empty input table means "every byte", which the core spells `None`.
+pub(super) fn translate_in_table(in_table: &[u8]) -> Option<&[u8]> {
+    if in_table.is_empty() {
+        None
+    } else {
+        Some(in_table)
+    }
+}
+
 /// `insert`'s arguments: the string, a 0-based begin defaulting to the front,
 /// an optional length and a pad.
 ///
@@ -9392,9 +9451,7 @@ fn native_mutable_buffer_changestr(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let needle = string_method_argument(interp, args, 0)?;
-    let replacement = string_method_argument(interp, args, 1)?;
-    let limit = optional_non_negative_argument(interp, args, 2)?.unwrap_or(usize::MAX);
+    let (needle, replacement, limit) = changestr_arguments(interp, args)?;
     let mut out = interp.take_result_buffer();
     let state = buffer_state_mut(interp, receiver, b"CHANGESTR")?;
     if !needle.is_empty() && limit > 0 && replacement.len() > needle.len() {
@@ -9423,9 +9480,7 @@ fn native_mutable_buffer_caselesschangestr(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let needle = string_method_argument(interp, args, 0)?;
-    let replacement = string_method_argument(interp, args, 1)?;
-    let limit = optional_non_negative_argument(interp, args, 2)?.unwrap_or(usize::MAX);
+    let (needle, replacement, limit) = changestr_arguments(interp, args)?;
     let mut out = interp.take_result_buffer();
     let state = buffer_state_mut(interp, receiver, b"CASELESSCHANGESTR")?;
     if !needle.is_empty() && limit > 0 && replacement.len() > needle.len() {
@@ -9461,8 +9516,7 @@ fn buffer_case_shift(
     name: &[u8],
     shift: fn(&u8) -> u8,
 ) -> Result<Option<ObjRef>, Failure> {
-    let start = optional_position_argument(interp, args, first)?.unwrap_or(1) - 1;
-    let range = optional_length_argument(interp, args, first + 1)?;
+    let (start, range) = case_shift_arguments(interp, args, first)?;
     let state = buffer_state_mut(interp, receiver, name)?;
     crate::builtin::string::case_shift_bytes(&mut state.bytes, start, range, shift);
     Ok(Some(receiver))
@@ -9513,21 +9567,12 @@ fn native_mutable_buffer_translate(
             u8::to_ascii_uppercase,
         );
     }
-    let out_table = optional_string_method_argument(interp, args, 0)?;
-    let in_table = optional_string_method_argument(interp, args, 1)?;
-    let pad = pad_method_argument(interp, args, 2)?.unwrap_or(b' ');
-    let start = optional_position_argument(interp, args, 3)?.unwrap_or(1) - 1;
-    let range = optional_length_argument(interp, args, 4)?;
+    let (out_table, in_table, pad, start, range) = translate_arguments(interp, args)?;
     let state = buffer_state_mut(interp, receiver, b"TRANSLATE")?;
-    let in_table = if in_table.is_empty() {
-        None
-    } else {
-        Some(in_table.as_slice())
-    };
     crate::builtin::string::translate_bytes(
         &mut state.bytes,
         &out_table,
-        in_table,
+        translate_in_table(&in_table),
         pad,
         start,
         range,
@@ -9545,8 +9590,7 @@ fn native_mutable_buffer_space(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let gap = optional_length_argument(interp, args, 0)?.unwrap_or(1);
-    let pad = pad_method_argument(interp, args, 1)?.unwrap_or(b' ');
+    let (gap, pad) = space_arguments(interp, args)?;
     let mut out = interp.take_result_buffer();
     let state = buffer_state_mut(interp, receiver, b"SPACE")?;
     crate::builtin::string::space_bytes(&mut out, &state.bytes, gap, pad)?;

@@ -1,0 +1,19 @@
+count 18
+/* String's whole-string rewrites -- changeStr, caselessChangeStr, translate,
+   lower, space and append. Each answers a new string; the last line shows the
+   receivers did not move, which is what separates these from the
+   MutableBuffer rows of the same names. */
+s = 'abcABCabc'
+w = '  now is  the time  '
+say s~changeStr('abc', 'Z') '|' s~changeStr('abc', 'Z', 1) '|' s~changeStr('x', 'Z') '|' s~changeStr('', 'Z') '|' s~changeStr('abc', '')
+say s~caselessChangeStr('ABC', 'Z') '|' s~caselessChangeStr('abc', 'Z', 2) '|' s~caselessChangeStr('x', 'Z')
+/* translate with no tables is an upper-case shift, and its range arguments
+   then sit at positions 4 and 5. */
+say s~translate() '|' s~translate('X', 'a') '|' s~translate('XY', 'ab') '|' s~translate('X', 'ab', '-') '|' s~translate('', 'a')
+say s~lower() '|' s~lower(1, 3) '|' s~lower(4) '|' 'ABC'~lower(2, 1)
+say s~upper() '|' s~upper(1, 3) '|' s~upper(4)
+say w~space() '|' w~space(0) '|' w~space(3) '|' w~space(2, '-') '|' ''~space()
+/* append is concatenation under a second name, so it renders its argument. */
+say s~append('XY') '|' s~append('') '|' ''~append('X') '|' s~append(.nil)
+say s~changeStr('a', 'Z')~class~id s~append('X')~class~id
+say s'|'w'|'
