@@ -1,7 +1,7 @@
 # Phase 5f Task 4c — Base64
 
 Plan: `docs/superpowers/plans/2026-09-05-phase-5f-string.md`, Task 4.
-BASE `1502f13c4`. Landed at `PENDING`.
+BASE `1502f13c4`. Landed at `ac732b8ae`.
 
 `ENCODEBASE64 DECODEBASE64`. The refresh moved exactly those two rows from
 `loud` to `answers` with zero regressions. String now reads 128 `answers`, 6
@@ -111,13 +111,18 @@ reads exactly like a compile failure and is two lints.
 
 | gate | command | status |
 |---|---|---|
-| G1 | `cargo fmt --all --check` | PENDING |
-| G2 | `cargo clippy --workspace --all-targets -- -D warnings` | PENDING |
-| G3 | `cargo test --release --workspace --no-fail-fast` | PENDING |
-| G4 | G3 with `REXX_CORPUS_GATE=1` | PENDING |
-| G5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | PENDING |
-| G6 | `REXX_PHASE_GATE=5c REXX_CORPUS_GATE=1` | PENDING |
-| G7 | `REXX_PHASE_GATE=5d REXX_CORPUS_GATE=1` | PENDING |
+| G1 | `cargo fmt --all --check` | rc 0 |
+| G2 | `cargo clippy --workspace --all-targets -- -D warnings` | rc 0 |
+| G3 | `cargo test --release --workspace --no-fail-fast` | rc 0, 0 failed suites |
+| G4 | G3 with `REXX_CORPUS_GATE=1` | rc 0, 0 failed suites |
+| G5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | rc 0, 0 failed suites |
+| G6 | `REXX_PHASE_GATE=5c REXX_CORPUS_GATE=1` | rc 0, 0 failed suites |
+| G7 | `REXX_PHASE_GATE=5d REXX_CORPUS_GATE=1` | rc 0, 0 failed suites |
+
+Run by `scratchpad/gates-4c.sh`, its status file opening with `sha
+2f041fd49c3113dfe55e14b8f347f3821b8cab1c` -- the collections survey commit,
+which sits on top of this task's and carries no code, so the gated tree is this
+task's code.
 
 Pre-commit chain: method-bodies refresh rc 0 (the two rows above `loud` ->
 `answers`, no row on any other class moved), `cargo fmt --all --check` rc 0,
