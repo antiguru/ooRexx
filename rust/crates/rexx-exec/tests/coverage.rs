@@ -1421,6 +1421,8 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/string_rewrites_refusals.rex",
     "lang/string_rounding.rex",
     "lang/string_rounding_refusals.rex",
+    "lang/string_base64.rex",
+    "lang/string_base64_refusals.rex",
     "lang/string_operators.rex",
     "lang/string_operators_refusals.rex",
     "lang/string_choice.rex",

@@ -1728,6 +1728,32 @@ fn native_string_trunc(
     Ok(Some(answer))
 }
 
+/// `String~"ENCODEBASE64"`, `RexxString::encodeBase64`.
+fn native_string_encode_base64(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let source = interp.to_text(receiver).into_owned();
+    let answer = convert::encode_base64_bytes(&source);
+    Ok(Some(interp.text_built(answer)))
+}
+
+/// `String~"DECODEBASE64"`, `RexxString::decodeBase64`.
+fn native_string_decode_base64(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let source = interp.to_text(receiver).into_owned();
+    let Some(answer) = convert::decode_base64_bytes(&source) else {
+        return Err(Raised::invalid_base64().into());
+    };
+    Ok(Some(interp.text_built(answer)))
+}
+
 /// `String~"FLOOR"`, `RexxString::floor`.
 fn native_string_floor(
     interp: &mut Interp,
@@ -2108,6 +2134,18 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     ("String", "D2X", Arity::Fixed(1), native_string_d2x),
     ("String", "CEILING", Arity::Fixed(0), native_string_ceiling),
+    (
+        "String",
+        "DECODEBASE64",
+        Arity::Fixed(0),
+        native_string_decode_base64,
+    ),
+    (
+        "String",
+        "ENCODEBASE64",
+        Arity::Fixed(0),
+        native_string_encode_base64,
+    ),
     ("String", "FLOOR", Arity::Fixed(0), native_string_floor),
     ("String", "FORMAT", Arity::Fixed(4), native_string_format),
     ("String", "LEFT", Arity::Fixed(2), native_string_left),

@@ -412,6 +412,90 @@ pub(crate) fn b2x(
     let out = b2x_bytes(interp, &string)?;
     Ok(interp.text_built(out))
 }
+/// RFC 2045's alphabet, which is the one with `+` and `/` rather than the
+/// URL-safe pair: measured, `'-w=='~decodeBase64` is 93.962 and `'+w=='` is
+/// not.
+const BASE64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/// The value `byte` stands for in [`BASE64`], or `None` if it stands for
+/// nothing. `=` is not a digit and answers `None` here; only
+/// [`decode_base64_bytes`] knows where it is allowed.
+fn base64_digit(byte: u8) -> Option<u8> {
+    match byte {
+        b'A'..=b'Z' => Some(byte - b'A'),
+        b'a'..=b'z' => Some(byte - b'a' + 26),
+        b'0'..=b'9' => Some(byte - b'0' + 52),
+        b'+' => Some(62),
+        b'/' => Some(63),
+        _ => None,
+    }
+}
+
+/// `String~encodeBase64`, `RexxString::encodeBase64`
+/// (`classes/StringClassConversion.cpp:90`).
+///
+/// Three bytes become four digits; a short final group is padded with the
+/// zero bits it does not have and then with `=`.
+pub(crate) fn encode_base64_bytes(source: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(source.len().div_ceil(3) * 4);
+    for group in source.chunks(3) {
+        let held = [
+            group[0],
+            group.get(1).copied().unwrap_or(0),
+            group.get(2).copied().unwrap_or(0),
+        ];
+        out.push(BASE64[usize::from(held[0] >> 2)]);
+        out.push(BASE64[usize::from(((held[0] & 0x03) << 4) | (held[1] >> 4))]);
+        out.push(match group.len() {
+            1 => b'=',
+            _ => BASE64[usize::from(((held[1] & 0x0f) << 2) | (held[2] >> 6))],
+        });
+        out.push(match group.len() {
+            3 => BASE64[usize::from(held[2] & 0x3f)],
+            _ => b'=',
+        });
+    }
+    out
+}
+
+/// `String~decodeBase64`, `RexxString::decodeBase64` (`:153`). `None` is
+/// 93.962, which is the method's only refusal.
+///
+/// **`=` closes the last quartet and appears nowhere else.** It is legal as
+/// that quartet's fourth digit, or as its third when the fourth is one too,
+/// and the interpreter tests both the position and the quartet. Measured, all
+/// 93.962: `'YW=j'`, `'Y=WJ'`, `'YW==YWJj'` -- a well-formed pair, but not in
+/// the last quartet -- and `'YWJj===='`, whose final quartet is padding all
+/// the way to its first digit.
+pub(crate) fn decode_base64_bytes(source: &[u8]) -> Option<Vec<u8>> {
+    if !source.len().is_multiple_of(4) {
+        return None;
+    }
+    let quartets = source.len() / 4;
+    let mut out = Vec::with_capacity(quartets * 3);
+    for (index, group) in source.as_chunks::<4>().0.iter().enumerate() {
+        let last = index + 1 == quartets;
+        let mut accumulated: u32 = 0;
+        let mut taken: usize = 0;
+        for (position, &byte) in group.iter().enumerate() {
+            let Some(value) = base64_digit(byte) else {
+                if byte == b'=' && last && (position == 3 || (position == 2 && group[3] == b'=')) {
+                    break;
+                }
+                return None;
+            };
+            accumulated = (accumulated << 6) | u32::from(value);
+            taken += 1;
+        }
+        // Left-align what was taken into the low three bytes, so the digits
+        // sit where they would had the quartet been full.
+        accumulated <<= 6 * (4 - taken) as u32;
+        let bytes = accumulated.to_be_bytes();
+        let emitted = taken.saturating_sub(1);
+        out.extend_from_slice(&bytes[1..1 + emitted]);
+    }
+    Some(out)
+}
 
 /// `B2X`'s answer once its argument is read, shared with `String~b2x`.
 pub(crate) fn b2x_bytes(interp: &Interp, string: &[u8]) -> Result<Vec<u8>, Failure> {
@@ -1101,7 +1185,9 @@ pub(crate) fn xrange(
 #[cfg(test)]
 mod tests {
     use super::super::dispatch;
-    use super::{HEX_DIGITS, hex_value};
+    use super::{
+        BASE64, HEX_DIGITS, base64_digit, decode_base64_bytes, encode_base64_bytes, hex_value,
+    };
     use crate::plan::{BodyKey, ProgramId};
     use crate::{Activation, Interp, error::Failure, error::Raised};
     use rexx_parse::parse_program;
@@ -1417,6 +1503,40 @@ mod tests {
             assert_eq!(answer(b"X2B", &[&hex]), bits);
             assert_eq!(answer(b"B2X", &[&bits]), hex);
         }
+    }
+
+    /// `BASE64` and `base64_digit` are two spellings of one table and only the
+    /// first is ever used to encode, so they are crossed both ways here --
+    /// over every digit, and over every byte that is not one. An alphabet
+    /// gaining a character it cannot decode, or losing one it emits, reddens
+    /// here rather than waiting for a witness whose text happens to use it.
+    #[test]
+    fn every_base64_digit_decodes_to_the_value_that_encoded_it() {
+        for value in 0..64u8 {
+            assert_eq!(base64_digit(BASE64[usize::from(value)]), Some(value));
+        }
+        for byte in 0..=u8::MAX {
+            assert_eq!(base64_digit(byte).is_some(), BASE64.contains(&byte));
+        }
+        // Padding is not a digit, which is what lets the decoder rather than
+        // the table decide where it is allowed.
+        assert_eq!(base64_digit(b'='), None);
+    }
+
+    /// Every byte value through a full group, a padded pair and a padded
+    /// single, which is the axis the corpus witness cannot sweep.
+    #[test]
+    fn every_byte_survives_the_base64_round_trip() {
+        for length in 1..=3usize {
+            for value in 0..=u8::MAX {
+                let source = vec![value; length];
+                let encoded = encode_base64_bytes(&source);
+                assert_eq!(encoded.len(), 4, "{source:?}");
+                assert_eq!(decode_base64_bytes(&encoded).as_deref(), Some(&source[..]));
+            }
+        }
+        assert_eq!(encode_base64_bytes(b""), b"");
+        assert_eq!(decode_base64_bytes(b""), Some(Vec::new()));
     }
 
     /// The bit builtins pass the longer string's tail through when no pad is

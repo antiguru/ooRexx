@@ -1,0 +1,30 @@
+/* ENCODEBASE64 and DECODEBASE64 as methods: `AddMethod("EncodeBase64",
+ * RexxString::encodeBase64, 0)` and its pair, reaching
+ * classes/StringClassConversion.cpp:90 and :153.
+ *
+ * The alphabet is RFC 2045's, with `+` and `/` rather than the URL-safe pair,
+ * and the last group is padded with `=` to a multiple of four. Both are byte
+ * operations rather than text ones, so the last block goes through values no
+ * character set would survive.
+ *
+ * A null string encodes and decodes to itself.
+ */
+
+say 'e3' 'abc'~encodeBase64
+say 'e2' 'ab'~encodeBase64
+say 'e1' 'a'~encodeBase64
+say 'e0' '['||''~encodeBase64||']'
+say 'e6' 'abcabc'~encodeBase64
+say 'd3' 'YWJj'~decodeBase64
+say 'd2' 'YWI='~decodeBase64
+say 'd1' 'YQ=='~decodeBase64
+say 'd0' '['||''~decodeBase64||']'
+say 'd4' 'YWJjYW=='~decodeBase64
+say 'x1' 'ff'x~encodeBase64
+say 'x2' '00010203fffe'x~encodeBase64
+say 'x3' c2x('/w=='~decodeBase64)
+say 'x4' c2x('/+8='~decodeBase64)
+say 'x5' c2x('AB=='~decodeBase64)
+say 'x6' c2x('00'x~encodeBase64)
+say 'rt' ('abc'~encodeBase64~decodeBase64 == 'abc')
+say 'rx' (c2x('00010203fffe'x~encodeBase64~decodeBase64))

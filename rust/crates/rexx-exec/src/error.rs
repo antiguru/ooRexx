@@ -2178,6 +2178,16 @@ impl Raised {
         Raised::syntax(93, 940, vec![method.to_vec(), found.to_vec()])
     }
 
+    /// 93.962: `~decodeBase64`'s receiver is not a Base64 encoding. No
+    /// substitutions -- the message names neither the method nor the value.
+    ///
+    /// It is that method's only refusal, and covers every way the text can be
+    /// wrong: a length that is not a multiple of four, a byte outside the
+    /// alphabet, and a `=` anywhere but closing the last quartet.
+    pub(crate) fn invalid_base64() -> Raised {
+        Raised::syntax(93, 962, Vec::new())
+    }
+
     /// 88.928: `USE ARG >name` where the caller did not pass a variable
     /// reference. `position` is 1-based; `found` is the argument's own
     /// **rendered value**.

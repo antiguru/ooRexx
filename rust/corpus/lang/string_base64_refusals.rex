@@ -1,0 +1,49 @@
+/* DECODEBASE64's one refusal, and the arity of both methods.
+ *
+ * 93.962 covers every way the text can be wrong and names neither the method
+ * nor the value, so the rows below are told apart by which ones raise at all
+ * rather than by their messages.
+ *
+ * `=` closes the LAST quartet and appears nowhere else. It is legal as that
+ * quartet's fourth digit, or as its third when the fourth is one too. A
+ * well-formed pair in an earlier quartet is still an error, which is what row
+ * 7 says and what the untrapped tail repeats as bytes.
+ *
+ * ENCODEBASE64 has no refusal at all: every byte string encodes.
+ */
+
+signal on syntax name trapped
+n = 0
+
+next:
+n = n + 1
+select
+  /* A length that is not a multiple of four. */
+  when n = 1 then say n 'answered' 'abc'~decodeBase64
+  when n = 2 then say n 'answered' 'YWJ'~decodeBase64
+  when n = 3 then say n 'answered' 'YWJj='~decodeBase64
+  /* A byte outside the alphabet, including the URL-safe pair. */
+  when n = 4 then say n 'answered' '!@#$'~decodeBase64
+  when n = 5 then say n 'answered' '-w=='~decodeBase64
+  when n = 6 then say n 'answered' 'Y W J j'~decodeBase64
+  /* Padding away from the end of the last quartet. */
+  when n = 7 then say n 'answered' 'YW==YWJj'~decodeBase64
+  when n = 8 then say n 'answered' 'YW=j'~decodeBase64
+  when n = 9 then say n 'answered' 'Y=WJ'~decodeBase64
+  when n = 10 then say n 'answered' 'YWJj===='~decodeBase64
+  when n = 11 then say n 'answered' '===='~decodeBase64
+  /* Each row's arity is a maximum, and it is zero. */
+  when n = 12 then say n 'answered' 'abc'~encodeBase64(1)
+  when n = 13 then say n 'answered' 'YWJj'~decodeBase64(1)
+  otherwise signal done
+end
+signal next
+
+trapped:
+say n 'raised' rc'.'condition('E')
+signal on syntax name trapped
+signal next
+
+done:
+signal off syntax
+say 'YW==YWJj'~decodeBase64

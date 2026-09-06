@@ -298,10 +298,10 @@ String	countStr	instance	answers	rc 163
 String	d2c	instance	answers	rc 163
 String	d2x	instance	answers	rc 163
 String	dataType	instance	answers	rc 0
-String	decodeBase64	instance	loud	method "DECODEBASE64" of class "String"
+String	decodeBase64	instance	answers	rc 163
 String	delStr	instance	answers	rc 0
 String	delWord	instance	answers	rc 163
-String	encodeBase64	instance	loud	method "ENCODEBASE64" of class "String"
+String	encodeBase64	instance	answers	rc 0
 String	endsWith	instance	answers	rc 168
 String	equals	instance	answers	rc 163
 String	floor	instance	answers	rc 163
