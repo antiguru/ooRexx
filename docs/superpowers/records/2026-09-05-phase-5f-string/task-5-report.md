@@ -1,7 +1,7 @@
 # Phase 5f Task 5 — file the witnesses, and close
 
 Plan: `docs/superpowers/plans/2026-09-05-phase-5f-string.md`, Task 5.
-BASE `b6d7d1af1`. Closing at `PENDING`.
+BASE `b6d7d1af1`. Closing at `6994d0bcd`.
 
 **Every one of `String`'s rows is bound.** It reads 129 `answers` and 6
 `uncomparable`, with no `loud` row left.
@@ -93,13 +93,16 @@ Confirmed unchanged.
 
 | gate | command | status |
 |---|---|---|
-| G1 | `cargo fmt --all --check` | PENDING |
-| G2 | `cargo clippy --workspace --all-targets -- -D warnings` | PENDING |
-| G3 | `cargo test --release --workspace --no-fail-fast` | PENDING |
-| G4 | G3 with `REXX_CORPUS_GATE=1` | PENDING |
-| G5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | PENDING |
-| G6 | `REXX_PHASE_GATE=5c REXX_CORPUS_GATE=1` | PENDING |
-| G7 | `REXX_PHASE_GATE=5d REXX_CORPUS_GATE=1` | PENDING |
+| G1 | `cargo fmt --all --check` | rc 0 |
+| G2 | `cargo clippy --workspace --all-targets -- -D warnings` | rc 0 |
+| G3 | `cargo test --release --workspace --no-fail-fast` | rc 0, 0 failed suites |
+| G4 | G3 with `REXX_CORPUS_GATE=1` | rc 0, 0 failed suites |
+| G5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | rc 0, 0 failed suites |
+| G6 | `REXX_PHASE_GATE=5c REXX_CORPUS_GATE=1` | rc 0, 0 failed suites |
+| G7 | `REXX_PHASE_GATE=5d REXX_CORPUS_GATE=1` | rc 0, 0 failed suites |
+
+Run by `scratchpad/gates-t5.sh`, status file opening with `sha
+6994d0bcd4277b6745957db1239b5f465b7e00ec`.
 
 This task changes no code — it is the enumeration and the filing check — so
 the run over it is the same tree Task 4d's seven gates already read at 0.
