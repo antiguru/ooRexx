@@ -1690,6 +1690,17 @@ impl Raised {
         Raised::syntax(93, 901, vec![expected.to_string().into_bytes()])
     }
 
+    /// 93.918: a `Queue` index names a position it does not hold.
+    ///
+    /// `Error_Incorrect_method_index`, which `QueueClass::putRexx` raises
+    /// when `validateIndex` under `IndexAccess` refuses -- a queue does not
+    /// grow to meet a `put` the way an array does. The substitution is the
+    /// index as written. Measured at rc 163 on a one-item queue:
+    /// `q~put('Y', 99)` reports `Incorrect list index "99".`
+    pub(crate) fn incorrect_list_index(index: &[u8]) -> Raised {
+        Raised::syntax(93, 918, vec![index.to_vec()])
+    }
+
     /// 98.975: a sort was asked to order an array with a hole in it.
     ///
     /// `Error_Execution_sparse_array`. The substitution is the 1-based

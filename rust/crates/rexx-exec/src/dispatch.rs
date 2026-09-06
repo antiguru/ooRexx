@@ -845,7 +845,6 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     // `QueueClass::initRexx` (`memory/Setup.cpp:777`) and the donation
     // `InheritInstanceMethods(IdentityTable)` makes at `Relation` (`:958`).
-    ("Queue", "INIT", Arity::Fixed(1), native_capacity_init),
     ("Relation", "INIT", Arity::Fixed(1), native_capacity_init),
     // `.context`'s own package, which is the running program's -- the one
     // route to it, since `Class~package` above answers `REXX` for every
@@ -6208,6 +6207,18 @@ fn array_reshape(
 /// Measured, `a = (1,,3)`: `a[1]` is `1`, `a[2]` is `The NIL object`, `a[3]` is
 /// `3` and `a[4]` is `The NIL object`.
 fn native_array_at(
+    interp: &mut Interp,
+    cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    native_array_at_for(interp, cleared, receiver, args)
+}
+
+/// [`native_array_at`] against a named store, which is what `Queue`'s own row
+/// needs: its slots live in an `Array` the instance holds rather than in the
+/// receiver.
+fn native_array_at_for(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,

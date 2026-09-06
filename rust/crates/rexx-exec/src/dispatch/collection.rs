@@ -57,7 +57,68 @@ const SUPPLIER_ITEMS: &[u8] = b"ITEMS";
 const SUPPLIER_INDEXES: &[u8] = b"INDEXES";
 const SUPPLIER_POSITION: &[u8] = b"POSITION";
 
+/// [`array_slots`] over the receiver's store rather than the receiver.
+fn slots_of(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<Option<ObjRef>>, Failure> {
+    let store = store_of(interp, receiver)?;
+    array_slots_owned(interp, store)
+}
+
+/// [`array_dimensions`] over the receiver's store rather than the receiver.
+fn dimensions_of(interp: &mut Interp, receiver: ObjRef) -> Result<Option<Vec<usize>>, Failure> {
+    let store = store_of(interp, receiver)?;
+    array_dimensions(interp, store)
+}
+
+/// [`array_position`] over the receiver's store rather than the receiver.
+fn position_in(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    index_use: IndexUse,
+) -> Result<Option<usize>, Failure> {
+    let store = store_of(interp, receiver)?;
+    array_position(interp, store, args, index_use)
+}
+
+/// The `Queue` store's pool name, in the receiver's own pool under the
+/// `Queue` class as scope -- `Supplier`'s arrangement and for the same
+/// reason: `ScopePools` is already walked by the collector.
+const QUEUE_ITEMS: &[u8] = b"ITEMS";
+
 // ---- the contents protocol ----
+
+/// The array that actually holds `receiver`'s slots.
+///
+/// **A `Queue` is not a `Body::Array` and cannot be one.** A `Body::Array`
+/// resolves to `Primitive::Array` wherever it is asked, so an object carrying
+/// one answers `.Array` for `~class` -- there is nowhere in that body to say
+/// which class it belongs to. Upstream has the opposite arrangement:
+/// `Setup.cpp`'s `InheritInstanceMethods(Array)` copies `Array`'s whole
+/// native behaviour into `Queue`, so one C++ body serves both receivers.
+///
+/// This function is what buys the same thing here. A `Queue` is an ordinary
+/// instance whose pool holds an `Array`, and every body written against
+/// `Array` reaches it by asking for the store rather than for the receiver.
+/// Measured before it existed: `.Queue~new~allItems` refused with
+/// `a message send to a value that is not an array` rather than with the
+/// unimplemented message, which is the shared registration already in place
+/// and only the store missing.
+///
+/// The alternative -- widening `Body::Array` with a class field -- costs
+/// every array in the heap eight bytes to serve two classes, against
+/// `body.rs`'s own size assertion. This costs a pool lookup on the collection
+/// methods of one class.
+fn store_of(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure> {
+    if interp.array_slots(receiver).is_some() {
+        return Ok(receiver);
+    }
+    let scope = interp
+        .classes()
+        .lookup("Queue")
+        .expect("Queue is a native class");
+    pool_variable(interp, receiver, scope, QUEUE_ITEMS)
+        .ok_or_else(|| Loud::receiver_class("a value that is not an array").into())
+}
 
 /// Every (index, item) pair an ordered receiver holds, in the store's own
 /// order, holes skipped.
@@ -73,6 +134,7 @@ const SUPPLIER_POSITION: &[u8] = b"POSITION";
 /// with `[1]`, `[3]` and `[5] = .nil` answers `size 5`, `items 3`,
 /// `allIndexes 1,3,5`.
 fn ordered_pairs(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<(ObjRef, ObjRef)>, Failure> {
+    let receiver = store_of(interp, receiver)?;
     let slots = array_slots_owned(interp, receiver)?;
     let dimensions = array_dimensions(interp, receiver)?;
     let mut pairs = Vec::new();
@@ -211,7 +273,7 @@ fn native_array_is_empty(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let empty = array_slots(interp, receiver)?.iter().flatten().count() == 0;
+    let empty = slots_of(interp, receiver)?.iter().flatten().count() == 0;
     Ok(Some(crate::eval::logical(empty)))
 }
 
@@ -233,7 +295,7 @@ fn native_array_empty(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let length = array_slots(interp, receiver)?.len();
+    let length = slots_of(interp, receiver)?.len();
     for offset in 0..length {
         clear_array_slot(interp, receiver, offset)?;
     }
@@ -282,11 +344,11 @@ fn native_array_has_index(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let Some(position) = array_position(interp, receiver, args, IndexUse::Get)? else {
+    let Some(position) = position_in(interp, receiver, args, IndexUse::Get)? else {
         return Ok(Some(crate::eval::logical(false)));
     };
     let held = matches!(
-        array_slots(interp, receiver)?.get(position - 1),
+        slots_of(interp, receiver)?.get(position - 1).copied(),
         Some(Some(_))
     );
     Ok(Some(crate::eval::logical(held)))
@@ -303,11 +365,11 @@ fn native_array_remove(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let Some(position) = array_position(interp, receiver, args, IndexUse::Get)? else {
+    let Some(position) = position_in(interp, receiver, args, IndexUse::Get)? else {
         return Ok(Some(ObjRef::NIL));
     };
-    let held = match array_slots(interp, receiver)?.get(position - 1) {
-        Some(Some(item)) => *item,
+    let held = match slots_of(interp, receiver)?.get(position - 1).copied() {
+        Some(Some(item)) => item,
         Some(None) | None => return Ok(Some(ObjRef::NIL)),
     };
     clear_array_slot(interp, receiver, position - 1)?;
@@ -323,7 +385,7 @@ fn native_array_remove_item(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let wanted = item_argument(args)?;
-    let slots = array_slots_owned(interp, receiver)?;
+    let slots = slots_of(interp, receiver)?;
     for (offset, slot) in slots.iter().enumerate() {
         let Some(item) = *slot else { continue };
         if same_item(interp, item, wanted)? {
@@ -354,6 +416,7 @@ fn native_array_supplier(
 
 /// Empties one slot of an array receiver.
 fn clear_array_slot(interp: &mut Interp, receiver: ObjRef, offset: usize) -> Result<(), Failure> {
+    let receiver = store_of(interp, receiver)?;
     match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
             if let Some(slot) = slots.get_mut(offset) {
@@ -536,15 +599,21 @@ fn native_supplier_init(
 /// Its callers upstream are `APPEND`, `INSERT`, `DELETE` and `SECTION`, and
 /// nothing else -- `fill`, `first`, `next` and the rest are happy with any
 /// shape. Measured at rc 163: `.Array~new(2,3)~delete(1)` reports 93.954.
-fn single_dimension_only(interp: &Interp, receiver: ObjRef, method: &str) -> Result<(), Failure> {
-    if array_dimensions(interp, receiver)?.is_some_and(|shape| shape.len() > 1) {
+fn single_dimension_only(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    method: &str,
+) -> Result<(), Failure> {
+    let receiver = store_of(interp, receiver)?;
+    if dimensions_of(interp, receiver)?.is_some_and(|shape| shape.len() > 1) {
         return Err(Raised::single_dimension_only(method).into());
     }
     Ok(())
 }
 
 /// The 0-based offsets of `receiver`'s occupied slots.
-fn occupied(interp: &Interp, receiver: ObjRef) -> Result<Vec<usize>, Failure> {
+fn occupied(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<usize>, Failure> {
+    let receiver = store_of(interp, receiver)?;
     Ok(array_slots(interp, receiver)?
         .iter()
         .enumerate()
@@ -564,6 +633,7 @@ fn array_end(
     take_last: bool,
     want_item: bool,
 ) -> Result<Option<ObjRef>, Failure> {
+    let receiver = store_of(interp, receiver)?;
     let offsets = occupied(interp, receiver)?;
     let found = if take_last {
         offsets.last().copied()
@@ -579,7 +649,7 @@ fn array_end(
             None => ObjRef::NIL,
         }));
     }
-    let dimensions = array_dimensions(interp, receiver)?;
+    let dimensions = dimensions_of(interp, receiver)?;
     Ok(Some(subscript_object(
         interp,
         offset,
@@ -636,7 +706,8 @@ fn array_step(
     args: &[Option<ObjRef>],
     forward: bool,
 ) -> Result<Option<ObjRef>, Failure> {
-    let Some(position) = array_position(interp, receiver, args, IndexUse::Get)? else {
+    let receiver = store_of(interp, receiver)?;
+    let Some(position) = position_in(interp, receiver, args, IndexUse::Get)? else {
         return Ok(Some(ObjRef::NIL));
     };
     let offsets = occupied(interp, receiver)?;
@@ -651,7 +722,7 @@ fn array_step(
     let Some(offset) = found else {
         return Ok(Some(ObjRef::NIL));
     };
-    let dimensions = array_dimensions(interp, receiver)?;
+    let dimensions = dimensions_of(interp, receiver)?;
     Ok(Some(subscript_object(
         interp,
         offset,
@@ -687,7 +758,7 @@ fn native_array_append(
 ) -> Result<Option<ObjRef>, Failure> {
     let item = item_argument(args)?;
     single_dimension_only(interp, receiver, "APPEND")?;
-    let at = array_slots(interp, receiver)?.len();
+    let at = slots_of(interp, receiver)?.len();
     array_splice(interp, receiver, at, Some(item))?;
     Ok(Some(interp.counted(at + 1)))
 }
@@ -721,7 +792,7 @@ fn native_array_insert(
             .last()
             .map_or(0, |last| last + 1),
     };
-    let length = array_slots(interp, receiver)?.len();
+    let length = slots_of(interp, receiver)?.len();
     if at > length {
         array_grow(interp, receiver, at)?;
     }
@@ -746,11 +817,11 @@ fn native_array_delete(
     // the index-validating family is 93.901 -- `classes/ArrayClass.cpp:822`.
     item_argument(args)?;
     single_dimension_only(interp, receiver, "DELETE")?;
-    let Some(position) = array_position(interp, receiver, args, IndexUse::Get)? else {
+    let Some(position) = position_in(interp, receiver, args, IndexUse::Get)? else {
         return Ok(Some(ObjRef::NIL));
     };
-    let held = match array_slots(interp, receiver)?.get(position - 1) {
-        Some(slot) => *slot,
+    let held = match slots_of(interp, receiver)?.get(position - 1).copied() {
+        Some(slot) => slot,
         None => return Ok(Some(ObjRef::NIL)),
     };
     array_splice(interp, receiver, position - 1, None)?;
@@ -794,7 +865,7 @@ fn native_array_section(
     single_dimension_only(interp, receiver, "SECTION")?;
     let start = item_argument(args)?;
     let start = super::positive_index(interp, start, 1)?;
-    let slots = array_slots_owned(interp, receiver)?;
+    let slots = slots_of(interp, receiver)?;
     let available = slots.len().saturating_sub(start.saturating_sub(1));
     let count = match args.get(1).copied().flatten() {
         Some(count) => super::array_size_argument(interp, Some(count), 2)?.min(available),
@@ -805,9 +876,7 @@ fn native_array_section(
         .skip(start.saturating_sub(1))
         .take(count)
         .collect();
-    let section = interp.alloc_with(BehaviourId::ARRAY, Body::array(taken));
-    interp.roots.push_temp(section);
-    Ok(Some(section))
+    Ok(Some(same_class_array(interp, receiver, taken)?))
 }
 
 /// `Array~dimensions`: an `Array` of the extents --
@@ -822,9 +891,9 @@ fn native_array_dimensions(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let extents = match array_dimensions(interp, receiver)? {
+    let extents = match dimensions_of(interp, receiver)? {
         Some(shape) => shape,
-        None => vec![array_slots(interp, receiver)?.len()],
+        None => vec![slots_of(interp, receiver)?.len()],
     };
     let items = extents
         .into_iter()
@@ -840,7 +909,8 @@ fn native_array_dimensions(
 /// **A hole is a refusal and not a skip.** Measured at rc 158, an array
 /// holding `[1]`, `[3]`, `[5]` answers `~sort` with `98.975 Missing array
 /// element at position 2.`, where `allItems` happily skips the same holes.
-fn dense_items(interp: &Interp, receiver: ObjRef) -> Result<Vec<ObjRef>, Failure> {
+fn dense_items(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<ObjRef>, Failure> {
+    let receiver = store_of(interp, receiver)?;
     let slots = array_slots(interp, receiver)?;
     let mut items = Vec::with_capacity(slots.len());
     for (offset, slot) in slots.iter().enumerate() {
@@ -956,6 +1026,7 @@ fn merge_sort(
 /// sort family sort **in place**: measured, `p = .Array~of('b','a')` then
 /// `q = p~sort` leaves `p` reading `a,b` and `q` is that same array.
 fn write_back(interp: &mut Interp, receiver: ObjRef, items: Vec<ObjRef>) -> Result<(), Failure> {
+    let receiver = store_of(interp, receiver)?;
     match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
             for (slot, item) in slots.iter_mut().zip(items) {
@@ -1008,6 +1079,7 @@ fn array_splice(
     at: usize,
     item: Option<ObjRef>,
 ) -> Result<(), Failure> {
+    let receiver = store_of(interp, receiver)?;
     match item {
         Some(item) => array_splice_slot(interp, receiver, at, Some(item)),
         None => match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
@@ -1022,6 +1094,36 @@ fn array_splice(
     }
 }
 
+/// A new array of the receiver's own class over `slots`.
+///
+/// `ArrayClass::sectionRexx` ends `allocateArrayOfClass`
+/// (`classes/ArrayClass.cpp:1524`), so a `Queue`'s section is a **Queue**.
+/// Measured: `q~section(1,1)~makeString` is 97.1 on the oracle, because a
+/// `Queue` does not answer `makeString` -- an `Array` result would have
+/// answered it, which is how this was found.
+fn same_class_array(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    slots: Vec<Option<ObjRef>>,
+) -> Result<ObjRef, Failure> {
+    let store = interp.alloc_with(BehaviourId::ARRAY, Body::array(slots));
+    interp.roots.push_temp(store);
+    if interp.array_slots(receiver).is_some() {
+        return Ok(store);
+    }
+    let class = interp
+        .class_of_value(receiver)
+        .ok_or_else(|| Failure::from(Loud::receiver_class("a value that is not an array")))?;
+    let object = new_instance(interp, class)?;
+    interp.roots.push_temp(object);
+    let scope = interp
+        .classes()
+        .lookup("Queue")
+        .expect("Queue is a native class");
+    interp.set_pool_variable(object, scope, QUEUE_ITEMS, store);
+    Ok(object)
+}
+
 /// Inserts a slot at 0-based `at`, which may be empty -- `insert` with its
 /// item omitted opens a hole rather than refusing.
 fn array_splice_slot(
@@ -1030,6 +1132,7 @@ fn array_splice_slot(
     at: usize,
     item: Option<ObjRef>,
 ) -> Result<(), Failure> {
+    let receiver = store_of(interp, receiver)?;
     match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
             let at = at.min(slots.len());
@@ -1042,6 +1145,7 @@ fn array_splice_slot(
 
 /// Grows `receiver` to `length` empty slots, for an `insert` past the end.
 fn array_grow(interp: &mut Interp, receiver: ObjRef, length: usize) -> Result<(), Failure> {
+    let receiver = store_of(interp, receiver)?;
     match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
             slots.resize(length, None);
@@ -1049,6 +1153,181 @@ fn array_grow(interp: &mut Interp, receiver: ObjRef, length: usize) -> Result<()
         }
         _ => Err(Loud::receiver_class("a value that is not an array").into()),
     }
+}
+
+// ---- Queue ----
+
+/// `Queue~init([size])`: validates the optional capacity the way every
+/// collection's does, and gives the instance the array that holds its items.
+///
+/// Upstream a `Queue` *is* an array -- `QueueClass` derives from `ArrayClass`
+/// and `Setup.cpp` copies the whole behaviour across. Here the store is an
+/// `Array` object in the receiver's own pool, for the reason [`store_of`]
+/// gives.
+fn native_queue_init(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    super::optional_length_argument(interp, args, 0)?;
+    let store = interp.alloc_with(BehaviourId::ARRAY, Body::array(Vec::new()));
+    interp.roots.push_temp(store);
+    let scope = interp
+        .classes()
+        .lookup("Queue")
+        .expect("Queue is a native class");
+    interp.set_pool_variable(receiver, scope, QUEUE_ITEMS, store);
+    Ok(None)
+}
+
+/// `Queue~queue(item)`: adds at the **end** -- `QueueClass::queueRexx`.
+fn native_queue_queue(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let item = item_argument(args)?;
+    let store = store_of(interp, receiver)?;
+    let at = array_slots(interp, store)?.len();
+    array_splice_slot(interp, store, at, Some(item))?;
+    Ok(None)
+}
+
+/// `Queue~push(item)`: adds at the **front** -- `QueueClass::pushRexx`.
+///
+/// Measured: after `queue('a')`, `queue('b')`, `push('z')` the queue reads
+/// `z,a,b`, so the two are opposite ends and not spellings of one another.
+fn native_queue_push(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let item = item_argument(args)?;
+    let store = store_of(interp, receiver)?;
+    array_splice_slot(interp, store, 0, Some(item))?;
+    Ok(None)
+}
+
+/// `Queue~peek`: the front item without removing it, or `.nil` for an empty
+/// queue -- `QueueClass::peek`.
+fn native_queue_peek(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let store = store_of(interp, receiver)?;
+    Ok(Some(match array_slots(interp, store)?.first() {
+        Some(Some(item)) => *item,
+        Some(None) | None => ObjRef::NIL,
+    }))
+}
+
+/// `Queue~pull`: takes the front item off and answers it, or `.nil` --
+/// `QueueClass::pullRexx`.
+fn native_queue_pull(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let store = store_of(interp, receiver)?;
+    let front = match array_slots(interp, store)?.first() {
+        Some(Some(item)) => *item,
+        Some(None) | None => return Ok(Some(ObjRef::NIL)),
+    };
+    array_splice(interp, store, 0, None)?;
+    Ok(Some(front))
+}
+
+/// `Queue~delete(index)` and `Queue~remove(index)`, which are **one body**
+/// upstream (`QueueClass::deleteRexx`) where `Array` has two.
+///
+/// That is the difference worth stating: `Array~remove` leaves a hole and
+/// keeps the size, while `Queue~remove` closes the gap. Measured on a queue
+/// reading `a,b,c`, `remove(2)` answers `b` and leaves `a,c` at size 2.
+fn native_queue_delete(
+    interp: &mut Interp,
+    cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    native_array_delete(interp, cleared, receiver, args)
+}
+
+/// `Queue~put(item, index)` and `Queue~[index] = item`:
+/// `QueueClass::putRexx`, which replaces rather than growing.
+fn native_queue_put(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let item = item_argument(args)?;
+    let Some(index) = args.get(1).copied().flatten() else {
+        return Err(Raised::missing_method_argument(2).into());
+    };
+    let store = store_of(interp, receiver)?;
+    let refuse = |interp: &mut Interp| {
+        let written = interp.to_text(index);
+        Failure::from(Raised::incorrect_list_index(&written))
+    };
+    let Some(position) = array_position(interp, store, &args[1..], IndexUse::Get)? else {
+        return Err(refuse(interp));
+    };
+    let held = array_slots(interp, store)?.len();
+    if position > held {
+        return Err(refuse(interp));
+    }
+    match interp.heap.get_mut(store).map(|object| &mut object.body) {
+        Some(Body::Array { slots, .. }) => {
+            slots[position - 1] = Some(item);
+            Ok(None)
+        }
+        _ => Err(Loud::receiver_class("a value that is not an array").into()),
+    }
+}
+
+/// `Queue~at(index)` and `Queue~[index]`: `ArrayClass::getRexx` over the
+/// store.
+///
+/// A row of its own rather than the shared registration, because the bodies
+/// `Setup.cpp` lets `Queue` inherit live in `dispatch.rs` and take the
+/// receiver's own slots. The ones in this file reach the store through
+/// [`store_of`] already; these four are the ones that do not.
+fn native_queue_at(
+    interp: &mut Interp,
+    cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let store = store_of(interp, receiver)?;
+    super::native_array_at_for(interp, cleared, store, args)
+}
+
+/// `Queue~items`: how many slots of the store hold an object.
+fn native_queue_items(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let items = slots_of(interp, receiver)?.iter().flatten().count();
+    Ok(Some(interp.counted(items)))
+}
+
+/// `Queue~size`: how many slots the store has.
+fn native_queue_size(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let size = slots_of(interp, receiver)?.len();
+    Ok(Some(interp.counted(size)))
 }
 
 /// The collection classes' primitive methods, chained into
@@ -1062,6 +1341,19 @@ fn array_grow(interp: &mut Interp, receiver: ObjRef, length: usize) -> Result<()
 /// `Setup.cpp`'s own third operand: a literal is a maximum and `A_COUNT` is
 /// [`Arity::Counted`].
 pub(super) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
+    ("Queue", "AT", Arity::Counted, native_queue_at),
+    ("Queue", "[]", Arity::Counted, native_queue_at),
+    ("Queue", "ITEMS", Arity::Fixed(0), native_queue_items),
+    ("Queue", "SIZE", Arity::Fixed(0), native_queue_size),
+    ("Queue", "INIT", Arity::Fixed(1), native_queue_init),
+    ("Queue", "QUEUE", Arity::Fixed(1), native_queue_queue),
+    ("Queue", "PUSH", Arity::Fixed(1), native_queue_push),
+    ("Queue", "PEEK", Arity::Fixed(0), native_queue_peek),
+    ("Queue", "PULL", Arity::Fixed(0), native_queue_pull),
+    ("Queue", "DELETE", Arity::Fixed(1), native_queue_delete),
+    ("Queue", "REMOVE", Arity::Fixed(1), native_queue_delete),
+    ("Queue", "PUT", Arity::Fixed(2), native_queue_put),
+    ("Queue", "[]=", Arity::Fixed(2), native_queue_put),
     ("Array", "SORT", Arity::Fixed(0), native_array_sort),
     ("Array", "SORTWITH", Arity::Fixed(1), native_array_sort_with),
     ("Array", "STABLESORT", Arity::Fixed(0), native_array_sort),

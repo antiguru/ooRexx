@@ -514,54 +514,54 @@ Bag	uniqueIndexes	instance	loud	method "UNIQUEINDEXES" of class "Bag"
 Bag	xor	instance	answers	rc 163
 Bag	disjoint	instance	answers	rc 163
 Bag	equivalent	instance	answers	rc 163
-CircularQueue	of	class	loud	a message send to a value that is not an array
+CircularQueue	of	class	answers	rc 0
 CircularQueue	append	instance	answers	rc 163
 CircularQueue	init	instance	answers	rc 163
-CircularQueue	insert	instance	loud	a message send to a value that is not an array
+CircularQueue	insert	instance	answers	rc 0
 CircularQueue	intersection	instance	answers	rc 163
-CircularQueue	makeArray	instance	loud	a message send to a value that is not an array
-CircularQueue	makeString	instance	loud	a message send to a value that is not an array
+CircularQueue	makeArray	instance	answers	rc 0
+CircularQueue	makeString	instance	answers	rc 0
 CircularQueue	push	instance	answers	rc 163
 CircularQueue	queue	instance	answers	rc 163
 CircularQueue	resize	instance	answers	rc 163
 CircularQueue	section	instance	answers	rc 163
 CircularQueue	size	instance	answers	rc 0
-CircularQueue	string	instance	loud	a message send to a value that is not an array
-CircularQueue	supplier	instance	loud	a message send to a value that is not an array
+CircularQueue	string	instance	answers	rc 0
+CircularQueue	supplier	instance	answers	rc 0
 CircularQueue	union	instance	answers	rc 163
 CircularQueue	xor	instance	answers	rc 163
-CircularQueue	[]	instance	loud	a message send to a value that is not an array
-CircularQueue	[]=	instance	loud	method "[]=" of class "Queue"
-CircularQueue	allIndexes	instance	loud	a message send to a value that is not an array
-CircularQueue	allItems	instance	loud	a message send to a value that is not an array
-CircularQueue	at	instance	loud	a message send to a value that is not an array
+CircularQueue	[]	instance	answers	rc 163
+CircularQueue	[]=	instance	answers	rc 163
+CircularQueue	allIndexes	instance	answers	rc 0
+CircularQueue	allItems	instance	answers	rc 0
+CircularQueue	at	instance	answers	rc 163
 CircularQueue	difference	instance	answers	rc 163
 CircularQueue	disjoint	instance	answers	rc 163
 CircularQueue	equivalent	instance	answers	rc 163
-CircularQueue	hasIndex	instance	loud	a message send to a value that is not an array
+CircularQueue	hasIndex	instance	answers	rc 163
 CircularQueue	hasItem	instance	answers	rc 163
 CircularQueue	index	instance	answers	rc 163
-CircularQueue	items	instance	loud	a message send to a value that is not an array
-CircularQueue	put	instance	loud	method "PUT" of class "Queue"
+CircularQueue	items	instance	answers	rc 0
+CircularQueue	put	instance	answers	rc 163
 CircularQueue	subset	instance	answers	rc 163
 CircularQueue	appendAll	instance	answers	rc 163
-CircularQueue	delete	instance	loud	method "DELETE" of class "Queue"
-CircularQueue	first	instance	loud	a message send to a value that is not an array
-CircularQueue	firstItem	instance	loud	a message send to a value that is not an array
-CircularQueue	last	instance	loud	a message send to a value that is not an array
-CircularQueue	lastItem	instance	loud	a message send to a value that is not an array
-CircularQueue	next	instance	loud	a message send to a value that is not an array
-CircularQueue	previous	instance	loud	a message send to a value that is not an array
-CircularQueue	sort	instance	loud	a message send to a value that is not an array
+CircularQueue	delete	instance	answers	rc 163
+CircularQueue	first	instance	answers	rc 0
+CircularQueue	firstItem	instance	answers	rc 0
+CircularQueue	last	instance	answers	rc 0
+CircularQueue	lastItem	instance	answers	rc 0
+CircularQueue	next	instance	answers	rc 163
+CircularQueue	previous	instance	answers	rc 163
+CircularQueue	sort	instance	answers	rc 0
 CircularQueue	sortWith	instance	answers	rc 163
-CircularQueue	stableSort	instance	loud	a message send to a value that is not an array
+CircularQueue	stableSort	instance	answers	rc 0
 CircularQueue	stableSortWith	instance	answers	rc 163
 CircularQueue	new	class	answers	rc 163
-CircularQueue	empty	instance	loud	a message send to a value that is not an array
-CircularQueue	isEmpty	instance	loud	a message send to a value that is not an array
-CircularQueue	peek	instance	loud	method "PEEK" of class "Queue"
-CircularQueue	pull	instance	loud	method "PULL" of class "Queue"
-CircularQueue	remove	instance	loud	method "REMOVE" of class "Queue"
+CircularQueue	empty	instance	answers	rc 0
+CircularQueue	isEmpty	instance	answers	rc 0
+CircularQueue	peek	instance	answers	rc 0
+CircularQueue	pull	instance	answers	rc 0
+CircularQueue	remove	instance	answers	rc 163
 CircularQueue	removeItem	instance	answers	rc 163
 Directory	new	class	answers	rc 0
 Directory	[]	instance	answers	rc 168
@@ -706,37 +706,37 @@ Properties	unknown	instance	answers	rc 163
 Properties	unsetMethod	instance	loud	method "UNSETMETHOD" of class "Directory"
 Queue	new	class	answers	rc 0
 Queue	of	class	loud	method "OF" of class "Queue"
-Queue	[]	instance	loud	a message send to a value that is not an array
-Queue	[]=	instance	loud	method "[]=" of class "Queue"
-Queue	allIndexes	instance	loud	a message send to a value that is not an array
-Queue	allItems	instance	loud	a message send to a value that is not an array
+Queue	[]	instance	answers	rc 163
+Queue	[]=	instance	answers	rc 163
+Queue	allIndexes	instance	answers	rc 0
+Queue	allItems	instance	answers	rc 0
 Queue	append	instance	answers	rc 163
-Queue	at	instance	loud	a message send to a value that is not an array
-Queue	delete	instance	loud	method "DELETE" of class "Queue"
-Queue	empty	instance	loud	a message send to a value that is not an array
-Queue	first	instance	loud	a message send to a value that is not an array
-Queue	firstItem	instance	loud	a message send to a value that is not an array
-Queue	hasIndex	instance	loud	a message send to a value that is not an array
+Queue	at	instance	answers	rc 163
+Queue	delete	instance	answers	rc 163
+Queue	empty	instance	answers	rc 0
+Queue	first	instance	answers	rc 0
+Queue	firstItem	instance	answers	rc 0
+Queue	hasIndex	instance	answers	rc 163
 Queue	hasItem	instance	answers	rc 163
 Queue	index	instance	answers	rc 163
-Queue	insert	instance	loud	a message send to a value that is not an array
-Queue	isEmpty	instance	loud	a message send to a value that is not an array
-Queue	items	instance	loud	a message send to a value that is not an array
-Queue	last	instance	loud	a message send to a value that is not an array
-Queue	lastItem	instance	loud	a message send to a value that is not an array
-Queue	makeArray	instance	loud	a message send to a value that is not an array
-Queue	next	instance	loud	a message send to a value that is not an array
-Queue	peek	instance	loud	method "PEEK" of class "Queue"
-Queue	previous	instance	loud	a message send to a value that is not an array
-Queue	pull	instance	loud	method "PULL" of class "Queue"
-Queue	push	instance	loud	method "PUSH" of class "Queue"
-Queue	put	instance	loud	method "PUT" of class "Queue"
-Queue	queue	instance	loud	method "QUEUE" of class "Queue"
-Queue	remove	instance	loud	method "REMOVE" of class "Queue"
+Queue	insert	instance	answers	rc 0
+Queue	isEmpty	instance	answers	rc 0
+Queue	items	instance	answers	rc 0
+Queue	last	instance	answers	rc 0
+Queue	lastItem	instance	answers	rc 0
+Queue	makeArray	instance	answers	rc 0
+Queue	next	instance	answers	rc 163
+Queue	peek	instance	answers	rc 0
+Queue	previous	instance	answers	rc 163
+Queue	pull	instance	answers	rc 0
+Queue	push	instance	answers	rc 163
+Queue	put	instance	answers	rc 163
+Queue	queue	instance	answers	rc 163
+Queue	remove	instance	answers	rc 163
 Queue	removeItem	instance	answers	rc 163
-Queue	section	instance	loud	a message send to a value that is not an array
-Queue	size	instance	loud	method "SIZE" of class "Queue"
-Queue	supplier	instance	loud	a message send to a value that is not an array
+Queue	section	instance	answers	rc 163
+Queue	size	instance	answers	rc 0
+Queue	supplier	instance	answers	rc 0
 Queue	difference	instance	answers	rc 163
 Queue	disjoint	instance	answers	rc 163
 Queue	equivalent	instance	answers	rc 163
@@ -745,9 +745,9 @@ Queue	subset	instance	answers	rc 163
 Queue	union	instance	answers	rc 163
 Queue	xor	instance	answers	rc 163
 Queue	appendAll	instance	answers	rc 163
-Queue	sort	instance	loud	a message send to a value that is not an array
+Queue	sort	instance	answers	rc 0
 Queue	sortWith	instance	answers	rc 163
-Queue	stableSort	instance	loud	a message send to a value that is not an array
+Queue	stableSort	instance	answers	rc 0
 Queue	stableSortWith	instance	answers	rc 163
 Relation	new	class	answers	rc 0
 Relation	[]	instance	answers	rc 168
@@ -1075,8 +1075,8 @@ File	\<<	instance	unanswered	a bare `~new` raises; the method was never sent
 File	\>	instance	unanswered	a bare `~new` raises; the method was never sent
 File	\>>	instance	unanswered	a bare `~new` raises; the method was never sent
 MessageNotification	messageComplete	instance	answers	rc 163
-Monitor	current	instance	loud	method "PEEK" of class "Queue"
-Monitor	destination	instance	loud	method "PULL" of class "Queue"
+Monitor	current	instance	answers	rc 0
+Monitor	destination	instance	answers	rc 0
 Monitor	init	instance	answers	rc 165
 Monitor	unknown	instance	answers	rc 163
 MutableBuffer	new	class	answers	rc 0

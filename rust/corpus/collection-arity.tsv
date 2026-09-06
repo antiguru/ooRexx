@@ -91,53 +91,53 @@ Bag	supplier	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Ba
 Bag	union	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
 Bag	uniqueIndexes	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
 Bag	xor	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-CircularQueue	[]	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	[]=	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	allIndexes	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	allItems	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	append	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	appendAll	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	at	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	delete	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	difference	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	disjoint	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	empty	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	equivalent	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	first	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	firstItem	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	hasIndex	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	hasItem	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	index	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	init	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	insert	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	intersection	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	isEmpty	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	items	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	last	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	lastItem	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	makeArray	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	makeString	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	next	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	peek	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	previous	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	pull	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	push	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	put	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	queue	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	remove	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	removeItem	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	resize	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	section	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	size	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	sort	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	sortWith	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	stableSort	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	stableSortWith	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	string	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	subset	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	supplier	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	union	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
-CircularQueue	xor	setup-differs	crate rc120: rexx-exec: a message send to a value that is not an array is not implemented (Phase 5)
+CircularQueue	[]	agree	rc0
+CircularQueue	[]=	agree	rc0
+CircularQueue	allIndexes	agree	rc0
+CircularQueue	allItems	agree	rc0
+CircularQueue	append	agree	rc0
+CircularQueue	appendAll	agree	rc0
+CircularQueue	at	agree	rc0
+CircularQueue	delete	agree	rc0
+CircularQueue	difference	agree	rc0
+CircularQueue	disjoint	agree	rc0
+CircularQueue	empty	agree	rc0
+CircularQueue	equivalent	agree	rc0
+CircularQueue	first	agree	rc0
+CircularQueue	firstItem	agree	rc0
+CircularQueue	hasIndex	agree	rc0
+CircularQueue	hasItem	agree	rc0
+CircularQueue	index	agree	rc0
+CircularQueue	init	agree	rc0
+CircularQueue	insert	agree	rc0
+CircularQueue	intersection	agree	rc0
+CircularQueue	isEmpty	agree	rc0
+CircularQueue	items	agree	rc0
+CircularQueue	last	agree	rc0
+CircularQueue	lastItem	agree	rc0
+CircularQueue	makeArray	agree	rc0
+CircularQueue	makeString	agree	rc0
+CircularQueue	next	agree	rc0
+CircularQueue	peek	agree	rc0
+CircularQueue	previous	agree	rc0
+CircularQueue	pull	agree	rc0
+CircularQueue	push	agree	rc0
+CircularQueue	put	agree	rc0
+CircularQueue	queue	agree	rc0
+CircularQueue	remove	agree	rc0
+CircularQueue	removeItem	agree	rc0
+CircularQueue	resize	agree	rc0
+CircularQueue	section	agree	rc0
+CircularQueue	size	agree	rc0
+CircularQueue	sort	agree	rc0
+CircularQueue	sortWith	agree	rc0
+CircularQueue	stableSort	agree	rc0
+CircularQueue	stableSortWith	agree	rc0
+CircularQueue	string	agree	rc0
+CircularQueue	subset	agree	rc0
+CircularQueue	supplier	agree	rc0
+CircularQueue	union	agree	rc0
+CircularQueue	xor	agree	rc0
 Directory	[]	agree	rc0
 Directory	[]=	agree	rc0
 Directory	allIndexes	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ALLINDEXES" of class "Directory" is not implemented (Phase 5)
@@ -270,49 +270,49 @@ Properties	union	setup-differs	crate rc120: rexx-exec: a message send to a value
 Properties	unknown	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
 Properties	unsetMethod	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
 Properties	xor	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Queue	[]	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	[]=	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	allIndexes	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	allItems	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	append	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	appendAll	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	at	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	delete	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	difference	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	disjoint	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	empty	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	equivalent	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	first	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	firstItem	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	hasIndex	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	hasItem	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	index	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	insert	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	intersection	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	isEmpty	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	items	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	last	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	lastItem	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	makeArray	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	next	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	peek	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	previous	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	pull	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	push	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	put	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	queue	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	remove	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	removeItem	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	section	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	size	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	sort	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	sortWith	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	stableSort	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	stableSortWith	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	subset	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	supplier	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	union	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
-Queue	xor	setup-differs	crate rc120: rexx-exec: method "QUEUE" of class "Queue" is not implemented (Phase 5)
+Queue	[]	agree	rc0
+Queue	[]=	agree	rc0
+Queue	allIndexes	agree	rc0
+Queue	allItems	agree	rc0
+Queue	append	agree	rc0
+Queue	appendAll	agree	rc0
+Queue	at	agree	rc0
+Queue	delete	agree	rc0
+Queue	difference	agree	rc0
+Queue	disjoint	agree	rc0
+Queue	empty	agree	rc0
+Queue	equivalent	agree	rc0
+Queue	first	agree	rc0
+Queue	firstItem	agree	rc0
+Queue	hasIndex	agree	rc0
+Queue	hasItem	agree	rc0
+Queue	index	agree	rc0
+Queue	insert	agree	rc0
+Queue	intersection	agree	rc0
+Queue	isEmpty	agree	rc0
+Queue	items	agree	rc0
+Queue	last	agree	rc0
+Queue	lastItem	agree	rc0
+Queue	makeArray	agree	rc0
+Queue	next	agree	rc0
+Queue	peek	agree	rc0
+Queue	previous	agree	rc0
+Queue	pull	agree	rc0
+Queue	push	agree	rc0
+Queue	put	agree	rc0
+Queue	queue	agree	rc0
+Queue	remove	agree	rc0
+Queue	removeItem	agree	rc0
+Queue	section	agree	rc0
+Queue	size	agree	rc0
+Queue	sort	agree	rc0
+Queue	sortWith	agree	rc0
+Queue	stableSort	agree	rc0
+Queue	stableSortWith	agree	rc0
+Queue	subset	agree	rc0
+Queue	supplier	agree	rc0
+Queue	union	agree	rc0
+Queue	xor	agree	rc0
 Relation	[]	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
 Relation	[]=	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
 Relation	allAt	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha

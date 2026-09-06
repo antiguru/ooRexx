@@ -1,0 +1,50 @@
+count 49
+/* Queue.  Upstream a Queue IS an array -- Setup.cpp copies Array's whole
+   native behaviour into it and then overrides a handful -- so most of what is
+   exercised here is Array's body reaching a Queue's store.
+
+   The overrides are what this program is built around, because each one
+   answers the same thing as Array's and does something different. */
+
+q = .Queue~new
+q~queue('a')
+q~queue('b')
+q~push('z')
+say 'queue adds at the end, push at the front' q~allItems~makeString('L', ',')
+say 'items' q~items 'size' q~size
+
+say 'peek does not remove' q~peek 'still' q~allItems~makeString('L', ',')
+say 'pull removes' q~pull 'leaving' q~allItems~makeString('L', ',')
+
+say 'at' q~at(1) 'first' q~first 'last' q~last
+q~put('X', 1)
+say 'put replaces' q~allItems~makeString('L', ',')
+
+/* `delete` and `remove` are ONE body on a Queue where Array has two, so both
+   close the gap.  On an Array, `remove` would leave a hole and keep the size. */
+r = .Queue~new
+r~queue('a')
+r~queue('b')
+r~queue('c')
+say 'remove answers' r~remove(2) 'leaving' r~allItems~makeString('L', ',') 'size' r~size
+say 'delete answers' r~delete(1) 'leaving' r~allItems~makeString('L', ',') 'size' r~size
+
+/* An empty queue answers .nil rather than raising. */
+say 'empty pull' .Queue~new~pull 'peek' .Queue~new~peek 'items' .Queue~new~items
+
+/* The inherited half works over the store. */
+t = .Queue~new
+t~queue('p')
+t~queue('q')
+say 'index' t~index('q') 'hasItem' t~hasItem('q') 'hasIndex' t~hasIndex(2)
+say 'allIndexes' t~allIndexes~makeString('L', ',')
+say 'supplier' t~supplier~item
+say 'sort' t~sort~allItems~makeString('L', ',')
+say 'isEmpty' t~isEmpty '/' .Queue~new~isEmpty
+
+/* A section of a Queue is a QUEUE and not an Array, which is
+   `allocateArrayOfClass` upstream.  The proof is that the result does NOT
+   answer `makeString`: RemoveMethod stripped it from Queue. */
+sec = t~section(1, 1)
+say 'section class' sec~class~id 'items' sec~items
+say sec~makeString('L', ',')
