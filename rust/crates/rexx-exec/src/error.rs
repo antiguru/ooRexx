@@ -1690,6 +1690,17 @@ impl Raised {
         Raised::syntax(93, 901, vec![expected.to_string().into_bytes()])
     }
 
+    /// 93.937: a `Supplier` was asked for a pair it no longer has.
+    ///
+    /// `Error_Incorrect_method_supplier`. No substitutions. Measured at
+    /// rc 163 on an exhausted supplier and on one built over two empty
+    /// arrays: `No more supplier items available.` -- and `~item`, `~index`
+    /// and `~next` all raise it, so stepping past the end is an error rather
+    /// than a no-op.
+    pub(crate) fn no_more_supplier_items() -> Raised {
+        Raised::syntax(93, 937, Vec::new())
+    }
+
     /// 93.926: an array subscript list is longer than the array's dimension.
     ///
     /// `Error_Incorrect_method_maxsub`, raised by the same function's

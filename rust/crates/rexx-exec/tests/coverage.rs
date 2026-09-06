@@ -1447,6 +1447,11 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/string_extremes_refusals.rex",
     "lang/string_caseless.rex",
     "lang/string_caseless_refusals.rex",
+    "lang/array_enumeration.rex",
+    "lang/array_item_argument.rex",
+    "lang/array_index_argument.rex",
+    "lang/array_extra_argument.rex",
+    "lang/supplier_iteration.rex",
 ];
 
 #[test]

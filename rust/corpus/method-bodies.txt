@@ -442,39 +442,39 @@ Array	new	class	answers	rc 0
 Array	of	class	answers	rc 0
 Array	[]	instance	answers	rc 163
 Array	[]=	instance	answers	rc 163
-Array	allIndexes	instance	loud	method "ALLINDEXES" of class "Array"
-Array	allItems	instance	loud	method "ALLITEMS" of class "Array"
+Array	allIndexes	instance	answers	rc 0
+Array	allItems	instance	answers	rc 0
 Array	append	instance	loud	method "APPEND" of class "Array"
 Array	at	instance	answers	rc 163
 Array	delete	instance	loud	method "DELETE" of class "Array"
 Array	dimension	instance	answers	rc 0
 Array	dimensions	instance	loud	method "DIMENSIONS" of class "Array"
-Array	empty	instance	loud	method "EMPTY" of class "Array"
+Array	empty	instance	answers	rc 0
 Array	fill	instance	loud	method "FILL" of class "Array"
 Array	first	instance	loud	method "FIRST" of class "Array"
 Array	firstItem	instance	loud	method "FIRSTITEM" of class "Array"
-Array	hasIndex	instance	loud	method "HASINDEX" of class "Array"
-Array	hasItem	instance	loud	method "HASITEM" of class "Array"
-Array	index	instance	loud	method "INDEX" of class "Array"
+Array	hasIndex	instance	answers	rc 163
+Array	hasItem	instance	answers	rc 163
+Array	index	instance	answers	rc 163
 Array	insert	instance	loud	method "INSERT" of class "Array"
-Array	isEmpty	instance	loud	method "ISEMPTY" of class "Array"
+Array	isEmpty	instance	answers	rc 0
 Array	items	instance	answers	rc 0
 Array	last	instance	loud	method "LAST" of class "Array"
 Array	lastItem	instance	loud	method "LASTITEM" of class "Array"
-Array	makeArray	instance	loud	method "MAKEARRAY" of class "Array"
+Array	makeArray	instance	answers	rc 0
 Array	makeString	instance	answers	rc 0
 Array	next	instance	loud	method "NEXT" of class "Array"
 Array	previous	instance	loud	method "PREVIOUS" of class "Array"
 Array	put	instance	answers	rc 163
-Array	remove	instance	loud	method "REMOVE" of class "Array"
-Array	removeItem	instance	loud	method "REMOVEITEM" of class "Array"
+Array	remove	instance	answers	rc 163
+Array	removeItem	instance	answers	rc 163
 Array	section	instance	loud	method "SECTION" of class "Array"
 Array	size	instance	answers	rc 0
 Array	sort	instance	loud	method "SORT" of class "Array"
 Array	sortWith	instance	loud	method "SORTWITH" of class "Array"
 Array	stableSort	instance	loud	method "STABLESORT" of class "Array"
 Array	stableSortWith	instance	loud	method "STABLESORTWITH" of class "Array"
-Array	supplier	instance	loud	method "SUPPLIER" of class "Array"
+Array	supplier	instance	answers	rc 0
 Array	toString	instance	answers	rc 0
 Array	difference	instance	answers	rc 163
 Array	disjoint	instance	answers	rc 163
@@ -514,33 +514,33 @@ Bag	uniqueIndexes	instance	loud	method "UNIQUEINDEXES" of class "Bag"
 Bag	xor	instance	answers	rc 163
 Bag	disjoint	instance	answers	rc 163
 Bag	equivalent	instance	answers	rc 163
-CircularQueue	of	class	loud	method "MAKEARRAY" of class "Queue"
+CircularQueue	of	class	loud	a message send to a value that is not an array
 CircularQueue	append	instance	answers	rc 163
 CircularQueue	init	instance	answers	rc 163
 CircularQueue	insert	instance	loud	method "INSERT" of class "Queue"
 CircularQueue	intersection	instance	answers	rc 163
-CircularQueue	makeArray	instance	loud	method "MAKEARRAY" of class "Queue"
-CircularQueue	makeString	instance	loud	method "MAKEARRAY" of class "Queue"
+CircularQueue	makeArray	instance	loud	a message send to a value that is not an array
+CircularQueue	makeString	instance	loud	a message send to a value that is not an array
 CircularQueue	push	instance	answers	rc 163
 CircularQueue	queue	instance	answers	rc 163
 CircularQueue	resize	instance	answers	rc 163
 CircularQueue	section	instance	answers	rc 163
 CircularQueue	size	instance	answers	rc 0
-CircularQueue	string	instance	loud	method "MAKEARRAY" of class "Queue"
-CircularQueue	supplier	instance	loud	method "SUPPLIER" of class "Queue"
+CircularQueue	string	instance	loud	a message send to a value that is not an array
+CircularQueue	supplier	instance	loud	a message send to a value that is not an array
 CircularQueue	union	instance	answers	rc 163
 CircularQueue	xor	instance	answers	rc 163
 CircularQueue	[]	instance	loud	a message send to a value that is not an array
 CircularQueue	[]=	instance	loud	method "[]=" of class "Queue"
-CircularQueue	allIndexes	instance	loud	method "ALLINDEXES" of class "Queue"
-CircularQueue	allItems	instance	loud	method "ALLITEMS" of class "Queue"
+CircularQueue	allIndexes	instance	loud	a message send to a value that is not an array
+CircularQueue	allItems	instance	loud	a message send to a value that is not an array
 CircularQueue	at	instance	loud	a message send to a value that is not an array
 CircularQueue	difference	instance	answers	rc 163
 CircularQueue	disjoint	instance	answers	rc 163
 CircularQueue	equivalent	instance	answers	rc 163
-CircularQueue	hasIndex	instance	loud	method "HASINDEX" of class "Queue"
-CircularQueue	hasItem	instance	loud	method "HASITEM" of class "Queue"
-CircularQueue	index	instance	loud	method "INDEX" of class "Queue"
+CircularQueue	hasIndex	instance	loud	a message send to a value that is not an array
+CircularQueue	hasItem	instance	answers	rc 163
+CircularQueue	index	instance	answers	rc 163
 CircularQueue	items	instance	loud	a message send to a value that is not an array
 CircularQueue	put	instance	loud	method "PUT" of class "Queue"
 CircularQueue	subset	instance	answers	rc 163
@@ -552,17 +552,17 @@ CircularQueue	last	instance	loud	method "LAST" of class "Queue"
 CircularQueue	lastItem	instance	loud	method "LASTITEM" of class "Queue"
 CircularQueue	next	instance	loud	method "NEXT" of class "Queue"
 CircularQueue	previous	instance	loud	method "PREVIOUS" of class "Queue"
-CircularQueue	sort	instance	loud	method "MAKEARRAY" of class "Queue"
+CircularQueue	sort	instance	loud	a message send to a value that is not an array
 CircularQueue	sortWith	instance	answers	rc 163
-CircularQueue	stableSort	instance	loud	method "MAKEARRAY" of class "Queue"
+CircularQueue	stableSort	instance	loud	a message send to a value that is not an array
 CircularQueue	stableSortWith	instance	answers	rc 163
 CircularQueue	new	class	answers	rc 163
-CircularQueue	empty	instance	loud	method "EMPTY" of class "Queue"
-CircularQueue	isEmpty	instance	loud	method "ISEMPTY" of class "Queue"
+CircularQueue	empty	instance	loud	a message send to a value that is not an array
+CircularQueue	isEmpty	instance	loud	a message send to a value that is not an array
 CircularQueue	peek	instance	loud	method "PEEK" of class "Queue"
 CircularQueue	pull	instance	loud	method "PULL" of class "Queue"
 CircularQueue	remove	instance	loud	method "REMOVE" of class "Queue"
-CircularQueue	removeItem	instance	loud	method "REMOVEITEM" of class "Queue"
+CircularQueue	removeItem	instance	answers	rc 163
 Directory	new	class	answers	rc 0
 Directory	[]	instance	answers	rc 168
 Directory	[]=	instance	answers	rc 168
@@ -708,23 +708,23 @@ Queue	new	class	answers	rc 0
 Queue	of	class	loud	method "OF" of class "Queue"
 Queue	[]	instance	loud	a message send to a value that is not an array
 Queue	[]=	instance	loud	method "[]=" of class "Queue"
-Queue	allIndexes	instance	loud	method "ALLINDEXES" of class "Queue"
-Queue	allItems	instance	loud	method "ALLITEMS" of class "Queue"
+Queue	allIndexes	instance	loud	a message send to a value that is not an array
+Queue	allItems	instance	loud	a message send to a value that is not an array
 Queue	append	instance	loud	method "APPEND" of class "Queue"
 Queue	at	instance	loud	a message send to a value that is not an array
 Queue	delete	instance	loud	method "DELETE" of class "Queue"
-Queue	empty	instance	loud	method "EMPTY" of class "Queue"
+Queue	empty	instance	loud	a message send to a value that is not an array
 Queue	first	instance	loud	method "FIRST" of class "Queue"
 Queue	firstItem	instance	loud	method "FIRSTITEM" of class "Queue"
-Queue	hasIndex	instance	loud	method "HASINDEX" of class "Queue"
-Queue	hasItem	instance	loud	method "HASITEM" of class "Queue"
-Queue	index	instance	loud	method "INDEX" of class "Queue"
+Queue	hasIndex	instance	loud	a message send to a value that is not an array
+Queue	hasItem	instance	answers	rc 163
+Queue	index	instance	answers	rc 163
 Queue	insert	instance	loud	method "INSERT" of class "Queue"
-Queue	isEmpty	instance	loud	method "ISEMPTY" of class "Queue"
+Queue	isEmpty	instance	loud	a message send to a value that is not an array
 Queue	items	instance	loud	a message send to a value that is not an array
 Queue	last	instance	loud	method "LAST" of class "Queue"
 Queue	lastItem	instance	loud	method "LASTITEM" of class "Queue"
-Queue	makeArray	instance	loud	method "MAKEARRAY" of class "Queue"
+Queue	makeArray	instance	loud	a message send to a value that is not an array
 Queue	next	instance	loud	method "NEXT" of class "Queue"
 Queue	peek	instance	loud	method "PEEK" of class "Queue"
 Queue	previous	instance	loud	method "PREVIOUS" of class "Queue"
@@ -733,10 +733,10 @@ Queue	push	instance	loud	method "PUSH" of class "Queue"
 Queue	put	instance	loud	method "PUT" of class "Queue"
 Queue	queue	instance	loud	method "QUEUE" of class "Queue"
 Queue	remove	instance	loud	method "REMOVE" of class "Queue"
-Queue	removeItem	instance	loud	method "REMOVEITEM" of class "Queue"
+Queue	removeItem	instance	answers	rc 163
 Queue	section	instance	loud	method "SECTION" of class "Queue"
 Queue	size	instance	loud	method "SIZE" of class "Queue"
-Queue	supplier	instance	loud	method "SUPPLIER" of class "Queue"
+Queue	supplier	instance	loud	a message send to a value that is not an array
 Queue	difference	instance	answers	rc 163
 Queue	disjoint	instance	answers	rc 163
 Queue	equivalent	instance	answers	rc 163
@@ -745,9 +745,9 @@ Queue	subset	instance	answers	rc 163
 Queue	union	instance	answers	rc 163
 Queue	xor	instance	answers	rc 163
 Queue	appendAll	instance	answers	rc 163
-Queue	sort	instance	loud	method "MAKEARRAY" of class "Queue"
+Queue	sort	instance	loud	a message send to a value that is not an array
 Queue	sortWith	instance	answers	rc 163
-Queue	stableSort	instance	loud	method "MAKEARRAY" of class "Queue"
+Queue	stableSort	instance	loud	a message send to a value that is not an array
 Queue	stableSortWith	instance	answers	rc 163
 Relation	new	class	answers	rc 0
 Relation	[]	instance	answers	rc 168
@@ -1242,12 +1242,12 @@ StreamSupplier	allIndexes	instance	unanswered	a bare `~new` raises; the method w
 StreamSupplier	allItems	instance	unanswered	a bare `~new` raises; the method was never sent
 StreamSupplier	supplier	instance	unanswered	a bare `~new` raises; the method was never sent
 Supplier	new	class	answers	rc 163
-Supplier	allIndexes	instance	loud	method "AVAILABLE" of class "Supplier"
-Supplier	allItems	instance	loud	method "AVAILABLE" of class "Supplier"
-Supplier	available	instance	loud	method "AVAILABLE" of class "Supplier"
-Supplier	index	instance	loud	method "INDEX" of class "Supplier"
-Supplier	item	instance	loud	method "ITEM" of class "Supplier"
-Supplier	next	instance	loud	method "NEXT" of class "Supplier"
+Supplier	allIndexes	instance	answers	rc 0
+Supplier	allItems	instance	answers	rc 0
+Supplier	available	instance	answers	rc 0
+Supplier	index	instance	answers	rc 163
+Supplier	item	instance	answers	rc 163
+Supplier	next	instance	answers	rc 163
 Supplier	supplier	instance	answers	rc 0
 Ticker	attachment	instance	unanswered	a bare `~new` raises; the method was never sent
 Ticker	cancel	instance	unanswered	a bare `~new` raises; the method was never sent

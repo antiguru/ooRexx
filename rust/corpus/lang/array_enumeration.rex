@@ -1,0 +1,89 @@
+/* Array's shared collection surface: the enumeration half of Phase 5g Task 1.
+   Every line here was measured against the C++ interpreter first.  The array
+   is deliberately sparse AND carries an explicit .nil, because the two are
+   different: a hole is not an item and an explicit .nil is one.  */
+
+a = .Array~new
+a[1] = 'p'
+a[3] = 'r'
+a[5] = .nil
+
+say 'size' a~size 'items' a~items 'isEmpty' a~isEmpty
+say 'allItems' a~allItems~makeString('L', ',')
+say 'allIndexes' a~allIndexes~makeString('L', ',')
+say 'makeArray' a~makeArray~makeString('L', ',')
+
+say 'hasIndex' a~hasIndex(1) a~hasIndex(2) a~hasIndex(5) a~hasIndex(9)
+say 'hasItem' a~hasItem('p') a~hasItem('q') a~hasItem(.nil)
+say 'index' a~index('p') a~index('r') a~index('q')
+
+s = a~supplier
+do while s~available
+  say 'supplied' s~index s~item
+  s~next
+end
+
+say 'remove' a~remove(1) 'size' a~size 'items' a~items
+say 'remove-again' a~remove(1)
+say 'removeItem' a~removeItem('r') 'items' a~items
+say 'removeItem-absent' a~removeItem('zz')
+
+e = .Array~new
+say 'empty-array size' e~size 'items' e~items 'isEmpty' e~isEmpty
+say 'empty-array allItems' e~allItems~items 'allIndexes' e~allIndexes~items
+say 'empty-array index' e~index('p') 'hasItem' e~hasItem('p')
+es = e~supplier
+say 'empty-array supplier available' es~available
+
+d = .Array~of('x', 'y')
+say 'before empty size' d~size 'items' d~items
+/* `~empty` answers the receiver, which a statement-only call cannot see.
+   Read through the answer rather than comparing with `==`, which is a
+   separate unimplemented row on Array. */
+say 'empty answers a' d~empty~class~id 'of size' d~empty~size
+say 'after empty size' d~size 'items' d~items 'isEmpty' d~isEmpty
+
+/* A multi-dimensional array's index is an ARRAY, not an integer, and nothing
+   about a one-dimensional array shows that. */
+m = .Array~new(2, 3)
+m[1, 1] = 'a'
+m[2, 3] = 'b'
+say 'md size' m~size 'items' m~items
+say 'md allItems' m~allItems~makeString('L', ',')
+say 'md allIndexes count' m~allIndexes~items
+say 'md first index class' m~allIndexes[1]~class~id 'value' m~allIndexes[1]~makeString('L', ',')
+say 'md index of b' m~index('b')~makeString('L', ',')
+say 'md hasIndex' m~hasIndex(1, 1) m~hasIndex(1, 2)
+ms = m~supplier
+do while ms~available
+  say 'md supplied' ms~index~makeString('L', ',') ms~item
+  ms~next
+end
+m~empty
+say 'md after empty size' m~size 'items' m~items
+
+/* Item equality is `==` on string values, which is none of the three obvious
+   readings.  Handle identity passes every case above -- a literal used twice
+   is one object -- so these are the cases that hold the comparison to what
+   the oracle does. */
+q = .Array~of('1', ' 2', 'abc')
+say 'eq str-vs-num' q~hasItem(1)
+say 'eq spaced    ' q~hasItem(2)
+say 'eq index     ' q~index(1)
+n = .Array~of(1)
+say 'eq num-vs-str' n~hasItem('1')
+say 'eq num-vs-dec' n~hasItem(1.0)
+
+/* And a class of its own may override `==`, which the collection honours:
+   two different K objects compare equal, so `hasItem` finds one that was
+   never put in. */
+k = .Array~new
+k[1] = .K~new
+say 'eq override  ' k~hasItem(.K~new) k~index(.K~new)
+say 'eq no-override' .Array~of(.Object~new)~hasItem(.Object~new)
+
+::CLASS K
+::METHOD "=="
+  return 1
+::METHOD "="
+  return 1

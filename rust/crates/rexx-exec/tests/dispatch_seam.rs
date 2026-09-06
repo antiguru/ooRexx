@@ -362,7 +362,11 @@ fn the_protected_question_is_asked_only_inside_the_seam() {
 /// child of the module take a clearance without anyone deciding that it may,
 /// which is the whole of what [`the_seam_token_is_named_only_by_the_dispatch_module`]
 /// checks.
-const CLEARANCE_CONSUMERS: &[&str] = &["src/dispatch.rs", "src/dispatch/string.rs"];
+const CLEARANCE_CONSUMERS: &[&str] = &[
+    "src/dispatch.rs",
+    "src/dispatch/string.rs",
+    "src/dispatch/collection.rs",
+];
 
 /// **Every consumer of the seam's token is written in one of
 /// [`CLEARANCE_CONSUMERS`]**, which is what lets the item read below bound the

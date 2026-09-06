@@ -905,7 +905,6 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `SupplierClass::initRexx` (`memory/Setup.cpp:1626`), which is where
     // `.Supplier~new`'s refusal comes from: the two arrays are required and
     // the allocation above it is not what raises.
-    ("Supplier", "INIT", Arity::Fixed(2), native_supplier_init),
     // The same donation at `Table` (`memory/Setup.cpp:861`).
     ("Table", "INIT", Arity::Fixed(1), native_capacity_init),
     // `VariableReference`'s own rows (`memory/Setup.cpp:1298`-`:1302`), the
@@ -10093,26 +10092,6 @@ fn native_weak_reference_new(
     Ok(Some(object))
 }
 
-/// `Supplier~init(items, indexes)`: both arrays required, validated and then
-/// dropped -- `SupplierClass::initRexx` (`classes/SupplierClass.cpp:309`).
-///
-/// Measured, oracle rc 163: `.Supplier~new` is `93.903 Missing argument in
-/// method; argument 1 is required.`, raised here rather than in `NEW`.
-fn native_supplier_init(
-    interp: &mut Interp,
-    _cleared: Cleared,
-    _receiver: ObjRef,
-    args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
-    for position in [1, 2] {
-        let Some(value) = args.get(position - 1).copied().flatten() else {
-            return Err(Raised::missing_method_argument(position).into());
-        };
-        array_argument(interp, value, ArrayArgument::Positional)?;
-    }
-    Ok(None)
-}
-
 /// `Object~request(class)`: the receiver converted to `class`, or `.nil` --
 /// `RexxObject::requestRexx` (`classes/ObjectClass.cpp:1912`).
 ///
@@ -11687,11 +11666,6 @@ mod tests {
                 "WeakReference",
                 "o~value",
             ),
-            (
-                ".Supplier~new(.Array~new, .Array~new)",
-                "Supplier",
-                "o~available",
-            ),
         ] {
             assert_eq!(
                 both_engines(&format!("o = {program}\nsay o~class~id\n")),
@@ -11705,6 +11679,17 @@ mod tests {
         assert_eq!(
             both_engines("o = .MutableBuffer~new('abc')\nsay o~class~id\nsay o~length\n"),
             (0, "MutableBuffer\n3\n".to_string(), String::new())
+        );
+        // `Supplier` joined the readback group in Phase 5g Task 1. Its `init`
+        // used to validate both arrays and drop them, which is the shell this
+        // test's refusal rows exist to catch; it now keeps them in the
+        // receiver's own pool and walks them.
+        assert_eq!(
+            both_engines(
+                "o = .Supplier~new(.Array~of('i'), .Array~of('x'))\n\
+                 say o~class~id o~available o~item o~index\n"
+            ),
+            (0, "Supplier 1 i x\n".to_string(), String::new())
         );
         // `say` reaches a `MutableBuffer` through the required-string
         // protocol's `MAKESTRING`, which answers the contents; the

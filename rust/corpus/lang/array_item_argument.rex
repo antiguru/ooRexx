@@ -1,0 +1,24 @@
+/* The three methods of Array's shared surface that take an ITEM.  All three
+   raise the same error and it is NOT the one the index-taking methods raise;
+   `array_index_argument.rex` is the other half of that pair.  The decimal is
+   only visible on stderr, because `condition('O')` answers a Directory this
+   crate does not build yet, so the last send is left to escape. */
+
+a = .Array~of('p', 'q')
+call trapped 'HASITEM'
+call trapped 'INDEX'
+call trapped 'REMOVEITEM'
+say 'all three raised SYNTAX'
+v = a~hasItem
+say 'unreachable' v
+exit
+
+trapped: procedure expose a
+  use arg name
+  signal on syntax name oops
+  v = a~send(name)
+  say name 'did not raise'
+  return
+oops:
+  say name 'raised' rc condition('C')
+  return

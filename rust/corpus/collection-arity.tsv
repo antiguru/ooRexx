@@ -21,37 +21,37 @@
 # the send; the test makes an oracle run that does not a failure for that row.
 Array	[]	agree	rc0
 Array	[]=	agree	rc0
-Array	allIndexes	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ALLINDEXES" of class "Array" is not implemented (Phase 5)
-Array	allItems	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ALLITEMS" of class "Array" is not implemented (Phase 5)
+Array	allIndexes	agree	rc0
+Array	allItems	agree	rc0
 Array	append	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "APPEND" of class "Array" is not implemented (Phase 5)
-Array	appendAll	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ALLITEMS" of class "Array" is not implemented (Phase 5)
+Array	appendAll	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "APPEND" of class "Array" is not implemented (Phase 5)
 Array	at	agree	rc0
 Array	delete	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "DELETE" of class "Array" is not implemented (Phase 5)
 Array	difference	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
 Array	dimension	agree	rc0
 Array	dimensions	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "DIMENSIONS" of class "Array" is not implemented (Phase 5)
 Array	disjoint	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
-Array	empty	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "EMPTY" of class "Array" is not implemented (Phase 5)
+Array	empty	agree	rc0
 Array	equivalent	agree	rc0
 Array	fill	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "FILL" of class "Array" is not implemented (Phase 5)
 Array	first	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "FIRST" of class "Array" is not implemented (Phase 5)
 Array	firstItem	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "FIRSTITEM" of class "Array" is not implemented (Phase 5)
-Array	hasIndex	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "HASINDEX" of class "Array" is not implemented (Phase 5)
-Array	hasItem	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "HASITEM" of class "Array" is not implemented (Phase 5)
-Array	index	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "INDEX" of class "Array" is not implemented (Phase 5)
+Array	hasIndex	agree	rc0
+Array	hasItem	agree	rc0
+Array	index	agree	rc0
 Array	insert	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "INSERT" of class "Array" is not implemented (Phase 5)
 Array	intersection	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
-Array	isEmpty	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ISEMPTY" of class "Array" is not implemented (Phase 5)
+Array	isEmpty	agree	rc0
 Array	items	agree	rc0
 Array	last	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "LAST" of class "Array" is not implemented (Phase 5)
 Array	lastItem	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "LASTITEM" of class "Array" is not implemented (Phase 5)
-Array	makeArray	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "MAKEARRAY" of class "Array" is not implemented (Phase 5)
+Array	makeArray	agree	rc0
 Array	makeString	agree	rc0
 Array	next	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "NEXT" of class "Array" is not implemented (Phase 5)
 Array	previous	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "PREVIOUS" of class "Array" is not implemented (Phase 5)
 Array	put	agree	rc0
-Array	remove	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "REMOVE" of class "Array" is not implemented (Phase 5)
-Array	removeItem	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "REMOVEITEM" of class "Array" is not implemented (Phase 5)
+Array	remove	agree	rc0
+Array	removeItem	agree	rc0
 Array	section	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SECTION" of class "Array" is not implemented (Phase 5)
 Array	size	agree	rc0
 Array	sort	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SORT" of class "Array" is not implemented (Phase 5)
@@ -59,7 +59,7 @@ Array	sortWith	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SORT
 Array	stableSort	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "STABLESORT" of class "Array" is not implemented (Phase 5)
 Array	stableSortWith	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "STABLESORTWITH" of class "Array" is not implemented (Phase 5)
 Array	subset	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
-Array	supplier	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SUPPLIER" of class "Array" is not implemented (Phase 5)
+Array	supplier	agree	rc0
 Array	toString	agree	rc0
 Array	union	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
 Array	xor	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
@@ -421,12 +421,12 @@ StringTable	supplier	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method
 StringTable	union	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
 StringTable	unknown	agree	rc0
 StringTable	xor	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
-Supplier	allIndexes	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "AVAILABLE" of class "Supplier" is not implemented (Phase 5)
-Supplier	allItems	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "AVAILABLE" of class "Supplier" is not implemented (Phase 5)
-Supplier	available	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "AVAILABLE" of class "Supplier" is not implemented (Phase 5)
-Supplier	index	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "INDEX" of class "Supplier" is not implemented (Phase 5)
-Supplier	item	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ITEM" of class "Supplier" is not implemented (Phase 5)
-Supplier	next	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "NEXT" of class "Supplier" is not implemented (Phase 5)
+Supplier	allIndexes	agree	rc0
+Supplier	allItems	agree	rc0
+Supplier	available	agree	rc0
+Supplier	index	agree	rc0
+Supplier	item	agree	rc0
+Supplier	next	agree	rc0
 Supplier	supplier	agree	rc0
 Table	[]	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
 Table	[]=	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
