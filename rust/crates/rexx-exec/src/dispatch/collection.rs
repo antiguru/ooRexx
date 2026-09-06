@@ -833,6 +833,173 @@ fn native_array_dimensions(
     Ok(Some(array_of(interp, items)))
 }
 
+// ---- the sort family ----
+
+/// Every item of a receiver the sort family will accept, in index order.
+///
+/// **A hole is a refusal and not a skip.** Measured at rc 158, an array
+/// holding `[1]`, `[3]`, `[5]` answers `~sort` with `98.975 Missing array
+/// element at position 2.`, where `allItems` happily skips the same holes.
+fn dense_items(interp: &Interp, receiver: ObjRef) -> Result<Vec<ObjRef>, Failure> {
+    let slots = array_slots(interp, receiver)?;
+    let mut items = Vec::with_capacity(slots.len());
+    for (offset, slot) in slots.iter().enumerate() {
+        match slot {
+            Some(item) => items.push(*item),
+            None => return Err(Raised::missing_array_element(offset + 1).into()),
+        }
+    }
+    Ok(items)
+}
+
+/// How the sort family orders two items.
+enum Order {
+    /// The default: send `compareTo` to the first item.
+    ///
+    /// `ArrayClass::BaseSortComparator::compare` is `first->compareTo(second)`
+    /// (`classes/ArrayClass.cpp:2891`), a C++ virtual, which is why the
+    /// default order is **not** numeric: measured,
+    /// `.Array~of(10,9,2,100,1)~sort` answers `1,10,100,2,9`.
+    CompareTo,
+    /// `sortWith`: send `compare(first, second)` to the comparator
+    /// (`:2897`).
+    With(ObjRef),
+}
+
+fn order_of(
+    interp: &mut Interp,
+    order: &Order,
+    left: ObjRef,
+    right: ObjRef,
+) -> Result<i64, Failure> {
+    let caller = interp.caller();
+    let answer = match order {
+        Order::CompareTo => {
+            interp.send_message(left, b"COMPARETO", None, &[Some(right)], caller)?
+        }
+        Order::With(comparator) => interp.send_message(
+            *comparator,
+            b"COMPARE",
+            None,
+            &[Some(left), Some(right)],
+            caller,
+        )?,
+    };
+    let name: &[u8] = match order {
+        Order::CompareTo => b"COMPARETO",
+        Order::With(_) => b"COMPARE",
+    };
+    let Some(answer) = answer else {
+        return Err(Raised::no_result(name).into());
+    };
+    // The sign is all the sort reads, which is what the C++ does with the
+    // `wholenumber_t` its two comparators answer.
+    let text = interp.to_text(answer);
+    let value: i64 = std::str::from_utf8(&text)
+        .ok()
+        .and_then(|text| text.trim().parse().ok())
+        .unwrap_or(0);
+    Ok(value)
+}
+
+/// A stable merge sort over `items`, which is what the interpreter's own four
+/// names all reach: `Setup.cpp` maps `Sort` and `StableSort` onto
+/// `ArrayClass::stableSortRexx` and the two `With` spellings onto
+/// `stableSortWithRexx`, so **there is one algorithm here and not two**.
+///
+/// Written out rather than handed to `slice::sort_by` because the comparison
+/// runs Rexx and can raise, and a `Result` cannot travel through a `bool`
+/// comparator.
+fn merge_sort(
+    interp: &mut Interp,
+    order: &Order,
+    items: Vec<ObjRef>,
+) -> Result<Vec<ObjRef>, Failure> {
+    if items.len() <= 1 {
+        return Ok(items);
+    }
+    let mut items = items;
+    let right = items.split_off(items.len() / 2);
+    let mut left = merge_sort(interp, order, items)?.into_iter().peekable();
+    let mut right = merge_sort(interp, order, right)?.into_iter().peekable();
+    let mut merged = Vec::new();
+    loop {
+        match (left.peek().copied(), right.peek().copied()) {
+            (Some(a), Some(b)) => {
+                // `<= 0` keeps the left run first for equal keys, which is
+                // what makes this stable: measured,
+                // `.Array~of('b1','a1','b2','a2')~stableSortWith` over a
+                // first-character comparator answers `a1,a2,b1,b2`.
+                if order_of(interp, order, a, b)? <= 0 {
+                    merged.push(a);
+                    left.next();
+                } else {
+                    merged.push(b);
+                    right.next();
+                }
+            }
+            (Some(a), None) => {
+                merged.push(a);
+                left.next();
+            }
+            (None, Some(b)) => {
+                merged.push(b);
+                right.next();
+            }
+            (None, None) => break,
+        }
+    }
+    Ok(merged)
+}
+
+/// Writes `items` back over the receiver's slots, which is what makes the
+/// sort family sort **in place**: measured, `p = .Array~of('b','a')` then
+/// `q = p~sort` leaves `p` reading `a,b` and `q` is that same array.
+fn write_back(interp: &mut Interp, receiver: ObjRef, items: Vec<ObjRef>) -> Result<(), Failure> {
+    match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
+        Some(Body::Array { slots, .. }) => {
+            for (slot, item) in slots.iter_mut().zip(items) {
+                *slot = Some(item);
+            }
+            Ok(())
+        }
+        _ => Err(Loud::receiver_class("a value that is not an array").into()),
+    }
+}
+
+fn sort_by(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    order: &Order,
+) -> Result<Option<ObjRef>, Failure> {
+    let items = dense_items(interp, receiver)?;
+    let sorted = merge_sort(interp, order, items)?;
+    write_back(interp, receiver, sorted)?;
+    Ok(Some(receiver))
+}
+
+/// `Array~sort` and `Array~stableSort`, both `ArrayClass::stableSortRexx`.
+fn native_array_sort(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    sort_by(interp, receiver, &Order::CompareTo)
+}
+
+/// `Array~sortWith(comparator)` and `Array~stableSortWith(comparator)`, both
+/// `ArrayClass::stableSortWithRexx`.
+fn native_array_sort_with(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let comparator = item_argument(args)?;
+    sort_by(interp, receiver, &Order::With(comparator))
+}
+
 /// Inserts `item` at 0-based `at`, or deletes the slot there when it is
 /// `None`, shifting everything after it.
 fn array_splice(
@@ -895,6 +1062,15 @@ fn array_grow(interp: &mut Interp, receiver: ObjRef, length: usize) -> Result<()
 /// `Setup.cpp`'s own third operand: a literal is a maximum and `A_COUNT` is
 /// [`Arity::Counted`].
 pub(super) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
+    ("Array", "SORT", Arity::Fixed(0), native_array_sort),
+    ("Array", "SORTWITH", Arity::Fixed(1), native_array_sort_with),
+    ("Array", "STABLESORT", Arity::Fixed(0), native_array_sort),
+    (
+        "Array",
+        "STABLESORTWITH",
+        Arity::Fixed(1),
+        native_array_sort_with,
+    ),
     ("Array", "APPEND", Arity::Fixed(1), native_array_append),
     ("Array", "DELETE", Arity::Fixed(1), native_array_delete),
     (

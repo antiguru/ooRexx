@@ -112,3 +112,4 @@ lang/supplier_iteration.rex
 lang/array_navigation.rex
 lang/array_structure.rex
 lang/array_structure_refusals.rex
+lang/array_sorting.rex

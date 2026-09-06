@@ -1690,6 +1690,17 @@ impl Raised {
         Raised::syntax(93, 901, vec![expected.to_string().into_bytes()])
     }
 
+    /// 98.975: a sort was asked to order an array with a hole in it.
+    ///
+    /// `Error_Execution_sparse_array`. The substitution is the 1-based
+    /// position of the first empty slot. Measured at rc 158: an array holding
+    /// `[1]`, `[3]` and `[5]` answers `~sort` with `Missing array element at
+    /// position 2.` -- so the sort family refuses a sparse receiver rather
+    /// than skipping the holes the way `allItems` does.
+    pub(crate) fn missing_array_element(position: usize) -> Raised {
+        Raised::syntax(98, 975, vec![position.to_string().into_bytes()])
+    }
+
     /// 93.954: a method that only works on a single-dimensional array was
     /// sent to one with more.
     ///

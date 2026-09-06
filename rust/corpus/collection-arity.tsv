@@ -54,10 +54,10 @@ Array	remove	agree	rc0
 Array	removeItem	agree	rc0
 Array	section	agree	rc0
 Array	size	agree	rc0
-Array	sort	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SORT" of class "Array" is not implemented (Phase 5)
-Array	sortWith	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SORTWITH" of class "Array" is not implemented (Phase 5)
-Array	stableSort	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "STABLESORT" of class "Array" is not implemented (Phase 5)
-Array	stableSortWith	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "STABLESORTWITH" of class "Array" is not implemented (Phase 5)
+Array	sort	agree	rc0
+Array	sortWith	agree	rc0
+Array	stableSort	agree	rc0
+Array	stableSortWith	agree	rc0
 Array	subset	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
 Array	supplier	agree	rc0
 Array	toString	agree	rc0

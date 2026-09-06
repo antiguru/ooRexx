@@ -470,10 +470,10 @@ Array	remove	instance	answers	rc 163
 Array	removeItem	instance	answers	rc 163
 Array	section	instance	answers	rc 163
 Array	size	instance	answers	rc 0
-Array	sort	instance	loud	method "SORT" of class "Array"
-Array	sortWith	instance	loud	method "SORTWITH" of class "Array"
-Array	stableSort	instance	loud	method "STABLESORT" of class "Array"
-Array	stableSortWith	instance	loud	method "STABLESORTWITH" of class "Array"
+Array	sort	instance	answers	rc 0
+Array	sortWith	instance	answers	rc 163
+Array	stableSort	instance	answers	rc 0
+Array	stableSortWith	instance	answers	rc 163
 Array	supplier	instance	answers	rc 0
 Array	toString	instance	answers	rc 0
 Array	difference	instance	answers	rc 163
