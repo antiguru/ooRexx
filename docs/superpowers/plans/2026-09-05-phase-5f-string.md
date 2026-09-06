@@ -141,8 +141,30 @@ The same holds for `append changeStr delStr replaceAt`, checked one by one. So:
   `buffer_state(interp, receiver, b"SUBSTR")?.bytes` there, `interp.to_text(receiver)` here.
 * **11 mutator rows** — `append caselessChangeStr changeStr delStr delWord insert lower overlay
   replaceAt space translate`, the ones whose `MutableBuffer` native reaches `buffer_state_mut` —
-  share the core and the argument layer and **not** the return contract. `String` builds a new value;
+  share the core and, with one exception, the argument layer, and **not** the return contract. `String` builds a new value;
   the buffer writes itself and answers the receiver.
+
+  **The exception is `replaceAt`, and it shares no argument layer at all.** Measured on the oracle,
+  the same send to the two receivers:
+
+  | send | `MutableBuffer` | `String` |
+  |---|---|---|
+  | `~replaceAt` | 88.901 | 93.903 |
+  | `~replaceAt('X')` | 88.901 | 93.903 |
+  | `~replaceAt('X', 0, 1)` | 88.912 | 93.924 |
+  | `~replaceAt('X', 'x', 1)` | 88.912 | 93.924 |
+  | `~replaceAt('X', 1, 1, 'ab')` | 88.910 | 93.922 |
+  | `~replaceAt(.nil, 1, 1)` | 88.909 | 88.909 |
+
+  The C++ says why: `RexxString::replaceAt` opens `stringArgument(newStrObj, ARG_ONE)`
+  (`classes/StringClassSub.cpp:380`) where `MutableBuffer::replaceAt` opens
+  `stringArgument(str, "new")` (`classes/MutableBufferClass.cpp:572`) and takes its position and pad
+  by name too. One method name, two argument conventions, in one interpreter. **`insert` is not like
+  this** — both receivers answer 93.906 for a bad second argument — so it is `replaceAt` alone and not
+  a property of the mutators.
+
+  So `replaceAt`'s row costs a `String`-side argument layer of its own, and **a witness that sends
+  only good arguments cannot see the difference**: every divergence above is on the refusal path.
 
 **Extract the shared half rather than copying it.** For the 30 that is a whole body parameterised by
 its byte source. For the 11 it is the argument layer and the core call, with two endings. Copying
