@@ -8407,6 +8407,29 @@ pub(super) fn conversion_length_argument(
     optional_length_argument(interp, args, 0)
 }
 
+/// A count argument that is zero or a positive whole number, answered as the
+/// `i64` the numeric cores take.
+///
+/// [`optional_non_negative_argument`] beside it narrows to `usize`, which is
+/// right for an index into bytes and wrong for a width: `padding_width` reads
+/// an `i64` and decides for itself which widths are absurd, and narrowing
+/// first would move that decision.
+///
+/// 93.906 for a negative or non-whole value, the same sub-code `COPIES` uses
+/// and not the 93.923 the pad family raises.
+pub(super) fn count_method_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    index: usize,
+) -> Result<Option<i64>, Failure> {
+    let raise = move |found: &[u8]| Raised::argument_not_non_negative(index + 1, found);
+    match whole_method_argument(interp, args, index, raise)? {
+        Some(value) if value >= 0 => Ok(Some(value)),
+        Some(_) => Err(refuse_method_argument(interp, args, index, raise)),
+        None => Ok(None),
+    }
+}
+
 /// `BITAND`/`BITOR`/`BITXOR`'s optional operand and optional pad.
 ///
 /// Neither is required and the operand has no length rule, so the pad is the
@@ -10422,8 +10445,22 @@ mod tests {
         let receiver = interp.text(b"abc");
         let string = interp.classes().lookup("String").expect("String is native");
         let answered = interp.classes().instance_method_names(string);
+        // **The candidate is found in the registry and only then sent.**
+        // Sending every name until one refuses used to do it, and that stopped
+        // working the moment a numeric method landed early in the order: a
+        // body that reads `NUMERIC DIGITS` wants a live activation, and this
+        // test has none, so the search panicked before it reached a loud name.
+        let rows: Vec<&str> = NATIVE_METHODS
+            .iter()
+            .chain(string::NATIVE_METHODS)
+            .filter(|(class, ..)| *class == "String")
+            .map(|(_, method, ..)| *method)
+            .collect();
         let mut unimplemented = None;
         for name in &answered {
+            if rows.contains(&name.as_str()) {
+                continue;
+            }
             if matches!(
                 interp.send_message(receiver, name.as_bytes(), None, &[], no_caller()),
                 Err(Failure::Loud(_))

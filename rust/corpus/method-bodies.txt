@@ -262,7 +262,7 @@ String	|	instance	answers	rc 163
 String	[]	instance	answers	rc 163
 String	?	instance	answers	rc 168
 String	abbrev	instance	answers	rc 163
-String	abs	instance	loud	method "ABS" of class "String"
+String	abs	instance	answers	rc 163
 String	append	instance	answers	rc 163
 String	b2x	instance	answers	rc 163
 String	bitAnd	instance	answers	rc 0
@@ -305,7 +305,7 @@ String	encodeBase64	instance	loud	method "ENCODEBASE64" of class "String"
 String	endsWith	instance	answers	rc 168
 String	equals	instance	loud	method "EQUALS" of class "String"
 String	floor	instance	loud	method "FLOOR" of class "String"
-String	format	instance	loud	method "FORMAT" of class "String"
+String	format	instance	answers	rc 163
 String	hashCode	instance	loud	method "HASHCODE" of class "Object"
 String	insert	instance	answers	rc 163
 String	lastPos	instance	answers	rc 163
@@ -334,7 +334,7 @@ String	substr	instance	answers	rc 163
 String	subWord	instance	answers	rc 163
 String	subWords	instance	answers	rc 0
 String	translate	instance	answers	rc 0
-String	trunc	instance	loud	method "TRUNC" of class "String"
+String	trunc	instance	answers	rc 163
 String	upper	instance	answers	rc 0
 String	verify	instance	answers	rc 163
 String	word	instance	answers	rc 163

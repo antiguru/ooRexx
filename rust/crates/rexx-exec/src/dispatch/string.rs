@@ -43,11 +43,12 @@
 use super::{
     Arity, Cleared, Failure, Interp, NativeMethod, ObjRef, abbrev_arguments, backward_search,
     backward_search_arguments, bit_arguments, case_shift_arguments, changestr_arguments,
-    compare_arguments, conversion_length_argument, copies_argument, datatype_option_argument,
-    delete_arguments, delword_arguments, ends_with, forward_search, forward_search_arguments,
-    insert_arguments, match_region_arguments, match_region_over, overlay_arguments, pad_arguments,
-    replace_at_bytes, replace_at_plan, space_arguments, starts_with, strip_arguments,
-    substr_arguments, translate_arguments, translate_in_table, verify_arguments, wordpos_arguments,
+    compare_arguments, conversion_length_argument, copies_argument, count_method_argument,
+    datatype_option_argument, delete_arguments, delword_arguments, ends_with, forward_search,
+    forward_search_arguments, insert_arguments, match_region_arguments, match_region_over,
+    overlay_arguments, pad_arguments, replace_at_bytes, replace_at_plan, space_arguments,
+    starts_with, strip_arguments, substr_arguments, translate_arguments, translate_in_table,
+    verify_arguments, wordpos_arguments,
 };
 use crate::builtin::convert;
 use crate::error::Raised;
@@ -1682,6 +1683,69 @@ fn native_string_datatype(
     Ok(Some(interp.text(if matched { b"1" } else { b"0" })))
 }
 
+/// The receiver of a numeric method, or 93.943 naming the method.
+///
+/// **It is read before any argument**, which is the ordering that separates
+/// these three from their builtins: measured, `'abc'~trunc('x')` and
+/// `'abc'~format(1,-1)` are the target's 93.943, where `trunc('abc','x')` is
+/// the argument's 40.12.
+fn numeric_receiver(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    method: &[u8],
+) -> Result<rexx_num::Number, Failure> {
+    match interp.to_number(receiver) {
+        Ok(number) => Ok(number),
+        Err(_) => {
+            let found = interp.string_value_text(receiver);
+            Err(Raised::method_target_not_a_number(method, &found).into())
+        }
+    }
+}
+
+/// `String~"ABS"`, `RexxString::abs`.
+fn native_string_abs(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let value = numeric_receiver(interp, receiver, b"ABS")?;
+    Ok(Some(crate::builtin::numeric::abs_of(interp, &value)))
+}
+
+/// `String~"TRUNC"`, `RexxString::trunc`.
+fn native_string_trunc(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let value = numeric_receiver(interp, receiver, b"TRUNC")?;
+    let places = count_method_argument(interp, args, 0)?;
+    let answer = crate::builtin::numeric::trunc_of(interp, &value, places)?;
+    Ok(Some(answer))
+}
+
+/// `String~"FORMAT"`, `RexxString::format`.
+///
+/// Four optional widths, all counts rather than lengths, and all read after
+/// the receiver.
+fn native_string_format(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let value = numeric_receiver(interp, receiver, b"FORMAT")?;
+    let before = count_method_argument(interp, args, 0)?;
+    let after = count_method_argument(interp, args, 1)?;
+    let expp = count_method_argument(interp, args, 2)?;
+    let expt = count_method_argument(interp, args, 3)?;
+    let answer = crate::builtin::numeric::format_over(interp, &value, before, after, expp, expt)?;
+    Ok(Some(answer))
+}
+
 /// `String`'s rows, in the shape [`super::NATIVE_METHODS`] uses.
 pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("String", "", Arity::Fixed(1), native_string_op_abuttal),
@@ -1749,6 +1813,7 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     ("String", "?", Arity::Fixed(2), native_string_op_choice),
     ("String", "ABBREV", Arity::Fixed(2), native_string_abbrev),
+    ("String", "ABS", Arity::Fixed(0), native_string_abs),
     ("String", "B2X", Arity::Fixed(0), native_string_b2x),
     ("String", "BITAND", Arity::Fixed(2), native_string_bitand),
     ("String", "BITOR", Arity::Fixed(2), native_string_bitor),
@@ -1768,9 +1833,11 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         native_string_datatype,
     ),
     ("String", "D2X", Arity::Fixed(1), native_string_d2x),
+    ("String", "FORMAT", Arity::Fixed(4), native_string_format),
     ("String", "LEFT", Arity::Fixed(2), native_string_left),
     ("String", "RIGHT", Arity::Fixed(2), native_string_right),
     ("String", "STRIP", Arity::Fixed(2), native_string_strip),
+    ("String", "TRUNC", Arity::Fixed(1), native_string_trunc),
     ("String", "X2B", Arity::Fixed(0), native_string_x2b),
     ("String", "X2C", Arity::Fixed(0), native_string_x2c),
     ("String", "X2D", Arity::Fixed(1), native_string_x2d),

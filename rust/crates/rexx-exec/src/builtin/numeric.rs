@@ -171,12 +171,19 @@ pub(crate) fn abs(
     name: &'static [u8],
     args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
-    let Numeric { digits, form, .. } = current(interp);
     let value = target_number(interp, name, args)?;
-    // The rounding is the oracle's `copyForCurrentSettings`, and it is not
-    // skipped for an already-positive value: measured, `numeric digits 3 ;
-    // abs(1.23456)` is `1.23`, the same answer `abs(-1.23456)` gives.
-    Ok(interp.number(value.abs().into_round(digits), saturate(digits), form))
+    Ok(abs_of(interp, &value))
+}
+
+/// [`abs`]'s answer once its target is a `Number`, shared with `String~abs`
+/// the way [`sign_of`] is shared with `String~sign`.
+///
+/// The rounding is the oracle's `copyForCurrentSettings`, and it is not
+/// skipped for an already-positive value: measured, `numeric digits 3 ;
+/// abs(1.23456)` is `1.23`, the same answer `abs(-1.23456)` gives.
+pub(crate) fn abs_of(interp: &mut Interp, value: &Number) -> ObjRef {
+    let Numeric { digits, form, .. } = current(interp);
+    interp.number(value.abs().into_round(digits), saturate(digits), form)
 }
 
 /// `SIGN(number)`.
@@ -225,10 +232,24 @@ pub(crate) fn trunc(
     name: &'static [u8],
     args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
-    let Numeric { digits, .. } = current(interp);
     let places = whole_number(interp, name, args, 2)?;
     let value = target_number(interp, name, args)?;
-    let places = padding_width(non_negative(places, 1)?.unwrap_or(0))?;
+    trunc_of(interp, &value, non_negative(places, 1)?)
+}
+
+/// [`trunc`]'s answer once its target and its places are in hand, shared with
+/// `String~trunc`.
+///
+/// `places` has already had its range checked -- the builtin does that after
+/// reading its target and the method before, which is the one ordering the two
+/// forms do not share.
+pub(crate) fn trunc_of(
+    interp: &mut Interp,
+    value: &Number,
+    places: Option<i64>,
+) -> Result<ObjRef, Failure> {
+    let Numeric { digits, .. } = current(interp);
+    let places = padding_width(places.unwrap_or(0))?;
     Ok(interp.integer_text(value.trunc(digits, places).into_bytes(), digits))
 }
 
@@ -249,18 +270,36 @@ pub(crate) fn format(
     name: &'static [u8],
     args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
-    let Numeric { digits, form, .. } = current(interp);
     let before = whole_number(interp, name, args, 2)?;
     let after = whole_number(interp, name, args, 3)?;
     let expp = whole_number(interp, name, args, 4)?;
     let expt = whole_number(interp, name, args, 5)?;
     let value = target_number(interp, name, args)?;
 
-    let before = non_negative(before, 1)?;
-    let after = non_negative(after, 2)?;
-    let expp = non_negative(expp, 3)?;
-    let expt = non_negative(expt, 4)?;
+    format_over(
+        interp,
+        &value,
+        non_negative(before, 1)?,
+        non_negative(after, 2)?,
+        non_negative(expp, 3)?,
+        non_negative(expt, 4)?,
+    )
+}
 
+/// [`format`]'s answer once its target and its four widths are in hand, shared
+/// with `String~format`.
+///
+/// All four have had their range checked already, for the reason
+/// [`trunc_of`] gives.
+pub(crate) fn format_over(
+    interp: &mut Interp,
+    value: &Number,
+    before: Option<i64>,
+    after: Option<i64>,
+    expp: Option<i64>,
+    expt: Option<i64>,
+) -> Result<ObjRef, Failure> {
+    let Numeric { digits, form, .. } = current(interp);
     // `before` and `after` are always materialised -- the interpreter's
     // `leadingSpaces` and `trailingDecimalZeros` are computed on every path
     // -- so both are reserved from the allocator before anything is built.

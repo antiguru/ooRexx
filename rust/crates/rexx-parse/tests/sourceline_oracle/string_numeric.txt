@@ -1,0 +1,25 @@
+count 24
+/* ABS, TRUNC and FORMAT as methods: `AddMethod("Abs", RexxString::abs, 0)`,
+ * `AddMethod("Trunc", RexxString::trunc, 1)` and
+ * `AddMethod("Format", RexxString::format, 4)` (memory/Setup.cpp:645, :604,
+ * :586).
+ *
+ * The receiver is the builtin's first argument, so every position here is the
+ * builtin's less one.
+ *
+ * ABS rounds under the current NUMERIC DIGITS even when the value is already
+ * positive, which the last block shows. TRUNC's places argument PADS as well
+ * as truncates. FORMAT's `expp` and `expt` are not symmetric: `expp = 0`
+ * suppresses exponential form outright, while `expt = 0` merely sets the
+ * trigger to zero and so almost always forces it.
+ */
+
+say '-12'~abs '12'~abs '-1.5'~abs '0'~abs '-0.0'~abs
+say '1.55'~trunc '1.55'~trunc(0) '1.55'~trunc(1) '1.55'~trunc(3)
+say '-1.55'~trunc(1) '12'~trunc(2) '1E3'~trunc '0.5'~trunc
+say '3.14159'~format '3.14159'~format(2) '3.14159'~format(,2)
+say '['||'3.14159'~format(6,2)||']' '['||'3.14159'~format(2,3)||']'
+say '12345'~format(,,2) '12345'~format(,,2,0) '12345'~format(,,,0)
+say '1'~format(,,3000000000) '1'~format(,,,999999999999999999)
+numeric digits 3
+say '1.23456'~abs '-1.23456'~abs '1.23456'~trunc(4) '123456'~format
