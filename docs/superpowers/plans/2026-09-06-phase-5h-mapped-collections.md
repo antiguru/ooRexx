@@ -2,7 +2,7 @@
 
 Spec: `docs/superpowers/specs/2026-09-06-collections.md`. Runs after Phase 5g
 (`2026-09-06-phase-5g-ordered-collections.md`), which owns the instrument, the scopes table, the
-contents protocol and the subclass-`~new` mechanism this plan depends on.
+contents protocol, `Supplier`, and the store-plus-variable-pool mechanism this plan depends on.
 
 Classes: `IdentityTable`, `Table`, `Set`, `Bag`, `Relation`, `Directory`, `StringTable`,
 `Properties`, `Stem`.
@@ -41,10 +41,24 @@ separate (spec §7).
 **`Relation` and `Bag` have identical native entry-point sets**, `Bag` adding only its two
 `BagClass` overrides on top of `Relation`'s eight. They are one task.
 
+**And four of these classes do not use `Collection`'s set operations at all.** The prolog at
+`CoreClasses.orx:80-87` runs `.set~inheritInstanceMethods(.SetMixin)`,
+`.bag~inheritInstanceMethods(.BagMixin)` and `.relation~/.bag~inheritInstanceMethods(.ManyItemMixin)`,
+which puts `union xor intersection difference subSet putAll` on `Set`, `Bag` and `Relation` at the
+**class's own scope**, on a mixin body — `SetMixin~union` copies the receiver and adds items where
+`Collection~union` is single-valued. Those rows read `answers rc 163` today and are unmeasurable
+until `put` works, so **the first thing Tasks 2 and 3 do after their store lands is run them**. A
+task that finds them answering `Collection`'s semantics has found a real defect, not a passing row.
+
 **`Properties` has no native entry point of its own**: every one of its rows resolves to
 `Directory`'s, and its Rexx-level methods (`getProperty`, `setProperty`, `load`, `save`, the logical
-and whole variants) are installed and already answering. It costs 5g Task 6's mechanism and nothing
-else. Verify that by running before writing any code for it.
+and whole variants) are installed and already answering. What blocks it is 5g Task 6's subject, and
+**it is a design branch to change knowingly rather than a gap to fill**: `native_directory_new`
+(`dispatch.rs:7839`) gives a `Directory` subclass a plain instance *on purpose* so `expose` works,
+and `a_directory_subclass_keeps_the_instance` (`dispatch.rs:11786`) pins the pair. `Properties` needs
+an instance that is both at once. Run it before writing any code for it -- a `StringTable` subclass
+already takes the other branch and round-trips at rc 0, so the mechanism exists and the question is
+which convention `Directory` should be on.
 
 ---
 
@@ -53,13 +67,22 @@ else. Verify that by running before writing any code for it.
 The phase's only new data structure, and the two classes that are the store with nothing on top.
 
 The store holds `ObjRef` in **both** positions. **It is walked by the collector in the commit that
-introduces it** (D98), with `collect_stress` as the witness — a key the collector cannot see is a
+introduces it** (spec D101), with `collect_stress` as the witness — a key the collector cannot see is a
 use-after-free that no small test produces, and a unit test that passes is not evidence here.
 
 Then `HashCollection`'s shared surface over the 5g contents protocol:
-`allIndexes allItems supplier index makeArray empty isEmpty items hasIndex hasItem remove
+`allIndexes allItems supplier index empty isEmpty items hasIndex hasItem remove
 removeItem`, plus `at`/`[]`/`put`/`[]=`, whose `answers` verdicts are vacuous — `t['k'] = 'v'`
 refuses at rc 120 today on both engines, measured 2026-09-06 at `3c6e60f16`.
+
+**`makeArray` is written here as `allIndexes`, not as items** (spec D98). It is a virtual upstream,
+and the first version of the 5g plan told Task 1 to write one shared body — which would answer
+items. Measured on the oracle, `.Directory` with `k1`/`k2` gives `makeArray: k1 k2` against
+`allItems: v1 v2`, where `Array` gives the opposite. Every class in this phase answers indexes
+except `Stem`, which answers its tail array.
+
+**`supplier` is 5g Task 1's** (spec D99): `.Supplier` itself is unimplemented, so no `supplier` row
+in this phase can be witnessed until that task lands. Check it has before writing one.
 
 **Two key protocols, one store, and the difference is not the obvious one.** `Table` compares by
 `equalValue` and hashes by `hash()`, which is the three-way thing spec D96 sets out and not simply

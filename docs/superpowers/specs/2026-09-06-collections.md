@@ -1,247 +1,295 @@
 # The collection classes
 
-Survey: `docs/superpowers/plans/2026-09-06-collections-survey.md`, committed at `2f041fd49`. Read it
-first for the vacuity finding; this spec does not restate it, it acts on it.
+Survey: `docs/superpowers/plans/2026-09-06-collections-survey.md`, committed at `2f041fd49`, for the
+vacuity finding it exists to record: a documented method sent no arguments agrees about an *arity
+error*, so an `answers` verdict on a collection row is not evidence that anything works.
 
-The survey closed with three questions for Moritz. This spec answers all three from measurement
-taken 2026-09-06 at `3c6e60f16`, and adds a fourth finding the survey did not have: **the shape of
-the remaining work is not the one the survey assumed**, because the C++ interpreter's own
-inheritance is visible in two files that can be scanned, and scanning them moves the estimate.
+**Read the survey for that finding and for nothing else. Its counts do not reproduce.** It states
+479 instance rows, 289 `loud` and 188 `answers` across the fourteen classes it names. Filtering
+`corpus/method-bodies.txt` to those classes' instance arm gives 439, 267 and 172 -- the same at
+`2f041fd49`, at `3c6e60f16` and at HEAD, so the table did not move under it. Nothing below is
+derived from the survey's arithmetic.
+
+This spec was reviewed on 2026-09-06 before any code was written against it, and the review found
+the first version wrong in six places. **Every correction is marked in the decision it belongs to,
+because the wrong version is the one a reader is likely to reconstruct.** Probes and outputs:
+`.../scratchpad/review-collections-spec-fable-9a7c/`.
 
 ---
 
-## 1. Where the work actually is, measured
+## 1. Where the work is, and how to ask
 
-The survey scoped from `corpus/method-bodies.txt`'s verdict column and warned that the column
-undercounts. It does. But the same table, joined against the interpreter's own two definition
-sites, also says something the verdict column cannot: **which loud rows are C++ bodies and which
-are Rexx bodies this crate already runs.**
+Almost every `loud` row of these classes is a C++ body. The Rexx bodies of `Collection` and its
+mixins -- `union`, `difference`, `subSet`, `xor`, `disjoint`, `equivalent`, `intersection` -- are
+installed and running at start (`Interp::bootstrap_library`), which is *why* they read `answers`
+rather than `loud`. **There is no free tier.** The leverage the survey hoped for from shared names
+was spent before the phase began.
 
-The two sites are `interpreter/memory/Setup.cpp` -- whose `StartClassDefinition(X)` blocks and
-`AddMethod("Name", entry, args)` lines are the native instance behaviour, with `A_COUNT` or a
-literal maximum in the third operand -- and `interpreter/RexxClasses/CoreClasses.orx`, whose
-`::CLASS`/`::METHOD` directives this crate already parses and installs at start
-(`Interp::bootstrap_library`).
+**The Rexx-bodied `loud` rows are these, measured, and the first version of this spec named only the
+third line.** `sort` and `stableSort` on `Queue`, `List` and `CircularQueue`, all at scope
+`OrderedCollection`; `CircularQueue`'s own `insert makeArray makeString string supplier` and its
+`of`; and the `of` class-arm row on each mapped class, at scope `MapCollection`. Note what this
+corrects: the sort *family* does not already answer. Only `sortWith` and `stableSortWith` do, and
+only because `use strict arg comparator` raises before the body reaches `makeArray`.
 
-**The mixin leverage has already been spent.** Joining the two against the loud rows of the surveyed
-classes, in the scope order the oracle's own `~superClasses` reports, puts almost every loud row on
-a native entry point. The Rexx-level bodies -- `Collection`'s `union`, `difference`, `subSet`,
-`xor`, `disjoint`, `equivalent`, `intersection`, and `OrderedCollection`'s sort family -- are
-already installed and already reading `answers`, which is why they are not in the loud set. Only
-`List`'s two sort rows and `CircularQueue`'s own overrides land on Rexx bodies.
+**`Setup.cpp` shares native bodies where the names do not**, through `InheritInstanceMethods(source)`
+-- `Queue` from `Array`, the mapped classes from `IdentityTable`, `Directory` from `StringTable`,
+`Bag` from `Relation`. So rows collapse along the *entry point* rather than the name.
 
-This is the finding that reshapes the phase, and it cuts the opposite way from the survey's
-hopeful reading of shared names: **there is no free tier.** What there is instead is one
-already-working example of the pattern to copy, which is worth more.
+**D88 -- the entry point is the unit of work, and it bounds the work from both sides.** The token
+`Setup.cpp` writes is a citation, not a body identity, and it is wrong in both directions:
 
-**But the C++ shares bodies where the names do not.** `Setup.cpp` has an
-`InheritInstanceMethods(source)` macro that copies a whole native behaviour before the derived
-class overrides part of it, and it is used across the mapped classes and from `Array` into `Queue`.
-So the loud rows collapse onto far fewer distinct C++ entry points than they have names, and they
-collapse along the *entry point*, not along the name -- `HashCollection::hasIndexRexx` is one body
-answering `hasIndex` across the mapped classes, while `hasItem` reaches a body of its own on a
-`Set`, on a `Bag` and on a `Relation`, and the shared one everywhere else.
+* **an upper bound on distinct bodies.** `Set`'s `HasItem` is written `IdentityTable::hasIndexRexx`,
+  and `IdentityTableClass.hpp` declares no such member -- it is `HashCollection::hasIndexRexx`
+  through C++ inheritance. Counting tokens overcounts bodies.
+* **a lower bound on distinct behaviours**, which the first version of this decision missed
+  entirely. One token reaches three behaviours selected by the contents class the receiver
+  allocated: `HashCollection::putRexx` on a `Relation` or `Bag` reaches `MultiValueContents::put`
+  and its `addFront`, and on a `Set` or `Bag` passes `IndexOnlyHashCollection::validateValueIndex`
+  first. A task sized by tokens alone undercounts exactly where the semantics are hardest.
 
-**D88 -- the entry point is the unit of work, not the name.** The survey counted distinct method
-names and said the ratio flatters, which was right for the wrong reason: the ratio flatters because
-a name is not a body, and it also *understates*, because `InheritInstanceMethods` gives one body
-several classes' rows. Neither number is the estimate. The estimate is the distinct
-entry points the join produces, and a task is sized by those -- with one correction the join cannot
-make for itself: the entry point is the token `Setup.cpp` writes, and two tokens sometimes name one
-C++ function reached through inheritance, so the distinct-token count is an upper bound on distinct
-bodies rather than a count of them.
+**D89 -- the scope column comes from the oracle, not from a file scan.** The first version built the
+whole join by scanning `Setup.cpp` and `CoreClasses.orx`, and that recipe is defective: it misses
+`RemoveMethod` (`Setup.cpp:792-804` strips `sort sortWith stableSort stableSortWith makeString
+toString` and three more from `Queue` *after* `InheritInstanceMethods(Array)` copied them in, moving
+nine documented rows to Rexx bodies), it misses `HideMethod`, and it misses the prolog's phony
+inherits at `CoreClasses.orx:80-87`, which put `Set~union`, `Bag~union`, `Relation~union` and their
+neighbours at the class's own scope on a *mixin* body -- `SetMixin~union` copies then adds, where
+`Collection~union` is single-valued. Three separate ways to attribute a row to the wrong body.
 
-**D89 -- the join is a committed artifact, not a paragraph.** Every number above is derived by
-reading two read-only upstream files, and a number derived that way and then written into prose
-rots the moment either file moves under it -- and neither is pinned by anything in this tree except
-`rexx-lib`'s sha256 on the `.orx`. So the partition is generated into `corpus/collection-scopes.tsv`
-and re-derived by its own test on every run, the way `corpus/refusal-sites.tsv` is: columns for the
-class, the documented method, the arm, the scope that defines it, whether that scope is native or
-Rexx, and for a native scope the entry point and its `Setup.cpp` arity operand. A row whose scope
-cannot be resolved is a failure, not a blank -- that is what catches an upstream rename.
+Ask the oracle instead. **`instance~instanceMethod(name)~scope~id` resolves every inherited scope**,
+over all 471 documented rows with no misses. The call that returns `.nil` -- and that sent the first
+version down the file-scanning path -- is the one sent to the *class object*, whose behaviour holds
+class methods only:
+
+```
+.Array~instanceMethod('UNION')                  ->  The NIL object
+.Array~new~instanceMethod('UNION')~scope~id     ->  OrderedCollection
+.Queue~new~instanceMethod('SORT')~scope~id      ->  OrderedCollection
+.Table~new~instanceMethod('HASINDEX')~scope~id  ->  Table
+```
+
+So `corpus/collection-scopes.tsv` is derived as: **scope from the oracle** by that call, then
+`Setup.cpp` keyed by (scope, name) for native-or-Rexx and the token -- present in that scope's
+post-`InheritInstanceMethods` table means native with that token, absent means Rexx. That leaves
+`RemoveMethod`, `HideMethod`, inherit order and the phony inherits unable to corrupt the scope
+column at all. The file is committed and re-derived by its own test, the way
+`corpus/refusal-sites.tsv` is; a row whose scope resolves nowhere is a failure, not a blank.
+
+**The Method object cannot tell native from Rexx** -- `~source~items` is 0 for `CircularQueue`'s
+Rexx `queue` and `Array`'s native `[]` alike, and `~package~name` is `REXX` for both -- which is why
+`Setup.cpp` is still read for that column and only that column.
 
 ---
 
 ## 2. The three questions the survey left open
 
-**D90 -- question 1, the third tier's storage. There is no third tier.** The survey grouped
-`Table`, `IdentityTable`, `Relation`, `Properties` and `CircularQueue` as "no backing storage at
-all". Two of those five do not belong in the group, and the reason changes what has to be built.
+**D90 -- question 1, the third tier. There is no third tier, and the first version of this decision
+got the mechanism wrong.** It claimed `CircularQueue` and `Properties` fail because `~new` on a
+Rexx subclass of a native class produces an instance with no native body, one mechanism owed to user
+code anyway. Measured, there are three different things happening and one of them is not a subclass
+effect at all:
 
-`CircularQueue` and `Properties` are not native classes. `CoreClasses.orx` declares them
-`::CLASS 'CircularQueue' subclass queue` and `::CLASS 'Properties' subclass Directory`, they appear
-in no `StartClassDefinition` block, and the oracle's `~superClasses` confirms `The Queue class` and
-`The Directory class`. Their storage is their superclass's. What refuses in this crate is not their
-storage but their construction, and the crate says so in its own words -- measured 2026-09-06 at
-`3c6e60f16`:
+| probe | oracle | this crate, both engines |
+|---|---|---|
+| `.Queue~new~items` (no subclass) | `0` | rc 120 `a value that is not an array` |
+| `.CircularQueue~new(3)~items` | `0` | rc 120, **the same message** |
+| `.MyST~new; s['k']='v'; say s['k']` (subclass `StringTable`) | `v` | **`v`, rc 0** |
+| `.MyDir~new; d['k']='v'` (subclass `Directory`) | `v` | rc 120 `not a hash collection` |
+| `.MyArr~new` (subclass `Array`), no message sent | `0` | rc 120 `~new on a subclass of Array` |
 
-```rexx
-a = .MyArr~new(3)
-a[1] = 'x'
-say a[1] a~items
-::CLASS MyArr SUBCLASS Array
-```
+* **`CircularQueue` says nothing about subclassing.** Plain `.Queue~new` has no store either and
+  fails identically, so every observation the first version drew from `CircularQueue` was an
+  observation about `Queue`. Its Rexx `init` and `size` run *today*, because the instance is an
+  ordinary instance with a variable pool.
+* **`Properties` is blocked by a deliberate design, not a missing mechanism.**
+  `native_directory_new` (`dispatch.rs:7839`) branches: the exact `.Directory` class gets the hash
+  body, a subclass gets a plain instance so `expose` works, and the pair is pinned by the test
+  `a_directory_subclass_keeps_the_instance` (`dispatch.rs:11786`).
+* **A `StringTable` subclass already carries a working store** and round-trips at rc 0, taking the
+  other branch (`Primitive::StringTable(ObjRef)`, `dispatch.rs:1366`). `TraceObject subclass
+  StringTable` (`CoreClasses.orx:3993`) has shipped on it. The mechanism is not missing; the two
+  conventions coexist on purpose.
+* **`Array` refuses at `~new`** (`dispatch.rs:12068`), before any message.
 
-Oracle rc 0, `x 1`. This crate rc 120, `rexx-exec: ~new on a subclass of Array is not implemented
-(Phase 5)`. `.Properties~new` and `.CircularQueue~new(3)` fail the same way one message later, at
-`a value that is not a hash collection` and `a value that is not an array` respectively, because
-`~new` on a Rexx subclass of a native class produces an instance with no native body.
+**So the real subject is not "subclass `~new` is unimplemented". It is one instance carrying a
+native store *and* an object variable pool at once**, and the witness that both are needed on one
+object is `CircularQueue~init`'s `expose size` (`CoreClasses.orx:1726-1728`). That is a
+better-defined task than the first version described, and a larger one.
 
-So those two classes cost one mechanism, not two class implementations, and that mechanism is owed
-to user code anyway: `::CLASS MyArr SUBCLASS Array` is ordinary Rexx that any program may write.
-**The remaining three -- `Table`, `IdentityTable`, `Relation` -- do need a store this crate does not
-have**, and so do `Set` and `Bag`, which the survey put in the tier above on the strength of a
-divergence rather than a probe.
+**D91 -- question 2, the receiver sweep, folds in.** The 5c follow-up's 105 rows across 13 classes
+(`records/2026-09-04-phase-5c-followup/task-0-report.md:59`) are these classes. A
+`RECEIVER_OVERRIDES` entry is worth nothing until the collection can hold something and nearly free
+afterwards, so the sweep is each store's last step, not a separate job.
 
-**D91 -- question 2, the receiver sweep, folds in and is answered by this phase's instrument.** The
-5c follow-up left 105 rows across 13 classes whose zero-argument probe cannot discriminate because
-the documented receiver is empty, and Phase 5f's Task 0 measured that a populated receiver would
-sharpen `Queue`, `Array` and `List` rows. Those classes are these classes. A `RECEIVER_OVERRIDES`
-entry for a collection is worth nothing until the collection can hold something, and is nearly free
-afterwards -- so the sweep is not a separate job, it is the last step of each store's task.
+**D92 -- question 3, `Bag~put`/`Set~put`, and it is smaller than the first version claimed.** The
+rule is `IndexOnlyHashCollection::validateValueIndex` (`HashCollection.cpp:1129-1142`): the value is
+required; the index is optional but, if given, must satisfy `isIndexEqual` against the value or the
+send raises 93.949; the index then becomes the value. `Set` and `Bag` are its only subclasses.
+Re-measured: `b~put('x')` is oracle rc 0 `1` against this crate's rc 168 `88.901`, and
+`b~put('x','y')` is oracle rc 163 `93.949`.
 
-**D92 -- question 3, `Bag~put`/`Set~put` does not wait for the phase, and its rule is already
-written down.** `HashCollection.cpp`'s `IndexOnlyHashCollection::validateValueIndex` is the whole
-specification: the value argument is required; the index is optional but, if given, must satisfy
-`isIndexEqual` against the value or the send raises `Error_Incorrect_method_nomatch`; and the index
-is then made the value. `Bag` and `Set` are the two `IndexOnlyHashCollection` subclasses. This is a
-small self-contained correction to an argument layer that already exists, and it is the phase's
-first commit rather than one of its tasks.
+**But `.Bag~new` has no store**, so the argument-layer fix moves rc 168 to rc 120 -- loud instead of
+wrong. That is worth doing and it is not the oracle's answer. The first version called this "a small
+self-contained correction" landing as the phase's first commit while D90 two paragraphs above said
+`Set` and `Bag` need a store; both cannot be true. **It lands first, it is worth landing, and it
+closes nothing** -- 5h Task 3's store closes it.
 
 ---
 
 ## 3. What is in scope, and the split
 
-**D93 -- `RexxQueue` is out of scope.** It is not a collection. `StreamClasses.orx` declares it, its
-class methods are `EXTERNAL 'LIBRARY REXX rexx_create_queue'` and friends, and its instance methods
-are the external data queue's -- `push`, `queue`, `pull`, `queued`, `lineIn`, `lineOut`, `say`,
-sitting on the interpreter's native API and on `RexxQueueMethods.cpp`. It is I/O wearing a
-collection's name, it shares no storage and no primitive with the classes here, and it belongs with
-`Stream` in Phase 7. Its rows stay loud and the phase's gate excludes it by name, not by silence.
+**D93 -- `RexxQueue` is out of scope.** `StreamClasses.orx:439` declares it; its class methods are
+`EXTERNAL 'LIBRARY REXX rexx_create_queue'` and its `push queue pull lineIn queued empty` are
+`EXTERNAL` too. `~superClasses` is `Object` alone -- no native store, no `HashContents`, no
+`ArrayClass` entry point. Phase 7's, with `Stream`.
 
-**D94 -- the phase splits in two, and the split is the backing store.** One phase over the
-remaining classes is roughly twice Phase 5f's whole size in rows and more than that in entry
-points, and the split that falls out of the join is not arbitrary: the ordered classes share
-`Array`'s native behaviour by `InheritInstanceMethods`, the mapped classes share
-`IdentityTable`'s, and no entry point crosses the line except `RexxObject::makeArrayRexx`, which
-every class's `makeArray` row lands on.
+**D94 -- the phase splits in two, and the split is the backing store.**
 
 * **Phase 5g -- the ordered collections.** `Array`, `Queue`, `List`, `CircularQueue`.
 * **Phase 5h -- the mapped collections.** `IdentityTable`, `Table`, `Set`, `Bag`, `Relation`,
   `Directory`, `StringTable`, `Properties`, `Stem`.
 
-Ordered first, for three reasons that are about evidence rather than taste. `Array`'s store already
-exists in this crate (`Body::Array`, with `dimensions`), so the contents protocol D95 introduces can
-be designed against a store that works instead of one being invented in the same task. `Queue`
-inherits `Array`'s whole native behaviour upstream, so the second class is nearly the first one
-again and any protocol that does not make it so is wrong early rather than late. And
-`RexxObject::makeArrayRexx` is the one shared body, so it lands where its store is real.
+The seven hash classes share `IdentityTable`'s native behaviour. **`Stem` shares nothing** -- its
+table is `StemClass::*` throughout with no `InheritInstanceMethods` -- and the first version of this
+sentence said the mapped classes share `IdentityTable`'s behaviour without that exception. `Stem` is
+in 5h by inheritance from `MapCollection` and by nothing else.
 
-**5h's task list is not written here.** Its sizing depends on Task 0's instrument -- the same
-instrument whose absence is what the survey is a warning about -- and writing a task list against
-the verdict column now would be the exact mistake the survey exists to prevent. Its shape is in §5.
+Ordered first: `Body::Array` exists, so the protocol of D95 is designed against a store that works;
+`Queue` inherits `Array`'s behaviour upstream, so the second class tests the protocol immediately.
+
+**D99 -- `Supplier` is in scope and belongs to 5g.** Every `supplier` row in *both* phases lands on
+it -- `Collection~supplier` is `.supplier~new(self~allItems, self~allIndexes)`
+(`CoreClasses.orx:753`) -- and it is unimplemented here:
+
+```
+.Supplier~new(.Array~of('x1','x2'), .Array~of(1,2))~available
+    oracle rc 0    crate rc 120  method "AVAILABLE" of class "Supplier"
+```
+
+Its `Available Index Next Item Init` are `SupplierClass::*` (`Setup.cpp:1624-1628`). Thirteen
+`supplier` rows cannot be witnessed until those exist. The first version mentioned it only as
+something a task might report.
+
+**D100 -- the `of` class-arm rows are blocked outside both phases.** The mapped classes' `of` runs
+`MapCollection~OF` (`CoreClasses.orx:1238`), whose `args = arg(1, 'a')` is unimplemented at
+`crates/rexx-exec/src/builtin/state.rs:1135`. It is a BIF option, it is not collection work, and it
+belongs to whoever owns `ARG`. Named here so it is not silently inherited by a collection task.
 
 ---
 
 ## 4. The design
 
-**D95 -- one contents protocol, mirroring the interpreter's own virtuals.** The C++ does not write
-`allItems` per class. `HashCollection` and `ArrayClass` implement the shared surface once against a
-small set of virtuals, and each concrete class supplies the virtuals. The shared surface is the
-large half of the loud rows -- `allItems`, `allIndexes`, `supplier`, `index`, `makeArray`, `empty`,
-`isEmpty`, `items`, `hasIndex`, `hasItem`, `remove`, `removeItem` -- and every one of them is
-mechanical given iteration, lookup and deletion.
+**D95 -- one contents protocol, mirroring the interpreter's own virtuals.** The C++ writes the
+shared surface once against a small set of virtuals. So does this crate: iterate (index, item) pairs
+in the store's order, look up by index, put, remove by index, count. What the protocol must not hide
+is the key semantics of D96 and the argument layer of D97.
 
-So this crate gets an internal protocol with the same shape, and the shared surface is written once
-per *store*, not once per class. What a store supplies: iterate (index, item) pairs in the store's
-own order, look up by index, put, remove by index, count. What the protocol must **not** hide is the
-part that genuinely differs per class, which is the key semantics of D96 and the argument layer of
-D97.
+**D98 -- and `makeArray` is not part of the shared surface, which the first version got exactly
+backwards.** It said `RexxObject::makeArrayRexx` is "the one body every class in both phases lands
+on -- write it once". The token is shared because `ObjectClass.cpp` defines it as
+`return makeArray();`, a **virtual**, and the answers differ per store:
 
-**D96 -- key semantics are four, and the interpreter names all four.**
-`classes/support/HashContents.hpp` defines the variants and which class uses each: identity
-comparison hashed by `getHashValue()`; `EqualityHashContents` comparing by `equalValue` and hashed
-by `hash()`; `MultiValueContents`, which is the equality one with `put` remapped to `addFront`, for
-`Relation` and `Bag`; and `StringHashContents`, comparing by `memCompare` and hashed by the string
-hash, for the string-keyed classes. **What `hash()` is, exactly, because the loose reading is wrong in a way that matters.**
-`ObjectClass.hpp` and `ObjectClass.cpp` between them define three things, not one.
-`identityHash()` is the address complemented. `getHashValue()` defaults to `identityHash()` and is
-overridden -- `RexxString` caches a string hash, `.NIL` holds a static one. And `RexxObject::hash()`
-branches: for a **base-class** object it is `getHashValue()`, and for any **other** object it
-*sends the `HASHCODE` message* and decodes the binary string that comes back, raising if the send
-answers nothing.
+```
+Directory  makeArray: k1 k2    allItems: v1 v2      (HashCollection::makeArray -> allIndexes)
+Array      makeArray: p r      allIndexes: 1 3      (ArrayClass::makeArray    -> allItems)
+Stem       makeArray: b a                           (StemClass::makeArray     -> tailArray)
+```
 
-So the `HASHCODE` body Phase 5f Task 4d landed is reached by this store only for objects of a user
-class -- exactly the objects whose `::METHOD hashCode` an author writes to make their instances
-usable as keys. For a string, a number or a collection, the store must use the internal hash and
-never the message. An implementation that always sends `HASHCODE` is observably wrong: it makes a
-user's `hashCode` override change where a *string* key lands.
+Hash collections answer **indexes**; `Array` and `List` answer **items**; `Stem` answers its tail
+array. Writing it once produces items where every 5h class needs keys.
 
-Note the identity variant's own comment: it matches on reference identity but hashes with
-`getHashValue()` rather than `identityHash`. That distinction is deviation 4's neighbourhood and is
-where an `IdentityTable` implementation that "obviously" uses the handle will diverge.
+**D96 -- the hash, keyed on `isBaseClass()` and not on being a string.** `ObjectClass.hpp` defines
+three things: `identityHash()` is the address complemented (`:340`); `getHashValue()` defaults to it
+and is overridden by `RexxString` and `.NIL` (`:335`, `:622`); and `RexxObject::hash()` branches --
+`if (isBaseClass()) return getHashValue();` else it **sends `HASHCODE`** and decodes the string,
+raising if the send answers nothing.
 
-**D97 -- the argument layer is per entry point and comes from `Setup.cpp`, not from the docs.** The
-third operand of each `AddMethod` is the interpreter's own arity: a literal is a maximum, `A_COUNT`
-is `Arity::Counted`. The generated table of D89 carries it, so a row's `Arity` is read from the
-join rather than guessed from the documentation -- which is where Phase 5f's `Arity::Fixed(n)`
-misreadings came from. **A shared body still needs its own argument checking per class** where the
-upstream overrides it: `Set`'s `hasItem` is `IdentityTable::hasIndexRexx` at arity 1, `Bag`'s is
-`BagClass::hasItemRexx` at arity 2, and a protocol that routes both to one Rust body with one arity
-is wrong in a way no zero-argument probe can see.
+**The consequence the first version drew from this is false.** It said an implementation that always
+sends `HASHCODE` would let a user's override change where a *string* key lands. There is no such
+override:
 
-**D98 -- the new store is GC-visible from its first commit.** `Body::Native`'s existing map is keyed
-by bytes and holds `ObjRef` values; an object-keyed store holds `ObjRef` in *both* positions, and a
-key the collector cannot see is a use-after-free that a small test will not produce. Whatever
-`Body` variant the mapped store lands as is walked by the collector in the same commit that
-introduces it, with `collect_stress` as the witness rather than a unit test.
+```
+.String~define('HASHCODE', ...)   ->  rc 158, Error 98.985
+                                      User additions are not allowed to the REXX language classes
+```
+
+and for a base string the two paths are value-identical anyway. **The branch is observable one step
+over, on a subclass**, and that is the witness to write:
+
+```rexx
+t = .Table~new;  t['gamma'] = 5;  k = .MyStr~new('gamma')
+say t[k] t~hasIndex(k)
+::CLASS MyStr SUBCLASS String
+::METHOD hashCode        -- with this method:    The NIL object 0
+  return '4141414141414141'x   -- without it:    5 1
+```
+
+So the rule is the oracle's: a **base-class** object hashes internally, and anything else -- a user
+class *and* a `String` subclass -- gets the message. **The trap for this crate is that "has a string
+value" and "is a base-class object" are different questions**, and the first version of this
+decision conflated them.
+
+`IdentityTable` compares by reference identity and still hashes with `getHashValue()`; measured, an
+`IdentityTable` with string keys iterates reproducibly across oracle runs and `it['alpha'~copy]` is
+`.NIL`. An implementation hashing the handle would not reproduce. That is the observable, and it is
+writable as a witness.
+
+**D97 -- the argument layer is per entry point and comes from `Setup.cpp`.** A literal third operand
+is a maximum, `A_COUNT` is `Arity::Counted`, and the scopes table carries it verbatim so a row's
+`Arity` is read rather than guessed. A shared body still needs its own checking per class where
+upstream overrides it: `Set`'s `hasItem` is the shared `hasIndex` body at arity 1, `Bag`'s is
+`BagClass::hasItemRexx` at arity 2. (The first version justified this decision by attributing
+`Arity::Fixed(n)` misreadings to Phase 5f; that phase's records do not support it, and the decision
+stands on the upstream operand alone.)
+
+**D101 -- the new store is GC-visible from its first commit.** An object-keyed store holds `ObjRef`
+in both positions, and a key the collector cannot see is a use-after-free no small test produces.
+`collect_stress` is the witness, in the commit that introduces the store.
 
 ---
 
 ## 5. The gate
 
-Inherited from Phase 5f unchanged, because the reason it was written still holds: the verdict
-column cannot see a stub, and for these classes it cannot see a wrong signature either.
+Inherited from Phase 5f, plus what the review found missing.
 
 * **The gate is the corpus programs**, under `REXX_CORPUS_GATE=1`. The plain `--test corpus` binary
   is report mode and exits 0 on a divergence.
-* **`method-bodies.txt` is a drift check only.** No row of a class in scope may move to `diverge`,
-  and no row that was answering may stop. `loud` -> `answers` is reported, never required.
-* **Every witness sends a short argument list as well as a good one**, because the shared
-  missing-argument raiser makes those rows agree in the table for free.
-* Every new corpus program is filed in `corpus/phase-5c.txt`, in `EXPECTED_SUBSET_5C`, and as a
-  `crates/rexx-parse/tests/sourceline_oracle/<name>.txt`.
-* **And one addition this phase needs.** A collection row's `answers` verdict is not evidence, and
-  the instrument that replaces it is Task 0's: a re-probe of every row in scope with a real argument
-  list, committed as a table, so that a row this phase leaves alone is a row someone has looked at
-  rather than one whose verdict happened to be green. The phase's own progress is read from that
-  table and not from the verdict column.
+* **The per-row control is 5f's and it is the only one there is: replace a landed body with a
+  93.903 stub and the witness must go red.** The first version said "inherited unchanged" without
+  restating it. Restate it: nothing else in this gate checks a row individually.
+* **`method-bodies.txt` is a drift check only.** No row may move to `diverge`, none that answered may
+  stop. `loud` -> `answers` is reported, never required.
+* Every witness sends a short argument list as well as a good one; every new corpus program is filed
+  in `corpus/phase-5c.txt`, in `EXPECTED_SUBSET_5C`, and as a `sourceline_oracle/<name>.txt`. **The
+  filing rule is load-bearing, not a chore**: `corpus.rs:692` documents that a subset losing a whole
+  file exits 0 in both modes, so `EXPECTED_SUBSET_5C` is the only thing that notices.
+* **The instrument that replaces the verdict column, and the rule that makes it mean anything.** A
+  re-probe of every row in scope with a real argument list, committed as a table. **A row's argument
+  list is real only if the oracle answers rc 0 to it.** An empty list, or one the oracle rejects, is
+  a harness failure for that row and not a data point -- without that rule a harness can send real
+  arguments to the two control rows and nothing else and read green, because every other row agrees
+  at zero arguments exactly as it does today.
 
 ---
 
 ## 6. What neither phase does
 
-* `RexxQueue` (D93).
-* The `Collection` mixin bodies, which already run.
-* `Stream` and anything reached through the native API.
-* Performance. `Body::Array`'s `Vec<Option<ObjRef>>` and whatever the mapped store becomes are
-  correctness structures; a hash collection's bucket layout is not this phase's subject and the
-  oracle's iteration order is licensed to differ anyway only where it is already licensed
-  (`oorexx-hash-iteration-order`: unseeded and bucket-ordered, string keys reproduce, identity keys
-  do not reproduce even across runs of the oracle itself). **Where the oracle's own order is not
-  reproducible, a witness may not depend on it** -- that is a corpus program that cannot be written,
-  not a divergence to chase.
+`RexxQueue` (D93). The `Collection` mixin bodies, which already run. `ARG(1,'A')` (D100). `Stream`
+and the native API. Performance: where the oracle's own iteration order does not reproduce, a
+witness may not depend on it -- that is a witness that cannot be written, not a divergence to chase.
 
 ## 7. Risks
 
-* **The instrument is the phase's load-bearing measurement and it is a probe of my own.** Probe
-  discipline applies at full strength: a re-probe harness that sends a wrong argument list produces
-  a table that looks exactly like a right one. Task 0's own red control is a row it must classify
-  wrongly if the harness is broken.
-* **`Stem` is a `MapCollection` whose store already exists** (`Body::Stem`, with tombstones) and
-  whose semantics are the language's, not the collection framework's. It is in 5h by inheritance
-  and may not fit the protocol; if it does not, it gets its own task rather than a widened protocol.
-* **The subclass-`~new` mechanism of D90 is not scoped by this spec.** It is named as the blocker
-  for two classes and as ordinary user-facing Rexx, but what it costs -- which `Body` variant a
-  subclass instance carries, and how `Primitive` resolution changes from identity to descent -- is
-  a question for 5g's plan and may be large enough to be its own task.
+* **The instrument is load-bearing and it is a probe of my own.** This spec's first version was
+  wrong in six places, and the two that survived review longest were both mechanism claims built on
+  correct probes. Outcome rulings have held here; mechanism rulings have not.
+* **The red control's own tree matters.** D92's commit makes `Bag~put` *loud*, and in a harness
+  shaped like `method_bodies.rs` a loud row never reaches the oracle -- so "these two rows must
+  disagree" becomes unfalsifiable rather than red. Decide whether D92 or the instrument lands first,
+  and write the prediction for the tree the control will actually run on.
+* **`Stem`** may not fit the protocol. If it does not, it gets its own task rather than a widened
+  protocol.
+* **D90's cost is not scoped here.** Which `Body` a subclass instance carries, and whether
+  `Primitive` resolution moves from identity to descent, is 5g's to answer; both conventions already
+  coexist deliberately and `dispatch.rs` says why.

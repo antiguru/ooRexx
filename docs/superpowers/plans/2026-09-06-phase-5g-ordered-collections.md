@@ -7,11 +7,16 @@ Classes: `Array`, `Queue`, `List`, `CircularQueue`. `Stem` and the mapped classe
 `RexxQueue` is out of scope by D93.
 
 **The thing to hold on to while reading this plan.** For these four classes the `answers` column of
-`corpus/method-bodies.txt` is not evidence of anything. `Table~at` reads `answers` and refuses at
-rc 120 when sent an argument; `CircularQueue~queue` reads `answers` and refuses the same way. That
-is not a bug in the harness -- its own comment says a zero-argument send to a method needing
-arguments is agreement about an arity error -- it is the reason Task 0 exists and the reason no
-later task may cite a verdict as a reason to skip a row.
+`corpus/method-bodies.txt` is not evidence of anything. `t['k'] = 'v'` on a `Table` reads `answers`
+for `[]=` and refuses at rc 120 on both engines; `.Bag~new~put('x')` reads `answers` and is rc 168
+against the oracle's rc 0. That is not a bug in the harness -- its own comment says a zero-argument
+send to a method needing arguments is agreement about an arity error -- it is why Task 0 exists and
+why no later task may cite a verdict as a reason to skip a row.
+
+**Two examples that look like they belong here and do not.** `.Table~new~at('k')` answers
+`The NIL object` at rc 0 on the oracle *and* on both engines -- the read is fine, it is the write
+that refuses. And `.CircularQueue~new(3)~items` refusing says nothing about `CircularQueue`: plain
+`.Queue~new~items` refuses identically, because `Queue` has no store. Spec D90 has the measurements.
 
 BASE for Task 0 is the commit this plan lands in.
 
@@ -67,83 +72,128 @@ Every task, no exceptions. Inherited from Phase 5f's plan unchanged except where
 
 Three deliverables, and the first is the phase's load-bearing measurement.
 
-**(a) `corpus/collection-scopes.tsv`, derived and re-derived (D89).** A test in `rexx-exec`'s test
-tree that reads `/home/moritz/dev/repos/ooRexx/interpreter/memory/Setup.cpp` and
-`/home/moritz/dev/repos/ooRexx/interpreter/RexxClasses/CoreClasses.orx` and joins them against
-`corpus/docs/class-methods.txt`, emitting one row per (class, method, arm) for every class in this
-spec's scope: the scope that defines the method, whether that scope is native or Rexx, and for a
-native scope the C++ entry point and the `Setup.cpp` arity operand verbatim (`A_COUNT` or the
-literal). Follow `refusal_sites.rs`: the file is committed and the test re-derives it, so an
-upstream edit is a red test rather than a stale document.
+**(a) `corpus/collection-scopes.tsv`, derived and re-derived (spec D89).** One row per (class,
+method, arm) for every class in scope: the scope that defines it, native or Rexx, and for a native
+scope the C++ entry point and the `Setup.cpp` arity operand verbatim.
 
-Three things it must get right, each of which is a way to be silently wrong:
+**The scope column comes from the oracle, not from a file scan**, and this is the plan's single
+biggest correction from review:
 
-* `StartClassDefinition(X)` blocks, and `InheritInstanceMethods(source)` copies the source's whole
-  instance behaviour *before* the block's own `AddMethod` lines override part of it. A join that
-  ignores the macro puts `Table`'s rows on nothing.
-* Scope order is most-derived first, and for `CircularQueue` and `Properties` the most-derived scope
-  is a **Rexx** one. Getting this backwards is what makes `CircularQueue~supplier` look native.
-* A row whose scope resolves nowhere is a **failure**, not an empty cell. `RexxQueue`'s rows resolve
-  nowhere and are excluded by name in the table's own scope list, so that the failure mode stays
-  available for a class that is supposed to resolve.
-* **The entry point is the token `Setup.cpp` writes, and two tokens can name one C++ function.**
-  `Set`'s `HasItem` is written `IdentityTable::hasIndexRexx`, and `IdentityTableClass.hpp` declares
-  no such member -- it is `HashCollection::hasIndexRexx` reached through C++ inheritance. So the
-  table's entry-point column is a *citation*, not a body identity, and a task that counts distinct
-  bodies from it overcounts. Say which the column is in the file's own header.
+```rexx
+inst["ARRAY"] = .Array~new  ...  inst["CIRCULARQUEUE"] = .CircularQueue~new(5)
+if arm == "instance" then m = inst[cls~upper]~instanceMethod(nm)
+                     else m = .environment[cls~upper]~instanceMethod(nm)
+say cls nm arm m~scope~id
+```
+
+Sent to an **instance** this resolves every inherited scope, over all 471 documented rows with no
+misses. Sent to the class object it answers `.nil` for inherited names, which is what sent the first
+version of this plan down a file-scanning path. `Class~method` is own-scope only; do not use it.
+
+Then read `Setup.cpp` keyed by (scope, name) for the token and for native-or-Rexx: present in that
+scope's post-`InheritInstanceMethods` table means native with that token, absent means Rexx. **The
+Method object cannot answer that question** -- `~source~items` is 0 for `CircularQueue`'s Rexx
+`queue` and `Array`'s native `[]` alike, and `~package~name` is `REXX` for both.
+
+Follow `refusal_sites.rs`: the file is committed and the test re-derives it, so an upstream edit is
+a red test rather than a stale document. A row whose scope resolves nowhere is a **failure**, not a
+blank; `RexxQueue` is excluded by name so that failure mode stays available.
+
+**If you build the scope column from the files anyway, these three will each attribute rows to the
+wrong body**, and the first version of this plan named none of them:
+
+* `RemoveMethod` — `Setup.cpp:792-804` strips `Dimension Dimensions Fill sort sortWith stableSort
+  stableSortWith makeString toString` from `Queue` *after* `InheritInstanceMethods(Array)` copied
+  them in. Nine documented rows across `Queue` and `CircularQueue` move to Rexx bodies.
+* `HideMethod` — `Setup.cpp:1399-1404` on `Stem`. Moves no documented row today; would matter the
+  moment `Stem`'s operator rows enter the table.
+* The prolog's phony inherits at `CoreClasses.orx:80-87` —
+  `.set~inheritInstanceMethods(.SetMixin)` and its four neighbours put `Set~union`, `Bag~union`,
+  `Relation~union` and others at the class's own scope on a **mixin** body. `SetMixin~union` copies
+  then adds items; `Collection~union` is single-valued. Attributing those to `Collection` is the
+  wrong body, not just the wrong scope name.
+
+**And the entry-point column is a citation, not a body identity.** Two tokens can name one C++
+function (`Set`'s `HasItem` is written `IdentityTable::hasIndexRexx`; that header declares no such
+member), and one token can reach three behaviours selected by the receiver's contents class. Say
+which the column is in the file's own header.
 
 **(b) The re-probe instrument, `corpus/collection-arity.tsv`.** For every row of every class in
-scope, send the documented name **with an argument list that the method could accept**, to a
-receiver holding something, on both engines and on the oracle, and record the three descriptors'
-agreement. This replaces the verdict column for this phase, and its whole purpose is to find the
-rows that read `answers` and are wrong.
+scope, send the documented name with an argument list the method could accept, to a receiver holding
+something, on both engines and on the oracle, and record the three descriptors' agreement. This
+replaces the verdict column for this phase.
 
-**Its red control, and the control is the point.** The instrument's failure mode is that it sends
-argument lists nothing accepts, agrees about *that*, and reports a green table -- the same shape of
-mistake one layer down from the one the survey found. So: `Bag~put` and `Set~put` must come out
-**disagreeing** in the first run of this table, because D92 has already measured that they do
-(`b = .Bag~new; b~put('x'); say b~items` is oracle rc 0 `1`, this crate rc 168). A first run that
-puts those two rows in agreement means the harness is not sending an argument, and the table is
-worthless until it does. Predict that before running it and record which way it came out.
+**The rule that makes it mean anything: a row's argument list is real only if the ORACLE answers
+rc 0 to it.** An empty list, or one the oracle rejects, is a harness failure for that row and not a
+data point. Without it the instrument is defeated two ways that both read green — fill in argument
+lists for the control rows only and leave the rest empty, or send two arguments to everything and
+let both sides agree on 93.902.
+
+**Its red control, and its tree.** `Bag~put` and `Set~put` must come out **disagreeing**: with no
+argument both sides give rc 163, with one argument the oracle is rc 0 `1` and this crate rc 168. But
+spec D92's commit turns that row **loud**, and in a harness shaped like `method_bodies.rs` — whose
+own doc says pass one is crate-only and pass two runs the oracle only for rows pass one did not
+classify — a loud row never reaches the oracle, so "disagreeing" stops being a state it can be in
+and the control becomes unfalsifiable rather than red. **Decide the order before writing the
+prediction, and say in the table's header what verdict a loud row takes.**
 
 Report, whether or not it is acted on: how many rows in scope read `answers` and disagree under a
 real argument list. That number sizes 5h.
 
 **(c) `crates/rexx-exec/src/dispatch/collection.rs`**, beside `dispatch/native.rs` and
-`dispatch/string.rs`, holding its own `NATIVE_METHODS` slice chained into the registration loop.
+`dispatch/string.rs`, with its own `NATIVE_METHODS` slice chained into the registration loop.
 **Land it with the slice empty.** Its red control is Phase 5f Task 0's, which worked: a row naming a
-method the class does not answer must panic at `ObjectModel::build`, and a row binding a real loud
-name to the wrong body must make the send reach that body. Remove both and confirm the name is loud
-again.
+method the class does not answer must panic at `ObjectModel::build` (`dispatch.rs:1200,1205`), and a
+row binding a real loud name to the wrong body must make the send reach that body. Remove both and
+confirm the name is loud again.
 
 ---
 
-## Task 1 — the contents protocol, proved on `Array`'s shared surface
+## Task 1 — the contents protocol, `Supplier`, and `Array`'s shared surface
 
 `Array`'s store exists (`Body::Array`, `slots: Vec<Option<ObjRef>>` with `dimensions`), which is why
-the protocol is introduced here and not against a store being invented in the same commit (D95).
+the protocol is introduced here and not against a store being invented in the same commit.
 
 Introduce the internal protocol — iterate (index, item) pairs in the store's order, look up by
 index, put, remove by index, count — and write `Array`'s shared surface against it:
 `allIndexes allItems supplier index makeArray empty isEmpty hasIndex hasItem remove removeItem`.
 
-**`makeArray` is `RexxObject::makeArrayRexx`, the one body every class in both phases lands on**
-(spec §3). Write it once, here, against the protocol.
+**`Supplier` is this task's, and it blocks thirteen rows across both phases** (spec D99).
+`Collection~supplier` is `.supplier~new(self~allItems, self~allIndexes)` (`CoreClasses.orx:753`),
+and `Supplier` is unimplemented here:
 
-Three traps, all upstream-visible:
+```
+.Supplier~new(.Array~of('x1','x2'), .Array~of(1,2))~available
+    oracle rc 0            crate rc 120  method "AVAILABLE" of class "Supplier"
+```
 
-* `Array`'s `hasIndex`, `next`, `previous` and `remove` are `A_COUNT`, not fixed — a multi-dimensional
-  index arrives as several arguments. `Setup.cpp`'s operand is in Task 0's table; read it.
+Its `Available Index Next Item Init` are `SupplierClass::*` (`Setup.cpp:1624-1628`). No `supplier`
+row in either phase can be witnessed until they exist, so they are written here rather than
+discovered by whichever task first tries to close one.
+
+**`makeArray` is written per store, not once** (spec D98). The token `RexxObject::makeArrayRexx` is
+shared because `ObjectClass.cpp` defines it as `return makeArray();`, a virtual, and the answers
+differ: `Array` and `List` give **items**, hash collections give **indexes**, `Stem` gives its tail
+array. Measured on the oracle:
+
+```
+Array     makeArray: p r      allIndexes: 1 3
+Directory makeArray: k1 k2    allItems:   v1 v2
+```
+
+Write `Array`'s here. Do not write a shared one — the first version of this plan said "write it
+once, here, against the protocol", which produces items where every 5h class needs keys.
+
+Two more traps, both upstream-visible:
+
+* `Array`'s `hasIndex`, `next`, `previous` and `remove` are `A_COUNT`, not fixed — a
+  multi-dimensional index arrives as several arguments. The operand is in Task 0's table; read it.
 * A sparse `Array` has holes. `allItems` skips them, `allIndexes` skips them, `items` counts
-  non-holes, and `size` does not. Any of those four written as "the length of the vector" is wrong
-  and no zero-argument probe sees it.
-* `supplier` answers a `Supplier` object, and `SupplierMixin` is one of the `CoreClasses.orx`
-  mixins. Check whether `.Supplier` constructs in this crate today before assuming the row is
-  reachable; if it is not, that is a finding for the report and possibly a task, not something to
-  work around with a substitute object.
+  non-holes, `size` does not. Any of the four written as "the length of the vector" is wrong and no
+  zero-argument probe sees it.
 
 Witnesses: one corpus program for the enumeration surface over a populated, a sparse and an empty
-`Array`; one refusals program.
+`Array`; one for `Supplier` driven to exhaustion; one refusals program.
 
 ---
 
@@ -162,9 +212,13 @@ Witnesses: one program per half (navigation, structure) plus refusals.
 
 ## Task 3 — the sort family
 
-`sort sortWith stableSort stableSortWith`, all four on `ArrayClass::stableSortRexx` and
+**`Array`'s four, and `Array`'s only.** All four land on `ArrayClass::stableSortRexx` and
 `ArrayClass::stableSortWithRexx` — the interpreter maps the unstable names onto the stable bodies,
-which Task 0's table shows and which means **there is one algorithm here, not two**.
+so **there is one algorithm here, not two**. `Queue` and `CircularQueue` do *not* share them:
+`Setup.cpp:799-802` removes all four from `Queue` after it inherits `Array`'s behaviour, and their
+rows fall through to `OrderedCollection`'s Rexx bodies, which route through `makeArray`. Task 0's
+table shows this; a task that assumes the `Array` bodies serve all three is writing for one class
+and claiming three.
 
 `sortWith` takes a `Comparator`, and the comparator classes are Rexx-level in `CoreClasses.orx` and
 already installed — `DescendingComparator`, `CaselessComparator`, `ColumnComparator`,
@@ -215,26 +269,38 @@ Task 6's; outside that task these two are the only ones.
 
 ---
 
-## Task 6 — `~new` on a subclass of a native class, and `CircularQueue`
+## Task 6 — one instance carrying a store and a variable pool, and `CircularQueue`
 
-The mechanism of D90. The crate refuses in its own words today —
-`rexx-exec: ~new on a subclass of Array is not implemented (Phase 5)` — so the refusal site is
-already named and findable.
+**Not "`~new` on a subclass of a native class is unimplemented".** That was the first version's
+framing and spec D90 records why it is wrong: three different mechanisms are in play and one of them
+is not a subclass effect.
 
-`CircularQueue` needs it and nothing else of its own: its bodies are Rexx, in `CoreClasses.orx`,
-already installed and already running. `Properties` needs the same mechanism against `Directory`
-and is 5h's, but if it falls out for free here, take it and say so.
+* `.Queue~new~items` refuses identically to `.CircularQueue~new(3)~items`, so **nothing observed
+  about `CircularQueue` is evidence about subclass construction.** Its Rexx `init` and `size` run
+  today.
+* A `StringTable` subclass already carries a working store — `.MyST~new; s['k']='v'; say s['k']` is
+  `v` at rc 0 on both engines — via `Primitive::StringTable(ObjRef)` (`dispatch.rs:1366`), and
+  `TraceObject subclass StringTable` has shipped on it.
+* A `Directory` subclass is **deliberately** given a plain instance so `expose` works:
+  `native_directory_new` (`dispatch.rs:7839`) branches on the exact class, pinned by the test
+  `a_directory_subclass_keeps_the_instance` (`dispatch.rs:11786`). That is why `Properties`' writes
+  refuse, and it is a design to change knowingly, not a gap to fill.
+* `Array` refuses at `~new` itself (`dispatch.rs:12068`).
 
-**Scope check before starting** (spec §7): what a subclass instance carries as its `Body`, and
-whether `Primitive` resolution moves from identity to descent, is not settled by this plan.
-`dispatch.rs` documents `Primitive::Directory` as "identity and not descent" deliberately and
-`Primitive::StringTable` as the opposite, so the two conventions already coexist and the reason is
-written down there. Read that first. If the answer is large, split this task and say why — do not
-widen it silently.
+**The subject is therefore one instance carrying a native store *and* an object variable pool**, and
+the witness that both are needed on one object is `CircularQueue~init`'s `expose size`
+(`CoreClasses.orx:1726-1728`). Read `dispatch.rs`'s own account of why identity and descent coexist
+before changing either.
 
-Its witness is ordinary user Rexx, not a library class: `::CLASS MyArr SUBCLASS Array` with a
-method of its own that calls `self~append`, because that is the shape that proves the native body
-and the Rexx subclass share a receiver.
+`CircularQueue` needs this and a `Queue` store, and nothing else of its own: its bodies are Rexx,
+already installed and running. Note from Task 0's table that its `sort`/`stableSort` are
+`OrderedCollection`'s, not `Array`'s — `RemoveMethod` stripped them from `Queue`.
+
+`Properties` is 5h's; if it falls out here, take it and say so.
+
+Its witness is ordinary user Rexx — `::CLASS MyArr SUBCLASS Array` with a method of its own that
+calls `self~append` and one that `expose`s an instance variable, because the two together are the
+property this task exists for.
 
 ---
 
