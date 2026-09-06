@@ -923,9 +923,20 @@ pub(crate) fn strip(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result
     let set = optional_string(interp, args, 3);
 
     let option = option_letter(option.as_deref(), "BLT")?.unwrap_or(b'B');
-    let set = set.as_deref().unwrap_or(DEFAULT_STRIP_SET);
+    let kept = strip_bytes(&string, option, set.as_deref());
+    Ok(interp.text(kept))
+}
 
-    let mut kept = string.as_slice();
+/// `STRIP`'s answer once its option and set are read, shared with
+/// `String~strip`.
+///
+/// **`set` is `None` for an omitted argument and `Some(b"")` for a null
+/// string, and the two differ**: omitted takes the whitespace default while a
+/// null string is an empty set that removes nothing. A pure slice of the
+/// input, so nothing here can allocate or fail.
+pub(crate) fn strip_bytes<'a>(string: &'a [u8], option: u8, set: Option<&[u8]>) -> &'a [u8] {
+    let set = set.unwrap_or(DEFAULT_STRIP_SET);
+    let mut kept = string;
     if option == b'L' || option == b'B' {
         while kept.first().is_some_and(|&byte| in_set(byte, set)) {
             kept = &kept[1..];
@@ -936,7 +947,7 @@ pub(crate) fn strip(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result
             kept = &kept[..kept.len() - 1];
         }
     }
-    Ok(interp.text(kept))
+    kept
 }
 
 /// `SPACE`'s body: the words of `string` joined by `gap` copies of `pad`,
@@ -1034,20 +1045,29 @@ pub(crate) fn abbrev(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result
     let requested = whole_number(interp, name, args, 3)?;
 
     let minimum = match requested {
-        Some(value) => length_of(value)?,
-        None => info.len(),
+        Some(value) => Some(length_of(value)?),
+        None => None,
     };
-    // An empty `info` with a zero minimum abbreviates anything, including
-    // the empty string -- measured, `abbrev('','')` is 1 where
-    // `abbrev('','x')` is 0.
-    let answer = if minimum == 0 && info.is_empty() {
-        true
-    } else if information.is_empty() || info.len() < minimum || information.len() < info.len() {
-        false
-    } else {
-        information[..info.len()] == info[..]
-    };
+    let answer = abbrev_holds(&information, &info, minimum);
     Ok(interp.text(if answer { b"1" } else { b"0" }))
+}
+
+/// `ABBREV`'s answer once its two strings and its length are read, shared with
+/// `String~abbrev`.
+///
+/// `minimum` is `None` for an omitted length, which means the candidate's own
+/// length. An empty candidate with a zero minimum abbreviates anything,
+/// including the empty string -- measured, `abbrev('','')` is 1 where
+/// `abbrev('','x')` is 0.
+pub(crate) fn abbrev_holds(information: &[u8], info: &[u8], minimum: Option<usize>) -> bool {
+    let minimum = minimum.unwrap_or(info.len());
+    if minimum == 0 && info.is_empty() {
+        return true;
+    }
+    if information.is_empty() || info.len() < minimum || information.len() < info.len() {
+        return false;
+    }
+    information[..info.len()] == info[..]
 }
 
 /// `COMPARE(string1, string2 [,pad])`: the 1-based offset of the first byte
@@ -1057,8 +1077,14 @@ pub(crate) fn compare(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Resul
     let second = required_string(interp, args, 2);
     let pad = pad_byte(interp, name, args, 3)?.unwrap_or(b' ');
 
+    Ok(interp.counted(compare_at(&first, &second, pad)))
+}
+
+/// `COMPARE`'s answer once its two strings and its pad are read, shared with
+/// `String~compare`: the 1-based offset of the first byte that differs, or 0.
+pub(crate) fn compare_at(first: &[u8], second: &[u8], pad: u8) -> usize {
     let shared = first.len().min(second.len());
-    let mismatch = (0..shared)
+    (0..shared)
         .find(|&index| first[index] != second[index])
         .map(|index| index + 1)
         .or_else(|| {
@@ -1075,8 +1101,7 @@ pub(crate) fn compare(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Resul
                 .position(|&byte| byte != pad)
                 .map(|offset| shared + offset + 1)
         })
-        .unwrap_or(0);
-    Ok(interp.counted(mismatch))
+        .unwrap_or(0)
 }
 
 /// `COUNTSTR(needle, haystack)`: how many non-overlapping `needle`s

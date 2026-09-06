@@ -1,0 +1,26 @@
+count 25
+/* STRIP as a method: `AddMethod("Strip", RexxString::strip, 2)`
+ * (memory/Setup.cpp:593), `RexxString::strip`
+ * (classes/StringClassSub.cpp:529).
+ *
+ * The second argument is a SET of characters, not a pad -- documented, in
+ * rexxref's own words: "The third argument, chars, specifies the set of
+ * characters to be removed", with STRIP("12.0000", "T", '.0') --> "12" as its
+ * own two-character example. A null set removes nothing rather than raising.
+ *
+ * The default set is whitespace, which is a space AND a horizontal tab, so a
+ * receiver ending in a tab strips clean without naming one.
+ *
+ * The option's first letter is the whole of it: "Leading" and "L" are one
+ * option, and what follows the letter is ignored.
+ */
+
+t = '09'x
+say '['||'  ab  '~strip||']' '['||'  ab  '~strip('B')||']'
+say '['||'  ab  '~strip('L')||']' '['||'  ab  '~strip('T')||']'
+say '['||'  ab  '~strip('Leading')||']' '['||'  ab  '~strip('trailing')||']'
+say '['||(t'ab't)~strip||']' '['||(t||'ab')~strip('L')||']'
+say '['||'12.7000'~strip(,'0')||']' '['||'0012.700'~strip(,'0')||']'
+say '['||'12.0000'~strip('T', '.0')||']' '['||'aabb'~strip('L', 'ab')||']'
+say '['||'aXbXc'~strip('B', 'X')||']' '['||'XaXbXcX'~strip('B', 'X')||']'
+say '['||'abc'~strip('B', '')||']' '['||''~strip||']' '['||'   '~strip||']'

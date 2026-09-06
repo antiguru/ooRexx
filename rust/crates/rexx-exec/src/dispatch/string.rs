@@ -41,12 +41,13 @@
 //! argument. Share the byte core; never the builtin's argument handling.
 
 use super::{
-    Arity, Cleared, Failure, Interp, NativeMethod, ObjRef, backward_search,
-    backward_search_arguments, case_shift_arguments, changestr_arguments, copies_argument,
-    delete_arguments, delword_arguments, ends_with, forward_search, forward_search_arguments,
-    insert_arguments, match_region_arguments, match_region_over, overlay_arguments, pad_arguments,
-    replace_at_bytes, replace_at_plan, space_arguments, starts_with, substr_arguments,
-    translate_arguments, translate_in_table, verify_arguments, wordpos_arguments,
+    Arity, Cleared, Failure, Interp, NativeMethod, ObjRef, abbrev_arguments, backward_search,
+    backward_search_arguments, case_shift_arguments, changestr_arguments, compare_arguments,
+    copies_argument, delete_arguments, delword_arguments, ends_with, forward_search,
+    forward_search_arguments, insert_arguments, match_region_arguments, match_region_over,
+    overlay_arguments, pad_arguments, replace_at_bytes, replace_at_plan, space_arguments,
+    starts_with, strip_arguments, substr_arguments, translate_arguments, translate_in_table,
+    verify_arguments, wordpos_arguments,
 };
 use crate::error::Raised;
 use crate::eval::logical_value;
@@ -1433,6 +1434,55 @@ fn native_string_copies(
     }
 }
 
+/// `String~"STRIP"`, `RexxString::strip` (`classes/StringClassSub.cpp:529`).
+fn native_string_strip(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let (option, set) = strip_arguments(interp, args)?;
+    let bytes = interp.to_text(receiver).to_vec();
+    let kept = crate::builtin::string::strip_bytes(&bytes, option, set.as_deref());
+    Ok(Some(interp.text(kept)))
+}
+
+/// `String~"ABBREV"`, `RexxString::abbrev`
+/// (`classes/StringClassMisc.cpp:75`).
+///
+/// Answers the *text* `1` or `0` rather than a boolean object, so the answer
+/// goes on to arithmetic -- measured, `'Print'~abbrev('Pri') + 1` is 2 and
+/// `datatype('Print'~abbrev('Pri'))` is `NUM`.
+fn native_string_abbrev(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let (info, minimum) = abbrev_arguments(interp, args)?;
+    let bytes = interp.to_text(receiver).to_vec();
+    let holds = crate::builtin::string::abbrev_holds(&bytes, &info, minimum);
+    let answer = interp.text(if holds { b"1" } else { b"0" });
+    interp.give_result_buffer(info);
+    Ok(Some(answer))
+}
+
+/// `String~"COMPARE"`, `RexxString::compare`
+/// (`classes/StringClassMisc.cpp:159`).
+fn native_string_compare(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let (other, pad) = compare_arguments(interp, args)?;
+    let bytes = interp.to_text(receiver).to_vec();
+    let at = crate::builtin::string::compare_at(&bytes, &other, pad);
+    let answer = interp.counted(at);
+    interp.give_result_buffer(other);
+    Ok(Some(answer))
+}
+
 /// `String`'s rows, in the shape [`super::NATIVE_METHODS`] uses.
 pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("String", "", Arity::Fixed(1), native_string_op_abuttal),
@@ -1499,12 +1549,15 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         native_string_op_strict_greater_equal,
     ),
     ("String", "?", Arity::Fixed(2), native_string_op_choice),
+    ("String", "ABBREV", Arity::Fixed(2), native_string_abbrev),
     ("String", "APPEND", Arity::Fixed(1), native_string_append),
+    ("String", "COMPARE", Arity::Fixed(2), native_string_compare),
     ("String", "CENTER", Arity::Fixed(2), native_string_center),
     ("String", "CENTRE", Arity::Fixed(2), native_string_center),
     ("String", "COPIES", Arity::Fixed(1), native_string_copies),
     ("String", "LEFT", Arity::Fixed(2), native_string_left),
     ("String", "RIGHT", Arity::Fixed(2), native_string_right),
+    ("String", "STRIP", Arity::Fixed(2), native_string_strip),
     (
         "String",
         "CASELESSCHANGESTR",

@@ -8393,6 +8393,55 @@ pub(super) fn substr_arguments(
     Ok((start, length, pad))
 }
 
+/// `STRIP`'s option and character set.
+///
+/// The option is `"BLT"`, defaulting to `B`, and an unrecognised letter is
+/// 93.915 naming the accepted set -- measured, `'x'~strip('Z')` reports
+/// `Method option must be one of "BLT"; found "Z".` An empty option string is
+/// as wrong as a wrong letter.
+///
+/// **The set is answered as `Option`, because omitted and null are different
+/// arguments.** Omitted takes the whitespace default; a null string is an
+/// empty set that strips nothing. Documented, in rexxref's own words: "If
+/// chars is a null string, then no characters are removed." There is no
+/// length check on it at all -- `STRIP("12.0000", "T", '.0')` is the
+/// documentation's own two-character example.
+pub(super) fn strip_arguments(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+) -> Result<(u8, Option<Vec<u8>>), Failure> {
+    let option = option_method_argument(interp, args, 0, "BLT")?.unwrap_or(b'B');
+    let set = optional_string_or_none_argument(interp, args, 1)?;
+    Ok((option, set))
+}
+
+/// `ABBREV`'s candidate and its minimum length.
+///
+/// The candidate is required (93.903 omitted, 88.909 without a string value)
+/// and the length is `optionalLengthArgument`, 93.923.
+pub(super) fn abbrev_arguments(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+) -> Result<(Vec<u8>, Option<usize>), Failure> {
+    let info = string_method_argument(interp, args, 0)?;
+    let minimum = optional_length_argument(interp, args, 1)?;
+    Ok((info, minimum))
+}
+
+/// `COMPARE`'s other string and its pad.
+///
+/// The same first argument as [`abbrev_arguments`] over a second that is a pad
+/// rather than a length, so the two differ only in which sub-code the second
+/// argument raises: 93.922 here against 93.923 there.
+pub(super) fn compare_arguments(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+) -> Result<(Vec<u8>, u8), Failure> {
+    let other = string_method_argument(interp, args, 0)?;
+    let pad = pad_method_argument(interp, args, 1)?.unwrap_or(b' ');
+    Ok((other, pad))
+}
+
 /// A width and a pad: `CENTER`/`CENTRE`/`LEFT`/`RIGHT`'s two arguments as
 /// methods.
 ///

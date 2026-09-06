@@ -261,7 +261,7 @@ String	&&	instance	answers	rc 163
 String	|	instance	answers	rc 163
 String	[]	instance	answers	rc 163
 String	?	instance	answers	rc 168
-String	abbrev	instance	loud	method "ABBREV" of class "String"
+String	abbrev	instance	answers	rc 163
 String	abs	instance	loud	method "ABS" of class "String"
 String	append	instance	answers	rc 163
 String	b2x	instance	loud	method "B2X" of class "String"
@@ -289,7 +289,7 @@ String	ceiling	instance	loud	method "CEILING" of class "String"
 String	center	instance	answers	rc 163
 String	centre	instance	answers	rc 163
 String	changeStr	instance	answers	rc 163
-String	compare	instance	loud	method "COMPARE" of class "String"
+String	compare	instance	answers	rc 163
 String	compareTo	instance	loud	method "COMPARETO" of class "String"
 String	contains	instance	answers	rc 163
 String	containsWord	instance	answers	rc 163
@@ -328,7 +328,7 @@ String	round	instance	loud	method "ROUND" of class "String"
 String	sign	instance	answers	rc 163
 String	space	instance	answers	rc 0
 String	startsWith	instance	answers	rc 168
-String	strip	instance	loud	method "STRIP" of class "String"
+String	strip	instance	answers	rc 0
 String	subChar	instance	answers	rc 163
 String	substr	instance	answers	rc 163
 String	subWord	instance	answers	rc 163
