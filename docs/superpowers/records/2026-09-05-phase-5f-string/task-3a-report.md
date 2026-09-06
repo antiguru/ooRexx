@@ -68,7 +68,28 @@ String. `XRANGE.testGroup:297` is `self~assertSame(xrange()~copies(2), …)` and
 `D2C.testGroup:102` is `self~assertSame('7F'x||'FF'x~copies(249), d2c(vlong))`
 — read, not inferred from the count.
 
-## 5. The control — three mutations, predicted before running
+## 5. Nine rows on other classes moved with them
+
+`method-bodies.txt` changed 21 rows, not five. The other sixteen are the
+interesting half, and they are the same effect the ooTest rows above are:
+
+- **`DateTime~maxDate`, `~minDate`, `~offset` and `TimeSpan~"+"`, `~"-"`,
+  `~duration`, `~makeString`, `~string`** — eight rows, `loud` -> `answers`.
+  These are Rexx-level bodies in `CoreClasses.orx` whose formatting reaches
+  `~right`/`~left`, so binding this family is what let them run.
+- **`DateTime~elapsed`** — `loud` -> `unstable`. It answers now, and its answer
+  is an elapsed time, so two runs of the same probe differ. `unstable` is the
+  correct verdict for it and not a defect.
+- **Seven `CircularQueue` rows** stay `loud` and change their evidence: what
+  they hit first moved from `method "LEFT" of class "String"` to
+  `method "MAKEARRAY" of class "Queue"` (and `"SUPPLIER"` for `~supplier`).
+  Nothing about them improved except that this family is no longer what blocks
+  them.
+
+None of this was predicted; it is what the refresh reported and it was read
+row by row rather than summarised from the count.
+
+## 6. The control — three mutations, predicted before running
 
 **G — COPIES reads its count as a length.** Predicted: refusals rows 17 and 18
 turn 93.906 into 93.923 and the stderr tail moves; row 16 does *not* move,
@@ -90,7 +111,7 @@ line 10 because I enumerated the file's sends from memory instead of reading
 them; the mutation is caught in five places, so the witness is not the weak
 part here.
 
-## 6. Gates
+## 7. Gates
 
 | | |
 |---|---|
@@ -102,5 +123,5 @@ part here.
 | G6 `REXX_PHASE_GATE=5c` | PENDING |
 | G7 `REXX_PHASE_GATE=5d` | PENDING |
 
-Pre-commit chain: method-bodies refresh rc 0 (five rows `loud` -> `answers`),
-fmt rc 0, clippy rc 0, strict corpus 383 of 383, full workspace test rc 0.
+Pre-commit chain: method-bodies refresh rc 0 (21 rows changed -- see section
+5), fmt rc 0, clippy rc 0, strict corpus 383 of 383, full workspace test rc 0.
