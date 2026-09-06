@@ -1,0 +1,13 @@
+/* String's word readers and verify -- word, words, wordIndex, wordLength and
+   verify -- on a receiver with leading, repeated and trailing blanks. */
+w = '  now is  the time  '
+say w~words w~wordIndex(1) w~wordIndex(3) w~wordIndex(4) w~wordIndex(5) w~wordLength(1) w~wordLength(4) w~wordLength(5)
+say w~word(1) '|' w~word(3) '|' w~word(4) '|' w~word(5)
+say ''~words '   '~words ''~word(1) '|' ''~wordIndex(1) ''~wordLength(1)
+/* verify: an empty reference, both options in either case, a range, and a
+   start past the end. */
+s = 'abcabc'
+say s~verify('abc') s~verify('ab') s~verify('ab', 'M') s~verify('x', 'N', 2) s~verify('ab', 'N', 2, 1) s~verify('ab', 'n', 2, 2) s~verify('c', 'match', 2)
+say s~verify('', 'M') s~verify('', 'N') s~verify('', 'N', 3) s~verify('abc', 'N', 9) s~verify('', 'N', 9) s~verify('abc', 'M', 6, 1)
+say w~words~class~id s~verify('ab')~class~id
+say s'|'w'|'

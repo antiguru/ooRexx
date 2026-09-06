@@ -43,7 +43,8 @@
 use super::{
     Arity, Cleared, Failure, Interp, NativeMethod, ObjRef, backward_search,
     backward_search_arguments, ends_with, forward_search, forward_search_arguments,
-    match_region_arguments, match_region_over, starts_with, substr_arguments, wordpos_arguments,
+    match_region_arguments, match_region_over, starts_with, substr_arguments, verify_arguments,
+    wordpos_arguments,
 };
 
 /// `RexxString::posRexx` (`classes/StringClassMisc.cpp:581`).
@@ -553,6 +554,84 @@ fn native_string_subwords(
     Ok(Some(super::array_of_texts(interp, words)?))
 }
 
+/// `RexxString::word` (`classes/StringClassWord.cpp:214`).
+fn native_string_word(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let position = super::required_position_argument(interp, args, 0)?;
+    let mut out = interp.take_result_buffer();
+    {
+        let bytes = interp.to_text(receiver);
+        let found = crate::builtin::word::word_range(&bytes, position).unwrap_or(0..0);
+        out.extend_from_slice(&bytes[found]);
+    }
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `RexxString::wordIndex` (`classes/StringClassWord.cpp:228`): the 1-based
+/// byte at which the word starts, or 0.
+fn native_string_wordindex(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let position = super::required_position_argument(interp, args, 0)?;
+    let index = {
+        let bytes = interp.to_text(receiver);
+        crate::builtin::word::word_range(&bytes, position).map_or(0, |word| word.start + 1)
+    };
+    Ok(Some(interp.counted(index)))
+}
+
+/// `RexxString::wordLength` (`classes/StringClassWord.cpp:242`).
+fn native_string_wordlength(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let position = super::required_position_argument(interp, args, 0)?;
+    let length = {
+        let bytes = interp.to_text(receiver);
+        crate::builtin::word::word_range(&bytes, position).map_or(0, |word| word.len())
+    };
+    Ok(Some(interp.counted(length)))
+}
+
+/// `RexxString::words` (`classes/StringClassWord.cpp:309`).
+fn native_string_words(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let count = {
+        let bytes = interp.to_text(receiver);
+        crate::builtin::word::word_count(&bytes)
+    };
+    Ok(Some(interp.counted(count)))
+}
+
+/// `RexxString::verify` (`classes/StringClassMisc.cpp:771`).
+fn native_string_verify(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let (reference, option, start, range) = verify_arguments(interp, args)?;
+    let answer = {
+        let bytes = interp.to_text(receiver);
+        crate::builtin::string::verify_bytes(&bytes, &reference, option, start, range)
+    };
+    interp.give_result_buffer(reference);
+    Ok(Some(interp.counted(answer)))
+}
+
 /// `String`'s rows, in the shape [`super::NATIVE_METHODS`] uses.
 pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     (
@@ -663,6 +742,21 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(2),
         native_string_subwords,
     ),
+    ("String", "VERIFY", Arity::Fixed(4), native_string_verify),
+    ("String", "WORD", Arity::Fixed(1), native_string_word),
+    (
+        "String",
+        "WORDINDEX",
+        Arity::Fixed(1),
+        native_string_wordindex,
+    ),
+    (
+        "String",
+        "WORDLENGTH",
+        Arity::Fixed(1),
+        native_string_wordlength,
+    ),
     ("String", "WORDPOS", Arity::Fixed(2), native_string_wordpos),
+    ("String", "WORDS", Arity::Fixed(0), native_string_words),
     ("String", "[]", Arity::Fixed(2), native_string_brackets),
 ];

@@ -336,12 +336,12 @@ String	subWords	instance	answers	rc 0
 String	translate	instance	loud	method "TRANSLATE" of class "String"
 String	trunc	instance	loud	method "TRUNC" of class "String"
 String	upper	instance	answers	rc 0
-String	verify	instance	loud	method "VERIFY" of class "String"
-String	word	instance	loud	method "WORD" of class "String"
-String	wordIndex	instance	loud	method "WORDINDEX" of class "String"
-String	wordLength	instance	loud	method "WORDLENGTH" of class "String"
+String	verify	instance	answers	rc 163
+String	word	instance	answers	rc 163
+String	wordIndex	instance	answers	rc 163
+String	wordLength	instance	answers	rc 163
 String	wordPos	instance	answers	rc 163
-String	words	instance	loud	method "WORDS" of class "String"
+String	words	instance	answers	rc 0
 String	x2b	instance	loud	method "X2B" of class "String"
 String	x2c	instance	loud	method "X2C" of class "String"
 String	x2d	instance	loud	method "X2D" of class "String"
@@ -951,7 +951,7 @@ DateTime	dayMicroseconds	instance	answers	rc 0
 DateTime	dayMinutes	instance	answers	rc 0
 DateTime	dayName	instance	answers	rc 0
 DateTime	daySeconds	instance	answers	rc 0
-DateTime	daysInMonth	instance	loud	method "WORD" of class "String"
+DateTime	daysInMonth	instance	answers	rc 0
 DateTime	daysInYear	instance	answers	rc 0
 DateTime	elapsed	instance	loud	method "RIGHT" of class "String"
 DateTime	europeanDate	instance	answers	rc 0
