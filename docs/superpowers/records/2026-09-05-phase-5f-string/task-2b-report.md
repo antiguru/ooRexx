@@ -1,7 +1,7 @@
 # Phase 5f Task 2b — String's thirty-two operator rows
 
 Plan: `docs/superpowers/plans/2026-09-05-phase-5f-string.md`, Task 2, D83, D85.
-BASE `8051f89d5`. Landed at `PENDING`.
+BASE `8051f89d5`. Landed at `644d6d847`.
 
 Thirty-two of the thirty-three operator rows. `?` is Task 2c: it is the one
 operator that is not a `rexx_parse::Operator` at all, and it needs a logical
@@ -123,13 +123,13 @@ prediction was actually about.
 
 | | |
 |---|---|
-| G1 `cargo fmt --all --check` | PENDING |
-| G2 `cargo clippy --workspace --all-targets -- -D warnings` | PENDING |
-| G3 `cargo test --release --workspace --no-fail-fast` | PENDING |
-| G4 same with `REXX_CORPUS_GATE=1` | PENDING |
-| G5 `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace` | PENDING |
-| G6 `REXX_PHASE_GATE=5c` | PENDING |
-| G7 `REXX_PHASE_GATE=5d` | PENDING |
+| G1 `cargo fmt --all --check` | rc 0 |
+| G2 `cargo clippy --workspace --all-targets -- -D warnings` | rc 0, zero warnings |
+| G3 `cargo test --release --workspace --no-fail-fast` | rc 0 |
+| G4 same with `REXX_CORPUS_GATE=1` | rc 0 |
+| G5 `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace` | rc 0 |
+| G6 `REXX_PHASE_GATE=5c` | rc 0 |
+| G7 `REXX_PHASE_GATE=5d` | rc 0 |
 
 Pre-commit chain, all green at the committed tree: method-bodies refresh rc 0,
 fmt rc 0, clippy rc 0, strict corpus 379 of 379, full workspace test rc 0.
