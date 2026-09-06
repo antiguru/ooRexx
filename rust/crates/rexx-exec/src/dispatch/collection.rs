@@ -80,10 +80,21 @@ fn position_in(
     array_position(interp, store, args, index_use)
 }
 
-/// The `Queue` store's pool name, in the receiver's own pool under the
-/// `Queue` class as scope -- `Supplier`'s arrangement and for the same
+/// The Array-shaped store's pool name, in the receiver's own pool under the
+/// `Array` class as scope -- `Supplier`'s arrangement and for the same
 /// reason: `ScopePools` is already walked by the collector.
+///
+/// **One scope for every holder**, so that `Queue`, `CircularQueue` and any
+/// user subclass of `Array` are all reached by the same [`store_of`].
 const QUEUE_ITEMS: &[u8] = b"ITEMS";
+
+/// The scope the Array-shaped store is bound under.
+fn store_scope(interp: &mut Interp) -> ObjRef {
+    interp
+        .classes()
+        .lookup("Array")
+        .expect("Array is a native class")
+}
 
 // ---- the contents protocol ----
 
@@ -112,10 +123,7 @@ fn store_of(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure> {
     if interp.array_slots(receiver).is_some() {
         return Ok(receiver);
     }
-    let scope = interp
-        .classes()
-        .lookup("Queue")
-        .expect("Queue is a native class");
+    let scope = store_scope(interp);
     pool_variable(interp, receiver, scope, QUEUE_ITEMS)
         .ok_or_else(|| Loud::receiver_class("a value that is not an array").into())
 }
@@ -1116,10 +1124,29 @@ fn same_class_array(
         .ok_or_else(|| Failure::from(Loud::receiver_class("a value that is not an array")))?;
     let object = new_instance(interp, class)?;
     interp.roots.push_temp(object);
-    let scope = interp
-        .classes()
-        .lookup("Queue")
-        .expect("Queue is a native class");
+    let scope = store_scope(interp);
+    interp.set_pool_variable(object, scope, QUEUE_ITEMS, store);
+    Ok(object)
+}
+
+/// An instance of `class` whose store is `store`, for a `~new` on a subclass
+/// of `Array` and for a section of one.
+///
+/// **This is the whole of spec D90's mechanism.** The instance is an ordinary
+/// `Body::Instance`, so it has an object variable pool and the subclass's own
+/// `expose` works; the store is a pool entry, so the collection methods
+/// inherited from `Array` work through [`store_of`]. Both halves on one
+/// object, which is what `CircularQueue~init`'s `expose size` beside its
+/// `queue` needs.
+pub(super) fn instance_over_store(
+    interp: &mut Interp,
+    class: ObjRef,
+    store: ObjRef,
+) -> Result<ObjRef, Failure> {
+    interp.roots.push_temp(store);
+    let object = new_instance(interp, class)?;
+    interp.roots.push_temp(object);
+    let scope = store_scope(interp);
     interp.set_pool_variable(object, scope, QUEUE_ITEMS, store);
     Ok(object)
 }
@@ -1173,10 +1200,7 @@ fn native_queue_init(
     super::optional_length_argument(interp, args, 0)?;
     let store = interp.alloc_with(BehaviourId::ARRAY, Body::array(Vec::new()));
     interp.roots.push_temp(store);
-    let scope = interp
-        .classes()
-        .lookup("Queue")
-        .expect("Queue is a native class");
+    let scope = store_scope(interp);
     interp.set_pool_variable(receiver, scope, QUEUE_ITEMS, store);
     Ok(None)
 }

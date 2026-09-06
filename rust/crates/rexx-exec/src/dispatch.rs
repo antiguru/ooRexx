@@ -5832,9 +5832,35 @@ fn native_package_public_classes(
 /// dictionary reaches is a `Body::Array`. Loud rather than a panic, this
 /// crate's rule for an internal inconsistency.
 fn array_slots(interp: &Interp, receiver: ObjRef) -> Result<&[Option<ObjRef>], Failure> {
+    let receiver = collection_store(interp, receiver);
     interp
         .array_slots(receiver)
         .ok_or_else(|| Loud::receiver_class("a value that is not an array").into())
+}
+
+/// The array that actually holds `receiver`'s slots: the receiver itself when
+/// it carries a `Body::Array`, and otherwise the store its own pool holds.
+///
+/// **One resolution point for every Array-shaped receiver**, which is what
+/// lets one body serve `.Array`, a `Queue`, a `CircularQueue` and a user
+/// subclass of any of them. A `Body::Array` resolves to `Primitive::Array`
+/// wherever it is asked and so cannot answer a subclass's `~class`; spec D90
+/// and `collection::store_of` carry the whole argument.
+///
+/// Answers the receiver unchanged when there is no store, so the refusal a
+/// caller already raises stays the one it raises.
+fn collection_store(interp: &Interp, receiver: ObjRef) -> ObjRef {
+    if interp.array_slots(receiver).is_some() {
+        return receiver;
+    }
+    let Some(model) = interp.object_model.as_ref() else {
+        return receiver;
+    };
+    let scope = model.array;
+    match interp.heap.get(receiver).map(|object| &object.body) {
+        Some(Body::Instance { pools, .. }) => pools.get(scope, b"ITEMS").unwrap_or(receiver),
+        _ => receiver,
+    }
 }
 
 /// [`array_slots`] as an owned copy, for a caller that renders the slots and
@@ -5849,6 +5875,7 @@ fn array_slots_owned(interp: &Interp, receiver: ObjRef) -> Result<Vec<Option<Obj
 /// `None` is an array no dimension list was fixed for, which is not the same
 /// as a one-element list -- see [`rexx_core::Body::Array`].
 fn array_dimensions(interp: &Interp, receiver: ObjRef) -> Result<Option<Vec<usize>>, Failure> {
+    let receiver = collection_store(interp, receiver);
     match interp.array_body(receiver) {
         Some((_, dimensions)) => Ok(dimensions.map(<[usize]>::to_vec)),
         None => Err(Loud::receiver_class("a value that is not an array").into()),
@@ -5858,6 +5885,7 @@ fn array_dimensions(interp: &Interp, receiver: ObjRef) -> Result<Option<Vec<usiz
 /// `ArrayClass::isFixedDimension` (`classes/ArrayClass.hpp:223`): an array
 /// that can no longer take a shape from a subscript list.
 fn array_is_fixed_dimension(interp: &Interp, receiver: ObjRef) -> Result<bool, Failure> {
+    let receiver = collection_store(interp, receiver);
     match interp.array_body(receiver) {
         Some((slots, dimensions)) => Ok(dimensions.is_some() || !slots.is_empty()),
         None => Err(Loud::receiver_class("a value that is not an array").into()),
@@ -6098,6 +6126,7 @@ fn position_index(
 /// `ArrayClass::extend` (`classes/ArrayClass.cpp:2034`): grow the receiver to
 /// `size` slots, the added ones empty.
 fn array_resize(interp: &mut Interp, receiver: ObjRef, size: usize) -> Result<(), Failure> {
+    let receiver = collection_store(interp, receiver);
     match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
             if let Some(extra) = size.checked_sub(slots.len()) {
@@ -6258,6 +6287,7 @@ fn native_array_put(
     };
     let position = array_position(interp, receiver, &args[1..], IndexUse::Put)?
         .expect("IndexUse::Put grows the array rather than answering out of bounds");
+    let receiver = collection_store(interp, receiver);
     match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
             slots[position - 1] = Some(value);
@@ -6325,9 +6355,6 @@ fn native_array_new(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let class = class_receiver(interp, receiver)?;
-    if class != interp.object_model().array {
-        return Err(Loud::array_subclass_new().into());
-    }
     let spread;
     let body = match args {
         [] => Body::array(Vec::new()),
@@ -6350,11 +6377,25 @@ fn native_array_new(
         },
         _ => multidimensional_body(interp, args)?,
     };
-    let object = interp.alloc_with(BehaviourId::ARRAY, body);
-    interp.roots.push_temp(object);
+    let object = array_of_class(interp, class, body)?;
     let caller = interp.caller();
     interp.send_message(object, INIT, None, &[], caller)?;
     Ok(Some(object))
+}
+
+/// `body` as an object of `class`: a bare `Body::Array` for `.Array` itself,
+/// and an instance carrying it as a store for any subclass.
+///
+/// A `Body::Array` resolves to `Primitive::Array` wherever it is asked, so it
+/// cannot answer a subclass's `~class` -- spec D90 and
+/// `dispatch::collection::store_of` carry the whole of that argument.
+fn array_of_class(interp: &mut Interp, class: ObjRef, body: Body) -> Result<ObjRef, Failure> {
+    let store = interp.alloc_with(BehaviourId::ARRAY, body);
+    if class == interp.object_model().array {
+        interp.roots.push_temp(store);
+        return Ok(store);
+    }
+    collection::instance_over_store(interp, class, store)
 }
 
 /// `.Array~of(item, ...)`: the arguments as an array's slots, in order --
@@ -6373,15 +6414,11 @@ fn native_array_of(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let class = class_receiver(interp, receiver)?;
-    if class != interp.object_model().array {
-        return Err(unbuilt_class_method(interp, class, b"OF"));
-    }
     let body = Body::Array {
         slots: args.to_vec(),
         dimensions: args.is_empty().then(|| Box::from([0].as_slice())),
     };
-    let object = interp.alloc_with(BehaviourId::ARRAY, body);
-    interp.roots.push_temp(object);
+    let object = array_of_class(interp, class, body)?;
     let caller = interp.caller();
     interp.send_message(object, INIT, None, &[], caller)?;
     Ok(Some(object))
@@ -11948,18 +11985,17 @@ mod tests {
         );
     }
 
-    /// `~of` sent to a subclass of `Array` refuses, where the oracle answers
-    /// it -- the position `native_array_new` is already in for `~new`.
+    /// `~of` sent to a subclass of `Array` answers an instance of that
+    /// subclass -- Phase 5g Task 6, where this test used to assert the
+    /// refusal.
     ///
-    /// Measured 2026-09-03, oracle rc 0: `.array~subclass('K')~of(1,2)~size`
-    /// is `2`.
+    /// Measured, oracle rc 0: `.array~subclass('K')~of(1,2)~size` is `2` and
+    /// its `~class~id` is `K`.
     #[test]
-    fn array_of_on_a_subclass_is_loud() {
-        let (code, stdout, stderr) = both_engines("say .array~subclass('K')~of(1,2)~size\n");
-        assert_eq!((code, stdout.as_str()), (120, ""));
+    fn array_of_on_a_subclass_answers_an_instance_of_it() {
         assert_eq!(
-            stderr,
-            "rexx-exec: method \"OF\" of class \"K\" is not implemented (Phase 5)\n"
+            both_engines("k = .array~subclass('K')\nsay k~of(1,2)~size\nsay k~of(1,2)~class~id\n"),
+            (0, "2\nK\n".to_string(), String::new())
         );
     }
 
@@ -12050,22 +12086,18 @@ mod tests {
             assert!(stderr.contains(message), "{source:?} {stderr:?}");
         }
     }
-
-    /// `~new` on a class deriving from `Array` is loud, because the answer
-    /// would have to dispatch against the subclass's behaviour and a
-    /// `Body::Array` carries none. The oracle answers it -- measured,
-    /// `.array~subclass('K')~new(2,3)~size` is `6` at rc 0.
+    /// A subclass of `Array` constructs, keeps its class, and carries both a
+    /// store and an object variable pool -- Phase 5g Task 6.
     ///
-    /// The `~id` line is the adjacent success: the subclass itself is built,
-    /// so the refusal is `~new`'s and not `~subclass`'s.
+    /// This test used to assert the refusal that stood here. Measured on the
+    /// oracle: `.array~subclass('K')~new(2,3)~size` is `6` at rc 0.
     #[test]
-    fn new_on_a_subclass_of_array_is_loud() {
-        let (code, stdout, stderr) =
-            both_engines("k = .array~subclass('K')\nsay k~id\nsay k~new(2,3)~size\n");
-        assert_eq!((code, stdout.as_str()), (120, "K\n"));
+    fn new_on_a_subclass_of_array_answers_an_instance_of_it() {
         assert_eq!(
-            stderr,
-            "rexx-exec: ~new on a subclass of Array is not implemented (Phase 5)\n"
+            both_engines(
+                "k = .array~subclass('K')\nsay k~id\nsay k~new(2,3)~size\nsay k~new~class~id\n"
+            ),
+            (0, "K\n6\nK\n".to_string(), String::new())
         );
     }
 

@@ -1,0 +1,71 @@
+/* A user subclass of an ordered collection.  The property this is about is
+   that one instance carries a native store AND an object variable pool at the
+   same time: the store makes the inherited collection methods work, and the
+   pool makes the subclass's own `expose` work.  A design that gives the
+   instance only one of the two passes half of this program. */
+
+a = .MyArr~new(3)
+a[1] = 'x'
+a[3] = 'z'
+say 'subclass of Array' a~class~id a~size a~items a[1]
+say 'inherited surface' a~allItems~makeString('L', ',') a~allIndexes~makeString('L', ',')
+say 'its own method over its own state' a~tagged
+say 'and over the inherited store' a~doubled
+
+say 'multi-dimensional' .Array~subclass('K')~new(2, 3)~size
+say 'of' .Array~subclass('K')~of('p', 'q')~allItems~makeString('L', ',')
+say 'the class is kept' .Array~subclass('K')~new~class~id
+
+/* A section of a subclass is that subclass, not the base class. */
+say 'section class' a~section(1, 2)~class~id
+
+q = .MyQ~new
+q~queue('p')
+q~push('o')
+say 'subclass of Queue' q~class~id q~items q~allItems~makeString('L', ',')
+say 'its own state survived init' q~tagged
+
+l = .MyL~new
+h = l~append('m')
+say 'subclass of List' l~class~id l~at(h) l~items
+say 'its own state' l~tagged
+
+/* CircularQueue is the library's own Rexx subclass of Queue, and it is the
+   witness that both halves are needed on one object: its `init` exposes
+   `size` while its `queue` reaches Queue's store. */
+c = .CircularQueue~new(3)
+c~queue('a')
+c~queue('b')
+c~queue('c')
+c~queue('d')
+say 'CircularQueue keeps the newest' c~allItems~makeString('L', ',') 'items' c~items
+say 'and its string form' c~string
+
+::CLASS MyArr SUBCLASS Array
+::METHOD init
+  expose tag
+  tag = 'A'
+  forward class (super)
+::METHOD tagged
+  expose tag
+  return tag
+::METHOD doubled
+  return self~items * 2
+
+::CLASS MyQ SUBCLASS Queue
+::METHOD init
+  expose tag
+  tag = 'Q'
+  forward class (super)
+::METHOD tagged
+  expose tag
+  return tag
+
+::CLASS MyL SUBCLASS List
+::METHOD init
+  expose tag
+  tag = 'L'
+  forward class (super)
+::METHOD tagged
+  expose tag
+  return tag
