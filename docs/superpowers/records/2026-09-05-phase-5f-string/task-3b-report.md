@@ -1,7 +1,7 @@
 # Phase 5f Task 3b — STRIP, ABBREV, COMPARE
 
 Plan: `docs/superpowers/plans/2026-09-05-phase-5f-string.md`, Task 3.
-BASE `709f64468`. Landed at `PENDING`.
+BASE `709f64468`. Landed at `6d4dbaf2c`.
 
 Three more of Task 3's twenty-five. String now reads 99 `answers`, 6
 `uncomparable`, 30 `loud`: **82 of the phase's 112 bound**, 30 left.
@@ -86,13 +86,13 @@ do *not* move, because an all-pad tail answers 0 from either side. Measured:
 
 | | |
 |---|---|
-| G1 `cargo fmt --all --check` | PENDING |
-| G2 `cargo clippy --workspace --all-targets -- -D warnings` | PENDING |
-| G3 `cargo test --release --workspace --no-fail-fast` | PENDING |
-| G4 same with `REXX_CORPUS_GATE=1` | PENDING |
-| G5 `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace` | PENDING |
-| G6 `REXX_PHASE_GATE=5c` | PENDING |
-| G7 `REXX_PHASE_GATE=5d` | PENDING |
+| G1 `cargo fmt --all --check` | rc 0 |
+| G2 `cargo clippy --workspace --all-targets -- -D warnings` | rc 0, zero warnings |
+| G3 `cargo test --release --workspace --no-fail-fast` | rc 0 |
+| G4 same with `REXX_CORPUS_GATE=1` | rc 0 |
+| G5 `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace` | rc 0 |
+| G6 `REXX_PHASE_GATE=5c` | rc 0 |
+| G7 `REXX_PHASE_GATE=5d` | rc 0 |
 
 Pre-commit chain: method-bodies refresh rc 0 (three rows, `abbrev`, `compare`
 and `strip`, `loud` -> `answers`, and no row on any other class moved — read
