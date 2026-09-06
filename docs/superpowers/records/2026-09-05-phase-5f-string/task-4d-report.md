@@ -1,7 +1,7 @@
 # Phase 5f Task 4d — hashCode, and the phase's last row
 
 Plan: `docs/superpowers/plans/2026-09-05-phase-5f-string.md`, Task 4.
-BASE `b41a5e5ba`. Landed at `PENDING`.
+BASE `b41a5e5ba`. Landed at `745111072`.
 
 `HASHCODE`. **String now reads 129 `answers` and 6 `uncomparable`, with no
 `loud` row left: all 112 of the phase's rows are bound.** The refresh moved
@@ -108,13 +108,16 @@ read the same either way, so the null string cannot witness endianness.
 
 | gate | command | status |
 |---|---|---|
-| G1 | `cargo fmt --all --check` | PENDING |
-| G2 | `cargo clippy --workspace --all-targets -- -D warnings` | PENDING |
-| G3 | `cargo test --release --workspace --no-fail-fast` | PENDING |
-| G4 | G3 with `REXX_CORPUS_GATE=1` | PENDING |
-| G5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | PENDING |
-| G6 | `REXX_PHASE_GATE=5c REXX_CORPUS_GATE=1` | PENDING |
-| G7 | `REXX_PHASE_GATE=5d REXX_CORPUS_GATE=1` | PENDING |
+| G1 | `cargo fmt --all --check` | rc 0 |
+| G2 | `cargo clippy --workspace --all-targets -- -D warnings` | rc 0 |
+| G3 | `cargo test --release --workspace --no-fail-fast` | rc 0, 0 failed suites |
+| G4 | G3 with `REXX_CORPUS_GATE=1` | rc 0, 0 failed suites |
+| G5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | rc 0, 0 failed suites |
+| G6 | `REXX_PHASE_GATE=5c REXX_CORPUS_GATE=1` | rc 0, 0 failed suites |
+| G7 | `REXX_PHASE_GATE=5d REXX_CORPUS_GATE=1` | rc 0, 0 failed suites |
+
+Run by `scratchpad/gates-4d.sh`, status file opening with `sha
+745111072bd75271f9d98e8c1df5ace2e1d52e45`.
 
 Pre-commit chain: method-bodies refresh rc 0 (the four rows above, no row on
 any other class moved), `cargo fmt --all --check` rc 0, clippy rc 0, strict
