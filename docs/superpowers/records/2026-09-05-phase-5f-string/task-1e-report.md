@@ -3,7 +3,7 @@
 Plan: `docs/superpowers/plans/2026-09-05-phase-5f-string.md`, Task 1's fifth family, and the last of
 the readers.
 
-BASE `1bfa9b7c9`. Landed at **`GATECOMMIT`**.
+BASE `1bfa9b7c9`. Landed at `54fb3e0d6`.
 
 Five more rows: `word words wordIndex wordLength verify`. **That closes the 30 reader rows** of the
 41 `MutableBuffer` already implements; the 11 with the other return contract are what remain.
@@ -59,8 +59,10 @@ whose final send takes no arguments pins a frame line and nothing else.
 |---|---|
 | G1 `cargo fmt --all --check` | rc 0 |
 | G2 `cargo clippy --workspace --all-targets -- -D warnings` | rc 0, zero warnings |
-| G3 `cargo test --release --workspace --no-fail-fast` | **G3** |
-| G4 | **G4** |
-| G5 | **G5** |
-| G6 | **G6** |
-| G7 | **G7** |
+| G3 `cargo test --release --workspace --no-fail-fast` | rc 0 |
+| G4 same with `REXX_CORPUS_GATE=1` | rc 0, strict corpus `373 of 373 matching` |
+| G5 `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace` | rc 0 |
+| G6 `REXX_PHASE_GATE=5c` | rc 0 |
+| G7 `REXX_PHASE_GATE=5d` | rc 0 |
+
+Run at `54fb3e0d6`, 02:52:11 to 03:06:28.
