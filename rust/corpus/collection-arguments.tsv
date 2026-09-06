@@ -1,0 +1,445 @@
+# The argument list each documented collection method is sent in
+# corpus/collection-arity.tsv's probe (Phase 5g Task 0b).
+#
+# class<TAB>method<TAB>arguments, where `--` is a send with none.
+#
+# A LIST IS ONLY REAL IF THE ORACLE ANSWERS rc 0 TO IT. Any row the
+# oracle refuses is a harness failure for that row and not a data point;
+# collection_arity.rs makes that a test failure. Without the rule the
+# instrument reads green having sent nothing that could work.
+#
+# `other` is a second collection of the receiver's own class, built by
+# the probe; the receiver itself is corpus/collection-receivers.tsv.
+Array	[]	1
+Array	[]=	va, 1
+Array	allIndexes	--
+Array	allItems	--
+Array	append	va
+Array	appendAll	other
+Array	at	1
+Array	delete	1
+Array	difference	other
+Array	dimension	1
+Array	dimensions	--
+Array	disjoint	other
+Array	empty	--
+Array	equivalent	other
+Array	fill	va
+Array	first	--
+Array	firstItem	--
+Array	hasIndex	1
+Array	hasItem	va
+Array	index	va
+Array	insert	va, 1
+Array	intersection	other
+Array	isEmpty	--
+Array	items	--
+Array	last	--
+Array	lastItem	--
+Array	makeArray	--
+Array	makeString	'L', '-'
+Array	next	1
+Array	previous	1
+Array	put	va, 1
+Array	remove	1
+Array	removeItem	va
+Array	section	1, 2
+Array	size	--
+Array	sort	--
+Array	sortWith	.DescendingComparator~new
+Array	stableSort	--
+Array	stableSortWith	.DescendingComparator~new
+Array	subset	other
+Array	supplier	--
+Array	toString	'L', '-'
+Array	union	other
+Array	xor	other
+Bag	[]	ka
+Bag	[]=	va, ka
+Bag	allAt	ka
+Bag	allIndex	ka
+Bag	allIndexes	--
+Bag	allItems	--
+Bag	at	ka
+Bag	difference	other
+Bag	disjoint	other
+Bag	empty	--
+Bag	equivalent	other
+Bag	hasIndex	ka
+Bag	hasItem	va, ka
+Bag	index	va
+Bag	intersection	other
+Bag	isEmpty	--
+Bag	items	ka
+Bag	makeArray	--
+Bag	put	va
+Bag	putAll	other
+Bag	remove	ka
+Bag	removeAll	ka
+Bag	removeItem	va, ka
+Bag	subset	other
+Bag	supplier	ka
+Bag	union	other
+Bag	uniqueIndexes	--
+Bag	xor	other
+CircularQueue	[]	1
+CircularQueue	[]=	va, 1
+CircularQueue	allIndexes	--
+CircularQueue	allItems	--
+CircularQueue	append	va
+CircularQueue	appendAll	other
+CircularQueue	at	1
+CircularQueue	delete	1
+CircularQueue	difference	other
+CircularQueue	disjoint	other
+CircularQueue	empty	--
+CircularQueue	equivalent	other
+CircularQueue	first	--
+CircularQueue	firstItem	--
+CircularQueue	hasIndex	1
+CircularQueue	hasItem	va
+CircularQueue	index	va
+CircularQueue	init	5
+CircularQueue	insert	va, 1
+CircularQueue	intersection	other
+CircularQueue	isEmpty	--
+CircularQueue	items	--
+CircularQueue	last	--
+CircularQueue	lastItem	--
+CircularQueue	makeArray	--
+CircularQueue	makeString	',', 'F'
+CircularQueue	next	1
+CircularQueue	peek	--
+CircularQueue	previous	1
+CircularQueue	pull	--
+CircularQueue	push	va
+CircularQueue	put	va, 1
+CircularQueue	queue	va
+CircularQueue	remove	1
+CircularQueue	removeItem	va
+CircularQueue	resize	1
+CircularQueue	section	1, 2
+CircularQueue	size	--
+CircularQueue	sort	--
+CircularQueue	sortWith	.DescendingComparator~new
+CircularQueue	stableSort	--
+CircularQueue	stableSortWith	.DescendingComparator~new
+CircularQueue	string	',', 'F'
+CircularQueue	subset	other
+CircularQueue	supplier	--
+CircularQueue	union	other
+CircularQueue	xor	other
+Directory	[]	ka
+Directory	[]=	va, ka
+Directory	allIndexes	--
+Directory	allItems	--
+Directory	at	ka
+Directory	difference	other
+Directory	disjoint	other
+Directory	empty	--
+Directory	entry	ka
+Directory	equivalent	other
+Directory	hasEntry	ka
+Directory	hasIndex	ka
+Directory	hasItem	va
+Directory	index	va
+Directory	intersection	other
+Directory	isEmpty	--
+Directory	items	--
+Directory	makeArray	--
+Directory	put	va, ka
+Directory	putAll	other
+Directory	remove	ka
+Directory	removeEntry	ka
+Directory	removeItem	va
+Directory	setEntry	ka, va
+Directory	setMethod	"MM", .Method~new("MM","return 7")
+Directory	subset	other
+Directory	supplier	--
+Directory	union	other
+Directory	unknown	"ZZ", .Array~new
+Directory	unsetMethod	ka
+Directory	xor	other
+IdentityTable	[]	ka
+IdentityTable	[]=	va, ka
+IdentityTable	allIndexes	--
+IdentityTable	allItems	--
+IdentityTable	at	ka
+IdentityTable	difference	other
+IdentityTable	disjoint	other
+IdentityTable	empty	--
+IdentityTable	equivalent	other
+IdentityTable	hasIndex	ka
+IdentityTable	hasItem	va
+IdentityTable	index	va
+IdentityTable	intersection	other
+IdentityTable	isEmpty	--
+IdentityTable	items	--
+IdentityTable	makeArray	--
+IdentityTable	put	va, ka
+IdentityTable	putAll	other
+IdentityTable	remove	ka
+IdentityTable	removeItem	va
+IdentityTable	subset	other
+IdentityTable	supplier	--
+IdentityTable	union	other
+IdentityTable	xor	other
+List	[]	1
+List	[]=	va, 1
+List	allIndexes	--
+List	allItems	--
+List	append	va
+List	appendAll	other
+List	at	1
+List	delete	1
+List	difference	other
+List	disjoint	other
+List	empty	--
+List	equivalent	other
+List	first	--
+List	firstItem	--
+List	hasIndex	1
+List	hasItem	va
+List	index	va
+List	insert	va, 1
+List	intersection	other
+List	isEmpty	--
+List	items	--
+List	last	--
+List	lastItem	--
+List	makeArray	--
+List	next	1
+List	previous	1
+List	put	va, 1
+List	remove	1
+List	removeItem	va
+List	section	1, 2
+List	sort	--
+List	sortWith	.DescendingComparator~new
+List	stableSort	--
+List	stableSortWith	.DescendingComparator~new
+List	subset	other
+List	supplier	--
+List	union	other
+List	xor	other
+Properties	[]	ka
+Properties	[]=	va, ka
+Properties	allIndexes	--
+Properties	allItems	--
+Properties	at	ka
+Properties	difference	other
+Properties	disjoint	other
+Properties	empty	--
+Properties	entry	ka
+Properties	equivalent	other
+Properties	getLogical	'flag'
+Properties	getProperty	ka
+Properties	getWhole	'num'
+Properties	hasEntry	ka
+Properties	hasIndex	ka
+Properties	hasItem	va
+Properties	index	va
+Properties	intersection	other
+Properties	isEmpty	--
+Properties	items	--
+Properties	load	EXEMPT:needs a file only ~save creates; putting that in the receiver setup would make every Properties row read setup-differs
+Properties	makeArray	--
+Properties	put	va, ka
+Properties	putAll	other
+Properties	remove	ka
+Properties	removeEntry	ka
+Properties	removeItem	va
+Properties	save	'props.tmp'
+Properties	setEntry	ka, va
+Properties	setLogical	'sl', 1
+Properties	setMethod	"MM", .Method~new("MM","return 7")
+Properties	setProperty	ka, va
+Properties	setWhole	'sw', 7
+Properties	subset	other
+Properties	supplier	--
+Properties	union	other
+Properties	unknown	"ZZ", .Array~new
+Properties	unsetMethod	ka
+Properties	xor	other
+Queue	[]	1
+Queue	[]=	va, 1
+Queue	allIndexes	--
+Queue	allItems	--
+Queue	append	va
+Queue	appendAll	other
+Queue	at	1
+Queue	delete	1
+Queue	difference	other
+Queue	disjoint	other
+Queue	empty	--
+Queue	equivalent	other
+Queue	first	--
+Queue	firstItem	--
+Queue	hasIndex	1
+Queue	hasItem	va
+Queue	index	va
+Queue	insert	va, 1
+Queue	intersection	other
+Queue	isEmpty	--
+Queue	items	--
+Queue	last	--
+Queue	lastItem	--
+Queue	makeArray	--
+Queue	next	1
+Queue	peek	--
+Queue	previous	1
+Queue	pull	--
+Queue	push	va
+Queue	put	va, 1
+Queue	queue	va
+Queue	remove	1
+Queue	removeItem	va
+Queue	section	1, 2
+Queue	size	--
+Queue	sort	--
+Queue	sortWith	.DescendingComparator~new
+Queue	stableSort	--
+Queue	stableSortWith	.DescendingComparator~new
+Queue	subset	other
+Queue	supplier	--
+Queue	union	other
+Queue	xor	other
+Relation	[]	ka
+Relation	[]=	va, ka
+Relation	allAt	ka
+Relation	allIndex	ka
+Relation	allIndexes	--
+Relation	allItems	--
+Relation	at	ka
+Relation	difference	other
+Relation	disjoint	other
+Relation	empty	--
+Relation	equivalent	other
+Relation	hasIndex	ka
+Relation	hasItem	va, ka
+Relation	index	va
+Relation	intersection	other
+Relation	isEmpty	--
+Relation	items	ka
+Relation	makeArray	--
+Relation	put	va, ka
+Relation	putAll	other
+Relation	remove	ka
+Relation	removeAll	ka
+Relation	removeItem	va, ka
+Relation	subset	other
+Relation	supplier	ka
+Relation	union	other
+Relation	uniqueIndexes	--
+Relation	xor	other
+Set	[]	ka
+Set	[]=	va, ka
+Set	allIndexes	--
+Set	allItems	--
+Set	at	ka
+Set	difference	other
+Set	disjoint	other
+Set	empty	--
+Set	equivalent	other
+Set	hasIndex	ka
+Set	hasItem	va
+Set	index	va
+Set	intersection	other
+Set	isEmpty	--
+Set	items	--
+Set	makeArray	--
+Set	put	va
+Set	putAll	other
+Set	remove	ka
+Set	removeItem	va
+Set	subset	other
+Set	supplier	--
+Set	union	other
+Set	xor	other
+Stem	[]	ka
+Stem	[]=	va, ka
+Stem	allIndexes	--
+Stem	allItems	--
+Stem	at	ka
+Stem	difference	other
+Stem	disjoint	other
+Stem	empty	--
+Stem	equivalent	other
+Stem	hasIndex	ka
+Stem	hasItem	va
+Stem	index	va
+Stem	intersection	other
+Stem	isEmpty	--
+Stem	items	--
+Stem	makeArray	--
+Stem	put	va, ka
+Stem	putAll	other
+Stem	remove	ka
+Stem	removeItem	va
+Stem	request	ka
+Stem	subset	other
+Stem	supplier	--
+Stem	toDirectory	--
+Stem	union	other
+Stem	unknown	'LENGTH', .Array~new
+Stem	xor	other
+StringTable	[]	ka
+StringTable	[]=	va, ka
+StringTable	allIndexes	--
+StringTable	allItems	--
+StringTable	at	ka
+StringTable	difference	other
+StringTable	disjoint	other
+StringTable	empty	--
+StringTable	entry	ka
+StringTable	equivalent	other
+StringTable	hasEntry	ka
+StringTable	hasIndex	ka
+StringTable	hasItem	va
+StringTable	index	va
+StringTable	intersection	other
+StringTable	isEmpty	--
+StringTable	items	--
+StringTable	makeArray	--
+StringTable	put	va, ka
+StringTable	putAll	other
+StringTable	remove	ka
+StringTable	removeEntry	ka
+StringTable	removeItem	va
+StringTable	setEntry	ka, va
+StringTable	subset	other
+StringTable	supplier	--
+StringTable	union	other
+StringTable	unknown	"ZZ", .Array~new
+StringTable	xor	other
+Supplier	allIndexes	--
+Supplier	allItems	--
+Supplier	available	--
+Supplier	index	--
+Supplier	item	--
+Supplier	next	--
+Supplier	supplier	--
+Table	[]	ka
+Table	[]=	va, ka
+Table	allIndexes	--
+Table	allItems	--
+Table	at	ka
+Table	difference	other
+Table	disjoint	other
+Table	empty	--
+Table	equivalent	other
+Table	hasIndex	ka
+Table	hasItem	va
+Table	index	va
+Table	intersection	other
+Table	isEmpty	--
+Table	items	--
+Table	makeArray	--
+Table	put	va, ka
+Table	putAll	other
+Table	remove	ka
+Table	removeItem	va
+Table	subset	other
+Table	supplier	--
+Table	union	other
+Table	xor	other

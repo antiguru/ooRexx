@@ -449,3 +449,45 @@ it is still red, so whoever binds these six decides first how the table is to
 carry a row whose oracle answer cannot be obtained.
 
 Found 2026-09-05 building the Phase 5f receiver sweep. **No upstream ticket.**
+
+--------------------------------------------------------------------------
+
+`Stem~index` and `Stem~hasItem` sent with no argument
+
+    s = .Stem~new
+    s['k1'] = 'v1'
+    say s~index
+
+Effect: SIGSEGV, rc 139, deterministic (measured 3 runs of 3), stdout and
+stderr both empty. `say s~hasItem` in place of `say s~index` is the same
+crash; the two are the whole of it on this class.
+
+Cause: `StemClass::index` (`classes/StemClass.cpp:430`) and
+`StemClass::hasItem` (`:377`) both open with `findByValue(target)` and neither
+calls `requiredArgument` first. `Setup.cpp` registers each at arity 1, and an
+arity operand there is a MAXIMUM rather than a minimum, so a zero-argument
+send arrives with `target` as `OREF_NULL` and the search dereferences it.
+
+**The guarded sibling is in the same file and makes the fix a one-liner.**
+`StemClass::removeItemRexx` (`:391`) carries the comment "we require the index
+to be there" and checks; measured, `say s~removeItem` on the same receiver is
+a clean 93.x at rc 163. So the two crashing methods need that same check and
+nothing more.
+
+Same shape as the six `String` shift operators in the entry above -- a native
+body whose required argument is unguarded, registered at an arity that is a
+maximum -- which makes this the second instance of one upstream defect class
+rather than a new one.
+
+Consequence for this crate, and it is the same trap: `Stem~index` and
+`Stem~hasItem` are documented instance rows, and `corpus/method-bodies.txt`
+classifies a row by sending its name with NO ARGUMENTS. Both read `loud`
+today, a verdict reached in the crate-only pass without running the oracle.
+**The first commit that implements either makes the refresh reach the oracle
+for that row**, where `method_bodies.rs` records a `Structural` failure rather
+than a verdict. Whoever binds them decides first how the table carries a row
+whose oracle answer cannot be obtained.
+
+Found 2026-09-06 by Phase 5g Task 0(b)'s argument instrument, which flagged it
+as an argument list the oracle refuses -- the rule that a list is only real if
+the oracle answers rc 0 to it. **No upstream ticket.**

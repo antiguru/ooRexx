@@ -1,0 +1,29 @@
+# The receiver each class's rows are sent to in corpus/collection-arity.tsv's
+# probe, and the second collection its set operations take (Phase 5g Task 0b).
+#
+# class<TAB>setup, statements separated by ` | `, which must leave `r` holding
+# the receiver, `other` a second collection of the same class, and `ka`/`va`
+# an index and an item that are IN `r`.
+#
+# `ka` and `va` are variables and not literals on purpose: IdentityTable
+# compares indexes by identity, so a second literal of the same spelling is
+# not guaranteed to be the object that was stored.
+#
+# THE SETUP IS THE RICHEST RECEIVER THE ORACLE CAN BUILD, not the richest both
+# sides can. A class whose store this crate does not have fails here rather
+# than at the send, and the probe reports that as `setup-differs` -- which is
+# the phase's headline measurement and not a harness fault.
+Array	ka = 1 | va = 'z' | r = .Array~of('a','b','c') | r[1] = va | other = .Array~of('c','d')
+Bag	ka = 'k1' | va = ka | r = .Bag~new | r~put(ka) | r~put('k2') | other = .Bag~new | other~put('k2')
+CircularQueue	ka = 1 | va = 'z' | r = .CircularQueue~new(5) | r~queue(va) | r~queue('b') | other = .CircularQueue~new(5) | other~queue('b')
+Directory	ka = 'k1' | va = 'v1' | r = .Directory~new | r[ka] = va | r['k2'] = 'v2' | other = .Directory~new | other['k2'] = 'v2'
+IdentityTable	ka = 'k1' | va = 'v1' | r = .IdentityTable~new | r[ka] = va | r['k2'] = 'v2' | other = .IdentityTable~new | other['k2'] = 'v2'
+List	ka = 1 | va = 'z' | r = .List~new | ka = r~append(va) | r~append('b') | other = .List~new | other~append('b')
+Properties	ka = 'k1' | va = 'v1' | r = .Properties~new | r[ka] = va | r['k2'] = 'v2' | r['flag'] = 1 | r['num'] = 7 | other = .Properties~new | other['k2'] = 'v2'
+Queue	ka = 1 | va = 'z' | r = .Queue~new | r~queue(va) | r~queue('b') | other = .Queue~new | other~queue('b')
+Relation	ka = 'k1' | va = 'v1' | r = .Relation~new | r~put(va, ka) | r~put('v2', ka) | other = .Relation~new | other~put('v2', ka)
+Set	ka = 'k1' | va = ka | r = .Set~new | r~put(ka) | r~put('k2') | other = .Set~new | other~put('k2')
+Stem	ka = 'k1' | va = 'v1' | r = .Stem~new | r[ka] = va | r['k2'] = 'v2' | other = .Stem~new | other['k2'] = 'v2'
+StringTable	ka = 'k1' | va = 'v1' | r = .StringTable~new | r[ka] = va | r['k2'] = 'v2' | other = .StringTable~new | other['k2'] = 'v2'
+Supplier	ka = 1 | va = 'a' | r = .Supplier~new(.Array~of('a','b'), .Array~of(1,2)) | other = .Supplier~new(.Array~of('a'), .Array~of(1))
+Table	ka = 'k1' | va = 'v1' | r = .Table~new | r[ka] = va | r['k2'] = 'v2' | other = .Table~new | other['k2'] = 'v2'

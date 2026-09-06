@@ -170,6 +170,9 @@ pub(crate) mod native;
 // `ObjectModel::build` beside `NATIVE_METHODS` rather than merged into it.
 mod string;
 
+// The collection classes' primitive methods, chained the same way.
+mod collection;
+
 /// One primitive method's implementation.
 ///
 /// The [`Cleared`] parameter is the seam's own enforcement and is never read
@@ -1194,6 +1197,7 @@ impl ObjectModel {
         for (class_id, method_name, arity, run) in NATIVE_METHODS
             .iter()
             .chain(string::NATIVE_METHODS)
+            .chain(collection::NATIVE_METHODS)
             .chain(extra)
         {
             let class = classes.lookup(class_id).unwrap_or_else(|| {
@@ -10551,6 +10555,7 @@ mod tests {
         let rows: Vec<&str> = NATIVE_METHODS
             .iter()
             .chain(string::NATIVE_METHODS)
+            .chain(collection::NATIVE_METHODS)
             .filter(|(class, ..)| *class == "String")
             .map(|(_, method, ..)| *method)
             .collect();
