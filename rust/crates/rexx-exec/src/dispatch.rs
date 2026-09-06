@@ -342,6 +342,7 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     ("Class", "DELETE", Arity::Fixed(1), native_delete),
     ("Class", "ENHANCED", Arity::Counted, native_enhanced),
+    ("Class", "HASHCODE", Arity::Fixed(0), native_hash_code),
     ("Class", "ID", Arity::Fixed(0), native_id),
     ("Class", "INHERIT", Arity::Fixed(2), native_class_inherit),
     (
@@ -767,6 +768,7 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         native_default_name,
     ),
     ("Object", "HASMETHOD", Arity::Fixed(1), native_has_method),
+    ("Object", "HASHCODE", Arity::Fixed(0), native_hash_code),
     (
         "Object",
         "IDENTITYHASH",
@@ -4587,6 +4589,69 @@ fn native_identity_hash(
 ) -> Result<Option<ObjRef>, Failure> {
     let bits = receiver.bits().to_string().into_bytes();
     Ok(Some(interp.text_built(bits)))
+}
+
+/// `RexxNilObject::getHashValue` (`classes/ObjectClass.cpp:2916`), whose
+/// member is stamped with this sentinel rather than derived from anything.
+const NIL_HASH: u64 = 0xdead_beef;
+
+/// The string hash `RexxString::getStringHash` computes
+/// (`classes/StringClass.hpp:328`), over the bytes rather than the text.
+///
+/// The accumulator is 64-bit and wraps, and **the byte is signed** -- `char`
+/// on this platform -- which is the half a reimplementation gets wrong,
+/// because it only shows above 0x7f. Measured: `'ff'x~hashCode` is eight `FF`
+/// bytes, so the single byte contributed -1 rather than 255, and
+/// `'80'x~hashCode` is `80FFFFFFFFFFFFFF`.
+fn string_hash(bytes: &[u8]) -> u64 {
+    let mut hash: u64 = 0;
+    for byte in bytes {
+        hash = hash
+            .wrapping_mul(31)
+            .wrapping_add(*byte as i8 as i64 as u64);
+    }
+    hash
+}
+
+/// `Object~hashCode`, `RexxObject::hashCode` (`classes/ObjectClass.cpp:398`):
+/// `getHashValue()` rendered as its own eight bytes, little-endian.
+///
+/// `getHashValue` is virtual and overridden by `NilObject`, `String`,
+/// `Pointer`, `Integer`, `NumberString` and `Class`; every other receiver
+/// takes `identityHash()`. **The rule is the receiver's kind, not whether it
+/// renders as text**: measured, two `.MutableBuffer~new('abc')` hash
+/// differently from each other and from `'abc'`, and both move between the
+/// oracle's own runs.
+///
+/// `Integer` and `NumberString` delegate to their string value's hash
+/// (`IntegerClass.cpp:83`, `NumberStringClass.cpp:129`) and answer `String`
+/// for their class, so [`Primitive::String`] covers all three: measured,
+/// `5~hashCode` and `'5'~hashCode` are both `3500000000000000`, and
+/// `(2**40)~hashCode` equals `'1.09951163E+12'~hashCode` -- the hash is of
+/// the number as it renders, not of its digits.
+///
+/// The identity arm answers the handle, which is deviation 4's licence read
+/// exactly as [`native_identity_hash`] reads it: the oracle's own value is
+/// the complement of an address and does not reproduce across its own runs,
+/// so no differential row can compare the two.
+fn native_hash_code(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let value = if receiver == ObjRef::NIL {
+        NIL_HASH
+    } else {
+        match interp.receiver_kind(receiver) {
+            Ok(Primitive::String | Primitive::SmallInt) => string_hash(&interp.to_text(receiver)),
+            Ok(Primitive::Class(class)) => {
+                string_hash(interp.classes().id_string(class).as_bytes())
+            }
+            _ => receiver.bits(),
+        }
+    };
+    Ok(Some(interp.text_built(value.to_le_bytes().to_vec())))
 }
 
 /// `Class~annotation(name)`, and the same method at `Method`, `Routine` and
@@ -11409,6 +11474,31 @@ mod tests {
     /// a build answering a constant answers and is usable, and still fails the
     /// row that asks two different handles.
     ///
+    /// [`string_hash`] against the oracle's own answers, byte for byte.
+    ///
+    /// The signed-byte rows are the ones that matter: an unsigned
+    /// accumulator is right for every ASCII string and wrong above `0x7f`,
+    /// so a witness of letters alone cannot see it. `c2x` of the method's
+    /// answer is this value little-endian.
+    #[test]
+    fn the_string_hash_matches_the_oracle_including_above_7f() {
+        // Measured with `c2x(<x>~hashCode)`, read back as little-endian.
+        assert_eq!(string_hash(b""), 0x0000_0000_0000_0000);
+        assert_eq!(string_hash(b"a"), 0x0000_0000_0000_0061);
+        assert_eq!(string_hash(b"abc"), 0x0000_0000_0001_7862);
+        assert_eq!(string_hash(b"5"), 0x0000_0000_0000_0035);
+        assert_eq!(string_hash(b"String"), 0x0000_0000_943a_4c31);
+        // Wraps the 64-bit register rather than saturating.
+        assert_eq!(
+            string_hash(b"abcdefghijklmnopqrstuvwxyz0123456789"),
+            0xa09f_2fd2_5824_3772
+        );
+        // Signed: one byte of 0xff contributes -1, not 255.
+        assert_eq!(string_hash(b"\xff"), 0xffff_ffff_ffff_ffff);
+        assert_eq!(string_hash(b"\x80"), 0xffff_ffff_ffff_ff80);
+        assert_eq!(string_hash(b"\x7f"), 0x0000_0000_0000_007f);
+    }
+
     /// `==` and not `=`, and `numeric digits 20` rather than the default:
     /// measured, the answer is wider than nine significant digits, so a
     /// numeric comparison at the default `DIGITS` rounds two different

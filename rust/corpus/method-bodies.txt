@@ -140,7 +140,7 @@ Object	(blank)	instance	answers	rc 163
 Object	class	instance	answers	rc 0
 Object	copy	instance	answers	rc 0
 Object	defaultName	instance	answers	rc 0
-Object	hashCode	instance	loud	method "HASHCODE" of class "Object"
+Object	hashCode	instance	unstable	the oracle
 Object	hasMethod	instance	answers	rc 163
 Object	identityHash	instance	unstable	the oracle
 Object	instanceMethod	instance	loud	method "INSTANCEMETHOD" of class "Object"
@@ -306,7 +306,7 @@ String	endsWith	instance	answers	rc 168
 String	equals	instance	answers	rc 163
 String	floor	instance	answers	rc 163
 String	format	instance	answers	rc 163
-String	hashCode	instance	loud	method "HASHCODE" of class "Object"
+String	hashCode	instance	answers	rc 0
 String	insert	instance	answers	rc 163
 String	lastPos	instance	answers	rc 163
 String	left	instance	answers	rc 163
@@ -956,7 +956,7 @@ DateTime	daysInYear	instance	answers	rc 0
 DateTime	elapsed	instance	unstable	this crate
 DateTime	europeanDate	instance	answers	rc 0
 DateTime	fullDate	instance	answers	rc 0
-DateTime	hashCode	instance	loud	method "HASHCODE" of class "Object"
+DateTime	hashCode	instance	answers	rc 0
 DateTime	hours	instance	answers	rc 0
 DateTime	isLeapYear	instance	answers	rc 0
 DateTime	isoDate	instance	answers	rc 0
@@ -1281,7 +1281,7 @@ TimeSpan	addWeeks	instance	answers	rc 163
 TimeSpan	compareTo	instance	answers	rc 163
 TimeSpan	days	instance	answers	rc 0
 TimeSpan	duration	instance	answers	rc 0
-TimeSpan	hashCode	instance	loud	method "HASHCODE" of class "Object"
+TimeSpan	hashCode	instance	answers	rc 0
 TimeSpan	hours	instance	answers	rc 0
 TimeSpan	makeString	instance	answers	rc 0
 TimeSpan	microseconds	instance	answers	rc 0
