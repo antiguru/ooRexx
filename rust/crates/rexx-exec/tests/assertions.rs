@@ -407,14 +407,6 @@ const EXEMPT: &[ExemptRow] = &[
     },
     ExemptRow {
         group: "Literals",
-        method: "test_hexadecimal",
-        occurrence: 15,
-        expr: ".String~xdigit~x2c",
-        expected: "'0123456789ABCDEFabcdef'x",
-        unblocked_by: "Phase 5",
-    },
-    ExemptRow {
-        group: "Literals",
         method: "test_binary",
         occurrence: 4,
         expr: "\"A\"",

@@ -264,12 +264,12 @@ String	?	instance	answers	rc 168
 String	abbrev	instance	answers	rc 163
 String	abs	instance	loud	method "ABS" of class "String"
 String	append	instance	answers	rc 163
-String	b2x	instance	loud	method "B2X" of class "String"
+String	b2x	instance	answers	rc 163
 String	bitAnd	instance	loud	method "BITAND" of class "String"
 String	bitOr	instance	loud	method "BITOR" of class "String"
 String	bitXor	instance	loud	method "BITXOR" of class "String"
-String	c2d	instance	loud	method "C2D" of class "String"
-String	c2x	instance	loud	method "C2X" of class "String"
+String	c2d	instance	answers	rc 0
+String	c2x	instance	answers	rc 0
 String	caselessAbbrev	instance	loud	method "CASELESSABBREV" of class "String"
 String	caselessChangeStr	instance	answers	rc 163
 String	caselessCompare	instance	loud	method "CASELESSCOMPARE" of class "String"
@@ -295,8 +295,8 @@ String	contains	instance	answers	rc 163
 String	containsWord	instance	answers	rc 163
 String	copies	instance	answers	rc 163
 String	countStr	instance	answers	rc 163
-String	d2c	instance	loud	method "D2C" of class "String"
-String	d2x	instance	loud	method "D2X" of class "String"
+String	d2c	instance	answers	rc 163
+String	d2x	instance	answers	rc 163
 String	dataType	instance	loud	method "DATATYPE" of class "String"
 String	decodeBase64	instance	loud	method "DECODEBASE64" of class "String"
 String	delStr	instance	answers	rc 0
@@ -342,9 +342,9 @@ String	wordIndex	instance	answers	rc 163
 String	wordLength	instance	answers	rc 163
 String	wordPos	instance	answers	rc 163
 String	words	instance	answers	rc 0
-String	x2b	instance	loud	method "X2B" of class "String"
-String	x2c	instance	loud	method "X2C" of class "String"
-String	x2d	instance	loud	method "X2D" of class "String"
+String	x2b	instance	answers	rc 0
+String	x2c	instance	answers	rc 0
+String	x2d	instance	answers	rc 0
 Collection	[]	instance	answers	rc 163
 Collection	[]=	instance	answers	rc 163
 Collection	allIndexes	instance	answers	rc 163

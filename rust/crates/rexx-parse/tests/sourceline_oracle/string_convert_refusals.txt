@@ -1,0 +1,72 @@
+count 71
+/* The base conversions' refusals.
+ *
+ * Four distinct families sit behind them: a character outside the notation is
+ * 93.934 (binary) or 93.933 (hexadecimal) and the message names the character
+ * found; a group that breaks the residue rule is 93.977 or 93.976; a value
+ * that is not a whole number names the METHOD in both the sub-code and the
+ * message -- 93.928 for D2X and 93.929 for D2C, which is one more distinction
+ * than the shape suggests; and a negative value with no length to put it in is
+ * 93.927 for either.
+ *
+ * The length argument, where there is one, is an ordinary `lengthArgument`:
+ * 93.923. B2X, C2X, X2B and X2C have none at all, so any argument to them is
+ * 93.902 at `0 expected` rather than a length error.
+ *
+ * The untrapped tail is the 93.928, whose substituted text names both the
+ * method and the value. rc 163.
+ */
+
+signal on syntax name trapped
+n = 0
+
+next:
+n = n + 1
+select
+  /* A character outside the notation. */
+  when n = 1 then say n 'answered' '2'~b2x
+  when n = 2 then say n 'answered' 'zz'~x2c
+  when n = 3 then say n 'answered' 'zz'~x2b
+  when n = 4 then say n 'answered' 'gg'~x2d
+  /* A group that breaks the residue rule. */
+  when n = 5 then say n 'answered' '1 0 1 1'~b2x
+  when n = 6 then say n 'answered' '414 243'~x2c
+  when n = 7 then say n 'answered' '4 142'~x2b
+  /* A value that is not a whole number. */
+  when n = 8 then say n 'answered' 'x'~d2x
+  when n = 9 then say n 'answered' '1.5'~d2x
+  when n = 10 then say n 'answered' 'x'~d2c
+  /* A negative value with nowhere to put it. */
+  when n = 11 then say n 'answered' '-1'~d2x
+  when n = 12 then say n 'answered' '-1'~d2c
+  /* The value's check comes BEFORE the length's, for these two only: a bad
+   * value with a bad length reports the value, and a good value with a bad
+   * length reports the length. */
+  when n = 13 then say n 'answered' 'x'~d2c(-1)
+  when n = 14 then say n 'answered' 'x'~d2x(-1)
+  when n = 15 then say n 'answered' '1.5'~d2x(-1)
+  /* An invalid length, where there is a length at all. */
+  when n = 16 then say n 'answered' 'abc'~c2d(-1)
+  when n = 17 then say n 'answered' 'abc'~c2d('x')
+  when n = 18 then say n 'answered' '65'~d2x(-1)
+  when n = 19 then say n 'answered' '41'~x2d('x')
+  /* The four with no argument at all refuse any. */
+  when n = 20 then say n 'answered' '1011'~b2x(1)
+  when n = 21 then say n 'answered' 'abc'~c2x(1)
+  when n = 22 then say n 'answered' '41'~x2b(1)
+  when n = 23 then say n 'answered' '41'~x2c(1)
+  /* And the four that take one take only one. */
+  when n = 24 then say n 'answered' 'abc'~c2d(1, 2)
+  when n = 25 then say n 'answered' '65'~d2x(1, 2)
+  otherwise signal done
+end
+signal next
+
+trapped:
+say n 'raised' rc'.'condition('E')
+signal on syntax name trapped
+signal next
+
+done:
+signal off syntax
+say 'x'~d2x

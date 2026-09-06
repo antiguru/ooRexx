@@ -43,11 +43,11 @@
 use super::{
     Arity, Cleared, Failure, Interp, NativeMethod, ObjRef, abbrev_arguments, backward_search,
     backward_search_arguments, case_shift_arguments, changestr_arguments, compare_arguments,
-    copies_argument, delete_arguments, delword_arguments, ends_with, forward_search,
-    forward_search_arguments, insert_arguments, match_region_arguments, match_region_over,
-    overlay_arguments, pad_arguments, replace_at_bytes, replace_at_plan, space_arguments,
-    starts_with, strip_arguments, substr_arguments, translate_arguments, translate_in_table,
-    verify_arguments, wordpos_arguments,
+    conversion_length_argument, copies_argument, delete_arguments, delword_arguments, ends_with,
+    forward_search, forward_search_arguments, insert_arguments, match_region_arguments,
+    match_region_over, overlay_arguments, pad_arguments, replace_at_bytes, replace_at_plan,
+    space_arguments, starts_with, strip_arguments, substr_arguments, translate_arguments,
+    translate_in_table, verify_arguments, wordpos_arguments,
 };
 use crate::error::Raised;
 use crate::eval::logical_value;
@@ -1483,6 +1483,124 @@ fn native_string_compare(
     Ok(Some(answer))
 }
 
+/// `String~"B2X"`, `RexxString::b2x`.
+fn native_string_b2x(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let bytes = interp.to_text(receiver).to_vec();
+    let out = crate::builtin::convert::b2x_bytes(interp, &bytes)?;
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `String~"C2X"`, `RexxString::c2x`.
+fn native_string_c2x(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let bytes = interp.to_text(receiver).to_vec();
+    let out = crate::builtin::convert::c2x_bytes(interp, &bytes)?;
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `String~"X2B"`, `RexxString::x2b`.
+fn native_string_x2b(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let bytes = interp.to_text(receiver).to_vec();
+    let out = crate::builtin::convert::x2b_bytes(interp, &bytes)?;
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `String~"X2C"`, `RexxString::x2c`.
+fn native_string_x2c(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let bytes = interp.to_text(receiver).to_vec();
+    let out = crate::builtin::convert::x2c_bytes(&bytes)?;
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `String~"C2D"`, `RexxString::c2d`.
+///
+/// **The length is read before the receiver is looked at**, which is the
+/// ordering `x2d_c2d_over`'s own doc records: measured, `'ZZ'~x2d(-1)` is the
+/// length's 93.923 where `'ZZ'~x2d(4)` is the invalid-character 93.933.
+fn native_string_c2d(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let requested = conversion_length_argument(interp, args)?;
+    let bytes = interp.to_text(receiver).to_vec();
+    let value = crate::builtin::convert::x2d_c2d_over(interp, &bytes, requested, true)?;
+    Ok(Some(value))
+}
+
+/// `String~"X2D"`, `RexxString::x2d`.
+fn native_string_x2d(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let requested = conversion_length_argument(interp, args)?;
+    let bytes = interp.to_text(receiver).to_vec();
+    let value = crate::builtin::convert::x2d_c2d_over(interp, &bytes, requested, false)?;
+    Ok(Some(value))
+}
+
+/// `String~"D2C"`, `RexxString::d2c`.
+///
+/// **The length is read from inside the core, through the closure**, because
+/// here the ordering is the other way round: the receiver's own check comes
+/// first, so `'abc'~d2c(-1)` is 93.929 and not the length's 93.923.
+fn native_string_d2c(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_d2x_d2c(interp, receiver, args, true)
+}
+
+/// `String~"D2X"`, `RexxString::d2x`.
+fn native_string_d2x(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_d2x_d2c(interp, receiver, args, false)
+}
+
+/// `D2C` and `D2X` as messages, which differ only in the flag.
+fn string_d2x_d2c(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    character: bool,
+) -> Result<Option<ObjRef>, Failure> {
+    let numeric = interp.to_number(receiver).is_ok();
+    let text = interp.to_text(receiver).to_vec();
+    let value =
+        crate::builtin::convert::d2x_d2c_over(interp, &text, numeric, character, |interp| {
+            conversion_length_argument(interp, args)
+        })?;
+    Ok(Some(value))
+}
+
 /// `String`'s rows, in the shape [`super::NATIVE_METHODS`] uses.
 pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("String", "", Arity::Fixed(1), native_string_op_abuttal),
@@ -1550,14 +1668,22 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     ("String", "?", Arity::Fixed(2), native_string_op_choice),
     ("String", "ABBREV", Arity::Fixed(2), native_string_abbrev),
+    ("String", "B2X", Arity::Fixed(0), native_string_b2x),
     ("String", "APPEND", Arity::Fixed(1), native_string_append),
+    ("String", "C2D", Arity::Fixed(1), native_string_c2d),
+    ("String", "C2X", Arity::Fixed(0), native_string_c2x),
     ("String", "COMPARE", Arity::Fixed(2), native_string_compare),
     ("String", "CENTER", Arity::Fixed(2), native_string_center),
     ("String", "CENTRE", Arity::Fixed(2), native_string_center),
     ("String", "COPIES", Arity::Fixed(1), native_string_copies),
+    ("String", "D2C", Arity::Fixed(1), native_string_d2c),
+    ("String", "D2X", Arity::Fixed(1), native_string_d2x),
     ("String", "LEFT", Arity::Fixed(2), native_string_left),
     ("String", "RIGHT", Arity::Fixed(2), native_string_right),
     ("String", "STRIP", Arity::Fixed(2), native_string_strip),
+    ("String", "X2B", Arity::Fixed(0), native_string_x2b),
+    ("String", "X2C", Arity::Fixed(0), native_string_x2c),
+    ("String", "X2D", Arity::Fixed(1), native_string_x2d),
     (
         "String",
         "CASELESSCHANGESTR",

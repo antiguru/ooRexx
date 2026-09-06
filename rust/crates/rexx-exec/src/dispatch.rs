@@ -8393,6 +8393,20 @@ pub(super) fn substr_arguments(
     Ok((start, length, pad))
 }
 
+/// The optional length `C2D`, `D2C`, `D2X` and `X2D` take, as methods.
+///
+/// An ordinary `optionalLengthArgument`: `None` for omitted, 93.923 for
+/// anything that is not a non-negative whole number in range. **The builtin
+/// forms do not share it** -- there the same mistake is 40.x, so the two
+/// conversions' cores read their length through the caller rather than
+/// reading it themselves.
+pub(super) fn conversion_length_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+) -> Result<Option<usize>, Failure> {
+    optional_length_argument(interp, args, 0)
+}
+
 /// `STRIP`'s option and character set.
 ///
 /// The option is `"BLT"`, defaulting to `B`, and an unrecognised letter is

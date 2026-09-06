@@ -1,0 +1,31 @@
+count 30
+/* The eight base conversions as methods: B2X, C2X, X2B, X2C at no arguments
+ * and C2D, D2C, D2X, X2D at one (memory/Setup.cpp:634-:641).
+ *
+ * A hexadecimal or binary string is grouped, and the rule is a residue rather
+ * than a length: the FIRST group fixes the remainder and every group after it
+ * must be an exact multiple of the unit, with the first left-padded rather
+ * than rejected. So '101'~b2x is 5 and '101 0000'~b2x is 50, while
+ * '1 0 1 1'~b2x is a grouping error.
+ *
+ * The length argument is a byte count for C2D and D2C and a digit count for
+ * D2X and X2D, and it makes the conversion SIGNED: 'ff'~x2d is 255 and
+ * 'ff'~x2d(2) is -1. Without one, a negative value has nowhere to go, which
+ * is what the refusals witness beside this shows.
+ *
+ * X2C and D2C answer raw bytes. Where those bytes happen to be printable the
+ * answer is said as it stands -- '414243'~x2c is ABC -- and where they are not
+ * it is read back through C2X, so this program's own output stays text.
+ */
+
+say '1011'~b2x '101'~b2x '1011 0000'~b2x '1'~b2x
+say 'abc'~c2x '41'~x2b '414243'~x2b '10110000'~b2x
+say 'abc'~c2d 'abc'~c2d(2) 'abc'~c2d(1) 'abc'~c2d(0)
+say '41'~x2d 'ff'~x2d 'ff'~x2d(2) 'ff'~x2d(4) '41'~x2d(1)
+say '65'~d2x '65'~d2x(4) '-1'~d2x(4) '0'~d2x '255'~d2x
+say '['||'414243'~x2c||']' '['||'65'~d2c~c2x||']' '['||'65'~d2c(2)~c2x||']'
+say '4 1424'~x2c~c2x '414 2434'~x2c~c2x '101 0000'~b2x '41 42'~x2c~c2x
+say '0'~d2c~c2x '256'~d2c~c2x '-1'~d2c(2)~c2x '255'~d2c~c2x
+say '['||''~b2x||']' '['||''~c2x||']' '['||''~x2b||']' '['||''~x2c||']'
+/* A length of zero answers zero without validating the string at all. */
+say 'zz'~x2d(0) 'zz'~c2d(0) '!!'~c2d(0)

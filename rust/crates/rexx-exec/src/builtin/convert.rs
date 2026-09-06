@@ -320,6 +320,12 @@ pub(crate) fn c2x(
     args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
+    let out = c2x_bytes(interp, &string)?;
+    Ok(interp.text_built(out))
+}
+
+/// `C2X`'s answer once its argument is read, shared with `String~c2x`.
+pub(crate) fn c2x_bytes(interp: &Interp, string: &[u8]) -> Result<Vec<u8>, Failure> {
     // Saturating rather than checked: a length that doubles past `usize` can
     // only be refused, and `buffer` is what refuses it.
     let mut out = buffer(interp, string.len().saturating_mul(2))?;
@@ -327,7 +333,7 @@ pub(crate) fn c2x(
         out.push(HEX_DIGITS[usize::from(byte >> 4)]);
         out.push(HEX_DIGITS[usize::from(byte & 0x0f)]);
     }
-    Ok(interp.text_built(out))
+    Ok(out)
 }
 
 /// `X2C(string)`: hexadecimal digits packed into bytes.
@@ -337,8 +343,16 @@ pub(crate) fn x2c(
     args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
-    let packed = pack_hex(&string)?;
+    let packed = x2c_bytes(&string)?;
     Ok(interp.text_built(packed))
+}
+
+/// `X2C`'s answer once its argument is read, shared with `String~x2c`.
+///
+/// The one of the four that needs no `Interp`: `pack_hex` sizes its result
+/// from the input rather than from a length the caller supplies.
+pub(crate) fn x2c_bytes(string: &[u8]) -> Result<Vec<u8>, Failure> {
+    pack_hex(string)
 }
 
 /// `X2B(string)`: four `0`/`1` bytes per hexadecimal digit, with no padding.
@@ -348,17 +362,23 @@ pub(crate) fn x2b(
     args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
+    let out = x2b_bytes(interp, &string)?;
+    Ok(interp.text_built(out))
+}
+
+/// `X2B`'s answer once its argument is read, shared with `String~x2b`.
+pub(crate) fn x2b_bytes(interp: &Interp, string: &[u8]) -> Result<Vec<u8>, Failure> {
     if string.is_empty() {
-        return Ok(interp.text(b""));
+        return Ok(Vec::new());
     }
-    let nibbles = validate_grouped(&string, Notation::Hex)?;
+    let nibbles = validate_grouped(string, Notation::Hex)?;
     let mut out = buffer(interp, nibbles.saturating_mul(4))?;
-    for value in digits_of(&string, Notation::Hex) {
+    for value in digits_of(string, Notation::Hex) {
         for bit in (0..4).rev() {
             out.push(b'0' + ((value >> bit) & 1));
         }
     }
-    Ok(interp.text_built(out))
+    Ok(out)
 }
 
 /// `B2X(string)`: one hexadecimal digit per four bits, with the first group
@@ -369,12 +389,18 @@ pub(crate) fn b2x(
     args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
+    let out = b2x_bytes(interp, &string)?;
+    Ok(interp.text_built(out))
+}
+
+/// `B2X`'s answer once its argument is read, shared with `String~b2x`.
+pub(crate) fn b2x_bytes(interp: &Interp, string: &[u8]) -> Result<Vec<u8>, Failure> {
     if string.is_empty() {
-        return Ok(interp.text(b""));
+        return Ok(Vec::new());
     }
-    let bits = validate_grouped(&string, Notation::Binary)?;
+    let bits = validate_grouped(string, Notation::Binary)?;
     let mut out = buffer(interp, bits.div_ceil(4))?;
-    let mut digits = digits_of(&string, Notation::Binary);
+    let mut digits = digits_of(string, Notation::Binary);
     let mut remaining = bits;
     while remaining > 0 {
         // The leading group is short when the bit count is not a multiple of
@@ -387,7 +413,7 @@ pub(crate) fn b2x(
         out.push(HEX_DIGITS[usize::from(value)]);
         remaining -= take;
     }
-    Ok(interp.text_built(out))
+    Ok(out)
 }
 
 // ---- the numeric four ----
@@ -462,16 +488,29 @@ fn x2d_c2d(
     args: Args<'_>,
     character: bool,
 ) -> Result<ObjRef, Failure> {
-    let digits = current_digits(interp);
     let string = required_string(interp, args, 1);
     let requested = whole_number(interp, name, args, 2)?;
     // The length's range check runs before anything looks at the string,
     // which is the one ordering a program can see: measured, `x2d('ZZ',-1)`
-    // is 93.923 where `x2d('ZZ',4)` is the invalid-character 93.933.
+    // is 93.923 where `x2d('ZZ',4)` is the invalid-character 93.933. The
+    // method form gets that ordering by reading its own length before it
+    // calls the core below.
     let requested = match requested {
         Some(value) => Some(length_of(value)?),
         None => None,
     };
+    x2d_c2d_over(interp, &string, requested, character)
+}
+
+/// `X2D`'s and `C2D`'s answer once the string and the length are read, shared
+/// with `String~x2d` and `String~c2d`.
+pub(crate) fn x2d_c2d_over(
+    interp: &mut Interp,
+    string: &[u8],
+    requested: Option<usize>,
+    character: bool,
+) -> Result<ObjRef, Failure> {
+    let digits = current_digits(interp);
     // A length of zero answers zero without validating anything at all --
     // measured, `x2d('zz',0)` is `0`, not an error.
     let result_size = requested.unwrap_or(string.len());
@@ -481,9 +520,9 @@ fn x2d_c2d(
 
     let packed;
     let bytes: &[u8] = if character {
-        &string
+        string
     } else {
-        packed = pack_hex(&string)?;
+        packed = pack_hex(string)?;
         &packed
     };
 
@@ -746,11 +785,38 @@ fn d2x_d2c(
     args: Args<'_>,
     character: bool,
 ) -> Result<ObjRef, Failure> {
-    let digits = current_digits(interp);
     let subject = arg(args, 1).expect("check_arity admitted this required argument");
     let numeric = interp.to_number(subject).is_ok();
     let text = interp.to_text(subject).into_owned();
-    let requested = whole_number(interp, name, args, 2)?;
+    // **The length's type check runs here and its range check inside**, which
+    // is the ordering `the_call_layer_is_checked_before_the_operation_layer`
+    // pins: measured, `d2x('x','abc')` is the length's 40.12 while
+    // `d2x('x',-1)` is the value's 93.928. The method form has neither half
+    // out here -- for it the value beats the length outright.
+    let raw = whole_number(interp, name, args, 2)?;
+    d2x_d2c_over(interp, &text, numeric, character, move |_| match raw {
+        Some(length) => Ok(Some(length_of(length)?)),
+        None => Ok(None),
+    })
+}
+
+/// `D2X`'s and `D2C`'s answer once the value is in hand, shared with
+/// `String~d2x` and `String~d2c`.
+///
+/// **The length is read through the caller's own closure, and the order is
+/// why.** The value's own check comes first, ahead of the length's range
+/// check -- measured, `d2c('abc',-1)` is 93.929 where `d2x('1.5',-1)`, a real
+/// number with a bad length, is 93.923. A caller that read its length before
+/// calling would report the wrong one of the two, and the builtin and the
+/// method do not share a length reader: 40.x against 93.923.
+pub(crate) fn d2x_d2c_over(
+    interp: &mut Interp,
+    text: &[u8],
+    numeric: bool,
+    character: bool,
+    length: impl FnOnce(&mut Interp) -> Result<Option<usize>, Failure>,
+) -> Result<ObjRef, Failure> {
+    let digits = current_digits(interp);
 
     let not_whole = |found: &[u8]| -> Failure {
         if character {
@@ -760,26 +826,20 @@ fn d2x_d2c(
         }
     };
 
-    // The value's own check comes first, ahead of the length's range check:
-    // measured, `d2c('abc',-1)` is 93.929 where `d2x('1.5',-1)` -- a real
-    // number with a bad length -- is 93.923.
-    let Some(value) = scan_decimal(&text).filter(|_| numeric) else {
-        return Err(not_whole(&text));
+    let Some(value) = scan_decimal(text).filter(|_| numeric) else {
+        return Err(not_whole(text));
     };
-    let requested = match requested {
-        Some(length) => Some(length_of(length)?),
-        None => None,
-    };
+    let requested = length(interp)?;
 
     // The digit count of the value's integer form, which is what the setting
     // bounds. Widened because the exponent is the argument's own and can name
     // any power of ten a number may carry.
     let written = i128::from(value.exponent) + i128::try_from(value.significand.len()).unwrap_or(0);
     if written > i128::from(digits) {
-        return Err(not_whole(&text));
+        return Err(not_whole(text));
     }
     if has_significant_decimals(&value, digits) {
-        return Err(not_whole(&text));
+        return Err(not_whole(text));
     }
     if value.negative && requested.is_none() {
         return Err(Raised::length_required_for_negative().into());

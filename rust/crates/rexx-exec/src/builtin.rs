@@ -75,7 +75,11 @@ use crate::error::{Failure, Raised};
 use crate::value::Rendered;
 use crate::{Interp, Loud};
 
-mod convert;
+/// Crate-visible because the eight base conversions are methods on `String`
+/// as well as builtins -- `AddMethod("B2X", RexxString::b2x, 0)` and the rest
+/// of `memory/Setup.cpp:634`-`:641` -- and the cores here are what keep the
+/// two forms from coming to disagree about a grouping rule or a sign.
+pub(crate) mod convert;
 mod datatype;
 mod datetime;
 /// Crate-visible because `String~sign` is the same computation `SIGN` is --
