@@ -8374,6 +8374,45 @@ fn native_mutable_buffer_settext(
     Ok(Some(receiver))
 }
 
+/// `substr`'s arguments: a 0-based start, an optional length, and a pad
+/// defaulting to a blank.
+///
+/// **Shared by both receivers**, and the C++ says so at the site:
+/// `RexxString::substr` (`classes/StringClassSub.cpp:598`) is one line under
+/// the comment *"use the common code shared with MutableBuffer"*, and that
+/// common code is `StringUtil::substr`'s padding overload
+/// (`classes/support/StringUtil.cpp:66`), which `MutableBuffer::substr`
+/// (`classes/MutableBufferClass.cpp:770`) calls too. A pad wider than one character is 93.922, which is this layer's and
+/// not the core's.
+pub(super) fn substr_arguments(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+) -> Result<(usize, Option<usize>, u8), Failure> {
+    let start = required_position_argument(interp, args, 0)? - 1;
+    let length = optional_length_argument(interp, args, 1)?;
+    let pad = pad_method_argument(interp, args, 2)?.unwrap_or(b' ');
+    Ok((start, length, pad))
+}
+
+/// `verify`'s arguments: the reference set, the `M`/`N` option defaulting to
+/// `N`, a 0-based start, and an optional range.
+///
+/// **The option is the one argument here with an error of its own** -- an
+/// unrecognised letter is 93.915, which names the accepted set, and it is
+/// raised before the start is looked at. Measured, oracle:
+/// `'abcabc'~verify('ab', 'Z')` is 93.915 and so is the same send to a
+/// `MutableBuffer`.
+pub(super) fn verify_arguments(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+) -> Result<(Vec<u8>, u8, usize, Option<usize>), Failure> {
+    let reference = string_method_argument(interp, args, 0)?;
+    let option = option_method_argument(interp, args, 1, "MN")?.unwrap_or(b'N');
+    let start = optional_position_argument(interp, args, 2)?.unwrap_or(1) - 1;
+    let range = optional_length_argument(interp, args, 3)?;
+    Ok((reference, option, start, range))
+}
+
 /// `MutableBuffer::substr` (`classes/MutableBufferClass.cpp:770`),
 /// `StringUtil::substr`'s padding form.
 fn native_mutable_buffer_substr(
@@ -8382,9 +8421,7 @@ fn native_mutable_buffer_substr(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let start = required_position_argument(interp, args, 0)? - 1;
-    let length = optional_length_argument(interp, args, 1)?;
-    let pad = pad_method_argument(interp, args, 2)?.unwrap_or(b' ');
+    let (start, length, pad) = substr_arguments(interp, args)?;
     let state = buffer_state(interp, receiver, b"SUBSTR")?;
     let mut out = interp.take_result_buffer();
     crate::builtin::string::substr_bytes(&mut out, &state.bytes, start, length, pad)?;
@@ -8646,10 +8683,7 @@ fn native_mutable_buffer_verify(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let reference = string_method_argument(interp, args, 0)?;
-    let option = option_method_argument(interp, args, 1, "MN")?.unwrap_or(b'N');
-    let start = optional_position_argument(interp, args, 2)?.unwrap_or(1) - 1;
-    let range = optional_length_argument(interp, args, 3)?;
+    let (reference, option, start, range) = verify_arguments(interp, args)?;
     let state = buffer_state(interp, receiver, b"VERIFY")?;
     let answer =
         crate::builtin::string::verify_bytes(&state.bytes, &reference, option, start, range);

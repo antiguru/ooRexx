@@ -259,7 +259,7 @@ String	\	instance	loud	method "\" of class "String"
 String	&	instance	loud	method "&" of class "String"
 String	&&	instance	loud	method "&&" of class "String"
 String	|	instance	loud	method "|" of class "String"
-String	[]	instance	loud	method "[]" of class "String"
+String	[]	instance	answers	rc 163
 String	?	instance	loud	method "?" of class "String"
 String	abbrev	instance	loud	method "ABBREV" of class "String"
 String	abs	instance	loud	method "ABS" of class "String"
@@ -329,10 +329,10 @@ String	sign	instance	answers	rc 163
 String	space	instance	loud	method "SPACE" of class "String"
 String	startsWith	instance	answers	rc 168
 String	strip	instance	loud	method "STRIP" of class "String"
-String	subChar	instance	loud	method "SUBCHAR" of class "String"
-String	substr	instance	loud	method "SUBSTR" of class "String"
-String	subWord	instance	loud	method "SUBWORD" of class "String"
-String	subWords	instance	loud	method "SUBWORDS" of class "String"
+String	subChar	instance	answers	rc 163
+String	substr	instance	answers	rc 163
+String	subWord	instance	answers	rc 163
+String	subWords	instance	answers	rc 0
 String	translate	instance	loud	method "TRANSLATE" of class "String"
 String	trunc	instance	loud	method "TRUNC" of class "String"
 String	upper	instance	answers	rc 0
@@ -946,32 +946,32 @@ DateTime	baseDate	instance	answers	rc 0
 DateTime	civilTime	instance	answers	rc 0
 DateTime	compareTo	instance	answers	rc 163
 DateTime	date	instance	diverge	diverge-both
-DateTime	day	instance	loud	method "SUBSTR" of class "String"
+DateTime	day	instance	answers	rc 0
 DateTime	dayMicroseconds	instance	answers	rc 0
 DateTime	dayMinutes	instance	answers	rc 0
 DateTime	dayName	instance	answers	rc 0
 DateTime	daySeconds	instance	answers	rc 0
-DateTime	daysInMonth	instance	loud	method "SUBSTR" of class "String"
-DateTime	daysInYear	instance	loud	method "SUBSTR" of class "String"
+DateTime	daysInMonth	instance	loud	method "WORD" of class "String"
+DateTime	daysInYear	instance	answers	rc 0
 DateTime	elapsed	instance	loud	method "RIGHT" of class "String"
 DateTime	europeanDate	instance	answers	rc 0
 DateTime	fullDate	instance	answers	rc 0
 DateTime	hashCode	instance	loud	method "HASHCODE" of class "Object"
 DateTime	hours	instance	answers	rc 0
-DateTime	isLeapYear	instance	loud	method "SUBSTR" of class "String"
+DateTime	isLeapYear	instance	answers	rc 0
 DateTime	isoDate	instance	answers	rc 0
 DateTime	languageDate	instance	answers	rc 0
 DateTime	longTime	instance	answers	rc 0
 DateTime	makeString	instance	answers	rc 0
 DateTime	microseconds	instance	answers	rc 0
 DateTime	minutes	instance	answers	rc 0
-DateTime	month	instance	loud	method "SUBSTR" of class "String"
+DateTime	month	instance	answers	rc 0
 DateTime	monthName	instance	answers	rc 0
 DateTime	normalDate	instance	answers	rc 0
 DateTime	normalTime	instance	answers	rc 0
 DateTime	offset	instance	loud	method "RIGHT" of class "String"
 DateTime	orderedDate	instance	answers	rc 0
-DateTime	ordinalDate	instance	loud	method "SUBSTR" of class "String"
+DateTime	ordinalDate	instance	answers	rc 0
 DateTime	seconds	instance	answers	rc 0
 DateTime	standardDate	instance	answers	rc 0
 DateTime	string	instance	answers	rc 0
@@ -985,10 +985,10 @@ DateTime	utcDate	instance	answers	rc 0
 DateTime	utcIsoDate	instance	answers	rc 0
 DateTime	weekDay	instance	answers	rc 0
 DateTime	weekNumber	instance	answers	rc 0
-DateTime	weekNumberDate	instance	loud	method "SUBSTR" of class "String"
-DateTime	weekNumberYear	instance	loud	method "SUBSTR" of class "String"
-DateTime	weeksInYear	instance	loud	method "SUBSTR" of class "String"
-DateTime	year	instance	loud	method "SUBSTR" of class "String"
+DateTime	weekNumberDate	instance	answers	rc 0
+DateTime	weekNumberYear	instance	answers	rc 0
+DateTime	weeksInYear	instance	answers	rc 0
+DateTime	year	instance	answers	rc 0
 DateTime	yearDay	instance	answers	rc 0
 DateTime	=	instance	answers	rc 163
 DateTime	==	instance	answers	rc 163
@@ -1324,7 +1324,7 @@ TraceObject	option	class	answers	rc 0
 TraceObject	option=	class	answers	rc 163
 TraceObject	setMakeString	class	answers	rc 163
 TraceObject	unsetMakeString	class	answers	rc 165
-TraceObject	compareTo	instance	loud	method "[]" of class "String"
+TraceObject	compareTo	instance	answers	rc 163
 TraceObject	makeString	instance	answers	rc 0
 Validate	classType	class	answers	rc 163
 Validate	length	class	answers	rc 163

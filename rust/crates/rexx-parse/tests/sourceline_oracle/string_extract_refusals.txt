@@ -1,0 +1,46 @@
+count 45
+/* The extraction readers' refusals.
+ *
+ * A missing position is 93.903 naming argument 1, a position that is not a
+ * positive whole number is 93.924, a length that is not a whole number is
+ * 93.923, and a pad that is not one character is 93.922. Those numbers come
+ * from the argument's role and not from the method.
+ *
+ * The final send is untrapped so the 93.903 text and the frame line naming the
+ * scope are compared as bytes. rc 163.
+ */
+
+signal on syntax name trapped
+s = 'abcabc'
+w = '  now is  the time  '
+n = 0
+
+next:
+n = n + 1
+select
+  when n = 1 then say n 'answered' s~substr
+  when n = 2 then say n 'answered' s~substr('x')
+  when n = 3 then say n 'answered' s~substr(0)
+  when n = 4 then say n 'answered' s~substr(1, 'x')
+  when n = 5 then say n 'answered' s~substr(1, 1, 'ab')
+  when n = 6 then say n 'answered' s~substr(1, 1, ' ', 4)
+  when n = 7 then say n 'answered' s~subChar
+  when n = 8 then say n 'answered' s~subChar(0)
+  when n = 9 then say n 'answered' w~subWord
+  when n = 10 then say n 'answered' w~subWord(0)
+  when n = 11 then say n 'answered' w~subWord(1, 'x')
+  when n = 12 then say n 'answered' w~subWords(0)
+  /* The same shape at a MutableBuffer receiver, whose rows share this layer. */
+  when n = 13 then say n 'answered' .MutableBuffer~new('abc')~substr
+  otherwise signal done
+end
+signal next
+
+trapped:
+say n 'raised' rc'.'condition('E')
+signal on syntax name trapped
+signal next
+
+done:
+signal off syntax
+say s~substr

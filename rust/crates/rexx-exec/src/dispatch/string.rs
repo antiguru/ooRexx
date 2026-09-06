@@ -43,7 +43,7 @@
 use super::{
     Arity, Cleared, Failure, Interp, NativeMethod, ObjRef, backward_search,
     backward_search_arguments, ends_with, forward_search, forward_search_arguments,
-    match_region_arguments, match_region_over, starts_with, wordpos_arguments,
+    match_region_arguments, match_region_over, starts_with, substr_arguments, wordpos_arguments,
 };
 
 /// `RexxString::posRexx` (`classes/StringClassMisc.cpp:581`).
@@ -457,6 +457,102 @@ fn string_matchchar(
     Ok(Some(crate::eval::logical(answer)))
 }
 
+/// `RexxString::substr` (`classes/StringClassSub.cpp:598`).
+fn native_string_substr(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let (start, length, pad) = substr_arguments(interp, args)?;
+    let mut out = interp.take_result_buffer();
+    {
+        let bytes = interp.to_text(receiver);
+        crate::builtin::string::substr_bytes(&mut out, &bytes, start, length, pad)?;
+    }
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `RexxString::brackets` (`classes/StringClassSub.cpp:615`): `substr`'s
+/// two-argument form, the length defaulting to one byte, capped at the end of
+/// the receiver, and never padding.
+fn native_string_brackets(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let start = super::required_position_argument(interp, args, 0)? - 1;
+    let length = super::optional_length_argument(interp, args, 1)?.unwrap_or(1);
+    let mut out = interp.take_result_buffer();
+    {
+        let bytes = interp.to_text(receiver);
+        let capped = length.min(bytes.len().saturating_sub(start));
+        crate::builtin::string::substr_bytes(&mut out, &bytes, start, Some(capped), b' ')?;
+    }
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `RexxString::subchar` (`classes/StringClassSub.cpp:635`): the one byte at
+/// `position`, or the empty string past the end.
+fn native_string_subchar(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let position = super::required_position_argument(interp, args, 0)?;
+    let mut out = interp.take_result_buffer();
+    {
+        let bytes = interp.to_text(receiver);
+        out.extend(bytes.get(position - 1));
+    }
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `RexxString::subWord` (`classes/StringClassWord.cpp:180`).
+fn native_string_subword(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let position = super::required_position_argument(interp, args, 0)?;
+    let count = super::optional_length_argument(interp, args, 1)?;
+    let mut out = interp.take_result_buffer();
+    {
+        let bytes = interp.to_text(receiver);
+        let found = crate::builtin::word::subword_range(&bytes, position, count);
+        out.extend_from_slice(&bytes[found]);
+    }
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `RexxString::subWords` (`classes/StringClassWord.cpp:200`).
+///
+/// **Answers an `Array`, not a string.** The C++ return type is `ArrayClass *`
+/// where `subWord`'s is `RexxString *`, so a witness that only renders the
+/// answer cannot tell one from the other.
+fn native_string_subwords(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let position = super::optional_position_argument(interp, args, 0)?.unwrap_or(1);
+    let count = super::optional_length_argument(interp, args, 1)?.unwrap_or(usize::MAX);
+    let words: Vec<Vec<u8>> = {
+        let bytes = interp.to_text(receiver);
+        crate::builtin::word::word_slices(&bytes)
+            .into_iter()
+            .skip(position - 1)
+            .take(count)
+            .map(<[u8]>::to_vec)
+            .collect()
+    };
+    Ok(Some(super::array_of_texts(interp, words)?))
+}
+
 /// `String`'s rows, in the shape [`super::NATIVE_METHODS`] uses.
 pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     (
@@ -558,5 +654,15 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(1),
         native_string_startswith,
     ),
+    ("String", "SUBCHAR", Arity::Fixed(1), native_string_subchar),
+    ("String", "SUBSTR", Arity::Fixed(3), native_string_substr),
+    ("String", "SUBWORD", Arity::Fixed(2), native_string_subword),
+    (
+        "String",
+        "SUBWORDS",
+        Arity::Fixed(2),
+        native_string_subwords,
+    ),
     ("String", "WORDPOS", Arity::Fixed(2), native_string_wordpos),
+    ("String", "[]", Arity::Fixed(2), native_string_brackets),
 ];
