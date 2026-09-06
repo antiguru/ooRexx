@@ -3,7 +3,7 @@
 Plan: `docs/superpowers/plans/2026-09-05-phase-5f-string.md`, Task 1's sixth family and the first of
 the mutators.
 
-BASE `1c849c62d`. Landed at **`GATECOMMIT`**.
+BASE `1c849c62d`. Landed at `6c9dfd28f`.
 
 Five more rows: `insert overlay replaceAt delStr delWord`.
 
@@ -81,8 +81,10 @@ applied. A C++ line number now gets written only by the command that reads it.
 |---|---|
 | G1 `cargo fmt --all --check` | rc 0 |
 | G2 `cargo clippy --workspace --all-targets -- -D warnings` | rc 0, zero warnings |
-| G3 `cargo test --release --workspace --no-fail-fast` | **G3** |
-| G4 | **G4** |
-| G5 | **G5** |
-| G6 | **G6** |
-| G7 | **G7** |
+| G3 `cargo test --release --workspace --no-fail-fast` | rc 0 |
+| G4 same with `REXX_CORPUS_GATE=1` | rc 0, strict corpus `375 of 375 matching` |
+| G5 `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace` | rc 0 |
+| G6 `REXX_PHASE_GATE=5c` | rc 0 |
+| G7 `REXX_PHASE_GATE=5d` | rc 0 |
+
+Run at `6c9dfd28f`, 03:24:39 to 03:39:01.
