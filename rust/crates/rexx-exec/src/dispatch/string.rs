@@ -48,6 +48,8 @@ use super::{
     replace_at_plan, space_arguments, starts_with, substr_arguments, translate_arguments,
     translate_in_table, verify_arguments, wordpos_arguments,
 };
+use crate::error::Raised;
+use crate::eval::logical_value;
 use rexx_parse::Operator;
 
 /// `RexxString::posRexx` (`classes/StringClassMisc.cpp:581`).
@@ -1332,6 +1334,40 @@ fn native_string_op_not(
     ))
 }
 
+/// `String~"?"`, `RexxString::choiceRexx` (`classes/StringClass.cpp:2017`).
+///
+/// **The one row here whose name is not a [`rexx_parse::Operator`]** -- the
+/// oracle registers it beside the operators, `AddMethod("?",
+/// RexxString::choiceRexx, 2)` (`memory/Setup.cpp:678`), but the language has
+/// no `?` operator for an expression to spell, so this is the only dispatch
+/// there is and it has nothing to agree with.
+///
+/// The oracle's body is three lines and so is this, in that order: both
+/// arguments are required and named, and only then is the receiver read as a
+/// logical value. **The order is the whole of the behaviour** -- measured,
+/// `'abc'~"?"()` is 88.901 naming `true value`, not the 34.901 its receiver
+/// would otherwise earn.
+fn native_string_op_choice(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let on_true = args
+        .first()
+        .copied()
+        .flatten()
+        .ok_or_else(|| Raised::missing_named_argument("true value"))?;
+    let on_false = args
+        .get(1)
+        .copied()
+        .flatten()
+        .ok_or_else(|| Raised::missing_named_argument("false value"))?;
+    let text = interp.to_text(receiver).to_vec();
+    let holds = logical_value(&text).ok_or_else(|| Raised::not_logical(&text))?;
+    Ok(Some(if holds { on_true } else { on_false }))
+}
+
 /// `String`'s rows, in the shape [`super::NATIVE_METHODS`] uses.
 pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("String", "", Arity::Fixed(1), native_string_op_abuttal),
@@ -1397,6 +1433,7 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(1),
         native_string_op_strict_greater_equal,
     ),
+    ("String", "?", Arity::Fixed(2), native_string_op_choice),
     ("String", "APPEND", Arity::Fixed(1), native_string_append),
     (
         "String",

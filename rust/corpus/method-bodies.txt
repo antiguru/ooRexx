@@ -260,7 +260,7 @@ String	&	instance	answers	rc 163
 String	&&	instance	answers	rc 163
 String	|	instance	answers	rc 163
 String	[]	instance	answers	rc 163
-String	?	instance	loud	method "?" of class "String"
+String	?	instance	answers	rc 168
 String	abbrev	instance	loud	method "ABBREV" of class "String"
 String	abs	instance	loud	method "ABS" of class "String"
 String	append	instance	answers	rc 163

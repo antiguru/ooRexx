@@ -169,7 +169,7 @@ Raised	not_enough_arguments	body	crates/rexx-exec/src/error.rs:941	off-send-surf
 Raised	not_enough_method_arguments	body+send	crates/rexx-exec/src/error.rs:1689	agrees	yes	93.901	(1,2,3)~at()
 Raised	not_enough_subscripts	send	crates/rexx-exec/src/error.rs:1713	agrees	yes	93.925	.array~new(2,2)~at(1)
 Raised	not_inherited	body+send	crates/rexx-exec/src/error.rs:796	agrees	yes	98.945	.K~uninherit(.Comparable)
-Raised	not_logical	body	crates/rexx-exec/src/error.rs:363	off-send-surface	-	-	-
+Raised	not_logical	body+send	crates/rexx-exec/src/error.rs:363	agrees	yes	34.901	.String~new("abc")~"?"("y", "n") -- it has to be the ? method: say \'abc' is the identical 34.901 from the body site in eval.rs and reaches nothing here
 Raised	not_one_of	send	crates/rexx-exec/src/error.rs:705	agrees	yes	88.916	self~setMethod('Z', "return 1", 'BOGUS')
 Loud	object_method	send	crates/rexx-exec/src/lib.rs:991	diverges	yes	a receiver with no scope of its own	self~setMethod('ZZ', "return 'x'") inside ::method cm class, then .K~zz -- from the main body it is 98.991
 Raised	object_not_single_dimensional	send	crates/rexx-exec/src/error.rs:2429	agrees	yes	98.913	o~startWith('M', .array~new(2,2)) -- the same call shape ~sendWith reports 88.913 for

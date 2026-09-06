@@ -1,0 +1,20 @@
+/* `?`, the one method String registers beside the operators that is not an
+ * operator the parser has: `AddMethod("?", RexxString::choiceRexx, 2)`
+ * (memory/Setup.cpp:678). There is no expression form for it to agree with,
+ * so this dispatch is the only one there is.
+ *
+ * The oracle's body is three lines -- both arguments required and named, then
+ * the receiver read as a logical value -- and their order is the behaviour.
+ *
+ * The final send is untrapped and is the ordering witness: `'abc'~"?"()` has
+ * a receiver that is not logical AND no arguments, and what comes out is the
+ * argument's 88.901, not the receiver's 34.901. Its substituted text names
+ * `true value`, which no trapped row can show -- CONDITION("O") answers a
+ * Directory, which this crate does not implement. rc 168.
+ */
+
+say '1'~'?'('yes', 'no')
+say '0'~'?'('yes', 'no')
+say '1'~'?'(.nil, 'no')
+say '0'~'?'('yes', .nil)
+say 'abc'~'?'()
