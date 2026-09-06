@@ -193,44 +193,44 @@ IdentityTable	subset	setup-differs	crate rc120: rexx-exec: a message send to a v
 IdentityTable	supplier	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
 IdentityTable	union	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
 IdentityTable	xor	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-List	[]	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	[]=	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	allIndexes	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	allItems	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	append	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	appendAll	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	at	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	delete	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	difference	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	disjoint	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	empty	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	equivalent	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	first	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	firstItem	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	hasIndex	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	hasItem	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	index	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	insert	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	intersection	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	isEmpty	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	items	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	last	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	lastItem	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	makeArray	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	next	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	previous	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	put	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	remove	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	removeItem	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	section	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	sort	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	sortWith	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	stableSort	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	stableSortWith	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	subset	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	supplier	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	union	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
-List	xor	setup-differs	crate rc120: rexx-exec: method "APPEND" of class "List" is not implemented (Phase 5)
+List	[]	agree	rc0
+List	[]=	agree	rc0
+List	allIndexes	agree	rc0
+List	allItems	agree	rc0
+List	append	agree	rc0
+List	appendAll	agree	rc0
+List	at	agree	rc0
+List	delete	agree	rc0
+List	difference	agree	rc0
+List	disjoint	agree	rc0
+List	empty	agree	rc0
+List	equivalent	agree	rc0
+List	first	agree	rc0
+List	firstItem	agree	rc0
+List	hasIndex	agree	rc0
+List	hasItem	agree	rc0
+List	index	agree	rc0
+List	insert	agree	rc0
+List	intersection	agree	rc0
+List	isEmpty	agree	rc0
+List	items	agree	rc0
+List	last	agree	rc0
+List	lastItem	agree	rc0
+List	makeArray	agree	rc0
+List	next	agree	rc0
+List	previous	agree	rc0
+List	put	agree	rc0
+List	remove	agree	rc0
+List	removeItem	agree	rc0
+List	section	agree	rc0
+List	sort	agree	rc0
+List	sortWith	agree	rc0
+List	stableSort	agree	rc0
+List	stableSortWith	agree	rc0
+List	subset	agree	rc0
+List	supplier	agree	rc0
+List	union	agree	rc0
+List	xor	agree	rc0
 Properties	[]	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
 Properties	[]=	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
 Properties	allIndexes	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha

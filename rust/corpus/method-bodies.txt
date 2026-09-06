@@ -624,32 +624,32 @@ IdentityTable	of	class	loud	ARG option "A" answers an Array, which
 IdentityTable	putAll	instance	answers	rc 163
 List	new	class	answers	rc 0
 List	of	class	loud	method "OF" of class "List"
-List	[]	instance	loud	method "[]" of class "List"
-List	[]=	instance	loud	method "[]=" of class "List"
-List	allIndexes	instance	loud	method "ALLINDEXES" of class "List"
-List	allItems	instance	loud	method "ALLITEMS" of class "List"
-List	append	instance	loud	method "APPEND" of class "List"
-List	at	instance	loud	method "AT" of class "List"
-List	delete	instance	loud	method "DELETE" of class "List"
-List	empty	instance	loud	method "EMPTY" of class "List"
-List	first	instance	loud	method "FIRST" of class "List"
-List	firstItem	instance	loud	method "FIRSTITEM" of class "List"
-List	hasIndex	instance	loud	method "HASINDEX" of class "List"
-List	hasItem	instance	loud	method "HASITEM" of class "List"
-List	index	instance	loud	method "INDEX" of class "List"
-List	insert	instance	loud	method "INSERT" of class "List"
-List	isEmpty	instance	loud	method "ISEMPTY" of class "List"
-List	items	instance	loud	method "ITEMS" of class "List"
-List	last	instance	loud	method "LAST" of class "List"
-List	lastItem	instance	loud	method "LASTITEM" of class "List"
-List	makeArray	instance	loud	method "MAKEARRAY" of class "List"
-List	next	instance	loud	method "NEXT" of class "List"
-List	previous	instance	loud	method "PREVIOUS" of class "List"
-List	put	instance	loud	method "PUT" of class "List"
-List	remove	instance	loud	method "REMOVE" of class "List"
-List	removeItem	instance	loud	method "REMOVEITEM" of class "List"
-List	section	instance	loud	method "SECTION" of class "List"
-List	supplier	instance	loud	method "SUPPLIER" of class "List"
+List	[]	instance	answers	rc 163
+List	[]=	instance	answers	rc 163
+List	allIndexes	instance	answers	rc 0
+List	allItems	instance	answers	rc 0
+List	append	instance	answers	rc 163
+List	at	instance	answers	rc 163
+List	delete	instance	answers	rc 163
+List	empty	instance	answers	rc 0
+List	first	instance	answers	rc 0
+List	firstItem	instance	answers	rc 0
+List	hasIndex	instance	answers	rc 163
+List	hasItem	instance	answers	rc 163
+List	index	instance	answers	rc 163
+List	insert	instance	answers	rc 0
+List	isEmpty	instance	answers	rc 0
+List	items	instance	answers	rc 0
+List	last	instance	answers	rc 0
+List	lastItem	instance	answers	rc 0
+List	makeArray	instance	answers	rc 0
+List	next	instance	answers	rc 163
+List	previous	instance	answers	rc 163
+List	put	instance	answers	rc 163
+List	remove	instance	answers	rc 163
+List	removeItem	instance	answers	rc 163
+List	section	instance	answers	rc 163
+List	supplier	instance	answers	rc 0
 List	difference	instance	answers	rc 163
 List	disjoint	instance	answers	rc 163
 List	equivalent	instance	answers	rc 163
@@ -658,9 +658,9 @@ List	subset	instance	answers	rc 163
 List	union	instance	answers	rc 163
 List	xor	instance	answers	rc 163
 List	appendAll	instance	answers	rc 163
-List	sort	instance	loud	method "MAKEARRAY" of class "List"
+List	sort	instance	answers	rc 0
 List	sortWith	instance	answers	rc 163
-List	stableSort	instance	loud	method "MAKEARRAY" of class "List"
+List	stableSort	instance	answers	rc 0
 List	stableSortWith	instance	answers	rc 163
 Properties	load	class	answers	rc 163
 Properties	[]=	instance	answers	rc 163

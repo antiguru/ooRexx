@@ -417,7 +417,6 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(1),
         native_capacity_init,
     ),
-    ("List", "INIT", Arity::Fixed(1), native_capacity_init),
     (
         "Message",
         "COMPLETED",
