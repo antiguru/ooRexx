@@ -1452,6 +1452,9 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/array_index_argument.rex",
     "lang/array_extra_argument.rex",
     "lang/supplier_iteration.rex",
+    "lang/array_navigation.rex",
+    "lang/array_structure.rex",
+    "lang/array_structure_refusals.rex",
 ];
 
 #[test]

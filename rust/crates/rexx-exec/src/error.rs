@@ -1690,6 +1690,19 @@ impl Raised {
         Raised::syntax(93, 901, vec![expected.to_string().into_bytes()])
     }
 
+    /// 93.954: a method that only works on a single-dimensional array was
+    /// sent to one with more.
+    ///
+    /// `Error_Incorrect_method_array_dimension`, raised by
+    /// `ArrayClass::checkMultiDimensional` (`classes/ArrayClass.cpp:426`),
+    /// whose four callers are `APPEND`, `INSERT`, `DELETE` and `SECTION` and
+    /// nothing else. The substitution is the method name in upper case.
+    /// Measured at rc 163: `.Array~new(2,3)~delete(1)` reports `Method
+    /// "DELETE" can be used only on a single-dimensional array.`
+    pub(crate) fn single_dimension_only(method: &str) -> Raised {
+        Raised::syntax(93, 954, vec![method.as_bytes().to_vec()])
+    }
+
     /// 93.937: a `Supplier` was asked for a pair it no longer has.
     ///
     /// `Error_Incorrect_method_supplier`. No substitutions. Measured at

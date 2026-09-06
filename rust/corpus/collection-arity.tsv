@@ -23,36 +23,36 @@ Array	[]	agree	rc0
 Array	[]=	agree	rc0
 Array	allIndexes	agree	rc0
 Array	allItems	agree	rc0
-Array	append	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "APPEND" of class "Array" is not implemented (Phase 5)
-Array	appendAll	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "APPEND" of class "Array" is not implemented (Phase 5)
+Array	append	agree	rc0
+Array	appendAll	agree	rc0
 Array	at	agree	rc0
-Array	delete	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "DELETE" of class "Array" is not implemented (Phase 5)
+Array	delete	agree	rc0
 Array	difference	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
 Array	dimension	agree	rc0
-Array	dimensions	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "DIMENSIONS" of class "Array" is not implemented (Phase 5)
+Array	dimensions	agree	rc0
 Array	disjoint	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
 Array	empty	agree	rc0
 Array	equivalent	agree	rc0
-Array	fill	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "FILL" of class "Array" is not implemented (Phase 5)
-Array	first	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "FIRST" of class "Array" is not implemented (Phase 5)
-Array	firstItem	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "FIRSTITEM" of class "Array" is not implemented (Phase 5)
+Array	fill	agree	rc0
+Array	first	agree	rc0
+Array	firstItem	agree	rc0
 Array	hasIndex	agree	rc0
 Array	hasItem	agree	rc0
 Array	index	agree	rc0
-Array	insert	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "INSERT" of class "Array" is not implemented (Phase 5)
+Array	insert	agree	rc0
 Array	intersection	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
 Array	isEmpty	agree	rc0
 Array	items	agree	rc0
-Array	last	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "LAST" of class "Array" is not implemented (Phase 5)
-Array	lastItem	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "LASTITEM" of class "Array" is not implemented (Phase 5)
+Array	last	agree	rc0
+Array	lastItem	agree	rc0
 Array	makeArray	agree	rc0
 Array	makeString	agree	rc0
-Array	next	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "NEXT" of class "Array" is not implemented (Phase 5)
-Array	previous	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "PREVIOUS" of class "Array" is not implemented (Phase 5)
+Array	next	agree	rc0
+Array	previous	agree	rc0
 Array	put	agree	rc0
 Array	remove	agree	rc0
 Array	removeItem	agree	rc0
-Array	section	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SECTION" of class "Array" is not implemented (Phase 5)
+Array	section	agree	rc0
 Array	size	agree	rc0
 Array	sort	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SORT" of class "Array" is not implemented (Phase 5)
 Array	sortWith	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SORTWITH" of class "Array" is not implemented (Phase 5)

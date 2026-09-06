@@ -444,31 +444,31 @@ Array	[]	instance	answers	rc 163
 Array	[]=	instance	answers	rc 163
 Array	allIndexes	instance	answers	rc 0
 Array	allItems	instance	answers	rc 0
-Array	append	instance	loud	method "APPEND" of class "Array"
+Array	append	instance	answers	rc 163
 Array	at	instance	answers	rc 163
-Array	delete	instance	loud	method "DELETE" of class "Array"
+Array	delete	instance	answers	rc 163
 Array	dimension	instance	answers	rc 0
-Array	dimensions	instance	loud	method "DIMENSIONS" of class "Array"
+Array	dimensions	instance	answers	rc 0
 Array	empty	instance	answers	rc 0
-Array	fill	instance	loud	method "FILL" of class "Array"
-Array	first	instance	loud	method "FIRST" of class "Array"
-Array	firstItem	instance	loud	method "FIRSTITEM" of class "Array"
+Array	fill	instance	answers	rc 163
+Array	first	instance	answers	rc 0
+Array	firstItem	instance	answers	rc 0
 Array	hasIndex	instance	answers	rc 163
 Array	hasItem	instance	answers	rc 163
 Array	index	instance	answers	rc 163
-Array	insert	instance	loud	method "INSERT" of class "Array"
+Array	insert	instance	answers	rc 0
 Array	isEmpty	instance	answers	rc 0
 Array	items	instance	answers	rc 0
-Array	last	instance	loud	method "LAST" of class "Array"
-Array	lastItem	instance	loud	method "LASTITEM" of class "Array"
+Array	last	instance	answers	rc 0
+Array	lastItem	instance	answers	rc 0
 Array	makeArray	instance	answers	rc 0
 Array	makeString	instance	answers	rc 0
-Array	next	instance	loud	method "NEXT" of class "Array"
-Array	previous	instance	loud	method "PREVIOUS" of class "Array"
+Array	next	instance	answers	rc 163
+Array	previous	instance	answers	rc 163
 Array	put	instance	answers	rc 163
 Array	remove	instance	answers	rc 163
 Array	removeItem	instance	answers	rc 163
-Array	section	instance	loud	method "SECTION" of class "Array"
+Array	section	instance	answers	rc 163
 Array	size	instance	answers	rc 0
 Array	sort	instance	loud	method "SORT" of class "Array"
 Array	sortWith	instance	loud	method "SORTWITH" of class "Array"
@@ -517,7 +517,7 @@ Bag	equivalent	instance	answers	rc 163
 CircularQueue	of	class	loud	a message send to a value that is not an array
 CircularQueue	append	instance	answers	rc 163
 CircularQueue	init	instance	answers	rc 163
-CircularQueue	insert	instance	loud	method "INSERT" of class "Queue"
+CircularQueue	insert	instance	loud	a message send to a value that is not an array
 CircularQueue	intersection	instance	answers	rc 163
 CircularQueue	makeArray	instance	loud	a message send to a value that is not an array
 CircularQueue	makeString	instance	loud	a message send to a value that is not an array
@@ -546,12 +546,12 @@ CircularQueue	put	instance	loud	method "PUT" of class "Queue"
 CircularQueue	subset	instance	answers	rc 163
 CircularQueue	appendAll	instance	answers	rc 163
 CircularQueue	delete	instance	loud	method "DELETE" of class "Queue"
-CircularQueue	first	instance	loud	method "FIRST" of class "Queue"
-CircularQueue	firstItem	instance	loud	method "FIRSTITEM" of class "Queue"
-CircularQueue	last	instance	loud	method "LAST" of class "Queue"
-CircularQueue	lastItem	instance	loud	method "LASTITEM" of class "Queue"
-CircularQueue	next	instance	loud	method "NEXT" of class "Queue"
-CircularQueue	previous	instance	loud	method "PREVIOUS" of class "Queue"
+CircularQueue	first	instance	loud	a message send to a value that is not an array
+CircularQueue	firstItem	instance	loud	a message send to a value that is not an array
+CircularQueue	last	instance	loud	a message send to a value that is not an array
+CircularQueue	lastItem	instance	loud	a message send to a value that is not an array
+CircularQueue	next	instance	loud	a message send to a value that is not an array
+CircularQueue	previous	instance	loud	a message send to a value that is not an array
 CircularQueue	sort	instance	loud	a message send to a value that is not an array
 CircularQueue	sortWith	instance	answers	rc 163
 CircularQueue	stableSort	instance	loud	a message send to a value that is not an array
@@ -710,31 +710,31 @@ Queue	[]	instance	loud	a message send to a value that is not an array
 Queue	[]=	instance	loud	method "[]=" of class "Queue"
 Queue	allIndexes	instance	loud	a message send to a value that is not an array
 Queue	allItems	instance	loud	a message send to a value that is not an array
-Queue	append	instance	loud	method "APPEND" of class "Queue"
+Queue	append	instance	answers	rc 163
 Queue	at	instance	loud	a message send to a value that is not an array
 Queue	delete	instance	loud	method "DELETE" of class "Queue"
 Queue	empty	instance	loud	a message send to a value that is not an array
-Queue	first	instance	loud	method "FIRST" of class "Queue"
-Queue	firstItem	instance	loud	method "FIRSTITEM" of class "Queue"
+Queue	first	instance	loud	a message send to a value that is not an array
+Queue	firstItem	instance	loud	a message send to a value that is not an array
 Queue	hasIndex	instance	loud	a message send to a value that is not an array
 Queue	hasItem	instance	answers	rc 163
 Queue	index	instance	answers	rc 163
-Queue	insert	instance	loud	method "INSERT" of class "Queue"
+Queue	insert	instance	loud	a message send to a value that is not an array
 Queue	isEmpty	instance	loud	a message send to a value that is not an array
 Queue	items	instance	loud	a message send to a value that is not an array
-Queue	last	instance	loud	method "LAST" of class "Queue"
-Queue	lastItem	instance	loud	method "LASTITEM" of class "Queue"
+Queue	last	instance	loud	a message send to a value that is not an array
+Queue	lastItem	instance	loud	a message send to a value that is not an array
 Queue	makeArray	instance	loud	a message send to a value that is not an array
-Queue	next	instance	loud	method "NEXT" of class "Queue"
+Queue	next	instance	loud	a message send to a value that is not an array
 Queue	peek	instance	loud	method "PEEK" of class "Queue"
-Queue	previous	instance	loud	method "PREVIOUS" of class "Queue"
+Queue	previous	instance	loud	a message send to a value that is not an array
 Queue	pull	instance	loud	method "PULL" of class "Queue"
 Queue	push	instance	loud	method "PUSH" of class "Queue"
 Queue	put	instance	loud	method "PUT" of class "Queue"
 Queue	queue	instance	loud	method "QUEUE" of class "Queue"
 Queue	remove	instance	loud	method "REMOVE" of class "Queue"
 Queue	removeItem	instance	answers	rc 163
-Queue	section	instance	loud	method "SECTION" of class "Queue"
+Queue	section	instance	loud	a message send to a value that is not an array
 Queue	size	instance	loud	method "SIZE" of class "Queue"
 Queue	supplier	instance	loud	a message send to a value that is not an array
 Queue	difference	instance	answers	rc 163

@@ -528,6 +528,362 @@ fn native_supplier_init(
     Ok(None)
 }
 
+// ---- Array's own surface ----
+
+/// `ArrayClass::checkMultiDimensional` (`classes/ArrayClass.cpp:426`): the
+/// four methods that only work on a single-dimensional array.
+///
+/// Its callers upstream are `APPEND`, `INSERT`, `DELETE` and `SECTION`, and
+/// nothing else -- `fill`, `first`, `next` and the rest are happy with any
+/// shape. Measured at rc 163: `.Array~new(2,3)~delete(1)` reports 93.954.
+fn single_dimension_only(interp: &Interp, receiver: ObjRef, method: &str) -> Result<(), Failure> {
+    if array_dimensions(interp, receiver)?.is_some_and(|shape| shape.len() > 1) {
+        return Err(Raised::single_dimension_only(method).into());
+    }
+    Ok(())
+}
+
+/// The 0-based offsets of `receiver`'s occupied slots.
+fn occupied(interp: &Interp, receiver: ObjRef) -> Result<Vec<usize>, Failure> {
+    Ok(array_slots(interp, receiver)?
+        .iter()
+        .enumerate()
+        .filter_map(|(offset, slot)| slot.map(|_| offset))
+        .collect())
+}
+
+/// `Array~first` and `Array~last`: the INDEX of the outermost occupied slot,
+/// or `.nil` -- `ArrayClass::firstRexx`, `ArrayClass::lastRexx`.
+///
+/// **Not the item.** `firstItem`/`lastItem` are those, and on a sparse array
+/// the two cannot coincide: measured, an array holding `[1]`, `[3]`, `[5]`
+/// answers `first 1 last 5` against `firstItem p lastItem t`.
+fn array_end(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    take_last: bool,
+    want_item: bool,
+) -> Result<Option<ObjRef>, Failure> {
+    let offsets = occupied(interp, receiver)?;
+    let found = if take_last {
+        offsets.last().copied()
+    } else {
+        offsets.first().copied()
+    };
+    let Some(offset) = found else {
+        return Ok(Some(ObjRef::NIL));
+    };
+    if want_item {
+        return Ok(Some(match array_slots(interp, receiver)?[offset] {
+            Some(item) => item,
+            None => ObjRef::NIL,
+        }));
+    }
+    let dimensions = array_dimensions(interp, receiver)?;
+    Ok(Some(subscript_object(
+        interp,
+        offset,
+        dimensions.as_deref(),
+    )))
+}
+
+fn native_array_first(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    array_end(interp, receiver, false, false)
+}
+
+fn native_array_last(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    array_end(interp, receiver, true, false)
+}
+
+fn native_array_first_item(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    array_end(interp, receiver, false, true)
+}
+
+fn native_array_last_item(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    array_end(interp, receiver, true, true)
+}
+
+/// `Array~next(index...)` and `Array~previous(index...)`: the nearest occupied
+/// index on that side, or `.nil` -- `ArrayClass::nextRexx`,
+/// `ArrayClass::previousRexx`.
+///
+/// **The starting index need not hold anything.** Measured on an array
+/// holding `[1]`, `[3]`, `[5]`: `next(2)` is `3` and `previous(4)` is `3`.
+/// Past either end is `.nil` rather than an error.
+fn array_step(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    forward: bool,
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(position) = array_position(interp, receiver, args, IndexUse::Get)? else {
+        return Ok(Some(ObjRef::NIL));
+    };
+    let offsets = occupied(interp, receiver)?;
+    let found = if forward {
+        offsets.into_iter().find(|offset| *offset + 1 > position)
+    } else {
+        offsets
+            .into_iter()
+            .rev()
+            .find(|offset| *offset + 1 < position)
+    };
+    let Some(offset) = found else {
+        return Ok(Some(ObjRef::NIL));
+    };
+    let dimensions = array_dimensions(interp, receiver)?;
+    Ok(Some(subscript_object(
+        interp,
+        offset,
+        dimensions.as_deref(),
+    )))
+}
+
+fn native_array_next(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    array_step(interp, receiver, args, true)
+}
+
+fn native_array_previous(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    array_step(interp, receiver, args, false)
+}
+
+/// `Array~append(item)`: puts `item` past the last slot and answers its index
+/// -- `ArrayClass::appendRexx`.
+fn native_array_append(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let item = item_argument(args)?;
+    single_dimension_only(interp, receiver, "APPEND")?;
+    let at = array_slots(interp, receiver)?.len();
+    array_splice(interp, receiver, at, Some(item))?;
+    Ok(Some(interp.counted(at + 1)))
+}
+
+/// `Array~insert(item [, index])`: puts `item` **after** `index` and shifts
+/// the rest along, answering the index it landed on --
+/// `ArrayClass::insertRexx`.
+///
+/// Measured: `.Array~of('x','y','z')~insert('q', 1)` answers `2` and leaves
+/// `x,q,y,z`; with no index it appends and answers the new last index; index
+/// `0` is `93.907`, not the front; and an index past the end extends, so
+/// `insert('c', 9)` on a size-2 array answers `10` and leaves size 10.
+fn native_array_insert(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    single_dimension_only(interp, receiver, "INSERT")?;
+    // **The item is optional**, unlike `append`'s: `insertRexx` has no
+    // `requiredArgument` for it. Measured, `.Array~of('x','y')~insert`
+    // answers `3` and leaves size 3 with items 2 -- an empty slot.
+    let item = args.first().copied().flatten();
+    let at = match args.get(1).copied() {
+        // `.nil` is the front, which is the one spelling that is not an
+        // index at all (`classes/ArrayClass.cpp:755`).
+        Some(Some(index)) if index == ObjRef::NIL => 0,
+        Some(Some(index)) => super::positive_index(interp, index, 2)?,
+        // Omitted: after the last OCCUPIED slot, not the end of the array.
+        Some(None) | None => occupied(interp, receiver)?
+            .last()
+            .map_or(0, |last| last + 1),
+    };
+    let length = array_slots(interp, receiver)?.len();
+    if at > length {
+        array_grow(interp, receiver, at)?;
+    }
+    array_splice_slot(interp, receiver, at, item)?;
+    Ok(Some(interp.counted(at + 1)))
+}
+
+/// `Array~delete(index...)`: takes the slot out, closes the gap and answers
+/// the item -- `ArrayClass::deleteRexx`.
+///
+/// **Not `remove`.** Measured on `x,q,y,z,w`: `delete(2)` answers `q` and
+/// leaves `x,y,z,w` at size 4, while `remove(2)` answers the item and leaves
+/// a hole with the size unchanged. Same argument, same answer, different
+/// array.
+fn native_array_delete(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    // `requiredArgument(index, ARG_ONE)` comes FIRST and is 93.903, where
+    // the index-validating family is 93.901 -- `classes/ArrayClass.cpp:822`.
+    item_argument(args)?;
+    single_dimension_only(interp, receiver, "DELETE")?;
+    let Some(position) = array_position(interp, receiver, args, IndexUse::Get)? else {
+        return Ok(Some(ObjRef::NIL));
+    };
+    let held = match array_slots(interp, receiver)?.get(position - 1) {
+        Some(slot) => *slot,
+        None => return Ok(Some(ObjRef::NIL)),
+    };
+    array_splice(interp, receiver, position - 1, None)?;
+    Ok(Some(held.unwrap_or(ObjRef::NIL)))
+}
+
+/// `Array~fill(item)`: puts `item` in every slot and answers the receiver --
+/// `ArrayClass::fillRexx`.
+fn native_array_fill(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let item = item_argument(args)?;
+    match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
+        Some(Body::Array { slots, .. }) => {
+            for slot in slots.iter_mut() {
+                *slot = Some(item);
+            }
+            Ok(Some(receiver))
+        }
+        _ => Err(Loud::receiver_class("a value that is not an array").into()),
+    }
+}
+
+/// `Array~section(start [, count])`: a new array over that run --
+/// `ArrayClass::sectionRexx`.
+///
+/// Measured on `1,2,3,4,5`: `section(2,3)` is `2,3,4`; `section(4,10)` clamps
+/// to `4,5` rather than raising; `section(2,0)` is empty; and one argument
+/// runs to the end.
+fn native_array_section(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    // The dimension check comes FIRST here and the required argument second,
+    // which is the opposite order from `delete` -- `:1502` against `:822`.
+    single_dimension_only(interp, receiver, "SECTION")?;
+    let start = item_argument(args)?;
+    let start = super::positive_index(interp, start, 1)?;
+    let slots = array_slots_owned(interp, receiver)?;
+    let available = slots.len().saturating_sub(start.saturating_sub(1));
+    let count = match args.get(1).copied().flatten() {
+        Some(count) => super::array_size_argument(interp, Some(count), 2)?.min(available),
+        None => available,
+    };
+    let taken: Vec<Option<ObjRef>> = slots
+        .into_iter()
+        .skip(start.saturating_sub(1))
+        .take(count)
+        .collect();
+    let section = interp.alloc_with(BehaviourId::ARRAY, Body::array(taken));
+    interp.roots.push_temp(section);
+    Ok(Some(section))
+}
+
+/// `Array~dimensions`: an `Array` of the extents --
+/// `ArrayClass::getDimensionsRexx`.
+///
+/// **A single-dimensional array answers a one-element array holding its
+/// size**, which is why this is not `~dimension`'s plural spelling: measured,
+/// `.Array~of(1,2,3,4,5)~dimensions` prints `5` and `~dimension` prints `1`.
+fn native_array_dimensions(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let extents = match array_dimensions(interp, receiver)? {
+        Some(shape) => shape,
+        None => vec![array_slots(interp, receiver)?.len()],
+    };
+    let items = extents
+        .into_iter()
+        .map(|extent| interp.counted(extent))
+        .collect();
+    Ok(Some(array_of(interp, items)))
+}
+
+/// Inserts `item` at 0-based `at`, or deletes the slot there when it is
+/// `None`, shifting everything after it.
+fn array_splice(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    at: usize,
+    item: Option<ObjRef>,
+) -> Result<(), Failure> {
+    match item {
+        Some(item) => array_splice_slot(interp, receiver, at, Some(item)),
+        None => match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
+            Some(Body::Array { slots, .. }) => {
+                if at < slots.len() {
+                    slots.remove(at);
+                }
+                Ok(())
+            }
+            _ => Err(Loud::receiver_class("a value that is not an array").into()),
+        },
+    }
+}
+
+/// Inserts a slot at 0-based `at`, which may be empty -- `insert` with its
+/// item omitted opens a hole rather than refusing.
+fn array_splice_slot(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    at: usize,
+    item: Option<ObjRef>,
+) -> Result<(), Failure> {
+    match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
+        Some(Body::Array { slots, .. }) => {
+            let at = at.min(slots.len());
+            slots.insert(at, item);
+            Ok(())
+        }
+        _ => Err(Loud::receiver_class("a value that is not an array").into()),
+    }
+}
+
+/// Grows `receiver` to `length` empty slots, for an `insert` past the end.
+fn array_grow(interp: &mut Interp, receiver: ObjRef, length: usize) -> Result<(), Failure> {
+    match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
+        Some(Body::Array { slots, .. }) => {
+            slots.resize(length, None);
+            Ok(())
+        }
+        _ => Err(Loud::receiver_class("a value that is not an array").into()),
+    }
+}
+
 /// The collection classes' primitive methods, chained into
 /// `ObjectModel::build`.
 ///
@@ -539,6 +895,28 @@ fn native_supplier_init(
 /// `Setup.cpp`'s own third operand: a literal is a maximum and `A_COUNT` is
 /// [`Arity::Counted`].
 pub(super) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
+    ("Array", "APPEND", Arity::Fixed(1), native_array_append),
+    ("Array", "DELETE", Arity::Fixed(1), native_array_delete),
+    (
+        "Array",
+        "DIMENSIONS",
+        Arity::Fixed(0),
+        native_array_dimensions,
+    ),
+    ("Array", "FILL", Arity::Fixed(1), native_array_fill),
+    ("Array", "FIRST", Arity::Fixed(0), native_array_first),
+    (
+        "Array",
+        "FIRSTITEM",
+        Arity::Fixed(0),
+        native_array_first_item,
+    ),
+    ("Array", "INSERT", Arity::Fixed(2), native_array_insert),
+    ("Array", "LAST", Arity::Fixed(0), native_array_last),
+    ("Array", "LASTITEM", Arity::Fixed(0), native_array_last_item),
+    ("Array", "NEXT", Arity::Counted, native_array_next),
+    ("Array", "PREVIOUS", Arity::Counted, native_array_previous),
+    ("Array", "SECTION", Arity::Fixed(2), native_array_section),
     (
         "Array",
         "ALLINDEXES",

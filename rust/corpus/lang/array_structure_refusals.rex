@@ -1,0 +1,63 @@
+/* The structural surface's bad calls.  `insert`'s index 0 is the interesting
+   one: it is NOT "insert at the front", it is a positive-whole-number
+   complaint, and only stderr carries that decimal. */
+
+a = .Array~of('x', 'y')
+call trapped 'APPEND'
+call trapped 'FILL'
+call trapped 'SECTION'
+call trapped 'DELETE'
+say 'all four raised SYNTAX'
+
+/* Extra arguments to the zero-argument half. */
+call extra 'FIRST'
+call extra 'LAST'
+call extra 'FIRSTITEM'
+call extra 'LASTITEM'
+call extra 'DIMENSIONS'
+say 'all five raised SYNTAX'
+
+/* Four methods, and only these four, refuse a multi-dimensional receiver:
+   `checkMultiDimensional`'s callers upstream are APPEND, INSERT, DELETE and
+   SECTION.  `fill`, `first` and the rest take any shape. */
+m = .Array~new(2, 3)
+call onMulti 'APPEND', 'q'
+call onMulti 'INSERT', 'q'
+call onMulti 'DELETE', 1
+call onMulti 'SECTION', 1
+say 'all four refused the multi-dimensional receiver'
+say 'fill is happy' m~fill('z')~class~id 'first' m~first~makeString('L', ',')
+
+v = a~insert('q', 0)
+say 'unreachable' v
+exit
+
+onMulti: procedure expose m
+  use arg name, argument
+  signal on syntax name oops3
+  v = m~send(name, argument)
+  say name 'did not refuse'
+  return
+oops3:
+  say name 'multi-dimensional raised' rc condition('C')
+  return
+
+trapped: procedure expose a
+  use arg name
+  signal on syntax name oops
+  v = a~send(name)
+  say name 'did not raise'
+  return
+oops:
+  say name 'missing raised' rc condition('C')
+  return
+
+extra: procedure expose a
+  use arg name
+  signal on syntax name oops2
+  v = a~send(name, 'unwanted')
+  say name 'did not raise'
+  return
+oops2:
+  say name 'extra raised' rc condition('C')
+  return

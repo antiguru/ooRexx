@@ -1,0 +1,42 @@
+/* Array's structural surface.  The point of this program is that `delete` and
+   `remove` are different operations on the same argument: `delete` closes the
+   gap and shortens the array, `remove` leaves a hole and the size alone.  A
+   witness that only reads the returned item cannot tell them apart. */
+
+b = .Array~of('x', 'y', 'z')
+say 'append answers the index' b~append('w')
+say 'after append' b~makeString('L', ',') 'size' b~size 'items' b~items
+
+b~insert('q', 1)
+say 'insert goes AFTER its index' b~makeString('L', ',') 'size' b~size
+
+say 'delete answers the item' b~delete(2)
+say 'delete shifts' b~makeString('L', ',') 'size' b~size
+
+say 'remove answers the item' b~remove(2)
+say 'remove leaves a hole' b~items 'size' b~size 'hasIndex' b~hasIndex(2)
+
+c = .Array~of(1, 2, 3, 4, 5)
+say 'section' c~section(2, 3)~makeString('L', ',')
+say 'section clamps' c~section(4, 10)~makeString('L', ',')
+say 'section of none' c~section(2, 0)~items
+
+f = .Array~new(3)
+say 'fill answers a' f~fill('z')~class~id
+say 'filled' f~makeString('L', ',') 'items' f~items
+
+/* `insert` takes an OPTIONAL item: omitted, it opens a hole rather than
+   refusing, and `.nil` as the index means the front rather than an index. */
+h = .Array~of('x', 'y')
+say 'insert with no item answers' h~insert
+say 'and leaves' h~makeString('L', ',') 'size' h~size 'items' h~items 'hasIndex3' h~hasIndex(3)
+i = .Array~of('x', 'y')
+say 'insert at .nil answers' i~insert('front', .nil)
+say 'and leaves' i~makeString('L', ',')
+j = .Array~of('x', 'y')
+say 'insert past the end answers' j~insert('far', 9) 'size' j~size
+
+say 'dimension count' c~dimension 'extents' c~dimensions
+m = .Array~new(2, 3)
+say 'md dimension count' m~dimension 'extent 1' m~dimension(1) 'extent 2' m~dimension(2)
+say 'md extents' m~dimensions~makeString('L', ',')
