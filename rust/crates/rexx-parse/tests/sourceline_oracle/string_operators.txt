@@ -1,0 +1,25 @@
+count 24
+/* Every binary operator String answers as a message, sent as a message and
+   again as an expression, so the two dispatches are compared against each
+   other as well as against the oracle. The expression forms are parenthesised
+   because a bare `a = b c = d` is one chained comparison, not two. */
+s = '12'
+t = '3'
+say s~'+'(t) s~'-'(t) s~'*'(t) s~'**'(2) s~'/'(t) s~'%'(t) s~'//'(t)
+say (s + t) (s - t) (s * t) (s ** 2) (s / t) (s % t) (s // t)
+say s~''(t) s~'||'(t) s~' '(t)
+say (s''t) (s || t) (s t)
+say s~'='(t) s~'\='(t) s~'<>'(t) s~'><'(t) s~'>'(t) s~'<'(t) s~'>='(t) s~'<='(t)
+say (s = t) (s \= t) (s <> t) (s >< t) (s > t) (s < t) (s >= t) (s <= t)
+say s~'\<'(t) s~'\>'(t)
+say (s \< t) (s \> t)
+say s~'=='(t) s~'\=='(t) s~'>>'(t) s~'<<'(t) s~'>>='(t) s~'<<='(t) s~'\<<'(t) s~'\>>'(t)
+say (s == t) (s \== t) (s >> t) (s << t) (s >>= t) (s <<= t) (s \<< t) (s \>> t)
+say '1'~'&'('0') '1'~'|'('0') '1'~'&&'('0') '0'~'&&'('0')
+say ('1' & '0') ('1' | '0') ('1' && '0') ('0' && '0')
+say '1'~'\'() '0'~'\'()
+say (\'1') (\'0')
+/* Strings compare as text where numbers compare as numbers, so the strict
+   forms and the plain forms part company here. */
+say '10'~'<'('9') '10'~'<<'('9') '10'~'='('10.0') '10'~'=='('10.0')
+say s~'+'(t)~class~id s~'='(t)~class~id

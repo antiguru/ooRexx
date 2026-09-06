@@ -48,6 +48,7 @@ use super::{
     replace_at_plan, space_arguments, starts_with, substr_arguments, translate_arguments,
     translate_in_table, verify_arguments, wordpos_arguments,
 };
+use rexx_parse::Operator;
 
 /// `RexxString::posRexx` (`classes/StringClassMisc.cpp:581`).
 fn native_string_pos(
@@ -893,8 +894,509 @@ fn native_string_append(
     )?))
 }
 
+/// Every binary operator `String` answers as a message, and the
+/// [`rexx_parse::Operator`] each one is.
+///
+/// **The name column is the operator's own spelling**, which
+/// `operator_spellings_match_the_parser` asserts against
+/// [`rexx_parse::Operator::spelling`] rather than restating here. The oracle
+/// registers all of them at one argument -- `AddMethod("+", RexxString::plus,
+/// 1)` and the rest of that block (`memory/Setup.cpp:649`-`:677`) -- and `\\`
+/// and `?` are the two that are not in it, at zero and two.
+#[cfg(test)]
+const BINARY_OPERATORS: &[(&str, Operator)] = &[
+    ("+", Operator::Plus),
+    ("-", Operator::Subtract),
+    ("*", Operator::Multiply),
+    ("**", Operator::Power),
+    ("/", Operator::Divide),
+    ("%", Operator::IntDiv),
+    ("//", Operator::Remainder),
+    ("", Operator::Abuttal),
+    ("||", Operator::Concatenate),
+    (" ", Operator::Blank),
+    ("=", Operator::Equal),
+    ("\\=", Operator::BackslashEqual),
+    ("<>", Operator::LessThanGreaterThan),
+    ("><", Operator::GreaterThanLessThan),
+    (">", Operator::GreaterThan),
+    ("<", Operator::LessThan),
+    (">=", Operator::GreaterThanEqual),
+    ("\\<", Operator::BackslashLessThan),
+    ("<=", Operator::LessThanEqual),
+    ("\\>", Operator::BackslashGreaterThan),
+    ("==", Operator::StrictEqual),
+    ("\\==", Operator::StrictBackslashEqual),
+    (">>", Operator::StrictGreaterThan),
+    ("<<", Operator::StrictLessThan),
+    (">>=", Operator::StrictGreaterThanEqual),
+    ("\\<<", Operator::StrictBackslashLessThan),
+    ("<<=", Operator::StrictLessThanEqual),
+    ("\\>>", Operator::StrictBackslashGreaterThan),
+    ("&", Operator::And),
+    ("|", Operator::Or),
+    ("&&", Operator::Xor),
+];
+
+/// `String~"+"`, [`Operator::Plus`] through the arithmetic pair.
+fn native_string_op_plus(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_arithmetic_operator(interp, receiver, args, Operator::Plus)
+}
+
+/// `String~"-"`, [`Operator::Subtract`] through the arithmetic pair.
+fn native_string_op_subtract(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_arithmetic_operator(interp, receiver, args, Operator::Subtract)
+}
+
+/// `String~"*"`, [`Operator::Multiply`] through the arithmetic pair.
+fn native_string_op_multiply(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_arithmetic_operator(interp, receiver, args, Operator::Multiply)
+}
+
+/// `String~"**"`, [`Operator::Power`] through the arithmetic pair.
+fn native_string_op_power(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_arithmetic_operator(interp, receiver, args, Operator::Power)
+}
+
+/// `String~"/"`, [`Operator::Divide`] through the arithmetic pair.
+fn native_string_op_divide(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_arithmetic_operator(interp, receiver, args, Operator::Divide)
+}
+
+/// `String~"%"`, [`Operator::IntDiv`] through the arithmetic pair.
+fn native_string_op_intdiv(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_arithmetic_operator(interp, receiver, args, Operator::IntDiv)
+}
+
+/// `String~"//"`, [`Operator::Remainder`] through the arithmetic pair.
+fn native_string_op_remainder(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_arithmetic_operator(interp, receiver, args, Operator::Remainder)
+}
+
+/// `String~""`, [`Operator::Abuttal`] through [`Interp::apply_binary`].
+fn native_string_op_abuttal(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::Abuttal)
+}
+
+/// `String~"||"`, [`Operator::Concatenate`] through [`Interp::apply_binary`].
+fn native_string_op_concatenate(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::Concatenate)
+}
+
+/// `String~" "`, [`Operator::Blank`] through [`Interp::apply_binary`].
+fn native_string_op_blank(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::Blank)
+}
+
+/// `String~"="`, [`Operator::Equal`] through [`Interp::apply_binary`].
+fn native_string_op_equal(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::Equal)
+}
+
+/// `String~"\\="`, [`Operator::BackslashEqual`] through [`Interp::apply_binary`].
+fn native_string_op_backslash_equal(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::BackslashEqual)
+}
+
+/// `String~"<>"`, [`Operator::LessThanGreaterThan`] through [`Interp::apply_binary`].
+fn native_string_op_less_greater(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::LessThanGreaterThan)
+}
+
+/// `String~"><"`, [`Operator::GreaterThanLessThan`] through [`Interp::apply_binary`].
+fn native_string_op_greater_less(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::GreaterThanLessThan)
+}
+
+/// `String~">"`, [`Operator::GreaterThan`] through [`Interp::apply_binary`].
+fn native_string_op_greater(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::GreaterThan)
+}
+
+/// `String~"<"`, [`Operator::LessThan`] through [`Interp::apply_binary`].
+fn native_string_op_less(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::LessThan)
+}
+
+/// `String~">="`, [`Operator::GreaterThanEqual`] through [`Interp::apply_binary`].
+fn native_string_op_greater_equal(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::GreaterThanEqual)
+}
+
+/// `String~"\\<"`, [`Operator::BackslashLessThan`] through [`Interp::apply_binary`].
+fn native_string_op_backslash_less(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::BackslashLessThan)
+}
+
+/// `String~"<="`, [`Operator::LessThanEqual`] through [`Interp::apply_binary`].
+fn native_string_op_less_equal(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::LessThanEqual)
+}
+
+/// `String~"\\>"`, [`Operator::BackslashGreaterThan`] through [`Interp::apply_binary`].
+fn native_string_op_backslash_greater(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::BackslashGreaterThan)
+}
+
+/// `String~"=="`, [`Operator::StrictEqual`] through [`Interp::apply_binary`].
+fn native_string_op_strict_equal(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::StrictEqual)
+}
+
+/// `String~"\\=="`, [`Operator::StrictBackslashEqual`] through [`Interp::apply_binary`].
+fn native_string_op_strict_backslash_equal(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::StrictBackslashEqual)
+}
+
+/// `String~">>"`, [`Operator::StrictGreaterThan`] through [`Interp::apply_binary`].
+fn native_string_op_strict_greater(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::StrictGreaterThan)
+}
+
+/// `String~"<<"`, [`Operator::StrictLessThan`] through [`Interp::apply_binary`].
+fn native_string_op_strict_less(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::StrictLessThan)
+}
+
+/// `String~">>="`, [`Operator::StrictGreaterThanEqual`] through [`Interp::apply_binary`].
+fn native_string_op_strict_greater_equal(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::StrictGreaterThanEqual)
+}
+
+/// `String~"\\<<"`, [`Operator::StrictBackslashLessThan`] through [`Interp::apply_binary`].
+fn native_string_op_strict_backslash_less(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::StrictBackslashLessThan)
+}
+
+/// `String~"<<="`, [`Operator::StrictLessThanEqual`] through [`Interp::apply_binary`].
+fn native_string_op_strict_less_equal(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::StrictLessThanEqual)
+}
+
+/// `String~"\\>>"`, [`Operator::StrictBackslashGreaterThan`] through [`Interp::apply_binary`].
+fn native_string_op_strict_backslash_greater(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::StrictBackslashGreaterThan)
+}
+
+/// `String~"&"`, [`Operator::And`] through [`Interp::apply_binary`].
+fn native_string_op_and(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::And)
+}
+
+/// `String~"|"`, [`Operator::Or`] through [`Interp::apply_binary`].
+fn native_string_op_or(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::Or)
+}
+
+/// `String~"&&"`, [`Operator::Xor`] through [`Interp::apply_binary`].
+fn native_string_op_xor(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_binary_operator(interp, receiver, args, Operator::Xor)
+}
+
+/// One arithmetic operator sent as a message.
+///
+/// **Arithmetic does not go through [`Interp::apply_binary`]**, whose own doc
+/// says so: `**`'s exponent is not converted the way its base is, so it does
+/// not share the operand handling the other families do. The expression form
+/// and `crate::ir::Op::Arith` both enter
+/// [`Interp::arith_small_int`] and [`Interp::arith_general`] in this order,
+/// and so does this, which is what keeps the three from disagreeing.
+fn string_arithmetic_operator(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    op: Operator,
+) -> Result<Option<ObjRef>, Failure> {
+    if args.first().copied().flatten().is_none() {
+        match op {
+            // **`+` and `-` sent with no operand are the prefix forms, not an
+            // error.** Measured, oracle: `'12'~'+'()` is `12` and `'12'~'-'()`
+            // is `-12`, so the unary reading belongs to exactly the two
+            // operators the language has a prefix form for.
+            Operator::Plus => {
+                return Ok(Some(
+                    interp.apply_prefix(rexx_parse::PrefixOp::Plus, receiver)?,
+                ));
+            }
+            Operator::Subtract => {
+                return Ok(Some(
+                    interp.apply_prefix(rexx_parse::PrefixOp::Minus, receiver)?,
+                ));
+            }
+            // The other five convert the receiver *before* they complain about
+            // the operand. Measured, oracle: `.String~new('abc')~'*'()` is 41.1
+            // naming `"abc"`, while `'12'~'*'()` is 93.903 -- so a receiver
+            // that is not a number is what the send reports, and the missing
+            // argument only surfaces once the receiver converts.
+            _ => {
+                interp.arith_operand(receiver)?;
+            }
+        }
+    }
+    let other = super::operator_argument(args)?;
+    let value = match interp.arith_small_int(op, receiver, other) {
+        Some(value) => value,
+        None => interp.arith_general(op, receiver, other)?,
+    };
+    Ok(Some(value))
+}
+
+/// One binary operator sent as a message.
+///
+/// **It routes to [`Interp::apply_binary`], the same dispatch the expression
+/// form enters**, so the two cannot come to disagree about what an operator
+/// answers. The send's own frame is already pushed by [`Interp::invoke`] --
+/// measured, the crate prints `Compiled method "SUBSTR" with scope
+/// "MutableBuffer".` for a raising native send byte-identically to the oracle
+/// -- so the traceback line an operator *message* carries and an operator
+/// *expression* does not comes from the send rather than from here.
+fn string_binary_operator(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    op: Operator,
+) -> Result<Option<ObjRef>, Failure> {
+    let other = super::operator_argument(args)?;
+    Ok(Some(interp.apply_binary(op, receiver, other)?))
+}
+
+/// `String~"\\"`, the prefix `\` as a message.
+///
+/// **The one operator row that takes no argument** --
+/// `AddMethod("\\", RexxString::notOp, 0)` (`memory/Setup.cpp:674`) -- so it
+/// routes to [`Interp::apply_prefix`] rather than `apply_binary`. It is a text
+/// check and never a numeric one: measured, `say \'abc'` is 34.901, not 41.1.
+fn native_string_op_not(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    Ok(Some(
+        interp.apply_prefix(rexx_parse::PrefixOp::Not, receiver)?,
+    ))
+}
+
 /// `String`'s rows, in the shape [`super::NATIVE_METHODS`] uses.
 pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
+    ("String", "", Arity::Fixed(1), native_string_op_abuttal),
+    ("String", " ", Arity::Fixed(1), native_string_op_blank),
+    ("String", "%", Arity::Fixed(1), native_string_op_intdiv),
+    ("String", "&", Arity::Fixed(1), native_string_op_and),
+    ("String", "&&", Arity::Fixed(1), native_string_op_xor),
+    ("String", "*", Arity::Fixed(1), native_string_op_multiply),
+    ("String", "**", Arity::Fixed(1), native_string_op_power),
+    ("String", "+", Arity::Fixed(1), native_string_op_plus),
+    ("String", "-", Arity::Fixed(1), native_string_op_subtract),
+    ("String", "/", Arity::Fixed(1), native_string_op_divide),
+    ("String", "//", Arity::Fixed(1), native_string_op_remainder),
+    ("String", "<", Arity::Fixed(1), native_string_op_less),
+    (
+        "String",
+        "<<",
+        Arity::Fixed(1),
+        native_string_op_strict_less,
+    ),
+    (
+        "String",
+        "<<=",
+        Arity::Fixed(1),
+        native_string_op_strict_less_equal,
+    ),
+    ("String", "<=", Arity::Fixed(1), native_string_op_less_equal),
+    (
+        "String",
+        "<>",
+        Arity::Fixed(1),
+        native_string_op_less_greater,
+    ),
+    ("String", "=", Arity::Fixed(1), native_string_op_equal),
+    (
+        "String",
+        "==",
+        Arity::Fixed(1),
+        native_string_op_strict_equal,
+    ),
+    ("String", ">", Arity::Fixed(1), native_string_op_greater),
+    (
+        "String",
+        "><",
+        Arity::Fixed(1),
+        native_string_op_greater_less,
+    ),
+    (
+        "String",
+        ">=",
+        Arity::Fixed(1),
+        native_string_op_greater_equal,
+    ),
+    (
+        "String",
+        ">>",
+        Arity::Fixed(1),
+        native_string_op_strict_greater,
+    ),
+    (
+        "String",
+        ">>=",
+        Arity::Fixed(1),
+        native_string_op_strict_greater_equal,
+    ),
     ("String", "APPEND", Arity::Fixed(1), native_string_append),
     (
         "String",
@@ -1051,4 +1553,84 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("String", "WORDPOS", Arity::Fixed(2), native_string_wordpos),
     ("String", "WORDS", Arity::Fixed(0), native_string_words),
     ("String", "[]", Arity::Fixed(2), native_string_brackets),
+    ("String", "\\", Arity::Fixed(0), native_string_op_not),
+    (
+        "String",
+        "\\<",
+        Arity::Fixed(1),
+        native_string_op_backslash_less,
+    ),
+    (
+        "String",
+        "\\<<",
+        Arity::Fixed(1),
+        native_string_op_strict_backslash_less,
+    ),
+    (
+        "String",
+        "\\=",
+        Arity::Fixed(1),
+        native_string_op_backslash_equal,
+    ),
+    (
+        "String",
+        "\\==",
+        Arity::Fixed(1),
+        native_string_op_strict_backslash_equal,
+    ),
+    (
+        "String",
+        "\\>",
+        Arity::Fixed(1),
+        native_string_op_backslash_greater,
+    ),
+    (
+        "String",
+        "\\>>",
+        Arity::Fixed(1),
+        native_string_op_strict_backslash_greater,
+    ),
+    ("String", "|", Arity::Fixed(1), native_string_op_or),
+    (
+        "String",
+        "||",
+        Arity::Fixed(1),
+        native_string_op_concatenate,
+    ),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::{BINARY_OPERATORS, NATIVE_METHODS};
+
+    /// **The operator rows' names are the parser's own spellings**, so the
+    /// table cannot name an operator the language does not have, and a
+    /// spelling that changed would fail here rather than in a differential.
+    ///
+    /// It does not check that a row is wired to the *right* operator -- a `+`
+    /// bound to `Operator::Subtract` would pass this and fail
+    /// `corpus/lang/string_operators.rex` on its first line.
+    #[test]
+    fn operator_spellings_match_the_parser() {
+        for (name, op) in BINARY_OPERATORS {
+            assert_eq!(
+                op.spelling(),
+                *name,
+                "the table spells {op:?} as {name:?} where the parser spells it {:?}",
+                op.spelling()
+            );
+        }
+    }
+
+    /// Every operator [`BINARY_OPERATORS`] names has a row, so the two cannot
+    /// come apart by an operator being listed and never registered.
+    #[test]
+    fn every_listed_operator_has_a_row() {
+        for (name, _) in BINARY_OPERATORS {
+            assert!(
+                NATIVE_METHODS.iter().any(|(_, method, ..)| method == name),
+                "{name:?} is listed as an operator and has no row"
+            );
+        }
+    }
+}

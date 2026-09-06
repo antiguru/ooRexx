@@ -227,38 +227,38 @@ String	space	class	answers	rc 0
 String	tab	class	answers	rc 0
 String	upper	class	answers	rc 0
 String	xdigit	class	answers	rc 0
-String	+	instance	loud	method "+" of class "String"
-String	-	instance	loud	method "-" of class "String"
-String	*	instance	loud	method "*" of class "String"
-String	**	instance	loud	method "**" of class "String"
-String	/	instance	loud	method "/" of class "String"
-String	//	instance	loud	method "//" of class "String"
-String	%	instance	loud	method "%" of class "String"
-String	=	instance	loud	method "=" of class "String"
-String	==	instance	loud	method "==" of class "String"
-String	<	instance	loud	method "<" of class "String"
-String	<=	instance	loud	method "<=" of class "String"
-String	<<	instance	loud	method "<<" of class "String"
-String	<<=	instance	loud	method "<<=" of class "String"
-String	<>	instance	loud	method "<>" of class "String"
-String	>	instance	loud	method ">" of class "String"
-String	>=	instance	loud	method ">=" of class "String"
-String	><	instance	loud	method "><" of class "String"
-String	>>	instance	loud	method ">>" of class "String"
-String	>>=	instance	loud	method ">>=" of class "String"
-String	\=	instance	loud	method "\=" of class "String"
-String	\==	instance	loud	method "\==" of class "String"
-String	\<	instance	loud	method "\<" of class "String"
-String	\<<	instance	loud	method "\<<" of class "String"
-String	\>	instance	loud	method "\>" of class "String"
-String	\>>	instance	loud	method "\>>" of class "String"
-String	(abuttal)	instance	loud	method "" of class "String"
-String	||	instance	loud	method "||" of class "String"
-String	(blank)	instance	loud	method " " of class "String"
-String	\	instance	loud	method "\" of class "String"
-String	&	instance	loud	method "&" of class "String"
-String	&&	instance	loud	method "&&" of class "String"
-String	|	instance	loud	method "|" of class "String"
+String	+	instance	answers	rc 215
+String	-	instance	answers	rc 215
+String	*	instance	answers	rc 215
+String	**	instance	answers	rc 215
+String	/	instance	answers	rc 215
+String	//	instance	answers	rc 215
+String	%	instance	answers	rc 215
+String	=	instance	answers	rc 163
+String	==	instance	answers	rc 163
+String	<	instance	answers	rc 163
+String	<=	instance	answers	rc 163
+String	<<	instance	uncomparable	the oracle segfaults on this send
+String	<<=	instance	uncomparable	the oracle segfaults on this send
+String	<>	instance	answers	rc 163
+String	>	instance	answers	rc 163
+String	>=	instance	answers	rc 163
+String	><	instance	answers	rc 163
+String	>>	instance	uncomparable	the oracle segfaults on this send
+String	>>=	instance	uncomparable	the oracle segfaults on this send
+String	\=	instance	answers	rc 163
+String	\==	instance	answers	rc 163
+String	\<	instance	answers	rc 163
+String	\<<	instance	uncomparable	the oracle segfaults on this send
+String	\>	instance	answers	rc 163
+String	\>>	instance	uncomparable	the oracle segfaults on this send
+String	(abuttal)	instance	answers	rc 163
+String	||	instance	answers	rc 163
+String	(blank)	instance	answers	rc 163
+String	\	instance	answers	rc 222
+String	&	instance	answers	rc 163
+String	&&	instance	answers	rc 163
+String	|	instance	answers	rc 163
 String	[]	instance	answers	rc 163
 String	?	instance	loud	method "?" of class "String"
 String	abbrev	instance	loud	method "ABBREV" of class "String"
