@@ -69,7 +69,6 @@ CHARIN::test_charin_noerr_2#1	4c
 CHAROUT::test_stdout_ret2#1	4c
 CHAROUT::test_stdout_start#1	4c
 CHARS::test_stdin_wrong_synatx#1	4c
-D2C::test10#1	Phase 5
 LINES::test_normal_negativeTest1#1	4c
 LINES::test_normal_negativeTest1#2	4c
 LINES::test_normal_negativeTest1#3	4c
@@ -115,24 +114,3 @@ STREAM::test_relative_file_exists#1	4c
 STREAM::test_relative_file_exists2#1	4c
 STREAM::test_relative_file_not_exists#1	4c
 STREAM::test_relative_file_not_exists2#1	4c
-XRANGE::test_xrange_hex_hex#1	Phase 5
-XRANGE::test_xrange_hex_hex#2	Phase 5
-XRANGE::test_xrange_hex_hex#3	Phase 5
-XRANGE::test_xrange_hex_hex#4	Phase 5
-XRANGE::test_xrange_hex_hex#5	Phase 5
-XRANGE::test_xrange_hex_hex#6	Phase 5
-XRANGE::test_xrange_hex_hex#7	Phase 5
-XRANGE::test_xrange_hex_hex#8	Phase 5
-XRANGE::test_xrange_hex_hex#9	Phase 5
-XRANGE::test_xrange_hex_hex#10	Phase 5
-XRANGE::test_xrange_hex_hex#11	Phase 5
-XRANGE::test_xrange_hex_hex#12	Phase 5
-XRANGE::test_xrange_hex_hex#13	Phase 5
-XRANGE::test_xrange_three#3	Phase 5
-XRANGE::test_xrange_three#4	Phase 5
-XRANGE::test_xrange_three#5	Phase 5
-XRANGE::test_xrange_three#6	Phase 5
-XRANGE::test_xrange_three#7	Phase 5
-XRANGE::test_xrange_three#8	Phase 5
-XRANGE::test_xrange_three#9	Phase 5
-XRANGE::test_xrange_three#10	Phase 5

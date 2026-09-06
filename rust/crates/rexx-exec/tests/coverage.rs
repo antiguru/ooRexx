@@ -1423,6 +1423,8 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/string_operators_refusals.rex",
     "lang/string_choice.rex",
     "lang/string_choice_refusals.rex",
+    "lang/string_pad.rex",
+    "lang/string_pad_refusals.rex",
 ];
 
 #[test]

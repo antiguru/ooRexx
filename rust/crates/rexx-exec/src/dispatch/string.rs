@@ -42,11 +42,11 @@
 
 use super::{
     Arity, Cleared, Failure, Interp, NativeMethod, ObjRef, backward_search,
-    backward_search_arguments, case_shift_arguments, changestr_arguments, delete_arguments,
-    delword_arguments, ends_with, forward_search, forward_search_arguments, insert_arguments,
-    match_region_arguments, match_region_over, overlay_arguments, replace_at_bytes,
-    replace_at_plan, space_arguments, starts_with, substr_arguments, translate_arguments,
-    translate_in_table, verify_arguments, wordpos_arguments,
+    backward_search_arguments, case_shift_arguments, changestr_arguments, copies_argument,
+    delete_arguments, delword_arguments, ends_with, forward_search, forward_search_arguments,
+    insert_arguments, match_region_arguments, match_region_over, overlay_arguments, pad_arguments,
+    replace_at_bytes, replace_at_plan, space_arguments, starts_with, substr_arguments,
+    translate_arguments, translate_in_table, verify_arguments, wordpos_arguments,
 };
 use crate::error::Raised;
 use crate::eval::logical_value;
@@ -1368,6 +1368,71 @@ fn native_string_op_choice(
     Ok(Some(if holds { on_true } else { on_false }))
 }
 
+/// `String~"CENTER"` and `String~"CENTRE"`, `RexxString::center`
+/// (`classes/StringClassSub.cpp:59`).
+///
+/// **The two names are one body**, registered twice
+/// (`memory/Setup.cpp:582`-`:583`), the way the oracle registers them.
+fn native_string_center(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let (width, pad) = pad_arguments(interp, args)?;
+    let bytes = interp.to_text(receiver).to_vec();
+    match crate::builtin::string::center_bytes(interp, &bytes, width, pad)? {
+        Some(out) => Ok(Some(interp.text_built(out))),
+        None => Ok(Some(receiver)),
+    }
+}
+
+/// `String~"LEFT"`, `RexxString::left` (`classes/StringClassSub.cpp:248`).
+fn native_string_left(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let (size, pad) = pad_arguments(interp, args)?;
+    let bytes = interp.to_text(receiver).to_vec();
+    let out = crate::builtin::string::left_bytes(interp, &bytes, size, pad)?;
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `String~"RIGHT"`, `RexxString::right` (`classes/StringClassSub.cpp:485`).
+fn native_string_right(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let (size, pad) = pad_arguments(interp, args)?;
+    let bytes = interp.to_text(receiver).to_vec();
+    match crate::builtin::string::right_bytes(interp, &bytes, size, pad)? {
+        Some(out) => Ok(Some(interp.text_built(out))),
+        None => Ok(Some(receiver)),
+    }
+}
+
+/// `String~"COPIES"`, `RexxString::copies` (`classes/StringClassMisc.cpp:288`).
+///
+/// Its count is not a length: 93.906 rather than the 93.923 the three above
+/// raise, which is why it does not share their argument layer.
+fn native_string_copies(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let count = copies_argument(interp, args)?;
+    let bytes = interp.to_text(receiver).to_vec();
+    match crate::builtin::string::copies_bytes(interp, &bytes, count)? {
+        Some(out) => Ok(Some(interp.text_built(out))),
+        None => Ok(Some(receiver)),
+    }
+}
+
 /// `String`'s rows, in the shape [`super::NATIVE_METHODS`] uses.
 pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("String", "", Arity::Fixed(1), native_string_op_abuttal),
@@ -1435,6 +1500,11 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     ("String", "?", Arity::Fixed(2), native_string_op_choice),
     ("String", "APPEND", Arity::Fixed(1), native_string_append),
+    ("String", "CENTER", Arity::Fixed(2), native_string_center),
+    ("String", "CENTRE", Arity::Fixed(2), native_string_center),
+    ("String", "COPIES", Arity::Fixed(1), native_string_copies),
+    ("String", "LEFT", Arity::Fixed(2), native_string_left),
+    ("String", "RIGHT", Arity::Fixed(2), native_string_right),
     (
         "String",
         "CASELESSCHANGESTR",

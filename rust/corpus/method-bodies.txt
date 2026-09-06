@@ -286,14 +286,14 @@ String	caselessPos	instance	answers	rc 163
 String	caselessStartsWith	instance	answers	rc 168
 String	caselessWordPos	instance	answers	rc 163
 String	ceiling	instance	loud	method "CEILING" of class "String"
-String	center	instance	loud	method "CENTER" of class "String"
-String	centre	instance	loud	method "CENTRE" of class "String"
+String	center	instance	answers	rc 163
+String	centre	instance	answers	rc 163
 String	changeStr	instance	answers	rc 163
 String	compare	instance	loud	method "COMPARE" of class "String"
 String	compareTo	instance	loud	method "COMPARETO" of class "String"
 String	contains	instance	answers	rc 163
 String	containsWord	instance	answers	rc 163
-String	copies	instance	loud	method "COPIES" of class "String"
+String	copies	instance	answers	rc 163
 String	countStr	instance	answers	rc 163
 String	d2c	instance	loud	method "D2C" of class "String"
 String	d2x	instance	loud	method "D2X" of class "String"
@@ -309,7 +309,7 @@ String	format	instance	loud	method "FORMAT" of class "String"
 String	hashCode	instance	loud	method "HASHCODE" of class "Object"
 String	insert	instance	answers	rc 163
 String	lastPos	instance	answers	rc 163
-String	left	instance	loud	method "LEFT" of class "String"
+String	left	instance	answers	rc 163
 String	length	instance	answers	rc 0
 String	lower	instance	answers	rc 0
 String	makeArray	instance	answers	rc 0
@@ -323,7 +323,7 @@ String	overlay	instance	answers	rc 163
 String	pos	instance	answers	rc 163
 String	replaceAt	instance	answers	rc 163
 String	reverse	instance	answers	rc 0
-String	right	instance	loud	method "RIGHT" of class "String"
+String	right	instance	answers	rc 163
 String	round	instance	loud	method "ROUND" of class "String"
 String	sign	instance	answers	rc 163
 String	space	instance	answers	rc 0
@@ -514,20 +514,20 @@ Bag	uniqueIndexes	instance	loud	method "UNIQUEINDEXES" of class "Bag"
 Bag	xor	instance	answers	rc 163
 Bag	disjoint	instance	answers	rc 163
 Bag	equivalent	instance	answers	rc 163
-CircularQueue	of	class	loud	method "LEFT" of class "String"
+CircularQueue	of	class	loud	method "MAKEARRAY" of class "Queue"
 CircularQueue	append	instance	answers	rc 163
 CircularQueue	init	instance	answers	rc 163
 CircularQueue	insert	instance	loud	method "INSERT" of class "Queue"
 CircularQueue	intersection	instance	answers	rc 163
-CircularQueue	makeArray	instance	loud	method "LEFT" of class "String"
-CircularQueue	makeString	instance	loud	method "LEFT" of class "String"
+CircularQueue	makeArray	instance	loud	method "MAKEARRAY" of class "Queue"
+CircularQueue	makeString	instance	loud	method "MAKEARRAY" of class "Queue"
 CircularQueue	push	instance	answers	rc 163
 CircularQueue	queue	instance	answers	rc 163
 CircularQueue	resize	instance	answers	rc 163
 CircularQueue	section	instance	answers	rc 163
 CircularQueue	size	instance	answers	rc 0
-CircularQueue	string	instance	loud	method "LEFT" of class "String"
-CircularQueue	supplier	instance	loud	method "LEFT" of class "String"
+CircularQueue	string	instance	loud	method "MAKEARRAY" of class "Queue"
+CircularQueue	supplier	instance	loud	method "SUPPLIER" of class "Queue"
 CircularQueue	union	instance	answers	rc 163
 CircularQueue	xor	instance	answers	rc 163
 CircularQueue	[]	instance	loud	a message send to a value that is not an array
@@ -552,9 +552,9 @@ CircularQueue	last	instance	loud	method "LAST" of class "Queue"
 CircularQueue	lastItem	instance	loud	method "LASTITEM" of class "Queue"
 CircularQueue	next	instance	loud	method "NEXT" of class "Queue"
 CircularQueue	previous	instance	loud	method "PREVIOUS" of class "Queue"
-CircularQueue	sort	instance	loud	method "LEFT" of class "String"
+CircularQueue	sort	instance	loud	method "MAKEARRAY" of class "Queue"
 CircularQueue	sortWith	instance	answers	rc 163
-CircularQueue	stableSort	instance	loud	method "LEFT" of class "String"
+CircularQueue	stableSort	instance	loud	method "MAKEARRAY" of class "Queue"
 CircularQueue	stableSortWith	instance	answers	rc 163
 CircularQueue	new	class	answers	rc 163
 CircularQueue	empty	instance	loud	method "EMPTY" of class "Queue"
@@ -930,8 +930,8 @@ DateTime	fromTicks	class	answers	rc 163
 DateTime	fromUsaDate	class	answers	rc 163
 DateTime	fromUtcIsoDate	class	answers	rc 163
 DateTime	fromWeekNumberDate	class	answers	rc 163
-DateTime	maxDate	class	loud	method "RIGHT" of class "String"
-DateTime	minDate	class	loud	method "RIGHT" of class "String"
+DateTime	maxDate	class	answers	rc 0
+DateTime	minDate	class	answers	rc 0
 DateTime	today	class	answers	rc 0
 DateTime	+	instance	answers	rc 0
 DateTime	-	instance	answers	rc 163
@@ -953,7 +953,7 @@ DateTime	dayName	instance	answers	rc 0
 DateTime	daySeconds	instance	answers	rc 0
 DateTime	daysInMonth	instance	answers	rc 0
 DateTime	daysInYear	instance	answers	rc 0
-DateTime	elapsed	instance	loud	method "RIGHT" of class "String"
+DateTime	elapsed	instance	unstable	this crate
 DateTime	europeanDate	instance	answers	rc 0
 DateTime	fullDate	instance	answers	rc 0
 DateTime	hashCode	instance	loud	method "HASHCODE" of class "Object"
@@ -969,7 +969,7 @@ DateTime	month	instance	answers	rc 0
 DateTime	monthName	instance	answers	rc 0
 DateTime	normalDate	instance	answers	rc 0
 DateTime	normalTime	instance	answers	rc 0
-DateTime	offset	instance	loud	method "RIGHT" of class "String"
+DateTime	offset	instance	answers	rc 0
 DateTime	orderedDate	instance	answers	rc 0
 DateTime	ordinalDate	instance	answers	rc 0
 DateTime	seconds	instance	answers	rc 0
@@ -1266,8 +1266,8 @@ TimeSpan	fromMinutes	class	answers	rc 163
 TimeSpan	fromNormalTime	class	answers	rc 163
 TimeSpan	fromSeconds	class	answers	rc 163
 TimeSpan	fromStringFormat	class	answers	rc 163
-TimeSpan	+	instance	loud	method "RIGHT" of class "String"
-TimeSpan	-	instance	loud	method "RIGHT" of class "String"
+TimeSpan	+	instance	answers	rc 0
+TimeSpan	-	instance	answers	rc 0
 TimeSpan	*	instance	answers	rc 163
 TimeSpan	/	instance	answers	rc 163
 TimeSpan	//	instance	answers	rc 163
@@ -1280,15 +1280,15 @@ TimeSpan	addSeconds	instance	answers	rc 163
 TimeSpan	addWeeks	instance	answers	rc 163
 TimeSpan	compareTo	instance	answers	rc 163
 TimeSpan	days	instance	answers	rc 0
-TimeSpan	duration	instance	loud	method "RIGHT" of class "String"
+TimeSpan	duration	instance	answers	rc 0
 TimeSpan	hashCode	instance	loud	method "HASHCODE" of class "Object"
 TimeSpan	hours	instance	answers	rc 0
-TimeSpan	makeString	instance	loud	method "RIGHT" of class "String"
+TimeSpan	makeString	instance	answers	rc 0
 TimeSpan	microseconds	instance	answers	rc 0
 TimeSpan	minutes	instance	answers	rc 0
 TimeSpan	seconds	instance	answers	rc 0
 TimeSpan	sign	instance	answers	rc 0
-TimeSpan	string	instance	loud	method "RIGHT" of class "String"
+TimeSpan	string	instance	answers	rc 0
 TimeSpan	totalDays	instance	answers	rc 0
 TimeSpan	totalHours	instance	answers	rc 0
 TimeSpan	totalMicroseconds	instance	answers	rc 0

@@ -558,25 +558,46 @@ pub(crate) fn center(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result
     let width = whole_number(interp, name, args, 2)?.expect("check_arity admitted the width");
     let pad = pad_byte(interp, name, args, 3)?.unwrap_or(b' ');
     let width = length_of(width)?;
+    match center_bytes(interp, &string, width, pad)? {
+        Some(out) => Ok(interp.text_built(out)),
+        None => Ok(interp.text_built(string)),
+    }
+}
 
+/// `CENTER`'s answer once its two arguments are checked, shared with
+/// `String~center` so the builtin and the method cannot come to disagree.
+///
+/// `None` is the oracle's `return this` arm (`classes/StringClassSub.cpp:59`):
+/// a width equal to the receiver's own length answers the receiver itself, and
+/// only a method has a receiver object to answer with.
+///
+/// A width shorter than the receiver truncates from both ends rather than
+/// padding, and the odd byte comes off the left -- measured,
+/// `'abcd'~center(1)` is `b` and `'abcde'~center(1)` is `c`.
+pub(crate) fn center_bytes(
+    interp: &Interp,
+    string: &[u8],
+    width: usize,
+    pad: u8,
+) -> Result<Option<Vec<u8>>, Failure> {
     let len = string.len();
     if width == len {
-        return Ok(interp.text_built(string));
+        return Ok(None);
     }
     if width == 0 {
-        return Ok(interp.text(b""));
+        return Ok(Some(Vec::new()));
     }
     let out = if width > len {
         let left = (width - len) / 2;
         let mut out = buffer(interp, width)?;
         push_pad(&mut out, pad, left);
-        out.extend_from_slice(&string);
+        out.extend_from_slice(string);
         push_pad(&mut out, pad, width - len - left);
         out
     } else {
         string[(len - width) / 2..][..width].to_vec()
     };
-    Ok(interp.text_built(out))
+    Ok(Some(out))
 }
 
 /// `LEFT(string, length [,pad])`: the leading `length` bytes, padded on the
@@ -586,15 +607,30 @@ pub(crate) fn left(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<O
     let size = whole_number(interp, name, args, 2)?.expect("check_arity admitted the length");
     let pad = pad_byte(interp, name, args, 3)?.unwrap_or(b' ');
     let size = length_of(size)?;
+    let out = left_bytes(interp, &string, size, pad)?;
+    Ok(interp.text_built(out))
+}
 
+/// `LEFT`'s answer once its two arguments are checked, shared with
+/// `String~left`.
+///
+/// **The one of these four with no `return this` arm**
+/// (`classes/StringClassSub.cpp:248`), so it answers bytes rather than an
+/// `Option`: a width equal to the receiver's length still builds a copy.
+pub(crate) fn left_bytes(
+    interp: &Interp,
+    string: &[u8],
+    size: usize,
+    pad: u8,
+) -> Result<Vec<u8>, Failure> {
     if size == 0 {
-        return Ok(interp.text(b""));
+        return Ok(Vec::new());
     }
     let kept = string.len().min(size);
     let mut out = buffer(interp, size)?;
     out.extend_from_slice(&string[..kept]);
     push_pad(&mut out, pad, size - kept);
-    Ok(interp.text_built(out))
+    Ok(out)
 }
 
 /// `RIGHT(string, length [,pad])`: the trailing `length` bytes, padded on the
@@ -604,15 +640,34 @@ pub(crate) fn right(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<
     let size = whole_number(interp, name, args, 2)?.expect("check_arity admitted the length");
     let pad = pad_byte(interp, name, args, 3)?.unwrap_or(b' ');
     let size = length_of(size)?;
+    match right_bytes(interp, &string, size, pad)? {
+        Some(out) => Ok(interp.text_built(out)),
+        None => Ok(interp.text_built(string)),
+    }
+}
 
+/// `RIGHT`'s answer once its two arguments are checked, shared with
+/// `String~right`.
+///
+/// `None` is the oracle's `return this` arm (`classes/StringClassSub.cpp:485`),
+/// which `LEFT` beside it does not have.
+pub(crate) fn right_bytes(
+    interp: &Interp,
+    string: &[u8],
+    size: usize,
+    pad: u8,
+) -> Result<Option<Vec<u8>>, Failure> {
     if size == 0 {
-        return Ok(interp.text(b""));
+        return Ok(Some(Vec::new()));
+    }
+    if size == string.len() {
+        return Ok(None);
     }
     let kept = string.len().min(size);
     let mut out = buffer(interp, size)?;
     push_pad(&mut out, pad, size - kept);
     out.extend_from_slice(&string[string.len() - kept..]);
-    Ok(interp.text_built(out))
+    Ok(Some(out))
 }
 
 /// `SUBSTR`'s body: `length` bytes of `string` from 0-based `start`, padded
@@ -934,9 +989,27 @@ pub(crate) fn copies(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result
     let string = required_string(interp, args, 1);
     let count = whole_number(interp, name, args, 2)?.expect("check_arity admitted the count");
     let count = count_of(count, 1)?;
+    match copies_bytes(interp, &string, count)? {
+        Some(out) => Ok(interp.text_built(out)),
+        None => Ok(interp.text_built(string)),
+    }
+}
 
+/// `COPIES`'s answer once its count is checked, shared with `String~copies`.
+///
+/// `None` is the oracle's `return this` arm for a count of one
+/// (`classes/StringClassMisc.cpp:288`). A count of zero, or an empty receiver
+/// at any count, is the null string.
+pub(crate) fn copies_bytes(
+    interp: &Interp,
+    string: &[u8],
+    count: usize,
+) -> Result<Option<Vec<u8>>, Failure> {
     if count == 0 || string.is_empty() {
-        return Ok(interp.text(b""));
+        return Ok(Some(Vec::new()));
+    }
+    if count == 1 {
+        return Ok(None);
     }
     let total = string
         .len()
@@ -944,9 +1017,9 @@ pub(crate) fn copies(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result
         .ok_or_else(|| Failure::from(Raised::system_resources()))?;
     let mut out = buffer(interp, total)?;
     for _ in 0..count {
-        out.extend_from_slice(&string);
+        out.extend_from_slice(string);
     }
-    Ok(interp.text_built(out))
+    Ok(Some(out))
 }
 
 /// `ABBREV(information, info [,length])`: whether `info` is a prefix of

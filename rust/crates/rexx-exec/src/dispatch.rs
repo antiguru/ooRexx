@@ -8393,6 +8393,41 @@ pub(super) fn substr_arguments(
     Ok((start, length, pad))
 }
 
+/// A width and a pad: `CENTER`/`CENTRE`/`LEFT`/`RIGHT`'s two arguments as
+/// methods.
+///
+/// The width is `lengthArgument` and required, so an omitted one is 93.903 and
+/// anything that is not a non-negative whole number in range is 93.923; the pad
+/// is `optionalPadArgument`, 93.922 for anything but exactly one byte and
+/// 88.909 -- an 88, not a 93 -- for a value with no string value at all. That
+/// is the pair `RexxString::center` opens with
+/// (`classes/StringClassSub.cpp:59`) and `left` and `right` repeat.
+pub(super) fn pad_arguments(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+) -> Result<(usize, u8), Failure> {
+    let width = required_length_argument(interp, args, 0)?;
+    let pad = pad_method_argument(interp, args, 1)?.unwrap_or(b' ');
+    Ok((width, pad))
+}
+
+/// `COPIES`'s count: `nonNegativeArgument` (`classes/StringClassMisc.cpp:288`),
+/// required.
+///
+/// **A different sub-code from the width above for the same shape of
+/// mistake.** Measured, oracle: `'abc'~center(-1)` is 93.923 `Invalid length
+/// argument specified` and `'abc'~copies(-1)` is 93.906 `Method argument 1
+/// must be zero or a positive whole number`.
+pub(super) fn copies_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+) -> Result<usize, Failure> {
+    match optional_non_negative_argument(interp, args, 0)? {
+        Some(count) => Ok(count),
+        None => Err(Raised::missing_method_argument(1).into()),
+    }
+}
+
 /// `verify`'s arguments: the reference set, the `M`/`N` option defaulting to
 /// `N`, a 0-based start, and an optional range.
 ///

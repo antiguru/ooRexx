@@ -1,0 +1,63 @@
+count 62
+/* The pad family's refusals.
+ *
+ * Three distinct sub-codes sit behind what looks like one argument: a length
+ * that does not convert or is negative is 93.923, a pad that is not exactly
+ * one byte is 93.922, and a pad with no string value at all is 88.909 --
+ * which is 88, not 93. COPIES does not take a length at all: its count is
+ * 93.906, a different sub-code for the same shape of mistake.
+ *
+ * The trap prints the number only, so the `found` substitutions here are
+ * compared as codes. The untrapped tail is the one that separates the method
+ * from the builtin: measured, `'ab'~copies('-1.0')` reports `found "-1.0"`
+ * and `copies('ab','-1.0')` reports `found "-1"` -- the same sub-code and the
+ * same message, and the builtin substitutes the converted value where the
+ * method substitutes the text it was given. rc 163.
+ */
+
+signal on syntax name trapped
+s = 'abc'
+n = 0
+
+next:
+n = n + 1
+select
+  /* A length that does not convert, or converts to a negative. */
+  when n = 1 then say n 'answered' s~center('x')
+  when n = 2 then say n 'answered' s~center(-1)
+  when n = 3 then say n 'answered' s~center('7.5')
+  when n = 4 then say n 'answered' s~centre('x')
+  when n = 5 then say n 'answered' s~left(-1)
+  when n = 6 then say n 'answered' s~right('x')
+  /* A pad that is not exactly one byte. */
+  when n = 7 then say n 'answered' s~center(7, '..')
+  when n = 8 then say n 'answered' s~center(7, '')
+  when n = 9 then say n 'answered' s~left(7, 'ab')
+  when n = 10 then say n 'answered' s~right(7, '')
+  /* A pad with no string value is 88.909, not 93.922. */
+  when n = 11 then say n 'answered' s~center(7, .nil)
+  when n = 12 then say n 'answered' s~left(7, .nil)
+  /* The length is required. */
+  when n = 13 then say n 'answered' s~center()
+  when n = 14 then say n 'answered' s~left()
+  when n = 15 then say n 'answered' s~right()
+  when n = 16 then say n 'answered' s~copies()
+  /* COPIES counts rather than measures: 93.906, not 93.923. */
+  when n = 17 then say n 'answered' s~copies(-1)
+  when n = 18 then say n 'answered' s~copies('x')
+  /* Each row's arity is a maximum. */
+  when n = 19 then say n 'answered' s~center(7, '.', 1)
+  when n = 20 then say n 'answered' s~left(7, '.', 1)
+  when n = 21 then say n 'answered' s~copies(2, 3)
+  otherwise signal done
+end
+signal next
+
+trapped:
+say n 'raised' rc'.'condition('E')
+signal on syntax name trapped
+signal next
+
+done:
+signal off syntax
+say s~copies('-1.0')
