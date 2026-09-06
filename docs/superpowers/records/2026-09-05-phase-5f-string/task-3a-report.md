@@ -1,7 +1,7 @@
 # Phase 5f Task 3a — the pad family: CENTER, CENTRE, LEFT, RIGHT, COPIES
 
 Plan: `docs/superpowers/plans/2026-09-05-phase-5f-string.md`, Task 3.
-BASE `370fdbf3c`. Landed at `PENDING`.
+BASE `370fdbf3c`. Landed at `a9fb5e675`, report corrected at `23d7f85eb`.
 
 Five of Task 3's twenty-five. String now reads 96 `answers`, 6 `uncomparable`,
 33 `loud`: **79 of the phase's 112 bound**, 33 left.
@@ -115,13 +115,13 @@ part here.
 
 | | |
 |---|---|
-| G1 `cargo fmt --all --check` | PENDING |
-| G2 `cargo clippy --workspace --all-targets -- -D warnings` | PENDING |
-| G3 `cargo test --release --workspace --no-fail-fast` | PENDING |
-| G4 same with `REXX_CORPUS_GATE=1` | PENDING |
-| G5 `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace` | PENDING |
-| G6 `REXX_PHASE_GATE=5c` | PENDING |
-| G7 `REXX_PHASE_GATE=5d` | PENDING |
+| G1 `cargo fmt --all --check` | rc 0 |
+| G2 `cargo clippy --workspace --all-targets -- -D warnings` | rc 0, zero warnings |
+| G3 `cargo test --release --workspace --no-fail-fast` | rc 0 |
+| G4 same with `REXX_CORPUS_GATE=1` | rc 0 |
+| G5 `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace` | rc 0 |
+| G6 `REXX_PHASE_GATE=5c` | rc 0 |
+| G7 `REXX_PHASE_GATE=5d` | rc 0 |
 
 Pre-commit chain: method-bodies refresh rc 0 (21 rows changed -- see section
 5), fmt rc 0, clippy rc 0, strict corpus 383 of 383, full workspace test rc 0.
