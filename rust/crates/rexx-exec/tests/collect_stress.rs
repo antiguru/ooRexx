@@ -361,6 +361,10 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/select_when.rex",
     "lang/select_when_absorption.rex",
     "lang/select_when_bodies.rex",
+    // `EQUALS` and the abbreviation tests answer the interned text `1` or `0`
+    // and the three-way comparisons `-1`, `0` or `1`, all of which fit in a
+    // handle. Same reason as `string_compare.rex` below.
+    "lang/string_caseless.rex",
     // `ABBREV` answers the interned text `1` or `0` and `COMPARE` a counted
     // integer, so a whole program of them touches the heap for nothing. Its
     // refusals sibling is not here: a traceback is a wide string.

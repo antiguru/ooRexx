@@ -8492,6 +8492,39 @@ pub(super) fn strip_arguments(
     Ok((option, set))
 }
 
+/// `EQUALS`'s and `CASELESSEQUALS`'s one operand, as its **string value**.
+///
+/// **Not [`string_method_argument`]**, which is 88.909 for a value with no
+/// string value. `equals` has no such refusal -- measured, `'abc'~equals(.nil)`
+/// and `'abc'~equals(.array)` are both `0`, because every object renders and
+/// the rendering simply is not `abc`. An omitted operand is still 93.903.
+pub(super) fn equals_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+) -> Result<Vec<u8>, Failure> {
+    let Some(value) = args.first().copied().flatten() else {
+        return Err(Raised::missing_method_argument(1).into());
+    };
+    Ok(interp.string_value_text(value))
+}
+
+/// `COMPARETO`'s and `CASELESSCOMPARETO`'s three arguments.
+///
+/// The other string is required and strict -- 88.909, unlike `equals` above --
+/// the start is a `positionArgument` defaulting to 1 (93.924) and the length is
+/// an `optionalLengthArgument` (93.923) whose default is
+/// `max(len, other) - start + 1` and so is left to the caller, which is the one
+/// piece of it that needs both strings.
+pub(super) fn compare_to_arguments(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+) -> Result<(Vec<u8>, usize, Option<usize>), Failure> {
+    let other = string_method_argument(interp, args, 0)?;
+    let start = optional_position_argument(interp, args, 1)?.unwrap_or(1);
+    let length = optional_length_argument(interp, args, 2)?;
+    Ok((other, start, length))
+}
+
 /// `ABBREV`'s candidate and its minimum length.
 ///
 /// The candidate is required (93.903 omitted, 88.909 without a string value)

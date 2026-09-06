@@ -1,0 +1,25 @@
+count 24
+/* EQUALS, CASELESSEQUALS, COMPARETO, CASELESSCOMPARETO, CASELESSABBREV and
+ * CASELESSCOMPARE (memory/Setup.cpp:686-:689, :613, :617).
+ *
+ * EQUALS and CASELESSEQUALS answer the text 1 or 0. COMPARETO answers -1, 0 or
+ * 1 over a region: `RexxString::primitiveCompareTo`
+ * (classes/StringClassMisc.cpp:1097) takes a 1-based start and a length that
+ * defaults to max(mine, theirs) - start + 1, and where the compared regions
+ * are equal but of different lengths the longer one is the greater.
+ *
+ * A start past both strings is 0 and a start past only one of them decides on
+ * its own, which the last line separates.
+ */
+
+say 'abc'~equals('abc') 'abc'~equals('ABC') 'abc'~equals('ab') 'abc'~equals('abcd')
+say 'abc'~caselessEquals('ABC') 'abc'~caselessEquals('ab') 'ABC'~caselessEquals('abc')
+say 'abc'~equals(.nil) 'abc'~equals(.array) 'abc'~equals(1) ''~equals('')
+say 'abc'~compareTo('abd') 'abd'~compareTo('abc') 'abc'~compareTo('abc')
+say 'abc'~compareTo('ABC') 'abc'~caselessCompareTo('ABC') 'ABC'~caselessCompareTo('abc')
+say 'abc'~compareTo('ab') 'ab'~compareTo('abc') 'abcdef'~compareTo('abZef', 3)
+say 'abcdef'~compareTo('abZef', 3, 1) 'abcdef'~compareTo('abZef', 4, 1)
+say 'ab'~compareTo('abcd', 9) 'abcd'~compareTo('ab', 3) 'ab'~compareTo('abcd', 3)
+say 'Print'~caselessAbbrev('PRI') 'Print'~caselessAbbrev('pri') 'Print'~caselessAbbrev('PRI', 4)
+say 'abc'~caselessCompare('ABC') 'abc'~caselessCompare('ABD') 'abc'~caselessCompare('ABC  ')
+say 'abc'~caselessCompare('ABCXX', 'x') 'abc'~caselessCompare('ABCXX', 'X')

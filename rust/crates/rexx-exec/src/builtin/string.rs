@@ -1060,6 +1060,25 @@ pub(crate) fn abbrev(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result
 /// including the empty string -- measured, `abbrev('','')` is 1 where
 /// `abbrev('','x')` is 0.
 pub(crate) fn abbrev_holds(information: &[u8], info: &[u8], minimum: Option<usize>) -> bool {
+    abbrev_holds_over(information, info, minimum, false)
+}
+
+/// [`abbrev_holds`] ignoring case, shared with `String~caselessAbbrev`.
+pub(crate) fn caseless_abbrev_holds(
+    information: &[u8],
+    info: &[u8],
+    minimum: Option<usize>,
+) -> bool {
+    abbrev_holds_over(information, info, minimum, true)
+}
+
+/// The body both abbreviation tests share; `caseless` is the only difference.
+fn abbrev_holds_over(
+    information: &[u8],
+    info: &[u8],
+    minimum: Option<usize>,
+    caseless: bool,
+) -> bool {
     let minimum = minimum.unwrap_or(info.len());
     if minimum == 0 && info.is_empty() {
         return true;
@@ -1067,7 +1086,12 @@ pub(crate) fn abbrev_holds(information: &[u8], info: &[u8], minimum: Option<usiz
     if information.is_empty() || info.len() < minimum || information.len() < info.len() {
         return false;
     }
-    information[..info.len()] == info[..]
+    let prefix = &information[..info.len()];
+    if caseless {
+        caseless_eq(prefix, info)
+    } else {
+        prefix == info
+    }
 }
 
 /// `COMPARE(string1, string2 [,pad])`: the 1-based offset of the first byte
@@ -1083,9 +1107,30 @@ pub(crate) fn compare(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Resul
 /// `COMPARE`'s answer once its two strings and its pad are read, shared with
 /// `String~compare`: the 1-based offset of the first byte that differs, or 0.
 pub(crate) fn compare_at(first: &[u8], second: &[u8], pad: u8) -> usize {
+    compare_at_over(first, second, pad, false)
+}
+
+/// [`compare_at`] ignoring case, shared with `String~caselessCompare`.
+///
+/// **The pad is compared caselessly too**, which is what keeps this from being
+/// `compare_at` over two upcased copies: measured,
+/// `'abc'~caselessCompare('ABCXX','x')` is 0.
+pub(crate) fn caseless_compare_at(first: &[u8], second: &[u8], pad: u8) -> usize {
+    compare_at_over(first, second, pad, true)
+}
+
+/// The body both comparisons share.
+fn compare_at_over(first: &[u8], second: &[u8], pad: u8, caseless: bool) -> usize {
+    let same = |a: u8, b: u8| {
+        if caseless {
+            a.eq_ignore_ascii_case(&b)
+        } else {
+            a == b
+        }
+    };
     let shared = first.len().min(second.len());
     (0..shared)
-        .find(|&index| first[index] != second[index])
+        .find(|&index| !same(first[index], second[index]))
         .map(|index| index + 1)
         .or_else(|| {
             // Whichever string is longer supplies the tail; the other is
@@ -1098,10 +1143,51 @@ pub(crate) fn compare_at(first: &[u8], second: &[u8], pad: u8) -> usize {
                 &second[shared..]
             };
             tail.iter()
-                .position(|&byte| byte != pad)
+                .position(|&byte| !same(byte, pad))
                 .map(|offset| shared + offset + 1)
         })
         .unwrap_or(0)
+}
+
+/// `compareTo`'s three-way comparison of a region of two strings, shared with
+/// `String~compareTo` and `String~caselessCompareTo`.
+///
+/// `RexxString::primitiveCompareTo` (`classes/StringClassMisc.cpp:1097`):
+/// `start` is 1-based, and a start past both strings is 0 while a start past
+/// only one of them decides the answer on its own.
+pub(crate) fn compare_to_over(
+    first: &[u8],
+    second: &[u8],
+    start: usize,
+    len: usize,
+    caseless: bool,
+) -> i8 {
+    if start > first.len() {
+        return if start > second.len() { 0 } else { -1 };
+    }
+    if start > second.len() {
+        return 1;
+    }
+    let begin = start - 1;
+    let mine = len.min(first.len() - begin);
+    let theirs = len.min(second.len() - begin);
+    let shared = mine.min(theirs);
+    let ordering = if caseless {
+        let left: Vec<u8> = first[begin..][..shared].to_ascii_uppercase();
+        let right: Vec<u8> = second[begin..][..shared].to_ascii_uppercase();
+        left.cmp(&right)
+    } else {
+        first[begin..][..shared].cmp(&second[begin..][..shared])
+    };
+    match ordering {
+        core::cmp::Ordering::Equal => match mine.cmp(&theirs) {
+            core::cmp::Ordering::Equal => 0,
+            core::cmp::Ordering::Greater => 1,
+            core::cmp::Ordering::Less => -1,
+        },
+        core::cmp::Ordering::Greater => 1,
+        core::cmp::Ordering::Less => -1,
+    }
 }
 
 /// `COUNTSTR(needle, haystack)`: how many non-overlapping `needle`s

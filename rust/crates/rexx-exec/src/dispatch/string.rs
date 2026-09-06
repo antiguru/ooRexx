@@ -43,12 +43,12 @@
 use super::{
     Arity, Cleared, Failure, Interp, NativeMethod, ObjRef, abbrev_arguments, backward_search,
     backward_search_arguments, bit_arguments, case_shift_arguments, changestr_arguments,
-    compare_arguments, conversion_length_argument, copies_argument, count_method_argument,
-    datatype_option_argument, delete_arguments, delword_arguments, ends_with, forward_search,
-    forward_search_arguments, insert_arguments, match_region_arguments, match_region_over,
-    overlay_arguments, pad_arguments, replace_at_bytes, replace_at_plan, space_arguments,
-    starts_with, strip_arguments, substr_arguments, translate_arguments, translate_in_table,
-    verify_arguments, wordpos_arguments,
+    compare_arguments, compare_to_arguments, conversion_length_argument, copies_argument,
+    count_method_argument, datatype_option_argument, delete_arguments, delword_arguments,
+    ends_with, equals_argument, forward_search, forward_search_arguments, insert_arguments,
+    match_region_arguments, match_region_over, overlay_arguments, pad_arguments, replace_at_bytes,
+    replace_at_plan, space_arguments, starts_with, strip_arguments, substr_arguments,
+    translate_arguments, translate_in_table, verify_arguments, wordpos_arguments,
 };
 use crate::builtin::convert;
 use crate::builtin::numeric;
@@ -1789,6 +1789,126 @@ fn string_max_min(
     Ok(Some(answer))
 }
 
+/// `String~"EQUALS"`, `RexxString::equals`.
+fn native_string_equals(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_equals(interp, receiver, args, false)
+}
+
+/// `String~"CASELESSEQUALS"`, `RexxString::caselessEquals`.
+fn native_string_caseless_equals(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_equals(interp, receiver, args, true)
+}
+
+/// The two equality tests, which differ only in case folding.
+fn string_equals(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    caseless: bool,
+) -> Result<Option<ObjRef>, Failure> {
+    let other = equals_argument(interp, args)?;
+    let bytes = interp.to_text(receiver).to_vec();
+    let holds = if caseless {
+        crate::builtin::string::caseless_eq(&bytes, &other)
+    } else {
+        bytes == other
+    };
+    Ok(Some(interp.text(if holds { b"1" } else { b"0" })))
+}
+
+/// `String~"CASELESSABBREV"`, `RexxString::caselessAbbrev`.
+fn native_string_caseless_abbrev(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let (info, minimum) = abbrev_arguments(interp, args)?;
+    let bytes = interp.to_text(receiver).to_vec();
+    let holds = crate::builtin::string::caseless_abbrev_holds(&bytes, &info, minimum);
+    let answer = interp.text(if holds { b"1" } else { b"0" });
+    interp.give_result_buffer(info);
+    Ok(Some(answer))
+}
+
+/// `String~"CASELESSCOMPARE"`, `RexxString::caselessCompare`.
+fn native_string_caseless_compare(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let (other, pad) = compare_arguments(interp, args)?;
+    let bytes = interp.to_text(receiver).to_vec();
+    let at = crate::builtin::string::caseless_compare_at(&bytes, &other, pad);
+    let answer = interp.counted(at);
+    interp.give_result_buffer(other);
+    Ok(Some(answer))
+}
+
+/// `String~"COMPARETO"`, `RexxString::compareToRexx`
+/// (`classes/StringClassMisc.cpp:1075`).
+fn native_string_compare_to(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_compare_to(interp, receiver, args, false)
+}
+
+/// `String~"CASELESSCOMPARETO"`, `RexxString::caselessCompareToRexx`
+/// (`classes/StringClassMisc.cpp:1204`).
+fn native_string_caseless_compare_to(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_compare_to(interp, receiver, args, true)
+}
+
+/// The two three-way comparisons, which differ only in case folding.
+///
+/// **The length's default needs both strings**, which is why
+/// `compare_to_arguments` leaves it `None`: it is
+/// `max(mine, theirs) - start + 1`, and the receiver is not one of the
+/// arguments.
+fn string_compare_to(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    caseless: bool,
+) -> Result<Option<ObjRef>, Failure> {
+    let (other, start, length) = compare_to_arguments(interp, args)?;
+    let bytes = interp.to_text(receiver).to_vec();
+    let length = length.unwrap_or_else(|| {
+        bytes
+            .len()
+            .max(other.len())
+            .saturating_sub(start)
+            .saturating_add(1)
+    });
+    let ordering = crate::builtin::string::compare_to_over(&bytes, &other, start, length, caseless);
+    let answer = interp.text(match ordering {
+        -1 => b"-1".as_slice(),
+        0 => b"0",
+        _ => b"1",
+    });
+    interp.give_result_buffer(other);
+    Ok(Some(answer))
+}
+
 /// `String`'s rows, in the shape [`super::NATIVE_METHODS`] uses.
 pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("String", "", Arity::Fixed(1), native_string_op_abuttal),
@@ -1858,6 +1978,30 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("String", "ABBREV", Arity::Fixed(2), native_string_abbrev),
     ("String", "ABS", Arity::Fixed(0), native_string_abs),
     ("String", "B2X", Arity::Fixed(0), native_string_b2x),
+    (
+        "String",
+        "CASELESSABBREV",
+        Arity::Fixed(2),
+        native_string_caseless_abbrev,
+    ),
+    (
+        "String",
+        "CASELESSCOMPARE",
+        Arity::Fixed(2),
+        native_string_caseless_compare,
+    ),
+    (
+        "String",
+        "CASELESSCOMPARETO",
+        Arity::Fixed(3),
+        native_string_caseless_compare_to,
+    ),
+    (
+        "String",
+        "CASELESSEQUALS",
+        Arity::Fixed(1),
+        native_string_caseless_equals,
+    ),
     ("String", "BITAND", Arity::Fixed(2), native_string_bitand),
     ("String", "BITOR", Arity::Fixed(2), native_string_bitor),
     ("String", "BITXOR", Arity::Fixed(2), native_string_bitxor),
@@ -1865,10 +2009,17 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("String", "C2D", Arity::Fixed(1), native_string_c2d),
     ("String", "C2X", Arity::Fixed(0), native_string_c2x),
     ("String", "COMPARE", Arity::Fixed(2), native_string_compare),
+    (
+        "String",
+        "COMPARETO",
+        Arity::Fixed(3),
+        native_string_compare_to,
+    ),
     ("String", "CENTER", Arity::Fixed(2), native_string_center),
     ("String", "CENTRE", Arity::Fixed(2), native_string_center),
     ("String", "COPIES", Arity::Fixed(1), native_string_copies),
     ("String", "D2C", Arity::Fixed(1), native_string_d2c),
+    ("String", "EQUALS", Arity::Fixed(1), native_string_equals),
     (
         "String",
         "DATATYPE",

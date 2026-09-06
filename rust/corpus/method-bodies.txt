@@ -270,15 +270,15 @@ String	bitOr	instance	answers	rc 0
 String	bitXor	instance	answers	rc 0
 String	c2d	instance	answers	rc 0
 String	c2x	instance	answers	rc 0
-String	caselessAbbrev	instance	loud	method "CASELESSABBREV" of class "String"
+String	caselessAbbrev	instance	answers	rc 163
 String	caselessChangeStr	instance	answers	rc 163
-String	caselessCompare	instance	loud	method "CASELESSCOMPARE" of class "String"
-String	caselessCompareTo	instance	loud	method "CASELESSCOMPARETO" of class "String"
+String	caselessCompare	instance	answers	rc 163
+String	caselessCompareTo	instance	answers	rc 163
 String	caselessContains	instance	answers	rc 163
 String	caselessContainsWord	instance	answers	rc 163
 String	caselessCountStr	instance	answers	rc 163
 String	caselessEndsWith	instance	answers	rc 168
-String	caselessEquals	instance	loud	method "CASELESSEQUALS" of class "String"
+String	caselessEquals	instance	answers	rc 163
 String	caselessLastPos	instance	answers	rc 163
 String	caselessMatch	instance	answers	rc 163
 String	caselessMatchChar	instance	answers	rc 163
@@ -290,7 +290,7 @@ String	center	instance	answers	rc 163
 String	centre	instance	answers	rc 163
 String	changeStr	instance	answers	rc 163
 String	compare	instance	answers	rc 163
-String	compareTo	instance	loud	method "COMPARETO" of class "String"
+String	compareTo	instance	answers	rc 163
 String	contains	instance	answers	rc 163
 String	containsWord	instance	answers	rc 163
 String	copies	instance	answers	rc 163
@@ -303,7 +303,7 @@ String	delStr	instance	answers	rc 0
 String	delWord	instance	answers	rc 163
 String	encodeBase64	instance	loud	method "ENCODEBASE64" of class "String"
 String	endsWith	instance	answers	rc 168
-String	equals	instance	loud	method "EQUALS" of class "String"
+String	equals	instance	answers	rc 163
 String	floor	instance	loud	method "FLOOR" of class "String"
 String	format	instance	answers	rc 163
 String	hashCode	instance	loud	method "HASHCODE" of class "Object"
