@@ -316,8 +316,8 @@ String	makeArray	instance	answers	rc 0
 String	makeString	instance	answers	rc 0
 String	match	instance	answers	rc 163
 String	matchChar	instance	answers	rc 163
-String	max	instance	loud	method "MAX" of class "String"
-String	min	instance	loud	method "MIN" of class "String"
+String	max	instance	answers	rc 163
+String	min	instance	answers	rc 163
 String	modulo	instance	loud	method "MODULO" of class "String"
 String	overlay	instance	answers	rc 163
 String	pos	instance	answers	rc 163

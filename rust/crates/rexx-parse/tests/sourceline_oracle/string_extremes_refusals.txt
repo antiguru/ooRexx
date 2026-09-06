@@ -1,0 +1,57 @@
+count 56
+/* MAX's and MIN's refusals, and they come from two different families.
+ *
+ * The receiver is read as a number first: 93.943, naming the method, at rc
+ * 163. Then each argument in turn, and there the two errors are NOT both
+ * 93.9xx -- an OMITTED argument is the builtin's own 40.5 at rc 216, because
+ * A_COUNT hands the whole list to the body and the body's check is the
+ * builtin's. A non-numeric argument is 93.904 at rc 163.
+ *
+ * A refusal renders the argument as an OBJECT, not as the conversion that
+ * failed, so `.array` reports "The Array class". That is the untrapped tail.
+ *
+ * NO STRING LITERAL HERE SHARES A SPELLING WITH AN INTEGER LITERAL, and that
+ * is load-bearing rather than tidy. Measured on the oracle: a program
+ * containing `zz=5` anywhere answers `'5'~max(,7)` with 93.903, and the same
+ * program without it answers 40.5 -- an integer literal makes a string
+ * literal of the same spelling take the integer path, so `when n = 5` beside
+ * a `'5'` receiver would have made this file's own answers depend on its
+ * clause numbering. The receiver is spelled 55 and the operands 77 and 88 for
+ * that reason.
+ *
+ * rc 163.
+ */
+
+signal on syntax name trapped
+n = 0
+
+next:
+n = n + 1
+select
+  /* The receiver, before any argument. */
+  when n = 1 then say n 'answered' 'abc'~max(77)
+  when n = 2 then say n 'answered' 'abc'~min(77)
+  when n = 3 then say n 'answered' 'abc'~max
+  when n = 4 then say n 'answered' 'abc'~max('def')
+  /* An omitted argument is 40.5, at a different exit code. */
+  when n = 5 then say n 'answered' '55'~max(, 77)
+  when n = 6 then say n 'answered' '55'~max(77, , 88)
+  when n = 7 then say n 'answered' '55'~min(, 77)
+  /* A non-numeric argument is 93.904, and the position counts from 1. */
+  when n = 8 then say n 'answered' '55'~max('abc')
+  when n = 9 then say n 'answered' '55'~max(77, 'abc')
+  when n = 10 then say n 'answered' '55'~max(77, 88, 'abc')
+  when n = 11 then say n 'answered' '55'~min('abc')
+  when n = 12 then say n 'answered' '55'~max(.nil)
+  otherwise signal done
+end
+signal next
+
+trapped:
+say n 'raised' rc'.'condition('E')
+signal on syntax name trapped
+signal next
+
+done:
+signal off syntax
+say '55'~max(.array)

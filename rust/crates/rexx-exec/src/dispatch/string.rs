@@ -51,6 +51,7 @@ use super::{
     verify_arguments, wordpos_arguments,
 };
 use crate::builtin::convert;
+use crate::builtin::numeric;
 use crate::error::Raised;
 use crate::eval::logical_value;
 use rexx_parse::Operator;
@@ -1746,6 +1747,48 @@ fn native_string_format(
     Ok(Some(answer))
 }
 
+/// `String~"MAX"`, `RexxString::Max`.
+fn native_string_max(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_max_min(interp, receiver, args, b"MAX", numeric::Extreme::Max)
+}
+
+/// `String~"MIN"`, `RexxString::Min`.
+fn native_string_min(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    string_max_min(interp, receiver, args, b"MIN", numeric::Extreme::Min)
+}
+
+/// `MAX` and `MIN` as messages, which differ only in which end they want.
+///
+/// **`A_COUNT`, so the whole list reaches the body and nothing is refused
+/// ahead of it**; the omitted-argument check is the body's own, and it is the
+/// builtin's 40.5 at rc 216 rather than a 93.9xx. Measured, `'5'~max(,7)`
+/// reports `Missing argument in invocation of MAX; argument 1 is required.`
+///
+/// The receiver is read as a number first, so `'abc'~max(3)` is the target's
+/// 93.943 and not the argument's anything.
+fn string_max_min(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    method: &'static [u8],
+    want: numeric::Extreme,
+) -> Result<Option<ObjRef>, Failure> {
+    let value = numeric_receiver(interp, receiver, method)?;
+    let text = interp.to_text(receiver).to_vec();
+    let answer = numeric::max_min_over(interp, method, &value, text, args, args, want)?;
+    Ok(Some(answer))
+}
+
 /// `String`'s rows, in the shape [`super::NATIVE_METHODS`] uses.
 pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("String", "", Arity::Fixed(1), native_string_op_abuttal),
@@ -1835,6 +1878,8 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("String", "D2X", Arity::Fixed(1), native_string_d2x),
     ("String", "FORMAT", Arity::Fixed(4), native_string_format),
     ("String", "LEFT", Arity::Fixed(2), native_string_left),
+    ("String", "MAX", Arity::Counted, native_string_max),
+    ("String", "MIN", Arity::Counted, native_string_min),
     ("String", "RIGHT", Arity::Fixed(2), native_string_right),
     ("String", "STRIP", Arity::Fixed(2), native_string_strip),
     ("String", "TRUNC", Arity::Fixed(1), native_string_trunc),

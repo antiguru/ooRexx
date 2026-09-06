@@ -354,7 +354,7 @@ pub(crate) fn format_over(
 
 /// Which end of the range [`max_min`] is looking for.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Extreme {
+pub(crate) enum Extreme {
     Max,
     Min,
 }
@@ -487,7 +487,10 @@ fn max_min(
     args: Args<'_>,
     want: Extreme,
 ) -> Result<ObjRef, Failure> {
-    let Numeric { digits, fuzz, form } = current(interp);
+    // Only `digits` is read out here: the fast path below is the whole of
+    // what this wrapper decides, and `fuzz` and `form` belong to the general
+    // path, which now reads them for itself.
+    let Numeric { digits, .. } = current(interp);
     let target = arg(args, 1).expect("check_arity admitted the required first argument");
     let rest = args.values_from(2);
 
@@ -495,8 +498,37 @@ fn max_min(
         return Ok(answer);
     }
 
-    let mut best = target_number(interp, name, args)?.into_round(digits);
-    let mut best_text = required_string(interp, args, 1);
+    let best = target_number(interp, name, args)?;
+    let best_text = required_string(interp, args, 1);
+    let objects: Vec<Option<ObjRef>> = (0..rest.len()).map(|i| args.object(i + 2)).collect();
+    max_min_over(interp, name, &best, best_text, rest, &objects, want)
+}
+
+/// `MAX`'s and `MIN`'s general path, shared with `String~max` and `String~min`.
+///
+/// **The integer fast path is not here and the method rows do not want it.**
+/// `RexxInteger::Max` is a different class's method; `RexxString::Max` reaches
+/// `NumberString::maxMin` unconditionally, so a `String` receiver always takes
+/// this. What the two paths disagree about is an omitted argument -- measured,
+/// `max(1,,3)` is 93.903 at rc 163 and `max(1.0,,3)` is 40.5 at rc 216 -- and
+/// `integer_object`'s own doc records the one shape this crate cannot tell
+/// apart there.
+///
+/// `objects` runs parallel to `rest` and carries each argument as the caller
+/// first had it: a refusal renders the *object*, not the conversion, so
+/// `'5'~max(.array)` reports `found "The Array class"`.
+pub(crate) fn max_min_over(
+    interp: &mut Interp,
+    name: &'static [u8],
+    target: &Number,
+    target_text: Vec<u8>,
+    rest: &[Option<ObjRef>],
+    objects: &[Option<ObjRef>],
+    want: Extreme,
+) -> Result<ObjRef, Failure> {
+    let Numeric { digits, fuzz, form } = current(interp);
+    let mut best = target.clone().into_round(digits);
+    let mut best_text = target_text;
     for (index, slot) in rest.iter().enumerate() {
         let Some(candidate) = slot else {
             return Err(Raised::missing_argument(name, index + 1).into());
@@ -506,7 +538,7 @@ fn max_min(
             // The object rather than the conversion, which is every
             // argument message's rule -- `whole_number`'s own doc has the
             // measurement behind it.
-            let named = match args.object(index + 2) {
+            let named = match objects.get(index).copied().flatten() {
                 Some(object) => interp.string_value_text(object),
                 None => found,
             };

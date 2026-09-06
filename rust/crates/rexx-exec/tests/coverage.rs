@@ -1437,6 +1437,8 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/string_datatype_refusals.rex",
     "lang/string_numeric.rex",
     "lang/string_numeric_refusals.rex",
+    "lang/string_extremes.rex",
+    "lang/string_extremes_refusals.rex",
 ];
 
 #[test]
