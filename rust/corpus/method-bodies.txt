@@ -299,15 +299,15 @@ String	d2c	instance	loud	method "D2C" of class "String"
 String	d2x	instance	loud	method "D2X" of class "String"
 String	dataType	instance	loud	method "DATATYPE" of class "String"
 String	decodeBase64	instance	loud	method "DECODEBASE64" of class "String"
-String	delStr	instance	loud	method "DELSTR" of class "String"
-String	delWord	instance	loud	method "DELWORD" of class "String"
+String	delStr	instance	answers	rc 0
+String	delWord	instance	answers	rc 163
 String	encodeBase64	instance	loud	method "ENCODEBASE64" of class "String"
 String	endsWith	instance	answers	rc 168
 String	equals	instance	loud	method "EQUALS" of class "String"
 String	floor	instance	loud	method "FLOOR" of class "String"
 String	format	instance	loud	method "FORMAT" of class "String"
 String	hashCode	instance	loud	method "HASHCODE" of class "Object"
-String	insert	instance	loud	method "INSERT" of class "String"
+String	insert	instance	answers	rc 163
 String	lastPos	instance	answers	rc 163
 String	left	instance	loud	method "LEFT" of class "String"
 String	length	instance	answers	rc 0
@@ -319,9 +319,9 @@ String	matchChar	instance	answers	rc 163
 String	max	instance	loud	method "MAX" of class "String"
 String	min	instance	loud	method "MIN" of class "String"
 String	modulo	instance	loud	method "MODULO" of class "String"
-String	overlay	instance	loud	method "OVERLAY" of class "String"
+String	overlay	instance	answers	rc 163
 String	pos	instance	answers	rc 163
-String	replaceAt	instance	loud	method "REPLACEAT" of class "String"
+String	replaceAt	instance	answers	rc 163
 String	reverse	instance	answers	rc 0
 String	right	instance	loud	method "RIGHT" of class "String"
 String	round	instance	loud	method "ROUND" of class "String"

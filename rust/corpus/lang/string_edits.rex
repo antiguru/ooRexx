@@ -1,0 +1,15 @@
+/* String's range writes -- insert, overlay, replaceAt, delStr and delWord.
+   Each answers a new string and leaves the receiver alone, where the
+   MutableBuffer row with the same name writes itself and answers the
+   receiver; the last line is what pins that difference. */
+s = 'abcabc'
+say s~insert('XY') '|' s~insert('XY', 2) '|' s~insert('XY', 8) '|' s~insert('XY', 8, 4, '-') '|' s~insert('XY', 2, 1) '|' s~insert('', 2)
+say s~overlay('XY') '|' s~overlay('XY', 3) '|' s~overlay('XY', 8) '|' s~overlay('XY', 8, 4, '-') '|' s~overlay('XY', 3, 1) '|' s~overlay('XYZ', 5)
+say s~replaceAt('XY', 2, 3) '|' s~replaceAt('XY', 2, 0) '|' s~replaceAt('XY', 8, 2) '|' s~replaceAt('XY', 8, 2, '-') '|' s~replaceAt('', 2, 2)
+say s~delStr(2) '|' s~delStr(2, 3) '|' s~delStr(8) '|' s~delStr(2, 99) '|' s~delStr(1, 0)
+w = '  now is  the time  '
+say w~delWord(2)'|' w~delWord(2, 1)'|' w~delWord(5)'|' w~delWord(1, 99)'|'
+say ''~insert('X') '|' ''~overlay('X') '|' ''~delStr(1) '|' ''~delWord(1)
+say s~insert('X')~class~id
+/* Neither receiver moved. */
+say s'|'w'|'

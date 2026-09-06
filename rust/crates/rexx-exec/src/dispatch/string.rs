@@ -42,9 +42,10 @@
 
 use super::{
     Arity, Cleared, Failure, Interp, NativeMethod, ObjRef, backward_search,
-    backward_search_arguments, ends_with, forward_search, forward_search_arguments,
-    match_region_arguments, match_region_over, starts_with, substr_arguments, verify_arguments,
-    wordpos_arguments,
+    backward_search_arguments, delete_arguments, delword_arguments, ends_with, forward_search,
+    forward_search_arguments, insert_arguments, match_region_arguments, match_region_over,
+    overlay_arguments, replace_at_bytes, replace_at_plan, starts_with, substr_arguments,
+    verify_arguments, wordpos_arguments,
 };
 
 /// `RexxString::posRexx` (`classes/StringClassMisc.cpp:581`).
@@ -632,6 +633,109 @@ fn native_string_verify(
     Ok(Some(interp.counted(answer)))
 }
 
+/// `RexxString::insert` (`classes/StringClassSub.cpp:170`).
+///
+/// **Answers a new string and leaves the receiver alone**, where the
+/// `MutableBuffer` row writes itself and answers the receiver. Measured,
+/// oracle: `'abcdef'~insert('XY', 2)` is `abXYcdef` with `'abcdef'` unchanged,
+/// and the same send to a buffer returns the buffer, now `abXYcdef`.
+fn native_string_insert(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let (new, begin, length, pad) = insert_arguments(interp, args)?;
+    let mut out = interp.take_result_buffer();
+    {
+        let bytes = interp.to_text(receiver);
+        crate::builtin::string::insert_bytes(&mut out, &bytes, &new, begin, length, pad)?;
+    }
+    interp.give_result_buffer(new);
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `RexxString::overlay` (`classes/StringClassSub.cpp:292`).
+fn native_string_overlay(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let (new, begin, length, pad) = overlay_arguments(interp, args)?;
+    let mut out = interp.take_result_buffer();
+    {
+        let bytes = interp.to_text(receiver);
+        crate::builtin::string::overlay_bytes(&mut out, &bytes, &new, begin, length, pad)?;
+    }
+    interp.give_result_buffer(new);
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `RexxString::replaceAt` (`classes/StringClassSub.cpp:376`).
+///
+/// **This is the one row of the shared set whose argument layer is not
+/// shared**, so it reads its own. `RexxString::replaceAt` opens
+/// `stringArgument(newStrObj, ARG_ONE)` (`:380`) where
+/// `MutableBuffer::replaceAt` opens `stringArgument(str, "new")`
+/// (`classes/MutableBufferClass.cpp:572`) and takes its position and pad by
+/// name too. Measured, oracle: a bare send is 93.903 here and 88.901 there, a
+/// zero position 93.924 against 88.912, a two-character pad 93.922 against
+/// 88.910. Only `.nil` in the first position agrees, at 88.909.
+fn native_string_replaceat(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let new = super::string_method_argument(interp, args, 0)?;
+    let begin = super::required_position_argument(interp, args, 1)? - 1;
+    let length = super::optional_length_argument(interp, args, 2)?;
+    let pad = super::pad_method_argument(interp, args, 3)?.unwrap_or(b' ');
+    let mut out = interp.take_result_buffer();
+    {
+        let bytes = interp.to_text(receiver);
+        let (replaced, _) = replace_at_plan(bytes.len(), begin, length, new.len());
+        replace_at_bytes(&mut out, &bytes, &new, begin, replaced, pad)?;
+    }
+    interp.give_result_buffer(new);
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `RexxString::delstr` (`classes/StringClassSub.cpp:117`).
+fn native_string_delstr(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let (begin, range) = delete_arguments(interp, args)?;
+    let mut out = interp.take_result_buffer();
+    {
+        let bytes = interp.to_text(receiver);
+        out.extend_from_slice(&bytes);
+    }
+    crate::builtin::string::delete_range(&mut out, begin, range);
+    Ok(Some(interp.text_built(out)))
+}
+
+/// `RexxString::delWord` (`classes/StringClassWord.cpp:58`).
+fn native_string_delword(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let (position, count) = delword_arguments(interp, args)?;
+    let mut out = interp.take_result_buffer();
+    {
+        let bytes = interp.to_text(receiver);
+        out.extend_from_slice(&bytes);
+    }
+    crate::builtin::word::delword_bytes(&mut out, position, count);
+    Ok(Some(interp.text_built(out)))
+}
+
 /// `String`'s rows, in the shape [`super::NATIVE_METHODS`] uses.
 pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     (
@@ -712,12 +816,15 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(1),
         native_string_countstr,
     ),
+    ("String", "DELSTR", Arity::Fixed(2), native_string_delstr),
+    ("String", "DELWORD", Arity::Fixed(2), native_string_delword),
     (
         "String",
         "ENDSWITH",
         Arity::Fixed(1),
         native_string_endswith,
     ),
+    ("String", "INSERT", Arity::Fixed(4), native_string_insert),
     ("String", "LASTPOS", Arity::Fixed(3), native_string_lastpos),
     ("String", "MATCH", Arity::Fixed(4), native_string_match),
     (
@@ -726,7 +833,14 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(2),
         native_string_matchchar,
     ),
+    ("String", "OVERLAY", Arity::Fixed(4), native_string_overlay),
     ("String", "POS", Arity::Fixed(3), native_string_pos),
+    (
+        "String",
+        "REPLACEAT",
+        Arity::Fixed(4),
+        native_string_replaceat,
+    ),
     (
         "String",
         "STARTSWITH",
