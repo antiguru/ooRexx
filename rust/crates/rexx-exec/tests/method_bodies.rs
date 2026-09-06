@@ -139,6 +139,14 @@ enum Body {
     /// The evidence column names the constructor, not a status, because there
     /// is no status of the method to report.
     Unanswered,
+    /// **This crate answered and the oracle cannot be asked**, because the
+    /// zero-argument send this table classifies by is a known oracle crash
+    /// ([`ORACLE_CRASHING_SENDS`]). The evidence column names the crash.
+    ///
+    /// Not [`Body::Unanswered`], which means the send never reached the
+    /// method: here it reaches it and answers, and what is missing is the
+    /// other side.
+    Uncomparable,
 }
 
 impl Body {
@@ -149,6 +157,7 @@ impl Body {
             Body::Diverge => "diverge",
             Body::Unstable => "unstable",
             Body::Unanswered => "unanswered",
+            Body::Uncomparable => "uncomparable",
         }
     }
 
@@ -161,6 +170,7 @@ impl Body {
             Body::Diverge,
             Body::Unstable,
             Body::Unanswered,
+            Body::Uncomparable,
         ]
     }
 
@@ -215,6 +225,22 @@ fn regressed(was: Body, now: Body) -> bool {
         (Body::Unanswered, Body::Answers) => false,
         (Body::Unanswered, Body::Unstable) => false,
         (Body::Unanswered, Body::Unanswered) => false,
+        // `Uncomparable` is read the way `Unanswered` is: a row that was
+        // answering and stops is a row losing its evidence, and out of it
+        // nothing is a regression, because it never carried a claim about
+        // the oracle. It cannot reach `Diverge`, since a divergence needs
+        // two sides and this verdict says there is one.
+        (Body::Answers, Body::Uncomparable) => true,
+        (Body::Loud, Body::Uncomparable) => false,
+        (Body::Diverge, Body::Uncomparable) => false,
+        (Body::Unstable, Body::Uncomparable) => false,
+        (Body::Unanswered, Body::Uncomparable) => false,
+        (Body::Uncomparable, Body::Uncomparable) => false,
+        (Body::Uncomparable, Body::Diverge) => true,
+        (Body::Uncomparable, Body::Loud) => false,
+        (Body::Uncomparable, Body::Answers) => false,
+        (Body::Uncomparable, Body::Unstable) => false,
+        (Body::Uncomparable, Body::Unanswered) => false,
     }
 }
 
@@ -371,6 +397,27 @@ fn method_name_literal(name: &str) -> &str {
 /// `.MutableBuffer~new` is empty, so a reader of its contents answers the
 /// same on an instance that keeps them and one that does not; the override
 /// gives the rows contents to read back.
+/// The `(class, method)` rows whose **zero-argument send crashes the oracle**,
+/// so this table cannot ask it and records [`Body::Uncomparable`] instead.
+///
+/// Every entry is one shape of `corpus/oracle-crashes.txt`'s strict-ordering
+/// comparison entry: `RexxString::primitiveStrictComp` dereferences a missing
+/// argument with no check (`classes/StringClassMisc.cpp:920`-`:923`), and the
+/// six operator methods that route to it are these. The other twelve
+/// comparison operators raise 93.903 and are not here.
+///
+/// **This names a property of the oracle, not of this tree**, so it does not
+/// go stale when a phase lands. It is checked the way
+/// [`RECEIVER_OVERRIDES`] is: every pair must be a row that exists.
+const ORACLE_CRASHING_SENDS: &[(&str, &str)] = &[
+    ("String", "<<"),
+    ("String", "<<="),
+    ("String", ">>"),
+    ("String", ">>="),
+    ("String", "\\<<"),
+    ("String", "\\>>"),
+];
+
 const RECEIVER_OVERRIDES: &[(&str, &str)] = &[
     (
         "DateTime",
@@ -605,6 +652,29 @@ fn check_overrides(classes: &[ClassRow], structural: &mut Vec<Structural>) {
     }
 }
 
+/// Every `(class, method)` pair [`ORACLE_CRASHING_SENDS`] names is a row this
+/// table classifies.
+///
+/// An entry naming a row that does not exist would exempt nothing while
+/// reading as though it exempted something, which is the same failure
+/// [`check_overrides`] guards against one table over.
+fn check_crashing_sends(rows: &[MethodRow], structural: &mut Vec<Structural>) {
+    let named: BTreeSet<(&str, &str)> = rows
+        .iter()
+        .map(|row| (row.class.as_str(), row.method.as_str()))
+        .collect();
+    for (class, method) in ORACLE_CRASHING_SENDS {
+        if !named.contains(&(*class, *method)) {
+            structural.push(Structural {
+                subject: format!("ORACLE_CRASHING_SENDS entry {class}~{method}"),
+                detail: "names a row class-methods.txt does not carry, so it exempts nothing \
+                         while reading as though the oracle could not be asked about it"
+                    .to_string(),
+            });
+        }
+    }
+}
+
 /// Every instance receiver this table sends to is the one gate table C's
 /// committed probe constructs, or an override.
 ///
@@ -788,6 +858,7 @@ fn no_row_started_diverging_or_stopped_answering() {
         .map(|row| (row.class.clone(), row.arm.clone()))
         .collect();
     check_overrides(&classes, &mut structural);
+    check_crashing_sends(&rows, &mut structural);
     check_receivers_match_table_c(&corpus, &classes, &arms, &mut structural);
     // Not while refreshing: a row set that has moved is exactly what the
     // refresh is for, and reporting it as structural would leave the table
@@ -842,6 +913,20 @@ fn no_row_started_diverging_or_stopped_answering() {
                     verdict: Body::Loud,
                     evidence: refused_construct(&crate_side.outcome.stderr)
                         .unwrap_or_else(|| NO_EVIDENCE.to_string()),
+                    detail: None,
+                },
+            );
+            continue;
+        }
+        if ORACLE_CRASHING_SENDS
+            .iter()
+            .any(|(class, method)| *class == row.class && *method == row.method)
+        {
+            measured.insert(
+                row.key(),
+                Measured {
+                    verdict: Body::Uncomparable,
+                    evidence: "the oracle segfaults on this send".to_string(),
                     detail: None,
                 },
             );
