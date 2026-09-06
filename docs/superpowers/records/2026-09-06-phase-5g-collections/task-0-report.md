@@ -154,6 +154,19 @@ confirmed in both halves.
 
 Fast checks: `cargo fmt --all --check` clean, `cargo clippy --workspace
 --all-targets -- -D warnings` clean, `cargo test --release --workspace
---no-fail-fast` **G0**.
+--no-fail-fast` exit 0, 2124 passed, no suite failing.
 
-**G1** **G2** **G3** **G4** **G5** **G6** **G7**
+Seven gates over the committed tree at `cad1a286f`, statuses read from
+`scratchpad/gates-5g0.status`:
+
+| gate | status |
+|---|---|
+| G1 `cargo fmt --all --check` | 0 |
+| G2 `cargo clippy --workspace --all-targets -- -D warnings` | 0 |
+| G3 `cargo test --release --workspace --no-fail-fast` | 0 |
+| G4 G3 with `REXX_CORPUS_GATE=1` | 0 |
+| G5 `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | 0 |
+| G6 `REXX_PHASE_GATE=5c` | 0 |
+| G7 `REXX_PHASE_GATE=5d` | 0 |
+
+`failed-suites=0` for each of G3, G4, G5, G6 and G7.
