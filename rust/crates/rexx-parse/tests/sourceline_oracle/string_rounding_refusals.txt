@@ -1,0 +1,65 @@
+count 64
+/* FLOOR, CEILING, ROUND and MODULO's refusals.
+ *
+ * A receiver with no numeric value is 93.943 and names the method, which is
+ * the ArithmeticMethod macro's own check.
+ *
+ * MODULO adds a second target check and it comes first: the target must be a
+ * whole number (93.940) before the divisor is so much as read, so a call that
+ * is wrong in both places reports the target.
+ *
+ * Wholeness for MODULO is bounded by the precision the value was created
+ * under, and it bounds the exponent rather than the digit count: at DIGITS 9
+ * `'1234567890'` is whole and `'1E9'` is not.
+ *
+ * The divisor's three ways of being wrong -- not numeric, not whole, not
+ * positive -- share 93.907.
+ *
+ * The untrapped tail is the ordering claim as bytes: a missing divisor on a
+ * target that is not whole reports the target. rc 163.
+ */
+
+signal on syntax name trapped
+n = 0
+
+next:
+n = n + 1
+select
+  /* No numeric value at all, for each of the four. */
+  when n = 1 then say n 'answered' 'abc'~floor
+  when n = 2 then say n 'answered' 'abc'~ceiling
+  when n = 3 then say n 'answered' 'abc'~round
+  when n = 4 then say n 'answered' 'abc'~modulo(3)
+  /* MODULO's target must be whole, and the bound is on the exponent. */
+  when n = 5 then say n 'answered' '1.5'~modulo(3)
+  when n = 6 then say n 'answered' '1E9'~modulo(3)
+  /* That check beats both of the divisor's. */
+  when n = 7 then say n 'answered' '1.5'~modulo()
+  when n = 8 then say n 'answered' '1.5'~modulo('a')
+  /* On a whole target the divisor reports, and an absent one is not 93.907. */
+  when n = 9 then say n 'answered' '55'~modulo()
+  when n = 10 then say n 'answered' '55'~modulo('a')
+  when n = 11 then say n 'answered' '55'~modulo(0)
+  when n = 12 then say n 'answered' '55'~modulo(-3)
+  when n = 13 then say n 'answered' '55'~modulo(2.5)
+  when n = 14 then say n 'answered' '55'~modulo(.nil)
+  when n = 15 then say n 'answered' '55'~modulo('1E9')
+  /* The remainder is still a `//`, and carries that operator's own limit. */
+  when n = 16 then say n 'answered' '12345678901'~modulo(7)
+  /* Each row's arity is a maximum. */
+  when n = 17 then say n 'answered' '55'~floor(1)
+  when n = 18 then say n 'answered' '55'~ceiling(1)
+  when n = 19 then say n 'answered' '55'~round(1)
+  when n = 20 then say n 'answered' '55'~modulo(3, 4)
+  otherwise signal done
+end
+signal next
+
+trapped:
+say n 'raised' rc'.'condition('E')
+signal on syntax name trapped
+signal next
+
+done:
+signal off syntax
+say '1.5'~modulo()

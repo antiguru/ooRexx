@@ -26,6 +26,7 @@ mod compare;
 mod digits;
 mod muldiv;
 mod pow;
+mod rounding;
 
 pub use compare::{
     CompareOp, compare, compare_bytes, compare_decoded, compare_numbers, compare_strings,

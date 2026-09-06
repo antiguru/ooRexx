@@ -2162,6 +2162,22 @@ impl Raised {
         Raised::syntax(93, 943, vec![method.to_vec(), found.to_vec()])
     }
 
+    /// 93.940: `~MODULO`'s target is a number but not a whole one.
+    ///
+    /// `method` is always `MODULO` -- it is the only raiser
+    /// (`NumberString::modulo`, `classes/NumberStringClass.cpp:3622`) -- and
+    /// `found` is the target's rendered bytes.
+    ///
+    /// Beaten by [`method_target_not_a_number`] and beats everything about
+    /// the divisor: measured, `'abc'~modulo()` is 93.943 and
+    /// `'1.5'~modulo()` is this rather than the 93.903 the missing argument
+    /// would give on its own.
+    ///
+    /// [`method_target_not_a_number`]: Raised::method_target_not_a_number
+    pub(crate) fn method_target_not_whole(method: &[u8], found: &[u8]) -> Raised {
+        Raised::syntax(93, 940, vec![method.to_vec(), found.to_vec()])
+    }
+
     /// 88.928: `USE ARG >name` where the caller did not pass a variable
     /// reference. `position` is 1-based; `found` is the argument's own
     /// **rendered value**.

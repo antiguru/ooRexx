@@ -285,7 +285,7 @@ String	caselessMatchChar	instance	answers	rc 163
 String	caselessPos	instance	answers	rc 163
 String	caselessStartsWith	instance	answers	rc 168
 String	caselessWordPos	instance	answers	rc 163
-String	ceiling	instance	loud	method "CEILING" of class "String"
+String	ceiling	instance	answers	rc 163
 String	center	instance	answers	rc 163
 String	centre	instance	answers	rc 163
 String	changeStr	instance	answers	rc 163
@@ -304,7 +304,7 @@ String	delWord	instance	answers	rc 163
 String	encodeBase64	instance	loud	method "ENCODEBASE64" of class "String"
 String	endsWith	instance	answers	rc 168
 String	equals	instance	answers	rc 163
-String	floor	instance	loud	method "FLOOR" of class "String"
+String	floor	instance	answers	rc 163
 String	format	instance	answers	rc 163
 String	hashCode	instance	loud	method "HASHCODE" of class "Object"
 String	insert	instance	answers	rc 163
@@ -318,13 +318,13 @@ String	match	instance	answers	rc 163
 String	matchChar	instance	answers	rc 163
 String	max	instance	answers	rc 163
 String	min	instance	answers	rc 163
-String	modulo	instance	loud	method "MODULO" of class "String"
+String	modulo	instance	answers	rc 163
 String	overlay	instance	answers	rc 163
 String	pos	instance	answers	rc 163
 String	replaceAt	instance	answers	rc 163
 String	reverse	instance	answers	rc 0
 String	right	instance	answers	rc 163
-String	round	instance	loud	method "ROUND" of class "String"
+String	round	instance	answers	rc 163
 String	sign	instance	answers	rc 163
 String	space	instance	answers	rc 0
 String	startsWith	instance	answers	rc 168

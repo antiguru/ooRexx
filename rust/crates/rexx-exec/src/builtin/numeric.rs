@@ -78,7 +78,7 @@
 use std::cmp::Ordering;
 
 use rexx_core::ObjRef;
-use rexx_num::{CompareOp, Form, Number, compare_decoded};
+use rexx_num::{CompareOp, DivOp, Form, Number, compare_decoded};
 
 use super::{Args, arg, fresh_buffer, required_string, whole_number};
 use crate::Interp;
@@ -184,6 +184,48 @@ pub(crate) fn abs(
 pub(crate) fn abs_of(interp: &mut Interp, value: &Number) -> ObjRef {
     let Numeric { digits, form, .. } = current(interp);
     interp.number(value.abs().into_round(digits), saturate(digits), form)
+}
+
+/// The `NUMERIC DIGITS` in force, for a caller that needs it to ask a
+/// question of a `Number` rather than to compute one.
+pub(crate) fn digits_setting(interp: &Interp) -> u64 {
+    current(interp).digits
+}
+
+/// `String~FLOOR`, `~CEILING` and `~ROUND`, which differ only in `take`.
+///
+/// These have no BIF spelling, so unlike [`trunc_of`] there is no second
+/// caller; they are here for the `NUMERIC` settings rather than to be shared.
+pub(crate) fn integer_of(
+    interp: &mut Interp,
+    value: &Number,
+    take: fn(&Number, u64) -> String,
+) -> ObjRef {
+    let Numeric { digits, .. } = current(interp);
+    interp.integer_text(take(value, digits).into_bytes(), digits)
+}
+
+/// `String~MODULO`'s answer once its target and divisor are both in hand:
+/// the `//` remainder, with the divisor added back when that came out
+/// negative.
+///
+/// A zero remainder keeps its sign-free self rather than gaining a divisor:
+/// measured, `'-10'~modulo(5)` is `0`.
+pub(crate) fn modulo_over(
+    interp: &mut Interp,
+    value: &Number,
+    divisor: &Number,
+) -> Result<ObjRef, Failure> {
+    let Numeric { digits, form, .. } = current(interp);
+    let remainder = value
+        .div(divisor, digits, DivOp::Remainder)
+        .map_err(Raised::from)?;
+    let answer = if remainder.signum() < 0 {
+        remainder.add(divisor, digits).map_err(Raised::from)?
+    } else {
+        remainder
+    };
+    Ok(interp.number(answer, saturate(digits), form))
 }
 
 /// `SIGN(number)`.

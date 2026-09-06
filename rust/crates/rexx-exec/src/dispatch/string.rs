@@ -1728,6 +1728,86 @@ fn native_string_trunc(
     Ok(Some(answer))
 }
 
+/// `String~"FLOOR"`, `RexxString::floor`.
+fn native_string_floor(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let value = numeric_receiver(interp, receiver, b"FLOOR")?;
+    Ok(Some(numeric::integer_of(
+        interp,
+        &value,
+        rexx_num::Number::floor,
+    )))
+}
+
+/// `String~"CEILING"`, `RexxString::ceiling`.
+fn native_string_ceiling(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let value = numeric_receiver(interp, receiver, b"CEILING")?;
+    Ok(Some(numeric::integer_of(
+        interp,
+        &value,
+        rexx_num::Number::ceiling,
+    )))
+}
+
+/// `String~"ROUND"`, `RexxString::round`.
+fn native_string_round(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let value = numeric_receiver(interp, receiver, b"ROUND")?;
+    Ok(Some(numeric::integer_of(
+        interp,
+        &value,
+        rexx_num::Number::round,
+    )))
+}
+
+/// `String~"MODULO"`, `RexxString::modulo`.
+///
+/// Three refusals in a fixed order, and the order is the whole of what makes
+/// this different from the rest of the family: the target must be a number,
+/// then a whole one, and only then is the divisor looked at. Measured,
+/// `'1.5'~modulo()` is 93.940 rather than the missing argument's 93.903.
+///
+/// The divisor's three ways of being wrong -- not numeric, not whole, not
+/// positive -- share one message, so `.nil`, `'1E9'` and `-3` all report
+/// 93.907.
+fn native_string_modulo(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let value = numeric_receiver(interp, receiver, b"MODULO")?;
+    let digits = numeric::digits_setting(interp);
+    if !value.is_integer(digits) {
+        let found = interp.string_value_text(receiver);
+        return Err(Raised::method_target_not_whole(b"MODULO", &found).into());
+    }
+    let Some(object) = args.first().copied().flatten() else {
+        return Err(Raised::missing_method_argument(1).into());
+    };
+    let divisor = match interp.to_number(object) {
+        Ok(number) if number.is_integer(digits) && number.signum() == 1 => number,
+        _ => {
+            let found = interp.string_value_text(object);
+            return Err(Raised::method_argument_not_positive(1, &found).into());
+        }
+    };
+    Ok(Some(numeric::modulo_over(interp, &value, &divisor)?))
+}
+
 /// `String~"FORMAT"`, `RexxString::format`.
 ///
 /// Four optional widths, all counts rather than lengths, and all read after
@@ -2027,12 +2107,16 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         native_string_datatype,
     ),
     ("String", "D2X", Arity::Fixed(1), native_string_d2x),
+    ("String", "CEILING", Arity::Fixed(0), native_string_ceiling),
+    ("String", "FLOOR", Arity::Fixed(0), native_string_floor),
     ("String", "FORMAT", Arity::Fixed(4), native_string_format),
     ("String", "LEFT", Arity::Fixed(2), native_string_left),
     ("String", "MAX", Arity::Counted, native_string_max),
+    ("String", "MODULO", Arity::Fixed(1), native_string_modulo),
     ("String", "MIN", Arity::Counted, native_string_min),
     ("String", "RIGHT", Arity::Fixed(2), native_string_right),
     ("String", "STRIP", Arity::Fixed(2), native_string_strip),
+    ("String", "ROUND", Arity::Fixed(0), native_string_round),
     ("String", "TRUNC", Arity::Fixed(1), native_string_trunc),
     ("String", "X2B", Arity::Fixed(0), native_string_x2b),
     ("String", "X2C", Arity::Fixed(0), native_string_x2c),
