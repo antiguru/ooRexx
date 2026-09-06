@@ -1,7 +1,7 @@
 # Phase 5f Task 1d — the extraction readers
 
 Plan: `docs/superpowers/plans/2026-09-05-phase-5f-string.md`, Task 1's fourth family.
-BASE `62c6bae69`. Landed at **`GATECOMMIT`**.
+BASE `62c6bae69`. Landed at `aba5ea490`.
 
 Five more rows: `substr [] subChar subWord subWords`.
 
@@ -54,8 +54,10 @@ row -- or nothing witnesses the body at all.
 |---|---|
 | G1 `cargo fmt --all --check` | rc 0 |
 | G2 `cargo clippy --workspace --all-targets -- -D warnings` | rc 0, zero warnings |
-| G3 `cargo test --release --workspace --no-fail-fast` | **G3** |
-| G4 | **G4** |
-| G5 | **G5** |
-| G6 | **G6** |
-| G7 | **G7** |
+| G3 `cargo test --release --workspace --no-fail-fast` | rc 0 |
+| G4 same with `REXX_CORPUS_GATE=1` | rc 0, strict corpus `371 of 371 matching` |
+| G5 `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace` | rc 0 |
+| G6 `REXX_PHASE_GATE=5c` | rc 0 |
+| G7 `REXX_PHASE_GATE=5d` | rc 0 |
+
+Run at `aba5ea490`, 02:24:56 to 02:39:16.
