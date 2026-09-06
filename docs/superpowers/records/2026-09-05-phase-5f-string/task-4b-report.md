@@ -1,7 +1,7 @@
 # Phase 5f Task 4b — the numeric group
 
 Plan: `docs/superpowers/plans/2026-09-05-phase-5f-string.md`, Task 4.
-BASE `41a8ba94d`. Landed at `PENDING`.
+BASE `41a8ba94d`. Landed at `7512e1246`.
 
 `CEILING FLOOR ROUND MODULO`. The refresh moved exactly those four rows from
 `loud` to `answers` with zero regressions. String now reads 126 `answers`, 6
@@ -165,15 +165,36 @@ Seven gates, run over the committed tree.
 
 | gate | command | status |
 |---|---|---|
-| G1 | `cargo fmt --all --check` | PENDING |
-| G2 | `cargo clippy --workspace --all-targets -- -D warnings` | PENDING |
-| G3 | `cargo test --release --workspace --no-fail-fast` | PENDING |
-| G4 | G3 with `REXX_CORPUS_GATE=1` | PENDING |
-| G5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | PENDING |
-| G6 | `REXX_PHASE_GATE=5c` | PENDING |
-| G7 | `REXX_PHASE_GATE=5d` | PENDING |
+| G1 | `cargo fmt --all --check` | rc 0 |
+| G2 | `cargo clippy --workspace --all-targets -- -D warnings` | rc 0 |
+| G3 | `cargo test --release --workspace --no-fail-fast` | rc 0, 0 failed suites |
+| G4 | G3 with `REXX_CORPUS_GATE=1` | rc 0, 0 failed suites |
+| G5 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | rc 0, 0 failed suites |
+| G6 | `REXX_PHASE_GATE=5c REXX_CORPUS_GATE=1` | rc 0, 0 failed suites |
+| G7 | `REXX_PHASE_GATE=5d REXX_CORPUS_GATE=1` | rc 0, 0 failed suites |
+
+Run by `scratchpad/gates-4b.sh` over the committed tree, its status file opening
+with `sha 7512e12461df4a082cf013dea099c038b20ea5db`.
 
 Pre-commit chain: method-bodies refresh rc 0 (the four rows above `loud` ->
 `answers`, no row on any other class moved), `cargo fmt --all --check` rc 0,
 clippy rc 0, strict corpus 401 of 401, `rexx-num` rc 0, `refusal_sites`,
 `coverage`, `collect_stress` and `sourceline_oracle` each rc 0.
+
+## 10. `Object~hashCode` is deviation 4 at a second message
+
+Raised as a fork for Task 4d and settled without one, because the tree had
+already met it. `RexxObject::hashCode` is `getHashValue()` rendered as eight
+raw bytes, and `getHashValue()` is virtual with
+`identityHash() { return ((uintptr_t)this) ^ UINTPTR_MAX; }`
+(`classes/ObjectClass.hpp:340`) as its base. That is the same value
+`~identityHash` returns through a different door, and `native_identity_hash`
+(`crates/rexx-exec/src/dispatch.rs:4566`) already answers the handle under
+deviation 4's licence, with `Object identityHash`'s row reading `unstable`.
+
+So 4d implements `getHashValue` per class rather than "hashCode". Measured
+against the oracle, twice per receiver in separate runs: `'abc'` is 96354,
+DateTime and TimeSpan reproduce their own values, and `.object~new` does not —
+two objects in one run differ from each other and from the next run's. The
+value arms reach `answers`; the base arm lands `unstable`, assigned by the
+harness rather than chosen, since it runs the oracle twice and sees it move.
