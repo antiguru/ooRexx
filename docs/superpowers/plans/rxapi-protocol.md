@@ -3,7 +3,14 @@
 **Question:** can the new Rust interpreter speak the existing C++ `rxapi` daemon's
 IPC protocol without linking any C++, or must the ~12k LOC of `rexxapi/` be ported?
 
-**Answer: yes, a Rust client can speak it reliably. D7 stays "bridge to the C++ rxapi."**
+**Answer: yes, a Rust client can speak it reliably.**
+
+> **Status note, 2026-09-07.** This document answers the *technical* question
+> and nothing else. It recommended keeping D7 as "bridge to the C++ rxapi",
+> and that recommendation was then recorded as the decision by the same pass
+> that wrote it. D7 is **reopened** and awaiting a design session — see its
+> block in `2026-07-27-rust-rewrite.md`. Read what follows as evidence for a
+> decision still to be made, not as one already taken.
 
 The protocol is a raw dump of one C++ struct (`ServiceMessage`, 600 bytes on all
 64-bit platforms) followed by an optional length-prefixed payload, exchanged over a

@@ -107,7 +107,7 @@ Blocks are numbered in the order they were raised and ordered below by topic, so
 | **D14** | String representation | Phase 4, constrains Phase 3 | **closed** — byte strings, UTF-8 arrives as operations (2026-07-28) |
 | **D11** | RexxUtil / `Sys*` | Phase 7, and L2 | settled — subset in Phase 7, rest in Phase 10 |
 | **D12** | Security manager | Phases 5 and 7 | settled — split across both |
-| **D7** | RXAPI daemon | Phase 10 | **closed** — bridge to the C++ rxapi (2026-07-27) |
+| **D7** | RXAPI daemon | Phase 10 | **REOPENED** — the protocol question was answered, the decision was never made; needs a design session (2026-09-07) |
 | **D8** | Conformance ladder | everything | **closed** — L1 viable at 86.2% (2026-07-27) |
 | **D9** | Performance gate | every phase exit | settled — two thresholds, see Global Constraints |
 | **D10** | Parser construction | Phase 3 | open — spike at the head of Phase 3 |
@@ -352,7 +352,28 @@ Assigning the whole thing to Phase 5, as an earlier draft of this plan did, is w
 
 **Decision: keep the C++ `rxapi` binary and speak its IPC protocol from Rust. RECOMMENDED.** It is a separate process behind a stable wire boundary — exactly the kind of thing that should not be on the critical path. The first working Rust `rexx` links no C++ but talks to a C++ `rxapi`.
 
-**CLOSED — bridge confirmed.** Settled 2026-07-27; full analysis in `docs/superpowers/plans/rxapi-protocol.md`.
+**REOPENED 2026-09-07 — the technical half was answered; the decision was never made.**
+
+Everything below this line stands and was established by measurement: the
+protocol *can* be spoken from Rust. What did not happen is a decision.
+
+Two things are wrong with the old **CLOSED** marking. This block was written
+and marked closed by the same Phase 0 pass, with its own **RECOMMENDED** tag
+still on it, so the closure was self-ratified — Moritz has not signed it, and
+confirmed on 2026-09-07 that he never decided it. And the measurement answered
+*can we speak the protocol*; it never touched *should a Rust interpreter
+require a running C++ daemon to have a working `RXQUEUE`*. That is a product
+question and no probe settles it.
+
+Nothing depends on it yet — `RXQUEUE` (wholly excluded), cross-process
+`QUEUED` (partial) and `RexxQueue` (spec D93) are all unbuilt — so reopening
+costs nothing today and would cost a rewrite later. **Deferred to a design
+session**; do not start queue work against either answer until then. If it
+flips, this plan's own risk table already prices it: port `rexxapi/`, ~12k
+LOC, into Phase 10.
+
+Original closure, retained: settled 2026-07-27; full analysis in
+`docs/superpowers/plans/rxapi-protocol.md`.
 
 The feared answer was half-right and turned out not to matter. It **is** a raw struct dump — `ServiceMessage::writeMessage` does `pipe.write((void *)this, sizeof(ServiceMessage), messageData, messageDataLength, …)` (`rexxapi/common/ServiceMessage.cpp:141–152`), with the pointer field on the wire being garbage that every receiver ignores. What makes it safe anyway:
 
