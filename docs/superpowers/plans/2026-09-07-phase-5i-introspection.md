@@ -306,6 +306,11 @@ guessed, and so it is clear whether any other class in the environment shares th
 `Pointer` and `Buffer` are documented as native-code-only in the reference
 (`utilityclasses.xml:429`, `:6910`).
 
+**The sub-number is `967` and it was measured, not read.** A survey of
+`interpreter/messages/rexxmsg.xml` reported `Error_Unsupported_new_method` as `93.968` — that is
+the *next* `<SubMessage>` block's subcode, read one entry down. Run it yourself before writing the
+witness and use what the interpreter prints. `.StackFrame~new` shares this site; see Task 6.
+
 **Pointer's other five rows — `=`, `==`, `\=`, `\==`, `isNull` — close by cascade and not by
 implementation.** The instance arm's receiver is `.Pointer~new`, so with `new` raising identically
 on both sides the row records agreement about the construction. **That is honest here and it is not
@@ -495,7 +500,21 @@ under it; `method_scope` (`environment.rs:1686`) reads `NativeObject::scope`. `A
 `ANNOTATIONS` and `SCOPE` already answer for `Method`; `ANNOTATION` and `ANNOTATIONS` for
 `Routine`; both have a class-side `NEW` through `native_executable_new`.
 
-**So the link from a `Method` object to its parsed body already exists, and that is what most of
+**`Routine` is the asymmetric half and its rows cost more than `Method`'s.** Read against the tree
+2026-09-07: a `Method` object reaches its body through `table_method_bodies`
+(`lib.rs:3432`, filled at `environment.rs:875`-`:884` for `.methods` entries and at `lib.rs:6501`
+for compiled ones), or through `method_objects` → `own_instance_slot` → `MethodSlot::Defined` →
+`method_bodies` (`lib.rs:3364`). **A `Routine` object built by `.routines~<name>`
+(`environment.rs:1906`) gets `body: None` and no `table_method_bodies` entry at all** — its only
+link back to its directive is the annotation key. So `Routine~source`, `~call`, `~callWith` and
+`~[]` need that link built, and that is the design work in this task. Confirm it before you plan
+around it; if the link is there by another route, say which and the task gets smaller.
+
+`Package`'s receiver is `.Class~package`, the REXX package — see the section before Task 7 — so
+`Method~package` and `Routine~package` should be checked against **both** a program's package and
+that one.
+
+**The link from a `Method` object to its parsed body already exists, and that is what most of
 these sixteen rows read.** `~source` is the body's own source lines as an Array; the seven `is*`
 flags are properties of the directive that declared it; `~package` is the package object the
 `method_object`/`package_object` pair already keys on. Confirm each of those claims against the
@@ -559,6 +578,17 @@ oracle 2026-09-07:
 .array > .array      97.1  Object "The Array class" does not understand message ">".
 .array + 1           97.1  Object "The Array class" does not understand message "+".
 ```
+
+**There are two loud sites for these six names, not one, and they are reached by different
+syntax.** The operator path above is what `(.Array = .Array)` as an *expression* takes. A
+**message send** of the same name — `.Array~'='(.Array)` — takes `invocable` instead, and the row's
+own evidence in `method-bodies.txt` is `method "=" of class "Class"`, which is
+`Loud::native_method` at `dispatch.rs:2529`. That is the site the eight rows in the table are
+measured at, because the harness sends a message. `Setup.cpp`'s `Class` block gives `Class` its own
+`AddMethod("=", RexxClass::equal, 1)` and siblings, so the name resolves to a **Class-scoped**
+method id distinct from `Object`'s, and `NATIVE_METHODS` binds `=` only at `"Object"`
+(`dispatch.rs:756`). **Close both, and assert both spellings in the witness** — a fix at one site
+leaves the other loud and the row moves or does not depending on which the harness happens to use.
 
 So the six comparisons answer `Object`'s **identity** test — note `.array = 'The Array class'` is
 `0`, not a comparison of renderings — while every other operator is `97.1`, the oracle's own
@@ -647,11 +677,69 @@ an internal routine call is `INTERNALCALL`. So there is a **mapping** to work ou
 values `~type` can take has to come from the C++ (`StackFrameClass.cpp` and whatever fills it), not
 from `CallType`. Measure at least a program frame, an internal-call frame and a method frame.
 
+**`StackFrame`'s ten rows are a cascade today, and closing them by cascade would be the worst
+hollowness in this phase.** Read from the tables 2026-09-07: `corpus/docs/class-set.txt:100` marks
+`StackFrame` `not-covered` with **no construction expression** (`deferred-rexxcontext-stackframes`),
+so `method-bodies.txt` falls back to a bare `~new` — and every one of the ten instance rows carries
+the evidence `method "NEW" of class "StackFrame"`. The oracle refuses `.StackFrame~new` at the same
+`93.967` site as `Pointer` and `Buffer`. **So making `new` raise would turn all ten rows green
+without implementing a single StackFrame method**, and the next phase would read ten closed rows.
+
+**Do both, in this order, and the second is not optional.** Raise on `new` — it is the oracle's
+answer and it belongs here — and then **add a `RECEIVER_OVERRIDES` entry**
+`("StackFrame", ".context~stackFrames[1]")` in `crates/rexx-exec/tests/method_bodies.rs:432`, which
+is the mechanism this project already uses for exactly this (Phase 5g Task 7 and Phase 5h Task 6
+each added a block of them, with the reasoning in the file). That turns ten rows measured about a
+constructor into ten rows measured about their own methods, and it is the override that makes this
+task's work visible. **Report the ten rows' verdicts before and after the override**; the ones that
+are still loud after it are the honest count of what this task closed.
+
 **The two questions this task still has to answer, and neither is answered above:** what a
 `StackFrame` answers when it outlives the frame it describes, and what the collector sees of it.
 Measure the oracle for the first — keep `.context~stackFrames[1]` in a variable, return from the
 routine, read it — before choosing a representation. `Activation::object_roots` is named in
 `collect_now`'s comment as the other route for a parked activation's objects; read it.
+
+---
+
+## Both `Package` tasks share one problem: the receiver the rows are measured on
+
+**Read from the tables 2026-09-07: `corpus/docs/class-set.txt:55` gives `Package`'s construction
+expression as `.Class~package` — the REXX package, not a program's.** Every `Package` row in
+`corpus/method-bodies.txt` is therefore measured against the interpreter's own built-in package,
+and that object answers almost nothing. Measured on the oracle, rc 0:
+
+```
+name=REXX          sourceSize=0        source=Array(0)      sourceLine(1)=[]
+classes=StringTable(67)                publicClasses=StringTable(62)
+routines=StringTable(0)                publicRoutines=StringTable(0)
+resources=StringTable(0)               namespaces=StringTable(0)
+definedMethods=StringTable(0)          importedPackages=Array(0)
+digits=9  form=SCIENTIFIC  fuzz=0      trace=[]   (the null string, not N)
+prolog=The NIL object
+options=::OPTIONS DIGITS 9 FORM SCIENTIFIC FUZZ 0 … PROLOG TRACE ?n/a?
+```
+
+**So an implementation that answers an empty `StringTable` to everything closes about fifteen of
+the thirty-three rows and agrees with the oracle on every one of them.** That is this phase's
+worst instance of `rust/CLAUDE.md`'s hollow-shell rule, and it is not hypothetical — it is what
+the cheapest correct-looking implementation does.
+
+**Two consequences, and both tasks are bound by them.**
+
+* **`method-bodies.txt` is not the instrument for `Package`.** Task 0's
+  `corpus/introspection-arity.tsv` is, because its receiver is a *program's* package with real
+  directives behind it. Every witness in both tasks reads a program package; a row is reported
+  closed only with its arity verdict beside its method-bodies verdict.
+* **The two rows with real content on the REXX package are `classes` (67) and `publicClasses`
+  (62)**, and they are Task 8's. `publicClasses` **is already implemented for program packages** —
+  the loud site is `Loud::rexx_package_classes` (`dispatch.rs:5885`) and the row's evidence says so
+  in words: `the REXX package's class table`. So that row is not "implement publicClasses", it is
+  "give the REXX package a class table", and `classes` is the same job one method over.
+
+Compare the same reads against a program package, measured on a 28-line file with a `::routine`, a
+`::class` and a `::resource` (the figures in Task 7 and Task 8 below), and note which rows move.
+Where the two disagree, both answers have to come out right.
 
 ---
 
@@ -661,8 +749,7 @@ Twelve rows: `source`, `sourceLine`, `sourceSize`, `digits`, `form`, `fuzz`, `tr
 `prolog`, `loadLibrary`, `setSecurityManager` on the instance arm, and `defaultOptions` on the class
 arm.
 
-**Measured on the oracle 2026-09-07** on a 28-line program with a `::routine`, a `::class` and a
-`::resource`:
+**Measured on the oracle 2026-09-07 on a program package** — the 28-line file described above:
 
 ```
 source=Array(28)   sourceLine(1)=[p = .context~package]   sourceSize=28   sourceLine(99)=[]
@@ -675,6 +762,13 @@ prolog=Routine
 loadLibrary('rxmath')=1     setSecurityManager()=1     setSecurityManager(.Object~new)=1
 .Package~defaultOptions('DIGITS') = the same ::OPTIONS string as ~options
 ```
+
+**Four of these twelve answer differently on the two receivers, and each difference is a witness.**
+Measured, program package against the REXX package: `trace` is `N` against the **null string**;
+`prolog` is a `Routine` against **`The NIL object`**; `source` is `Array(28)` against `Array(0)`
+and `sourceSize` `28` against `0`; and `options`' last field is `TRACE NORMAL` against
+`TRACE ?n/a?`. A reader that answers the program package correctly and the REXX package by
+accident will get at least one of those four wrong — assert all four pairs.
 
 `~options` answering a String and `defaultOptions` apparently ignoring its argument are both
 surprising; **re-measure them yourself before implementing**, with more than one option name and
@@ -724,14 +818,27 @@ name=<the program's path>
 Every table is a `StringTable` except `importedPackages`, which is an **Array**. All of them are
 classes Phase 5h built, so the containers exist; what this task adds is the state behind them.
 
-**`ADDCLASS`, `ADDPUBLICCLASS`, `LOCAL`, `NAME` and `PUBLICCLASSES` already answer.** Read those
-five bodies first — they are the worked example for where a package's state lives and how it is
-reached, and one of them (`ADDCLASS`) is the write side of a table this task adds the read side of.
+**`ADDCLASS`, `ADDPUBLICCLASS`, `LOCAL` and `NAME` already answer.** Read those four bodies first —
+they are the worked example for where a package's state lives and how it is reached, and one of
+them (`ADDCLASS`) is the write side of a table this task adds the read side of.
 
-**The measurement above is the one to distrust.** Every count is 0 or 1, so a body answering an
-empty table of the right class agrees with the oracle on six of these rows. **The receiver Task 0
-commits must carry more than one of each**, and every witness here reads an entry back out by name
-— that is this plan's second NEW constraint and this is the task it was written for.
+**Most of this state already exists on `Interp`, keyed by `ProgramId`.** Read against the tree
+2026-09-07, `crates/rexx-exec/src/lib.rs`'s field list carries `package_options`, `routines`,
+`package_public_routines`, `merged_public_routines`, `package_classes`, `package_public_classes`,
+`merged_public_classes`, `package_namespaces`, `package_locals`, `class_packages`, `package_objects`
+and `package_tables` (the last keyed by `(ProgramId, PackageTable::{UnattachedMethods, Routines,
+Resources})`). A `Package` object reaches its `ProgramId` through `package_objects`' own key,
+`Package::Program(ProgramId)` (`plan.rs:69`). **So for most of these rows the state is there and
+what is missing is the reader** — confirm that per row and say which rows are the exception, because
+those are the ones that carry the task's real cost.
+
+**The measurement in the two blocks above is the one to distrust, and this task is where the
+hollow-shell rule bites hardest.** On the REXX package nearly every count is 0; on the program
+package nearly every count is 1. A body answering an empty table of the right class agrees with the
+oracle on about half these rows, and a body answering a one-entry table agrees on most of the rest.
+So: **the receiver Task 0 commits must carry more than one of each**, every witness here reads an
+entry back out **by name**, and the report gives each row its arity verdict beside its
+method-bodies verdict.
 
 `addPackage`, `addRoutine`, `addPublicRoutine` and `loadPackage` are writes; each is witnessed by
 the read that should see it, in the same program.
