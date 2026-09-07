@@ -527,12 +527,30 @@ obvious one, and its answer is measurable on the oracle).
 **`Class`'s eleven split into two unrelated halves, and only one of them is introspection.**
 
 *The six operators* — `=`, `==`, `<>`, `><`, `\=`, `\==` — are loud at a different site from every
-other row in the phase. Measured today, `.Array = .Array` on this crate is
-`the operator '=' applied to a class object is not implemented (Phase 5)` at rc 120, while the
-oracle answers `1` and `.Array == .String` answers `0`. Find the site that raises it (it is not
-`invocable`'s `Loud::native_method`; `Object`'s own `=`/`==` rows already answer for ordinary
-instances) and say in the report **why a class object does not reach `Object`'s comparison** — that
-answer decides whether this is six rows or one.
+other row in the phase, and it is **one** site: `Interp::operator_operand_gap`
+(`crates/rexx-exec/src/eval.rs:1812`) answers `Some("a class object")` at `:1819` for every class
+handle, and every operator path asks it first (`:1007`, `:1276`, `:1575`, `:1692`). So the six rows
+are one arm, not six bodies.
+
+**The arm cannot simply be deleted, and that is this half's whole difficulty.** Measured on the
+oracle 2026-09-07:
+
+```
+.array = .array                 1        .array \== .array          0
+.array = 'The Array class'      0        .array <> .string          1
+.array == .string               0        .array >< .string          1
+.array > .array      97.1  Object "The Array class" does not understand message ">".
+.array + 1           97.1  Object "The Array class" does not understand message "+".
+```
+
+So the six comparisons answer `Object`'s **identity** test — note `.array = 'The Array class'` is
+`0`, not a comparison of renderings — while every other operator is `97.1`, the oracle's own
+no-such-method. This crate refuses **all** of them loudly today, and `eval.rs`'s existing test
+around `:3705` pins that: it asserts `=`, `>`, `+` and `**` on `.array` are all loud with the noun
+`a class object`. **That test has to change, and how it changes is the deliverable** — the six
+comparisons stop being loud, and `>`, `+`, `**` must not silently become loud-for-a-different-reason
+or start answering. Whether `97.1` for the arithmetic operators is in scope here or stays loud is
+yours to measure and rule on; say which, and why, in the report.
 
 *The five readers* — `isAbstract`, `isMetaclass`, `methods`, `queryMixinClass`, `subclasses`.
 Measured on the oracle: `.Array~isMetaclass` is `0`, `.Object~isAbstract` is `0`,
