@@ -1010,7 +1010,10 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("MutexSemaphore", "NEW", Arity::Counted, native_new),
     ("Queue", "NEW", Arity::Counted, native_new),
     ("Relation", "NEW", Arity::Counted, native_new),
-    ("Set", "NEW", Arity::Counted, native_new),
+    ("Set", "NEW", Arity::Counted, hash::native_hash_new),
+    // `AddClassMethod("Of", SetClass::ofRexx, A_COUNT)`: `Set`'s own, unlike
+    // the mapped classes whose `of` is `MapCollection~OF` in Rexx.
+    ("Set", "OF", Arity::Counted, hash::native_set_of),
     ("Supplier", "NEW", Arity::Counted, native_new),
     ("Table", "NEW", Arity::Counted, hash::native_hash_new),
     // The classes whose own `newRexx` checks its arguments and then builds
@@ -7384,10 +7387,62 @@ fn native_copy(
     let body = source.body.clone();
     let copy = interp.alloc_with(rexx_core::BehaviourId::OBJECT, body);
     interp.roots.push_temp(copy);
+    duplicate_collection_stores(interp, copy);
     if interp.answers_uninit(copy) {
         interp.heap.set_uninit(copy);
     }
     Ok(Some(copy))
+}
+
+/// The pool entries a collection's CONTENTS live in, as (scope class, name).
+///
+/// A `Body::Instance` clone copies the pool map, so the copy's entries name
+/// the same `Array` objects the receiver's do -- which is right for an
+/// ordinary instance variable and wrong for a collection's contents.
+/// Upstream draws the same line by overriding the virtual `copy()`:
+/// `HashCollection::copy` copies the base object and then its contents
+/// (`classes/support/HashCollection.cpp:237`), and `ArrayClass` and
+/// `ListClass` do the same for theirs.
+///
+/// Measured before this existed: `q = .Queue~of('a','b')`, `c = q~copy`,
+/// `c~queue('z')` left **both** at 3 items where the oracle answers 2 and 3,
+/// and the same for `List`. It is why `Set~union` -- which is `self~copy` and
+/// then a loop of `put` (`RexxClasses/CoreClasses.orx:480`) -- was mutating
+/// its receiver, which is how this was found.
+const COLLECTION_STORES: &[(&str, &[u8])] = &[
+    ("Array", b"ITEMS"),
+    ("List", b"ITEMS"),
+    ("List", b"HANDLES"),
+    ("List", b"FREE"),
+    ("Supplier", b"ITEMS"),
+    ("Supplier", b"INDEXES"),
+    ("Table", b"HASHINDEXES"),
+    ("Table", b"HASHITEMS"),
+    ("Table", b"HASHNEXT"),
+];
+
+/// Replaces each of [`COLLECTION_STORES`] on `copy` with an array of its own.
+///
+/// The slots are copied across as they stand: the ITEMS are shared with the
+/// receiver's, which is what upstream's shallow element copy does, and only
+/// the array holding them is new.
+fn duplicate_collection_stores(interp: &mut Interp, copy: ObjRef) {
+    for (scope_name, entry) in COLLECTION_STORES {
+        let Some(scope) = interp.classes().lookup(scope_name) else {
+            continue;
+        };
+        let held = match interp.heap.get(copy).map(|object| &object.body) {
+            Some(Body::Instance { pools, .. }) => pools.get(scope, entry),
+            _ => return,
+        };
+        let Some(held) = held else { continue };
+        let Some(slots) = interp.array_slots_of(held) else {
+            continue;
+        };
+        let fresh = interp.alloc_with(BehaviourId::ARRAY, Body::array(slots));
+        interp.roots.push_temp(fresh);
+        interp.set_pool_variable(copy, scope, entry, fresh);
+    }
 }
 
 /// `Class~copy`: the refusal `memory/Setup.cpp:483` puts over [`native_copy`]

@@ -1741,6 +1741,17 @@ impl Raised {
         Raised::syntax(93, 954, vec![method.as_bytes().to_vec()])
     }
 
+    /// 93.949: a `Set` or a `Bag` was given an index that is not its value.
+    ///
+    /// `Error_Incorrect_method_nomatch`, raised by
+    /// `IndexOnlyHashCollection::validateValueIndex`
+    /// (`classes/support/HashCollection.cpp:1138`) with no substitutions. The
+    /// index is optional for those two classes and, when it is given, it must
+    /// equal the value. Measured at rc 163: `.Set~new~put('c','d')`.
+    pub(crate) fn index_does_not_match() -> Raised {
+        Raised::syntax(93, 949, Vec::new())
+    }
+
     /// 26.903: a `COMPARE` method answered something that is not a whole
     /// number.
     ///

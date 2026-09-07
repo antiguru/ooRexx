@@ -1474,6 +1474,7 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/sort_comparisons.rex",
     "lang/array_dimensions_append.rex",
     "lang/hash_table_store.rex",
+    "lang/set_operations.rex",
 ];
 
 #[test]

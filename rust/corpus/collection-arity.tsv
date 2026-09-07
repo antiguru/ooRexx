@@ -341,30 +341,30 @@ Relation	supplier	setup-differs	crate rc120: rexx-exec: a message send to a valu
 Relation	union	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
 Relation	uniqueIndexes	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
 Relation	xor	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Set	[]	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	[]=	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	allIndexes	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	allItems	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	at	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	difference	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	disjoint	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	empty	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	equivalent	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	hasIndex	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	hasItem	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	index	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	intersection	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	isEmpty	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	items	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	makeArray	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	put	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	putAll	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	remove	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	removeItem	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	subset	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	supplier	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	union	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
-Set	xor	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Set".
+Set	[]	agree	rc0
+Set	[]=	agree	rc0
+Set	allIndexes	agree	rc0
+Set	allItems	agree	rc0
+Set	at	agree	rc0
+Set	difference	agree	rc0
+Set	disjoint	agree	rc0
+Set	empty	agree	rc0
+Set	equivalent	agree	rc0
+Set	hasIndex	agree	rc0
+Set	hasItem	agree	rc0
+Set	index	agree	rc0
+Set	intersection	agree	rc0
+Set	isEmpty	agree	rc0
+Set	items	agree	rc0
+Set	makeArray	agree	rc0
+Set	put	agree	rc0
+Set	putAll	agree	rc0
+Set	remove	agree	rc0
+Set	removeItem	agree	rc0
+Set	subset	agree	rc0
+Set	supplier	agree	rc0
+Set	union	agree	rc0
+Set	xor	agree	rc0
 Stem	[]	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
 Stem	[]=	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
 Stem	allIndexes	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)

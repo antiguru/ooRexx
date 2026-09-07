@@ -780,26 +780,26 @@ Relation	equivalent	instance	answers	rc 163
 Relation	of	class	loud	ARG option "A" answers an Array, which
 Relation	putAll	instance	answers	rc 163
 Set	new	class	answers	rc 0
-Set	of	class	loud	method "OF" of class "Set"
+Set	of	class	answers	rc 0
 Set	[]	instance	answers	rc 168
 Set	[]=	instance	answers	rc 168
-Set	allIndexes	instance	loud	method "ALLINDEXES" of class "Set"
-Set	allItems	instance	loud	method "ALLITEMS" of class "Set"
+Set	allIndexes	instance	answers	rc 0
+Set	allItems	instance	answers	rc 0
 Set	at	instance	answers	rc 168
-Set	empty	instance	loud	method "EMPTY" of class "Set"
-Set	hasIndex	instance	loud	method "HASINDEX" of class "Set"
-Set	hasItem	instance	loud	method "HASITEM" of class "Set"
-Set	index	instance	loud	method "INDEX" of class "Set"
+Set	empty	instance	answers	rc 0
+Set	hasIndex	instance	answers	rc 168
+Set	hasItem	instance	answers	rc 168
+Set	index	instance	answers	rc 163
 Set	intersection	instance	answers	rc 163
-Set	isEmpty	instance	loud	method "ISEMPTY" of class "Set"
-Set	items	instance	loud	method "ITEMS" of class "Set"
-Set	makeArray	instance	loud	method "MAKEARRAY" of class "Set"
+Set	isEmpty	instance	answers	rc 0
+Set	items	instance	answers	rc 0
+Set	makeArray	instance	answers	rc 0
 Set	put	instance	answers	rc 168
 Set	putAll	instance	answers	rc 163
-Set	remove	instance	loud	method "REMOVE" of class "Set"
-Set	removeItem	instance	loud	method "REMOVEITEM" of class "Set"
+Set	remove	instance	answers	rc 168
+Set	removeItem	instance	answers	rc 168
 Set	subset	instance	answers	rc 163
-Set	supplier	instance	loud	method "SUPPLIER" of class "Set"
+Set	supplier	instance	answers	rc 0
 Set	union	instance	answers	rc 163
 Set	xor	instance	answers	rc 163
 Set	difference	instance	answers	rc 163

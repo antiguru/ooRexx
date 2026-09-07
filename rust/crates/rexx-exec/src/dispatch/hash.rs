@@ -124,7 +124,28 @@ fn hash_scope(interp: &mut Interp) -> ObjRef {
 /// Measured as the instrument for that: with the guard missing, the
 /// method-body table reported 38 rows regressing from `answers` to
 /// `diverge`.
-const OWNED: &[&str] = &["Table", "IdentityTable"];
+const OWNED: &[&str] = &["Table", "IdentityTable", "Set"];
+
+/// The classes whose `put` takes its index from its value --
+/// `IndexOnlyHashCollection`, whose only two subclasses are `Set` and `Bag`
+/// (`classes/support/HashCollection.cpp:1129`).
+const INDEX_ONLY: &[&str] = &["Set"];
+
+/// Whether `receiver`'s `put` is the index-only one.
+fn index_only(interp: &mut Interp, receiver: ObjRef) -> bool {
+    let Some(class) = interp.class_of_value(receiver) else {
+        return false;
+    };
+    for name in INDEX_ONLY {
+        let Some(base) = interp.classes().lookup(name) else {
+            continue;
+        };
+        if interp.classes().is_a(class, base) {
+            return true;
+        }
+    }
+    false
+}
 
 /// Whether `receiver`'s class is one of [`OWNED`].
 pub(super) fn owns(interp: &mut Interp, receiver: ObjRef) -> bool {
@@ -656,7 +677,23 @@ pub(super) fn store_put(
     let Some(item) = args.first().copied().flatten() else {
         return Err(Raised::missing_named_argument("item").into());
     };
-    let index = index_argument(args, 2)?;
+    // **A `Set`'s index is its value.**
+    // `IndexOnlyHashCollection::validateValueIndex`
+    // (`classes/support/HashCollection.cpp:1129`): the value is required, the
+    // index is optional, and an index that is given must equal the value or
+    // the send is 93.949. Measured: `s~put('a')` twice leaves `items` at 1,
+    // `s~put('b','b')` is accepted, and `s~put('c','d')` raises.
+    let index = if index_only(interp, receiver) {
+        match args.get(1).copied().flatten() {
+            // `isIndexEqual(value, index)` -- the VALUE receives the `==`.
+            Some(given) if !super::collection::same_item(interp, item, given)? => {
+                return Err(Raised::index_does_not_match().into());
+            }
+            _ => item,
+        }
+    } else {
+        index_argument(args, 2)?
+    };
     insert(interp, receiver, index, Some(item))?;
     Ok(None)
 }
@@ -888,6 +925,35 @@ pub(super) fn native_hash_new(
     Ok(Some(object))
 }
 
+/// `SetClass::ofRexx`: a new `Set` of the receiver's own class holding the
+/// arguments, each of which is its own index.
+///
+/// Measured: `.Set~of('x','y')~items` is 2 and `.Set~of('x','x')~items` is 1,
+/// so the arguments go through the same index-only rule `put` applies rather
+/// than being appended.
+pub(super) fn native_set_of(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = super::class_receiver(interp, receiver)?;
+    for (at, argument) in args.iter().enumerate() {
+        if argument.is_none() {
+            return Err(Raised::missing_method_argument(at + 1).into());
+        }
+    }
+    let object = new_instance(interp, class)?;
+    interp.roots.push_temp(object);
+    install_store(interp, object, MINIMUM_BUCKET_SIZE);
+    let caller = interp.caller();
+    interp.send_message(object, super::INIT, None, &[], caller)?;
+    for argument in args.iter().flatten() {
+        insert(interp, object, *argument, Some(*argument))?;
+    }
+    Ok(Some(object))
+}
+
 /// The mapped collections' primitive methods, chained into
 /// `ObjectModel::build` beside [`super::collection::NATIVE_METHODS`].
 pub(super) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
@@ -975,4 +1041,14 @@ pub(super) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(0),
         native_hash_supplier,
     ),
+    // **`Set`'s two overrides route to the INDEX bodies.** `Setup.cpp` writes
+    // `Set`'s `HasItem` as `IdentityTable::hasIndexRexx` and its `RemoveItem`
+    // as `IdentityTable::removeRexx`, and `IndexOnlyHashCollection`'s own
+    // comment gives the reason: for a collection whose index is its value,
+    // searching by index is the faster operation and answers the same thing.
+    // Rows of their own here because they are method identities of their own
+    // -- `Set~hasItem` is not `Table~hasItem`, which is why adding `Set` to
+    // [`OWNED`] alone left it refusing.
+    ("Set", "HASITEM", Arity::Fixed(1), native_hash_has_index),
+    ("Set", "REMOVEITEM", Arity::Fixed(1), native_hash_remove),
 ];
