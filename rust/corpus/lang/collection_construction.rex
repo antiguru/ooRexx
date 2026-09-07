@@ -1,0 +1,80 @@
+/* of sends INIT with no arguments and then fills the collection itself: an
+   overridden APPEND or PUT never runs.  The contents belong to the object new
+   allocates, so a subclass INIT that does not forward still has them, and a
+   second INIT leaves what is already there alone. */
+say 'array' .Watch~of('x','y')~items
+say 'list' .WatchL~of('x','y')~items
+say 'queue' .WatchQ~of('x','y')~items
+
+q = .Queue~of('a','b')
+q~init
+say 'queue init again' q~items q~at(1)
+l = .List~of('a','b')
+l~init
+say 'list init again' l~items l~firstItem
+a = .Array~of('a','b')
+a~init
+say 'array init again' a~items
+
+bare = .BareQ~new
+bare~queue('a')
+say 'queue subclass' bare~items bare~class~id
+bareList = .BareL~new
+bareList~append('a')
+say 'list subclass' bareList~items
+bareArray = .BareA~new
+bareArray~append('a')
+say 'array subclass' bareArray~items
+bareCircular = .BareC~new
+bareCircular~queue('a')
+say 'circular subclass' bareCircular~items
+
+::CLASS Watch SUBCLASS Array
+::METHOD init
+  say '  INIT' arg()
+  forward class (super)
+::METHOD append
+  say '  APPEND'
+  forward class (super)
+::METHOD put
+  say '  PUT'
+  forward class (super)
+
+::CLASS WatchL SUBCLASS List
+::METHOD init
+  say '  INIT' arg()
+  forward class (super)
+::METHOD append
+  say '  APPEND'
+  forward class (super)
+::METHOD put
+  say '  PUT'
+  forward class (super)
+
+::CLASS WatchQ SUBCLASS Queue
+::METHOD init
+  say '  INIT' arg()
+  forward class (super)
+::METHOD append
+  say '  APPEND'
+  forward class (super)
+::METHOD put
+  say '  PUT'
+  forward class (super)
+
+::CLASS BareQ SUBCLASS Queue
+::METHOD init
+  expose n
+  n = 0
+::CLASS BareL SUBCLASS List
+::METHOD init
+  expose n
+  n = 0
+::CLASS BareA SUBCLASS Array
+::METHOD init
+  expose n
+  n = 0
+::CLASS BareC SUBCLASS CircularQueue
+::METHOD init
+  expose n
+  n = 0

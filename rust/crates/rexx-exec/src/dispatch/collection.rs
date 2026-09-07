@@ -131,8 +131,44 @@ fn store_of(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure> {
         return Ok(receiver);
     }
     let scope = store_scope(interp);
-    pool_variable(interp, receiver, scope, QUEUE_ITEMS)
-        .ok_or_else(|| Loud::receiver_class("a value that is not an array").into())
+    if let Some(store) = pool_variable(interp, receiver, scope, QUEUE_ITEMS) {
+        return Ok(store);
+    }
+    // **A subclass `INIT` that never forwards still has a store.** Upstream
+    // the contents belong to the object `newRexx` allocates, so they are
+    // there before any `INIT` runs and a subclass that does not chain up
+    // cannot lose them. Measured: a `Queue` subclass whose `INIT` only sets
+    // an exposed variable answers `items 1` after `queue('a')`, and the same
+    // of a `CircularQueue` subclass -- both of which this crate refused with
+    // `a value that is not an array` when the store was `INIT`'s to make.
+    //
+    // On demand rather than at `new` so that this stays the one function
+    // that knows the arrangement.
+    if !holds_array_store(interp, receiver) {
+        return Err(Loud::receiver_class("a value that is not an array").into());
+    }
+    let store = interp.alloc_with(BehaviourId::ARRAY, Body::array(Vec::new()));
+    interp.roots.push_temp(store);
+    interp.set_pool_variable(receiver, scope, QUEUE_ITEMS, store);
+    Ok(store)
+}
+
+/// Whether `receiver` is an instance of a class this file gives an
+/// Array-shaped store to, which is what [`store_of`] may build one for. Any
+/// other receiver keeps the refusal.
+fn holds_array_store(interp: &mut Interp, receiver: ObjRef) -> bool {
+    let Some(class) = interp.class_of_value(receiver) else {
+        return false;
+    };
+    for name in ["Array", "Queue", "CircularQueue"] {
+        let Some(base) = interp.classes().lookup(name) else {
+            continue;
+        };
+        if interp.classes().is_a(class, base) {
+            return true;
+        }
+    }
+    false
 }
 
 /// Every (index, item) pair an ordered receiver holds, in the store's own
@@ -837,15 +873,23 @@ fn native_array_append(
 ) -> Result<Option<ObjRef>, Failure> {
     let item = item_argument(args)?;
     single_dimension_only(interp, receiver, "APPEND")?;
-    // **Past the last ITEM, not past the last slot.** A trailing hole is
-    // written into rather than skipped -- see [`last_item`].
+    let at = append_slot(interp, receiver, item)?;
+    Ok(Some(interp.counted(at)))
+}
+
+/// `append`'s body without the message send: writes `item` past the last
+/// item, growing to fit, and answers the 1-based index it landed on.
+///
+/// **Past the last ITEM, not past the last slot.** A trailing hole is written
+/// into rather than skipped -- see [`last_item`].
+fn append_slot(interp: &mut Interp, receiver: ObjRef, item: ObjRef) -> Result<usize, Failure> {
     let at = last_item(interp, receiver)?;
     let length = slots_of(interp, receiver)?.len();
     if at >= length {
         array_grow(interp, receiver, at + 1)?;
     }
     write_slot(interp, receiver, at, Some(item))?;
-    Ok(Some(interp.counted(at + 1)))
+    Ok(at + 1)
 }
 
 /// A `Queue`'s two-tier index bound, which is two different errors.
@@ -1402,15 +1446,20 @@ fn native_queue_init(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let asked = super::optional_length_argument(interp, args, 0)?.unwrap_or(0);
-    let store = interp.alloc_with(BehaviourId::ARRAY, Body::array(Vec::new()));
-    interp.roots.push_temp(store);
+    // **Keeps the contents and the extent a second `INIT` finds.** Measured,
+    // `q~init` on a two-item queue still answers `items 2`, and on a
+    // `.Queue~new(50)` holding one item `put('m', 50)` is still 93.966 --
+    // inside the extent, past the last item -- where a reset extent would
+    // have made it 93.918.
+    store_of(interp, receiver)?;
     let scope = store_scope(interp);
-    interp.set_pool_variable(receiver, scope, QUEUE_ITEMS, store);
-    // Measured: `.Queue~new(5)` bounds at 16 and `.Queue~new(50)` at 50, so
-    // the requested extent is floored at the default rather than replacing
-    // it.
-    let capacity = interp.counted(asked.max(DEFAULT_ARRAY_SIZE));
-    interp.set_pool_variable(receiver, scope, QUEUE_CAPACITY, capacity);
+    if pool_variable(interp, receiver, scope, QUEUE_CAPACITY).is_none() {
+        // Measured: `.Queue~new(5)` bounds at 16 and `.Queue~new(50)` at 50,
+        // so the requested extent is floored at the default rather than
+        // replacing it.
+        let capacity = interp.counted(asked.max(DEFAULT_ARRAY_SIZE));
+        interp.set_pool_variable(receiver, scope, QUEUE_CAPACITY, capacity);
+    }
     Ok(None)
 }
 
@@ -1424,12 +1473,7 @@ fn native_queue_queue(
     let item = item_argument(args)?;
     // Past the last ITEM, as `append` is: a queue emptied after holding two
     // starts again at index 1, and `peek` reads that slot.
-    let at = last_item(interp, receiver)?;
-    let length = slots_of(interp, receiver)?.len();
-    if at >= length {
-        array_grow(interp, receiver, at + 1)?;
-    }
-    write_slot(interp, receiver, at, Some(item))?;
+    append_slot(interp, receiver, item)?;
     Ok(None)
 }
 
@@ -1605,14 +1649,42 @@ fn list_scope(interp: &mut Interp) -> ObjRef {
 /// A list's items, its handles and its free stack.
 fn list_state(interp: &mut Interp, receiver: ObjRef) -> Result<(ObjRef, ObjRef, ObjRef), Failure> {
     let scope = list_scope(interp);
-    let (Some(items), Some(handles), Some(free)) = (
+    if let (Some(items), Some(handles), Some(free)) = (
         pool_variable(interp, receiver, scope, LIST_ITEMS),
         pool_variable(interp, receiver, scope, LIST_HANDLES),
         pool_variable(interp, receiver, scope, LIST_FREE),
-    ) else {
+    ) {
+        return Ok((items, handles, free));
+    }
+    // Built on demand for [`store_of`]'s reason: upstream the contents belong
+    // to the allocated object, so a subclass `INIT` that does not forward
+    // still has them. Measured, a `List` subclass whose `INIT` only sets an
+    // exposed variable answers `items 1` after `append('a')`. The three are
+    // only ever written together, so a partial set is not a state this can
+    // meet.
+    if !is_list(interp, receiver) {
         return Err(Loud::receiver_class("a value that is not a list").into());
+    }
+    let mut built = Vec::with_capacity(3);
+    for name in [LIST_ITEMS, LIST_HANDLES, LIST_FREE] {
+        let store = interp.alloc_with(BehaviourId::ARRAY, Body::array(Vec::new()));
+        interp.roots.push_temp(store);
+        interp.set_pool_variable(receiver, scope, name, store);
+        built.push(store);
+    }
+    Ok((built[0], built[1], built[2]))
+}
+
+/// Whether `receiver` is a `List` or something deriving from one --
+/// [`is_queue`]'s question for the other family.
+fn is_list(interp: &mut Interp, receiver: ObjRef) -> bool {
+    let Some(class) = interp.class_of_value(receiver) else {
+        return false;
     };
-    Ok((items, handles, free))
+    let Some(list) = interp.classes().lookup("List") else {
+        return false;
+    };
+    interp.classes().is_a(class, list)
 }
 
 /// Where in the list `handle` sits, or `None` for an index the list does not
@@ -1704,12 +1776,11 @@ fn native_list_init(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     super::optional_length_argument(interp, args, 0)?;
-    let scope = list_scope(interp);
-    for name in [LIST_ITEMS, LIST_HANDLES, LIST_FREE] {
-        let store = interp.alloc_with(BehaviourId::ARRAY, Body::array(Vec::new()));
-        interp.roots.push_temp(store);
-        interp.set_pool_variable(receiver, scope, name, store);
-    }
+    // **`INIT` sent a second time keeps the contents.** `ListClass::initRexx`
+    // takes the optional size and nothing else; the entries belong to the
+    // allocated object. Measured, `l~init` on a two-item list still answers
+    // `items 2`, where rebuilding the entries here answered `0`.
+    list_state(interp, receiver)?;
     Ok(None)
 }
 
@@ -2186,6 +2257,13 @@ fn native_list_make_array(
 /// **An omitted argument is refused, and the position named is its own.**
 /// Measured at rc 163: `.List~of('a',,'c')` reports `Missing argument in
 /// method; argument 2 is required.`
+///
+/// **`INIT` is the only message it sends, and it sends it with no arguments.**
+/// Measured with a subclass of each of `Array`, `List` and `Queue` overriding
+/// `INIT`, `APPEND` and `PUT`: `.Watch~of('x','y')` prints the `INIT` line
+/// reporting `arg()` as `0` and nothing else. Filling through `APPEND`, which
+/// is what this did for the `List` and `Queue` rows, is observable through
+/// any subclass that overrides it.
 pub(super) fn native_collection_of(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -2202,9 +2280,15 @@ pub(super) fn native_collection_of(
     interp.roots.push_temp(object);
     let caller = interp.caller();
     interp.send_message(object, super::INIT, None, &[], caller)?;
+    let list = is_list(interp, object);
     for argument in args.iter().flatten() {
-        let caller = interp.caller();
-        interp.send_message(object, b"APPEND", None, &[Some(*argument)], caller)?;
+        if list {
+            let (items, _, _) = list_state(interp, object)?;
+            let at = array_slots(interp, items)?.len();
+            list_insert_at(interp, object, at, Some(*argument))?;
+        } else {
+            append_slot(interp, object, *argument)?;
+        }
     }
     Ok(Some(object))
 }
