@@ -1077,9 +1077,15 @@ fn native_array_dimensions(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    // **A single-dimensional array answers its SIZE, not the extent it was
+    // fixed at.** `getDimensionsRexx` is `new_array(new_integer(size()))` for
+    // one (`classes/ArrayClass.cpp:1084`), and only a multi-dimensional array
+    // reports the stored shape. Measured: `.Array~new(0)~append('q')` then
+    // `~dimensions` is `1` -- and `.Array~of()` the same -- where reading the
+    // fixed list answered the stale `0`.
     let extents = match dimensions_of(interp, receiver)? {
-        Some(shape) => shape,
-        None => vec![slots_of(interp, receiver)?.len()],
+        Some(shape) if shape.len() > 1 => shape,
+        _ => vec![slots_of(interp, receiver)?.len()],
     };
     let items = extents
         .into_iter()

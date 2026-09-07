@@ -1,0 +1,18 @@
+/* A single-dimensional array reports its size for dimensions, not the extent
+   it was fixed at, so an append past that extent moves the answer. */
+zero = .Array~new(0)
+say 'new(0)' zero~dimensions~makeString('L',',') zero~dimension(1) zero~size
+zero~append('q')
+say 'appended' zero~dimensions~makeString('L',',') zero~dimension(1) zero~size zero~dimension
+
+made = .Array~of()
+made~append('q')
+say 'of()' made~dimensions~makeString('L',',') made~dimension(1) made~size
+
+five = .Array~new(5)
+say 'new(5)' five~dimensions~makeString('L',',') five~size
+five~append('m')
+say 'appended' five~dimensions~makeString('L',',') five~size
+
+grid = .Array~new(2,3)
+say 'grid' grid~dimensions~makeString('L',',') grid~dimension(1) grid~dimension(2)
