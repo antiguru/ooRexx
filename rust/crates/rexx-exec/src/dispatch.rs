@@ -6116,6 +6116,22 @@ fn unsigned_index(interp: &mut Interp, value: ObjRef) -> Option<usize> {
     usize::try_from(number.whole_value(rexx_num::ARGUMENT_DIGITS)?).ok()
 }
 
+/// A comparison result as `numberValue` reads it -- the conversion both sort
+/// comparators make on what the Rexx method answered
+/// (`classes/ArrayClass.cpp:2907`, `classes/ObjectClass.cpp:243`), at
+/// `Numerics::DEFAULT_DIGITS` rather than at the subscript precision.
+///
+/// `None` is the 26.902/26.903 limb. Measured: `'1.0'`, `'-1.0'` and `'0.0'`
+/// all convert and sort, where reading the answer's text for a sign left the
+/// array in its original order.
+fn whole_comparison(interp: &mut Interp, value: ObjRef) -> Option<i64> {
+    let digits = rexx_num::DEFAULT_DIGITS as usize;
+    if let Decoded::SmallInt(small) = value.decode() {
+        return rexx_num::whole_i64(small, digits);
+    }
+    interp.to_number(value).ok()?.whole_value(digits)
+}
+
 /// One subscript as `RexxInternalObject::requiredPositive`
 /// (`classes/ObjectClass.cpp:1564`) reads it, `position` naming its place in
 /// the method's own argument list.

@@ -1741,6 +1741,32 @@ impl Raised {
         Raised::syntax(93, 954, vec![method.as_bytes().to_vec()])
     }
 
+    /// 26.903: a `COMPARE` method answered something that is not a whole
+    /// number.
+    ///
+    /// `Error_Invalid_whole_number_compare`, raised by
+    /// `ArrayClass::WithSortComparator::compare` after `numberValue` refuses
+    /// the result (`classes/ArrayClass.cpp:2909`). The substitution is the
+    /// result as written. Measured at rc 230: a comparator answering `'abc'`
+    /// reports `Result of a COMPARE method call did not result in a whole
+    /// number; found "abc".`
+    pub(crate) fn compare_result_not_whole(found: &[u8]) -> Raised {
+        Raised::syntax(26, 903, vec![found.to_vec()])
+    }
+
+    /// 26.902: a `COMPARETO` method answered something that is not a whole
+    /// number.
+    ///
+    /// [`Raised::compare_result_not_whole`]'s sibling for the default order,
+    /// which is `RexxInternalObject::compareTo`
+    /// (`classes/ObjectClass.cpp:245`) rather than a comparator. Measured at
+    /// rc 230, sorting two instances of a class whose `COMPARETO` answers
+    /// `'zzz'`: `Result of a COMPARETO method call did not result in a whole
+    /// number; found "zzz".`
+    pub(crate) fn compare_to_result_not_whole(found: &[u8]) -> Raised {
+        Raised::syntax(26, 902, vec![found.to_vec()])
+    }
+
     /// 93.937: a `Supplier` was asked for a pair it no longer has.
     ///
     /// `Error_Incorrect_method_supplier`. No substitutions. Measured at

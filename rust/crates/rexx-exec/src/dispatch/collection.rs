@@ -42,7 +42,7 @@
 use super::{
     Arity, ArrayArgument, BehaviourId, Body, Cleared, Decoded, Failure, IndexUse, Interp, Loud,
     NativeMethod, ObjRef, Raised, array_argument, array_dimensions, array_position, array_slots,
-    array_slots_owned, new_instance, request_array,
+    array_slots_owned, new_instance, request_array, whole_comparison,
 };
 use rexx_parse::Operator;
 
@@ -1148,64 +1148,212 @@ fn order_of(
     let Some(answer) = answer else {
         return Err(Raised::no_result(name).into());
     };
-    // The sign is all the sort reads, which is what the C++ does with the
-    // `wholenumber_t` its two comparators answer.
-    let text = interp.to_text(answer);
-    let value: i64 = std::str::from_utf8(&text)
-        .ok()
-        .and_then(|text| text.trim().parse().ok())
-        .unwrap_or(0);
+    // **The answer is converted, not read for a sign.** Both comparators put
+    // it through `numberValue` and raise for a result that is not a whole
+    // number -- `WithSortComparator` 26.903 (`classes/ArrayClass.cpp:2909`)
+    // and `compareTo` 26.902 (`classes/ObjectClass.cpp:245`). Measured: a
+    // comparator answering `'-1.0'`, `'1.0'` and `'0.0'` sorts `b,a,c` into
+    // `a,b,c`, where parsing the text left it untouched; one answering
+    // `'abc'` raises, where this crate ran to completion.
+    let Some(value) = whole_comparison(interp, answer) else {
+        let found = interp.string_value_text(answer);
+        return Err(match order {
+            Order::CompareTo => Raised::compare_to_result_not_whole(&found).into(),
+            Order::With(_) => Raised::compare_result_not_whole(&found).into(),
+        });
+    };
     Ok(value)
 }
 
-/// A stable merge sort over `items`, which is what the interpreter's own four
-/// names all reach: `Setup.cpp` maps `Sort` and `StableSort` onto
-/// `ArrayClass::stableSortRexx` and the two `With` spellings onto
+/// Upstream's stable merge sort, comparison for comparison.
+///
+/// All four names reach it: `Setup.cpp` maps `Sort` and `StableSort` onto
+/// `ArrayClass::stableSortRexx` and both `With` spellings onto
 /// `stableSortWithRexx`, so **there is one algorithm here and not two**.
 ///
-/// Written out rather than handed to `slice::sort_by` because the comparison
-/// runs Rexx and can raise, and a `Result` cannot travel through a `bool`
-/// comparator.
+/// **The order of the comparisons is observable**, because every one of them
+/// runs Rexx -- a comparator that prints, counts or mutates sees the
+/// sequence, not just the result. Measured, `.Array~of(3,1,2)~sortWith`
+/// compares `1 3`, then `2 3`, then `2 1`, where a textbook top-down merge
+/// sort compares `1 2`, `3 1`, `3 2`. So this is `ArrayClass::mergeSort`
+/// (`classes/ArrayClass.cpp:2619`) written out rather than an algorithm that
+/// agrees with it on the answer: insertion sort at ten elements or fewer, and
+/// above that two halves merged by `merge` (`:2669`) using the exponential
+/// search of `find` (`:2773`).
+///
+/// The indices are one-based, as upstream's are, so the two can be read side
+/// by side; slot 0 of the vectors is a placeholder that is never compared.
 fn merge_sort(
     interp: &mut Interp,
     order: &Order,
     items: Vec<ObjRef>,
 ) -> Result<Vec<ObjRef>, Failure> {
-    if items.len() <= 1 {
+    let count = items.len();
+    if count <= 1 {
         return Ok(items);
     }
-    let mut items = items;
-    let right = items.split_off(items.len() / 2);
-    let mut left = merge_sort(interp, order, items)?.into_iter().peekable();
-    let mut right = merge_sort(interp, order, right)?.into_iter().peekable();
-    let mut merged = Vec::new();
-    loop {
-        match (left.peek().copied(), right.peek().copied()) {
-            (Some(a), Some(b)) => {
-                // `<= 0` keeps the left run first for equal keys, which is
-                // what makes this stable: measured,
-                // `.Array~of('b1','a1','b2','a2')~stableSortWith` over a
-                // first-character comparator answers `a1,a2,b1,b2`.
-                if order_of(interp, order, a, b)? <= 0 {
-                    merged.push(a);
-                    left.next();
-                } else {
-                    merged.push(b);
-                    right.next();
+    let mut one = Vec::with_capacity(count + 1);
+    one.push(items[0]);
+    one.extend(items);
+    let mut working = one.clone();
+    sort_range(interp, order, &mut one, &mut working, 1, count)?;
+    one.remove(0);
+    Ok(one)
+}
+
+/// `ArrayClass::mergeSort` over the inclusive one-based range `left..=right`.
+fn sort_range(
+    interp: &mut Interp,
+    order: &Order,
+    items: &mut [ObjRef],
+    working: &mut [ObjRef],
+    left: usize,
+    right: usize,
+) -> Result<(), Failure> {
+    // `len <= 10` is upstream's threshold, and it is why nine elements sort
+    // by insertion with no merge at all. Bound as `size_t len = right - left
+    // + 1` is, rather than folded into the test, so the two read alike.
+    let len = right - left + 1;
+    if len <= 10 {
+        for i in left + 1..=right {
+            let current = items[i];
+            let mut prev = items[i - 1];
+            if order_of(interp, order, current, prev)? < 0 {
+                let mut j = i;
+                loop {
+                    items[j] = prev;
+                    j -= 1;
+                    if j > left {
+                        prev = items[j - 1];
+                        if order_of(interp, order, current, prev)? < 0 {
+                            continue;
+                        }
+                    }
+                    break;
                 }
+                items[j] = current;
             }
-            (Some(a), None) => {
-                merged.push(a);
-                left.next();
-            }
-            (None, Some(b)) => {
-                merged.push(b);
-                right.next();
-            }
-            (None, None) => break,
+        }
+        return Ok(());
+    }
+    let mid = (right + left) / 2;
+    sort_range(interp, order, items, working, left, mid)?;
+    sort_range(interp, order, items, working, mid + 1, right)?;
+    merge(interp, order, items, working, left, mid + 1, right)
+}
+
+/// `ArrayClass::merge` (`classes/ArrayClass.cpp:2669`): the two partitions
+/// `left..mid` and `mid..=right`, merged through `working`.
+fn merge(
+    interp: &mut Interp,
+    order: &Order,
+    items: &mut [ObjRef],
+    working: &mut [ObjRef],
+    left: usize,
+    mid: usize,
+    right: usize,
+) -> Result<(), Failure> {
+    let left_end = mid - 1;
+    // Already in order: one comparison and no merge.
+    if order_of(interp, order, items[left_end], items[mid])? <= 0 {
+        return Ok(());
+    }
+    let mut left_cursor = left;
+    let mut right_cursor = mid;
+    let mut position = left;
+    loop {
+        let from_value = items[left_cursor];
+        let right_value = items[right_cursor];
+        if order_of(interp, order, from_value, right_value)? <= 0 {
+            let insertion = find(
+                interp,
+                order,
+                items,
+                right_value,
+                -1,
+                left_cursor + 1,
+                left_end,
+            )?;
+            let count = insertion - left_cursor + 1;
+            copy_run(items, left_cursor, working, position, count);
+            position += count;
+            working[position] = right_value;
+            position += 1;
+            right_cursor += 1;
+            left_cursor = insertion + 1;
+        } else {
+            let insertion = find(interp, order, items, from_value, 0, right_cursor + 1, right)?;
+            let count = insertion - right_cursor + 1;
+            copy_run(items, right_cursor, working, position, count);
+            position += count;
+            working[position] = from_value;
+            position += 1;
+            left_cursor += 1;
+            right_cursor = insertion + 1;
+        }
+        if !(right >= right_cursor && mid > left_cursor) {
+            break;
         }
     }
-    Ok(merged)
+    if left_cursor < mid {
+        copy_run(items, left_cursor, working, position, mid - left_cursor);
+    } else {
+        // `right - rightCursor + 1` upstream, where both are `size_t` and the
+        // loop can leave `rightCursor` one past `right` -- which wraps to
+        // zero there and would panic here.
+        copy_run(
+            items,
+            right_cursor,
+            working,
+            position,
+            (right + 1).saturating_sub(right_cursor),
+        );
+    }
+    copy_run(working, left, items, left, right - left + 1);
+    Ok(())
+}
+
+/// `ArrayClass::find` (`classes/ArrayClass.cpp:2773`): where `value` belongs
+/// in the sorted run `left..=right`, by exponential search then bisection.
+///
+/// `limit` is upstream's: `-1` puts `value` after its equals and `0` before
+/// them, which is what makes the merge stable.
+fn find(
+    interp: &mut Interp,
+    order: &Order,
+    items: &[ObjRef],
+    value: ObjRef,
+    limit: i64,
+    left: usize,
+    right: usize,
+) -> Result<usize, Failure> {
+    let (mut left, mut right) = (left, right);
+    let mut check = left;
+    let mut delta = 1;
+    while check <= right {
+        if order_of(interp, order, value, items[check])? > limit {
+            left = check + 1;
+        } else {
+            right = check - 1;
+            break;
+        }
+        check += delta;
+        delta *= 2;
+    }
+    while left <= right {
+        check = left.midpoint(right);
+        if order_of(interp, order, value, items[check])? > limit {
+            left = check + 1;
+        } else {
+            right = check - 1;
+        }
+    }
+    Ok(left - 1)
+}
+
+/// `ArrayClass::arraycopy` (`classes/ArrayClass.cpp:2745`).
+fn copy_run(source: &[ObjRef], start: usize, target: &mut [ObjRef], index: usize, count: usize) {
+    target[index..index + count].copy_from_slice(&source[start..start + count]);
 }
 
 /// Writes `items` back over the receiver's slots, which is what makes the

@@ -1,0 +1,133 @@
+/* The sort's comparison SEQUENCE is observable, because every comparison runs
+ * Rexx: a comparator that prints, counts or mutates sees the order, not just
+ * the result.  Upstream is insertion sort at ten elements or fewer, and above
+ * that two halves merged with an exponential search -- so three elements and
+ * nine elements take the insertion path, and fifteen exercises the merge.
+ *
+ * A textbook top-down merge sort agrees with all three answers and with none
+ * of the three sequences, which is what makes the traced lines the subject
+ * here rather than the sorted arrays beside them.
+ *
+ * The result each comparison answers goes through `numberValue`, so '1.0' and
+ * '-1.0' order the array while 'abc' is 26.903 -- and the default order,
+ * which is `compareTo` rather than a comparator, raises 26.902 instead.
+ *
+ * Every refusal below is raised inline rather than from an internal routine:
+ * a SYNTAX condition raised inside a PROCEDURE runs the caller's trap in the
+ * CALLEE's variable pool -- measured, `symbol('n')` is LIT there -- so a
+ * `signal` back into a counted loop re-raises on the counter forever, and the
+ * spinning interpreter does not answer SIGTERM.
+ *
+ * The last send is untrapped so the 26.903 text and the frame line are
+ * compared as bytes. rc 230.
+ */
+
+small = .Array~of(3,1,2)
+small~sortWith(.Tracer~new)
+say 'three' small~makeString('L',',')
+
+nine = .Array~of(5,3,8,1,9,2,7,4,6)
+nine~sortWith(.Tracer~new)
+say 'nine' nine~makeString('L',',')
+
+wide = .Array~of(11,4,15,2,9,13,6,1,14,7,3,12,5,10,8)
+wide~sortWith(.Quiet~new)
+say 'fifteen' wide~makeString('L',',')
+
+floats = .Array~of('b','a','c')
+floats~sortWith(.Floaty~new)
+say 'float results' floats~makeString('L',',')
+
+ranked = .Array~of(.Ranked~new(2), .Ranked~new(1), .Ranked~new(3))
+ranked~sort
+say 'compareTo' ranked~at(1)~rank ranked~at(2)~rank ranked~at(3)~rank
+
+signal on syntax name trapped
+n = 0
+pair = .Array~of('b','a')
+
+next:
+n = n + 1
+select
+  when n = 1 then do
+    pair~sortWith(.Fixed~new('abc'))
+    say n 'answered' pair~makeString('L',',')
+  end
+  when n = 2 then do
+    pair~sortWith(.Fixed~new(''))
+    say n 'answered' pair~makeString('L',',')
+  end
+  when n = 3 then do
+    pair~sortWith(.Fixed~new('1.5'))
+    say n 'answered' pair~makeString('L',',')
+  end
+  when n = 4 then do
+    .Array~of(.Broken~new, .Broken~new)~sort
+    say n 'answered sorted'
+  end
+  when n = 5 then do
+    pair~sortWith(.Fixed~new('-1'))
+    say n 'answered' pair~makeString('L',',')
+  end
+  when n = 6 then do
+    pair~sortWith(.Fixed~new('0'))
+    say n 'answered' pair~makeString('L',',')
+  end
+  otherwise signal done
+end
+signal next
+
+trapped:
+say n 'raised' rc'.'condition('E')
+signal on syntax name trapped
+signal next
+
+done:
+signal off syntax
+pair~sortWith(.Fixed~new('abc'))
+
+::CLASS Ranked
+::METHOD init
+  expose r
+  use arg r
+::METHOD rank
+  expose r
+  return r
+::METHOD compareTo
+  expose r
+  use arg other
+  return r - other~rank
+
+::CLASS Broken
+::METHOD compareTo
+  return 'zzz'
+
+::CLASS Tracer SUBCLASS Comparator
+::METHOD compare
+  use arg l, r
+  say '  cmp' l r
+  return l - r
+
+::CLASS Quiet SUBCLASS Comparator
+::METHOD compare
+  expose n
+  use arg l, r
+  if var('n') then n = n + 1
+  else n = 1
+  say '  step' n l r
+  return l - r
+
+::CLASS Floaty SUBCLASS Comparator
+::METHOD compare
+  use arg l, r
+  if l << r then return '-1.0'
+  if l >> r then return '1.0'
+  return '0.0'
+
+::CLASS Fixed SUBCLASS Comparator
+::METHOD init
+  expose v
+  use arg v
+::METHOD compare
+  expose v
+  return v
