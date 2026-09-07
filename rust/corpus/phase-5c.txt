@@ -138,3 +138,4 @@ lang/stem_collection.rex
 lang/collection_copy.rex
 lang/directory_set_method.rex
 lang/method_new.rex
+lang/stem_request_and_directory.rex

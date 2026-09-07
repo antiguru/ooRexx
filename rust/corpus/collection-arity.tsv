@@ -385,12 +385,12 @@ Stem	put	agree	rc0
 Stem	putAll	agree	rc0
 Stem	remove	agree	rc0
 Stem	removeItem	agree	rc0
-Stem	request	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "REQUEST" of class "Stem" is not implemented (Phase 5)
+Stem	request	agree	rc0
 Stem	subset	agree	rc0
 Stem	supplier	agree	rc0
-Stem	toDirectory	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "TODIRECTORY" of class "Stem" is not implemented (Phase 5)
+Stem	toDirectory	agree	rc0
 Stem	union	agree	rc0
-Stem	unknown	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "UNKNOWN" of class "Stem" is not implemented (Phase 5)
+Stem	unknown	agree	rc0
 Stem	xor	agree	rc0
 StringTable	[]	agree	rc0
 StringTable	[]=	agree	rc0

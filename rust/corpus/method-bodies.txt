@@ -821,10 +821,10 @@ Stem	makeArray	instance	answers	rc 0
 Stem	put	instance	answers	rc 163
 Stem	remove	instance	answers	rc 0
 Stem	removeItem	instance	answers	rc 163
-Stem	request	instance	loud	method "REQUEST" of class "Stem"
+Stem	request	instance	answers	rc 163
 Stem	supplier	instance	answers	rc 0
-Stem	toDirectory	instance	loud	method "TODIRECTORY" of class "Stem"
-Stem	unknown	instance	loud	method "UNKNOWN" of class "Stem"
+Stem	toDirectory	instance	answers	rc 0
+Stem	unknown	instance	answers	rc 163
 Stem	difference	instance	answers	rc 163
 Stem	disjoint	instance	answers	rc 163
 Stem	equivalent	instance	answers	rc 163

@@ -53,7 +53,7 @@
 
 use super::{
     Arity, BehaviourId, Body, Cleared, Decoded, Failure, Interp, Loud, NativeMethod, ObjRef,
-    Raised, array_slots, new_instance,
+    Raised, array_slots, new_instance, required_string_argument, unconverted_array_argument,
 };
 
 /// The five pool entries a hash store is, bound in the receiver's own pool
@@ -531,22 +531,6 @@ fn keys_of(interp: &mut Interp, receiver: ObjRef) -> Keys {
     }
 }
 
-/// Whether `value`'s behaviour is a primitive one, which is what
-/// `RexxObject::hash` branches on (`classes/ObjectClass.cpp:416`).
-///
-/// **"Has a string value" and "is a base-class object" are different
-/// questions**, which is spec D96's trap: a `String` subclass has a string
-/// value and is not a base class, so its `HASHCODE` override is reached where
-/// a plain string's -- which cannot exist, since `.String~define` is 98.985 --
-/// would not be.
-fn is_base_class(interp: &mut Interp, value: ObjRef) -> bool {
-    let Some(class) = interp.class_of_value(value) else {
-        return true;
-    };
-    let id = interp.classes().id_string(class).to_string();
-    interp.classes().system_lookup(&id) == Some(class)
-}
-
 /// `RexxInternalObject::getHashValue()`, which is what the identity contents
 /// hashes with and what the equality contents falls back on for a base class.
 fn get_hash_value(interp: &mut Interp, value: ObjRef) -> u64 {
@@ -580,7 +564,13 @@ fn hash_of(interp: &mut Interp, keys: Keys, index: ObjRef) -> Result<u64, Failur
         let text = interp.to_text(index).into_owned();
         return Ok(super::string_hash(&text));
     }
-    if keys == Keys::Identity || is_base_class(interp, index) {
+    // `RexxObject::hash` branches on whether the behaviour is a primitive one
+    // (`classes/ObjectClass.cpp:416`). **"Has a string value" and "is a
+    // base-class object" are different questions**, which is spec D96's trap:
+    // a `String` subclass has a string value and is not a base class, so its
+    // `HASHCODE` override is reached where a plain string's -- which cannot
+    // exist, since `.String~define` is 98.985 -- would not be.
+    if keys == Keys::Identity || interp.is_base_class(index) {
         return Ok(get_hash_value(interp, index));
     }
     let caller = interp.caller();
@@ -1820,6 +1810,122 @@ fn native_stem_all_items(
 
 /// `makeArray` answers the INDEXES here as it does for every other class in
 /// this phase -- measured, `A,C` for a stem holding `A` and `C`, not `1,3`.
+/// The stem's own value, which is what `StemClass`'s forwarding methods send
+/// to -- the `value` field every one of them names.
+///
+/// An unassigned stem answers its derived name, the same rule
+/// [`stem_read`] applies to a never-assigned tail. Measured: a bare
+/// `.Stem~new` answers `''`, so `~length` through `unknown` is 0, while a
+/// `q.` assigned `hello` answers `hello` and `~length` is 5.
+fn stem_value(interp: &mut Interp, receiver: ObjRef) -> ObjRef {
+    let (default, name) = match interp.heap.get(receiver).map(|object| &object.body) {
+        Some(Body::Stem { default, name, .. }) => (*default, name.as_ref().to_vec()),
+        _ => return ObjRef::NIL,
+    };
+    default.unwrap_or_else(|| interp.text_built(name))
+}
+
+/// `StemClass::request(class)` (`classes/StemClass.cpp`): `'ARRAY'` answers
+/// the stem's own `makeArray` -- which for a `Stem` is its TAILS -- and every
+/// other class is forwarded to the stem's value.
+///
+/// The argument is `stringArgument(requestclass, ARG_ONE)`, so it is the
+/// POSITIONAL 93 and not the named 88 -- measured, `request()` is rc 93 --
+/// and it is upper-cased, so `request('array')` answers an `Array` too.
+///
+/// The `ARRAY` limb repeats `requestArray`'s own `isBaseClass` split: a real
+/// `Stem` answers `makeArray()` directly, a subclass is sent `MAKEARRAY`.
+fn native_stem_request(
+    interp: &mut Interp,
+    cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !is_stem(interp, receiver) {
+        return Err(stem_refusal(interp, receiver, b"REQUEST"));
+    }
+    let Some(wanted) = args.first().copied().flatten() else {
+        return Err(Raised::missing_method_argument(1).into());
+    };
+    let wanted = required_string_argument(interp, wanted, 1)?;
+    let upper = interp.to_text(wanted).to_ascii_uppercase();
+    if upper == b"ARRAY" {
+        if interp.is_base_class(receiver) {
+            return native_stem_make_array(interp, cleared, receiver, &[]);
+        }
+        let caller = interp.caller();
+        return interp.send_message(receiver, b"MAKEARRAY", None, &[], caller);
+    }
+    let value = stem_value(interp, receiver);
+    interp.roots.push_temp(value);
+    let forwarded = interp.text_built(upper);
+    interp.roots.push_temp(forwarded);
+    let caller = interp.caller();
+    interp.send_message(value, b"REQUEST", None, &[Some(forwarded)], caller)
+}
+
+/// `StemClass::toDirectory`: a fresh `Directory` holding one entry per tail
+/// that HAS a value, keyed by the tail's name, added in the tail tree's own
+/// `first`/`next` order.
+///
+/// The answer's order is the DIRECTORY's, not the stem's: the names go in in
+/// tail order and come back in the store's. Measured, a stem with `X` and `Y`
+/// answers `allIndexes` `X,Y` and `allItems` `9,8`, and a stem one of whose
+/// two tails has been removed answers a directory of one.
+fn native_stem_to_directory(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !is_stem(interp, receiver) {
+        return Err(stem_refusal(interp, receiver, b"TODIRECTORY"));
+    }
+    let class = interp
+        .classes()
+        .lookup("Directory")
+        .expect("Directory is a native class");
+    let object = new_instance(interp, class)?;
+    interp.roots.push_temp(object);
+    for (name, value) in stem_live(interp, receiver) {
+        let index = interp.text_built(name);
+        interp.roots.push_temp(index);
+        insert(interp, object, index, Some(value))?;
+    }
+    Ok(Some(object))
+}
+
+/// `StemClass::unknownRexx(message, arguments)`: forwards the message and its
+/// argument array to the stem's value.
+///
+/// Measured: `q.` valued `hello` answers `q.~length` as 5, and a bare
+/// `.Stem~new`, whose value is the empty string, answers 0.
+fn native_stem_unknown(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !is_stem(interp, receiver) {
+        return Err(stem_refusal(interp, receiver, b"UNKNOWN"));
+    }
+    let Some(message) = args.first().copied().flatten() else {
+        return Err(Raised::missing_method_argument(1).into());
+    };
+    let message = required_string_argument(interp, message, 1)?;
+    let name = interp.to_text(message).to_vec();
+    let Some(arguments) = args.get(1).copied().flatten() else {
+        return Err(Raised::missing_method_argument(2).into());
+    };
+    let Some(forwarded) = interp.array_slots_of(arguments) else {
+        return Err(unconverted_array_argument(interp, arguments));
+    };
+    let value = stem_value(interp, receiver);
+    interp.roots.push_temp(value);
+    let caller = interp.caller();
+    interp.send_message(value, &name, None, &forwarded, caller)
+}
+
 fn native_stem_make_array(
     interp: &mut Interp,
     cleared: Cleared,
@@ -2774,6 +2880,14 @@ pub(super) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         native_stem_remove_item,
     ),
     ("Stem", "EMPTY", Arity::Fixed(0), native_stem_empty),
+    ("Stem", "REQUEST", Arity::Fixed(1), native_stem_request),
+    (
+        "Stem",
+        "TODIRECTORY",
+        Arity::Fixed(0),
+        native_stem_to_directory,
+    ),
+    ("Stem", "UNKNOWN", Arity::Fixed(2), native_stem_unknown),
     ("Bag", "HASITEM", Arity::Fixed(2), native_relation_has_item),
     (
         "Bag",

@@ -1801,7 +1801,21 @@ impl Interp {
     ///
     /// `None` where this phase builds no behaviour for the receiver, which is
     /// [`Interp::receiver_kind`]'s own refusal.
-    fn receiver_class_id(&mut self, receiver: ObjRef) -> Option<String> {
+    /// `RexxInternalObject::isBaseClass` (`classes/ObjectClass.hpp`): whether
+    /// the value's class is the interpreter's own class of that name rather
+    /// than a user subclass wearing it.
+    ///
+    /// It is what `requestArray` and the hash protocols branch on, so it lives
+    /// here rather than in either caller.
+    pub(crate) fn is_base_class(&mut self, value: ObjRef) -> bool {
+        let Some(class) = self.class_of_value(value) else {
+            return true;
+        };
+        let id = self.classes().id_string(class).to_string();
+        self.classes().system_lookup(&id) == Some(class)
+    }
+
+    pub(crate) fn receiver_class_id(&mut self, receiver: ObjRef) -> Option<String> {
         let owner = match self.receiver_behaviour(receiver).ok()? {
             Behaviour::Instance { owner, .. } => owner,
             // A class object's messages resolve against its class behaviour,
@@ -2102,7 +2116,7 @@ impl Interp {
     /// only method is `::METHOD unknown CLASS PRIVATE` answers `.K~zork` from
     /// outside the class, where the same directive under any other name is
     /// refused.
-    fn lookup(
+    pub(crate) fn lookup(
         &mut self,
         receiver: ObjRef,
         name: &[u8],
@@ -11706,10 +11720,16 @@ mod tests {
         );
     }
 
-    /// A receiver whose class this phase does not build is loud too, and for
-    /// the same reason: the oracle answers a send to a stem.
+    /// A `Stem` answers a message it has no method for by forwarding it to its
+    /// VALUE -- `StemClass::unknownRexx`.
+    ///
+    /// This was a refusal until `Stem~UNKNOWN` was built, and what replaced it
+    /// is the oracle's own answer rather than a choice: a stem named `A.` with
+    /// nothing assigned to it has the value `A.`, so `LENGTH` is 2. Measured,
+    /// oracle rc 0, with both engines agreeing: `a.b = 1` then `a.~length` is
+    /// `2`, `a.~string` is `A.` and `a.~upper` is `A.`.
     #[test]
-    fn a_receiver_with_no_class_here_is_loud() {
+    fn a_stem_forwards_a_message_it_has_no_method_for_to_its_value() {
         let mut interp = Interp::new();
         let stem = interp.alloc_with(
             rexx_core::BehaviourId::STEM,
@@ -11719,10 +11739,11 @@ mod tests {
                 tails: rexx_core::NameMap::default(),
             },
         );
-        assert!(matches!(
-            interp.send_message(stem, b"LENGTH", None, &[], no_caller()),
-            Err(Failure::Loud(_))
-        ));
+        let answered = interp
+            .send_message(stem, b"LENGTH", None, &[], no_caller())
+            .expect("a stem forwards an unknown message to its value")
+            .expect("LENGTH answers a value");
+        assert_eq!(interp.to_text(answered).as_ref(), b"2");
     }
 
     /// `~identityHash` answers, and **the corpus cannot witness it**: the
