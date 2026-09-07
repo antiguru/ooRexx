@@ -605,11 +605,16 @@ Measured on the oracle: `.Array~isMetaclass` is `0`, `.Object~isAbstract` is `0`
 `methods` are the two that need real state — a class's subclass list and its method table — and
 both must be witnessed by a second send that reads an element out.
 
-**`subclasses` has a hazard worth naming before it is discovered.** A class's subclass list is a
-set the collector must not keep alive by itself, and the oracle's own list is weak; check what
-`ClassClass`'s subclass list does with a collected subclass and write the witness for whichever it
-is. If this crate has no subclass list at all, building one is the bulk of this task and the report
-says so.
+**The subclass list already exists**: `class_graph.rs:128`'s `subclasses: Vec<ObjRef>`, written by
+the same path for `subclass()` and `inherit()` the way the oracle's `addSubClass` is, and read out
+by `Registry::subclasses` (`rexx-classes/src/registry.rs:387`). So this row is a reader over state
+that is there, not a new structure.
+
+**Its hazard is what the list does with a collected subclass.** The oracle's is weak; this crate's
+is a plain `Vec<ObjRef>`. Check what `ClassClass`'s list does when a subclass becomes unreachable
+and write the witness for whichever the oracle does — and note that spec D59 says classes are never
+collected here, so the answer may be that the question does not arise. Say which it is rather than
+leaving it unstated.
 
 ---
 
