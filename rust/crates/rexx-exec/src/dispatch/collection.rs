@@ -42,7 +42,7 @@
 use super::{
     Arity, ArrayArgument, BehaviourId, Body, Cleared, Decoded, Failure, IndexUse, Interp, Loud,
     NativeMethod, ObjRef, Raised, array_argument, array_dimensions, array_position, array_slots,
-    array_slots_owned, new_instance,
+    array_slots_owned, new_instance, request_array,
 };
 use rexx_parse::Operator;
 
@@ -549,16 +549,22 @@ fn supplier_state(
     Ok((items, indexes, position as usize))
 }
 
-/// How many pairs the supplier still has, which is the shorter of its two
-/// arrays measured from the current position.
+/// How many pairs the supplier still has, measured from the current position
+/// against its ITEMS array.
 ///
-/// **The two arrays need not be the same length.** Measured, a supplier over
-/// one item and two indexes constructs and answers `available 1`.
+/// **The INDEXES array bounds nothing.** `available`, `next`, `item` and
+/// `index` all test `position > items->size()` and none of them looks at the
+/// other array's length (`classes/SupplierClass.cpp:180`, `:217`, `:254`).
+/// Measured over items `('a','b')` and indexes `(1)`: after one `next` the
+/// supplier is still available and `item` is `b`, while `index` answers
+/// `.nil` -- [`supplier_half`]'s own missing-slot limb -- rather than
+/// raising. It is a SIZE and not an item count: a supplier over
+/// `.Array~new(2)` is available at both positions and answers `.nil` for the
+/// item at each.
 fn supplier_remaining(interp: &mut Interp, receiver: ObjRef) -> Result<usize, Failure> {
-    let (items, indexes, position) = supplier_state(interp, receiver)?;
+    let (items, _, position) = supplier_state(interp, receiver)?;
     let items = array_slots(interp, items)?.len();
-    let indexes = array_slots(interp, indexes)?.len();
-    Ok(items.min(indexes).saturating_sub(position))
+    Ok(items.saturating_sub(position))
 }
 
 /// `Supplier~available`: whether a pair is still there --
@@ -641,8 +647,15 @@ fn native_supplier_init(
         let Some(value) = args.get(position - 1).copied().flatten() else {
             return Err(Raised::missing_method_argument(position).into());
         };
-        // Validated for the argument error it raises, and then the array
-        // OBJECT is what is kept: the supplier holds the arrays it was given.
+        // `arrayArgument` is `requestArray`
+        // (`runtime/MethodArguments.hpp:683`), so a `List` or a `Queue` is
+        // converted and the CONVERTED array is what the supplier keeps --
+        // measured, `.Supplier~new(.List~of('a'), .List~of('h'))` answers
+        // `1 a h`. An argument that already is an array is kept as it
+        // stands, object identity and all.
+        let value = request_array(interp, value)?;
+        // Validated for the argument error it raises, after the conversion
+        // that upstream makes first.
         array_argument(interp, value, ArrayArgument::Positional)?;
         sides.push(value);
     }

@@ -1,0 +1,55 @@
+/* A Supplier is bounded by its items array alone: `available`, `next`, `item`
+ * and `index` all test the position against `items->size()` and none of them
+ * looks at the indexes array.  So a supplier whose indexes array is the
+ * shorter one keeps answering, and `index` past the end of it is `.nil`
+ * rather than the 93.937 the far end of the ITEMS array raises.
+ *
+ * It is a SIZE and not an item count, which is what the sparse case shows:
+ * two empty slots are two positions, each answering `.nil` for the item.
+ *
+ * Both arguments go through `requestArray`, so a List or a Queue is converted
+ * rather than refused.
+ *
+ * The last send is untrapped so the 93.937 text and the frame line are
+ * compared as bytes. rc 163.
+ */
+
+short = .Supplier~new(.Array~of('a','b'), .Array~of(1))
+say 'start' short~available short~item short~index
+short~next
+say 'past the indexes' short~available short~item short~index
+short~next
+say 'exhausted' short~available
+
+sparse = .Supplier~new(.Array~new(2), .Array~of(1,2))
+say 'sparse' sparse~available sparse~item sparse~index
+sparse~next
+say 'sparse again' sparse~available sparse~item sparse~index
+
+converted = .Supplier~new(.List~of('a'), .List~of('h'))
+say 'from lists' converted~available converted~item converted~index
+mixed = .Supplier~new(.Queue~of('q'), .Array~of(1))
+say 'from a queue' mixed~available mixed~item mixed~index
+
+signal on syntax name trapped
+n = 0
+
+next:
+n = n + 1
+select
+  when n = 1 then say n 'answered' short~item
+  when n = 2 then say n 'answered' short~index
+  when n = 3 then say n 'answered' short~next
+  when n = 4 then say n 'answered' .Supplier~new(.Array~of('a'), .Array~of(1))~item
+  otherwise signal done
+end
+signal next
+
+trapped:
+say n 'raised' rc'.'condition('E')
+signal on syntax name trapped
+signal next
+
+done:
+signal off syntax
+say short~item

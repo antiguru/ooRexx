@@ -1469,6 +1469,7 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/list_index_conversion.rex",
     "lang/list_empty_entry.rex",
     "lang/list_empty_and_section.rex",
+    "lang/supplier_bounds.rex",
 ];
 
 #[test]

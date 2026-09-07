@@ -6830,6 +6830,31 @@ fn referenced_receiver(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, 
 /// this crate has, and the send itself for a value it does not build a class
 /// for at all. Either way the message reads like the one `~request('ARRAY')`
 /// produces for the same value.
+/// `RexxObject::requestArray` (`runtime/MethodArguments.hpp:683`): the value
+/// itself when it already is an array, and its `MAKEARRAY` otherwise.
+///
+/// Upstream this is a `REQUEST` send, which answers `.nil` for a receiver
+/// whose behaviour has no `MAKEARRAY` and lets one that does raise through.
+/// The `.nil` limb keeps [`unconverted_array_argument`]'s loud refusal here
+/// rather than becoming upstream's `Error_Execution_noarray`: that gap is
+/// unchanged by this function and is not what it is for.
+///
+/// It exists because the collection classes now answer `MAKEARRAY`, and the
+/// refusal was written when no receiver did. Measured, oracle and crate
+/// agreeing: `.Supplier~new(.List~of('a'), .List~of('h'))` answers
+/// `1 a h`, where the direct slot read refused it.
+fn request_array(interp: &mut Interp, value: ObjRef) -> Result<ObjRef, Failure> {
+    if interp.array_slots_of(value).is_some() {
+        return Ok(value);
+    }
+    if interp.lookup(value, b"MAKEARRAY", None).is_none() {
+        return Ok(value);
+    }
+    let caller = interp.caller();
+    let sent = interp.send_message(value, b"MAKEARRAY", None, &[], caller)?;
+    Ok(sent.unwrap_or(value))
+}
+
 fn unconverted_array_argument(interp: &mut Interp, value: ObjRef) -> Failure {
     match interp.receiver_class_id(value) {
         Some(id) => Loud::native_method(b"MAKEARRAY", &id).into(),
@@ -7774,6 +7799,7 @@ fn array_argument(
     value: ObjRef,
     overload: ArrayArgument,
 ) -> Result<Vec<Option<ObjRef>>, Failure> {
+    let value = request_array(interp, value)?;
     let Some(slots) = interp.array_slots_of(value) else {
         return Err(unconverted_array_argument(interp, value));
     };
