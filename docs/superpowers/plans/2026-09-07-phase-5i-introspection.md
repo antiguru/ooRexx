@@ -1110,15 +1110,23 @@ for each one's search order, measure the miss as well as the hit, and assert bot
    `corpus/introspection-arity.tsv` under Task 0's refresh variable. Report the `loud` count per
    class before and after the phase, and **name every row that did not close and why**. The scope
    note's figure to close against is 139.
-2. **Run the gate's one rule in anger**: no row that was not diverging may have started diverging,
+2. **Re-run `fmt` and `clippy` from a CLEAN target directory**, in the gate worktree, at this
+   boundary and nowhere else. `rust/CLAUDE.md` records a green
+   `cargo clippy --workspace --all-targets -- -D warnings` that had not re-linted the code, repeated
+   across a session including at two commits that fail the identical command when it is re-run, and
+   its rule is that a same-session green is provisional. This phase's per-task runs are all warm --
+   Task 0's second run reported G1 and G2 within seconds for a doc-comment-only diff, and its
+   implementer flagged that itself. So the clean-target run belongs here, once, and its reading is
+   the one the phase closes on.
+3. **Run the gate's one rule in anger**: no row that was not diverging may have started diverging,
    and no row that was answering may have stopped. `RexxInfo~executable`/`~libraryPath` are the
    known exception and carry Task 3's decision.
-3. **The hollowness sweep.** For every row this phase closed, ask the question
+4. **The hollowness sweep.** For every row this phase closed, ask the question
    `rust/CLAUDE.md`'s rule asks: what degenerate implementation satisfies its witness, and would
    deleting the state it reads leave it green? Report the rows where the answer is uncomfortable.
    The classes to look at hardest are the ones whose oracle answer is an empty container or a
    constant — `Package`'s tables, `RexxInfo`'s platform facts, the three `setSecurityManager` rows.
-4. **Two things this phase found and declined, which the close must carry with their
+5. **Two things this phase found and declined, which the close must carry with their
    measurements.** `Class~new` on the class arm is `send-differs` under a real argument list and is
    **declined with a destination**: measured, `.Class~new('NEWCLS')` answers a class whose id is
    `NEWCLS` and whose superclass is `Object`, and whose instances then cannot be constructed at all
@@ -1128,11 +1136,11 @@ for each one's search order, measure the miss as well as the hit, and assert bot
    collection driver as well is an open opportunity with a named cost**: it re-verdicts
    `corpus/collection-arity.tsv`'s `agree` rows, and whatever it finds is a Phase 5g or 5h defect
    rather than a 5i one. `Class~enhanced` is what that comparison found on this phase's own classes.
-5. **The handover, which is a deliverable and not a formality.** It names, for the next phase to
+6. **The handover, which is a deliverable and not a formality.** It names, for the next phase to
    read: `Pointer` and `Buffer` as classes with no constructible instance and Phase 8 as the owner;
    `Message` and the two semaphores as Phase 6's; `Stream`, `File` and `RexxQueue` as Phase 7's,
    with `RexxQueue` additionally gated on D7; and any row this phase declined.
-6. **Update the scope note in place** with what the phase actually cost against what it was scoped
+7. **Update the scope note in place** with what the phase actually cost against what it was scoped
    at, and say which of its predictions were wrong. The prediction most likely to be wrong is "the
    cheapest first move is `ARG` option `A`, nine rows on one fix" — it is measured, so if it did not
    hold, that is the finding.
