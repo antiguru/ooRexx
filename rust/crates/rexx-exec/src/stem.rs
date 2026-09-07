@@ -475,9 +475,9 @@ impl Interp {
                 );
             };
             match tails.get(key) {
-                Some(Some(value)) => Some(*value),
-                Some(None) => None, // the tombstone: absent from the default too
-                None => *default,   // an untouched tail falls back to the default
+                Some((_, Some(value))) => Some(*value),
+                Some((_, None)) => None, // the tombstone: absent from the default too
+                None => *default,        // an untouched tail falls back to the default
             }
         };
 
@@ -550,16 +550,21 @@ impl Interp {
                 // The miss path hashes twice, and that is the trade: a tail
                 // is written once and then written again for the rest of the
                 // program.
+                // **The ordinal is assigned once and kept.** A tail written
+                // again, or written after a `DROP`, keeps the place it first
+                // took, because upstream reuses the tree node -- see
+                // `Body::Stem`.
+                let next = tails.len();
                 match tails.get_mut(key) {
-                    Some(existing) => *existing = Some(value),
+                    Some((_, existing)) => *existing = Some(value),
                     None => {
-                        tails.insert(key.to_vec(), Some(value));
+                        tails.insert(key.to_vec(), (next, Some(value)));
                     }
                 }
             }
             None => {
                 let mut tails = rexx_core::NameMap::default();
-                tails.insert(key.to_vec(), Some(value));
+                tails.insert(key.to_vec(), (0, Some(value)));
                 let stem = self.alloc_with(
                     BehaviourId::STEM,
                     Body::Stem {
@@ -597,7 +602,10 @@ impl Interp {
                     body_variant_name(&object.body)
                 );
             };
-            tails.insert(key.to_vec(), None);
+            // A drop keeps the tail's place, so the ordinal survives it.
+            let next = tails.len();
+            let ordinal = tails.get(key).map_or(next, |(at, _)| *at);
+            tails.insert(key.to_vec(), (ordinal, None));
         }
     }
 
@@ -818,7 +826,7 @@ impl Interp {
                     default: None,
                     tails,
                     ..
-                }) if tails.values().all(Option::is_none)
+                }) if tails.values().all(|(_, tail)| tail.is_none())
             ),
             _ => false,
         }

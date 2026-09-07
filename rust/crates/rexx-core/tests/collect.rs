@@ -117,9 +117,9 @@ fn a_stems_tails_and_default_are_traced() {
         num: None,
     });
     let mut tails = rexx_core::NameMap::default();
-    tails.insert(b"1".to_vec(), Some(tail));
+    tails.insert(b"1".to_vec(), (0, Some(tail)));
     // A tombstone: present, and reaching nothing.
-    tails.insert(b"2".to_vec(), None);
+    tails.insert(b"2".to_vec(), (1, None));
     let stem = heap.alloc_with_uncollected(
         BehaviourId::STEM,
         Body::Stem {

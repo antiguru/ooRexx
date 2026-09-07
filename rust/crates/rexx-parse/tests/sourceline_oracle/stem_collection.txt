@@ -1,4 +1,4 @@
-count 93
+count 144
 /* A Stem's store is the language's tails, and the collection surface has to
  * respect the one thing `Body::Stem` already models: a DROPPED tail is not
  * an absent one.
@@ -13,11 +13,13 @@ count 93
  * name.  Writing tombstones there would answer `U.K` where the oracle
  * answers `5`.
  *
- * `allIndexes`, `allItems`, `makeArray` and `supplier` are deliberately
- * absent: they answer tails in the stem's own table order, which is a
- * different geometry from the one the mapped classes use and which this
- * crate does not yet reproduce -- see the Task 5 report.  A witness that
- * asserted them would be asserting an order that is wrong.
+ * `allIndexes`, `allItems`, `makeArray` and `supplier` answer tails in the
+ * stem's own table order, which is neither insertion order nor sorted: the
+ * tails live in a balanced binary tree keyed on (length, bytes) and walked in
+ * POST-order.  The order therefore depends on the shape the insertions built,
+ * so the two blocks at the end insert the same five tails forwards and
+ * backwards and get different answers -- which is the assertion that a
+ * store keeping insertion order, or one sorting the names, would fail.
  */
 
 s. = 'dflt'
@@ -92,3 +94,52 @@ signal next
 
 done:
 say 'end'
+
+/* The tail order, which is the tree's post-order walk. */
+say 'order   ' obj~allIndexes~makeString('L',',') '/' obj~allItems~makeString('L',',')
+say 'makeArr ' obj~makeArray~makeString('L',',')
+osup = obj~supplier
+do while osup~available
+  say '  pair' osup~index osup~item
+  osup~next
+end
+
+f.zebra = 1
+f.apple = 2
+f.mango = 3
+f.q = 4
+f.longkeyname = 5
+say 'forward ' (f.)~allIndexes~makeString('L',',')
+r.longkeyname = 5
+r.q = 4
+r.mango = 3
+r.apple = 2
+r.zebra = 1
+say 'reversed' (r.)~allIndexes~makeString('L',',')
+
+do i = 1 to 25; g.i = i; end
+say 'grown   ' (g.)~allIndexes~makeString('L',',')
+
+/* And the operations built on that order. */
+u.b = 2
+u.c = 3
+uobj = u.
+say 'union   ' obj~union(uobj)~items
+say 'xor     ' obj~xor(uobj)~items
+say 'isect   ' obj~intersection(uobj)~items
+say 'diff    ' obj~difference(uobj)~items
+say 'subset  ' uobj~subset(obj) 'disjoint' obj~disjoint(uobj)
+
+/* The method path uses the tail EXACTLY as written; only the language path
+ * upper-cases, because a symbol in `s.a` is upper-cased when it is parsed and
+ * a subscript in `obj['a']` is a string.  Every line below separates the two,
+ * and none of the lines above can: they all use upper-case literals, which is
+ * why an implementation that upper-cased here passed all of them. */
+c.a = 1
+cobj2 = c.
+say 'read    ' cobj2['A'] cobj2['a']
+say 'hasIndex' cobj2~hasIndex('A') cobj2~hasIndex('a')
+cobj2['b'] = 2
+say 'written ' cobj2~allIndexes~makeString('L',',')
+say 'cases   ' cobj2['b'] cobj2['B'] c.b
+say 'built   ' (.Stem~new~~put('v1','k1')~~put('v2','k2'))~allIndexes~makeString('L',',')

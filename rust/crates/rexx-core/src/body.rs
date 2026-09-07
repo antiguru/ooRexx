@@ -132,7 +132,23 @@ pub enum Body {
     Stem {
         name: Box<[u8]>,
         default: Option<ObjRef>,
-        tails: crate::NameMap<Vec<u8>, Option<ObjRef>>,
+        /// **The `usize` is the tail's insertion ordinal, and it is
+        /// load-bearing.** A stem's tails are held in a balanced tree keyed
+        /// on (length, bytes) and walked in POST-ORDER
+        /// (`classes/support/CompoundVariableTable.cpp:343`, `:405`), so the
+        /// order `allIndexes` and `supplier` answer in depends on the shape
+        /// the insertions built and not on the tail names alone -- measured,
+        /// the same five tails inserted forwards and backwards answer
+        /// `Q,MANGO,LONGKEYNAME,ZEBRA,APPLE` and
+        /// `APPLE,Q,ZEBRA,LONGKEYNAME,MANGO`. A `HashMap` cannot say which
+        /// came first, so the ordinal rides with the value.
+        ///
+        /// Assigned once, at first insertion, and kept when a tail is
+        /// overwritten or dropped: upstream reuses the tree node, so a tail
+        /// re-assigned after a `DROP` keeps its place. `empty` clears the map
+        /// and the ordinals start again, which is what upstream's
+        /// `CompoundVariableTable::clear` does to the tree.
+        tails: crate::NameMap<Vec<u8>, (usize, Option<ObjRef>)>,
     },
     /// An array's slots, in index order, `None` for a slot that holds no
     /// object at all.
@@ -683,7 +699,7 @@ impl Body {
                 out.extend(default.iter().copied());
                 // A tombstone (`None`) reaches nothing, same as a weak
                 // reference clearing to `.nil` -- it is present but dead.
-                out.extend(tails.values().filter_map(|t| *t));
+                out.extend(tails.values().filter_map(|(_, tail)| *tail));
             }
             // An empty slot reaches nothing, the same as a stem's tombstone
             // above.

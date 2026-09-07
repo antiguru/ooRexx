@@ -808,8 +808,8 @@ Set	equivalent	instance	answers	rc 163
 Stem	new	class	answers	rc 0
 Stem	[]	instance	answers	rc 0
 Stem	[]=	instance	answers	rc 163
-Stem	allIndexes	instance	loud	method "ALLINDEXES" of class "Stem"
-Stem	allItems	instance	loud	method "ALLITEMS" of class "Stem"
+Stem	allIndexes	instance	answers	rc 0
+Stem	allItems	instance	answers	rc 0
 Stem	at	instance	answers	rc 0
 Stem	empty	instance	answers	rc 0
 Stem	hasIndex	instance	answers	rc 0
@@ -817,12 +817,12 @@ Stem	hasItem	instance	uncomparable	the oracle segfaults on this send
 Stem	index	instance	uncomparable	the oracle segfaults on this send
 Stem	isEmpty	instance	answers	rc 0
 Stem	items	instance	answers	rc 0
-Stem	makeArray	instance	loud	method "MAKEARRAY" of class "Stem"
+Stem	makeArray	instance	answers	rc 0
 Stem	put	instance	answers	rc 163
 Stem	remove	instance	answers	rc 0
 Stem	removeItem	instance	answers	rc 163
 Stem	request	instance	loud	method "REQUEST" of class "Stem"
-Stem	supplier	instance	loud	method "SUPPLIER" of class "Stem"
+Stem	supplier	instance	answers	rc 0
 Stem	toDirectory	instance	loud	method "TODIRECTORY" of class "Stem"
 Stem	unknown	instance	loud	method "UNKNOWN" of class "Stem"
 Stem	difference	instance	answers	rc 163
