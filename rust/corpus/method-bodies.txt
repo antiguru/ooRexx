@@ -813,8 +813,8 @@ Stem	allItems	instance	loud	method "ALLITEMS" of class "Stem"
 Stem	at	instance	answers	rc 0
 Stem	empty	instance	answers	rc 0
 Stem	hasIndex	instance	answers	rc 0
-Stem	hasItem	instance	answers	rc 0
-Stem	index	instance	answers	rc 0
+Stem	hasItem	instance	uncomparable	the oracle segfaults on this send
+Stem	index	instance	uncomparable	the oracle segfaults on this send
 Stem	isEmpty	instance	answers	rc 0
 Stem	items	instance	answers	rc 0
 Stem	makeArray	instance	loud	method "MAKEARRAY" of class "Stem"

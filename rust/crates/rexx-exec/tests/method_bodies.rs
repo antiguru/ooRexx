@@ -410,6 +410,17 @@ fn method_name_literal(name: &str) -> &str {
 /// go stale when a phase lands. It is checked the way
 /// [`RECEIVER_OVERRIDES`] is: every pair must be a row that exists.
 const ORACLE_CRASHING_SENDS: &[(&str, &str)] = &[
+    // `Stem~hasItem` and `~index` with no argument, which
+    // `corpus/oracle-crashes.txt` already carries: both dereference a missing
+    // argument, and both are a SIGSEGV whenever the stem holds a tail.
+    //
+    // **They arrive here only with Phase 5h Task 6's receiver override.** The
+    // documented receiver is an empty stem, which is the one shape the oracle
+    // survives, so before the override these two rows were comparable and
+    // answered; a populated receiver makes them crash. That is the override
+    // working, not a new defect.
+    ("Stem", "hasItem"),
+    ("Stem", "index"),
     ("String", "<<"),
     ("String", "<<="),
     ("String", ">>"),
@@ -435,6 +446,37 @@ const RECEIVER_OVERRIDES: &[(&str, &str)] = &[
     ("Queue", ".Queue~of('a','b','c')"),
     ("List", ".List~of('a','b','c')"),
     ("CircularQueue", ".CircularQueue~of('a','b','c')"),
+    // **Phase 5h Task 6's sweep**, the same step for the mapped classes: a
+    // zero-argument probe against an empty map cannot tell a body that works
+    // from one that refuses, and every class below can hold something now.
+    //
+    // `~~` rather than a helper, because a receiver override is one
+    // expression: it answers the receiver, so the puts chain. `Set` and `Bag`
+    // use `of`, which is native for those two alone -- the rest inherit
+    // `MapCollection~OF`, which spec D100 blocks. `Relation` gets two items
+    // under ONE index, which is the whole difference between it and a
+    // `Table`.
+    ("Table", ".Table~new~~put('v1','k1')~~put('v2','k2')"),
+    (
+        "IdentityTable",
+        ".IdentityTable~new~~put('v1','k1')~~put('v2','k2')",
+    ),
+    ("Set", ".Set~of('a','b','c')"),
+    ("Bag", ".Bag~of('a','a','b')"),
+    ("Relation", ".Relation~new~~put('v1','k')~~put('v2','k')"),
+    (
+        "Directory",
+        ".Directory~new~~put('v1','k1')~~put('v2','k2')",
+    ),
+    (
+        "StringTable",
+        ".StringTable~new~~put('v1','k1')~~put('v2','k2')",
+    ),
+    (
+        "Properties",
+        ".Properties~new~~put('v1','k1')~~put('v2','k2')",
+    ),
+    ("Stem", ".Stem~new~~put('v1','k1')~~put('v2','k2')"),
 ];
 
 /// The expression a row's send is made to, or `None` for the class arm, which
@@ -1189,7 +1231,20 @@ fn no_row_started_diverging_or_stopped_answering() {
         let (Some(cell), Some(was)) = (measured.get(&row.key()), committed.get(&row.key())) else {
             continue;
         };
-        if regressed(was.verdict, cell.verdict) {
+        // **A row the oracle now crashes on is not a row that stopped.**
+        // `ORACLE_CRASHING_SENDS` names a property of the oracle, and a
+        // receiver override can move a pair onto that list without anything
+        // in this tree changing: Phase 5h Task 6's `Stem` receiver holds a
+        // tail, and `hasItem`/`index` with no argument segfault the oracle
+        // only when one does, so both rows went `answers -> uncomparable`
+        // with their bodies untouched. The pair has to be on the list for
+        // this to apply, so a row losing its evidence for any other reason is
+        // still the regression the rule above catches.
+        let crashes = ORACLE_CRASHING_SENDS
+            .iter()
+            .any(|(class, method)| *class == row.class && *method == row.method);
+        if !(crashes && cell.verdict == Body::Uncomparable) && regressed(was.verdict, cell.verdict)
+        {
             regressions.push(format!(
                 "{} {} ({} arm): {} -> {} [{}]",
                 row.class,
