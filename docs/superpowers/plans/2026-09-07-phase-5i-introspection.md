@@ -61,17 +61,20 @@ prose the executor never reads.
   report mode and exits 0 on a divergence. Cite the STRICT run and its matching line.
 * **Mutation runs build with `--profile mutation`**, under `memcap 8G`, with `--no-fail-fast`.
 * Every family's witness sends a **short argument list as well as a good one**.
-* Every family generates a `crates/rexx-parse/tests/sourceline_oracle/<name>.txt` and adds its file
-  to `dispatch_seam.rs`'s `CLEARANCE_CONSUMERS` if it is a new one.
-* **The four shared artifacts belong to the controller and no task commits them**:
-  `corpus/method-bodies.txt`, the two arity tables, `corpus/phase-5c.txt`, and
-  `EXPECTED_SUBSET_5C` in `crates/rexx-exec/tests/coverage.rs`. Refresh them locally, record each
-  row's verdict **before and after** your change in your report with the refresh command quoted,
-  restore them from a `cp` copy (never `git checkout --`), and file your witness paths and subset
-  additions in `.superpowers/sdd/2026-09-07-phase-5i-introspection/task-<N>-tables.md`. The
-  controller lands them in one table commit. **The evidence standard is unchanged** -- the
-  before/after verdicts are the proof; the committed table is only where they are filed. This is
-  what lets two tasks run at once, because those four files are the only thing coupling them.
+* Every family generates a `crates/rexx-parse/tests/sourceline_oracle/<name>.txt`, and adds its file
+  to `dispatch_seam.rs`'s `CLEARANCE_CONSUMERS` **only if it is a source file naming the `Cleared`
+  seam token** -- a builtin in `builtin/state.rs` takes no clearance and must not be added.
+* **A task commits the shared artifacts its change moves**: `corpus/method-bodies.txt`, the arity
+  tables, `corpus/phase-5c.txt`, `corpus/unfiled.txt` and `EXPECTED_SUBSET_5C` in
+  `crates/rexx-exec/tests/coverage.rs`. Refresh them, and record each moved row's verdict **before
+  and after** your change in your report with the refresh command quoted -- that is the evidence,
+  and it is required whether or not the table is where it is filed.
+  (A constraint saying the controller owned those four was in force between `a85183fbb` and Task 1's
+  pre-flight. It existed to let two implementers run at once; the decision to run implementers
+  serially -- because two agents changing interpreter behaviour contaminate each other's local
+  refresh whatever the commit boundary -- removed its only justification, and it stayed in force
+  long enough to make one task's commit red by construction against five test binaries that assert
+  the committed tables match the tree. Revoked.)
 * **Your dispatch names the files you may touch; touch nothing outside it**, and use
   `rustfmt <path>` rather than `cargo fmt -p <crate>` while a sibling is live.
 * **No task may cite the `answers` verdict of `corpus/method-bodies.txt` as a reason a row needs no
