@@ -112,4 +112,74 @@ Fast checks: `cargo fmt --all --check` clean, `cargo clippy --workspace
 --all-targets -- -D warnings` clean, `cargo test --release --workspace
 --no-fail-fast` exit 0, 2124 passed, no suite failing. `collect_stress` green.
 
-**G1** **G2** **G3** **G4** **G5** **G6** **G7**
+Seven gates over `8aa53c8c3`, from `scratchpad/gates-5g8.status`: G1 0, G2 0,
+G3 0, G4 0, G5 0, G6 0, G7 0, `failed-suites=0` on each suite-running gate.
+
+---
+
+## What I checked myself, after the review
+
+The review's findings above were re-derived before being acted on. These are
+the rest of its brief, checked here rather than taken:
+
+**Every report sentence the review was asked to attack is CONFIRMED**, on both
+engines against the oracle, in one program (`claims.rex` in the verification
+directory): `Queue~remove` shifts and `Array~remove` leaves a hole at the same
+size, `Array~delete` shifts; `Array~empty` and `List~empty` both answer the
+receiver; a section of a `Queue` is a `Queue`, of a `List` a `List`, of an
+`Array` an `Array`; `of` answers the receiver's own class on all three; and
+`sort` is not numeric -- `.Array~of(10,9,2,100,1)~sort` is `1,10,100,2,9`.
+
+**"Exactly four methods refuse a multi-dimensional receiver" is CONFIRMED, and
+the check that confirms it is not the obvious one.** Sending all 32 documented
+`Array` instance methods to a `2x3` receiver, the oracle raises on seven, and
+both engines match it on all 32. Five of the seven raise `93` and two raise
+`98`, so counting by major code would give the wrong answer. By decimal:
+`APPEND`, `INSERT`, `DELETE` and `SECTION` raise **93.954**; `PUT` raises
+**93.925** (not enough subscripts) and the two sort names raise **98.975**
+(the receiver was sparse). Four, as claimed.
+
+**The instrument has a blind spot, and it is currently empty.** Its
+`every_row_is_sent_something_its_arity_needs` check can only see rows whose
+upstream arity is a number, so the twelve rows sent nothing whose body is Rexx
+-- `CircularQueue`'s `makeArray size sort stableSort supplier`, `List` and
+`Queue`'s `sort`/`stableSort`, `Supplier`'s `allItems allIndexes supplier` --
+are held only by the oracle-completes-the-send rule. Measured: the oracle
+refuses an extra argument on all ten that can be sent one, so every row in the
+hole genuinely takes none. **The hole is real and nothing sits in it**; closing
+it would mean asserting that refusal per row.
+
+## A pre-existing divergence this phase made reachable
+
+Found while auditing the blind spot above, and it is **not this phase's and
+not the collections'**:
+
+```rexx
+call one
+say 'returned'
+exit
+one: procedure
+  signal on syntax name oops
+  v = .DateTime~new~addYears('notanumber')
+  say 'accepted'
+  return
+oops:
+  say 'refused' rc
+  return
+```
+
+Oracle rc 0, `refused 88` then `returned`. This crate, both engines: **rc 168
+and no output at all.** The same send with the trap at the top level rather
+than inside a subroutine matches on both sides.
+
+**A condition raised inside a library (`CoreClasses.orx`) Rexx method does not
+unwind to a `SIGNAL ON SYNTAX` trap in an outer subroutine frame.** It is not
+`FORWARD` -- a user class forwarding inside a subroutine traps correctly -- and
+it is not the collections: `DateTime~addYears` and `TimeSpan~fromHours`
+reproduce it and both predate this phase. `CircularQueue~string` and
+`~makeArray` reach it too, which is how it was found, and that is the whole of
+this phase's relation to it.
+
+**No witness is added for it**, because a witness would be red. It is recorded
+here with a repro that names no collection, so whoever owns library frames can
+take it without reading this phase.
