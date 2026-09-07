@@ -172,7 +172,7 @@ mod string;
 
 // The collection classes' primitive methods, chained the same way.
 mod collection;
-mod hash;
+pub(crate) mod hash;
 
 /// One primitive method's implementation.
 ///
@@ -5210,10 +5210,7 @@ fn native_define_methods(
     let Some(Some(table)) = args.first().copied() else {
         return Err(Raised::missing_named_argument("methods").into());
     };
-    if !matches!(
-        interp.receiver_kind(table),
-        Ok(Primitive::Directory | Primitive::StringTable(_))
-    ) {
+    if !string_keyed_table(interp, table) {
         return Err(supplier_refusal(interp, table));
     }
     // **Asked before the walk**, because the walk cannot see the difference:
@@ -5249,6 +5246,25 @@ fn native_define_methods(
         ))
     })?;
     Ok(None)
+}
+
+/// Whether `value` is a table `~defineMethods`, `~enhanced` and `~setMethod`
+/// can walk: one of this crate's own `Body::Native` directories, or a
+/// `Directory` or `StringTable` a program made, which since Phase 5h Task 4
+/// is a collection with a hash store.
+///
+/// **Both, and the second is the one that was missed.** Measured when this
+/// asked only `receiver_kind`: `enhanced_scope.rex`, `enhanced_unset.rex` and
+/// `usesem.rex` -- all three of which hand `Class~enhanced` a
+/// `.StringTable~new` they filled -- fell through to the `SUPPLIER` refusal.
+fn string_keyed_table(interp: &mut Interp, value: ObjRef) -> bool {
+    if matches!(
+        interp.receiver_kind(value),
+        Ok(Primitive::Directory | Primitive::StringTable(_))
+    ) {
+        return true;
+    }
+    hash::owns(interp, value) && hash::string_keyed(interp, value)
 }
 
 /// What a `SUPPLIER` send to `table` would have answered, as the failure
@@ -5521,10 +5537,7 @@ fn enhance_class_methods(
     class: ObjRef,
     enhancing: ObjRef,
 ) -> Result<(), Failure> {
-    if !matches!(
-        interp.receiver_kind(enhancing),
-        Ok(Primitive::Directory | Primitive::StringTable(_))
-    ) {
+    if !string_keyed_table(interp, enhancing) {
         return Err(supplier_refusal(interp, enhancing));
     }
     if let Some(owner) = interp.unbuilt_collection_owner(enhancing) {
@@ -6635,7 +6648,11 @@ fn native_hash_at(
     // identity here exactly as they share one function upstream. The
     // string-keyed classes read the entry map they are built on; everything
     // else reads the object-keyed store.
-    if hash::owns(interp, receiver) {
+    if !matches!(
+        interp.heap.get(receiver).map(|object| &object.body),
+        Some(Body::Native(_))
+    ) && hash::owns(interp, receiver)
+    {
         return hash::store_at(interp, receiver, args);
     }
     let index = hash_index(interp, args, 1)?;
@@ -6660,7 +6677,11 @@ fn native_hash_put(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     // [`native_hash_at`]'s split, for the same reason.
-    if hash::owns(interp, receiver) {
+    if !matches!(
+        interp.heap.get(receiver).map(|object| &object.body),
+        Some(Body::Native(_))
+    ) && hash::owns(interp, receiver)
+    {
         return hash::store_put(interp, receiver, args);
     }
     let Some(Some(item)) = args.first().copied() else {
@@ -6717,14 +6738,30 @@ fn native_hash_unknown(
     let Some(forwarded) = interp.array_slots_of(arguments) else {
         return Err(unconverted_array_argument(interp, arguments));
     };
+    // [`native_hash_at`]'s split again: a collection reads its store and the
+    // environment reads its map. Measured, a `.Directory` given
+    // `setEntry('alpha', 42)` answers `d~alpha` as `42`, and `d~beta = 7`
+    // stores under `BETA`.
+    let store = !matches!(
+        interp.heap.get(receiver).map(|object| &object.body),
+        Some(Body::Native(_))
+    ) && hash::owns(interp, receiver);
     let Some(index) = name.strip_suffix(b"=") else {
         let index = name.to_ascii_uppercase();
+        if store {
+            let index = interp.text_built(index);
+            return hash::store_entry_read(interp, receiver, index);
+        }
         return Ok(Some(interp.hash_entry_read(receiver, &index)?));
     };
     let index = index.to_ascii_uppercase();
     let Some(Some(item)) = forwarded.first().copied() else {
         return Err(Loud::entry_method_without_a_value(&index).into());
     };
+    if store {
+        let index = interp.text_built(index);
+        return hash::store_entry_write(interp, receiver, index, item);
+    }
     interp.hash_entry_write(receiver, &index, item)?;
     Ok(None)
 }
@@ -7960,10 +7997,7 @@ fn native_enhanced(
     let Some(table) = args[0] else {
         return Err(Raised::missing_named_argument("methods").into());
     };
-    if !matches!(
-        interp.receiver_kind(table),
-        Ok(Primitive::Directory | Primitive::StringTable(_))
-    ) {
+    if !string_keyed_table(interp, table) {
         return Err(supplier_refusal(interp, table));
     }
     if let Some(owner) = interp.unbuilt_collection_owner(table) {
@@ -8032,15 +8066,18 @@ fn install_enhancing_object_methods(
 /// "StringTable".`
 fn native_hash_collection_new(
     interp: &mut Interp,
-    _cleared: Cleared,
+    cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let class = class_receiver(interp, receiver)?;
-    let object = interp.native_instance(class);
-    let caller = interp.caller();
-    interp.send_message(object, INIT, None, args, caller)?;
-    Ok(Some(object))
+    // **A `Directory` a program makes is a collection, not the environment.**
+    // `NativeObject`'s map holds its keys already uppercased, by its callers,
+    // and a `.Directory~new` does not: measured, `d['lower'] = 1` leaves
+    // `allIndexes` reading `lower` and `d['LOWER']` answering `.nil`. So that
+    // map is what `.environment` and `.local` are built on -- they are
+    // `native_instance`s the bootstrap makes and keeps -- and a collection
+    // gets the object-keyed store with a string-key protocol on top.
+    hash::native_hash_new(interp, cleared, receiver, args)
 }
 
 /// `Directory~new`: the hash body above for `.Directory` itself, and
@@ -11976,14 +12013,17 @@ mod tests {
         );
     }
 
-    /// A `Directory` subclass keeps [`native_new`]'s instance, so its
-    /// variable pool answers and its entry writes do not.
+    /// A `Directory` subclass has a variable pool AND a store, so its
+    /// `EXPOSE` answers and so do its entry writes.
     ///
-    /// **The pair is the whole test.** The first is the oracle's, measured
-    /// 2026-09-03: `K 1 5`, where a native body answers `EXPOSE on an object
-    /// with no variable pool` instead. The second is what the split costs and
-    /// the oracle answers `1` for, so unifying the two constructors turns the
-    /// first row red and the second green rather than one of them alone.
+    /// **The split this test recorded is closed.** It used to assert the
+    /// second half REFUSING, and said so: "what the split costs and the
+    /// oracle answers `1` for". `native_directory_new` gave `.Directory`
+    /// itself a `Body::Native` -- which has no variable pool -- and a
+    /// subclass a plain instance, so exactly one of the two rows could be
+    /// green at a time. Phase 5h Task 4 gave every `Directory` a program
+    /// makes the hash store, which lives in the pool, so the two are no
+    /// longer exclusive. Both values below are the oracle's.
     #[test]
     fn a_directory_subclass_keeps_the_instance() {
         assert_eq!(
@@ -12006,12 +12046,7 @@ mod tests {
              o['A'] = 1\n\
              say o['A']\n",
         );
-        assert_eq!((code, stdout.as_str()), (120, ""));
-        assert_eq!(
-            stderr,
-            "rexx-exec: a message send to a value that is not a hash collection is not \
-             implemented (Phase 5)\n"
-        );
+        assert_eq!((code, stdout.as_str(), stderr.as_str()), (0, "1\n", ""));
     }
 
     /// A stem receiver answers `Stem` and renders as its own value, and a

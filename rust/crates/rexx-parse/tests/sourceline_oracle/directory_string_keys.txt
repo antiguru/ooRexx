@@ -1,0 +1,65 @@
+count 64
+/* A Directory a program makes does NOT upper-case the keys the index family
+ * uses, and the entry family does.  That pair is the whole subject: the two
+ * read one store through different names, so `d['viaEntry']` is `.nil` after
+ * `d~setEntry('viaEntry', 9)` while `d['VIAENTRY']` is 9.
+ *
+ * Which matters because this crate already had a string-keyed store -- the
+ * one `.environment` and `.local` are built on -- whose keys its callers hold
+ * already upper-cased.  A Directory built on that store would silently
+ * upper-case a user's keys, and only the lines below would show it.
+ *
+ * The key is the index's string VALUE, not the index object: `d[1]` and
+ * `d['1']` are one entry, and an index that is not a string is taken by its
+ * string value rather than refused.
+ *
+ * `setEntry` with no value removes, and the entry mechanism answers a message
+ * of the entry's own name.
+ */
+
+d = .Directory~new
+d['lower'] = 1
+d['UPPER'] = 2
+d['MiXeD'] = 3
+say 'indexes ' d~allIndexes~makeString('L',',')
+say 'case    ' d['lower'] d['LOWER'] d~hasIndex('lower') d~hasIndex('LOWER')
+d~setEntry('viaEntry', 9)
+say 'setEntry' d~allIndexes~makeString('L',',')
+say 'both    ' d['viaEntry'] d['VIAENTRY'] d~entry('viaEntry') d~entry('VIAENTRY')
+say 'lowered ' d~entry('lower') d~hasEntry('lower') d~hasEntry('VIAENTRY') d~hasEntry('nope')
+say 'counts  ' d~items d~allItems~makeString('L',',')
+say 'makeArr ' d~makeArray~makeString('L',',')
+d~removeEntry('VIAENTRY')
+say 'removed ' d~items
+
+gone = .Directory~new
+gone~setEntry('beta', 2)
+gone~setEntry('beta')
+say 'no value' gone~items gone~entry('beta')
+
+numbered = .Directory~new
+numbered[1] = 'one'
+say 'numeric ' numbered[1] numbered['1'] numbered~allIndexes~makeString('L',',')
+numbered[.Array~new] = 'x'
+say 'object  ' numbered~items
+
+named = .Directory~new
+named~setEntry('alpha', 42)
+say 'message ' named~alpha
+named~beta = 7
+say 'assigned' named~beta named~entry('beta') named['BETA']
+
+st = .StringTable~new
+st~setEntry('gamma', 3)
+say 'st      ' st~entry('gamma') st~gamma st~allIndexes~makeString('L',',')
+st['plain'] = 4
+say 'st index' st['plain'] st~entry('plain') st~items
+
+p = .Properties~new
+p['a'] = 'b'
+p~setProperty('k', 'v')
+say 'props   ' p['a'] p~getProperty('k') p~getProperty('absent') p~getProperty('absent','dflt')
+say 'p index ' p~allIndexes~makeString('L',',') p~items
+
+/* The environment keeps the store it was built on, and keeps answering. */
+say 'env     ' .environment['ARRAY']~id .environment~local~class~id

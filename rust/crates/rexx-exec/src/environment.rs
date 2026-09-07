@@ -729,7 +729,10 @@ impl Interp {
     fn package_local_entry(&self, bare: &[u8]) -> Option<ObjRef> {
         let program = self.running_program()?;
         let directory = *self.package_locals.get(&Package::Program(program))?;
-        self.native_entry(directory, bare)
+        // The map alone: a package's local directory is one of this crate's
+        // own `native_instance`s and never a collection with a store, and
+        // this caller is on a `&self` path.
+        self.native_map_entry(directory, bare)
     }
 
     /// A public class of the interpreter's own package --
@@ -1012,20 +1015,60 @@ impl Interp {
         Ok(())
     }
 
-    /// Every key a `Body::Native`'s own map holds, or an empty list for any
-    /// other object. Owned, and in no particular order -- see
-    /// [`rexx_core::NativeObject::keys`].
-    pub(crate) fn native_keys(&self, object: ObjRef) -> Vec<Box<[u8]>> {
+    /// Every key a string-keyed table holds, owned and in the table's own
+    /// order -- `NativeObject`'s map for `.environment` and `.local`, and the
+    /// hash store for a `Directory` or `StringTable` a program made.
+    ///
+    /// **Both, because a method table is written by Rexx and read by this
+    /// crate.** `Class~enhanced` and `~defineMethods` are handed a
+    /// `.StringTable~new` the program filled, which is a collection with a
+    /// store; the same functions are handed the bootstrap's own tables, which
+    /// are `Body::Native`. Measured when this read only the first:
+    /// `enhanced_scope.rex`, `enhanced_unset.rex` and `usesem.rex` all fell
+    /// through to a `SUPPLIER` send and refused.
+    pub(crate) fn native_keys(&mut self, object: ObjRef) -> Vec<Box<[u8]>> {
         match self.heap.get(object).map(|held| &held.body) {
             Some(Body::Native(native)) => native.keys(),
+            Some(Body::Instance { .. }) => self
+                .store_indexes(object)
+                .into_iter()
+                .map(|index| self.to_text(index).into_owned().into_boxed_slice())
+                .collect(),
             _ => Vec::new(),
         }
     }
 
-    /// One entry of a `Body::Native`'s own map, by the key the caller holds.
-    pub(crate) fn native_entry(&self, object: ObjRef, index: &[u8]) -> Option<ObjRef> {
+    /// [`crate::dispatch::hash::store_indexes`], reachable from this module.
+    fn store_indexes(&mut self, object: ObjRef) -> Vec<ObjRef> {
+        crate::dispatch::hash::store_indexes(self, object)
+    }
+
+    /// [`crate::dispatch::hash::store_item`], reachable from this module.
+    fn store_item(&mut self, object: ObjRef, index: ObjRef) -> Option<ObjRef> {
+        crate::dispatch::hash::store_item(self, object, index)
+    }
+
+    /// One entry of a `Body::Native`'s own map, for a caller that holds
+    /// `&self` and is asking about a table this crate built.
+    fn native_map_entry(&self, object: ObjRef, index: &[u8]) -> Option<ObjRef> {
         match &self.heap.get(object)?.body {
             Body::Native(native) => native.entry(index),
+            _ => None,
+        }
+    }
+
+    /// One entry of a string-keyed table, by the key the caller holds.
+    pub(crate) fn native_entry(&mut self, object: ObjRef, index: &[u8]) -> Option<ObjRef> {
+        match &self.heap.get(object)?.body {
+            Body::Native(native) => native.entry(index),
+            Body::Instance { .. } => {
+                for held in self.store_indexes(object) {
+                    if self.to_text(held).as_ref() == index {
+                        return self.store_item(object, held);
+                    }
+                }
+                None
+            }
             _ => None,
         }
     }

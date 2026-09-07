@@ -140,35 +140,35 @@ CircularQueue	union	agree	rc0
 CircularQueue	xor	agree	rc0
 Directory	[]	agree	rc0
 Directory	[]=	agree	rc0
-Directory	allIndexes	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ALLINDEXES" of class "Directory" is not implemented (Phase 5)
-Directory	allItems	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ALLITEMS" of class "Directory" is not implemented (Phase 5)
+Directory	allIndexes	agree	rc0
+Directory	allItems	agree	rc0
 Directory	at	agree	rc0
-Directory	difference	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ALLINDEXES" of class "Directory" is not implemented (Phase 5)
-Directory	disjoint	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SUPPLIER" of class "Directory" is not implemented (Phase 5)
-Directory	empty	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "EMPTY" of class "Directory" is not implemented (Phase 5)
-Directory	entry	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ENTRY" of class "Directory" is not implemented (Phase 5)
-Directory	equivalent	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ITEMS" of class "Directory" is not implemented (Phase 5)
-Directory	hasEntry	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "HASENTRY" of class "Directory" is not implemented (Phase 5)
-Directory	hasIndex	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "HASINDEX" of class "Directory" is not implemented (Phase 5)
-Directory	hasItem	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "HASITEM" of class "Directory" is not implemented (Phase 5)
-Directory	index	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "INDEX" of class "Directory" is not implemented (Phase 5)
-Directory	intersection	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SUPPLIER" of class "Directory" is not implemented (Phase 5)
-Directory	isEmpty	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ISEMPTY" of class "Directory" is not implemented (Phase 5)
-Directory	items	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ITEMS" of class "Directory" is not implemented (Phase 5)
-Directory	makeArray	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "MAKEARRAY" of class "Directory" is not implemented (Phase 5)
+Directory	difference	agree	rc0
+Directory	disjoint	agree	rc0
+Directory	empty	agree	rc0
+Directory	entry	agree	rc0
+Directory	equivalent	agree	rc0
+Directory	hasEntry	agree	rc0
+Directory	hasIndex	agree	rc0
+Directory	hasItem	agree	rc0
+Directory	index	agree	rc0
+Directory	intersection	agree	rc0
+Directory	isEmpty	agree	rc0
+Directory	items	agree	rc0
+Directory	makeArray	agree	rc0
 Directory	put	agree	rc0
-Directory	putAll	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SUPPLIER" of class "Directory" is not implemented (Phase 5)
-Directory	remove	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "REMOVE" of class "Directory" is not implemented (Phase 5)
-Directory	removeEntry	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "REMOVEENTRY" of class "Directory" is not implemented (Phase 5)
-Directory	removeItem	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "REMOVEITEM" of class "Directory" is not implemented (Phase 5)
-Directory	setEntry	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SETENTRY" of class "Directory" is not implemented (Phase 5)
+Directory	putAll	agree	rc0
+Directory	remove	agree	rc0
+Directory	removeEntry	agree	rc0
+Directory	removeItem	agree	rc0
+Directory	setEntry	agree	rc0
 Directory	setMethod	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "NEW" of class "Method" is not implemented (Phase 5)
-Directory	subset	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ALLINDEXES" of class "Directory" is not implemented (Phase 5)
-Directory	supplier	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SUPPLIER" of class "Directory" is not implemented (Phase 5)
-Directory	union	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
+Directory	subset	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: an instance of a user class as a DO header's OVER target is not implemented (Ph
+Directory	supplier	agree	rc0
+Directory	union	agree	rc0
 Directory	unknown	agree	rc0
 Directory	unsetMethod	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "UNSETMETHOD" of class "Directory" is not implemented (Phase 5)
-Directory	xor	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
+Directory	xor	agree	rc0
 IdentityTable	[]	agree	rc0
 IdentityTable	[]=	agree	rc0
 IdentityTable	allIndexes	agree	rc0
@@ -231,45 +231,45 @@ List	subset	agree	rc0
 List	supplier	agree	rc0
 List	union	agree	rc0
 List	xor	agree	rc0
-Properties	[]	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	[]=	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	allIndexes	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	allItems	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	at	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	difference	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	disjoint	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	empty	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	entry	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	equivalent	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	getLogical	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	getProperty	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	getWhole	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	hasEntry	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	hasIndex	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	hasItem	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	index	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	intersection	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	isEmpty	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	items	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
+Properties	[]	agree	rc0
+Properties	[]=	agree	rc0
+Properties	allIndexes	agree	rc0
+Properties	allItems	agree	rc0
+Properties	at	agree	rc0
+Properties	difference	agree	rc0
+Properties	disjoint	agree	rc0
+Properties	empty	agree	rc0
+Properties	entry	agree	rc0
+Properties	equivalent	agree	rc0
+Properties	getLogical	agree	rc0
+Properties	getProperty	agree	rc0
+Properties	getWhole	agree	rc0
+Properties	hasEntry	agree	rc0
+Properties	hasIndex	agree	rc0
+Properties	hasItem	agree	rc0
+Properties	index	agree	rc0
+Properties	intersection	agree	rc0
+Properties	isEmpty	agree	rc0
+Properties	items	agree	rc0
 Properties	load	exempt	needs a file only ~save creates; putting that in the receiver setup would make every Properties row read setup-differs
-Properties	makeArray	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	put	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	putAll	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	remove	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	removeEntry	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	removeItem	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	save	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	setEntry	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	setLogical	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	setMethod	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	setProperty	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	setWhole	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	subset	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	supplier	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	union	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	unknown	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	unsetMethod	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Properties	xor	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
+Properties	makeArray	agree	rc0
+Properties	put	agree	rc0
+Properties	putAll	agree	rc0
+Properties	remove	agree	rc0
+Properties	removeEntry	agree	rc0
+Properties	removeItem	agree	rc0
+Properties	save	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: the LIBRARY REXX entry point "stream_init" is not implemented (Phase 7)
+Properties	setEntry	agree	rc0
+Properties	setLogical	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: ARG option "A" answers an Array, which is not implemented
+Properties	setMethod	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "NEW" of class "Method" is not implemented (Phase 5)
+Properties	setProperty	agree	rc0
+Properties	setWhole	agree	rc0
+Properties	subset	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: an instance of a user class as a DO header's OVER target is not implemented (Ph
+Properties	supplier	agree	rc0
+Properties	union	agree	rc0
+Properties	unknown	agree	rc0
+Properties	unsetMethod	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "UNSETMETHOD" of class "Directory" is not implemented (Phase 5)
+Properties	xor	agree	rc0
 Queue	[]	agree	rc0
 Queue	[]=	agree	rc0
 Queue	allIndexes	agree	rc0
@@ -394,33 +394,33 @@ Stem	unknown	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" 
 Stem	xor	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
 StringTable	[]	agree	rc0
 StringTable	[]=	agree	rc0
-StringTable	allIndexes	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ALLINDEXES" of class "StringTable" is not implemented (Phase 5)
-StringTable	allItems	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ALLITEMS" of class "StringTable" is not implemented (Phase 5)
+StringTable	allIndexes	agree	rc0
+StringTable	allItems	agree	rc0
 StringTable	at	agree	rc0
-StringTable	difference	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ALLINDEXES" of class "StringTable" is not implemented (Phase 5)
-StringTable	disjoint	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SUPPLIER" of class "StringTable" is not implemented (Phase 5)
-StringTable	empty	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "EMPTY" of class "StringTable" is not implemented (Phase 5)
-StringTable	entry	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ENTRY" of class "StringTable" is not implemented (Phase 5)
-StringTable	equivalent	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ITEMS" of class "StringTable" is not implemented (Phase 5)
-StringTable	hasEntry	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "HASENTRY" of class "StringTable" is not implemented (Phase 5)
-StringTable	hasIndex	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "HASINDEX" of class "StringTable" is not implemented (Phase 5)
-StringTable	hasItem	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "HASITEM" of class "StringTable" is not implemented (Phase 5)
-StringTable	index	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "INDEX" of class "StringTable" is not implemented (Phase 5)
-StringTable	intersection	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SUPPLIER" of class "StringTable" is not implemented (Phase 5)
-StringTable	isEmpty	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ISEMPTY" of class "StringTable" is not implemented (Phase 5)
-StringTable	items	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ITEMS" of class "StringTable" is not implemented (Phase 5)
-StringTable	makeArray	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "MAKEARRAY" of class "StringTable" is not implemented (Phase 5)
+StringTable	difference	agree	rc0
+StringTable	disjoint	agree	rc0
+StringTable	empty	agree	rc0
+StringTable	entry	agree	rc0
+StringTable	equivalent	agree	rc0
+StringTable	hasEntry	agree	rc0
+StringTable	hasIndex	agree	rc0
+StringTable	hasItem	agree	rc0
+StringTable	index	agree	rc0
+StringTable	intersection	agree	rc0
+StringTable	isEmpty	agree	rc0
+StringTable	items	agree	rc0
+StringTable	makeArray	agree	rc0
 StringTable	put	agree	rc0
-StringTable	putAll	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SUPPLIER" of class "StringTable" is not implemented (Phase 5)
-StringTable	remove	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "REMOVE" of class "StringTable" is not implemented (Phase 5)
-StringTable	removeEntry	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "REMOVEENTRY" of class "StringTable" is not implemented (Phase 5)
-StringTable	removeItem	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "REMOVEITEM" of class "StringTable" is not implemented (Phase 5)
-StringTable	setEntry	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SETENTRY" of class "StringTable" is not implemented (Phase 5)
-StringTable	subset	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ALLINDEXES" of class "StringTable" is not implemented (Phase 5)
-StringTable	supplier	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SUPPLIER" of class "StringTable" is not implemented (Phase 5)
-StringTable	union	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
+StringTable	putAll	agree	rc0
+StringTable	remove	agree	rc0
+StringTable	removeEntry	agree	rc0
+StringTable	removeItem	agree	rc0
+StringTable	setEntry	agree	rc0
+StringTable	subset	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: an instance of a user class as a DO header's OVER target is not implemented (Ph
+StringTable	supplier	agree	rc0
+StringTable	union	agree	rc0
 StringTable	unknown	agree	rc0
-StringTable	xor	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
+StringTable	xor	agree	rc0
 Supplier	allIndexes	agree	rc0
 Supplier	allItems	agree	rc0
 Supplier	available	agree	rc0

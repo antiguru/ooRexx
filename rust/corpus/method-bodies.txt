@@ -566,25 +566,25 @@ CircularQueue	removeItem	instance	answers	rc 163
 Directory	new	class	answers	rc 0
 Directory	[]	instance	answers	rc 168
 Directory	[]=	instance	answers	rc 168
-Directory	allIndexes	instance	loud	method "ALLINDEXES" of class "Directory"
-Directory	allItems	instance	loud	method "ALLITEMS" of class "Directory"
+Directory	allIndexes	instance	answers	rc 0
+Directory	allItems	instance	answers	rc 0
 Directory	at	instance	answers	rc 168
-Directory	empty	instance	loud	method "EMPTY" of class "Directory"
-Directory	entry	instance	loud	method "ENTRY" of class "Directory"
-Directory	hasEntry	instance	loud	method "HASENTRY" of class "Directory"
-Directory	hasIndex	instance	loud	method "HASINDEX" of class "Directory"
-Directory	hasItem	instance	loud	method "HASITEM" of class "Directory"
-Directory	index	instance	loud	method "INDEX" of class "Directory"
-Directory	isEmpty	instance	loud	method "ISEMPTY" of class "Directory"
-Directory	items	instance	loud	method "ITEMS" of class "Directory"
-Directory	makeArray	instance	loud	method "MAKEARRAY" of class "Directory"
+Directory	empty	instance	answers	rc 0
+Directory	entry	instance	answers	rc 168
+Directory	hasEntry	instance	answers	rc 168
+Directory	hasIndex	instance	answers	rc 168
+Directory	hasItem	instance	answers	rc 163
+Directory	index	instance	answers	rc 163
+Directory	isEmpty	instance	answers	rc 0
+Directory	items	instance	answers	rc 0
+Directory	makeArray	instance	answers	rc 0
 Directory	put	instance	answers	rc 168
-Directory	remove	instance	loud	method "REMOVE" of class "Directory"
-Directory	removeEntry	instance	loud	method "REMOVEENTRY" of class "Directory"
-Directory	removeItem	instance	loud	method "REMOVEITEM" of class "Directory"
-Directory	setEntry	instance	loud	method "SETENTRY" of class "Directory"
+Directory	remove	instance	answers	rc 168
+Directory	removeEntry	instance	answers	rc 168
+Directory	removeItem	instance	answers	rc 163
+Directory	setEntry	instance	answers	rc 168
 Directory	setMethod	instance	loud	method "SETMETHOD" of class "Directory"
-Directory	supplier	instance	loud	method "SUPPLIER" of class "Directory"
+Directory	supplier	instance	answers	rc 0
 Directory	unknown	instance	answers	rc 163
 Directory	unsetMethod	instance	loud	method "UNSETMETHOD" of class "Directory"
 Directory	difference	instance	answers	rc 163
@@ -674,33 +674,33 @@ Properties	setLogical	instance	answers	rc 163
 Properties	setProperty	instance	answers	rc 163
 Properties	setWhole	instance	answers	rc 163
 Properties	[]	instance	answers	rc 168
-Properties	allIndexes	instance	loud	method "ALLINDEXES" of class "Properties"
-Properties	allItems	instance	loud	method "ALLITEMS" of class "Properties"
+Properties	allIndexes	instance	answers	rc 0
+Properties	allItems	instance	answers	rc 0
 Properties	at	instance	answers	rc 168
 Properties	difference	instance	answers	rc 163
 Properties	disjoint	instance	answers	rc 163
 Properties	equivalent	instance	answers	rc 163
-Properties	hasIndex	instance	loud	method "HASINDEX" of class "Properties"
-Properties	hasItem	instance	loud	method "HASITEM" of class "Properties"
-Properties	index	instance	loud	method "INDEX" of class "Properties"
+Properties	hasIndex	instance	answers	rc 168
+Properties	hasItem	instance	answers	rc 163
+Properties	index	instance	answers	rc 163
 Properties	intersection	instance	answers	rc 163
-Properties	items	instance	loud	method "ITEMS" of class "Properties"
-Properties	makeArray	instance	loud	method "MAKEARRAY" of class "Properties"
+Properties	items	instance	answers	rc 0
+Properties	makeArray	instance	answers	rc 0
 Properties	subset	instance	answers	rc 163
-Properties	supplier	instance	loud	method "SUPPLIER" of class "Properties"
+Properties	supplier	instance	answers	rc 0
 Properties	union	instance	answers	rc 163
 Properties	xor	instance	answers	rc 163
 Properties	of	class	loud	ARG option "A" answers an Array, which
 Properties	putAll	instance	answers	rc 163
 Properties	new	class	answers	rc 0
-Properties	empty	instance	loud	method "EMPTY" of class "Properties"
-Properties	entry	instance	loud	method "ENTRY" of class "Directory"
-Properties	hasEntry	instance	loud	method "HASENTRY" of class "Directory"
-Properties	isEmpty	instance	loud	method "ISEMPTY" of class "Properties"
-Properties	remove	instance	loud	method "REMOVE" of class "Properties"
-Properties	removeEntry	instance	loud	method "REMOVEENTRY" of class "Directory"
-Properties	removeItem	instance	loud	method "REMOVEITEM" of class "Properties"
-Properties	setEntry	instance	loud	method "SETENTRY" of class "Directory"
+Properties	empty	instance	answers	rc 0
+Properties	entry	instance	answers	rc 168
+Properties	hasEntry	instance	answers	rc 168
+Properties	isEmpty	instance	answers	rc 0
+Properties	remove	instance	answers	rc 168
+Properties	removeEntry	instance	answers	rc 168
+Properties	removeItem	instance	answers	rc 163
+Properties	setEntry	instance	answers	rc 168
 Properties	setMethod	instance	loud	method "SETMETHOD" of class "Directory"
 Properties	unknown	instance	answers	rc 163
 Properties	unsetMethod	instance	loud	method "UNSETMETHOD" of class "Directory"
@@ -837,24 +837,24 @@ Stem	putAll	instance	answers	rc 163
 StringTable	new	class	answers	rc 0
 StringTable	[]	instance	answers	rc 168
 StringTable	[]=	instance	answers	rc 168
-StringTable	allIndexes	instance	loud	method "ALLINDEXES" of class "StringTable"
-StringTable	allItems	instance	loud	method "ALLITEMS" of class "StringTable"
+StringTable	allIndexes	instance	answers	rc 0
+StringTable	allItems	instance	answers	rc 0
 StringTable	at	instance	answers	rc 168
-StringTable	empty	instance	loud	method "EMPTY" of class "StringTable"
-StringTable	entry	instance	loud	method "ENTRY" of class "StringTable"
-StringTable	hasEntry	instance	loud	method "HASENTRY" of class "StringTable"
-StringTable	hasIndex	instance	loud	method "HASINDEX" of class "StringTable"
-StringTable	hasItem	instance	loud	method "HASITEM" of class "StringTable"
-StringTable	index	instance	loud	method "INDEX" of class "StringTable"
-StringTable	isEmpty	instance	loud	method "ISEMPTY" of class "StringTable"
-StringTable	items	instance	loud	method "ITEMS" of class "StringTable"
-StringTable	makeArray	instance	loud	method "MAKEARRAY" of class "StringTable"
+StringTable	empty	instance	answers	rc 0
+StringTable	entry	instance	answers	rc 168
+StringTable	hasEntry	instance	answers	rc 168
+StringTable	hasIndex	instance	answers	rc 168
+StringTable	hasItem	instance	answers	rc 163
+StringTable	index	instance	answers	rc 163
+StringTable	isEmpty	instance	answers	rc 0
+StringTable	items	instance	answers	rc 0
+StringTable	makeArray	instance	answers	rc 0
 StringTable	put	instance	answers	rc 168
-StringTable	remove	instance	loud	method "REMOVE" of class "StringTable"
-StringTable	removeEntry	instance	loud	method "REMOVEENTRY" of class "StringTable"
-StringTable	removeItem	instance	loud	method "REMOVEITEM" of class "StringTable"
-StringTable	setEntry	instance	loud	method "SETENTRY" of class "StringTable"
-StringTable	supplier	instance	loud	method "SUPPLIER" of class "StringTable"
+StringTable	remove	instance	answers	rc 168
+StringTable	removeEntry	instance	answers	rc 168
+StringTable	removeItem	instance	answers	rc 163
+StringTable	setEntry	instance	answers	rc 168
+StringTable	supplier	instance	answers	rc 0
 StringTable	unknown	instance	answers	rc 163
 StringTable	difference	instance	answers	rc 163
 StringTable	disjoint	instance	answers	rc 163

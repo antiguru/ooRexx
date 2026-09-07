@@ -124,7 +124,16 @@ fn hash_scope(interp: &mut Interp) -> ObjRef {
 /// Measured as the instrument for that: with the guard missing, the
 /// method-body table reported 38 rows regressing from `answers` to
 /// `diverge`.
-const OWNED: &[&str] = &["Table", "IdentityTable", "Set", "Relation", "Bag"];
+const OWNED: &[&str] = &[
+    "Table",
+    "IdentityTable",
+    "Set",
+    "Relation",
+    "Bag",
+    "Directory",
+    "StringTable",
+    "Properties",
+];
 
 /// The classes whose `put` takes its index from its value --
 /// `IndexOnlyHashCollection`, whose only two subclasses are `Set` and `Bag`
@@ -169,7 +178,17 @@ fn index_only(interp: &mut Interp, receiver: ObjRef) -> bool {
 }
 
 /// Whether `receiver`'s class is one of [`OWNED`].
-pub(super) fn owns(interp: &mut Interp, receiver: ObjRef) -> bool {
+pub(crate) fn owns(interp: &mut Interp, receiver: ObjRef) -> bool {
+    // **A `Body::Native` receiver is never one of these**, however its class
+    // reads. `.environment` and `.local` are `Directory`s the bootstrap built
+    // on `NativeObject`'s map and keeps there, so they answer the entry
+    // family and not the store -- see [`store_of`].
+    if matches!(
+        interp.heap.get(receiver).map(|object| &object.body),
+        Some(Body::Native(_))
+    ) {
+        return false;
+    }
     let Some(class) = interp.class_of_value(receiver) else {
         return false;
     };
@@ -391,12 +410,47 @@ enum Keys {
     /// `EqualityHashContents`: `equalValue`, hashed by `hash()`
     /// (`HashContents.hpp:441`).
     Equality,
+    /// `StringHashContents`: the index's STRING VALUE, compared as bytes and
+    /// hashed by the string hash.
+    ///
+    /// Measured on a `.Directory`: `d[1] = 'one'` answers to `d['1']` and
+    /// reports its index as `1`, so a number and its digits are one key; and
+    /// `d[.Array~new] = 'x'` is accepted rather than refused, so a non-string
+    /// index is taken by its string value rather than turned away.
+    StringValue,
+}
+
+/// The classes whose keys are string values.
+const STRING_KEYED: &[&str] = &["Directory", "StringTable", "Properties"];
+
+/// Whether `receiver`'s class is one of [`STRING_KEYED`].
+pub(crate) fn string_keyed(interp: &mut Interp, receiver: ObjRef) -> bool {
+    let Some(class) = interp.class_of_value(receiver) else {
+        return false;
+    };
+    for name in STRING_KEYED {
+        let Some(base) = interp.classes().lookup(name) else {
+            continue;
+        };
+        if interp.classes().is_a(class, base) {
+            return true;
+        }
+    }
+    false
 }
 
 fn keys_of(interp: &mut Interp, receiver: ObjRef) -> Keys {
     let Some(class) = interp.class_of_value(receiver) else {
         return Keys::Equality;
     };
+    for name in STRING_KEYED {
+        let Some(base) = interp.classes().lookup(name) else {
+            continue;
+        };
+        if interp.classes().is_a(class, base) {
+            return Keys::StringValue;
+        }
+    }
     let Some(identity) = interp.classes().lookup("IdentityTable") else {
         return Keys::Equality;
     };
@@ -452,6 +506,10 @@ fn object_hash_code(text: &[u8]) -> u64 {
 
 /// The hash a store looks an index up by.
 fn hash_of(interp: &mut Interp, keys: Keys, index: ObjRef) -> Result<u64, Failure> {
+    if keys == Keys::StringValue {
+        let text = interp.to_text(index).into_owned();
+        return Ok(super::string_hash(&text));
+    }
     if keys == Keys::Identity || is_base_class(interp, index) {
         return Ok(get_hash_value(interp, index));
     }
@@ -478,6 +536,11 @@ fn same_index(
     match keys {
         Keys::Identity => Ok(held == index),
         Keys::Equality => super::collection::same_item(interp, index, held),
+        Keys::StringValue => {
+            let wanted = interp.to_text(index).into_owned();
+            let found = interp.to_text(held).into_owned();
+            Ok(wanted == found)
+        }
     }
 }
 
@@ -1080,6 +1143,144 @@ pub(super) fn native_hash_new(
     Ok(Some(object))
 }
 
+// ---- the string-keyed classes' own accessors ----
+
+/// The name an entry method looks up, which is **upper-cased** where the
+/// index family's is not.
+///
+/// Measured on a `.Directory`: `d~setEntry('viaEntry', 9)` leaves
+/// `allIndexes` naming `VIAENTRY`, `d['viaEntry']` answering `.nil` and
+/// `d['VIAENTRY']` answering 9, and `d~entry('lower')` after `d['lower'] = 1`
+/// is `.nil` -- so the two families read one store through different names.
+fn entry_name(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<ObjRef, Failure> {
+    let Some(name) = args.first().copied().flatten() else {
+        return Err(Raised::missing_named_argument("index").into());
+    };
+    let upper = interp.to_text(name).to_ascii_uppercase();
+    Ok(interp.text_built(upper))
+}
+
+/// Every index the receiver's store holds, in the store's own order, or an
+/// empty list for a receiver that has no store -- what
+/// [`crate::Interp::native_keys`] reads for a method table a program built.
+pub(crate) fn store_indexes(interp: &mut Interp, receiver: ObjRef) -> Vec<ObjRef> {
+    let scope = hash_scope(interp);
+    if pool_variable(interp, receiver, scope, HASH_INDEXES).is_none() {
+        return Vec::new();
+    }
+    let Ok(store) = store_of(interp, receiver) else {
+        return Vec::new();
+    };
+    let Ok(order) = walk(interp, receiver) else {
+        return Vec::new();
+    };
+    order
+        .into_iter()
+        .filter_map(|slot| slot_at(interp, store.indexes, slot).ok().flatten())
+        .collect()
+}
+
+/// The item the receiver's store holds under `index`.
+pub(crate) fn store_item(interp: &mut Interp, receiver: ObjRef, index: ObjRef) -> Option<ObjRef> {
+    let (store, found) = probe(interp, receiver, index).ok()?;
+    let slot = found.found?;
+    slot_at(interp, store.items, slot).ok().flatten()
+}
+
+/// The `UNKNOWN` entry read, over the store rather than the environment's map.
+pub(super) fn store_entry_read(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    index: ObjRef,
+) -> Result<Option<ObjRef>, Failure> {
+    let (store, found) = probe(interp, receiver, index)?;
+    let Some(slot) = found.found else {
+        return Ok(Some(ObjRef::NIL));
+    };
+    Ok(Some(
+        slot_at(interp, store.items, slot)?.unwrap_or(ObjRef::NIL),
+    ))
+}
+
+/// [`store_entry_read`]'s other half.
+pub(super) fn store_entry_write(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    index: ObjRef,
+    item: ObjRef,
+) -> Result<Option<ObjRef>, Failure> {
+    insert(interp, receiver, index, Some(item))?;
+    Ok(None)
+}
+
+fn native_hash_entry(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !owns(interp, receiver) {
+        return Err(not_this_task(interp, receiver, b"ENTRY"));
+    }
+    let name = entry_name(interp, args)?;
+    let (store, found) = probe(interp, receiver, name)?;
+    let Some(slot) = found.found else {
+        return Ok(Some(ObjRef::NIL));
+    };
+    Ok(Some(
+        slot_at(interp, store.items, slot)?.unwrap_or(ObjRef::NIL),
+    ))
+}
+
+fn native_hash_has_entry(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !owns(interp, receiver) {
+        return Err(not_this_task(interp, receiver, b"HASENTRY"));
+    }
+    let name = entry_name(interp, args)?;
+    let (_, found) = probe(interp, receiver, name)?;
+    Ok(Some(crate::eval::logical(found.found.is_some())))
+}
+
+/// `~setEntry(name [, value])`: stores under the upper-cased name, and
+/// **removes the entry when the value is omitted** -- measured,
+/// `d~setEntry('beta')` after `d~setEntry('beta', 2)` leaves `items` at 0.
+fn native_hash_set_entry(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !owns(interp, receiver) {
+        return Err(not_this_task(interp, receiver, b"SETENTRY"));
+    }
+    let name = entry_name(interp, args)?;
+    match args.get(1).copied().flatten() {
+        Some(value) => insert(interp, receiver, name, Some(value))?,
+        None => {
+            take(interp, receiver, name)?;
+        }
+    }
+    Ok(None)
+}
+
+fn native_hash_remove_entry(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !owns(interp, receiver) {
+        return Err(not_this_task(interp, receiver, b"REMOVEENTRY"));
+    }
+    let name = entry_name(interp, args)?;
+    Ok(Some(take(interp, receiver, name)?.unwrap_or(ObjRef::NIL)))
+}
+
 // ---- `Relation` and `Bag`'s own surface ----
 
 /// Every slot whose index matches, in chain order.
@@ -1155,10 +1356,16 @@ fn native_relation_unique_indexes(
     for (index, _) in pairs(interp, receiver)? {
         let mut seen = false;
         for held in &unique {
-            if match keys {
+            let same = match keys {
                 Keys::Identity => *held == index,
                 Keys::Equality => super::collection::same_item(interp, index, *held)?,
-            } {
+                Keys::StringValue => {
+                    let wanted = interp.to_text(index).into_owned();
+                    let found = interp.to_text(*held).into_owned();
+                    wanted == found
+                }
+            };
+            if same {
                 seen = true;
                 break;
             }
@@ -1508,6 +1715,27 @@ pub(super) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         "REMOVEITEM",
         Arity::Fixed(2),
         native_relation_remove_item,
+    ),
+    // `StringHashCollection`'s four, which read the same store the index
+    // family reads and upper-case the name on the way in.
+    ("Directory", "ENTRY", Arity::Fixed(1), native_hash_entry),
+    (
+        "Directory",
+        "HASENTRY",
+        Arity::Fixed(1),
+        native_hash_has_entry,
+    ),
+    (
+        "Directory",
+        "SETENTRY",
+        Arity::Fixed(2),
+        native_hash_set_entry,
+    ),
+    (
+        "Directory",
+        "REMOVEENTRY",
+        Arity::Fixed(1),
+        native_hash_remove_entry,
     ),
     ("Bag", "HASITEM", Arity::Fixed(2), native_relation_has_item),
     (

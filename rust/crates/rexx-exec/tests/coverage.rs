@@ -1476,6 +1476,7 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/hash_table_store.rex",
     "lang/set_operations.rex",
     "lang/relation_multivalue.rex",
+    "lang/directory_string_keys.rex",
 ];
 
 #[test]
