@@ -6823,13 +6823,6 @@ fn referenced_receiver(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, 
         .ok_or_else(|| Loud::receiver_class("a value that is not a variable reference").into())
 }
 
-/// The refusal for an `~UNKNOWN` argument list that is not already an `Array`.
-///
-/// `arrayArgument` converts with `requestArray`, which is a `MAKEARRAY` send,
-/// so both arms name a step of that send: the method for a value whose class
-/// this crate has, and the send itself for a value it does not build a class
-/// for at all. Either way the message reads like the one `~request('ARRAY')`
-/// produces for the same value.
 /// `RexxObject::requestArray` (`runtime/MethodArguments.hpp:683`): the value
 /// itself when it already is an array, and its `MAKEARRAY` otherwise.
 ///
@@ -6855,6 +6848,13 @@ fn request_array(interp: &mut Interp, value: ObjRef) -> Result<ObjRef, Failure> 
     Ok(sent.unwrap_or(value))
 }
 
+/// The refusal for an `~UNKNOWN` argument list that is not already an `Array`.
+///
+/// `arrayArgument` converts with `requestArray`, which is a `MAKEARRAY` send,
+/// so both arms name a step of that send: the method for a value whose class
+/// this crate has, and the send itself for a value it does not build a class
+/// for at all. Either way the message reads like the one `~request('ARRAY')`
+/// produces for the same value.
 fn unconverted_array_argument(interp: &mut Interp, value: ObjRef) -> Failure {
     match interp.receiver_class_id(value) {
         Some(id) => Loud::native_method(b"MAKEARRAY", &id).into(),
