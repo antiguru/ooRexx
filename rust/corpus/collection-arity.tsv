@@ -365,33 +365,33 @@ Set	subset	agree	rc0
 Set	supplier	agree	rc0
 Set	union	agree	rc0
 Set	xor	agree	rc0
-Stem	[]	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	[]=	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	allIndexes	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	allItems	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	at	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	difference	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	disjoint	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	empty	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	equivalent	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	hasIndex	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	hasItem	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	index	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	intersection	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	isEmpty	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	items	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	makeArray	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	put	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	putAll	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	remove	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	removeItem	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	request	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	subset	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	supplier	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	toDirectory	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	union	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	unknown	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
-Stem	xor	setup-differs	crate rc120: rexx-exec: method "[]=" of class "Stem" is not implemented (Phase 5)
+Stem	[]	agree	rc0
+Stem	[]=	agree	rc0
+Stem	allIndexes	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ALLINDEXES" of class "Stem" is not implemented (Phase 5)
+Stem	allItems	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ALLITEMS" of class "Stem" is not implemented (Phase 5)
+Stem	at	agree	rc0
+Stem	difference	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ALLINDEXES" of class "Stem" is not implemented (Phase 5)
+Stem	disjoint	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SUPPLIER" of class "Stem" is not implemented (Phase 5)
+Stem	empty	agree	rc0
+Stem	equivalent	agree	rc0
+Stem	hasIndex	agree	rc0
+Stem	hasItem	agree	rc0
+Stem	index	agree	rc0
+Stem	intersection	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SUPPLIER" of class "Stem" is not implemented (Phase 5)
+Stem	isEmpty	agree	rc0
+Stem	items	agree	rc0
+Stem	makeArray	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "MAKEARRAY" of class "Stem" is not implemented (Phase 5)
+Stem	put	agree	rc0
+Stem	putAll	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SUPPLIER" of class "Stem" is not implemented (Phase 5)
+Stem	remove	agree	rc0
+Stem	removeItem	agree	rc0
+Stem	request	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "REQUEST" of class "Stem" is not implemented (Phase 5)
+Stem	subset	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ALLINDEXES" of class "Stem" is not implemented (Phase 5)
+Stem	supplier	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SUPPLIER" of class "Stem" is not implemented (Phase 5)
+Stem	toDirectory	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "TODIRECTORY" of class "Stem" is not implemented (Phase 5)
+Stem	union	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
+Stem	unknown	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "UNKNOWN" of class "Stem" is not implemented (Phase 5)
+Stem	xor	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
 StringTable	[]	agree	rc0
 StringTable	[]=	agree	rc0
 StringTable	allIndexes	agree	rc0

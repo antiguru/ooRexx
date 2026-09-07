@@ -12080,15 +12080,14 @@ mod tests {
             ),
             (0, "[] [FOO.]\nStem FOO.\n".to_string(), String::new())
         );
-        for (name, send) in [("AT", "o~at(1)"), ("[]", "o[1]"), ("ITEMS", "o~items")] {
-            let (code, stdout, stderr) =
-                both_engines(&format!("s. = 'dflt'\no = s.\nsay {send}\n"));
-            assert_eq!((code, stdout.as_str()), (120, ""), "{send}");
+        // **These three used to be the refusals this test pinned**, and
+        // Phase 5h Task 5 gave `Stem` its collection surface. Each value is
+        // the oracle's: a tail never assigned answers the stem's default,
+        // and `items` counts only the tails that hold something.
+        for (send, answer) in [("o~at(1)", "dflt"), ("o[1]", "dflt"), ("o~items", "0")] {
             assert_eq!(
-                stderr,
-                format!(
-                    "rexx-exec: method {name:?} of class \"Stem\" is not implemented (Phase 5)\n"
-                ),
+                both_engines(&format!("s. = 'dflt'\no = s.\nsay {send}\n")),
+                (0, format!("{answer}\n"), String::new()),
                 "{send}"
             );
         }

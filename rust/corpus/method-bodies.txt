@@ -806,21 +806,21 @@ Set	difference	instance	answers	rc 163
 Set	disjoint	instance	answers	rc 163
 Set	equivalent	instance	answers	rc 163
 Stem	new	class	answers	rc 0
-Stem	[]	instance	loud	method "[]" of class "Stem"
-Stem	[]=	instance	loud	method "[]=" of class "Stem"
+Stem	[]	instance	answers	rc 0
+Stem	[]=	instance	answers	rc 163
 Stem	allIndexes	instance	loud	method "ALLINDEXES" of class "Stem"
 Stem	allItems	instance	loud	method "ALLITEMS" of class "Stem"
-Stem	at	instance	loud	method "AT" of class "Stem"
-Stem	empty	instance	loud	method "EMPTY" of class "Stem"
-Stem	hasIndex	instance	loud	method "HASINDEX" of class "Stem"
-Stem	hasItem	instance	loud	method "HASITEM" of class "Stem"
-Stem	index	instance	loud	method "INDEX" of class "Stem"
-Stem	isEmpty	instance	loud	method "ISEMPTY" of class "Stem"
-Stem	items	instance	loud	method "ITEMS" of class "Stem"
+Stem	at	instance	answers	rc 0
+Stem	empty	instance	answers	rc 0
+Stem	hasIndex	instance	answers	rc 0
+Stem	hasItem	instance	answers	rc 0
+Stem	index	instance	answers	rc 0
+Stem	isEmpty	instance	answers	rc 0
+Stem	items	instance	answers	rc 0
 Stem	makeArray	instance	loud	method "MAKEARRAY" of class "Stem"
-Stem	put	instance	loud	method "PUT" of class "Stem"
-Stem	remove	instance	loud	method "REMOVE" of class "Stem"
-Stem	removeItem	instance	loud	method "REMOVEITEM" of class "Stem"
+Stem	put	instance	answers	rc 163
+Stem	remove	instance	answers	rc 0
+Stem	removeItem	instance	answers	rc 163
 Stem	request	instance	loud	method "REQUEST" of class "Stem"
 Stem	supplier	instance	loud	method "SUPPLIER" of class "Stem"
 Stem	toDirectory	instance	loud	method "TODIRECTORY" of class "Stem"

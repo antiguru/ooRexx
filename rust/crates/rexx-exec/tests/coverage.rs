@@ -1477,6 +1477,7 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/set_operations.rex",
     "lang/relation_multivalue.rex",
     "lang/directory_string_keys.rex",
+    "lang/stem_collection.rex",
 ];
 
 #[test]

@@ -1143,6 +1143,318 @@ pub(super) fn native_hash_new(
     Ok(Some(object))
 }
 
+// ---- `Stem` ----
+//
+// **`Stem` shares no entry point with the rest of this file**, which is spec
+// section 7's reason for giving it a task of its own rather than widening the
+// protocol: its store is the language's tails, it is a `MapCollection` by
+// inheritance alone, and `Body::Stem` already tells a dropped tail from an
+// absent one -- the distinction the collection surface has to respect.
+
+/// The stem's tails, as (name, value) pairs in the map's own order, with a
+/// dropped tail's `None` kept.
+fn stem_tails(interp: &Interp, receiver: ObjRef) -> Vec<(Vec<u8>, Option<ObjRef>)> {
+    match interp.heap.get(receiver).map(|object| &object.body) {
+        Some(Body::Stem { tails, .. }) => tails
+            .iter()
+            .map(|(name, value)| (name.clone(), *value))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// The value a tail read answers.
+///
+/// **Three cases and not two.** A tail that holds something answers it; a
+/// tail that was DROPPED answers its own derived name, because
+/// `Body::Stem` keeps the tombstone; and a tail that was never assigned
+/// answers the stem's default, or its derived name when there is none.
+/// Measured on `s. = 'dflt'` with `s.b` dropped: `at('B')` is `S.B` and
+/// `at('ZZ')` is `dflt`.
+fn stem_read(interp: &mut Interp, receiver: ObjRef, tail: &[u8]) -> ObjRef {
+    let (held, default, name) = match interp.heap.get(receiver).map(|object| &object.body) {
+        Some(Body::Stem {
+            tails,
+            default,
+            name,
+        }) => (tails.get(tail).copied(), *default, name.as_ref().to_vec()),
+        _ => return ObjRef::NIL,
+    };
+    match held {
+        Some(Some(value)) => value,
+        Some(None) => {
+            let mut derived = name;
+            derived.extend_from_slice(tail);
+            interp.text_built(derived)
+        }
+        None => default.unwrap_or_else(|| {
+            let mut derived = name;
+            derived.extend_from_slice(tail);
+            interp.text_built(derived)
+        }),
+    }
+}
+
+fn native_stem_at(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !is_stem(interp, receiver) {
+        return Err(stem_refusal(interp, receiver, b"[]"));
+    }
+    let tail = stem_tail(interp, args)?;
+    Ok(Some(stem_read(interp, receiver, &tail)))
+}
+
+/// `StemClass::bracketEqual`: the value is argument one and the subscripts
+/// follow it, as `Array~put`'s do.
+fn native_stem_put(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !is_stem(interp, receiver) {
+        return Err(stem_refusal(interp, receiver, b"[]="));
+    }
+    let value = super::collection::item_argument(args)?;
+    let tail = stem_tail(interp, args.get(1..).unwrap_or_default())?;
+    stem_write(interp, receiver, tail, Some(value));
+    Ok(None)
+}
+
+/// Whether `receiver` is a stem, which is what every row below needs and what
+/// the shared bodies must not be given.
+fn is_stem(interp: &Interp, receiver: ObjRef) -> bool {
+    matches!(
+        interp.heap.get(receiver).map(|object| &object.body),
+        Some(Body::Stem { .. })
+    )
+}
+
+fn stem_refusal(interp: &mut Interp, receiver: ObjRef, method: &[u8]) -> Failure {
+    not_this_task(interp, receiver, method)
+}
+
+/// Every tail that holds something, which is what `items` counts and
+/// `allIndexes` names.
+///
+/// **A dropped tail is not one of them.** Measured, `s.a = 1`, `s.b = 2`,
+/// `s.c = 3` then `drop s.b` leaves `items` at 2 and `allIndexes` at `A,C`.
+fn stem_live(interp: &Interp, receiver: ObjRef) -> Vec<(Vec<u8>, ObjRef)> {
+    stem_tails(interp, receiver)
+        .into_iter()
+        .filter_map(|(name, value)| Some((name, value?)))
+        .collect()
+}
+
+fn native_stem_items(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !is_stem(interp, receiver) {
+        return Err(stem_refusal(interp, receiver, b"ITEMS"));
+    }
+    let count = stem_live(interp, receiver).len();
+    Ok(Some(interp.counted(count)))
+}
+
+fn native_stem_is_empty(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !is_stem(interp, receiver) {
+        return Err(stem_refusal(interp, receiver, b"ISEMPTY"));
+    }
+    let empty = stem_live(interp, receiver).is_empty();
+    Ok(Some(crate::eval::logical(empty)))
+}
+
+/// The tail a subscript list names: the arguments' string values joined with
+/// `.`, upper-cased as a tail is.
+fn stem_tail(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<Vec<u8>, Failure> {
+    let mut tail = Vec::new();
+    for (at, argument) in args.iter().enumerate() {
+        let Some(argument) = *argument else {
+            return Err(Raised::missing_method_argument(at + 1).into());
+        };
+        if !tail.is_empty() {
+            tail.push(b'.');
+        }
+        tail.extend_from_slice(&interp.to_text(argument).to_ascii_uppercase());
+    }
+    Ok(tail)
+}
+
+fn native_stem_has_index(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !is_stem(interp, receiver) {
+        return Err(stem_refusal(interp, receiver, b"HASINDEX"));
+    }
+    // **No subscripts is true.** Measured, `obj~hasIndex()` on a stem holding
+    // one tail answers `1` -- the stem itself is the index a bare `hasIndex`
+    // asks about, and none of `Stem`'s rows treats a missing subscript as an
+    // error the way the hash classes do.
+    if args.is_empty() {
+        return Ok(Some(crate::eval::logical(true)));
+    }
+    let tail = stem_tail(interp, args)?;
+    let held = stem_live(interp, receiver)
+        .into_iter()
+        .any(|(name, _)| name == tail);
+    Ok(Some(crate::eval::logical(held)))
+}
+
+fn native_stem_has_item(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !is_stem(interp, receiver) {
+        return Err(stem_refusal(interp, receiver, b"HASITEM"));
+    }
+    // Optional, unlike every other class's, where a missing item is 93.903.
+    //
+    // **Measured against an EMPTIED stem, and it cannot be measured any other
+    // way.** `hasItem()` and `index()` with no argument are a SIGSEGV on the
+    // oracle whenever the stem holds a tail -- both are in
+    // `corpus/oracle-crashes.txt`, and the probe that answered `0` here got
+    // that answer only because an earlier line in it had emptied the stem.
+    // So these two limbs are written from the one shape the oracle survives
+    // and nothing in the tree witnesses them; `stem_collection.rex` says so
+    // and leaves them out rather than asserting an answer it cannot check.
+    let Some(wanted) = args.first().copied().flatten() else {
+        return Ok(Some(crate::eval::logical(false)));
+    };
+    for (_, value) in stem_live(interp, receiver) {
+        if super::collection::same_item(interp, wanted, value)? {
+            return Ok(Some(crate::eval::logical(true)));
+        }
+    }
+    Ok(Some(crate::eval::logical(false)))
+}
+
+fn native_stem_index(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !is_stem(interp, receiver) {
+        return Err(stem_refusal(interp, receiver, b"INDEX"));
+    }
+    let Some(wanted) = args.first().copied().flatten() else {
+        return Ok(Some(ObjRef::NIL));
+    };
+    for (name, value) in stem_live(interp, receiver) {
+        if super::collection::same_item(interp, wanted, value)? {
+            return Ok(Some(interp.text_built(name)));
+        }
+    }
+    Ok(Some(ObjRef::NIL))
+}
+
+/// Writes one tail, `None` dropping it.
+fn stem_write(interp: &mut Interp, receiver: ObjRef, tail: Vec<u8>, value: Option<ObjRef>) {
+    if let Some(Body::Stem { tails, .. }) = interp.heap.get_mut(receiver).map(|held| &mut held.body)
+    {
+        tails.insert(tail, value);
+    }
+}
+
+/// `remove(tail)`: drops the tail and answers what it held, or `.nil`.
+///
+/// **A drop and not a delete.** `Body::Stem` keeps the tombstone, which is
+/// what makes a dropped tail read as its own derived name where an absent one
+/// reads as the stem's default -- measured, `drop s.b` then `s~at('B')` is
+/// `S.B` while `s~at('ZZ')` is the default.
+fn native_stem_remove(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !is_stem(interp, receiver) {
+        return Err(stem_refusal(interp, receiver, b"REMOVE"));
+    }
+    // No subscripts names the stem itself, which is not a tail: measured,
+    // `obj~remove()` answers `S.` and takes nothing out, where
+    // `obj~remove('ZZ')` answers `.nil`.
+    if args.is_empty() {
+        return Ok(Some(stem_read(interp, receiver, b"")));
+    }
+    let tail = stem_tail(interp, args)?;
+    let held = stem_live(interp, receiver)
+        .into_iter()
+        .find(|(name, _)| *name == tail)
+        .map(|(_, value)| value);
+    if held.is_some() {
+        stem_write(interp, receiver, tail, None);
+    }
+    Ok(Some(held.unwrap_or(ObjRef::NIL)))
+}
+
+fn native_stem_remove_item(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !is_stem(interp, receiver) {
+        return Err(stem_refusal(interp, receiver, b"REMOVEITEM"));
+    }
+    let wanted = super::collection::item_argument(args)?;
+    for (name, value) in stem_live(interp, receiver) {
+        if super::collection::same_item(interp, wanted, value)? {
+            stem_write(interp, receiver, name, None);
+            return Ok(Some(value));
+        }
+    }
+    Ok(Some(ObjRef::NIL))
+}
+
+/// `empty`: drops every tail and **keeps the default** -- measured, `u. = 5`
+/// with one tail set answers `items` 0 after `empty` and `u~at('K')` still
+/// answers `5`.
+fn native_stem_empty(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !is_stem(interp, receiver) {
+        return Err(stem_refusal(interp, receiver, b"EMPTY"));
+    }
+    // **Deleted, not dropped.** A tombstone reads as the tail's own derived
+    // name; the oracle's `empty` leaves the tails never-assigned, so they
+    // read as the stem's default. Measured: `u. = 5` with one tail set
+    // answers `items` 0 after `empty` and `u~at('K')` still answers `5`,
+    // where writing tombstones answered `U.K`.
+    let default = match interp.heap.get(receiver).map(|object| &object.body) {
+        Some(Body::Stem { default, .. }) => *default,
+        _ => None,
+    };
+    if let Some(Body::Stem { tails, .. }) = interp.heap.get_mut(receiver).map(|held| &mut held.body)
+    {
+        *tails = rexx_core::NameMap::default();
+    }
+    let _ = default;
+    // Answers the receiver, as `Array~empty` and `List~empty` do -- measured,
+    // `(obj~empty == obj)` is `1`.
+    Ok(Some(receiver))
+}
+
 // ---- the string-keyed classes' own accessors ----
 
 /// The name an entry method looks up, which is **upper-cased** where the
@@ -1737,6 +2049,23 @@ pub(super) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(1),
         native_hash_remove_entry,
     ),
+    ("Stem", "AT", Arity::Counted, native_stem_at),
+    ("Stem", "[]", Arity::Counted, native_stem_at),
+    ("Stem", "PUT", Arity::Counted, native_stem_put),
+    ("Stem", "[]=", Arity::Counted, native_stem_put),
+    ("Stem", "ITEMS", Arity::Fixed(0), native_stem_items),
+    ("Stem", "ISEMPTY", Arity::Fixed(0), native_stem_is_empty),
+    ("Stem", "HASINDEX", Arity::Counted, native_stem_has_index),
+    ("Stem", "HASITEM", Arity::Fixed(1), native_stem_has_item),
+    ("Stem", "INDEX", Arity::Fixed(1), native_stem_index),
+    ("Stem", "REMOVE", Arity::Counted, native_stem_remove),
+    (
+        "Stem",
+        "REMOVEITEM",
+        Arity::Fixed(1),
+        native_stem_remove_item,
+    ),
+    ("Stem", "EMPTY", Arity::Fixed(0), native_stem_empty),
     ("Bag", "HASITEM", Arity::Fixed(2), native_relation_has_item),
     (
         "Bag",
