@@ -520,6 +520,40 @@ flags are properties of the directive that declared it; `~package` is the packag
 `method_object`/`package_object` pair already keys on. Confirm each of those claims against the
 tree before writing, and report any that is not true — the row count depends on it.
 
+**Measured on the oracle 2026-09-07.** On `class-set.txt`'s own receiver,
+`m = .Object~method('objectName')` — a **native** method:
+
+```
+scope=Object   package~name=REXX   source=Array(0)
+isAbstract=0  isAttribute=0  isConstant=0  isGuarded=1  isPackage=0  isPrivate=0  isProtected=0
+```
+
+and on a Rexx one, `mm = .K~method('M')` from `::method M unguarded private`:
+
+```
+scope=K   package~name=<the program's path>   source=Array(1)   source[1]=[  return 1]
+isGuarded=0   isPrivate=1   isProtected=0
+```
+
+**Two things that block a body from agreeing by accident.** The measured receiver's `~source` is an
+**empty Array** and every one of its seven flags but `isGuarded` is `0`, so a reader answering an
+empty array and seven zeroes agrees with the oracle on eight rows — witness the Rexx method too,
+where the source has content and the flags disagree with each other. And `isGuarded` is the one
+flag whose default is `1`, which is what tells a reader of the flags apart from a reader of
+nothing.
+
+**The four setters return no result at all.** Measured, `say m~setGuarded` is
+`91.999 Message "SETGUARDED" did not return a result.` at rc 165 — so the body answers `None`, not
+a value, and a witness must send them as statements. Sent that way they work and are observable
+through their readers: `setUnguarded` then `isGuarded` is `0`, `setGuarded` then `1`, `setPrivate`
+then `isPrivate` `1`, `setProtected` then `isProtected` `1`.
+
+**`Routine~call`, `~callWith` and `~[]` measured**, on `.routines~rr` where `rr` is
+`use arg n; return n * 2`: `~call(3)` is `6`, `~callWith(.Array~of(4))` is `8`, `~'[]'(5)` is `10`,
+and `~call(6)` **again** on the same object is `12` — that last is the second send this plan's NEW
+constraint asks for, and it is what catches a body that consumes its program on first use.
+`~source` is `Array(2)` with `source[1]` = `  use arg n`, leading blanks included.
+
 **The `set*` family is where the trap is.** `setGuarded`, `setUnguarded`, `setPrivate`,
 `setProtected` change a flag that something must *observe*, and the observable is the matching
 `is*` reader plus the interpreter's own behaviour. **Pair every setter with its reader in one
