@@ -405,13 +405,31 @@ declared (`rexx-core/src/body.rs:235`), `body.rs:741` gives it a trace arm that 
 `rexx-core/src/heap.rs:166`-`:202` implements the whole weak protocol — `checkWeakReferences`
 before `checkUninit`, clearing a dead referent to `Body::WeakRef(ObjRef::NIL)`. But
 `native_weak_reference_new` (`dispatch.rs:10369`) builds a **plain instance** through
-`new_instance` and drops the referent on the floor, and its own doc comment says so. Nothing in
-either crate constructs a `Body::WeakRef`. So:
+`new_instance` and drops the referent on the floor, and its own doc comment says so.
 
-* `new` has to build a `Body::WeakRef` instead of a plain instance, which makes `heap.rs`'s weak
-  path **live for the first time**;
-* `receiver_kind` (`dispatch.rs:1923`) must stop answering `Err("a weak reference")` for it;
-* and the doc comment at `dispatch.rs:10364`-`:10368` states the old contract and becomes false —
+**No `src/` file constructs a `Body::WeakRef`** -- but `rexx-core/tests/uninit.rs` builds one by
+hand, so the weak-clearing pass is not untested; what is missing is any route to it from a Rexx
+program. (An earlier version of this paragraph said "nothing in either crate constructs one". That
+was a grep of `crates/*/src/` and it is false of the test tree. Task 2's implementer found it when
+deleting the pass reddened `uninit.rs` as well as its own witness.) So:
+
+* **The reference object stays a `Body::Instance`, and the weak cell goes in its scope pool.** Ruled
+  2026-09-08 after Task 2's pre-flight measured that the obvious shape regresses a green case:
+  `Body::WeakRef` carries no class, behaviour, `ScopePools` or name, and a `WeakReference` SUBCLASS
+  keeps all four today -- `::class W subclass WeakReference` with an attribute answers `W`, `a W`
+  and its own attribute, byte-identical on the oracle and both engines. So `new` additionally
+  allocates a one-word cell whose body is `Body::WeakRef(referent)` and stores it in the instance's
+  pool for the `WeakReference` scope. The instance's trace walks the pool, so the cell lives exactly
+  as long as the reference object; the cell's own body traces nothing, so the referent is not
+  marked; `heap.rs`'s `checkWeakReferences` rewrites it to `Body::WeakRef(ObjRef::NIL)` when the
+  referent dies. **The already-written protocol runs unchanged and becomes reachable from a Rexx
+  program for the first time**, and `value` reads the cell with no branch because `NIL` decodes as
+  `.nil`. This is the crate's existing idiom, not an invention: `COLLECTION_STORES`
+  (`dispatch.rs:7485`) keeps `Array`'s `ITEMS` and `Table`'s `HASHINDEXES` the same way.
+* `receiver_kind` (`dispatch.rs:1923`) keeps its `Err("a weak reference")` arm, and it stays
+  unreachable from a program because the cell is never handed out. Say why that is correct rather
+  than a leftover.
+* and the doc comment at `dispatch.rs:10364`-`:10368` states the old contract and becomes false --
   correct it rather than leaving it, per `rust/CLAUDE.md`'s rule about comments that state
   something false.
 
