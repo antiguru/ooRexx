@@ -346,15 +346,33 @@ design section for why that is the point rather than an omission.
 
 ## Gates
 
+Run in the pinned gate worktree `/home/moritz/dev/repos/ooRexx-5i-gates`, detached at this task's
+commit, so the gated tree is the committed tree by construction. Read from
+`/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/t2/gates/status.txt`,
+whose first line is `3d2c7dd75a6ec20a49509bfc5d44072d2256f525` and whose last is
+`finished 2026-09-08T01:50:46+02:00`.
+
 | gate | command | result |
 | --- | --- | --- |
-| G1 | | **G1** |
-| G2 | | **G2** |
-| G3 | | **G3** |
-| G4 | | **G4** |
-| G5 | | **G5** |
-| G6 | | **G6** |
-| G7 | | **G7** |
+| G1 | `cargo fmt --all --check` | exit 0 |
+| G2 | `cargo clippy --workspace --all-targets -- -D warnings` | exit 0 |
+| G3 | `cargo test --release --workspace --no-fail-fast` | exit 0, 116 `test result: ok`, no `test result: FAILED`, 2279 passed |
+| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` (debug) | exit 0, 116 `test result: ok`, no `test result: FAILED`, 2280 passed |
+| G5 | `cargo test --release -p rexx-exec --test collection_arity` | exit 0, 23 passed |
+| G6 | `cargo test --release -p rexx-exec --test introspection_arity` | exit 0, 25 passed |
+| G7 | `cargo test --release -p rexx-exec --test introspection_scopes` | exit 0, 22 passed |
+
+All seven zero. **The STRICT corpus differential inside G4 reports `445 of 445 matching`** under
+`mode: STRICT (the gate) -- REXX_CORPUS_GATE is set`, which is the run that includes
+`lang/pointer_buffer_new_refused.rex` and `lang/weak_reference_value.rex`; the plain `--test corpus`
+binary is report mode and exits 0 on a divergence, so that is the line to cite. Task 1's gate at
+`9308ca9bd` reported 443 of 443, so the two new witnesses are the whole of the increase. G5's 23 and
+G7's 22 are unmoved from Task 1's; G6's 25 is unmoved too, and its three moved rows are inside that
+count rather than beside it.
+
+G3 carries one test fewer than G4, and the difference was diffed rather than assumed: the extra one
+is `bytes::tests::the_bytes_past_len_are_never_part_of_the_value`, which carries
+`#[cfg(debug_assertions)]`.
 
 ## Concerns
 
