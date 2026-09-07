@@ -734,10 +734,24 @@ the tree 2026-09-07:
 
 **`CallType`'s spellings are not `StackFrame~type`'s.** `CallType` (`activation.rs:~904`) is
 `Command`, `Subroutine`, `Function`, `Method`, `Requires`, rendering as `COMMAND SUBROUTINE
-FUNCTION METHOD REQUIRES` — that is `PARSE SOURCE`'s vocabulary. The oracle's `StackFrame~type` for
-an internal routine call is `INTERNALCALL`. So there is a **mapping** to work out, and the set of
-values `~type` can take has to come from the C++ (`StackFrameClass.cpp` and whatever fills it), not
-from `CallType`. Measure at least a program frame, an internal-call frame and a method frame.
+FUNCTION METHOD REQUIRES` — that is `PARSE SOURCE`'s vocabulary, and it is **not** what `~type`
+answers. Measured on the oracle 2026-09-07, from inside a `::routine` called by a `::method` called
+by an internal label called by the program — four frames, **innermost first**:
+
+```
+frames=4
+1  type=ROUTINE       name=INNER2  line=12  invocation=1  target=The NIL object
+2  type=METHOD        name=M       line=9   invocation=2  target=a KK
+3  type=INTERNALCALL  name=OUTER   line=5   invocation=3  target=The NIL object
+4  type=PROGRAM       name=<the program's path>  line=1  invocation=4  target=The NIL object
+```
+
+So: `~name` is the routine or method name **upcased**, and the program's *path* for the outermost
+frame; `~line` is the clause each frame is currently executing, not the line it was entered at;
+`~invocation` is the frame's depth counted from the innermost, starting at `1`; and `~target` is
+the receiver, present only on a `METHOD` frame. The set of `~type` values still has to come from
+the C++ (`StackFrameClass.cpp` and whatever fills it) rather than from those four — measure the
+kinds this crate can produce and say which of the C++'s values it has no way to reach yet.
 
 **`StackFrame`'s ten rows are a cascade today, and closing them by cascade would be the worst
 hollowness in this phase.** Read from the tables 2026-09-07: `corpus/docs/class-set.txt:100` marks
