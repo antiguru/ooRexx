@@ -919,8 +919,25 @@ method-bodies verdict.
 `addPackage`, `addRoutine`, `addPublicRoutine` and `loadPackage` are writes; each is witnessed by
 the read that should see it, in the same program.
 
-`findProgram`, `findNamespace` and the four `find*` lookups have a defined search order that is not
-guessable — read `PackageClass.cpp` for each, and measure the miss case as well as the hit.
+**The `find*` family and `resource`, measured on the oracle 2026-09-07** on a program with
+`::routine RR public`, `::class K public` and a two-line `::resource R1`:
+
+```
+findClass('K')        -> the class K              findClass('ZZZ')  -> The NIL object
+findClass('ARRAY')    -> the Array class          findRoutine('RR') -> a Routine
+findPublicClass('K')  -> K                        findRoutine('ZZZ')-> The NIL object
+findPublicClass('ARRAY') -> The Array class       findNamespace('X')-> The NIL object
+findPublicRoutine('RR')  -> a Routine
+findProgram('pf.rex')    -> the program's resolved absolute PATH, a String, not a Package
+resource('R1')  -> Array(2), [1] = "line one"     resource('ZZ')    -> The NIL object
+resources/classes/routines ~allIndexes -> R1 / K / RR
+```
+
+**Two of those are the ones a guess gets wrong.** `findClass` and even `findPublicClass` reach past
+the program's own table into the environment — `'ARRAY'` answers the `Array` class from both — so a
+body that searches only the package's own `classes` table answers `.nil` where the oracle answers a
+class. And `findProgram` answers a **path string**, not a package object. Read `PackageClass.cpp`
+for each one's search order, measure the miss as well as the hit, and assert both.
 
 ---
 
