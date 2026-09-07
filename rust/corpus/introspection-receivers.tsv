@@ -1,0 +1,58 @@
+# The receiver each of Phase 5i's introspection rows is sent to in
+# corpus/introspection-arity.tsv's probe (Phase 5i Task 0).
+#
+# class<TAB>arm<TAB>setup<TAB>wrapper<TAB>directives
+#
+# `setup` is statements separated by ` | `, which must leave `r` holding the
+# receiver. `directives` is directive text, also ` | `-separated, appended
+# after the program; `--` is none.
+#
+# `wrapper` is `call`, which puts the setup and the send inside an internal
+# routine called from the main program with two arguments, or `--`, which
+# leaves both at the top level. THE TWO MECHANISMS EXIST BECAUSE THE PROBE
+# WRITES ONE FILE AND RUNS IT: a receiver that needs a ::routine, ::method or
+# ::class to exist needs it in the same file, and a receiver that describes a
+# caller needs a caller. Measured on the oracle 2026-09-07, both halves:
+# `.context~stackFrames` has one entry at the top level and two inside a call,
+# and a RexxContext built inside a call is DEAD in the caller -- reading one
+# there is `98.981 Target RexxContext is no longer active`. A StackFrame, by
+# contrast, survives its own frame's exit and still answers ~name, ~line,
+# ~traceLine and ~arguments.
+#
+# THE SETUP IS THE RICHEST RECEIVER THE ORACLE CAN BUILD, not the richest both
+# sides can. A class whose state this crate does not have fails here rather
+# than at the send, and the probe reports that as `setup-differs` -- which is
+# the phase's headline measurement and not a harness fault.
+#
+# Pointer and Buffer are absent BY NAME rather than by silence, the way
+# collection_scopes.rs excludes RexxQueue. corpus/docs/class-set.txt gives
+# them no construction expression -- the reference says instances come only
+# from native code (utilityclasses.xml:429, :6910) -- so no receiver exists to
+# send to and every instance row of theirs would be setup-differs on the
+# oracle's own side. Naming them keeps "a row with no receiver is a failure"
+# available as a signal for a class that is supposed to have one.
+#
+# The probe directory also holds `source.rex`, a one-line `return 1` written
+# by the harness, because the probe writes one file and a row taking a file
+# name needs a second one -- naming the running program would re-execute it.
+#
+# Measured 2026-09-07, the Package receiver's tables: classes 3,
+# publicClasses 2, routines 2, publicRoutines 2, definedMethods 2,
+# resources 2. importedPackages is 0 and cannot be made otherwise here: a
+# ::requires needs a file on this build's search path and nothing is on it --
+# rxregexp.cls, json.cls and socket.cls all answer 43.901 rc 213.
+Class	class	r = .Class	--	--
+Class	instance	r = .K	--	::class K public subclass Object inherit MX | ::method MM | return 2 | ::class L public subclass K | ::class MX mixinclass Object | ::class MX2 mixinclass Object
+Method	class	r = .Method	--	--
+Method	instance	r = .K~method('MM')	--	::class K public subclass Object inherit MX | ::method MM | return 2 | ::class L public subclass K | ::class MX mixinclass Object | ::class MX2 mixinclass Object
+Object	class	r = .Object	--	--
+Object	instance	r = .K~new	--	::class K public subclass Object inherit MX | ::method MM | return 2 | ::class L public subclass K | ::class MX mixinclass Object | ::class MX2 mixinclass Object
+Package	class	r = .Package	--	--
+Package	instance	r = .context~package	--	::method FM1 | return 1 | ::method FM2 | return 2 | ::routine R public | return arg(1) | ::routine R2 public | return 2 | ::class K public subclass Object inherit MX | ::method MM | return 2 | ::class L public subclass K | ::class MX mixinclass Object | ::class MX2 mixinclass Object | ::resource RES | one | ::END | ::resource RES2 | two | ::END
+RexxContext	instance	r = .context	call	--
+RexxInfo	instance	r = .RexxInfo	--	--
+Routine	class	r = .Routine	--	--
+Routine	instance	r = .routines['R']	--	::routine R public | return arg(1)
+StackFrame	instance	r = .context~stackFrames[1]	call	--
+WeakReference	class	r = .WeakReference	--	--
+WeakReference	instance	o = .Object~new | r = .WeakReference~new(o)	--	--

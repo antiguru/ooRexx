@@ -1,0 +1,222 @@
+# What each documented introspection method does when sent an argument list it
+# could accept (Phase 5i Task 0). Derived by
+# crates/rexx-exec/tests/introspection_arity.rs; edit that, never this.
+#
+# class<TAB>method<TAB>arm<TAB>verdict<TAB>evidence
+#
+# THIS TABLE REPLACES corpus/method-bodies.txt's verdict column for these
+# classes. That column sends no arguments, so for a method that needs them it
+# records agreement about an arity error. No task in Phase 5i may cite it as
+# a reason a row needs no work.
+#
+#   agree          the oracle and both engines give identical descriptors
+#   send-differs   the receiver was built on both sides and the send differs
+#   setup-differs  one side could not build the receiver, so the row says
+#                  nothing about its own method
+#   engine-differs the two engines disagree with each other
+#   exempt         a committed reason instead of an argument list
+#
+# `agree` SAYS THE SEND COMPLETED THE SAME WAY, NOT THAT THE TWO SIDES
+# ANSWERED THE SAME VALUE: the probe sends a bare statement and never prints
+# the result. A task closing a row still owes it a witness that reads what it
+# answered.
+#
+# The argument lists are corpus/introspection-arguments.tsv and the receivers
+# are corpus/introspection-receivers.tsv. A list is only real if the ORACLE
+# completes the send; the test makes an oracle run that does not a failure for
+# that row.
+#
+# Pointer and Buffer are deliberately absent: class-set.txt gives them no
+# construction expression, because the reference says instances come only from
+# native code (utilityclasses.xml:429, :6910), so every instance row of theirs
+# would be setup-differs on the oracle's own side.
+Class	<>	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "<>" of class "Class" is not implemented (Phase 5)
+Class	=	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "=" of class "Class" is not implemented (Phase 5)
+Class	==	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "==" of class "Class" is not implemented (Phase 5)
+Class	><	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "><" of class "Class" is not implemented (Phase 5)
+Class	\=	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "\=" of class "Class" is not implemented (Phase 5)
+Class	\==	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "\==" of class "Class" is not implemented (Phase 5)
+Class	activate	instance	agree	rc0
+Class	annotation	instance	agree	rc0
+Class	annotations	instance	agree	rc0
+Class	baseClass	instance	agree	rc0
+Class	defaultName	instance	agree	rc0
+Class	define	instance	agree	rc0
+Class	defineMethods	instance	agree	rc0
+Class	delete	instance	agree	rc0
+Class	enhanced	instance	agree	rc0
+Class	id	instance	agree	rc0
+Class	inherit	instance	agree	rc0
+Class	isAbstract	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ISABSTRACT" of class "Class" is not implemented (Phase 5)
+Class	isMetaclass	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ISMETACLASS" of class "Class" is not implemented (Phase 5)
+Class	isSubclassOf	instance	agree	rc0
+Class	metaClass	instance	agree	rc0
+Class	method	instance	agree	rc0
+Class	methods	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "METHODS" of class "Class" is not implemented (Phase 5)
+Class	mixinClass	instance	agree	rc0
+Class	new	class	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "NEW" of class "Class" is not implemented (Phase 5)
+Class	package	instance	agree	rc0
+Class	queryMixinClass	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "QUERYMIXINCLASS" of class "Class" is not implemented (Phase 5)
+Class	subclass	instance	agree	rc0
+Class	subclasses	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SUBCLASSES" of class "Class" is not implemented (Phase 5)
+Class	superClass	instance	agree	rc0
+Class	superClasses	instance	agree	rc0
+Class	uninherit	instance	agree	rc0
+Method	annotation	instance	agree	rc0
+Method	annotations	instance	agree	rc0
+Method	isAbstract	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ISABSTRACT" of class "Method" is not implemented (Phase 5)
+Method	isAttribute	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ISATTRIBUTE" of class "Method" is not implemented (Phase 5)
+Method	isConstant	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ISCONSTANT" of class "Method" is not implemented (Phase 5)
+Method	isGuarded	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ISGUARDED" of class "Method" is not implemented (Phase 5)
+Method	isPackage	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ISPACKAGE" of class "Method" is not implemented (Phase 5)
+Method	isPrivate	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ISPRIVATE" of class "Method" is not implemented (Phase 5)
+Method	isProtected	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ISPROTECTED" of class "Method" is not implemented (Phase 5)
+Method	loadExternalMethod	class	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "LOADEXTERNALMETHOD" of class "Method" is not implemented (Phase 5)
+Method	new	class	agree	rc0
+Method	newFile	class	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "NEWFILE" of class "Method" is not implemented (Phase 5)
+Method	package	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "PACKAGE" of class "Method" is not implemented (Phase 5)
+Method	scope	instance	agree	rc0
+Method	setGuarded	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SETGUARDED" of class "Method" is not implemented (Phase 5)
+Method	setPrivate	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SETPRIVATE" of class "Method" is not implemented (Phase 5)
+Method	setProtected	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SETPROTECTED" of class "Method" is not implemented (Phase 5)
+Method	setSecurityManager	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SETSECURITYMANAGER" of class "Method" is not implemented (Phase 5)
+Method	setUnguarded	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SETUNGUARDED" of class "Method" is not implemented (Phase 5)
+Method	source	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SOURCE" of class "Method" is not implemented (Phase 5)
+Object	(abuttal)	instance	exempt	the book's displayed name is not a message name -- measured, o~'(abuttal)'('x') raises 97.1 while o~''('x') answers
+Object	(blank)	instance	exempt	the book's displayed name is not a message name -- measured, o~'(blank)'('x') raises 97.1 while o~' '('x') answers
+Object	<>	instance	agree	rc0
+Object	=	instance	agree	rc0
+Object	==	instance	agree	rc0
+Object	><	instance	agree	rc0
+Object	\=	instance	agree	rc0
+Object	\==	instance	agree	rc0
+Object	class	instance	agree	rc0
+Object	copy	instance	agree	rc0
+Object	defaultName	instance	agree	rc0
+Object	hasMethod	instance	agree	rc0
+Object	hashCode	instance	agree	rc0
+Object	identityHash	instance	agree	rc0
+Object	instanceMethod	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "INSTANCEMETHOD" of class "Object" is not implemented (Phase 5)
+Object	instanceMethods	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "INSTANCEMETHODS" of class "Object" is not implemented (Phase 5)
+Object	isA	instance	agree	rc0
+Object	isInstanceOf	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ISINSTANCEOF" of class "Object" is not implemented (Phase 5)
+Object	isNil	instance	agree	rc0
+Object	new	class	exempt	the oracle refuses an argument here -- measured, .Object~new('x') raises 93.902 while .Object~new answers, so Setup.cpp's A_COUNT is a maximum and not a minimum
+Object	objectName	instance	agree	rc0
+Object	objectName=	instance	agree	rc0
+Object	request	instance	agree	rc0
+Object	run	instance	exempt	private on Object -- measured, a send from outside a method answers 97.2, Object 'a K' cannot accept private message 'RUN' from this context, and self~run from inside one works
+Object	send	instance	agree	rc0
+Object	sendWith	instance	agree	rc0
+Object	setMethod	instance	exempt	private on Object -- measured, a send from outside a method answers 97.2, Object 'a K' cannot accept private message 'SETMETHOD' from this context, and self~setMethod from inside one works
+Object	start	instance	agree	rc0
+Object	startWith	instance	agree	rc0
+Object	string	instance	agree	rc0
+Object	unsetMethod	instance	exempt	private on Object -- measured, a send from outside a method answers 97.2, Object 'a K' cannot accept private message 'UNSETMETHOD' from this context, and self~unsetMethod from inside one works
+Object	||	instance	agree	rc0
+Package	addClass	instance	agree	rc0
+Package	addPackage	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ADDPACKAGE" of class "Package" is not implemented (Phase 5)
+Package	addPublicClass	instance	agree	rc0
+Package	addPublicRoutine	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ADDPUBLICROUTINE" of class "Package" is not implemented (Phase 5)
+Package	addRoutine	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ADDROUTINE" of class "Package" is not implemented (Phase 5)
+Package	annotation	instance	agree	rc0
+Package	annotations	instance	agree	rc0
+Package	classes	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "CLASSES" of class "Package" is not implemented (Phase 5)
+Package	defaultOptions	class	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "DEFAULTOPTIONS" of class "Package" is not implemented (Phase 5)
+Package	definedMethods	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "DEFINEDMETHODS" of class "Package" is not implemented (Phase 5)
+Package	digits	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "DIGITS" of class "Package" is not implemented (Phase 5)
+Package	findClass	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "FINDCLASS" of class "Package" is not implemented (Phase 5)
+Package	findNamespace	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "FINDNAMESPACE" of class "Package" is not implemented (Phase 5)
+Package	findProgram	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "FINDPROGRAM" of class "Package" is not implemented (Phase 5)
+Package	findPublicClass	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "FINDPUBLICCLASS" of class "Package" is not implemented (Phase 5)
+Package	findPublicRoutine	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "FINDPUBLICROUTINE" of class "Package" is not implemented (Phase 5)
+Package	findRoutine	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "FINDROUTINE" of class "Package" is not implemented (Phase 5)
+Package	form	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "FORM" of class "Package" is not implemented (Phase 5)
+Package	fuzz	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "FUZZ" of class "Package" is not implemented (Phase 5)
+Package	importedClasses	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "IMPORTEDCLASSES" of class "Package" is not implemented (Phase 5)
+Package	importedPackages	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "IMPORTEDPACKAGES" of class "Package" is not implemented (Phase 5)
+Package	importedRoutines	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "IMPORTEDROUTINES" of class "Package" is not implemented (Phase 5)
+Package	loadLibrary	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "LOADLIBRARY" of class "Package" is not implemented (Phase 5)
+Package	loadPackage	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "LOADPACKAGE" of class "Package" is not implemented (Phase 5)
+Package	local	instance	agree	rc0
+Package	name	instance	agree	rc0
+Package	namespaces	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "NAMESPACES" of class "Package" is not implemented (Phase 5)
+Package	new	class	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "NEW" of class "Package" is not implemented (Phase 5)
+Package	options	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "OPTIONS" of class "Package" is not implemented (Phase 5)
+Package	prolog	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "PROLOG" of class "Package" is not implemented (Phase 5)
+Package	publicClasses	instance	agree	rc0
+Package	publicRoutines	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "PUBLICROUTINES" of class "Package" is not implemented (Phase 5)
+Package	resource	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "RESOURCE" of class "Package" is not implemented (Phase 5)
+Package	resources	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "RESOURCES" of class "Package" is not implemented (Phase 5)
+Package	routines	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ROUTINES" of class "Package" is not implemented (Phase 5)
+Package	setSecurityManager	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SETSECURITYMANAGER" of class "Package" is not implemented (Phase 5)
+Package	source	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SOURCE" of class "Package" is not implemented (Phase 5)
+Package	sourceLine	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SOURCELINE" of class "Package" is not implemented (Phase 5)
+Package	sourceSize	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SOURCESIZE" of class "Package" is not implemented (Phase 5)
+Package	trace	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "TRACE" of class "Package" is not implemented (Phase 5)
+RexxContext	args	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ARGS" of class "RexxContext" is not implemented (Phase 5)
+RexxContext	condition	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "CONDITION" of class "RexxContext" is not implemented (Phase 5)
+RexxContext	digits	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "DIGITS" of class "RexxContext" is not implemented (Phase 5)
+RexxContext	executable	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "EXECUTABLE" of class "RexxContext" is not implemented (Phase 5)
+RexxContext	form	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "FORM" of class "RexxContext" is not implemented (Phase 5)
+RexxContext	fuzz	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "FUZZ" of class "RexxContext" is not implemented (Phase 5)
+RexxContext	interpreter	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "INTERPRETER" of class "RexxContext" is not implemented (Phase 5)
+RexxContext	invocation	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "INVOCATION" of class "RexxContext" is not implemented (Phase 5)
+RexxContext	line	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "LINE" of class "RexxContext" is not implemented (Phase 5)
+RexxContext	name	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "NAME" of class "RexxContext" is not implemented (Phase 5)
+RexxContext	package	instance	agree	rc0
+RexxContext	rs	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "RS" of class "RexxContext" is not implemented (Phase 5)
+RexxContext	stackFrames	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
+RexxContext	thread	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "THREAD" of class "RexxContext" is not implemented (Phase 5)
+RexxContext	variables	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "VARIABLES" of class "RexxContext" is not implemented (Phase 5)
+RexxInfo	architecture	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ARCHITECTURE" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	caseSensitiveFiles	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "CASESENSITIVEFILES" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	date	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "DATE" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	debug	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "DEBUG" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	digits	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "DIGITS" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	directorySeparator	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "DIRECTORYSEPARATOR" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	endofline	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ENDOFLINE" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	executable	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	form	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "FORM" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	fuzz	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "FUZZ" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	internalDigits	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "INTERNALDIGITS" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	internalMaxNumber	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "INTERNALMAXNUMBER" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	internalMinNumber	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "INTERNALMINNUMBER" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	languageLevel	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "LANGUAGELEVEL" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	libraryPath	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "LIBRARYPATH" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	majorVersion	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "MAJORVERSION" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	maxArraySize	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "MAXARRAYSIZE" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	maxExponent	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "MAXEXPONENT" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	maxPathLength	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "MAXPATHLENGTH" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	minExponent	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "MINEXPONENT" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	modification	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "MODIFICATION" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	name	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "NAME" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	package	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "PACKAGE" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	pathSeparator	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "PATHSEPARATOR" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	platform	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "PLATFORM" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	release	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "RELEASE" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	revision	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "REVISION" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	version	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "VERSION" of class "RexxInfo" is not implemented (Phase 5)
+Routine	[]	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "[]" of class "Routine" is not implemented (Phase 5)
+Routine	annotation	instance	agree	rc0
+Routine	annotations	instance	agree	rc0
+Routine	call	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "CALL" of class "Routine" is not implemented (Phase 5)
+Routine	callWith	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "CALLWITH" of class "Routine" is not implemented (Phase 5)
+Routine	loadExternalRoutine	class	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "LOADEXTERNALROUTINE" of class "Routine" is not implemented (Phase 5)
+Routine	new	class	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "NEW" of class "Routine" is not implemented (Phase 5)
+Routine	newFile	class	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "NEWFILE" of class "Routine" is not implemented (Phase 5)
+Routine	package	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "PACKAGE" of class "Routine" is not implemented (Phase 5)
+Routine	setSecurityManager	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SETSECURITYMANAGER" of class "Routine" is not implemented (Phase 5)
+Routine	source	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SOURCE" of class "Routine" is not implemented (Phase 5)
+StackFrame	arguments	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
+StackFrame	context	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
+StackFrame	invocation	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
+StackFrame	line	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
+StackFrame	makeString	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
+StackFrame	name	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
+StackFrame	string	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
+StackFrame	target	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
+StackFrame	traceLine	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
+StackFrame	type	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
+WeakReference	new	class	agree	rc0
+WeakReference	value	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "VALUE" of class "WeakReference" is not implemented (Phase 5)

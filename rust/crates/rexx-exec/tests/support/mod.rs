@@ -91,6 +91,16 @@
 //! format has this same embedded-quote ambiguity; nothing here resolves
 //! it, only refuses to let it hide a divergence.
 
+/// The arity probe both `collection_arity.rs` and `introspection_arity.rs`
+/// drive: one machine, two tables, parameterised by the four files each
+/// reads and writes. Its own module doc carries the verdicts and the rule
+/// that a list is only real if the oracle completes the send.
+pub mod arity;
+
+/// `Setup.cpp`'s per-scope method tables, joined onto the oracle's own scope
+/// answer by both `collection_scopes.rs` and `introspection_scopes.rs`.
+pub mod setup_cpp;
+
 /// Running a program through the C++ oracle and comparing the three
 /// observable channels. Its own module doc carries the memory limit, the
 /// missing-binary rule and why an invocation count is kept there. Shared for

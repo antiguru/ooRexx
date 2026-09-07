@@ -1,0 +1,208 @@
+# The argument list each documented introspection method is sent in
+# corpus/introspection-arity.tsv's probe (Phase 5i Task 0).
+#
+# class<TAB>method<TAB>arm<TAB>arguments, where `--` is a send with none.
+#
+# A LIST IS ONLY REAL IF THE ORACLE COMPLETES THE SEND. Any row the oracle
+# refuses is a harness failure for that row and not a data point;
+# introspection_arity.rs makes that a test failure. Without the rule the
+# instrument reads green having sent nothing that could work.
+#
+# THE CLASS ARM IS HERE and corpus/collection-arguments.tsv's is not. Five of
+# this phase's own `loud` rows live on it -- Package~defaultOptions,
+# Method~loadExternalMethod, Method~newFile, Routine~loadExternalRoutine and
+# Routine~newFile -- and the plan's Tasks 4 and 7 name them; an instance-only
+# table would leave those five unsized.
+#
+# The receivers, the directives each needs and the two that are sent to from
+# inside a call are corpus/introspection-receivers.tsv.
+Class	new	class	'C9'
+Class	<>	instance	.Object
+Class	=	instance	.Object
+Class	==	instance	.Object
+Class	><	instance	.Object
+Class	\=	instance	.Object
+Class	\==	instance	.Object
+Class	activate	instance	--
+Class	annotation	instance	'a1'
+Class	annotations	instance	--
+Class	baseClass	instance	--
+Class	defaultName	instance	--
+Class	define	instance	'NEWM', .Method~new('NEWM', 'return 1')
+Class	defineMethods	instance	.StringTable~new
+Class	delete	instance	'MM'
+Class	enhanced	instance	.StringTable~new
+Class	id	instance	--
+Class	inherit	instance	.MX2
+Class	isAbstract	instance	--
+Class	isMetaclass	instance	--
+Class	isSubclassOf	instance	.Object
+Class	metaClass	instance	--
+Class	method	instance	'MM'
+Class	methods	instance	.K
+Class	mixinClass	instance	'MX3'
+Class	package	instance	--
+Class	queryMixinClass	instance	--
+Class	subclass	instance	'S1'
+Class	subclasses	instance	--
+Class	superClass	instance	--
+Class	superClasses	instance	--
+Class	uninherit	instance	.MX
+Method	loadExternalMethod	class	'M9', 'LIBRARY rexxutil SysCurPos'
+Method	new	class	'M9', 'return 1'
+Method	newFile	class	'source.rex'
+Method	annotation	instance	'a1'
+Method	annotations	instance	--
+Method	isAbstract	instance	--
+Method	isAttribute	instance	--
+Method	isConstant	instance	--
+Method	isGuarded	instance	--
+Method	isPackage	instance	--
+Method	isPrivate	instance	--
+Method	isProtected	instance	--
+Method	package	instance	--
+Method	scope	instance	--
+Method	setGuarded	instance	--
+Method	setPrivate	instance	--
+Method	setProtected	instance	--
+Method	setSecurityManager	instance	.Object~new
+Method	setUnguarded	instance	--
+Method	source	instance	--
+Object	new	class	EXEMPT:the oracle refuses an argument here -- measured, .Object~new('x') raises 93.902 while .Object~new answers, so Setup.cpp's A_COUNT is a maximum and not a minimum
+Object	(abuttal)	instance	EXEMPT:the book's displayed name is not a message name -- measured, o~'(abuttal)'('x') raises 97.1 while o~''('x') answers
+Object	(blank)	instance	EXEMPT:the book's displayed name is not a message name -- measured, o~'(blank)'('x') raises 97.1 while o~' '('x') answers
+Object	<>	instance	.Object~new
+Object	=	instance	.Object~new
+Object	==	instance	.Object~new
+Object	><	instance	.Object~new
+Object	\=	instance	.Object~new
+Object	\==	instance	.Object~new
+Object	class	instance	--
+Object	copy	instance	--
+Object	defaultName	instance	--
+Object	hasMethod	instance	'MM'
+Object	hashCode	instance	--
+Object	identityHash	instance	--
+Object	instanceMethod	instance	'MM'
+Object	instanceMethods	instance	.K
+Object	isA	instance	.K
+Object	isInstanceOf	instance	.K
+Object	isNil	instance	--
+Object	objectName	instance	--
+Object	objectName=	instance	'named'
+Object	request	instance	'string'
+Object	run	instance	EXEMPT:private on Object -- measured, a send from outside a method answers 97.2, Object 'a K' cannot accept private message 'RUN' from this context, and self~run from inside one works
+Object	send	instance	'MM'
+Object	sendWith	instance	'MM', .Array~new(0)
+Object	setMethod	instance	EXEMPT:private on Object -- measured, a send from outside a method answers 97.2, Object 'a K' cannot accept private message 'SETMETHOD' from this context, and self~setMethod from inside one works
+Object	start	instance	'MM'
+Object	startWith	instance	'MM', .Array~new(0)
+Object	string	instance	--
+Object	unsetMethod	instance	EXEMPT:private on Object -- measured, a send from outside a method answers 97.2, Object 'a K' cannot accept private message 'UNSETMETHOD' from this context, and self~unsetMethod from inside one works
+Object	||	instance	'x'
+Package	defaultOptions	class	'DIGITS'
+Package	new	class	'p9.rex', .Array~of('return 1')
+Package	addClass	instance	'C2', .K
+Package	addPackage	instance	.Class~package
+Package	addPublicClass	instance	'C3', .K
+Package	addPublicRoutine	instance	'R3', .routines['R']
+Package	addRoutine	instance	'R4', .routines['R']
+Package	annotation	instance	'a1'
+Package	annotations	instance	--
+Package	classes	instance	--
+Package	definedMethods	instance	--
+Package	digits	instance	--
+Package	findClass	instance	'K'
+Package	findNamespace	instance	'NS9'
+Package	findProgram	instance	'source.rex'
+Package	findPublicClass	instance	'K'
+Package	findPublicRoutine	instance	'R'
+Package	findRoutine	instance	'R'
+Package	form	instance	--
+Package	fuzz	instance	--
+Package	importedClasses	instance	--
+Package	importedPackages	instance	--
+Package	importedRoutines	instance	--
+Package	loadLibrary	instance	'rxmath'
+Package	loadPackage	instance	'source.rex'
+Package	local	instance	--
+Package	name	instance	--
+Package	namespaces	instance	--
+Package	options	instance	'DIGITS'
+Package	prolog	instance	--
+Package	publicClasses	instance	--
+Package	publicRoutines	instance	--
+Package	resource	instance	'RES'
+Package	resources	instance	--
+Package	routines	instance	--
+Package	setSecurityManager	instance	.Object~new
+Package	source	instance	--
+Package	sourceLine	instance	1
+Package	sourceSize	instance	--
+Package	trace	instance	--
+RexxContext	args	instance	--
+RexxContext	condition	instance	--
+RexxContext	digits	instance	--
+RexxContext	executable	instance	--
+RexxContext	form	instance	--
+RexxContext	fuzz	instance	--
+RexxContext	interpreter	instance	--
+RexxContext	invocation	instance	--
+RexxContext	line	instance	--
+RexxContext	name	instance	--
+RexxContext	package	instance	--
+RexxContext	rs	instance	--
+RexxContext	stackFrames	instance	--
+RexxContext	thread	instance	--
+RexxContext	variables	instance	--
+RexxInfo	architecture	instance	--
+RexxInfo	caseSensitiveFiles	instance	--
+RexxInfo	date	instance	--
+RexxInfo	debug	instance	--
+RexxInfo	digits	instance	--
+RexxInfo	directorySeparator	instance	--
+RexxInfo	endofline	instance	--
+RexxInfo	executable	instance	--
+RexxInfo	form	instance	--
+RexxInfo	fuzz	instance	--
+RexxInfo	internalDigits	instance	--
+RexxInfo	internalMaxNumber	instance	--
+RexxInfo	internalMinNumber	instance	--
+RexxInfo	languageLevel	instance	--
+RexxInfo	libraryPath	instance	--
+RexxInfo	majorVersion	instance	--
+RexxInfo	maxArraySize	instance	--
+RexxInfo	maxExponent	instance	--
+RexxInfo	maxPathLength	instance	--
+RexxInfo	minExponent	instance	--
+RexxInfo	modification	instance	--
+RexxInfo	name	instance	--
+RexxInfo	package	instance	--
+RexxInfo	pathSeparator	instance	--
+RexxInfo	platform	instance	--
+RexxInfo	release	instance	--
+RexxInfo	revision	instance	--
+RexxInfo	version	instance	--
+Routine	loadExternalRoutine	class	'R9', 'LIBRARY rxmath RxCalcPi'
+Routine	new	class	'R9', 'return 1'
+Routine	newFile	class	'source.rex'
+Routine	[]	instance	'a'
+Routine	annotation	instance	'a1'
+Routine	annotations	instance	--
+Routine	call	instance	'a'
+Routine	callWith	instance	.Array~of('a')
+Routine	package	instance	--
+Routine	setSecurityManager	instance	.Object~new
+Routine	source	instance	--
+StackFrame	arguments	instance	--
+StackFrame	context	instance	--
+StackFrame	invocation	instance	--
+StackFrame	line	instance	--
+StackFrame	makeString	instance	--
+StackFrame	name	instance	--
+StackFrame	string	instance	--
+StackFrame	target	instance	--
+StackFrame	traceLine	instance	--
+StackFrame	type	instance	--
+WeakReference	new	class	.Object~new
+WeakReference	value	instance	--

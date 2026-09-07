@@ -1,0 +1,214 @@
+# Which scope defines each documented introspection method, and whether that
+# scope's body is C++ or Rexx (Phase 5i Task 0). Derived by
+# crates/rexx-exec/tests/introspection_scopes.rs, which re-derives it on every
+# run; edit that, never this.
+#
+# class<TAB>method<TAB>arm<TAB>scope<TAB>kind<TAB>token<TAB>arity
+#
+# `scope` is the oracle's own answer to `receiver~instanceMethod(NAME)~scope~id`
+# -- the behaviour after every InheritInstanceMethods copy, RemoveMethod and
+# HideMethod, which is why no file scan can produce this column. The receivers
+# are corpus/introspection-receivers.tsv, one probe program per (class, arm).
+#
+# `token` IS A CITATION, NOT A BODY IDENTITY, in both directions: two tokens
+# can name one C++ function and one token can reach several behaviours. Count
+# tokens for an upper bound on bodies; never for a count of behaviours.
+#
+# `arity` is Setup.cpp's third operand verbatim: a literal is a MAXIMUM,
+# A_COUNT is Arity::Counted.
+#
+# Pointer and Buffer are deliberately absent: class-set.txt gives them no
+# construction expression, because the reference says instances come only from
+# native code (utilityclasses.xml:429, :6910).
+#
+# Object's (abuttal) and (blank) are deliberately absent: measured on the
+# oracle, the book's displayed name reaches no method -- o~'(abuttal)'('x')
+# raises 97.1 while o~''('x') and o~' '('x') both answer.
+Class	<>	instance	Class	native	RexxClass::notEqual	1
+Class	=	instance	Class	native	RexxClass::equal	1
+Class	==	instance	Class	native	RexxClass::strictEqual	1
+Class	><	instance	Class	native	RexxClass::notEqual	1
+Class	\=	instance	Class	rexx	--	--
+Class	\==	instance	Class	rexx	--	--
+Class	activate	instance	Class	native	RexxObject::initRexx	0
+Class	annotation	instance	Class	native	RexxClass::getAnnotationRexx	1
+Class	annotations	instance	Class	native	RexxClass::getAnnotations	0
+Class	baseClass	instance	Class	native	RexxClass::getBaseClass	0
+Class	defaultName	instance	Class	native	RexxClass::defaultNameRexx	0
+Class	define	instance	Class	native	RexxClass::defineMethod	2
+Class	defineMethods	instance	Class	native	RexxClass::defineMethodsRexx	1
+Class	delete	instance	Class	native	RexxClass::deleteMethod	1
+Class	enhanced	instance	Class	native	RexxClass::enhanced	A_COUNT
+Class	id	instance	Class	native	RexxClass::getId	0
+Class	inherit	instance	Class	native	RexxClass::inherit	2
+Class	isAbstract	instance	Class	native	RexxClass::isAbstractRexx	0
+Class	isMetaclass	instance	Class	native	RexxClass::isMetaClassRexx	0
+Class	isSubclassOf	instance	Class	native	RexxClass::isSubclassOf	1
+Class	metaClass	instance	Class	native	RexxClass::getMetaClass	0
+Class	method	instance	Class	native	RexxClass::method	1
+Class	methods	instance	Class	native	RexxClass::methods	1
+Class	mixinClass	instance	Class	native	RexxClass::mixinClassRexx	3
+Class	new	class	Class	native	RexxClass::newRexx	A_COUNT
+Class	package	instance	Class	native	RexxClass::getPackage	0
+Class	queryMixinClass	instance	Class	native	RexxClass::queryMixinClass	0
+Class	subclass	instance	Class	native	RexxClass::subclassRexx	3
+Class	subclasses	instance	Class	native	RexxClass::getSubClasses	0
+Class	superClass	instance	Class	native	RexxClass::getSuperClass	0
+Class	superClasses	instance	Class	native	RexxClass::getSuperClasses	0
+Class	uninherit	instance	Class	native	RexxClass::uninherit	1
+Method	annotation	instance	Method	native	BaseExecutable::getAnnotationRexx	1
+Method	annotations	instance	Method	native	BaseExecutable::getAnnotations	0
+Method	isAbstract	instance	Method	native	MethodClass::isAbstractRexx	0
+Method	isAttribute	instance	Method	native	MethodClass::isAttributeRexx	0
+Method	isConstant	instance	Method	native	MethodClass::isConstantRexx	0
+Method	isGuarded	instance	Method	native	MethodClass::isGuardedRexx	0
+Method	isPackage	instance	Method	native	MethodClass::isPackageRexx	0
+Method	isPrivate	instance	Method	native	MethodClass::isPrivateRexx	0
+Method	isProtected	instance	Method	native	MethodClass::isProtectedRexx	0
+Method	loadExternalMethod	class	Method	native	MethodClass::loadExternalMethod	2
+Method	new	class	Method	native	MethodClass::newRexx	A_COUNT
+Method	newFile	class	Method	native	MethodClass::newFileRexx	2
+Method	package	instance	Method	native	BaseExecutable::getPackage	0
+Method	scope	instance	Method	native	MethodClass::getScopeRexx	0
+Method	setGuarded	instance	Method	native	MethodClass::setGuardedRexx	0
+Method	setPrivate	instance	Method	native	MethodClass::setPrivateRexx	0
+Method	setProtected	instance	Method	native	MethodClass::setProtectedRexx	0
+Method	setSecurityManager	instance	Method	native	MethodClass::setSecurityManager	1
+Method	setUnguarded	instance	Method	native	MethodClass::setUnguardedRexx	0
+Method	source	instance	Method	native	BaseExecutable::source	0
+Object	<>	instance	Object	native	RexxObject::notEqual	1
+Object	=	instance	Object	native	RexxObject::equal	1
+Object	==	instance	Object	native	RexxObject::strictEqual	1
+Object	><	instance	Object	native	RexxObject::notEqual	1
+Object	\=	instance	Object	rexx	--	--
+Object	\==	instance	Object	rexx	--	--
+Object	class	instance	Object	native	RexxObject::classObject	0
+Object	copy	instance	Object	native	RexxObject::copyRexx	0
+Object	defaultName	instance	Object	native	RexxObject::defaultNameRexx	0
+Object	hasMethod	instance	Object	native	RexxObject::hasMethodRexx	1
+Object	hashCode	instance	Object	native	RexxObject::hashCode	0
+Object	identityHash	instance	Object	native	RexxObject::identityHashRexx	0
+Object	instanceMethod	instance	Object	native	RexxObject::instanceMethodRexx	1
+Object	instanceMethods	instance	Object	native	RexxObject::instanceMethodsRexx	1
+Object	isA	instance	Object	native	RexxObject::isInstanceOfRexx	1
+Object	isInstanceOf	instance	Object	native	RexxObject::isInstanceOfRexx	1
+Object	isNil	instance	Object	native	RexxObject::isNilRexx	0
+Object	new	class	Object	native	RexxObject::newRexx	A_COUNT
+Object	objectName	instance	Object	native	RexxObject::objectName	0
+Object	objectName=	instance	Object	native	RexxObject::objectNameEquals	1
+Object	request	instance	Object	native	RexxObject::requestRexx	1
+Object	run	instance	Object	native	RexxObject::run	A_COUNT
+Object	send	instance	Object	native	RexxObject::send	A_COUNT
+Object	sendWith	instance	Object	native	RexxObject::sendWith	2
+Object	setMethod	instance	Object	native	RexxObject::setMethod	3
+Object	start	instance	Object	native	RexxObject::start	A_COUNT
+Object	startWith	instance	Object	native	RexxObject::startWith	2
+Object	string	instance	Object	native	RexxObject::stringRexx	0
+Object	unsetMethod	instance	Object	native	RexxObject::unsetMethod	1
+Object	||	instance	Object	native	RexxObject::concatRexx	1
+Package	addClass	instance	Package	native	PackageClass::addClassRexx	2
+Package	addPackage	instance	Package	native	PackageClass::addPackageRexx	2
+Package	addPublicClass	instance	Package	native	PackageClass::addPublicClassRexx	2
+Package	addPublicRoutine	instance	Package	native	PackageClass::addPublicRoutineRexx	2
+Package	addRoutine	instance	Package	native	PackageClass::addRoutineRexx	2
+Package	annotation	instance	Package	native	PackageClass::getAnnotationRexx	1
+Package	annotations	instance	Package	native	PackageClass::getAnnotations	0
+Package	classes	instance	Package	native	PackageClass::getClassesRexx	0
+Package	defaultOptions	class	Package	native	PackageClass::clzOptions	2
+Package	definedMethods	instance	Package	native	PackageClass::getMethodsRexx	0
+Package	digits	instance	Package	native	PackageClass::digitsRexx	0
+Package	findClass	instance	Package	native	PackageClass::findClassRexx	1
+Package	findNamespace	instance	Package	native	PackageClass::findNamespaceRexx	1
+Package	findProgram	instance	Package	native	PackageClass::findProgramRexx	1
+Package	findPublicClass	instance	Package	native	PackageClass::findPublicClassRexx	1
+Package	findPublicRoutine	instance	Package	native	PackageClass::findPublicRoutineRexx	1
+Package	findRoutine	instance	Package	native	PackageClass::findRoutineRexx	1
+Package	form	instance	Package	native	PackageClass::formRexx	0
+Package	fuzz	instance	Package	native	PackageClass::fuzzRexx	0
+Package	importedClasses	instance	Package	native	PackageClass::getImportedClassesRexx	0
+Package	importedPackages	instance	Package	native	PackageClass::getImportedPackagesRexx	0
+Package	importedRoutines	instance	Package	native	PackageClass::getImportedRoutinesRexx	0
+Package	loadLibrary	instance	Package	native	PackageClass::loadLibraryRexx	1
+Package	loadPackage	instance	Package	native	PackageClass::loadPackageRexx	2
+Package	local	instance	Package	native	PackageClass::getPackageLocal	0
+Package	name	instance	Package	native	PackageClass::getProgramName	0
+Package	namespaces	instance	Package	native	PackageClass::getNamespacesRexx	0
+Package	new	class	Package	native	PackageClass::newRexx	A_COUNT
+Package	options	instance	Package	native	PackageClass::options	2
+Package	prolog	instance	Package	native	PackageClass::getMainRexx	0
+Package	publicClasses	instance	Package	native	PackageClass::getPublicClassesRexx	0
+Package	publicRoutines	instance	Package	native	PackageClass::getPublicRoutinesRexx	0
+Package	resource	instance	Package	native	PackageClass::getResourceRexx	1
+Package	resources	instance	Package	native	PackageClass::getResourcesRexx	0
+Package	routines	instance	Package	native	PackageClass::getRoutinesRexx	0
+Package	setSecurityManager	instance	Package	native	PackageClass::setSecurityManagerRexx	1
+Package	source	instance	Package	native	PackageClass::getSourceRexx	0
+Package	sourceLine	instance	Package	native	PackageClass::getSourceLineRexx	1
+Package	sourceSize	instance	Package	native	PackageClass::getSourceSizeRexx	0
+Package	trace	instance	Package	native	PackageClass::traceRexx	0
+RexxContext	args	instance	RexxContext	native	RexxContext::getArgs	0
+RexxContext	condition	instance	RexxContext	native	RexxContext::getCondition	0
+RexxContext	digits	instance	RexxContext	native	RexxContext::getDigits	0
+RexxContext	executable	instance	RexxContext	native	RexxContext::getExecutable	0
+RexxContext	form	instance	RexxContext	native	RexxContext::getForm	0
+RexxContext	fuzz	instance	RexxContext	native	RexxContext::getFuzz	0
+RexxContext	interpreter	instance	RexxContext	native	RexxContext::getInterpreter	0
+RexxContext	invocation	instance	RexxContext	native	RexxContext::getInvocation	0
+RexxContext	line	instance	RexxContext	native	RexxContext::getLine	0
+RexxContext	name	instance	RexxContext	native	RexxContext::getName	0
+RexxContext	package	instance	RexxContext	native	RexxContext::getPackage	0
+RexxContext	rs	instance	RexxContext	native	RexxContext::getRS	0
+RexxContext	stackFrames	instance	RexxContext	native	RexxContext::getStackFrames	0
+RexxContext	thread	instance	RexxContext	native	RexxContext::getThread	0
+RexxContext	variables	instance	RexxContext	native	RexxContext::getVariables	0
+RexxInfo	architecture	instance	RexxInfo	native	RexxInfo::getArchitecture	0
+RexxInfo	caseSensitiveFiles	instance	RexxInfo	native	RexxInfo::getCaseSensitiveFiles	0
+RexxInfo	date	instance	RexxInfo	native	RexxInfo::getInterpreterDate	0
+RexxInfo	debug	instance	RexxInfo	native	RexxInfo::getDebug	0
+RexxInfo	digits	instance	RexxInfo	native	RexxInfo::getDigits	0
+RexxInfo	directorySeparator	instance	RexxInfo	native	RexxInfo::getDirectorySeparator	0
+RexxInfo	endofline	instance	RexxInfo	native	RexxInfo::getFileEndOfLine	0
+RexxInfo	executable	instance	RexxInfo	native	RexxInfo::getRexxExecutable	0
+RexxInfo	form	instance	RexxInfo	native	RexxInfo::getForm	0
+RexxInfo	fuzz	instance	RexxInfo	native	RexxInfo::getFuzz	0
+RexxInfo	internalDigits	instance	RexxInfo	native	RexxInfo::getInternalDigits	0
+RexxInfo	internalMaxNumber	instance	RexxInfo	native	RexxInfo::getInternalMaxNumber	0
+RexxInfo	internalMinNumber	instance	RexxInfo	native	RexxInfo::getInternalMinNumber	0
+RexxInfo	languageLevel	instance	RexxInfo	native	RexxInfo::getLanguageLevel	0
+RexxInfo	libraryPath	instance	RexxInfo	native	RexxInfo::getRexxLibrary	0
+RexxInfo	majorVersion	instance	RexxInfo	native	RexxInfo::getMajorVersion	0
+RexxInfo	maxArraySize	instance	RexxInfo	native	RexxInfo::getMaxArraySize	0
+RexxInfo	maxExponent	instance	RexxInfo	native	RexxInfo::getMaxExponent	0
+RexxInfo	maxPathLength	instance	RexxInfo	native	RexxInfo::getMaxPathLength	0
+RexxInfo	minExponent	instance	RexxInfo	native	RexxInfo::getMinExponent	0
+RexxInfo	modification	instance	RexxInfo	native	RexxInfo::getModification	0
+RexxInfo	name	instance	RexxInfo	native	RexxInfo::getInterpreterName	0
+RexxInfo	package	instance	RexxInfo	native	RexxInfo::getPackage	0
+RexxInfo	pathSeparator	instance	RexxInfo	native	RexxInfo::getPathSeparator	0
+RexxInfo	platform	instance	RexxInfo	native	RexxInfo::getPlatform	0
+RexxInfo	release	instance	RexxInfo	native	RexxInfo::getRelease	0
+RexxInfo	revision	instance	RexxInfo	native	RexxInfo::getRevision	0
+RexxInfo	version	instance	RexxInfo	native	RexxInfo::getInterpreterVersion	0
+Routine	[]	instance	Routine	native	RoutineClass::callRexx	A_COUNT
+Routine	annotation	instance	Routine	native	BaseExecutable::getAnnotationRexx	1
+Routine	annotations	instance	Routine	native	BaseExecutable::getAnnotations	0
+Routine	call	instance	Routine	native	RoutineClass::callRexx	A_COUNT
+Routine	callWith	instance	Routine	native	RoutineClass::callWithRexx	1
+Routine	loadExternalRoutine	class	Routine	native	RoutineClass::loadExternalRoutine	2
+Routine	new	class	Routine	native	RoutineClass::newRexx	A_COUNT
+Routine	newFile	class	Routine	native	RoutineClass::newFileRexx	2
+Routine	package	instance	Routine	native	BaseExecutable::getPackage	0
+Routine	setSecurityManager	instance	Routine	native	RoutineClass::setSecurityManager	1
+Routine	source	instance	Routine	native	BaseExecutable::source	0
+StackFrame	arguments	instance	StackFrame	native	StackFrameClass::getArguments	0
+StackFrame	context	instance	StackFrame	native	StackFrameClass::getContext	0
+StackFrame	invocation	instance	StackFrame	native	StackFrameClass::getInvocation	0
+StackFrame	line	instance	StackFrame	native	StackFrameClass::getLine	0
+StackFrame	makeString	instance	StackFrame	native	StackFrameClass::getTraceLine	0
+StackFrame	name	instance	StackFrame	native	StackFrameClass::getName	0
+StackFrame	string	instance	StackFrame	native	StackFrameClass::getTraceLine	0
+StackFrame	target	instance	StackFrame	native	StackFrameClass::getTarget	0
+StackFrame	traceLine	instance	StackFrame	native	StackFrameClass::getTraceLine	0
+StackFrame	type	instance	StackFrame	native	StackFrameClass::getType	0
+WeakReference	new	class	WeakReference	native	WeakReference::newRexx	A_COUNT
+WeakReference	value	instance	WeakReference	native	WeakReference::value	0
