@@ -57,6 +57,16 @@
 //! predates the flag and does not say it. A task sizing itself from an
 //! `agree` row of such a table still owes that row a witness that reads what
 //! it answered.
+//!
+//! # Hygiene that no flag gates
+//!
+//! [`Layout::compare_values`] and [`Layout::fixture`] are per driver, but the
+//! probe directory's substitution out of every side's streams and the
+//! rendering of control characters in evidence are not: they run for every
+//! table this probe drives. That they change nothing in
+//! `corpus/collection-arity.tsv` is a property of what its rows answer today
+//! rather than of this code, and that table's byte identity is what would
+//! notice if it stopped being one.
 
 #![allow(dead_code)]
 

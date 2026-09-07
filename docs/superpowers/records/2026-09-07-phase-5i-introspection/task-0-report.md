@@ -627,9 +627,18 @@ harness rule rather than making it look refused. The handler builds the code fro
 `condition('E')` rather than `condition('O')~code`: measured on both sides, a `91.999` gives
 `rc=91` and `condition('E')=999` on the oracle and on this crate alike, where `condition('O')` is
 an object one side declines to build — **a probe whose own handler a side cannot run measures the
-probe**. That was not a hypothetical: the first refresh, written with `condition('O')~code`, turned
-all seven no-result rows into `send-differs` whose evidence read
-`crate rc120 rexx-exec: CONDITION option "O" answers a Directory, which is not implemented`.
+probe**. That was not a hypothetical, and it is the best catch of the round: **the probe was measuring
+itself.** The first refresh, written with `condition('O')~code`, turned all seven no-result rows
+into `send-differs` whose evidence read
+`crate rc120 rexx-exec: CONDITION option "O" answers a Directory, which is not implemented` — the
+verdict on `Class~define` was a report of *this crate's own gap in the probe's handler*, not of
+anything `Class~define` does. Both sides run `Class~define` correctly.
+
+The collection driver's flag-off path still calls `condition('O')~code` and is **left alone
+deliberately**: the byte-identity control needs that path untouched, and the path is dead by
+construction rather than by data — `the_oracle_completes_every_send` guarantees the oracle raises on
+no non-exempt row, so this crate raising is the only way to reach the handler, and nothing there
+does today. The controller has ledgered it for the whole-branch review.
 
 **Two verdicts were added rather than folding the cases into `agree`.**
 
@@ -676,6 +685,18 @@ calls the row `answers`, and the other called it `agree`.
   of every side now have that directory replaced by `<probe directory>` before the sides are
   compared; the substitution is applied to all three, so it cannot make two sides that answered
   differently compare equal. Two refreshes now `diff` empty.
+
+  **This is the second instance in this task of one class, and the class is worth the name.** The
+  review found the first: the `source.rex` write was inert for the collection driver, but inert
+  *because of what today's rows happen to do* rather than because the code could not reach it. The
+  `findProgram` path is the same shape found by a completely different route — nothing in the design
+  said an answer could not quote the harness's own directory, and one row did. A third sits in the
+  code as shipped and is recorded rather than fixed: `scrub` and `printable` are **not** layout-gated
+  and run for every table the probe drives, so their being no-ops for `corpus/collection-arity.tsv`
+  is a property of what that table's rows answer and not of the code. They are deliberately left
+  ungated — the collection driver has exactly the latent non-determinism they cure — and
+  `support/arity.rs`'s module doc says so, with that table's byte identity as what would notice if
+  it stopped being true.
 * An answer containing a tab would put a second tab in its row and break the table's own shape.
   Evidence now renders control characters as spaces. No committed row needs it today, which is
   exactly the "inert, but data-dependently so" the review named for the fixture.
@@ -704,8 +725,15 @@ throwaway variant.
 **The re-slice check, re-run on the new figures.** `send-differs` + `setup-differs` is now **129**
 against the **131** the scope note gives these eleven classes, and **127 against 124** over the
 nine. The surplus grows from two to three, the third being `Class~enhanced` moving out of `agree`.
-Three rows on 124 is not a re-slice and the phase's shape does not change; what a later task should
-read out of it is that the surplus is one real divergence plus the two `~new` rows §3 names.
+Three rows on 124 is not a re-slice and the phase's shape does not change.
+
+**The third row is a different kind of thing from the other two, and a later reader has to be able
+to tell them apart.** The two `~new` rows §3 names are rows `method-bodies.txt` classified
+differently because it sends no arguments — they were always going to need work and the scope note
+would have counted them under a sharper instrument. `Class~enhanced` is **a defect this phase
+found**: it was not a `loud` row, nothing counted it, and it left `agree` because the instrument got
+sharper rather than because the work got bigger. A surplus of that kind is the instrument earning
+its keep, not scope creep.
 
 **A `no-value` row is not a closed row**, and neither is an `agree` one: `~string` renders `a
 Supplier` for a `Supplier` and `an Array` for an `Array`, so the value comparison sees the class of
