@@ -1,0 +1,51 @@
+count 50
+/* `.nil` under the operators.
+
+   `.nil` is an object, not a string, and two independent rules say so.  Its
+   own `==`, `\==`, `=`, `<>` and `><` are identity, and it understands no
+   other operator -- so an ordering or arithmetic operator against it is 97.1
+   rather than a comparison of its string value.  And on the other side,
+   `RexxString::primitiveIsEqual` refuses `.nil` before it looks at any bytes,
+   so a string is never EQUAL to it however the string reads.
+
+   Everything here turns on the text `The NIL object`, which is what `.nil`
+   renders as: against any other text both rules and the string comparison
+   agree, and the program would pass with neither of them. */
+
+say 'nil against its own text' (.nil == 'The NIL object') (.nil = 'The NIL object')
+say 'and the other way round ' ('The NIL object' == .nil) ('The NIL object' = .nil)
+say 'the negations           ' (.nil \== 'The NIL object') (.nil <> 'The NIL object'),
+    ('The NIL object' \== .nil) ('The NIL object' <> .nil)
+say 'nil against nil         ' (.nil == .nil) (.nil = .nil)
+say 'nil against other text  ' (.nil == 'x') ('x' == .nil)
+
+/* Ordering and concatenation are NOT identity: they use the string value on
+   the string's side, and `.nil` does not understand them on its own. */
+say 'a string orders against it' ('a' < .nil) ('a' << .nil)
+say 'and concatenates with it  ' ('a' || .nil)
+say 'nil concatenates too      ' (.nil || 'x')
+
+call refused 'less'
+call refused 'greater'
+call refused 'strictless'
+call refused 'plus'
+say 'all four refused'
+
+v = .nil + 1
+say 'unreachable' v
+exit
+
+refused: procedure
+  use arg what
+  signal on syntax name oops
+  select
+    when what == 'less'       then v = (.nil < 'x')
+    when what == 'greater'    then v = (.nil > 'x')
+    when what == 'strictless' then v = (.nil << 'x')
+    otherwise                      v = (.nil * 2)
+  end
+  say what 'answered' v
+  return
+oops:
+  say what 'raised' rc condition('C')
+  return

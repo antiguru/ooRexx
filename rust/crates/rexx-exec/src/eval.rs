@@ -1732,9 +1732,19 @@ impl Interp {
     /// Takes one operand and allocates nothing, so it carries no rooting
     /// precondition of its own.
     pub(crate) fn operator_message_receiver(&self, value: ObjRef) -> Option<ObjRef> {
-        // A small integer, an inline string and `.nil` all leave on this
-        // line, which is what keeps this off the cost of a comparison
-        // between two numbers.
+        // **`.nil` is an operator receiver.** It answers `==`, `\\==`, `=`,
+        // `<>` and `><` by identity and understands no other operator, so an
+        // ordering or arithmetic operator against it is 97.1 -- measured,
+        // `.nil < 'x'` and `.nil + 1` both report `Object "The NIL object"
+        // does not understand message`. Reaching that through the send is
+        // what `RexxObject`'s own operator methods do; converting `.nil` to
+        // its string value instead makes it equal to the text `The NIL
+        // object` and orderable against anything.
+        if value == ObjRef::NIL {
+            return Some(value);
+        }
+        // A small integer and an inline string leave on this line, which is
+        // what keeps this off the cost of a comparison between two numbers.
         let Decoded::Heap { slot, generation } = value.decode() else {
             return None;
         };
@@ -1890,6 +1900,16 @@ impl Interp {
         // the string value the line below would make of it.
         if let Some(target) = self.operator_message_receiver(left) {
             return self.send_operator(op.spelling(), target, &[Some(right)]);
+        }
+        // **A string is never equal to `.nil`, whatever its text.**
+        // `RexxString::primitiveIsEqual` (`classes/StringClass.cpp:674`)
+        // returns false for `TheNilObject` before it looks at any bytes, so
+        // `'The NIL object' == .nil` is `0` where comparing string values
+        // would make it `1`. Only the equality operators do this: measured,
+        // `'a' < .nil` is `0` and `'a' || .nil` is `aThe NIL object`, both of
+        // which do use the string value.
+        if right == ObjRef::NIL && is_equality(op) {
+            return Ok(logical(is_inequality(op)));
         }
         let right = self.required_string_value(right)?;
         match op {
@@ -2234,6 +2254,33 @@ fn is_comparison(op: Operator) -> bool {
             | StrictLessThanEqual
             | LessThanGreaterThan
             | GreaterThanLessThan
+    )
+}
+
+/// Whether `op` asks whether two values are the same, as against how they
+/// order.
+///
+/// The distinction is `.nil`'s: `RexxString::primitiveIsEqual` refuses it
+/// before comparing bytes, where `comp` converts it like anything else.
+fn is_equality(op: Operator) -> bool {
+    use Operator::*;
+    matches!(
+        op,
+        Equal
+            | BackslashEqual
+            | StrictEqual
+            | StrictBackslashEqual
+            | LessThanGreaterThan
+            | GreaterThanLessThan
+    )
+}
+
+/// Which half of [`is_equality`] answers `1` for a value that is not `.nil`.
+fn is_inequality(op: Operator) -> bool {
+    use Operator::*;
+    matches!(
+        op,
+        BackslashEqual | StrictBackslashEqual | LessThanGreaterThan | GreaterThanLessThan
     )
 }
 
@@ -4102,17 +4149,23 @@ mod object_operand_tests {
     /// no traceback frame, unlike `b.` (no default) and a `String`-defaulted
     /// stem, both of which do.
     ///
-    /// Measured on the oracle: `s. = .nil` then `say s. + 1` is 97.1, "does
-    /// not understand message +", with no `Compiled method` line. This
-    /// crate's own answer differs from the oracle on this program before and
-    /// after this test -- `41.1` against a `.nil` default rather than
-    /// `97.1` -- and closing that gap belongs to whichever task owns 97.1's
-    /// forwarding rule, not this one; only the frame line is this test's
-    /// concern, and it must not appear.
+    /// The gap this test used to document is closed. It recorded that this
+    /// crate answered `41.1` here against the oracle's `97.1`, and left the
+    /// fix to "whichever task owns 97.1's forwarding rule"; that rule is
+    /// `operator_message_receiver` admitting `.nil` as an operator receiver,
+    /// so an operator it does not understand raises the message send's own
+    /// 97.1 instead of converting its string value. stderr is now
+    /// byte-identical to the oracle's on this program.
     #[test]
     fn a_nil_defaulted_stem_carries_no_operator_frame() {
         let (code, stdout, stderr) = both_engines(b"s. = .nil\nsay s. + 1\n");
-        assert_eq!(code, 215, "{stderr:?}");
+        assert_eq!(code, 159, "{stderr:?}");
+        assert!(
+            stderr.contains(
+                r#"Error 97.1:  Object "The NIL object" does not understand message "+"."#
+            ),
+            "{stderr:?}"
+        );
         assert_eq!(stdout, "");
         assert!(
             !stderr.contains("Compiled method"),

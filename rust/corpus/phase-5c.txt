@@ -122,3 +122,4 @@ lang/queue_bounds.rex
 lang/collection_item_equality.rex
 lang/queue_extent.rex
 lang/collection_callback_mutates.rex
+lang/nil_comparison.rex
