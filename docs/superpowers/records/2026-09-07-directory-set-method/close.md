@@ -127,4 +127,8 @@ A follow-up commit extends the witness with the case-sensitivity asymmetry
 into the UNKNOWN slot, `d['m'] = 5` removes a method by the index AS WRITTEN
 and so leaves an upper-cased `M` standing beside a new `m`, while
 `setEntry('m', 9)` upper-cases first and does reach it. Measured on both
-engines. Its gate reading is recorded with that commit.
+engines.
+
+Over that commit, `bdb56f652`: all seven zero, `failed-suites=0` on each of
+the five suite-running gates. G6 among them, which is the third reading
+agreeing that `queued_empty` was transient.
