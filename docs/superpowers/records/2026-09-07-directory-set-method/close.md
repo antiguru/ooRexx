@@ -110,4 +110,21 @@ matches exactly. All agree.
 
 ## Gates
 
-Over `SHA`: G1 `G1`, G2 `G2`, G3 `G3`, G4 `G4`, G5 `G5`, G6 `G6`, G7 `G7`.
+Over `2b4db37e0`: G1 0, G2 0, G3 0, G4 0, G5 0, **G6 101**, G7 0.
+
+The G6 failure was `queued_empty` -- the whole program is `say queued()` --
+and it is not this commit's. The same binary passed that case in G3, G4 and
+G5 minutes earlier in the same run, and `REXX_PHASE_GATE=5c` cannot change
+what `queued()` reads. Re-running the full G6 command alone: rc 0,
+`failed-suites=0`. The session queue is shared per user across processes, so
+a concurrently-running suite's `push` is visible to a bare `queued()` in
+another. This is the same surface `QUEUED`'s partial exclusion already names
+as un-differentiable cross-process, and it is an argument for giving that
+harness a queue of its own.
+
+A follow-up commit extends the witness with the case-sensitivity asymmetry
+`setMethod`/`put`/`setEntry` have -- `setMethod('unknown', ...)` upper-cases
+into the UNKNOWN slot, `d['m'] = 5` removes a method by the index AS WRITTEN
+and so leaves an upper-cased `M` standing beside a new `m`, while
+`setEntry('m', 9)` upper-cases first and does reach it. Measured on both
+engines. Its gate reading is recorded with that commit.

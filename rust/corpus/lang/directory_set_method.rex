@@ -139,3 +139,28 @@ say 'props   ' p~items p['GREET'] p~allIndexes~makeString('L',',')
 st = .StringTable~new
 st['p'] = 1
 say 'st      ' st~setMethod('X', 'return 1') st~x st~items
+
+/* The name `setMethod` and `unsetMethod` take is upper-cased before the
+ * UNKNOWN comparison, so a lower-case one reaches the special place too.
+ */
+lu = .Directory~new
+lu['p'] = 1
+lu~setMethod('unknown', 'return "caught["arg(1)"]"')
+say 'lower unk' lu['nosuch'] lu~items lu~allIndexes~makeString('L',',')
+lu~unsetMethod('UnKnOwN')
+say 'lower gone' lu['nosuch']
+
+/* But `put` removes the method by the index AS WRITTEN, where `setEntry`
+ * upper-cases first -- so a lower-case `[]=` leaves an upper-cased method
+ * standing and the directory holds both names at once.
+ */
+lp = .Directory~new
+lp~setMethod('M', 'return 2')
+lp['m'] = 5
+say 'raw put ' lp['M'] lp['m'] lp~items lp~allIndexes~makeString('L',',')
+lp~unsetMethod('M')
+say 'raw gone' lp['M'] lp['m'] lp~items
+le = .Directory~new
+le~setMethod('M', 'return 2')
+le~setEntry('m', 9)
+say 'upperset' le['M'] le~items
