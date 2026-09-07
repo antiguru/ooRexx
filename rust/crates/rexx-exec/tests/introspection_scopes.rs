@@ -129,17 +129,7 @@ fn documented() -> Vec<(String, String, String)> {
 }
 
 fn receivers() -> HashMap<(String, String), Receiver> {
-    let layout = arity::Layout {
-        receivers: RECEIVERS,
-        arguments: RECEIVERS,
-        scopes: RECEIVERS,
-        table: RECEIVERS,
-        refresh_env: REFRESH_ENV,
-        header: "",
-        arm_column: true,
-        probe_prefix: "rexx-introspection-scopes",
-    };
-    layout.receivers()
+    arity::read_receivers(RECEIVERS, true)
 }
 
 // ---- the oracle's answer for the scope column ----
@@ -382,7 +372,14 @@ fn the_table_matches_the_interpreter() {
 /// what catches an upstream rename.
 #[test]
 fn every_documented_row_resolves_to_a_scope() {
-    let unresolved: Vec<String> = committed()
+    let committed = committed();
+    if !refreshing() {
+        assert!(
+            !committed.is_empty(),
+            "{TABLE_FILE} is missing, so this reads green over nothing"
+        );
+    }
+    let unresolved: Vec<String> = committed
         .iter()
         .filter(|row| row.scope == "NOMETHOD")
         .map(|row| format!("{}~{} ({})", row.class, row.method, row.arm))
@@ -398,7 +395,14 @@ fn every_documented_row_resolves_to_a_scope() {
 /// cites neither token nor arity.
 #[test]
 fn the_kind_column_agrees_with_the_two_it_governs() {
-    for row in committed() {
+    let committed = committed();
+    if !refreshing() {
+        assert!(
+            !committed.is_empty(),
+            "{TABLE_FILE} is missing, so this reads green over nothing"
+        );
+    }
+    for row in committed {
         match row.kind.as_str() {
             "native" => assert!(
                 row.token != NO_EVIDENCE && row.arity != NO_EVIDENCE,

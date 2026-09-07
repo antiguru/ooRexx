@@ -45,16 +45,22 @@
 //! * `engine-differs` -- the two engines disagree with each other, which is a
 //!   defect of its own and never expected.
 //! * `exempt` -- a row with a committed reason instead of a list.
+//! * `no-value` -- under [`Layout::compare_values`], a send both sides
+//!   completed that returned no result, so there was nothing to compare
+//!   beyond the three descriptors. Deliberately not `agree`.
+//! * `unstable` -- a row marked [`UNSTABLE`], whose value the oracle does not
+//!   reproduce between two of its own runs.
 //!
 //! # What `agree` does not say
 //!
-//! The send is a bare statement and the probe never prints its result, so
-//! `agree` means the three descriptors match -- that neither side raised --
-//! and not that the two sides answered the same value. Measured 2026-09-07 by
-//! re-running the introspection table's `agree` rows with `vv~string` printed:
-//! three of them answer differently, and the other rows there hold. A task
-//! sizing itself from an `agree` row still owes that row a witness that reads
-//! what it answered.
+//! With [`Layout::compare_values`] off the send is a bare statement whose
+//! result the probe never prints, so `agree` says the three descriptors match
+//! -- that neither side raised -- and not that the two sides answered the
+//! same value. That is a property of this probe and holds for every table it
+//! drives that way, `corpus/collection-arity.tsv` included, whose own header
+//! predates the flag and does not say it. A task sizing itself from an
+//! `agree` row of such a table still owes that row a witness that reads what
+//! it answered.
 
 #![allow(dead_code)]
 
@@ -83,6 +89,20 @@ pub const EXEMPT: &str = "EXEMPT:";
 /// send is made with no arguments.
 pub const REFUSED: &str = "REFUSED:";
 
+/// A row whose answered value the ORACLE does not reproduce between two of
+/// its own runs, so no value comparison could say anything about it.
+///
+/// `Object~hashCode` and `~identityHash` are the case it exists for. The
+/// value is not printed for such a row and the verdict is `unstable`, which
+/// is `corpus/method-bodies.txt`'s own word for an answer no verdict can rest
+/// on. The send is made with no arguments.
+///
+/// **The rule is inverted rather than waived**, by
+/// [`stable_rows_marked_unstable`]: a row marked this way whose two oracle
+/// runs answer the same thing is a failure, so the marker cannot hide a
+/// divergence.
+pub const UNSTABLE: &str = "UNSTABLE:";
+
 /// A one-line program the probe directory always holds, so that a row whose
 /// send needs a file on disk has one to name.
 ///
@@ -92,6 +112,13 @@ pub const REFUSED: &str = "REFUSED:";
 /// as well, because loading the running program re-executes it.
 pub const FIXTURE: &str = "source.rex";
 pub const NONE: &str = "--";
+
+/// What the probe directory is called in the evidence column.
+///
+/// Its real name carries a pid and a nanosecond timestamp, and
+/// `Package~findProgram` answers the absolute path of [`FIXTURE`], so a row
+/// quoting it verbatim would rewrite itself on every refresh.
+const PROBE_DIR: &str = "<probe directory>";
 
 /// The four files one table is derived from and written to, plus what the
 /// driver calls itself.
@@ -114,6 +141,19 @@ pub struct Layout {
     /// `corpus/collection-arity.tsv` predates the column and does not carry
     /// it; widening that file would move bytes no task asked to move.
     pub arm_column: bool,
+    /// Whether the probe assigns the send's result and prints `vv~string`, so
+    /// that a row completing on both sides with different answers reads
+    /// `send-differs` rather than `agree`.
+    ///
+    /// Off for `corpus/collection-arity.tsv`, whose committed bytes are this
+    /// task's control and whose verdicts are earlier phases' measurements.
+    pub compare_values: bool,
+    /// Whether the probe directory holds [`FIXTURE`].
+    ///
+    /// The oracle searches the working directory for an external routine and
+    /// the probe runs there, so writing it for a driver that has no row
+    /// needing a file would change that driver's environment.
+    pub fixture: bool,
     /// Distinguishes this driver's probe directories from another's.
     pub probe_prefix: &'static str,
 }
@@ -177,6 +217,39 @@ pub fn read_table(path: &Path, fields: usize) -> Vec<Vec<String>> {
     rows
 }
 
+/// Every receiver in a receivers file, keyed by (class, arm).
+///
+/// This is a free function rather than a [`Layout`] method so that a caller
+/// wanting only the receivers -- `introspection_scopes.rs` does -- does not
+/// have to fabricate a layout whose write target would be an input file.
+pub fn read_receivers(file: &str, arm_column: bool) -> HashMap<(String, String), Receiver> {
+    let fields = if arm_column { 5 } else { 2 };
+    read_table(&corpus_root().join(file), fields)
+        .into_iter()
+        .map(|row| {
+            if arm_column {
+                (
+                    (row[0].clone(), row[1].clone()),
+                    Receiver {
+                        setup: row[2].clone(),
+                        wrapper: row[3].clone(),
+                        directives: row[4].clone(),
+                    },
+                )
+            } else {
+                (
+                    (row[0].clone(), IMPLIED_ARM.to_string()),
+                    Receiver {
+                        setup: row[1].clone(),
+                        wrapper: NONE.to_string(),
+                        directives: NONE.to_string(),
+                    },
+                )
+            }
+        })
+        .collect()
+}
+
 impl Layout {
     fn path(&self, name: &str) -> PathBuf {
         corpus_root().join(name)
@@ -184,31 +257,7 @@ impl Layout {
 
     /// Every class's receiver, keyed by (class, arm).
     pub fn receivers(&self) -> HashMap<(String, String), Receiver> {
-        let fields = if self.arm_column { 5 } else { 2 };
-        read_table(&self.path(self.receivers), fields)
-            .into_iter()
-            .map(|row| {
-                if self.arm_column {
-                    (
-                        (row[0].clone(), row[1].clone()),
-                        Receiver {
-                            setup: row[2].clone(),
-                            wrapper: row[3].clone(),
-                            directives: row[4].clone(),
-                        },
-                    )
-                } else {
-                    (
-                        (row[0].clone(), IMPLIED_ARM.to_string()),
-                        Receiver {
-                            setup: row[1].clone(),
-                            wrapper: NONE.to_string(),
-                            directives: NONE.to_string(),
-                        },
-                    )
-                }
-            })
-            .collect()
+        read_receivers(self.receivers, self.arm_column)
     }
 
     /// Every (class, method, arm, argument list) the probe sends.
@@ -298,20 +347,42 @@ impl Layout {
 /// The probe for one row: build the receiver, announce it, send, announce
 /// that.
 ///
-/// The message name is quoted because `[]` and `[]=` are not symbols; the
-/// send is a bare statement rather than an assignment because a method
-/// returning nothing would otherwise raise 91.1 and mask the send.
+/// The message name is quoted because `[]` and `[]=` are not symbols. Under
+/// `values` the send is an assignment and the answer is printed, so a method
+/// returning no result raises `91.999` at the assignment; the trap reads that
+/// one code as a completed send with nothing to compare rather than as a
+/// refusal, which is what keeps such a row out of the harness rule. That
+/// handler builds the code from `rc` and `condition('E')` rather than from
+/// `condition('O')~code`, so reaching it asks nothing of a side under test
+/// that the send itself did not: a probe whose handler an engine cannot run
+/// measures the probe.
 ///
 /// A `call` receiver puts both the setup and the send inside an internal
 /// routine, because a `.context` built in one activation is dead in its
 /// caller (`98.981`) and a stack with one frame on it has no caller to
 /// describe. The `SYNTAX` trap then sits in the main program, where the
 /// condition arrives after the routine unwinds.
-pub fn program(receiver: &Receiver, method: &str, arguments: &str) -> String {
-    let send = if arguments == NONE {
+pub fn program(receiver: &Receiver, method: &str, arguments: &str, values: bool) -> String {
+    let call = if arguments == NONE {
         format!("r~'{method}'")
     } else {
         format!("r~'{method}'({arguments})")
+    };
+    let send = if values {
+        format!("vv = {call}\n")
+    } else {
+        format!("{call}\n")
+    };
+    let announce = if values {
+        "say 'SENT'\nsay 'VALUE' vv~string\nexit\n"
+    } else {
+        "say 'SENT'\nexit\n"
+    };
+    let trap = if values {
+        "oops:\nvc = rc || '.' || condition('E')\nif vc = '91.999' then do\nsay 'SENT'\n\
+         say 'NORESULT'\nexit 0\nend\nsay 'SYNTAX' vc\nexit 0\n"
+    } else {
+        "oops:\nsay 'SYNTAX' condition('O')~code\nexit 0\n"
     };
     let mut setup = String::new();
     for statement in receiver.setup.split('|') {
@@ -322,18 +393,20 @@ pub fn program(receiver: &Receiver, method: &str, arguments: &str) -> String {
     if receiver.wrapped() {
         text.push_str("signal on syntax name oops\n");
         text.push_str("call probe 'a1', 'a2'\n");
-        text.push_str("say 'SENT'\nexit\noops:\nsay 'SYNTAX' condition('O')~code\nexit 0\n");
+        text.push_str(announce);
+        text.push_str(trap);
         text.push_str("probe:\n");
         text.push_str(&setup);
         text.push_str("say 'SETUP-OK'\n");
         text.push_str(&send);
-        text.push_str("\nreturn\n");
+        text.push_str("return\n");
     } else {
         text.push_str(&setup);
         text.push_str("say 'SETUP-OK'\n");
         text.push_str("signal on syntax name oops\n");
         text.push_str(&send);
-        text.push_str("\nsay 'SENT'\nexit\noops:\nsay 'SYNTAX' condition('O')~code\nexit 0\n");
+        text.push_str(announce);
+        text.push_str(trap);
     }
     if receiver.directives != NONE {
         for line in receiver.directives.split('|') {
@@ -356,6 +429,35 @@ fn run(command: &mut Command) -> Three {
     )
 }
 
+/// The probe directory's own name, out of both streams and under one name.
+///
+/// Applied to every side, so it cannot make two sides that answered
+/// differently compare equal.
+fn scrub(three: Three, dir: &Path) -> Three {
+    let dir = dir.display().to_string();
+    (
+        three.0,
+        three.1.replace(&dir, PROBE_DIR),
+        three.2.replace(&dir, PROBE_DIR),
+    )
+}
+
+/// The oracle wrapped as `rust/CLAUDE.md` requires: its own address-space cap,
+/// its own library path, and the probe directory as the working directory.
+fn oracle_command(oracle: &Path, program: &Path, dir: &Path) -> Command {
+    let mut command = Command::new("bash");
+    command
+        .arg("-c")
+        .arg(format!(
+            "ulimit -v 1048576; exec {} {}",
+            oracle.join("bin/rexx").display(),
+            program.display()
+        ))
+        .current_dir(dir)
+        .env("LD_LIBRARY_PATH", oracle.join("lib"));
+    command
+}
+
 fn probe_dir(prefix: &str) -> PathBuf {
     let base = std::env::temp_dir().join(format!(
         "{prefix}-{}-{}",
@@ -375,7 +477,9 @@ pub fn measured(layout: &Layout) -> Vec<(Row, String)> {
     let receivers = layout.receivers();
     let dir = probe_dir(layout.probe_prefix);
     let path = dir.join("probe.rex");
-    fs::write(dir.join(FIXTURE), "return 1\n").expect("the fixture is writable");
+    if layout.fixture {
+        fs::write(dir.join(FIXTURE), "return 1\n").expect("the fixture is writable");
+    }
     let oracle = oracle::oracle_root();
     let binary = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/release/rexx-run");
     assert!(
@@ -401,29 +505,26 @@ pub fn measured(layout: &Layout) -> Vec<(Row, String)> {
         let receiver = receivers
             .get(&(class.clone(), arm.clone()))
             .unwrap_or_else(|| panic!("{} has no setup for {class} ({arm})", layout.receivers));
-        let list = if list.starts_with(REFUSED) {
+        let unstable = list.starts_with(UNSTABLE);
+        let list = if list.starts_with(REFUSED) || unstable {
             NONE.to_string()
         } else {
             list
         };
-        fs::write(&path, program(receiver, &method, &list)).expect("the probe is writable");
-        let cpp = run(Command::new("bash")
-            .arg("-c")
-            .arg(format!(
-                "ulimit -v 1048576; exec {} {}",
-                oracle.join("bin/rexx").display(),
-                path.display()
-            ))
-            .current_dir(&dir)
-            .env("LD_LIBRARY_PATH", oracle.join("lib")));
+        let values = layout.compare_values && !unstable;
+        fs::write(&path, program(receiver, &method, &list, values)).expect("the probe is writable");
+        let cpp = scrub(run(&mut oracle_command(&oracle, &path, &dir)), &dir);
         let mut engines = Vec::new();
         for engine in ["ir", "tree-walker"] {
-            engines.push(run(Command::new(&binary)
-                .arg(&path)
-                .current_dir(&dir)
-                .env("REXX_ENGINE", engine)));
+            engines.push(scrub(
+                run(Command::new(&binary)
+                    .arg(&path)
+                    .current_dir(&dir)
+                    .env("REXX_ENGINE", engine)),
+                &dir,
+            ));
         }
-        let (verdict, evidence) = classify(&cpp, &engines[0], &engines[1]);
+        let (verdict, evidence) = classify(&cpp, &engines[0], &engines[1], unstable);
         rows.push((
             Row {
                 class,
@@ -439,7 +540,7 @@ pub fn measured(layout: &Layout) -> Vec<(Row, String)> {
     rows
 }
 
-fn classify(cpp: &Three, ir: &Three, tree: &Three) -> (String, String) {
+fn classify(cpp: &Three, ir: &Three, tree: &Three, unstable: bool) -> (String, String) {
     if ir != tree {
         return (
             "engine-differs".into(),
@@ -447,6 +548,18 @@ fn classify(cpp: &Three, ir: &Three, tree: &Three) -> (String, String) {
         );
     }
     if ir == cpp {
+        if unstable {
+            return (
+                "unstable".into(),
+                format!("rc{}, the oracle does not reproduce its own answer", cpp.0),
+            );
+        }
+        if cpp.1.contains("NORESULT") {
+            return (
+                "no-value".into(),
+                format!("rc{}, the send returned no result to compare", cpp.0),
+            );
+        }
         return ("agree".into(), format!("rc{}", cpp.0));
     }
     if !ir.1.contains("SETUP-OK") {
@@ -471,24 +584,21 @@ fn classify(cpp: &Three, ir: &Three, tree: &Three) -> (String, String) {
     )
 }
 
-fn first_line(text: &str) -> String {
-    text.trim()
-        .lines()
-        .next()
-        .unwrap_or("")
-        .chars()
-        .take(90)
+/// A control character in an answer would put a second tab in the row and
+/// break the table's own shape, so evidence carries none.
+fn printable(line: &str, width: usize) -> String {
+    line.chars()
+        .take(width)
+        .map(|c| if c.is_control() { ' ' } else { c })
         .collect()
 }
 
+fn first_line(text: &str) -> String {
+    printable(text.trim().lines().next().unwrap_or(""), 90)
+}
+
 fn last_line(text: &str) -> String {
-    text.trim()
-        .lines()
-        .next_back()
-        .unwrap_or("")
-        .chars()
-        .take(60)
-        .collect()
+    printable(text.trim().lines().next_back().unwrap_or(""), 60)
 }
 
 // ---- what the drivers assert ----
@@ -579,6 +689,42 @@ fn refused_keys(layout: &Layout) -> std::collections::HashSet<(String, String, S
         .collect()
 }
 
+/// The rows marked [`UNSTABLE`] whose two oracle runs answer the same thing.
+///
+/// The classification is a measurement -- the oracle is run twice and its own
+/// two answers compared -- rather than a sentence in a header, so a row that
+/// starts reproducing loses the marker instead of hiding a divergence behind
+/// it.
+pub fn stable_rows_marked_unstable(layout: &Layout) -> Vec<String> {
+    let receivers = layout.receivers();
+    let dir = probe_dir(layout.probe_prefix);
+    let path = dir.join("probe.rex");
+    if layout.fixture {
+        fs::write(dir.join(FIXTURE), "return 1\n").expect("the fixture is writable");
+    }
+    let oracle = oracle::oracle_root();
+    let mut stable = Vec::new();
+    for (class, method, arm, list) in layout.arguments() {
+        if !list.starts_with(UNSTABLE) {
+            continue;
+        }
+        let receiver = receivers
+            .get(&(class.clone(), arm.clone()))
+            .unwrap_or_else(|| panic!("{} has no setup for {class} ({arm})", layout.receivers));
+        fs::write(&path, program(receiver, &method, NONE, true)).expect("the probe is writable");
+        let first = run(&mut oracle_command(&oracle, &path, &dir));
+        let second = run(&mut oracle_command(&oracle, &path, &dir));
+        if first == second {
+            stable.push(format!(
+                "{class}~{method} ({arm}) is marked {UNSTABLE} and the oracle answers {:?} on \
+                 two runs of its own, so the value is comparable -- drop the marker",
+                last_line(&first.1)
+            ));
+        }
+    }
+    stable
+}
+
 /// The documented rows with no list at all, and the native rows whose upstream
 /// arity is not zero and that are sent nothing.
 ///
@@ -616,7 +762,7 @@ pub fn rows_missing_arguments(layout: &Layout) -> Vec<String> {
             ));
             continue;
         };
-        if kind == "native" && arity != "0" && list == NONE {
+        if kind == "native" && arity != "0" && (list == NONE || list.starts_with(UNSTABLE)) {
             wrong.push(format!(
                 "{}~{} ({}) is native at arity {arity} and is sent nothing",
                 key.0, key.1, key.2
@@ -636,7 +782,8 @@ pub fn exemptions_without_a_reason(layout: &Layout) -> Vec<String> {
         .filter_map(|(class, method, arm, list)| {
             let reason = list
                 .strip_prefix(EXEMPT)
-                .or_else(|| list.strip_prefix(REFUSED))?;
+                .or_else(|| list.strip_prefix(REFUSED))
+                .or_else(|| list.strip_prefix(UNSTABLE))?;
             (reason.len() <= 20).then(|| {
                 format!(
                     "{class}~{method} ({arm}) is exempt with no reason worth reading: {reason:?}"
@@ -648,8 +795,15 @@ pub fn exemptions_without_a_reason(layout: &Layout) -> Vec<String> {
 
 /// The committed rows on which the two engines answer differently.
 pub fn engine_splits(layout: &Layout) -> Vec<Row> {
-    layout
-        .committed()
+    let committed = layout.committed();
+    if !layout.refreshing() {
+        assert!(
+            !committed.is_empty(),
+            "{} is missing, so this reads green over nothing",
+            layout.table
+        );
+    }
+    committed
         .into_iter()
         .filter(|row| row.verdict == "engine-differs")
         .collect()
@@ -678,7 +832,8 @@ mod tests {
             program(
                 &plain("ka = 'k1' | r = .Table~new | r[ka] = 'v1'"),
                 "at",
-                "ka"
+                "ka",
+                false
             ),
             "ka = 'k1'\n\
              r = .Table~new\n\
@@ -698,7 +853,33 @@ mod tests {
     #[test]
     fn an_empty_argument_list_sends_no_parentheses() {
         assert!(
-            program(&plain("r = .Table~new"), "items", NONE).contains("\nr~'items'\nsay 'SENT'\n")
+            program(&plain("r = .Table~new"), "items", NONE, false)
+                .contains("\nr~'items'\nsay 'SENT'\n")
+        );
+    }
+
+    /// Comparing values assigns the send and prints the answer, and reads the
+    /// one code a method returning no result raises as a completed send.
+    #[test]
+    fn comparing_values_assigns_the_send_and_prints_the_answer() {
+        assert_eq!(
+            program(&plain("r = .Table~new"), "items", NONE, true),
+            "r = .Table~new\n\
+             say 'SETUP-OK'\n\
+             signal on syntax name oops\n\
+             vv = r~'items'\n\
+             say 'SENT'\n\
+             say 'VALUE' vv~string\n\
+             exit\n\
+             oops:\n\
+             vc = rc || '.' || condition('E')\n\
+             if vc = '91.999' then do\n\
+             say 'SENT'\n\
+             say 'NORESULT'\n\
+             exit 0\n\
+             end\n\
+             say 'SYNTAX' vc\n\
+             exit 0\n"
         );
     }
 
@@ -714,6 +895,7 @@ mod tests {
             },
             "name",
             NONE,
+            false,
         );
         assert_eq!(
             text,
@@ -743,6 +925,7 @@ mod tests {
             },
             "id",
             NONE,
+            false,
         );
         assert!(
             text.ends_with("::class K subclass Object\n::method MM\nreturn 2\n"),

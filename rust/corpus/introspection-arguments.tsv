@@ -8,11 +8,17 @@
 # introspection_arity.rs makes that a test failure. Without the rule the
 # instrument reads green having sent nothing that could work.
 #
-# THE CLASS ARM IS HERE and corpus/collection-arguments.tsv's is not. Five of
-# this phase's own `loud` rows live on it -- Package~defaultOptions,
+# THE CLASS ARM IS HERE and corpus/collection-arguments.tsv's is not. This
+# phase's own `loud` rows that live on it -- Package~defaultOptions,
 # Method~loadExternalMethod, Method~newFile, Routine~loadExternalRoutine and
-# Routine~newFile -- and the plan's Tasks 4 and 7 name them; an instance-only
-# table would leave those five unsized.
+# Routine~newFile -- are named by the plan's Tasks 4 and 7; an instance-only
+# table would leave them unsized.
+#
+# `UNSTABLE:` marks a row whose answered value the ORACLE does not reproduce
+# between two of its own runs, so no value comparison could say anything
+# about it. The value is not printed for such a row and the verdict is
+# `unstable`; the marker is earned by running the oracle twice and is a test
+# failure on a row whose two answers agree.
 #
 # `REFUSED:` marks a row the ORACLE refuses BY DESIGN, where the refusal is
 # the measurement and no argument list would change it. The row is still
@@ -90,8 +96,8 @@ Object	class	instance	--
 Object	copy	instance	--
 Object	defaultName	instance	--
 Object	hasMethod	instance	'MM'
-Object	hashCode	instance	--
-Object	identityHash	instance	--
+Object	hashCode	instance	UNSTABLE:the oracle does not reproduce its own answer -- measured, three runs of one program answered three different byte strings, so a value comparison here would compare the allocator against itself
+Object	identityHash	instance	UNSTABLE:the oracle does not reproduce its own answer -- measured, two runs of one program answered -140458910717729 and -140371917186849
 Object	instanceMethod	instance	'MM'
 Object	instanceMethods	instance	.K
 Object	isA	instance	.K

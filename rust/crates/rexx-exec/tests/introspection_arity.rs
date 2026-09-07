@@ -27,10 +27,10 @@
 //!
 //! # What it carries that `collection-arity.tsv` does not
 //!
-//! An `arm` column. Five of this phase's own `loud` rows are class methods --
+//! An `arm` column. This phase's own `loud` rows that are class methods --
 //! `Package~defaultOptions`, `Method~loadExternalMethod`, `Method~newFile`,
-//! `Routine~loadExternalRoutine`, `Routine~newFile` -- so an instance-only
-//! table would leave them unsized.
+//! `Routine~loadExternalRoutine`, `Routine~newFile` -- would be left unsized
+//! by an instance-only table.
 //!
 //! Refresh with
 //!   `REXX_INTROSPECTION_ARITY_REFRESH=1 cargo test --release -p rexx-exec \
@@ -52,17 +52,31 @@ const HEADER: &str = "\
 # records agreement about an arity error. No task in Phase 5i may cite it as
 # a reason a row needs no work.
 #
-#   agree          the oracle and both engines give identical descriptors
+#   agree          the oracle and both engines give identical descriptors,
+#                  the answered value among them
 #   send-differs   the receiver was built on both sides and the send differs
 #   setup-differs  one side could not build the receiver, so the row says
 #                  nothing about its own method
 #   engine-differs the two engines disagree with each other
 #   exempt         a committed reason instead of an argument list
+#   no-value       the send completed the same way on both sides and returned
+#                  no result, so nothing beyond the three descriptors was
+#                  compared. It is deliberately not `agree`: a reader sizing
+#                  work from it learns that the send is reachable and nothing
+#                  about what the method answers.
+#   unstable       marked UNSTABLE: -- the oracle does not reproduce its own
+#                  answer between two runs, so no value comparison could say
+#                  anything. The marker is policed by running the oracle
+#                  twice, not by this line.
 #
-# `agree` SAYS THE SEND COMPLETED THE SAME WAY, NOT THAT THE TWO SIDES
-# ANSWERED THE SAME VALUE: the probe sends a bare statement and never prints
-# the result. A task closing a row still owes it a witness that reads what it
-# answered.
+# THE ANSWERED VALUE IS COMPARED HERE, unlike corpus/collection-arity.tsv:
+# the probe assigns the send's result and prints `vv~string`, so a row both
+# sides complete with different answers reads send-differs rather than agree.
+# `Class~enhanced` is the row it exists for: the oracle answers `enhanced K`
+# at rc 0, so a crate that completes the send and answers something else was
+# invisible to an instrument reading only the exit status and the streams. A
+# task closing a row still owes it a witness that reads the answer's own
+# contents, which `~string` does not.
 #
 # The argument lists are corpus/introspection-arguments.tsv and the receivers
 # are corpus/introspection-receivers.tsv. A list is only real if the ORACLE
@@ -86,6 +100,8 @@ fn layout() -> arity::Layout {
         refresh_env: "REXX_INTROSPECTION_ARITY_REFRESH",
         header: HEADER,
         arm_column: true,
+        compare_values: true,
+        fixture: true,
         probe_prefix: "rexx-introspection-arity",
     }
 }
@@ -125,6 +141,16 @@ fn the_oracle_completes_every_send() {
 fn every_refused_row_is_really_refused() {
     let completed = arity::refusals_the_oracle_completes(&layout());
     assert!(completed.is_empty(), "{completed:#?}");
+}
+
+/// A row marked `UNSTABLE:` is one the oracle really does not reproduce.
+///
+/// The marker suppresses this row's value comparison, so it has to be earned
+/// by the oracle's own two answers differing rather than claimed in a header.
+#[test]
+fn every_unstable_row_is_really_unstable() {
+    let stable = arity::stable_rows_marked_unstable(&layout());
+    assert!(stable.is_empty(), "{stable:#?}");
 }
 
 /// Every documented row has a list, and a native row whose upstream arity is

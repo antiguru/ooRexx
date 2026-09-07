@@ -29,7 +29,10 @@
 //! This table carries no `arm` column and covers the instance arm only.
 //! Phase 5i's `corpus/introspection-arity.tsv` carries one; widening this
 //! file would move bytes no task asked to move, and its header's sentence
-//! about `method-bodies.txt` is scoped to these classes.
+//! about `method-bodies.txt` is scoped to these classes. Value comparison is
+//! off here for the same reason, so `agree` says the three descriptors
+//! matched and not that the two sides answered the same value; the property
+//! is `support::arity`'s.
 //!
 //! Refresh with
 //!   `REXX_COLLECTION_ARITY_REFRESH=1 cargo test --release -p rexx-exec \
@@ -72,6 +75,8 @@ fn layout() -> arity::Layout {
         refresh_env: "REXX_COLLECTION_ARITY_REFRESH",
         header: HEADER,
         arm_column: false,
+        compare_values: false,
+        fixture: false,
         probe_prefix: "rexx-collection-arity",
     }
 }

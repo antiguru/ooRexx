@@ -52,7 +52,7 @@
 # by the harness, because the probe writes one file and a row taking a file
 # name needs a second one -- naming the running program would re-execute it.
 #
-# Measured 2026-09-07, the Package receiver's tables: classes 3,
+# Measured 2026-09-07, the Package receiver's tables: classes 4,
 # publicClasses 2, routines 2, publicRoutines 2, definedMethods 2,
 # resources 2. importedPackages is 0 and cannot be made otherwise here: a
 # ::requires needs a file on this build's search path and nothing is on it --
