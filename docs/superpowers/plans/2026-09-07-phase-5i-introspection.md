@@ -60,6 +60,12 @@ prose the executor never reads.
 * **The corpus control that can go red is `REXX_CORPUS_GATE=1`.** The plain `--test corpus` binary is
   report mode and exits 0 on a divergence. Cite the STRICT run and its matching line.
 * **Mutation runs build with `--profile mutation`**, under `memcap 8G`, with `--no-fail-fast`.
+* **`memcap 8G` cannot wrap the release fast check on this machine, and it fails looking like a test
+  failure.** Measured 2026-09-08: `memcap 8G cargo test --release --workspace --no-fail-fast` is
+  exit **137** with **zero** `test result` lines, `memcap: OOM-killed at the 8G cap (peak 8.0G)`, and
+  `Compiling rexx-exec` as the last thing on stderr -- the cap killed the *compile*, not a test.
+  Without the cap it runs. G3 has no `memcap` and G4 does, which is the right split; the reason to
+  write it down is that "exit 137, no test results" reads exactly like a red gate.
 * Every family's witness sends a **short argument list as well as a good one**.
 * Every family generates a `crates/rexx-parse/tests/sourceline_oracle/<name>.txt`, and adds its file
   to `dispatch_seam.rs`'s `CLEARANCE_CONSUMERS` **only if it is a source file naming the `Cleared`
