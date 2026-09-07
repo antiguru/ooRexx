@@ -1690,6 +1690,22 @@ impl Raised {
         Raised::syntax(93, 901, vec![expected.to_string().into_bytes()])
     }
 
+    /// 93.966: a `Queue` insertion or replacement index is past its last
+    /// item.
+    ///
+    /// `Error_Incorrect_method_queue_index`, raised by
+    /// `QueueClass::checkInsertIndex` (`classes/QueueClass.cpp:113`) when
+    /// `position > lastItem`. Its own comment says why a `Queue` differs from
+    /// an `Array` here: "the position must be location of an existing item
+    /// within the bounds of the queue, unlike an array which can insert at
+    /// empty slots or beyond the existing bounds". Both `insertRexx` and
+    /// `putRexx` call it. Measured at rc 163 on a two-item queue:
+    /// `q~insert('k', 4)` and `q~put('k', 4)` both report `Incorrect queue
+    /// index "4".`
+    pub(crate) fn incorrect_queue_index(position: usize) -> Raised {
+        Raised::syntax(93, 966, vec![position.to_string().into_bytes()])
+    }
+
     /// 93.918: a `Queue` index names a position it does not hold.
     ///
     /// `Error_Incorrect_method_index`, which `QueueClass::putRexx` raises

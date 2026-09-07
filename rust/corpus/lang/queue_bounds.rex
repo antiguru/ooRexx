@@ -1,0 +1,38 @@
+/* A Queue's size is its ITEM count -- Setup.cpp maps `size` to
+   `ArrayClass::itemsRexx` -- and its insertion index is bounded by the last
+   item where an Array's extends to meet it. */
+
+q = .Queue~new
+q~queue('a')
+q~queue('b')
+say 'before' q~items q~size
+q~empty
+say 'after empty' q~items q~size q~isEmpty
+q~queue('z')
+say 'and queueing starts again at the front' q~items q~size q~peek q~pull
+
+r = .Queue~new
+r~queue('a')
+r~queue('b')
+say 'insert at the last item is allowed' r~insert('k', 2) 'now' r~allItems~makeString('L', ',')
+
+call bounded r, 'INSERT'
+call bounded r, 'PUT'
+say 'both refused'
+
+s = .Queue~new
+s~queue('a')
+s~queue('b')
+s~put('n', 4)
+say 'unreachable'
+exit
+
+bounded: procedure
+  use arg target, name
+  signal on syntax name oops
+  v = target~send(name, 'z', 9)
+  say name 'did not refuse'
+  return
+oops:
+  say name 'past the last item raised' rc condition('C')
+  return

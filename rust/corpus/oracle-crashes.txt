@@ -491,3 +491,36 @@ whose oracle answer cannot be obtained.
 Found 2026-09-06 by Phase 5g Task 0(b)'s argument instrument, which flagged it
 as an argument list the oracle refuses -- the rule that a list is only real if
 the oracle answers rc 0 to it. **No upstream ticket.**
+
+--------------------------------------------------------------------------
+
+`List~removeItem`, `~hasItem` or `~index` on a list holding an empty entry
+
+    l = .List~of('a', 'c')
+    l~insert(, 0)
+    say l~removeItem('c')
+
+Effect: SIGSEGV, rc 139, deterministic (measured 4 runs of 4), stdout empty
+after the preceding line and stderr empty. Four shapes, and they are one
+defect: the empty entry can come from `insert(, handle)` or from
+`put(, handle)`, and any of `removeItem`, `hasItem` or `index` reaches it.
+
+Cause: a `List` entry is allowed to hold nothing -- `ListClass::insertRexx`
+has no `requiredArgument` for its value (`classes/ListClass.cpp:454`) and
+`putRexx` requires only the index (`:349`), both measured -- and the three
+methods that search by ITEM dereference each entry's value without checking
+for it. Same class as the `Stem~index` entry above: a null the search does not
+guard.
+
+**Do not construct one of these to confirm it.** The shape to avoid is an
+empty `List` entry followed by any item-searching send. `corpus/lang/`'s
+`list_operations.rex` is the nearest thing in the tree and is safe: it calls
+`put` with a value, never the value-less form.
+
+Consequence for this crate: it answers all four without crashing -- `c`, `1`,
+`2` and `0` respectively at rc 0 -- so these are rows where **a differential
+cannot be run at all**, not rows where the two sides agree. Nothing in
+`corpus/method-bodies.txt` reaches them, because the classification sends no
+arguments and an empty entry needs one send to create.
+
+Found 2026-09-07 by the Phase 5g review. **No upstream ticket.**

@@ -161,6 +161,20 @@ fn ordered_pairs(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<(ObjRef, O
     Ok(pairs)
 }
 
+/// `ArrayClass`'s `lastItem`: the 1-based index of the outermost occupied
+/// slot, or 0 for a collection holding nothing.
+///
+/// **This is what `append` counts from, not the slot count.** Measured on the
+/// oracle: `.Array~new(5)~append('m')` answers `1` and leaves `size 5`, and
+/// an array whose last item has been removed appends back over the hole.
+/// `ArrayClass::empty` sets the field to 0 (`classes/ArrayClass.cpp:672`),
+/// which is why appending after `~empty` starts again at 1.
+fn last_item(interp: &mut Interp, receiver: ObjRef) -> Result<usize, Failure> {
+    Ok(occupied(interp, receiver)?
+        .last()
+        .map_or(0, |last| last + 1))
+}
+
 /// The index object for the flat 0-based `offset` of an array shaped
 /// `dimensions`: the 1-based position for a single dimension, and an `Array`
 /// of coordinates for more than one.
@@ -766,9 +780,30 @@ fn native_array_append(
 ) -> Result<Option<ObjRef>, Failure> {
     let item = item_argument(args)?;
     single_dimension_only(interp, receiver, "APPEND")?;
-    let at = slots_of(interp, receiver)?.len();
-    array_splice(interp, receiver, at, Some(item))?;
+    // **Past the last ITEM, not past the last slot.** A trailing hole is
+    // written into rather than skipped -- see [`last_item`].
+    let at = last_item(interp, receiver)?;
+    let length = slots_of(interp, receiver)?.len();
+    if at >= length {
+        array_grow(interp, receiver, at + 1)?;
+    }
+    write_slot(interp, receiver, at, Some(item))?;
     Ok(Some(interp.counted(at + 1)))
+}
+
+/// Whether `receiver` is a `Queue` or something deriving from one.
+///
+/// **A `Queue` and a subclass of `Array` are both instances carrying a store,
+/// so the store cannot tell them apart** -- the class has to. `Queue`
+/// range-checks an insertion index where `Array` extends to meet it.
+fn is_queue(interp: &mut Interp, receiver: ObjRef) -> bool {
+    let Some(class) = interp.class_of_value(receiver) else {
+        return false;
+    };
+    let Some(queue) = interp.classes().lookup("Queue") else {
+        return false;
+    };
+    interp.classes().is_a(class, queue)
 }
 
 /// `Array~insert(item [, index])`: puts `item` **after** `index` and shifts
@@ -794,17 +829,25 @@ fn native_array_insert(
         // `.nil` is the front, which is the one spelling that is not an
         // index at all (`classes/ArrayClass.cpp:755`).
         Some(Some(index)) if index == ObjRef::NIL => 0,
-        Some(Some(index)) => super::positive_index(interp, index, 2)?,
+        Some(Some(index)) => {
+            let position = super::positive_index(interp, index, 2)?;
+            // `QueueClass::checkInsertIndex` (`classes/QueueClass.cpp:113`):
+            // "the position must be location of an existing item within the
+            // bounds of the queue, unlike an array which can insert at empty
+            // slots or beyond the existing bounds".
+            if is_queue(interp, receiver) && position > last_item(interp, receiver)? {
+                return Err(Raised::incorrect_queue_index(position).into());
+            }
+            position
+        }
         // Omitted: after the last OCCUPIED slot, not the end of the array.
-        Some(None) | None => occupied(interp, receiver)?
-            .last()
-            .map_or(0, |last| last + 1),
+        Some(None) | None => last_item(interp, receiver)?,
     };
     let length = slots_of(interp, receiver)?.len();
     if at > length {
         array_grow(interp, receiver, at)?;
     }
-    array_splice_slot(interp, receiver, at, item)?;
+    splice_absorbing_slack(interp, receiver, at, item)?;
     Ok(Some(interp.counted(at + 1)))
 }
 
@@ -1170,6 +1213,58 @@ fn array_splice_slot(
     }
 }
 
+/// Writes one slot of the store without shifting anything.
+fn write_slot(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    at: usize,
+    item: Option<ObjRef>,
+) -> Result<(), Failure> {
+    let store = store_of(interp, receiver)?;
+    match interp.heap.get_mut(store).map(|object| &mut object.body) {
+        Some(Body::Array { slots, .. }) => {
+            if let Some(slot) = slots.get_mut(at) {
+                *slot = item;
+            }
+            Ok(())
+        }
+        _ => Err(Loud::receiver_class("a value that is not an array").into()),
+    }
+}
+
+/// [`array_splice_slot`], except that a trailing empty slot absorbs the shift
+/// instead of the array growing.
+///
+/// Measured: `.Array~new(4)~insert('j')` answers `1` and leaves `size 4`,
+/// where a plain insert would leave 5. Upstream shifts within the slots it
+/// already has.
+fn splice_absorbing_slack(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    at: usize,
+    item: Option<ObjRef>,
+) -> Result<(), Failure> {
+    // **Slack the array ALREADY had**, not slack the insert just created.
+    // Measured: `.Array~new(4)~insert('j')` leaves size 4, where
+    // `.Array~of('x','y')~insert` -- whose last slot is occupied -- leaves
+    // size 3.
+    let slack = slots_of(interp, receiver)?.last() == Some(&None);
+    array_splice_slot(interp, receiver, at, item)?;
+    if !slack {
+        return Ok(());
+    }
+    let store = store_of(interp, receiver)?;
+    match interp.heap.get_mut(store).map(|object| &mut object.body) {
+        Some(Body::Array { slots, .. }) => {
+            if slots.last() == Some(&None) {
+                slots.pop();
+            }
+            Ok(())
+        }
+        _ => Err(Loud::receiver_class("a value that is not an array").into()),
+    }
+}
+
 /// Grows `receiver` to `length` empty slots, for an `insert` past the end.
 fn array_grow(interp: &mut Interp, receiver: ObjRef, length: usize) -> Result<(), Failure> {
     let receiver = store_of(interp, receiver)?;
@@ -1213,9 +1308,14 @@ fn native_queue_queue(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let item = item_argument(args)?;
-    let store = store_of(interp, receiver)?;
-    let at = array_slots(interp, store)?.len();
-    array_splice_slot(interp, store, at, Some(item))?;
+    // Past the last ITEM, as `append` is: a queue emptied after holding two
+    // starts again at index 1, and `peek` reads that slot.
+    let at = last_item(interp, receiver)?;
+    let length = slots_of(interp, receiver)?.len();
+    if at >= length {
+        array_grow(interp, receiver, at + 1)?;
+    }
+    write_slot(interp, receiver, at, Some(item))?;
     Ok(None)
 }
 
@@ -1299,13 +1399,19 @@ fn native_queue_put(
         let written = interp.to_text(index);
         Failure::from(Raised::incorrect_list_index(&written))
     };
+    // `putRexx` calls `checkInsertIndex` (`classes/QueueClass.cpp:205`)
+    // before anything else can refuse, so an index past the last item is
+    // 93.966 and never the 93.918 an unheld index would answer.
+    let bound = last_item(interp, receiver)?;
+    if let Some(index) = args.get(1).copied().flatten() {
+        let position = super::positive_index(interp, index, 2)?;
+        if position > bound {
+            return Err(Raised::incorrect_queue_index(position).into());
+        }
+    }
     let Some(position) = array_position(interp, store, &args[1..], IndexUse::Get)? else {
         return Err(refuse(interp));
     };
-    let held = array_slots(interp, store)?.len();
-    if position > held {
-        return Err(refuse(interp));
-    }
     match interp.heap.get_mut(store).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
             slots[position - 1] = Some(item);
@@ -1344,14 +1450,16 @@ fn native_queue_items(
 }
 
 /// `Queue~size`: how many slots the store has.
+/// **`Setup.cpp:789` maps it to `ArrayClass::itemsRexx`**, so a `Queue`'s
+/// size is its item count and not its slot count -- measured, a queue emptied
+/// after holding two answers `size 0`.
 fn native_queue_size(
     interp: &mut Interp,
-    _cleared: Cleared,
+    cleared: Cleared,
     receiver: ObjRef,
-    _args: &[Option<ObjRef>],
+    args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let size = slots_of(interp, receiver)?.len();
-    Ok(Some(interp.counted(size)))
+    native_queue_items(interp, cleared, receiver, args)
 }
 
 // ---- List ----
