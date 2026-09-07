@@ -922,3 +922,52 @@ fn a_method_that_assigns_over_self_keeps_its_exposed_variables() {
         );
     }
 }
+
+/// A weak reference does not keep its referent alive, and keeps answering one
+/// that something else does.
+///
+/// This is the only place either half is observable: the collector is what
+/// clears a reference, and no differential harness collects. **The dropped and
+/// the held reference are read in the same program after the same
+/// collections**, so an implementation that ignored weakness entirely fails
+/// the first line and one that cleared unconditionally fails the second.
+///
+/// Measured against the tree before `WeakReference~value` existed: the program
+/// stops at the first `~value` with `rexx-exec: method "VALUE" of class
+/// "WeakReference" is not implemented (Phase 5)` at exit 120.
+#[test]
+fn a_weak_reference_clears_only_when_its_referent_becomes_unreachable() {
+    let program = concat!(
+        "dropped = .Object~new\n",
+        "wd = .WeakReference~new(dropped)\n",
+        "held = .Object~new\n",
+        "wh = .WeakReference~new(held)\n",
+        "drop dropped\n",
+        "do i = 1 to 20\n",
+        "  zj = 'filler' i\n",
+        "end\n",
+        "say 'dropped' (wd~value == .nil)\n",
+        "say 'held' (wh~value == held) wh~value~class~id\n",
+        // The referent arrives as an argument with no other handle on it, and
+        // building the cell allocates -- so the collect this line's own
+        // allocations run is between the referent's creation and the read.
+        "say 'temp' (.WeakReference~new(.Object~new)~value == .nil)\n",
+    );
+    for engine in [rexx_exec::Engine::TreeWalker, rexx_exec::Engine::Ir] {
+        let stress = run_program_collect_every_alloc(
+            "<weak-reference-clearing>",
+            program.as_bytes().to_vec(),
+            rexx_exec::Invocation::none().with_engine(engine),
+        );
+        assert_eq!(stress.exit_code, 0, "{engine:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&stress.stdout),
+            "dropped 1\nheld 1 Object\ntemp 0\n",
+            "{engine:?}"
+        );
+        assert!(
+            stress.collections > 0,
+            "the stress mode did not collect, so this proves nothing, {engine:?}"
+        );
+    }
+}

@@ -938,6 +938,13 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(1),
         native_reference_request,
     ),
+    // `AddMethod("Value", WeakReference::value, 0)`, `memory/Setup.cpp:1686`.
+    (
+        "WeakReference",
+        "VALUE",
+        Arity::Fixed(0),
+        native_weak_reference_value,
+    ),
 ];
 
 /// The primitive methods bound to a class's **class** dictionary rather than
@@ -1036,6 +1043,11 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Counted,
         native_weak_reference_new,
     ),
+    // The classes whose `newRexx` is the refusal and nothing else, because
+    // their instances come only from native code (`utilityclasses.xml:429`,
+    // `:6910`).
+    ("Buffer", "NEW", Arity::Counted, native_unsupported_new),
+    ("Pointer", "NEW", Arity::Counted, native_unsupported_new),
     // `AddClassMethod("New", RexxString::newRexx, A_COUNT)`,
     // `memory/Setup.cpp:572`. The one row here whose answer is a value rather
     // than an instance.
@@ -1178,6 +1190,9 @@ pub(crate) struct ObjectModel {
     /// The class a `Body::Stem` answers, whether a bare stem read produced it
     /// or `.Stem~new` did.
     stem: ObjRef,
+    /// The scope [`WEAK_REFERENT`] is bound in, so that a subclass's instance
+    /// keeps its referent where `WeakReference~value` looks for it.
+    weak_reference: ObjRef,
 }
 
 impl ObjectModel {
@@ -1300,6 +1315,9 @@ impl ObjectModel {
             .lookup("VariableReference")
             .expect("VariableReference is a native class");
         let stem = classes.lookup("Stem").expect("Stem is a native class");
+        let weak_reference = classes
+            .lookup("WeakReference")
+            .expect("WeakReference is a native class");
         ObjectModel {
             classes,
             natives,
@@ -1317,6 +1335,7 @@ impl ObjectModel {
             message,
             variable_reference,
             stem,
+            weak_reference,
         }
     }
 }
@@ -10361,11 +10380,51 @@ fn native_stem_new(
     Ok(Some(object))
 }
 
-/// `WeakReference~new(value, ...)`: an instance that does not hold the value
-/// -- `WeakReference::newRexx` (`classes/WeakReferenceClass.cpp:231`).
+/// `Pointer~new` and `Buffer~new`: the raise that is the whole body of
+/// `PointerClass::newRexx` (`classes/PointerClass.cpp:139`-`:143`) and
+/// `BufferClass::newRexx` (`classes/BufferClass.cpp:86`-`:90`).
 ///
-/// The referent is not kept. Measured, oracle rc 163: `.WeakReference~new`
-/// is `93.903 Missing argument in method; argument 1 is required.`
+/// No argument is read, and the substitution is the receiver class's own
+/// `getId()` rather than the scope the method is compiled in. Measured, oracle
+/// rc 163: with `::class P subclass Pointer`, `.P~new` reports `NEW method is
+/// not supported for the P class.` under a trace line naming scope `Pointer`.
+fn native_unsupported_new(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    let id = interp.class_id_text(class).as_bytes().to_vec();
+    Err(Raised::unsupported_new_method(&id).into())
+}
+
+/// The entry `WeakReference`'s scope pool binds the referent cell to, in the
+/// position [`COLLECTION_STORES`]' entries are in.
+const WEAK_REFERENT: &[u8] = b"REFERENT";
+
+/// The cell `WEAK_REFERENT` holds: a `Body::WeakRef` allocated for `referent`.
+///
+/// The reference object keeps this cell strongly and the cell keeps nothing,
+/// so `Heap::collect`'s weak pass rewrites it to `Body::WeakRef(ObjRef::NIL)`
+/// as soon as the referent is unreachable -- `WeakReference::referentObject`
+/// with `memoryObject.addWeakReference` around it
+/// (`classes/WeakReferenceClass.cpp:82`-`:88`).
+fn weak_referent_cell(interp: &mut Interp, referent: ObjRef) -> ObjRef {
+    let cell = interp.alloc_with(rexx_core::BehaviourId::OBJECT, Body::WeakRef(referent));
+    interp.roots.push_temp(cell);
+    cell
+}
+
+/// `WeakReference~new(value, ...)`: a reference that does not keep `value`
+/// alive -- `WeakReference::newRexx` (`classes/WeakReferenceClass.cpp:231`).
+///
+/// The instance is an ordinary one, so a subclass keeps its own class, its own
+/// rendering and its own instance variables; the referent lives beside them in
+/// [`WEAK_REFERENT`]. The arguments past the first go to `INIT`.
+///
+/// Measured, oracle rc 163: `.WeakReference~new` is `93.903 Missing argument in
+/// method; argument 1 is required.`
 fn native_weak_reference_new(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -10373,14 +10432,41 @@ fn native_weak_reference_new(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let class = class_receiver(interp, receiver)?;
-    if args.first().copied().flatten().is_none() {
+    let Some(referent) = args.first().copied().flatten() else {
         return Err(Raised::missing_method_argument(1).into());
-    }
+    };
+    let scope = interp.object_model().weak_reference;
     let object = new_instance(interp, class)?;
+    let cell = weak_referent_cell(interp, referent);
+    interp.set_pool_variable(object, scope, WEAK_REFERENT, cell);
     let caller = interp.caller();
     let rest: Vec<Option<ObjRef>> = args.iter().skip(1).copied().collect();
     interp.send_message(object, INIT, None, &rest, caller)?;
     Ok(Some(object))
+}
+
+/// `WeakReference~value`: the referent, or `.nil` once the collector has
+/// cleared it -- `WeakReference::value` (`classes/WeakReferenceClass.cpp:217`),
+/// whose whole body is `resultOrNil(referentObject)`.
+///
+/// A cleared cell holds `ObjRef::NIL`, so a cleared reference and a live one
+/// are the same read; a receiver carrying no cell answers `.nil` for the
+/// reason an unset `referentObject` does.
+fn native_weak_reference_value(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let scope = interp.object_model().weak_reference;
+    let cell = interp
+        .pools_of(receiver)
+        .and_then(|pools| pools.get(scope, WEAK_REFERENT));
+    let referent = match cell.and_then(|cell| interp.heap.get(cell).map(|object| &object.body)) {
+        Some(Body::WeakRef(referent)) => *referent,
+        _ => ObjRef::NIL,
+    };
+    Ok(Some(referent))
 }
 
 /// `Object~request(class)`: the receiver converted to `class`, or `.nil` --
@@ -11943,8 +12029,10 @@ mod tests {
             );
         }
         for (class, status, catalogue) in [
+            ("Buffer", 163, "Error 93.967:"),
             ("Class", 163, "Error 93.901:"),
             ("Message", 163, "Error 93.901:"),
+            ("Pointer", 163, "Error 93.967:"),
             ("Method", 168, "Error 88.901:"),
             ("Package", 168, "Error 88.901:"),
             ("Routine", 168, "Error 88.901:"),
@@ -11962,32 +12050,36 @@ mod tests {
     /// answer one, and the state is either kept and read back or refused,
     /// never answered from nothing.
     ///
-    /// The refusal rows are what stop this from passing over a constructor
-    /// that fabricated a body: each names a method that would read what the
-    /// arguments carried, and the crate holds none of it. `MutableBuffer`
-    /// keeps what it is given, so its row reads the state back instead.
+    /// The refusal row is what stops this from passing over a constructor that
+    /// fabricated a body: it names a method that would read what the arguments
+    /// carried, and the crate holds none of it. `MutableBuffer`, `Supplier` and
+    /// `WeakReference` keep what they are given, so their rows read the state
+    /// back instead.
     #[test]
     fn a_constructor_taking_arguments_answers_an_instance_and_refuses_its_state() {
-        for (program, id, unread) in [
-            (".Message~new(.Object~new, 'STRING')", "Message", "o~send"),
-            (
-                ".WeakReference~new(.Object~new)",
-                "WeakReference",
-                "o~value",
-            ),
-        ] {
-            assert_eq!(
-                both_engines(&format!("o = {program}\nsay o~class~id\n")),
-                (0, format!("{id}\n"), String::new()),
-                "{program}"
-            );
-            let (code, stdout, stderr) = both_engines(&format!("o = {program}\nsay {unread}\n"));
-            assert_eq!((code, stdout.as_str()), (120, ""), "{program}");
-            assert!(stderr.starts_with("rexx-exec: "), "{program}: {stderr:?}");
-        }
+        let message = ".Message~new(.Object~new, 'STRING')";
+        assert_eq!(
+            both_engines(&format!("o = {message}\nsay o~class~id\n")),
+            (0, "Message\n".to_string(), String::new())
+        );
+        let (code, stdout, stderr) = both_engines(&format!("o = {message}\nsay o~send\n"));
+        assert_eq!((code, stdout.as_str()), (120, ""));
+        assert!(stderr.starts_with("rexx-exec: "), "{stderr:?}");
         assert_eq!(
             both_engines("o = .MutableBuffer~new('abc')\nsay o~class~id\nsay o~length\n"),
             (0, "MutableBuffer\n3\n".to_string(), String::new())
+        );
+        // `WeakReference` keeps its referent and reads it back, so it is a
+        // readback row rather than a refusal one. That its reference is *weak*
+        // is not visible here and cannot be -- nothing on this path collects;
+        // `tests/collect_stress.rs` carries that half.
+        assert_eq!(
+            both_engines(
+                "k = .Object~new\n\
+                 o = .WeakReference~new(k)\n\
+                 say o~class~id (o~value == k) o~value~class~id\n"
+            ),
+            (0, "WeakReference 1 Object\n".to_string(), String::new())
         );
         // `Supplier` joined the readback group in Phase 5g Task 1. Its `init`
         // used to validate both arrays and drop them, which is the shell this

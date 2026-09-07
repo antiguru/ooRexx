@@ -900,7 +900,7 @@ Alarm	scheduledTime	instance	unanswered	a bare `~new` raises; the method was nev
 Alarm	triggered	instance	unanswered	a bare `~new` raises; the method was never sent
 AlarmNotification	cancel	instance	answers	rc 165
 AlarmNotification	triggered	instance	answers	rc 163
-Buffer	new	class	loud	method "NEW" of class "Buffer"
+Buffer	new	class	answers	rc 163
 Comparable	compareTo	instance	answers	rc 163
 Comparator	compare	instance	answers	rc 163
 CaselessComparator	compare	instance	answers	rc 163
@@ -1154,12 +1154,12 @@ Orderable	\<<	instance	answers	rc 163
 Orderable	\>	instance	answers	rc 163
 Orderable	\>>	instance	answers	rc 163
 Orderable	compareTo	instance	answers	rc 163
-Pointer	new	class	loud	method "NEW" of class "Pointer"
-Pointer	=	instance	loud	method "NEW" of class "Pointer"
-Pointer	==	instance	loud	method "NEW" of class "Pointer"
-Pointer	\=	instance	loud	method "NEW" of class "Pointer"
-Pointer	\==	instance	loud	method "NEW" of class "Pointer"
-Pointer	isNull	instance	loud	method "NEW" of class "Pointer"
+Pointer	new	class	answers	rc 163
+Pointer	=	instance	unanswered	a bare `~new` raises; the method was never sent
+Pointer	==	instance	unanswered	a bare `~new` raises; the method was never sent
+Pointer	\=	instance	unanswered	a bare `~new` raises; the method was never sent
+Pointer	\==	instance	unanswered	a bare `~new` raises; the method was never sent
+Pointer	isNull	instance	unanswered	a bare `~new` raises; the method was never sent
 RexxContext	args	instance	loud	method "ARGS" of class "RexxContext"
 RexxContext	condition	instance	loud	method "CONDITION" of class "RexxContext"
 RexxContext	digits	instance	loud	method "DIGITS" of class "RexxContext"
@@ -1344,7 +1344,7 @@ VariableReference	request	instance	answers	rc 163
 VariableReference	unknown	instance	answers	rc 163
 VariableReference	value	instance	answers	rc 0
 WeakReference	new	class	answers	rc 163
-WeakReference	value	instance	loud	method "VALUE" of class "WeakReference"
+WeakReference	value	instance	answers	rc 0
 InputOutputStream	arrayOut	instance	answers	rc 163
 InputOutputStream	charIn	instance	answers	rc 163
 InputOutputStream	charOut	instance	answers	rc 163

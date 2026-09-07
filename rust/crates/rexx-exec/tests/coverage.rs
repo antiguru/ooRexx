@@ -1485,6 +1485,9 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/do_over_request_array.rex",
     "lang/arg_option_array.rex",
     "lang/map_collection_of.rex",
+    // Task 2's two witnesses.
+    "lang/pointer_buffer_new_refused.rex",
+    "lang/weak_reference_value.rex",
 ];
 
 #[test]

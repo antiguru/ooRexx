@@ -1706,6 +1706,23 @@ impl Raised {
         Raised::syntax(93, 966, vec![position.to_string().into_bytes()])
     }
 
+    /// 93.967: a class whose instances come only from native code was sent
+    /// `NEW`.
+    ///
+    /// `Error_Unsupported_new_method`, raised by `PointerClass::newRexx`
+    /// (`classes/PointerClass.cpp:142`) and `BufferClass::newRexx`
+    /// (`classes/BufferClass.cpp:89`) as the whole of their bodies, and by
+    /// `StackFrameClass.cpp:127`, `ContextClass.cpp:99`,
+    /// `VariableReference.cpp:100` and `RexxInfoClass.cpp:92` beside them.
+    ///
+    /// `id` is `((RexxClass *)this)->getId()` -- the **receiver** class, not
+    /// the scope the method is compiled in. Measured at rc 163: with
+    /// `::class P subclass Pointer`, `.P~new` reports `NEW method is not
+    /// supported for the P class.` under a trace line naming scope `Pointer`.
+    pub(crate) fn unsupported_new_method(id: &[u8]) -> Raised {
+        Raised::syntax(93, 967, vec![id.to_vec()])
+    }
+
     /// 93.918: a `Queue` index names a position it does not hold.
     ///
     /// `Error_Incorrect_method_index`, which `QueueClass::putRexx` raises

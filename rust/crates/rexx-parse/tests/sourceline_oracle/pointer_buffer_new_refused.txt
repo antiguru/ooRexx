@@ -1,0 +1,46 @@
+count 45
+/* `.Pointer~new` and `.Buffer~new` refuse rather than building an instance.
+   `PointerClass::newRexx` (`classes/PointerClass.cpp:139`-`:143`) and
+   `BufferClass::newRexx` (`classes/BufferClass.cpp:86`-`:90`) are the raise and
+   nothing else, so no argument list is looked at, and the substitution is the
+   RECEIVER class's own `getId()`.  Both classes are documented as
+   native-code-only (`utilityclasses.xml:429`, `:6910`). */
+
+signal on syntax name none
+zz = .Pointer~new
+say 'unreached' zz
+
+none:
+say 'pointer-none' rc condition('C') condition('E')
+signal on syntax name several
+zz = .Pointer~new(1, 2, 3)
+say 'unreached' zz
+
+several:
+say 'pointer-several' rc condition('C') condition('E')
+signal on syntax name buffer
+zz = .Buffer~new
+say 'unreached' zz
+
+buffer:
+say 'buffer-none' rc condition('C') condition('E')
+signal on syntax name bufferseveral
+zz = .Buffer~new('a', 'b')
+say 'unreached' zz
+
+bufferseveral:
+say 'buffer-several' rc condition('C') condition('E')
+signal on syntax name subclassed
+zz = .B~new
+say 'unreached' zz
+
+subclassed:
+say 'buffer-subclass' rc condition('C') condition('E')
+/* Untrapped, so the transcript carries the message text.  The trace line names
+   the scope the method is compiled in, `Pointer`, while the substitution names
+   the receiver class, `P` -- a hard-coded id would print the same word twice. */
+zz = .P~new
+say 'unreached' zz
+
+::class P subclass Pointer
+::class B subclass Buffer

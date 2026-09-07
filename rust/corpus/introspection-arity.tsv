@@ -46,7 +46,7 @@
 # instance row of theirs would be setup-differs on the oracle's own side.
 # Their class arm is here, marked REFUSED: in the argument file -- the oracle
 # answers 93.967 and that refusal is what the row measures.
-Buffer	new	class	send-differs	oracle rc0 SYNTAX 93.967; crate rc120 rexx-exec: method "NEW" of class "Buffer" is not implemented (Phase 5)
+Buffer	new	class	agree	rc0
 Class	<>	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: method "<>" of class "Class" is not implemented (Phase 5)
 Class	=	instance	send-differs	oracle rc0 VALUE 0; crate rc120 rexx-exec: method "=" of class "Class" is not implemented (Phase 5)
 Class	==	instance	send-differs	oracle rc0 VALUE 0; crate rc120 rexx-exec: method "==" of class "Class" is not implemented (Phase 5)
@@ -171,7 +171,7 @@ Package	source	instance	send-differs	oracle rc0 VALUE an Array; crate rc120 rexx
 Package	sourceLine	instance	send-differs	oracle rc0 VALUE r = .context~package; crate rc120 rexx-exec: method "SOURCELINE" of class "Package" is not implemented (Phase 5)
 Package	sourceSize	instance	send-differs	oracle rc0 VALUE 36; crate rc120 rexx-exec: method "SOURCESIZE" of class "Package" is not implemented (Phase 5)
 Package	trace	instance	send-differs	oracle rc0 VALUE N; crate rc120 rexx-exec: method "TRACE" of class "Package" is not implemented (Phase 5)
-Pointer	new	class	send-differs	oracle rc0 SYNTAX 93.967; crate rc120 rexx-exec: method "NEW" of class "Pointer" is not implemented (Phase 5)
+Pointer	new	class	agree	rc0
 RexxContext	args	instance	send-differs	oracle rc0 VALUE an Array; crate rc120 rexx-exec: method "ARGS" of class "RexxContext" is not implemented (Phase 5)
 RexxContext	condition	instance	send-differs	oracle rc0 VALUE The NIL object; crate rc120 rexx-exec: method "CONDITION" of class "RexxContext" is not implemented (Phase 5)
 RexxContext	digits	instance	send-differs	oracle rc0 VALUE 9; crate rc120 rexx-exec: method "DIGITS" of class "RexxContext" is not implemented (Phase 5)
@@ -237,4 +237,4 @@ StackFrame	target	instance	setup-differs	crate rc120: rexx-exec: method "STACKFR
 StackFrame	traceLine	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
 StackFrame	type	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
 WeakReference	new	class	agree	rc0
-WeakReference	value	instance	send-differs	oracle rc0 VALUE an Object; crate rc120 rexx-exec: method "VALUE" of class "WeakReference" is not implemented (Phase 5)
+WeakReference	value	instance	agree	rc0
