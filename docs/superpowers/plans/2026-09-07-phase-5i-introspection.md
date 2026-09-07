@@ -205,18 +205,26 @@ shape would leave five of this phase's own rows unsized: `Package~defaultOptions
 named verbatim in Tasks 4 and 7. The shared module takes the arm column as a layout flag, off for
 the collection driver, so `corpus/collection-arity.tsv` keeps its four columns and its byte-identity
 control. **`Pointer` and `Buffer` are excluded per (class, arm) rather than per class**: only their instance
-arm is excluded by name, with the reference citation as its reason, and their class-arm `new` row
-goes in as an `EXEMPT:` row whose reason is the measurement, `93.967`.
+arm is excluded by name, with the reference citation as its reason, and their class-arm `new` row is
+measured on the refusal that IS its documented behaviour.
 
-**The first version of this ruling gave a false reason for a correct outcome, and the correction is
-recorded rather than quietly applied.** It said the class-arm row "is measurable with receiver
-`.Pointer` and sizes Task 2". The oracle *raises* on `.Pointer~new`, so the probe's `SYNTAX` trap
-fires, `SENT` is never printed, and the harness rule -- a row's list is real only if the ORACLE
-completes the send -- refuses it as a data point. **Nothing this instrument can do sizes Task 2**,
-because the row is about a refusal both sides make; Task 2 is sized by `corpus/method-bodies.txt`
-alone, which is legitimate for exactly that reason. What the two rows buy is that the exclusion is
-per (class, arm) and that `93.967` lives in a committed row rather than in a header sentence no test
-reads.
+**This ruling was given a false reason, the correction was itself partly false, and the implementer
+found the answer both had missed.** The sequence is recorded because it is the phase's clearest
+example of a defect class this project keeps hitting -- a correct decision shipping with a wrong
+justification, and then a correction round introducing a new wrong statement.
+
+* The ruling said the class-arm row "is measurable with receiver `.Pointer` and sizes Task 2".
+* The correction said that was false: the oracle **raises** `93.967` on `.Pointer~new`, so the
+  probe's `SYNTAX` trap fires, `SENT` is never printed, and the harness rule -- a row's list is real
+  only if the oracle completes the send -- refuses it as a data point. It concluded that the rows
+  could only be `EXEMPT:`, and that **nothing this instrument can do sizes Task 2**.
+* Both halves of that conclusion were wrong. An `EXEMPT:` row indeed cannot move -- but the harness
+  rule can be **inverted rather than waived**. `REFUSED:` marks a row the oracle refuses *by
+  design*; the row is still compared on all three descriptors, so it reads `send-differs` today
+  (oracle `SYNTAX 93.967` against this crate's loud refusal) and becomes `agree` the moment Task 2
+  makes this crate raise the same thing. It moves, and it sizes Task 2 after all.
+* And the marker cannot become a hiding place, because the inversion is asserted:
+  `every_refused_row_is_really_refused` fails on a `REFUSED:` row the oracle **does** complete.
 
 **Deliverable of this task, and it is what sizes every later one:** the number of rows in this
 phase's classes that read `agree` under a real argument list, and the number that read
