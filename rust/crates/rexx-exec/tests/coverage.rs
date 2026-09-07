@@ -1482,6 +1482,7 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/directory_set_method.rex",
     "lang/method_new.rex",
     "lang/stem_request_and_directory.rex",
+    "lang/do_over_request_array.rex",
 ];
 
 #[test]

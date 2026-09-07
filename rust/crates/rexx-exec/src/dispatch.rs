@@ -10654,10 +10654,20 @@ fn native_string_makearray(
 ) -> Result<Option<ObjRef>, Failure> {
     let bytes = interp.to_text(receiver).to_vec();
     let lines = crate::builtin::string::line_slices(&bytes);
-    let slots: Vec<Option<ObjRef>> = lines
-        .into_iter()
-        .map(|line| Some(interp.text_built(line.to_vec())))
-        .collect();
+    // **Each line is rooted as it is built.** The `Vec` gathering them is a
+    // Rust local and invisible to the collector, so a line built earlier is
+    // swept by the allocation of the next one -- and, for a single-line
+    // string, by the `alloc_with` below. Measured under
+    // `run_program_collect_every_alloc`: `'.RESOURCES'~makeArray` then
+    // `a[1]` panicked at `not_in_arena`'s "a live value", while `'abc'`
+    // survived only because a short string is inline and never a heap object
+    // at all.
+    let mut slots: Vec<Option<ObjRef>> = Vec::with_capacity(lines.len());
+    for line in lines {
+        let text = interp.text_built(line.to_vec());
+        interp.roots.push_temp(text);
+        slots.push(Some(text));
+    }
     // Measured, oracle: `''~makeArray~dimension` is 0, so an empty result
     // carries no dimensions rather than one of size 0.
     let body = Body::Array {

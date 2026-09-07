@@ -3877,7 +3877,6 @@ mod object_operand_tests {
     #[test]
     fn an_object_as_a_do_over_target_is_loud() {
         let cases: &[(&[u8], &str)] = &[
-            (b"do e over .array\nsay e\nend\n", "a class object"),
             (
                 b"do e over .environment\nsay e\nend\n",
                 "one of the interpreter's own objects",
@@ -3903,6 +3902,24 @@ mod object_operand_tests {
                 String::from_utf8_lossy(source)
             );
         }
+        // **A class object is no longer one of them, and that is the point of
+        // the pair.** It reaches `requestArray`, answers no `MAKEARRAY`, and
+        // raises the oracle's own `Error_Execution_noarray` naming itself --
+        // measured, oracle rc 158, `Unable to convert object "The Array
+        // class" to a single-dimensional array value.` So what is left
+        // refusing above is exactly the two directories this crate models as
+        // a subset, which is a MEMBERSHIP difference rather than a missing
+        // conversion.
+        let (code, stdout, stderr) = both_engines(b"do e over .array\nsay e\nend\n");
+        assert_eq!((code, stdout.as_str()), (158, ""));
+        assert!(
+            stderr.contains(
+                "Error 98.913:  Unable to convert object \"The Array class\" to a \
+                 single-dimensional array value."
+            ),
+            "a class object must raise the oracle's own noarray, got {stderr:?}"
+        );
+
         // The adjacent success, which is what makes the refusals above about
         // the *directories* rather than about `Body::Native`: the one
         // collection this crate does iterate is a `StringTable`, and the

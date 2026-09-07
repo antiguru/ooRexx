@@ -8397,30 +8397,80 @@ impl Interp {
         Ok(())
     }
 
-    /// A `DO OVER` target this crate cannot hand to `requestArray`, naming its
-    /// own shape, or `None` for one it can.
+    /// `OverLoop::setup`'s conversion
+    /// (`instructions/DoBlockComponents.cpp:233`): the array whose items a
+    /// `DO OVER` binds in turn.
     ///
-    /// [`Interp::operator_operand_gap`]'s set minus an array and a
-    /// `StringTable`. An **array**
-    /// is the one `requestArray` answers without a message send at all:
-    /// `OverLoop::setup` tests `isArray(result)` and calls `makeArray()`
-    /// directly (`instructions/DoBlockComponents.cpp:233`-`:236`). A
-    /// **`StringTable`** answers its own indexes -- see
-    /// [`Interp::hash_collection_indexes`]. Everything else in that set
-    /// reaches `result->requestArray()` and either iterates entries this crate
-    /// does not build or raises 98.913, which is what the refusal covers:
-    /// measured, `do e over .context~package` is 98.913 at rc 158, `Unable to
-    /// convert object "a Package" to a single-dimensional array value.`, and
-    /// so are a `Method` object, a `RexxContext` and a class object.
+    /// **`isArray(result)` is the PRIMITIVE test, not "an array or a subclass
+    /// of one".** Measured: a subclass of `Array` overriding `makeArray`
+    /// iterates the override, which only the `requestArray` limb reaches --
+    /// the direct limb would have called `ArrayClass::makeArray` and answered
+    /// the slots. In this crate that test is exactly `Body::Array`, because a
+    /// user subclass of `Array` is an ordinary instance whose pool holds one.
+    ///
+    /// `requestArray` (`classes/ObjectClass.cpp:1646`) is **two paths keyed on
+    /// `isBaseClass()`**: a base-class object answers `makeArray()` through a
+    /// direct virtual call with no message send, and anything else is sent
+    /// `REQUEST` with `'ARRAY'`. Both were measured through the difference a
+    /// send makes: a subclass of `Table` overriding `makeArray` answers the
+    /// override, and a class overriding `request` itself answers from
+    /// `request` with the argument `ARRAY`.
+    ///
+    /// The RESULT faces the same primitive test -- measured, a `makeArray`
+    /// answering an `Array` subclass is 98.913 -- and everything that fails it
+    /// raises `Error_Execution_noarray` naming the ORIGINAL object, not the
+    /// conversion's answer.
+    ///
+    /// `makeArray` runs exactly once per loop, measured with a counter, which
+    /// is why the conversion is here rather than in [`Interp::over_items`].
+    fn over_target_array(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
+        if self.array_slots_of(value).is_some() {
+            return Ok(value);
+        }
+        let converted = self.request_array_for_over(value)?;
+        if let Some(converted) = converted
+            && self.array_slots_of(converted).is_some()
+        {
+            return Ok(converted);
+        }
+        let found = self.string_value_text(value);
+        Err(Raised::object_not_single_dimensional(&found).into())
+    }
+
+    /// [`Interp::over_target_array`]'s `requestArray` limb, which is a message
+    /// send on one path and a direct call on the other.
+    fn request_array_for_over(&mut self, value: ObjRef) -> Result<Option<ObjRef>, Failure> {
+        let caller = self.caller();
+        if self.is_base_class(value) {
+            if self.lookup(value, b"MAKEARRAY", None).is_none() {
+                return Ok(None);
+            }
+            return self.send_message(value, b"MAKEARRAY", None, &[], caller);
+        }
+        let wanted = self.text_built(b"ARRAY".to_vec());
+        self.roots.push_temp(wanted);
+        self.send_message(value, b"REQUEST", None, &[Some(wanted)], caller)
+    }
+
+    /// The one `DO OVER` target this crate still refuses: one of the
+    /// interpreter's own directories.
+    ///
+    /// `.environment` and `.local` answer `MAKEARRAY`, so the protocol above
+    /// would iterate them -- but this crate models them as a SUBSET of the
+    /// oracle's, so iterating one differs in MEMBERSHIP and not merely in
+    /// order. Measured, `.local` iterates ten entries on the oracle and none
+    /// here. Every other object now goes through `requestArray` and either
+    /// converts or raises 98.913 as upstream does, which is what a class
+    /// object, a `Package`, a `Method` and a `RexxContext` all do.
     fn over_target_gap(&mut self, value: ObjRef) -> Option<&'static str> {
-        let kind = self.operator_operand_gap(value)?;
-        if self.is_hash_collection(value) {
+        if !matches!(
+            self.heap.get(value).map(|object| &object.body),
+            Some(Body::Native(_))
+        ) {
             return None;
         }
-        match self.heap.get(value).map(|object| &object.body) {
-            Some(Body::Array { .. }) => None,
-            _ => Some(kind),
-        }
+        (self.receiver_class_id(value).as_deref() == Some("Directory"))
+            .then_some("one of the interpreter's own objects")
     }
 
     /// Whether `value` is a `StringTable` -- `.methods`, `.routines`,
@@ -8439,29 +8489,52 @@ impl Interp {
         class == self.object_model().iterable_collection_class()
     }
 
-    /// `requestArray`'s answer for a `DO OVER` target, as the list of values
-    /// the loop binds its control variable to in turn.
+    /// The values a `DO OVER` binds its control variable to: the **non-empty**
+    /// slots of what [`Interp::over_target_array`] converts the target into.
     ///
-    /// An array answers its own **non-empty** slots: `OverLoop::setup` takes
-    /// `makeArray()`, which is the non-sparse copy, and `DoBlock::checkOver`
-    /// then walks it to `lastIndex()`. Measured, `do e over (1,,3)` yields `1`
-    /// and `3` where `do e over (1,.nil,3)` yields `1`, `The NIL object` and
-    /// `3` -- an explicit `.nil` is an item and an empty slot is not.
+    /// `OverLoop::setup` takes `makeArray()`, the non-sparse copy, and
+    /// `DoBlock::checkOver` then walks it to `lastIndex()`. Measured,
+    /// `do e over (1,,3)` yields `1` and `3` where `do e over (1,.nil,3)`
+    /// yields `1`, `The NIL object` and `3` -- an explicit `.nil` is an item
+    /// and an empty slot is not.
     ///
-    /// A `StringTable` answers its own **indexes**, not its values:
-    /// `HashCollection::makeArray` is `allIndexes()`. Measured, `do e over
-    /// .methods` prints the unattached methods' names.
+    /// **The conversion happens HERE and not where the header value was
+    /// accepted**, because this is the level whose rooting covers the loop:
+    /// each item is `push_temp`ed at the same level `LoopState::OverItems`
+    /// documents, and the tree-walker's header temps do not survive the IR
+    /// engine's op boundary -- there a header value is kept alive by a
+    /// REGISTER, so a freshly built array filed in `LoopHeaderValues` is
+    /// swept before the loop runs. Measured: converting at header time made
+    /// `do_over_string_table.rex` bind a dead handle under
+    /// `collect_on_every_allocation` and panic rendering it.
     ///
-    /// Everything else answers itself, as a list of one. Measured,
-    /// `do i over 'abc'` prints `abc` once.
-    fn over_items(&mut self, value: ObjRef) -> Vec<ObjRef> {
+    /// It still runs once per loop, which is what the oracle does -- measured
+    /// with a counting `makeArray` -- because a `LoopState` is built once per
+    /// entry.
+    fn over_items(&mut self, value: ObjRef) -> Result<Vec<ObjRef>, Failure> {
+        // The one collection whose order is this crate's rather than the
+        // oracle's answers from its own walk -- see
+        // [`Interp::hash_collection_indexes`] for why it is sorted and what
+        // that costs. It cannot go through `MAKEARRAY` either: a
+        // `Body::Native` receiver is not the store `hash.rs` owns.
         if self.is_hash_collection(value) {
-            return self.hash_collection_indexes(value);
+            return Ok(self.hash_collection_indexes(value));
         }
-        match self.heap.get(value).map(|object| &object.body) {
+        let array = self.over_target_array(value)?;
+        let items: Vec<ObjRef> = match self.heap.get(array).map(|object| &object.body) {
             Some(Body::Array { slots, .. }) => slots.iter().flatten().copied().collect(),
-            _ => vec![value],
+            _ => vec![array],
+        };
+        // **A converted array is rooted here for the loop's lifetime.** The
+        // target the source named is already rooted -- a clause temp on the
+        // tree-walker, a register on the IR engine, and every register is a
+        // root because the register file is a region of the same `temps` the
+        // collector walks. What `makeArray` built is a different object, and
+        // its items are reachable only through it.
+        if array != value {
+            self.roots.push_temp(array);
         }
+        Ok(items)
     }
 
     /// A `StringTable`'s indexes, as the values a `DO OVER` binds in turn.
@@ -8790,7 +8863,7 @@ impl Interp {
                     values
                         .over
                         .expect("a DO OVER's plan always names its target"),
-                ),
+                )?,
                 next: 0,
                 remaining: values.for_remaining,
             },
@@ -9343,7 +9416,7 @@ impl Interp {
                     values
                         .over
                         .expect("a DO OVER's plan always names its target"),
-                ),
+                )?,
                 next: 0,
                 remaining: values.for_remaining,
             },

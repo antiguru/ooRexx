@@ -1,0 +1,137 @@
+/* `DO ... OVER` hands its target to `requestArray`, and that is a two-path
+ * protocol keyed on `isBaseClass()`: a base-class object answers `makeArray`
+ * through a direct call, and anything else -- a user class, or a SUBCLASS of
+ * a built-in -- is sent `REQUEST` with `'ARRAY'`.
+ *
+ * The split is observable, and each block below is one of the four ways.  A
+ * subclass of `Array` overriding `makeArray` answers the override, which is
+ * how `isArray()` shows itself to be the PRIMITIVE test rather than "an
+ * array or a subclass of one" -- the direct path would have answered the
+ * slots.  A class overriding `request` answers from `request`, which is how
+ * the message name and its argument show themselves.
+ *
+ * The result faces the same primitive test: a `makeArray` answering an
+ * `Array` subclass is 98.913, and so is a target that answers no `makeArray`
+ * at all.  `.nil` is one of those.
+ *
+ * A string is a base class whose `makeArray` splits it into LINES, so a
+ * two-line string iterates twice and a one-line string once.
+ *
+ * `makeArray` runs exactly once per loop, which the counter below asserts.
+ */
+
+/* a user class that answers makeArray */
+do e over .withMake~new
+  say 'made' e
+end
+
+/* the mapped collections answer their indexes */
+t = .Table~new
+t['k1'] = 'v1'
+t['k2'] = 'v2'
+do e over t
+  say 'table' e
+end
+d = .Directory~new
+d['a'] = 1
+do e over d
+  say 'dir' e
+end
+
+/* a subclass of a built-in takes the REQUEST path, so its override is seen */
+s = .myTable~new
+s['k'] = 'v'
+do e over s
+  say 'subclass' e
+end
+
+/* and so does a subclass of Array, which is what makes isArray primitive */
+a = .myArray~new(3)
+a[1] = 'x'
+a[3] = 'z'
+do e over a
+  say 'arraysub' e
+end
+
+/* REQUEST is the message, and 'ARRAY' the argument */
+do e over .viaRequest~new
+  say 'request' e
+end
+
+/* exactly one makeArray per loop */
+do e over .counted~new
+  say 'counted' e
+end
+say 'calls' .counted~calls
+
+/* a string splits into lines */
+do e over 'abc'
+  say 'one' e
+end
+two = 'first' || '0a'x || 'second'
+do e over two
+  say 'two' e
+end
+
+/* an ordinary array is taken directly, and an empty slot is not an item */
+do e over (1,,3)
+  say 'sparse' e
+end
+
+/* the shapes that cannot convert */
+call try 'nomake', 'do e over .plain~new; end'
+call try 'badmake', 'do e over .badMake~new; end'
+call try 'subresult', 'do e over .subResult~new; end'
+call try 'nil', 'do e over .nil; end'
+exit
+
+try:
+  use arg label, src
+  signal on syntax name bad
+  interpret src
+  say label' OK'
+  return
+bad:
+  say label' rc='rc
+  return
+
+::class withMake
+::method makeArray
+  return .array~of('a','b','c')
+
+::class plain
+::method greet
+  return 1
+
+::class badMake
+::method makeArray
+  return 'notanarray'
+
+::class myTable subclass Table
+::method makeArray
+  return .array~of('OVERRIDDEN')
+
+::class myArray subclass Array
+::method makeArray
+  return .array~of('ARRAYSUB')
+
+::class viaRequest
+::method request
+  use arg what
+  return .array~of('via' what)
+
+::class counted
+::attribute calls class
+::method init class
+  self~calls = 0
+::method makeArray
+  .counted~calls = .counted~calls + 1
+  return .array~of('one','two')
+
+::class arrSub subclass Array
+::class subResult
+::method makeArray
+  b = .arrSub~new(2)
+  b[1] = 'p'
+  b[2] = 'q'
+  return b

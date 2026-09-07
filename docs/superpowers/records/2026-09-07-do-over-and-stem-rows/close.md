@@ -1,98 +1,98 @@
 # `DO ... OVER` and the three `Stem` rows -- close
 
-Base `da02f3f1e`. Plan:
+Base `da02f3f1e`, landing over `267446a4e`. Plan:
 `docs/superpowers/plans/2026-09-07-do-over-and-stem-rows.md`.
 
-**Half the goal landed.** The three `Stem` rows are done. `DO ... OVER` is
-measured, specified and NOT landed: it was implemented, it agreed with the
-oracle everywhere, and it was reverted because it introduces a
-garbage-collection defect this crate has no correct place to fix yet. The
-implementation is kept at `scratchpad/doover-wip/run.rs.diff` and the
-measurements are in the plan.
+Both halves of the goal are done, and the harder half turned out not to be
+`DO OVER` at all.
 
-## What landed
+## What moved
 
-`corpus/collection-arity.tsv`: `agree` 422 to **425**, `send-differs` 10 to
-**7**. `corpus/method-bodies.txt`: the same three rows, `loud` to `answers`.
-Strict corpus 439 to **440**, adding
-`lang/stem_request_and_directory.rex`.
+`corpus/collection-arity.tsv`: `agree` 422 to **430**, `send-differs` 10 to
+**2**. The two left are out of scope and named as such: `Properties save`
+(Phase 7 streams) and `Properties setLogical` (`ARG` option `"A"`).
+`corpus/method-bodies.txt`: the three `Stem` rows, `loud` to `answers`.
+Strict corpus 439 to **441**.
 
-All three `Stem` methods turn on one field: a stem has a VALUE of its own,
-separate from its tails, and an unassigned stem's value is its own derived
-name. `a.b = 1` then `a.~length` is **2**, not 0 -- measured, both engines
-agreeing.
+## The three `Stem` rows
 
-* **`request(class)`** upper-cases its argument; `'ARRAY'` answers the stem's
-  `makeArray`, which for a `Stem` is its TAILS in the tail tree's post-order,
-  and every other name is forwarded to the value. The missing argument is the
-  POSITIONAL 93, not the named 88.
-* **`toDirectory`** answers a `Directory` of one entry per tail that has a
-  value. Its order is the DIRECTORY's, not the stem's: names go in in tail
-  order and come back in the store's, which falls out of Phase 5h rather than
-  needing anything here.
-* **`unknown`** forwards the message and its arguments to the value.
+All three turn on one field: a stem has a VALUE of its own, separate from its
+tails, and an unassigned stem's value is its own derived name -- `a.b = 1`
+then `a.~length` is **2**, not 0.
 
-One unit test changed rather than being fixed:
+`request` upper-cases its argument; `'ARRAY'` answers the stem's `makeArray`,
+which for a `Stem` is its TAILS in the tail tree's post-order, and every
+other name is forwarded to the value. A missing argument is the POSITIONAL
+93. `toDirectory` answers a `Directory` of one entry per tail that has a
+value, in the directory's order rather than the stem's. `unknown` forwards
+the message and its arguments to the value.
+
 `a_receiver_with_no_class_here_is_loud` asserted that a `Stem` receiver is
 loud "because this phase builds no class for it". `UNKNOWN` is now built, so
-the premise is gone and the oracle's own answer replaced it.
+the premise is gone and the oracle's own answer replaced the refusal.
 
-## `DO ... OVER`: measured, correct, and reverted
+## `DO ... OVER`
 
-The protocol is fully measured and recorded in the plan.
-`RexxInternalObject::requestArray` is two paths keyed on `isBaseClass()`, and
-the split is observable four ways -- a subclass of `Table` overriding
-`makeArray` answers the override, a subclass of `Array` doing the same also
-answers it (so `isArray()` is the PRIMITIVE test, not "an array or a
-subclass"), a class overriding `request` answers from `request` with the
-argument `ARRAY`, and `makeArray` runs exactly once per loop.
+`requestArray` (`classes/ObjectClass.cpp:1646`) is two paths keyed on
+`isBaseClass()`: a base-class object answers `makeArray()` through a direct
+call with no message send, anything else is sent `REQUEST` with `'ARRAY'`.
+The split is observable four ways, all measured and all in the witness: a
+subclass of `Table` overriding `makeArray` answers the override; a subclass
+of `Array` doing the same also answers it, which is how `isArray()` shows
+itself to be the PRIMITIVE test rather than "an array or a subclass"; a class
+overriding `request` answers from `request` with the argument `ARRAY`; and
+`makeArray` runs exactly once per loop, asserted by a counter.
 
-Implemented, it agreed with the oracle on every probe, and it closed **two
-silent divergences** that are still open without it:
+It closed **two silent divergences**: `do e over` a two-line string iterated
+the whole string once here against the oracle's two lines, and `do e over
+.nil` answered `.nil` once at rc 0 against the oracle's 98.913 at rc 158 -- a
+wrong answer rather than a missing one.
 
-* `do e over` a two-line string iterates the two lines on the oracle and the
-  whole string once here;
-* `do e over .nil` is **98.913 at rc 158** on the oracle and iterates `.nil`
-  once at **rc 0** here -- a wrong answer, not a missing one.
+`.environment` and `.local` keep their refusal deliberately: this crate
+models them as a subset, so iterating one differs in MEMBERSHIP and not
+merely in order. A class object no longer does -- it reaches `requestArray`,
+answers no `MAKEARRAY`, and raises the oracle's own noarray naming itself.
 
-**Why it is reverted.** `DO OVER`'s items must stay reachable for the loop's
-lifetime, and today they always are *through the target*: an array's items are
-its own slots, and the engines root the target -- the tree-walker with a
-clause-lifetime temp, the IR engine with a register. A `makeArray` result is a
-DIFFERENT object that nothing roots. Under
-`run_program_collect_every_alloc` the converted array's items are swept and
-the loop binds a dead handle; `collect_stress` then panics rendering one.
-Rooting it with `push_temp` at header-acceptance time, at `over_items` time,
-per item, and array-plus-items were all tried and none holds under the IR
-engine. `RootSet::park` would hold it, but its own doc reserves it for
-`REPLY` and warns it may be deleted.
+## The defect underneath, which was not this task's
 
-So the missing piece is a root whose lifetime is the loop's, and choosing one
-is a design decision about the IR engine's loop-value lifetime rather than a
-patch. That is the next session's, with the protocol already measured.
+The first attempt at `DO OVER` was reverted because `collect_stress` panicked
+rendering a loop item. The cause was **not** in `DO OVER`.
+`native_string_makearray` built its line strings inside a `map` closure and
+collected them into a `Vec` -- a Rust local, invisible to the collector -- so
+every line was swept by the allocation of the next one, and a single-line
+string's by the `alloc_with` that built the array to hold it. The
+`push_temp` came after the damage.
 
-## How it was actually found, because I got it wrong repeatedly
+It was latent because nothing reached it: a short string is INLINE and never
+a heap object at all, so `'abc'~makeArray` survives where
+`'.RESOURCES'~makeArray` does not. `DO OVER` was simply its first caller on a
+heap string under stress. Confirmed on the reverted tree with no `DO OVER`
+code present: `'.RESOURCES'~makeArray` then `a[1]` panics, `'abc'` passes,
+two long lines panic. The fix is one `push_temp` per line as it is built, and
+with it `DO OVER` needed no rooting work of its own beyond the converted
+array.
 
-I ruled on the mechanism four times -- the fresh array is unrooted, the items
-are unrooted, the temps shift the IR register file, the pre-existing
-`StringTable` path has the same latent bug -- and each was wrong, twice
-producing a "fix" that changed nothing. What localised it was evidence:
-a driver built outside the repo that named each program before running it,
-then a prefix bisect **with a positive control** that the whole file still
-failed.
+A scan for the same shape -- a fresh allocation gathered into a Rust `Vec`
+inside a closure -- found four more, all inside `mod tests`.
 
-The first bisect was worthless and looked conclusive: the prefixes cut off a
-`::routine` the program calls, so every one of them errored early and every
-one read as passing. Six "OK" lines, no information. Only adding the control
--- the untruncated file, which must fail -- exposed that.
+## What I got wrong, because the record should carry it
 
-The program was `do_over_string_table.rex`, and the line was
-`do e over .resources`. **`.resources` in a program with no resources is not
-a StringTable at all**: an unresolved dot-variable is the String
-`.RESOURCES`, so that line is `DO OVER` a string and took the new path. The
-isolated case fails only when the string is a heap object -- `'abc'` is
-inline and passes, `.RESOURCES` is not and does not -- which is why the
-existing corpus never saw it.
+I ruled on the mechanism five times and was wrong every time: the fresh array
+is unrooted, the items are unrooted, the extra temps shift the IR register
+file, the pre-existing `StringTable` path has the same latent bug, and
+finally "a converted array has no root whose lifetime is the loop's". That
+last one was committed in the first version of this report and is false --
+`RootSet::iter` walks the WHOLE `temps` vector, the IR register file is a
+region of it, so `push_temp` roots unconditionally and there is no
+per-register bit. Moritz asked whether registers carry such a bit, and
+answering it honestly is what showed the report wrong.
+
+Two instruments did the actual work. A driver built outside the repo that
+named each program before running it, which localised the failure to one
+program in one run. And a prefix bisect **with a positive control** -- the
+first bisect cut off a `::routine` the program calls, so every prefix errored
+early and every one read as passing: six "OK" lines and no information, until
+the control said the untruncated file must fail.
 
 ## Gates
 

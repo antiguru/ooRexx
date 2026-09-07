@@ -163,7 +163,7 @@ Directory	removeEntry	agree	rc0
 Directory	removeItem	agree	rc0
 Directory	setEntry	agree	rc0
 Directory	setMethod	agree	rc0
-Directory	subset	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: an instance of a user class as a DO header's OVER target is not implemented (Ph
+Directory	subset	agree	rc0
 Directory	supplier	agree	rc0
 Directory	union	agree	rc0
 Directory	unknown	agree	rc0
@@ -189,7 +189,7 @@ IdentityTable	put	agree	rc0
 IdentityTable	putAll	agree	rc0
 IdentityTable	remove	agree	rc0
 IdentityTable	removeItem	agree	rc0
-IdentityTable	subset	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: an instance of a user class as a DO header's OVER target is not implemented (Ph
+IdentityTable	subset	agree	rc0
 IdentityTable	supplier	agree	rc0
 IdentityTable	union	agree	rc0
 IdentityTable	xor	agree	rc0
@@ -264,7 +264,7 @@ Properties	setLogical	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: ARG o
 Properties	setMethod	agree	rc0
 Properties	setProperty	agree	rc0
 Properties	setWhole	agree	rc0
-Properties	subset	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: an instance of a user class as a DO header's OVER target is not implemented (Ph
+Properties	subset	agree	rc0
 Properties	supplier	agree	rc0
 Properties	union	agree	rc0
 Properties	unknown	agree	rc0
@@ -416,7 +416,7 @@ StringTable	remove	agree	rc0
 StringTable	removeEntry	agree	rc0
 StringTable	removeItem	agree	rc0
 StringTable	setEntry	agree	rc0
-StringTable	subset	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: an instance of a user class as a DO header's OVER target is not implemented (Ph
+StringTable	subset	agree	rc0
 StringTable	supplier	agree	rc0
 StringTable	union	agree	rc0
 StringTable	unknown	agree	rc0
@@ -448,7 +448,7 @@ Table	put	agree	rc0
 Table	putAll	agree	rc0
 Table	remove	agree	rc0
 Table	removeItem	agree	rc0
-Table	subset	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: an instance of a user class as a DO header's OVER target is not implemented (Ph
+Table	subset	agree	rc0
 Table	supplier	agree	rc0
 Table	union	agree	rc0
 Table	xor	agree	rc0

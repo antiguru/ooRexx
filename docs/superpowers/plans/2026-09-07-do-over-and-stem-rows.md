@@ -16,9 +16,6 @@ The two left after this are `Properties save` (Phase 7 streams) and
 
 ## Part 1 -- `DO ... OVER`
 
-> **Not landed.** Everything measured below stands and the implementation
-> agreed with the oracle, but it was reverted: a converted array's items have
-> no root whose lifetime is the loop's. See this plan's close report.
 
 `OverLoop::setup` (`instructions/DoBlockComponents.cpp:233`) tests
 `isArray(result)` and calls `makeArray()` directly; otherwise it calls
