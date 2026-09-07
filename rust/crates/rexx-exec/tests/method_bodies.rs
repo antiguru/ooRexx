@@ -424,6 +424,17 @@ const RECEIVER_OVERRIDES: &[(&str, &str)] = &[
         ".DateTime~fromIsoDate('2020-01-02T03:04:05.678901')",
     ),
     ("MutableBuffer", ".MutableBuffer~new('abc')"),
+    // **Phase 5g Task 7's sweep.** The 5c follow-up left 105 rows across
+    // thirteen classes whose zero-argument probe cannot discriminate because
+    // the documented receiver is empty, and Phase 5f's Task 0 measured that a
+    // populated one would sharpen `Queue`, `Array` and `List`. It is worth
+    // nothing until the collection can hold something and nearly free
+    // afterwards, which is why it is this phase's last step and not its
+    // first.
+    ("Array", ".Array~of('a','b','c')"),
+    ("Queue", ".Queue~of('a','b','c')"),
+    ("List", ".List~of('a','b','c')"),
+    ("CircularQueue", ".CircularQueue~of('a','b','c')"),
 ];
 
 /// The expression a row's send is made to, or `None` for the class arm, which

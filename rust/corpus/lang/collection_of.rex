@@ -1,0 +1,26 @@
+/* `~of` on the ordered collections.  One body serves Queue and List upstream
+   -- each creates a collection of the RECEIVER's own class and appends the
+   arguments -- and CircularQueue reaches it through Queue.  The class of the
+   answer is the point: `of` is not a synonym for `.Array~of`. */
+
+say 'Array' .Array~of('a', 'b', 'c')~items .Array~of('a')~class~id
+say 'Queue' .Queue~of('a', 'b', 'c')~items .Queue~of('a')~class~id
+say 'List' .List~of('a', 'b', 'c')~items .List~of('a')~class~id
+say 'CircularQueue' .CircularQueue~of('a', 'b', 'c')~items .CircularQueue~of('a')~class~id
+
+/* The items arrive in order and the collection's own surface reaches them. */
+q = .Queue~of('p', 'q', 'r')
+say 'order' q~allItems~makeString('L', ',') 'first' q~first 'peek' q~peek
+l = .List~of('p', 'q', 'r')
+say 'list order' l~allItems~makeString('L', ',') 'handles' l~allIndexes~makeString('L', ',')
+
+/* A subclass gets an instance of itself, not of the base class. */
+say 'subclass' .Array~subclass('K')~of(1, 2)~class~id .MyQ~of('z')~class~id
+
+/* No arguments is an empty collection rather than a refusal. */
+say 'empty' .Queue~of~items .List~of~items
+
+/* An omitted argument is refused, and the position named is its own. */
+say .List~of('a', , 'c')~items
+
+::CLASS MyQ SUBCLASS Queue

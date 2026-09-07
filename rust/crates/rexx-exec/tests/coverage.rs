@@ -1459,6 +1459,7 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/queue_operations.rex",
     "lang/list_operations.rex",
     "lang/collection_subclasses.rex",
+    "lang/collection_of.rex",
 ];
 
 #[test]

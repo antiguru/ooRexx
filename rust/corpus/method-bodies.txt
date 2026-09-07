@@ -623,7 +623,7 @@ IdentityTable	xor	instance	answers	rc 163
 IdentityTable	of	class	loud	ARG option "A" answers an Array, which
 IdentityTable	putAll	instance	answers	rc 163
 List	new	class	answers	rc 0
-List	of	class	loud	method "OF" of class "List"
+List	of	class	answers	rc 0
 List	[]	instance	answers	rc 163
 List	[]=	instance	answers	rc 163
 List	allIndexes	instance	answers	rc 0
@@ -705,7 +705,7 @@ Properties	setMethod	instance	loud	method "SETMETHOD" of class "Directory"
 Properties	unknown	instance	answers	rc 163
 Properties	unsetMethod	instance	loud	method "UNSETMETHOD" of class "Directory"
 Queue	new	class	answers	rc 0
-Queue	of	class	loud	method "OF" of class "Queue"
+Queue	of	class	answers	rc 0
 Queue	[]	instance	answers	rc 163
 Queue	[]=	instance	answers	rc 163
 Queue	allIndexes	instance	answers	rc 0

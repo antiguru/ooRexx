@@ -1895,6 +1895,35 @@ fn native_list_make_array(
     native_list_all_items(interp, cleared, receiver, args)
 }
 
+/// `Queue~of(item, ...)` and `List~of(item, ...)`: a new collection of the
+/// receiver's own class holding the arguments.
+///
+/// **An omitted argument is refused, and the position named is its own.**
+/// Measured at rc 163: `.List~of('a',,'c')` reports `Missing argument in
+/// method; argument 2 is required.`
+pub(super) fn native_collection_of(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = super::class_receiver(interp, receiver)?;
+    for (at, argument) in args.iter().enumerate() {
+        if argument.is_none() {
+            return Err(Raised::missing_method_argument(at + 1).into());
+        }
+    }
+    let object = new_instance(interp, class)?;
+    interp.roots.push_temp(object);
+    let caller = interp.caller();
+    interp.send_message(object, super::INIT, None, &[], caller)?;
+    for argument in args.iter().flatten() {
+        let caller = interp.caller();
+        interp.send_message(object, b"APPEND", None, &[Some(*argument)], caller)?;
+    }
+    Ok(Some(object))
+}
+
 /// The collection classes' primitive methods, chained into
 /// `ObjectModel::build`.
 ///

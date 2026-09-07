@@ -961,6 +961,22 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `memory/Setup.cpp:709`. The same body as the row above, filled from the
     // arguments rather than sized from them.
     ("Array", "OF", Arity::Counted, native_array_of),
+    // `AddClassMethod("Of", QueueClass::ofRexx, A_COUNT)` and
+    // `AddClassMethod("Of", ListClass::ofRexx, A_COUNT)`. One body: each
+    // creates a collection of the receiver's own class and appends the
+    // arguments to it (`classes/ListClass.cpp:1010`).
+    (
+        "Queue",
+        "OF",
+        Arity::Counted,
+        collection::native_collection_of,
+    ),
+    (
+        "List",
+        "OF",
+        Arity::Counted,
+        collection::native_collection_of,
+    ),
     // `AddClassMethod("New", StringTable::newRexx, A_COUNT)` and
     // `AddClassMethod("New", DirectoryClass::newRexx, A_COUNT)`,
     // `memory/Setup.cpp:875` and `:928`. Rows of their own rather than
