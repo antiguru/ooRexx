@@ -67,6 +67,22 @@ use super::oracle;
 
 pub const EXEMPT: &str = "EXEMPT:";
 
+/// A row whose send the ORACLE refuses by design, where that refusal is the
+/// measurement rather than a bad argument list.
+///
+/// `Pointer~new` and `Buffer~new` are the case it exists for: the reference
+/// says instances come only from native code, the oracle answers `93.967`,
+/// and no argument list makes it answer anything else -- so the rule that a
+/// list is real only if the oracle completes the send has no better list to
+/// ask for. The row is still measured: the three sides are compared on the
+/// refusal, and a crate that refuses differently reads `send-differs`.
+///
+/// **The rule is inverted rather than waived**, by
+/// [`refusals_the_oracle_completes`]: a row marked this way that the oracle
+/// *does* complete is a failure, so the marker cannot hide a bad list. The
+/// send is made with no arguments.
+pub const REFUSED: &str = "REFUSED:";
+
 /// A one-line program the probe directory always holds, so that a row whose
 /// send needs a file on disk has one to name.
 ///
@@ -385,6 +401,11 @@ pub fn measured(layout: &Layout) -> Vec<(Row, String)> {
         let receiver = receivers
             .get(&(class.clone(), arm.clone()))
             .unwrap_or_else(|| panic!("{} has no setup for {class} ({arm})", layout.receivers));
+        let list = if list.starts_with(REFUSED) {
+            NONE.to_string()
+        } else {
+            list
+        };
         fs::write(&path, program(receiver, &method, &list)).expect("the probe is writable");
         let cpp = run(Command::new("bash")
             .arg("-c")
@@ -506,9 +527,14 @@ pub fn table_disagreements(layout: &Layout) -> Vec<(Row, Row)> {
 /// **The harness rule.** The rows whose send the oracle does not complete,
 /// which are a failure of this instrument for that row and never a data point.
 pub fn unsent_rows(layout: &Layout) -> Vec<String> {
+    let refused = refused_keys(layout);
     measured(layout)
         .iter()
-        .filter(|(row, stdout)| row.verdict != "exempt" && !stdout.contains("SENT"))
+        .filter(|(row, stdout)| {
+            row.verdict != "exempt"
+                && !refused.contains(&(row.class.clone(), row.method.clone(), row.arm.clone()))
+                && !stdout.contains("SENT")
+        })
         .map(|(row, stdout)| {
             format!(
                 "{}~{} ({}): the oracle stopped at {:?}",
@@ -518,6 +544,38 @@ pub fn unsent_rows(layout: &Layout) -> Vec<String> {
                 stdout.trim().lines().next_back().unwrap_or("nothing")
             )
         })
+        .collect()
+}
+
+/// The rows marked [`REFUSED`] whose send the oracle does in fact complete.
+///
+/// This is the inversion that keeps the marker from being an escape hatch: a
+/// row is only allowed to skip the `SENT` requirement while the oracle really
+/// does refuse it.
+pub fn refusals_the_oracle_completes(layout: &Layout) -> Vec<String> {
+    let refused = refused_keys(layout);
+    measured(layout)
+        .iter()
+        .filter(|(row, stdout)| {
+            refused.contains(&(row.class.clone(), row.method.clone(), row.arm.clone()))
+                && stdout.contains("SENT")
+        })
+        .map(|(row, _)| {
+            format!(
+                "{}~{} ({}) is marked {REFUSED} and the oracle completes the send, so the \
+                 refusal is not the measurement -- give it a real argument list",
+                row.class, row.method, row.arm
+            )
+        })
+        .collect()
+}
+
+fn refused_keys(layout: &Layout) -> std::collections::HashSet<(String, String, String)> {
+    layout
+        .arguments()
+        .into_iter()
+        .filter(|(_, _, _, list)| list.starts_with(REFUSED))
+        .map(|(class, method, arm, _)| (class, method, arm))
         .collect()
 }
 
@@ -576,7 +634,9 @@ pub fn exemptions_without_a_reason(layout: &Layout) -> Vec<String> {
         .arguments()
         .into_iter()
         .filter_map(|(class, method, arm, list)| {
-            let reason = list.strip_prefix(EXEMPT)?;
+            let reason = list
+                .strip_prefix(EXEMPT)
+                .or_else(|| list.strip_prefix(REFUSED))?;
             (reason.len() <= 20).then(|| {
                 format!(
                     "{class}~{method} ({arm}) is exempt with no reason worth reading: {reason:?}"
@@ -593,4 +653,101 @@ pub fn engine_splits(layout: &Layout) -> Vec<Row> {
         .into_iter()
         .filter(|row| row.verdict == "engine-differs")
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{NONE, Receiver, program};
+
+    fn plain(setup: &str) -> Receiver {
+        Receiver {
+            setup: setup.to_string(),
+            wrapper: NONE.to_string(),
+            directives: NONE.to_string(),
+        }
+    }
+
+    /// The program text `corpus/collection-arity.tsv` was derived with, spelled
+    /// out rather than described.
+    ///
+    /// Every byte of that committed table is downstream of this, so the shape
+    /// is asserted rather than left to a diff someone remembers to run.
+    #[test]
+    fn a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program() {
+        assert_eq!(
+            program(
+                &plain("ka = 'k1' | r = .Table~new | r[ka] = 'v1'"),
+                "at",
+                "ka"
+            ),
+            "ka = 'k1'\n\
+             r = .Table~new\n\
+             r[ka] = 'v1'\n\
+             say 'SETUP-OK'\n\
+             signal on syntax name oops\n\
+             r~'at'(ka)\n\
+             say 'SENT'\n\
+             exit\n\
+             oops:\n\
+             say 'SYNTAX' condition('O')~code\n\
+             exit 0\n"
+        );
+    }
+
+    /// `--` for the argument list is a send with none, not a send of `--`.
+    #[test]
+    fn an_empty_argument_list_sends_no_parentheses() {
+        assert!(
+            program(&plain("r = .Table~new"), "items", NONE).contains("\nr~'items'\nsay 'SENT'\n")
+        );
+    }
+
+    /// The wrapper moves the setup and the send inside the call and leaves the
+    /// trap in the caller, which is where the condition arrives.
+    #[test]
+    fn the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine() {
+        let text = program(
+            &Receiver {
+                setup: "r = .context".to_string(),
+                wrapper: "call".to_string(),
+                directives: NONE.to_string(),
+            },
+            "name",
+            NONE,
+        );
+        assert_eq!(
+            text,
+            "signal on syntax name oops\n\
+             call probe 'a1', 'a2'\n\
+             say 'SENT'\n\
+             exit\n\
+             oops:\n\
+             say 'SYNTAX' condition('O')~code\n\
+             exit 0\n\
+             probe:\n\
+             r = .context\n\
+             say 'SETUP-OK'\n\
+             r~'name'\n\
+             return\n"
+        );
+    }
+
+    /// Directives are appended after the program, one per `|`-separated part.
+    #[test]
+    fn directives_are_appended_after_the_program() {
+        let text = program(
+            &Receiver {
+                setup: "r = .K".to_string(),
+                wrapper: NONE.to_string(),
+                directives: "::class K subclass Object | ::method MM | return 2".to_string(),
+            },
+            "id",
+            NONE,
+        );
+        assert!(
+            text.ends_with("::class K subclass Object\n::method MM\nreturn 2\n"),
+            "{text}"
+        );
+        assert!(text.starts_with("r = .K\nsay 'SETUP-OK'\n"), "{text}");
+    }
 }

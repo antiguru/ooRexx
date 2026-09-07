@@ -17,13 +17,15 @@
 # `arity` is Setup.cpp's third operand verbatim: a literal is a MAXIMUM,
 # A_COUNT is Arity::Counted.
 #
-# Pointer and Buffer are deliberately absent: class-set.txt gives them no
-# construction expression, because the reference says instances come only from
-# native code (utilityclasses.xml:429, :6910).
+# Pointer's and Buffer's INSTANCE arm is deliberately absent: class-set.txt
+# gives them no construction expression, because the reference says instances
+# come only from native code (utilityclasses.xml:429, :6910). Their class arm
+# is here -- `.Pointer` needs no construction.
 #
 # Object's (abuttal) and (blank) are deliberately absent: measured on the
 # oracle, the book's displayed name reaches no method -- o~'(abuttal)'('x')
 # raises 97.1 while o~''('x') and o~' '('x') both answer.
+Buffer	new	class	Buffer	native	BufferClass::newRexx	A_COUNT
 Class	<>	instance	Class	native	RexxClass::notEqual	1
 Class	=	instance	Class	native	RexxClass::equal	1
 Class	==	instance	Class	native	RexxClass::strictEqual	1
@@ -146,6 +148,7 @@ Package	source	instance	Package	native	PackageClass::getSourceRexx	0
 Package	sourceLine	instance	Package	native	PackageClass::getSourceLineRexx	1
 Package	sourceSize	instance	Package	native	PackageClass::getSourceSizeRexx	0
 Package	trace	instance	Package	native	PackageClass::traceRexx	0
+Pointer	new	class	Pointer	native	PointerClass::newRexx	A_COUNT
 RexxContext	args	instance	RexxContext	native	RexxContext::getArgs	0
 RexxContext	condition	instance	RexxContext	native	RexxContext::getCondition	0
 RexxContext	digits	instance	RexxContext	native	RexxContext::getDigits	0

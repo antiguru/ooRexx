@@ -69,10 +69,12 @@ const HEADER: &str = "\
 # completes the send; the test makes an oracle run that does not a failure for
 # that row.
 #
-# Pointer and Buffer are deliberately absent: class-set.txt gives them no
-# construction expression, because the reference says instances come only from
-# native code (utilityclasses.xml:429, :6910), so every instance row of theirs
-# would be setup-differs on the oracle's own side.
+# Pointer's and Buffer's INSTANCE arm is deliberately absent: class-set.txt
+# gives them no construction expression, because the reference says instances
+# come only from native code (utilityclasses.xml:429, :6910), so every
+# instance row of theirs would be setup-differs on the oracle's own side.
+# Their class arm is here, marked REFUSED: in the argument file -- the oracle
+# answers 93.967 and that refusal is what the row measures.
 ";
 
 fn layout() -> arity::Layout {
@@ -111,6 +113,18 @@ fn the_oracle_completes_every_send() {
          row's verdict is about the list and not about the method. Fix the list in \
          corpus/introspection-arguments.tsv, or exempt it with a reason.\n{unsent:#?}"
     );
+}
+
+/// A row marked `REFUSED:` is one the oracle really does refuse.
+///
+/// The marker lets `Pointer~new` and `Buffer~new` be measured on their
+/// refusal, which is the whole of what those rows are. Inverting the harness
+/// rule rather than waiving it is what stops the marker being an escape hatch
+/// for a bad argument list.
+#[test]
+fn every_refused_row_is_really_refused() {
+    let completed = arity::refusals_the_oracle_completes(&layout());
+    assert!(completed.is_empty(), "{completed:#?}");
 }
 
 /// Every documented row has a list, and a native row whose upstream arity is

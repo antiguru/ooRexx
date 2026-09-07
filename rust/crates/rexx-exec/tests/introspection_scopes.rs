@@ -56,25 +56,31 @@ const RECEIVERS: &str = "introspection-receivers.tsv";
 const NO_EVIDENCE: &str = "--";
 
 /// The classes this table covers.
-///
-/// `Pointer` and `Buffer` are excluded **by name** rather than by silence,
-/// the way `collection_scopes.rs` excludes `RexxQueue`:
-/// `corpus/docs/class-set.txt` gives them no construction expression, because
-/// the reference says instances come only from native code
-/// (`utilityclasses.xml:429`, `:6910`). Naming them here keeps "a scope that
-/// resolves nowhere is a failure" available as a signal for a class that is
-/// supposed to resolve.
 const SCOPE_CLASSES: &[&str] = &[
+    "Buffer",
     "Class",
     "Method",
     "Object",
     "Package",
+    "Pointer",
     "RexxContext",
     "RexxInfo",
     "Routine",
     "StackFrame",
     "WeakReference",
 ];
+
+/// The classes whose INSTANCE arm is excluded by name rather than by silence,
+/// the way `collection_scopes.rs` excludes `RexxQueue`.
+///
+/// `corpus/docs/class-set.txt` gives them no construction expression, because
+/// the reference says instances come only from native code
+/// (`utilityclasses.xml:429`, `:6910`), so no receiver exists to send to.
+/// Their **class** arm is measured: `.Pointer` needs no construction, and
+/// `new` is the row Phase 5i owns. Naming them keeps "a scope that resolves
+/// nowhere is a failure" available for every class that is supposed to
+/// resolve.
+const NO_INSTANCE_ARM: &[&str] = &["Buffer", "Pointer"];
 
 /// The documented rows whose name is a rendering rather than a message.
 ///
@@ -115,6 +121,7 @@ fn documented() -> Vec<(String, String, String)> {
             .into_iter()
             .filter(|row| SCOPE_CLASSES.contains(&row[0].as_str()))
             .filter(|row| !DISPLAY_NAMES.contains(&(row[0].as_str(), row[1].as_str())))
+            .filter(|row| !(row[2] == "instance" && NO_INSTANCE_ARM.contains(&row[0].as_str())))
             .map(|row| (row[0].clone(), row[1].clone(), row[2].clone()))
             .collect();
     rows.sort();
@@ -327,9 +334,10 @@ const HEADER: &str = "\
 # `arity` is Setup.cpp's third operand verbatim: a literal is a MAXIMUM,
 # A_COUNT is Arity::Counted.
 #
-# Pointer and Buffer are deliberately absent: class-set.txt gives them no
-# construction expression, because the reference says instances come only from
-# native code (utilityclasses.xml:429, :6910).
+# Pointer's and Buffer's INSTANCE arm is deliberately absent: class-set.txt
+# gives them no construction expression, because the reference says instances
+# come only from native code (utilityclasses.xml:429, :6910). Their class arm
+# is here -- `.Pointer` needs no construction.
 #
 # Object's (abuttal) and (blank) are deliberately absent: measured on the
 # oracle, the book's displayed name reaches no method -- o~'(abuttal)'('x')

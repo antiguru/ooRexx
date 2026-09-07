@@ -14,8 +14,17 @@
 # Routine~newFile -- and the plan's Tasks 4 and 7 name them; an instance-only
 # table would leave those five unsized.
 #
+# `REFUSED:` marks a row the ORACLE refuses BY DESIGN, where the refusal is
+# the measurement and no argument list would change it. The row is still
+# compared on all three descriptors, and the rule is inverted rather than
+# waived: a REFUSED row the oracle does complete is a test failure.
+#
+# Pointer's and Buffer's INSTANCE arm is deliberately absent -- no receiver
+# exists for it. Their class arm is here.
+#
 # The receivers, the directives each needs and the two that are sent to from
 # inside a call are corpus/introspection-receivers.tsv.
+Buffer	new	class	REFUSED:the oracle refuses this send by design -- measured, .Buffer~new answers 93.967 NEW method is not supported for the Buffer class, and the reference says instances come only from native code (utilityclasses.xml:429)
 Class	new	class	'C9'
 Class	<>	instance	.Object
 Class	=	instance	.Object
@@ -140,6 +149,7 @@ Package	source	instance	--
 Package	sourceLine	instance	1
 Package	sourceSize	instance	--
 Package	trace	instance	--
+Pointer	new	class	REFUSED:the oracle refuses this send by design -- measured, .Pointer~new answers 93.967 NEW method is not supported for the Pointer class, and the reference says instances come only from native code (utilityclasses.xml:6910)
 RexxContext	args	instance	--
 RexxContext	condition	instance	--
 RexxContext	digits	instance	--

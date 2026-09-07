@@ -24,13 +24,29 @@
 # than at the send, and the probe reports that as `setup-differs` -- which is
 # the phase's headline measurement and not a harness fault.
 #
-# Pointer and Buffer are absent BY NAME rather than by silence, the way
-# collection_scopes.rs excludes RexxQueue. corpus/docs/class-set.txt gives
-# them no construction expression -- the reference says instances come only
-# from native code (utilityclasses.xml:429, :6910) -- so no receiver exists to
-# send to and every instance row of theirs would be setup-differs on the
-# oracle's own side. Naming them keeps "a row with no receiver is a failure"
-# available as a signal for a class that is supposed to have one.
+# Pointer's and Buffer's INSTANCE arm is absent BY NAME rather than by
+# silence, the way collection_scopes.rs excludes RexxQueue.
+# corpus/docs/class-set.txt gives them no construction expression -- the
+# reference says instances come only from native code (utilityclasses.xml:429,
+# :6910) -- so no receiver exists to send to and every instance row of theirs
+# would be setup-differs on the oracle's own side. Naming them keeps "a row
+# with no receiver is a failure" available as a signal for a class that is
+# supposed to have one. Their CLASS arm is here: `.Pointer` needs no
+# construction, and `new` is the row Phase 5i owns.
+#
+# THE Method RECEIVER IS A REXX METHOD ON PURPOSE. class-set.txt's own is
+# `.Object~method('objectName')`, which is native; measured 2026-09-07 its
+# ~source is an EMPTY Array where `.K~method('MM')`'s has one line, and the
+# seven is* flags are identical on both (only isGuarded is 1), so the native
+# receiver cannot discriminate a body that reads the source from one that
+# answers an empty Array.
+#
+# THE Package RECEIVER IS A PROGRAM'S PACKAGE ON PURPOSE, for the same reason.
+# class-set.txt's own is `.Class~package`, the REXX package; measured
+# 2026-09-07 that answers name REXX, sourceSize 0, source Array(0), and EMPTY
+# tables for routines, publicRoutines, resources, definedMethods and
+# namespaces -- only classes (67) and publicClasses (62) have content. Every
+# Package row in method-bodies.txt is measured against that.
 #
 # The probe directory also holds `source.rex`, a one-line `return 1` written
 # by the harness, because the probe writes one file and a row taking a file
@@ -41,6 +57,7 @@
 # resources 2. importedPackages is 0 and cannot be made otherwise here: a
 # ::requires needs a file on this build's search path and nothing is on it --
 # rxregexp.cls, json.cls and socket.cls all answer 43.901 rc 213.
+Buffer	class	r = .Buffer	--	--
 Class	class	r = .Class	--	--
 Class	instance	r = .K	--	::class K public subclass Object inherit MX | ::method MM | return 2 | ::class L public subclass K | ::class MX mixinclass Object | ::class MX2 mixinclass Object
 Method	class	r = .Method	--	--
@@ -49,6 +66,7 @@ Object	class	r = .Object	--	--
 Object	instance	r = .K~new	--	::class K public subclass Object inherit MX | ::method MM | return 2 | ::class L public subclass K | ::class MX mixinclass Object | ::class MX2 mixinclass Object
 Package	class	r = .Package	--	--
 Package	instance	r = .context~package	--	::method FM1 | return 1 | ::method FM2 | return 2 | ::routine R public | return arg(1) | ::routine R2 public | return 2 | ::class K public subclass Object inherit MX | ::method MM | return 2 | ::class L public subclass K | ::class MX mixinclass Object | ::class MX2 mixinclass Object | ::resource RES | one | ::END | ::resource RES2 | two | ::END
+Pointer	class	r = .Pointer	--	--
 RexxContext	instance	r = .context	call	--
 RexxInfo	instance	r = .RexxInfo	--	--
 Routine	class	r = .Routine	--	--

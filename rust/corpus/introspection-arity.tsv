@@ -26,10 +26,13 @@
 # completes the send; the test makes an oracle run that does not a failure for
 # that row.
 #
-# Pointer and Buffer are deliberately absent: class-set.txt gives them no
-# construction expression, because the reference says instances come only from
-# native code (utilityclasses.xml:429, :6910), so every instance row of theirs
-# would be setup-differs on the oracle's own side.
+# Pointer's and Buffer's INSTANCE arm is deliberately absent: class-set.txt
+# gives them no construction expression, because the reference says instances
+# come only from native code (utilityclasses.xml:429, :6910), so every
+# instance row of theirs would be setup-differs on the oracle's own side.
+# Their class arm is here, marked REFUSED: in the argument file -- the oracle
+# answers 93.967 and that refusal is what the row measures.
+Buffer	new	class	send-differs	oracle rc0 SYNTAX 93.967; crate rc120 rexx-exec: method "NEW" of class "Buffer" is not implemented (Phase 5)
 Class	<>	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "<>" of class "Class" is not implemented (Phase 5)
 Class	=	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "=" of class "Class" is not implemented (Phase 5)
 Class	==	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "==" of class "Class" is not implemented (Phase 5)
@@ -154,6 +157,7 @@ Package	source	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: met
 Package	sourceLine	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SOURCELINE" of class "Package" is not implemented (Phase 5)
 Package	sourceSize	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SOURCESIZE" of class "Package" is not implemented (Phase 5)
 Package	trace	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "TRACE" of class "Package" is not implemented (Phase 5)
+Pointer	new	class	send-differs	oracle rc0 SYNTAX 93.967; crate rc120 rexx-exec: method "NEW" of class "Pointer" is not implemented (Phase 5)
 RexxContext	args	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ARGS" of class "RexxContext" is not implemented (Phase 5)
 RexxContext	condition	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "CONDITION" of class "RexxContext" is not implemented (Phase 5)
 RexxContext	digits	instance	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "DIGITS" of class "RexxContext" is not implemented (Phase 5)
