@@ -314,17 +314,34 @@ holds something. Say exactly that in the report, and say it again in the phase's
 `rust/CLAUDE.md`'s hollow-shell rule requires a phase that ships one to name it in the handover.
 **Do not add bodies for those five.** A body nothing can reach is the shell that rule forbids.
 
-**`WeakReference~value` is a real body.** `Body::WeakRef(ObjRef)` already exists in
-`rexx-core/src/body.rs`. Measured on the oracle, rc 0:
-`.WeakReference~new(.Object~new)~value` answers `an Object`, and with the referent held in a live
-variable `~value~class~id` is `Object`.
+**`WeakReference~value` is a real body, and it is bigger than one row.** Measured on the oracle,
+rc 0: `.WeakReference~new(.Object~new)~value` answers `an Object`, and with the referent held in a
+live variable `~value~class~id` is `Object`.
 
-The witness that matters is the one the type exists for: **a reference whose referent is
-collectable must answer `.nil` after a collection**, and a reference whose referent is still held
-must answer the object. Find how this crate's other collection-sensitive tests force a collection
-(`collect_stress` is the harness) and write the pair. A test that only ever asks a live reference
-is satisfied by an implementation that ignores weakness entirely — which is the degenerate
-implementation this row exists to exclude.
+**The state and the collector already exist and nothing reaches them.** `Body::WeakRef(ObjRef)` is
+declared (`rexx-core/src/body.rs:235`), `body.rs:741` gives it a trace arm that walks nothing, and
+`rexx-core/src/heap.rs:166`-`:202` implements the whole weak protocol — `checkWeakReferences`
+before `checkUninit`, clearing a dead referent to `Body::WeakRef(ObjRef::NIL)`. But
+`native_weak_reference_new` (`dispatch.rs:10369`) builds a **plain instance** through
+`new_instance` and drops the referent on the floor, and its own doc comment says so. Nothing in
+either crate constructs a `Body::WeakRef`. So:
+
+* `new` has to build a `Body::WeakRef` instead of a plain instance, which makes `heap.rs`'s weak
+  path **live for the first time**;
+* `receiver_kind` (`dispatch.rs:1923`) must stop answering `Err("a weak reference")` for it;
+* and the doc comment at `dispatch.rs:10364`-`:10368` states the old contract and becomes false —
+  correct it rather than leaving it, per `rust/CLAUDE.md`'s rule about comments that state
+  something false.
+
+**The witness is the one the type exists for**: a reference whose referent is collectable answers
+`.nil` after a collection, and one whose referent is still held answers the object. `collect_stress`
+is the harness. **A test that only ever asks a live reference is satisfied by an implementation
+that ignores weakness entirely** — that is the degenerate implementation this row exists to
+exclude, and it is the shape this crate would have shipped, since the plain-instance version passes
+every live-reference probe.
+
+Run the dead-referent witness against the code **before** your change as well: it should fail
+differently (the row is loud today), and if it passes, the witness is not testing what you think.
 
 ---
 
@@ -357,7 +374,7 @@ native-externals to `Err(Loud::native_method(name, &scope))` at `:2529`. A row c
 entry to `NATIVE_METHODS` (`dispatch.rs:255`) or `NATIVE_CLASS_METHODS` (`:951`) that binds the
 name to a body. Two rows in this phase do *not* reach that site and are called out where they
 occur: `Class`'s six operators, and `WeakReference~value`, whose receiver kind
-(`receiver_kind`, `dispatch.rs:1893`) currently returns `Err` for `Body::WeakRef` at `:1927`.
+(`receiver_kind`, `dispatch.rs:1893`) currently returns `Err` for `Body::WeakRef` at `:1923`.
 
 **The 5f/5g registration control is available to every task and each one runs it.** A row naming a
 method the class does not answer must panic at `ObjectModel::build` (`dispatch.rs:1200`, `:1205`),
