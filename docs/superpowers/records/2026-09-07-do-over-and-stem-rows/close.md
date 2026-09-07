@@ -96,4 +96,5 @@ the control said the untruncated file must fail.
 
 ## Gates
 
-The seven, over the commit.
+Over `548271c4a`: all seven zero, `failed-suites=0` on each of the five
+suite-running gates.
