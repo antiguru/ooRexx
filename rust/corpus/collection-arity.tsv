@@ -27,10 +27,10 @@ Array	append	agree	rc0
 Array	appendAll	agree	rc0
 Array	at	agree	rc0
 Array	delete	agree	rc0
-Array	difference	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
+Array	difference	agree	rc0
 Array	dimension	agree	rc0
 Array	dimensions	agree	rc0
-Array	disjoint	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
+Array	disjoint	agree	rc0
 Array	empty	agree	rc0
 Array	equivalent	agree	rc0
 Array	fill	agree	rc0
@@ -40,7 +40,7 @@ Array	hasIndex	agree	rc0
 Array	hasItem	agree	rc0
 Array	index	agree	rc0
 Array	insert	agree	rc0
-Array	intersection	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
+Array	intersection	agree	rc0
 Array	isEmpty	agree	rc0
 Array	items	agree	rc0
 Array	last	agree	rc0
@@ -58,11 +58,11 @@ Array	sort	agree	rc0
 Array	sortWith	agree	rc0
 Array	stableSort	agree	rc0
 Array	stableSortWith	agree	rc0
-Array	subset	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
+Array	subset	agree	rc0
 Array	supplier	agree	rc0
 Array	toString	agree	rc0
-Array	union	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
-Array	xor	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
+Array	union	agree	rc0
+Array	xor	agree	rc0
 Bag	[]	agree	rc0
 Bag	[]=	agree	rc0
 Bag	allAt	agree	rc0
@@ -389,9 +389,9 @@ Stem	request	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "REQUES
 Stem	subset	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "ALLINDEXES" of class "Stem" is not implemented (Phase 5)
 Stem	supplier	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SUPPLIER" of class "Stem" is not implemented (Phase 5)
 Stem	toDirectory	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "TODIRECTORY" of class "Stem" is not implemented (Phase 5)
-Stem	union	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
+Stem	union	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SUPPLIER" of class "Stem" is not implemented (Phase 5)
 Stem	unknown	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "UNKNOWN" of class "Stem" is not implemented (Phase 5)
-Stem	xor	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
+Stem	xor	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "SUPPLIER" of class "Stem" is not implemented (Phase 5)
 StringTable	[]	agree	rc0
 StringTable	[]=	agree	rc0
 StringTable	allIndexes	agree	rc0

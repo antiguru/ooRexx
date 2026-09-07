@@ -7412,11 +7412,20 @@ fn native_copy(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    match interp.receiver_kind(receiver) {
-        Ok(Primitive::Instance { .. }) => {}
+    // **An `Array` and a `Stem` are copyable too**, and each keeps its own
+    // behaviour: measured, `.Array~of('x','y')~copy~class~id` is `Array` and a
+    // stem's is `Stem`. The clone below is what makes both deep in the way
+    // upstream's virtual `copy()` is -- the slots and the tails travel with
+    // the body, so appending to the copy leaves the receiver alone
+    // (`a~items` 2 against `b~items` 3) and a tail written on the copy does
+    // not appear on the receiver.
+    let behaviour = match interp.receiver_kind(receiver) {
+        Ok(Primitive::Instance { .. }) => rexx_core::BehaviourId::OBJECT,
+        Ok(Primitive::Array) => rexx_core::BehaviourId::ARRAY,
+        Ok(Primitive::Stem) => rexx_core::BehaviourId::STEM,
         Ok(_) => return Err(Loud::native_method(b"COPY", "Object").into()),
         Err(kind) => return Err(Loud::receiver_class(kind).into()),
-    }
+    };
     // The allocation below collects first, and while the cloned body is a
     // local the collector does not walk, every value in it is reachable from
     // the receiver and from nowhere else.
@@ -7425,7 +7434,7 @@ fn native_copy(
         return Err(Loud::receiver_class("a value whose object is no longer live").into());
     };
     let body = source.body.clone();
-    let copy = interp.alloc_with(rexx_core::BehaviourId::OBJECT, body);
+    let copy = interp.alloc_with(behaviour, body);
     interp.roots.push_temp(copy);
     duplicate_collection_stores(interp, copy);
     if interp.answers_uninit(copy) {
