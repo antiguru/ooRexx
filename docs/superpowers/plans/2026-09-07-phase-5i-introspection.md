@@ -181,6 +181,17 @@ Ask before inventing a third file.
 keyed by (scope, name) for the entry-point token and the arity operand. A row whose scope resolves
 nowhere is a **failure**, not a blank.
 
+**Ruled during execution, from this task's own pre-flight: the introspection tables carry an `arm`
+column and the collection table does not.** `corpus/collection-arguments.tsv` is instance-arm only —
+its 44 `Array` rows are exactly `class-methods.txt`'s 44 `Array` *instance* rows — and copying that
+shape would leave five of this phase's own rows unsized: `Package~defaultOptions`,
+`Method~loadExternalMethod`, `Method~newFile`, `Routine~loadExternalRoutine`, `Routine~newFile`, all
+named verbatim in Tasks 4 and 7. The shared module takes the arm column as a layout flag, off for
+the collection driver, so `corpus/collection-arity.tsv` keeps its four columns and its byte-identity
+control. **`Pointer` and `Buffer` are excluded per (class, arm) rather than per class**: their
+class-arm `new` row is measurable with receiver `.Pointer` and sizes Task 2, and only their instance
+arm is excluded, with the reference citation as its reason.
+
 **Deliverable of this task, and it is what sizes every later one:** the number of rows in this
 phase's classes that read `agree` under a real argument list, and the number that read
 `send-differs`. Report both, per class, in the task report. If a class's row count under the new
@@ -770,11 +781,28 @@ constructor into ten rows measured about their own methods, and it is the overri
 task's work visible. **Report the ten rows' verdicts before and after the override**; the ones that
 are still loud after it are the honest count of what this task closed.
 
-**The two questions this task still has to answer, and neither is answered above:** what a
-`StackFrame` answers when it outlives the frame it describes, and what the collector sees of it.
-Measure the oracle for the first — keep `.context~stackFrames[1]` in a variable, return from the
-routine, read it — before choosing a representation. `Activation::object_roots` is named in
-`collect_now`'s comment as the other route for a parked activation's objects; read it.
+**A `StackFrame` outlives its frame and a `RexxContext` does not**, which is the opposite way round
+from the guess. Measured on the oracle 2026-09-07, twice and independently — by Task 0's
+implementer during its pre-flight and by the controller — with both objects captured inside a
+routine and read after it returned:
+
+```
+c~name       -> Error 98.981  Target RexxContext is no longer active.
+f~name       -> R
+f~line       -> 19
+f~traceLine  -> "    19 *-*   f = c~stackFrames[1]"
+f~arguments~items -> 0
+```
+
+So a `StackFrame` is a **snapshot**, taken when `stackFrames` builds it, and a `RexxContext` is a
+**live handle** that raises `98.981` once its activation is gone. Those are two different
+representations and this task builds both. `98.981` is a row this task owes a witness for like any
+other; find its message in `rexxmsg.xml` and assert the whole transcript.
+
+**What the collector sees is still open** and is this task's remaining design question.
+`Activation::object_roots` is named in `collect_now`'s comment as the other route for a parked
+activation's objects; read it. Task 0's report carries both transcripts above under a heading for
+this task.
 
 ---
 
