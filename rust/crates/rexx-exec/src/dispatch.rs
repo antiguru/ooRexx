@@ -6096,6 +6096,26 @@ fn whole_index(interp: &mut Interp, value: ObjRef) -> Option<usize> {
     (index > 0).then_some(index)
 }
 
+/// [`whole_index`]'s conversion admitting zero, for the one index in the
+/// language that counts from it: `ListClass::validateIndex`
+/// (`classes/ListClass.cpp:195`) reads a list handle with
+/// `unsignedNumberValue` under the same `Numerics::ARGUMENT_DIGITS`, and a
+/// list's first handle is `0`.
+///
+/// Measured on `.List~of('a','b','c')`, whose handles are `0`, `1` and `2`:
+/// `hasIndex('-0')` is `1`, `hasIndex('1e1')` is `0` -- it converts to ten,
+/// which the list does not hold -- and `hasIndex('1e300')` raises, because no
+/// `size_t` holds it.
+fn unsigned_index(interp: &mut Interp, value: ObjRef) -> Option<usize> {
+    if let Decoded::SmallInt(small) = value.decode()
+        && let Some(whole) = rexx_num::whole_i64(small, rexx_num::ARGUMENT_DIGITS)
+    {
+        return usize::try_from(whole).ok();
+    }
+    let number = interp.to_number(value).ok()?;
+    usize::try_from(number.whole_value(rexx_num::ARGUMENT_DIGITS)?).ok()
+}
+
 /// One subscript as `RexxInternalObject::requiredPositive`
 /// (`classes/ObjectClass.cpp:1564`) reads it, `position` naming its place in
 /// the method's own argument list.

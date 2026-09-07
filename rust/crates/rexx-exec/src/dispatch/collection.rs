@@ -1597,23 +1597,36 @@ fn list_state(interp: &mut Interp, receiver: ObjRef) -> Result<(ObjRef, ObjRef, 
     Ok((items, handles, free))
 }
 
-/// Where in the list `handle` sits, or `None` for a handle the list does not
+/// Where in the list `handle` sits, or `None` for an index the list does not
 /// hold.
 ///
 /// **A `List` index is a handle and not a position.** Measured: appending
 /// `a`, `b`, `c` answers `0 1 2`; inserting after the first answers a fresh
 /// `3` and leaves every old handle reaching the item it always did; removing
 /// the second leaves the first and third still valid.
+///
+/// **And it is converted, not compared.** `ListClass::validateIndex`
+/// (`classes/ListClass.cpp:195`) reads the argument with
+/// `unsignedNumberValue`, so `' 1'`, `'01'`, `1.0`, `'+1'`, `1e0` and `' 1 '`
+/// all name entry 1 -- measured, every one of them answers `b` of
+/// `.List~of('a','b','c')`. An argument that will not convert is 93.918 and
+/// not an answer, which is why this raises rather than reporting absence:
+/// measured, `at('abc')`, `at(-1)`, `hasIndex(1.5)`, `hasIndex('1e300')` and
+/// `hasIndex('')` all raise it, each naming the argument as it was written.
 fn list_position(
     interp: &mut Interp,
     receiver: ObjRef,
     handle: ObjRef,
 ) -> Result<Option<usize>, Failure> {
+    let Some(wanted) = super::unsigned_index(interp, handle) else {
+        let written = interp.to_text(handle);
+        return Err(Raised::incorrect_list_index(&written).into());
+    };
     let (_, handles, _) = list_state(interp, receiver)?;
     let held = array_slots_owned(interp, handles)?;
     for (offset, slot) in held.iter().enumerate() {
         if let Some(slot) = *slot
-            && same_item(interp, slot, handle)?
+            && super::unsigned_index(interp, slot) == Some(wanted)
         {
             return Ok(Some(offset));
         }
