@@ -220,7 +220,12 @@ fn subscript_object(interp: &mut Interp, offset: usize, dimensions: Option<&[usi
 
 /// An `Array` object over `items`.
 fn array_of(interp: &mut Interp, items: Vec<ObjRef>) -> ObjRef {
-    let slots = items.into_iter().map(Some).collect();
+    array_of_slots(interp, items.into_iter().map(Some).collect())
+}
+
+/// An `Array` object over `slots`, holes and all -- what a `List` carrying an
+/// entry that holds nothing answers for `allItems`.
+fn array_of_slots(interp: &mut Interp, slots: Vec<Option<ObjRef>>) -> ObjRef {
     let array = interp.alloc_with(BehaviourId::ARRAY, Body::array(slots));
     interp.roots.push_temp(array);
     array
@@ -1622,13 +1627,21 @@ fn list_position(
         let written = interp.to_text(handle);
         return Err(Raised::incorrect_list_index(&written).into());
     };
-    let (_, handles, _) = list_state(interp, receiver)?;
+    let (items, handles, _) = list_state(interp, receiver)?;
     let held = array_slots_owned(interp, handles)?;
+    let stored = array_slots_owned(interp, items)?;
     for (offset, slot) in held.iter().enumerate() {
         if let Some(slot) = *slot
             && super::unsigned_index(interp, slot) == Some(wanted)
         {
-            return Ok(Some(offset));
+            // `isIndexValid` is `isInUse`
+            // (`classes/support/ListContents.hpp:235`), so `validateIndex`
+            // answers NoLink for an entry holding nothing and every lookup
+            // reads it as absent. Measured over `l~put(, 1)`: `hasIndex(1)`
+            // is `0`, `at(1)` and `next(1)` are `.nil`, and `section(1,1)`
+            // raises -- while the chain still walks through the entry, which
+            // is [`list_pairs`]'s business and not this function's.
+            return Ok(stored.get(offset).copied().flatten().map(|_| offset));
         }
     }
     Ok(None)
@@ -1834,21 +1847,35 @@ fn native_list_remove_item(
     Ok(Some(ObjRef::NIL))
 }
 
-/// The list's items and handles, as owned copies.
-fn list_pairs(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<(ObjRef, ObjRef)>, Failure> {
+/// The list's entries in chain order: every handle, each with the item it
+/// holds or `None` for an entry holding nothing.
+///
+/// **An entry that holds nothing is still an entry.** `l~put(, 1)` leaves one
+/// -- `putRexx` checks the index and not the value
+/// (`classes/ListClass.cpp:349`) -- and it still counts. Measured over
+/// `.List~of('a','b','c')` with entry 1 emptied: `items` stays `3`,
+/// `allIndexes` is `0,1,2`, `next(0)` is `1`, `previous(2)` is `1`,
+/// `firstItem` over an emptied first entry is `.nil`, and `section(0,3)`
+/// answers three entries where `section(0,2)` answers two.
+fn list_pairs(
+    interp: &mut Interp,
+    receiver: ObjRef,
+) -> Result<Vec<(ObjRef, Option<ObjRef>)>, Failure> {
     let (items, handles, _) = list_state(interp, receiver)?;
     let items = array_slots_owned(interp, items)?;
     let handles = array_slots_owned(interp, handles)?;
-    let pairs: Vec<(ObjRef, ObjRef)> = handles
+    let pairs: Vec<(ObjRef, Option<ObjRef>)> = handles
         .into_iter()
         .zip(items)
-        .filter_map(|(handle, item)| Some((handle?, item?)))
+        .filter_map(|(handle, item)| Some((handle?, item)))
         .collect();
     // Rooted for [`ordered_pairs`]'s reason: a caller sends `==` per pair and
     // the callback may empty the list.
     for (handle, item) in &pairs {
         interp.roots.push_temp(*handle);
-        interp.roots.push_temp(*item);
+        if let Some(item) = *item {
+            interp.roots.push_temp(item);
+        }
     }
     Ok(pairs)
 }
@@ -1863,7 +1890,7 @@ fn native_list_all_items(
         .into_iter()
         .map(|(_, item)| item)
         .collect();
-    Ok(Some(array_of(interp, items)))
+    Ok(Some(array_of_slots(interp, items)))
 }
 
 fn native_list_all_indexes(
@@ -1932,7 +1959,12 @@ fn list_end(
     let Some((handle, item)) = found.copied() else {
         return Ok(Some(ObjRef::NIL));
     };
-    Ok(Some(if want_item { item } else { handle }))
+    Ok(Some(match want_item {
+        // `firstItem` over an entry holding nothing is `.nil`, not the first
+        // entry that holds something -- measured, and likewise `lastItem`.
+        true => item.unwrap_or(ObjRef::NIL),
+        false => handle,
+    }))
 }
 
 fn native_list_first(
@@ -2034,7 +2066,9 @@ fn native_list_has_item(
 ) -> Result<Option<ObjRef>, Failure> {
     let wanted = item_argument(args)?;
     for (_, item) in list_pairs(interp, receiver)? {
-        if same_item(interp, wanted, item)? {
+        if let Some(item) = item
+            && same_item(interp, wanted, item)?
+        {
             return Ok(Some(crate::eval::logical(true)));
         }
     }
@@ -2050,7 +2084,9 @@ fn native_list_index(
 ) -> Result<Option<ObjRef>, Failure> {
     let wanted = item_argument(args)?;
     for (handle, item) in list_pairs(interp, receiver)? {
-        if same_item(interp, wanted, item)? {
+        if let Some(item) = item
+            && same_item(interp, wanted, item)?
+        {
             return Ok(Some(handle));
         }
     }
@@ -2085,7 +2121,7 @@ fn native_list_section(
     interp.send_message(section, super::INIT, None, &[], caller)?;
     for (_, item) in pairs.into_iter().skip(at).take(count) {
         let at = list_pairs(interp, section)?.len();
-        list_insert_at(interp, section, at, Some(item))?;
+        list_insert_at(interp, section, at, item)?;
     }
     Ok(Some(section))
 }
@@ -2098,9 +2134,9 @@ fn native_list_supplier(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let pairs = list_pairs(interp, receiver)?;
-    let items: Vec<ObjRef> = pairs.iter().map(|(_, item)| *item).collect();
+    let items: Vec<Option<ObjRef>> = pairs.iter().map(|(_, item)| *item).collect();
     let handles: Vec<ObjRef> = pairs.into_iter().map(|(handle, _)| handle).collect();
-    let items = array_of(interp, items);
+    let items = array_of_slots(interp, items);
     let handles = array_of(interp, handles);
     new_supplier(interp, items, handles).map(Some)
 }

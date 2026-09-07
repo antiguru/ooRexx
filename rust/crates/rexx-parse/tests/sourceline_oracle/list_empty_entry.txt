@@ -1,0 +1,67 @@
+count 66
+/* `put` with no value leaves an entry holding nothing.  The entry still
+ * counts and the chain still walks through it, while every index lookup reads
+ * it as absent -- `isIndexValid` is `isInUse`.
+ *
+ * So `items` is 3 with two items in it, `allIndexes` names all three handles,
+ * `next(0)` and `previous(2)` step over the empty entry to reach it, and
+ * `firstItem` of an emptied first entry is `.nil` rather than the first entry
+ * that holds something.  The pair that separates the two rules is
+ * `previous(2)` answering 1 while `hasIndex(1)` is 0.
+ *
+ * `hasItem`, `index` and `removeItem` are deliberately absent: on a list
+ * holding an empty entry each of them is a SIGSEGV on the oracle, recorded in
+ * corpus/oracle-crashes.txt.
+ *
+ * The last send is untrapped so the 93.918 text and the frame line are
+ * compared as bytes. rc 163.
+ */
+
+middle = .List~of('a','b','c')
+middle~put(, 1)
+say 'items' middle~items 'isEmpty' middle~isEmpty
+say 'indexes' middle~allIndexes~makeString('L',',')
+say 'items' middle~allItems~makeString('L',',') 'size' middle~allItems~size
+say 'slot 2 held' middle~allItems~hasIndex(2)
+say 'ends' middle~first middle~last middle~firstItem middle~lastItem
+say 'lookups' middle~at(1) middle~hasIndex(1) middle~next(1) middle~previous(1)
+say 'walk' middle~next(0) middle~previous(2)
+say 'section' middle~section(0)~items middle~section(0,2)~items middle~section(2)~items
+say 'makeArray' middle~makeArray~size
+
+s = middle~supplier
+do while s~available
+  say '  pair' s~index s~item
+  s~next
+end
+
+head = .List~of('a','b','c')
+head~put(, 0)
+say 'head empty' head~firstItem head~first head~items
+tail = .List~of('a','b','c')
+tail~put(, 2)
+say 'tail empty' tail~lastItem tail~last tail~items
+
+signal on syntax name trapped
+n = 0
+
+next:
+n = n + 1
+select
+  when n = 1 then say n 'answered' middle~section(1, 1)~items
+  when n = 2 then say n 'answered' middle~put('x', 1)
+  when n = 3 then say n 'answered' middle~insert('x', 1)
+  when n = 4 then say n 'answered' middle~section(0, 1)~items
+  when n = 5 then say n 'answered' middle~remove(1)
+  otherwise signal done
+end
+signal next
+
+trapped:
+say n 'raised' rc'.'condition('E')
+signal on syntax name trapped
+signal next
+
+done:
+signal off syntax
+say middle~section(1, 1)~items

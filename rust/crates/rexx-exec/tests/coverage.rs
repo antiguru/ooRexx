@@ -1467,6 +1467,7 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/collection_callback_mutates.rex",
     "lang/nil_comparison.rex",
     "lang/list_index_conversion.rex",
+    "lang/list_empty_entry.rex",
 ];
 
 #[test]
