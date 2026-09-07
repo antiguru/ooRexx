@@ -111,4 +111,5 @@ Fast checks: `cargo fmt --all --check` clean, `cargo clippy --workspace
 423**. Four witnesses added: `collection_item_equality.rex`, `queue_extent.rex`,
 `collection_callback_mutates.rex`, and `queue_bounds.rex` extended.
 
-**G1** **G2** **G3** **G4** **G5** **G6** **G7**
+Seven gates over `9abbb6831`, from `scratchpad/gates-5g9.status`: G1 0, G2 0,
+G3 0, G4 0, G5 0, G6 0, G7 0, `failed-suites=0` on each suite-running gate.
