@@ -255,7 +255,7 @@ fn subscript_object(interp: &mut Interp, offset: usize, dimensions: Option<&[usi
 }
 
 /// An `Array` object over `items`.
-fn array_of(interp: &mut Interp, items: Vec<ObjRef>) -> ObjRef {
+pub(super) fn array_of(interp: &mut Interp, items: Vec<ObjRef>) -> ObjRef {
     array_of_slots(interp, items.into_iter().map(Some).collect())
 }
 
@@ -287,7 +287,11 @@ fn array_of_slots(interp: &mut Interp, slots: Vec<Option<ObjRef>>) -> ObjRef {
 /// right: `'1'` matches `1`, `' 2'` does **not** match `2`, and `1` does not
 /// match `1.0` -- so it is neither byte equality of the source spelling nor
 /// numeric equality, but `==` on string values.
-fn same_item(interp: &mut Interp, wanted: ObjRef, element: ObjRef) -> Result<bool, Failure> {
+pub(super) fn same_item(
+    interp: &mut Interp,
+    wanted: ObjRef,
+    element: ObjRef,
+) -> Result<bool, Failure> {
     let (left, right) = (wanted, element);
     let answer = interp.apply_binary(Operator::StrictEqual, left, right)?;
     let text = interp.to_text(answer);
@@ -302,7 +306,7 @@ fn same_item(interp: &mut Interp, wanted: ObjRef, element: ObjRef) -> Result<boo
 /// arguments for method; 1 expected.` The two families raise different errors
 /// and no zero-argument probe can tell them apart, because both are loud
 /// until the bodies exist.
-fn item_argument(args: &[Option<ObjRef>]) -> Result<ObjRef, Failure> {
+pub(super) fn item_argument(args: &[Option<ObjRef>]) -> Result<ObjRef, Failure> {
     args.first()
         .copied()
         .flatten()
@@ -534,7 +538,11 @@ fn pool_variable(interp: &Interp, owner: ObjRef, scope: ObjRef, name: &[u8]) -> 
 // ---- Supplier ----
 
 /// A `Supplier` over `items` and `indexes`, positioned at the first pair.
-fn new_supplier(interp: &mut Interp, items: ObjRef, indexes: ObjRef) -> Result<ObjRef, Failure> {
+pub(super) fn new_supplier(
+    interp: &mut Interp,
+    items: ObjRef,
+    indexes: ObjRef,
+) -> Result<ObjRef, Failure> {
     let class = interp
         .classes()
         .lookup("Supplier")

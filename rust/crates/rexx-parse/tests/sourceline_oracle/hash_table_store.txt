@@ -1,0 +1,104 @@
+count 103
+/* Table and IdentityTable are the hash store with nothing on top, and the
+ * store's GEOMETRY is observable: iteration is bucket order, not insertion
+ * order, and the bucket count comes from the optional capacity.
+ *
+ * The three orders below are the point.  The same eight keys inserted in the
+ * same order answer one way at the default capacity and another at
+ * `new(100)`, and forty integer keys answer a third that only a table which
+ * grew twice can produce.  A store keeping insertion order agrees with none
+ * of them, and a store hashing differently agrees with none of them either.
+ *
+ * The last block is what separates the two classes: two strings that are
+ * equal and are not the same object.  They must be long enough to be heap
+ * objects -- a short string is a value in the handle here, so identity and
+ * equality cannot come apart for one, which is the value model's own
+ * deviation and not the store's.
+ */
+
+keys = .Array~of('zebra','apple','Mango','q','longer-key-name','','  ','Z')
+
+t = .Table~new
+do k over keys; t[k] = k~length; end
+say 'order   ' t~allIndexes~makeString('L','|')
+say 'items   ' t~allItems~makeString('L','|')
+say 'makeArr ' t~makeArray~makeString('L','|')
+say 'count   ' t~items t~isEmpty
+say 'at      ' t['zebra'] t['nope']
+say 'hasIndex' t~hasIndex('apple') t~hasIndex('nope')
+say 'hasItem ' t~hasItem(5) t~hasItem(99)
+say 'index   ' t~index(1) t~index(99)
+
+wide = .Table~new(100)
+do k over keys; wide[k] = 1; end
+say 'cap100  ' wide~allIndexes~makeString('L','|')
+
+grown = .Table~new
+do i = 1 to 40; grown[i] = i; end
+say 'grown   ' grown~allIndexes~makeString('L',',')
+
+gone = .Table~new
+do k over keys; gone[k] = 1; end
+say 'removed ' gone~remove('zebra') gone~items gone~allIndexes~makeString('L','|')
+say 'again   ' gone~remove('zebra')
+say 'removeIt' gone~removeItem(1) gone~items
+
+drained = .Table~new
+drained['a'] = 1
+say 'empty   ' (drained~empty == drained) drained~items drained~isEmpty
+
+paired = .Table~new
+paired['a'] = 1
+paired['b'] = 2
+s = paired~supplier
+do while s~available
+  say '  pair' s~index s~item
+  s~next
+end
+
+one = 'a-key-long-enough-not-to-be-inline'
+two = 'a-key-long-enough-not-to-be-inlin' || 'e'
+say 'equal   ' (one == two) 'sameref' (one~identityHash == two~identityHash)
+byref = .IdentityTable~new
+byref[one] = 1
+say 'identity' byref[one] byref[two] byref~items
+byref[two] = 2
+say 'both    ' byref~items byref[one] byref[two]
+byvalue = .Table~new
+byvalue[one] = 1
+say 'equality' byvalue[one] byvalue[two] byvalue~items
+byvalue[two] = 2
+say 'both    ' byvalue~items byvalue[one] byvalue[two]
+
+/* The two argument errors are not interchangeable: an INDEX is named and 88.901,
+ * an ITEM is positional and 93.903.  The last send is untrapped so the 88.901
+ * text and the frame line are compared as bytes.  rc 168.
+ */
+signal on syntax name trapped
+bare = .Table~new
+n = 0
+
+next:
+n = n + 1
+select
+  when n = 1 then say n 'answered' bare~at()
+  when n = 2 then say n 'answered' bare~put()
+  when n = 3 then say n 'answered' bare~put('v')
+  when n = 4 then say n 'answered' bare~hasIndex()
+  when n = 5 then say n 'answered' bare~remove()
+  when n = 6 then say n 'answered' bare~hasItem()
+  when n = 7 then say n 'answered' bare~index()
+  when n = 8 then say n 'answered' bare~removeItem()
+  when n = 9 then say n 'answered' bare~items()
+  otherwise signal done
+end
+signal next
+
+trapped:
+say n 'raised' rc'.'condition('E')
+signal on syntax name trapped
+signal next
+
+done:
+signal off syntax
+say bare~at()

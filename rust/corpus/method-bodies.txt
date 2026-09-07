@@ -599,20 +599,20 @@ Directory	putAll	instance	answers	rc 163
 IdentityTable	new	class	answers	rc 0
 IdentityTable	[]	instance	answers	rc 168
 IdentityTable	[]=	instance	answers	rc 168
-IdentityTable	allIndexes	instance	loud	method "ALLINDEXES" of class "IdentityTable"
-IdentityTable	allItems	instance	loud	method "ALLITEMS" of class "IdentityTable"
+IdentityTable	allIndexes	instance	answers	rc 0
+IdentityTable	allItems	instance	answers	rc 0
 IdentityTable	at	instance	answers	rc 168
-IdentityTable	empty	instance	loud	method "EMPTY" of class "IdentityTable"
-IdentityTable	hasIndex	instance	loud	method "HASINDEX" of class "IdentityTable"
-IdentityTable	hasItem	instance	loud	method "HASITEM" of class "IdentityTable"
-IdentityTable	index	instance	loud	method "INDEX" of class "IdentityTable"
-IdentityTable	isEmpty	instance	loud	method "ISEMPTY" of class "IdentityTable"
-IdentityTable	items	instance	loud	method "ITEMS" of class "IdentityTable"
-IdentityTable	makeArray	instance	loud	method "MAKEARRAY" of class "IdentityTable"
+IdentityTable	empty	instance	answers	rc 0
+IdentityTable	hasIndex	instance	answers	rc 168
+IdentityTable	hasItem	instance	answers	rc 163
+IdentityTable	index	instance	answers	rc 163
+IdentityTable	isEmpty	instance	answers	rc 0
+IdentityTable	items	instance	answers	rc 0
+IdentityTable	makeArray	instance	answers	rc 0
 IdentityTable	put	instance	answers	rc 168
-IdentityTable	remove	instance	loud	method "REMOVE" of class "IdentityTable"
-IdentityTable	removeItem	instance	loud	method "REMOVEITEM" of class "IdentityTable"
-IdentityTable	supplier	instance	loud	method "SUPPLIER" of class "IdentityTable"
+IdentityTable	remove	instance	answers	rc 168
+IdentityTable	removeItem	instance	answers	rc 163
+IdentityTable	supplier	instance	answers	rc 0
 IdentityTable	difference	instance	answers	rc 163
 IdentityTable	disjoint	instance	answers	rc 163
 IdentityTable	equivalent	instance	answers	rc 163
@@ -674,32 +674,32 @@ Properties	setLogical	instance	answers	rc 163
 Properties	setProperty	instance	answers	rc 163
 Properties	setWhole	instance	answers	rc 163
 Properties	[]	instance	answers	rc 168
-Properties	allIndexes	instance	loud	method "ALLINDEXES" of class "Directory"
-Properties	allItems	instance	loud	method "ALLITEMS" of class "Directory"
+Properties	allIndexes	instance	loud	method "ALLINDEXES" of class "Properties"
+Properties	allItems	instance	loud	method "ALLITEMS" of class "Properties"
 Properties	at	instance	answers	rc 168
 Properties	difference	instance	answers	rc 163
 Properties	disjoint	instance	answers	rc 163
 Properties	equivalent	instance	answers	rc 163
-Properties	hasIndex	instance	loud	method "HASINDEX" of class "Directory"
-Properties	hasItem	instance	loud	method "HASITEM" of class "Directory"
-Properties	index	instance	loud	method "INDEX" of class "Directory"
+Properties	hasIndex	instance	loud	method "HASINDEX" of class "Properties"
+Properties	hasItem	instance	loud	method "HASITEM" of class "Properties"
+Properties	index	instance	loud	method "INDEX" of class "Properties"
 Properties	intersection	instance	answers	rc 163
-Properties	items	instance	loud	method "ITEMS" of class "Directory"
-Properties	makeArray	instance	loud	method "MAKEARRAY" of class "Directory"
+Properties	items	instance	loud	method "ITEMS" of class "Properties"
+Properties	makeArray	instance	loud	method "MAKEARRAY" of class "Properties"
 Properties	subset	instance	answers	rc 163
-Properties	supplier	instance	loud	method "SUPPLIER" of class "Directory"
+Properties	supplier	instance	loud	method "SUPPLIER" of class "Properties"
 Properties	union	instance	answers	rc 163
 Properties	xor	instance	answers	rc 163
 Properties	of	class	loud	ARG option "A" answers an Array, which
 Properties	putAll	instance	answers	rc 163
 Properties	new	class	answers	rc 0
-Properties	empty	instance	loud	method "EMPTY" of class "Directory"
+Properties	empty	instance	loud	method "EMPTY" of class "Properties"
 Properties	entry	instance	loud	method "ENTRY" of class "Directory"
 Properties	hasEntry	instance	loud	method "HASENTRY" of class "Directory"
-Properties	isEmpty	instance	loud	method "ISEMPTY" of class "Directory"
-Properties	remove	instance	loud	method "REMOVE" of class "Directory"
+Properties	isEmpty	instance	loud	method "ISEMPTY" of class "Properties"
+Properties	remove	instance	loud	method "REMOVE" of class "Properties"
 Properties	removeEntry	instance	loud	method "REMOVEENTRY" of class "Directory"
-Properties	removeItem	instance	loud	method "REMOVEITEM" of class "Directory"
+Properties	removeItem	instance	loud	method "REMOVEITEM" of class "Properties"
 Properties	setEntry	instance	loud	method "SETENTRY" of class "Directory"
 Properties	setMethod	instance	loud	method "SETMETHOD" of class "Directory"
 Properties	unknown	instance	answers	rc 163
@@ -868,20 +868,20 @@ StringTable	putAll	instance	answers	rc 163
 Table	new	class	answers	rc 0
 Table	[]	instance	answers	rc 168
 Table	[]=	instance	answers	rc 168
-Table	allIndexes	instance	loud	method "ALLINDEXES" of class "Table"
-Table	allItems	instance	loud	method "ALLITEMS" of class "Table"
+Table	allIndexes	instance	answers	rc 0
+Table	allItems	instance	answers	rc 0
 Table	at	instance	answers	rc 168
-Table	empty	instance	loud	method "EMPTY" of class "Table"
-Table	hasIndex	instance	loud	method "HASINDEX" of class "Table"
-Table	hasItem	instance	loud	method "HASITEM" of class "Table"
-Table	index	instance	loud	method "INDEX" of class "Table"
-Table	isEmpty	instance	loud	method "ISEMPTY" of class "Table"
-Table	items	instance	loud	method "ITEMS" of class "Table"
-Table	makeArray	instance	loud	method "MAKEARRAY" of class "Table"
+Table	empty	instance	answers	rc 0
+Table	hasIndex	instance	answers	rc 168
+Table	hasItem	instance	answers	rc 163
+Table	index	instance	answers	rc 163
+Table	isEmpty	instance	answers	rc 0
+Table	items	instance	answers	rc 0
+Table	makeArray	instance	answers	rc 0
 Table	put	instance	answers	rc 168
-Table	remove	instance	loud	method "REMOVE" of class "Table"
-Table	removeItem	instance	loud	method "REMOVEITEM" of class "Table"
-Table	supplier	instance	loud	method "SUPPLIER" of class "Table"
+Table	remove	instance	answers	rc 168
+Table	removeItem	instance	answers	rc 163
+Table	supplier	instance	answers	rc 0
 Table	difference	instance	answers	rc 163
 Table	disjoint	instance	answers	rc 163
 Table	equivalent	instance	answers	rc 163

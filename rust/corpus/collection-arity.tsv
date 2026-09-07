@@ -169,30 +169,30 @@ Directory	union	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COP
 Directory	unknown	agree	rc0
 Directory	unsetMethod	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "UNSETMETHOD" of class "Directory" is not implemented (Phase 5)
 Directory	xor	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
-IdentityTable	[]	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	[]=	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	allIndexes	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	allItems	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	at	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	difference	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	disjoint	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	empty	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	equivalent	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	hasIndex	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	hasItem	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	index	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	intersection	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	isEmpty	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	items	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	makeArray	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	put	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	putAll	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	remove	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	removeItem	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	subset	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	supplier	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	union	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-IdentityTable	xor	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
+IdentityTable	[]	agree	rc0
+IdentityTable	[]=	agree	rc0
+IdentityTable	allIndexes	agree	rc0
+IdentityTable	allItems	agree	rc0
+IdentityTable	at	agree	rc0
+IdentityTable	difference	agree	rc0
+IdentityTable	disjoint	agree	rc0
+IdentityTable	empty	agree	rc0
+IdentityTable	equivalent	agree	rc0
+IdentityTable	hasIndex	agree	rc0
+IdentityTable	hasItem	agree	rc0
+IdentityTable	index	agree	rc0
+IdentityTable	intersection	agree	rc0
+IdentityTable	isEmpty	agree	rc0
+IdentityTable	items	agree	rc0
+IdentityTable	makeArray	agree	rc0
+IdentityTable	put	agree	rc0
+IdentityTable	putAll	agree	rc0
+IdentityTable	remove	agree	rc0
+IdentityTable	removeItem	agree	rc0
+IdentityTable	subset	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: an instance of a user class as a DO header's OVER target is not implemented (Ph
+IdentityTable	supplier	agree	rc0
+IdentityTable	union	agree	rc0
+IdentityTable	xor	agree	rc0
 List	[]	agree	rc0
 List	[]=	agree	rc0
 List	allIndexes	agree	rc0
@@ -428,27 +428,27 @@ Supplier	index	agree	rc0
 Supplier	item	agree	rc0
 Supplier	next	agree	rc0
 Supplier	supplier	agree	rc0
-Table	[]	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	[]=	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	allIndexes	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	allItems	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	at	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	difference	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	disjoint	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	empty	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	equivalent	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	hasIndex	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	hasItem	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	index	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	intersection	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	isEmpty	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	items	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	makeArray	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	put	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	putAll	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	remove	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	removeItem	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	subset	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	supplier	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	union	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Table	xor	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
+Table	[]	agree	rc0
+Table	[]=	agree	rc0
+Table	allIndexes	agree	rc0
+Table	allItems	agree	rc0
+Table	at	agree	rc0
+Table	difference	agree	rc0
+Table	disjoint	agree	rc0
+Table	empty	agree	rc0
+Table	equivalent	agree	rc0
+Table	hasIndex	agree	rc0
+Table	hasItem	agree	rc0
+Table	index	agree	rc0
+Table	intersection	agree	rc0
+Table	isEmpty	agree	rc0
+Table	items	agree	rc0
+Table	makeArray	agree	rc0
+Table	put	agree	rc0
+Table	putAll	agree	rc0
+Table	remove	agree	rc0
+Table	removeItem	agree	rc0
+Table	subset	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: an instance of a user class as a DO header's OVER target is not implemented (Ph
+Table	supplier	agree	rc0
+Table	union	agree	rc0
+Table	xor	agree	rc0

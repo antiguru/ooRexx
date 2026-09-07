@@ -172,6 +172,7 @@ mod string;
 
 // The collection classes' primitive methods, chained the same way.
 mod collection;
+mod hash;
 
 /// One primitive method's implementation.
 ///
@@ -996,14 +997,22 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // the `INIT` send, and nothing that would read the body.
     ("Bag", "NEW", Arity::Counted, native_new),
     ("EventSemaphore", "NEW", Arity::Counted, native_new),
-    ("IdentityTable", "NEW", Arity::Counted, native_new),
+    // `TableClass::newRexx` and `IdentityTable::newRexx` take an optional
+    // initial capacity, and it is observable: it decides the bucket count,
+    // which decides the order every iteration answers in.
+    (
+        "IdentityTable",
+        "NEW",
+        Arity::Counted,
+        hash::native_hash_new,
+    ),
     ("List", "NEW", Arity::Counted, native_new),
     ("MutexSemaphore", "NEW", Arity::Counted, native_new),
     ("Queue", "NEW", Arity::Counted, native_new),
     ("Relation", "NEW", Arity::Counted, native_new),
     ("Set", "NEW", Arity::Counted, native_new),
     ("Supplier", "NEW", Arity::Counted, native_new),
-    ("Table", "NEW", Arity::Counted, native_new),
+    ("Table", "NEW", Arity::Counted, hash::native_hash_new),
     // The classes whose own `newRexx` checks its arguments and then builds
     // something this crate does not -- a class object, an undispatched
     // message, a compiled executable, a loaded package, a weak reference
@@ -1210,6 +1219,7 @@ impl ObjectModel {
         for (class_id, method_name, arity, run) in NATIVE_METHODS
             .iter()
             .chain(string::NATIVE_METHODS)
+            .chain(hash::NATIVE_METHODS)
             .chain(collection::NATIVE_METHODS)
             .chain(extra)
         {
@@ -4657,18 +4667,22 @@ fn native_hash_code(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let value = if receiver == ObjRef::NIL {
-        NIL_HASH
-    } else {
-        match interp.receiver_kind(receiver) {
-            Ok(Primitive::String | Primitive::SmallInt) => string_hash(&interp.to_text(receiver)),
-            Ok(Primitive::Class(class)) => {
-                string_hash(interp.classes().id_string(class).as_bytes())
-            }
-            _ => receiver.bits(),
-        }
-    };
+    let value = hash_value(interp, receiver);
     Ok(Some(interp.text_built(value.to_le_bytes().to_vec())))
+}
+
+/// `RexxInternalObject::getHashValue()` as a number, which is what
+/// [`native_hash_code`] renders and what the mapped collections' store hashes
+/// an index by. Split out for the second caller, not changed.
+pub(super) fn hash_value(interp: &mut Interp, receiver: ObjRef) -> u64 {
+    if receiver == ObjRef::NIL {
+        return NIL_HASH;
+    }
+    match interp.receiver_kind(receiver) {
+        Ok(Primitive::String | Primitive::SmallInt) => string_hash(&interp.to_text(receiver)),
+        Ok(Primitive::Class(class)) => string_hash(interp.classes().id_string(class).as_bytes()),
+        _ => receiver.bits(),
+    }
 }
 
 /// `Class~annotation(name)`, and the same method at `Method`, `Routine` and
@@ -6608,6 +6622,16 @@ fn native_hash_at(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    // **One body, two stores.** `Setup.cpp` donates `IdentityTable`'s `At`,
+    // `Put` and `[]` rows to `StringTable` and that whole set on to
+    // `Directory` (`memory/Setup.cpp:881`, `:933`), so `Table`,
+    // `IdentityTable`, `StringTable` and `Directory` share one method
+    // identity here exactly as they share one function upstream. The
+    // string-keyed classes read the entry map they are built on; everything
+    // else reads the object-keyed store.
+    if hash::owns(interp, receiver) {
+        return hash::store_at(interp, receiver, args);
+    }
     let index = hash_index(interp, args, 1)?;
     Ok(Some(interp.hash_entry_read(receiver, &index)?))
 }
@@ -6629,6 +6653,10 @@ fn native_hash_put(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    // [`native_hash_at`]'s split, for the same reason.
+    if hash::owns(interp, receiver) {
+        return hash::store_put(interp, receiver, args);
+    }
     let Some(Some(item)) = args.first().copied() else {
         return Err(Raised::missing_named_argument("item").into());
     };
@@ -10659,6 +10687,7 @@ mod tests {
         let rows: Vec<&str> = NATIVE_METHODS
             .iter()
             .chain(string::NATIVE_METHODS)
+            .chain(hash::NATIVE_METHODS)
             .chain(collection::NATIVE_METHODS)
             .filter(|(class, ..)| *class == "String")
             .map(|(_, method, ..)| *method)
