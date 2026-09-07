@@ -92,6 +92,17 @@ programming hazard rather than an oracle property. It is why every refusal in
 
 ## Gates
 
-Seven gates over `96d376350` (through D4): G1 0, G2 0, G3 0, G4 0, G5 0, G6 0,
-G7 0, `failed-suites=0` on each suite-running gate, from
-`scratchpad/gates-d4.status`.
+Two seven-gate runs, both all green.
+
+Over `96d376350`, the phase through D4: G1 0, G2 0, G3 0, G4 0, G5 0, G6 0,
+G7 0, `failed-suites=0` on each suite-running gate
+(`scratchpad/gates-d4.status`).
+
+Over `c69a2f688`, the phase complete: the same seven zeros and the same five
+`failed-suites=0` (`scratchpad/gates-d7.status`).
+
+Per-task fast checks were `cargo fmt --all --check`, `cargo clippy --workspace
+--all-targets -- -D warnings`, and `cargo test --release --workspace
+--no-fail-fast` under `REXX_CORPUS_GATE=1` -- which is G1 through G4 exactly,
+so what the two gate runs add over the per-task checks is G5's debug build and
+the two phase gates.
