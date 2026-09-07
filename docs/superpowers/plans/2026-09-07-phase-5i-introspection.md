@@ -607,12 +607,34 @@ send `.context~name`, which is loud until this task lands. Task 1 closes the eig
 them because the zero-argument send never reaches those lines; **this task writes them**, and its
 report says whether the crate reaches the oracle's messages once `~name` answers.
 
-**The hazard to size before starting.** `RexxContext` and `StackFrame` read the *activation stack*,
-and `NativeObject` holds no reference to one. Whatever mechanism connects an object to the frame it
-describes is this task's real design work, and the two questions it must answer explicitly are:
-what happens when a `StackFrame` outlives the frame it describes, and what the collector sees.
-Measure the oracle for the first (`.context~stackFrames[1]` kept in a variable, read after the
-routine returns) before choosing.
+**The activation stack exists and is already walkable — do not build a second one.** Read against
+the tree 2026-09-07:
+
+* `Interp::running: Option<Box<Activation>>` and `Interp::suspended: Vec<Box<Activation>>`
+  (`crates/rexx-exec/src/lib.rs:3038`) are the stack, **oldest first**, so `suspended.last()` is the
+  running activation's own caller — the field's own doc says so. `Interp::collect_now`
+  (`lib.rs:~7162`) already walks exactly that chain.
+* **Each activation already carries its own `RexxContext` object**: `Activation::context_object`
+  (`crates/rexx-exec/src/activation.rs`, the field around `:816`), created by
+  `Interp::context_object`, and `collect_now`'s comment calls it "the one object an activation owns
+  outright". `RexxContext~package` already answers through this path (`dispatch.rs:849`-`:854`).
+* `Activation` (`activation.rs:405`) carries `program`, `program_id`, `body`, `plan`, `entry`,
+  `call_type: CallType`, `method_identity`, `settings: Settings`, `pc`, `trace_entry` and
+  `condition`. Between them those are the fields every row in this task reads. Find each and cite
+  it in the report rather than adding a parallel field.
+
+**`CallType`'s spellings are not `StackFrame~type`'s.** `CallType` (`activation.rs:~904`) is
+`Command`, `Subroutine`, `Function`, `Method`, `Requires`, rendering as `COMMAND SUBROUTINE
+FUNCTION METHOD REQUIRES` — that is `PARSE SOURCE`'s vocabulary. The oracle's `StackFrame~type` for
+an internal routine call is `INTERNALCALL`. So there is a **mapping** to work out, and the set of
+values `~type` can take has to come from the C++ (`StackFrameClass.cpp` and whatever fills it), not
+from `CallType`. Measure at least a program frame, an internal-call frame and a method frame.
+
+**The two questions this task still has to answer, and neither is answered above:** what a
+`StackFrame` answers when it outlives the frame it describes, and what the collector sees of it.
+Measure the oracle for the first — keep `.context~stackFrames[1]` in a variable, return from the
+routine, read it — before choosing a representation. `Activation::object_roots` is named in
+`collect_now`'s comment as the other route for a parked activation's objects; read it.
 
 ---
 
