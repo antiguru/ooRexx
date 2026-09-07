@@ -1,0 +1,34 @@
+count 33
+/* `~of` on the mapped collections.  One Rexx body in MapCollection serves them
+   all: `arg(1,'A')` takes the whole argument list as an array, each element
+   must be a two-item array, and the pair goes in REVERSED -- the index is
+   first and the value second, the opposite of `put`. */
+
+do klass over .Array~of(.Directory, .IdentityTable, .Properties, .Relation, ,
+                        .Stem, .StringTable, .Table)
+   made = klass~of(.Array~of('k1', 'v1'), .Array~of('k2', 'v2'))
+   /* A second send: the entries have to come back OUT of the collection `of`
+      built, not merely have gone in. */
+   say klass~id made~class~id made~items '['made['k1']']' '['made['k2']']',
+       made~hasIndex('k2')
+end
+
+/* No arguments is an empty collection of the receiver's own class -- the body
+   returns before it looks at the array at all. */
+say 'empty' .Table~of~items .Table~of~class~id .StringTable~of~items
+
+/* A subclass gets an instance of itself. */
+say 'subclass' .Table~subclass('K')~of(.Array~of('a', 'b'))~class~id
+
+/* The mixin itself reaches its own abstract PUT. */
+signal on syntax name abstractPut
+zz = .MapCollection~of(.Array~of('k', 'v'))
+say 'unreached' zz
+exit 1
+
+abstractPut:
+  say 'mixin' rc condition('C') condition('E')
+
+/* An omitted argument is 93.903 naming its own position: the hole `arg(1,'A')`
+   carried through is what `args~hasIndex(i)` sees. */
+say .Directory~of(.Array~of('k', 'v'), , .Array~of('k2', 'v2'))~items

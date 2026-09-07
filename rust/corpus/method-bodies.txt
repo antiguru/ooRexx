@@ -364,7 +364,7 @@ Collection	subset	instance	answers	rc 163
 Collection	supplier	instance	answers	rc 163
 Collection	union	instance	answers	rc 163
 Collection	xor	instance	answers	rc 163
-MapCollection	of	class	loud	ARG option "A" answers an Array, which
+MapCollection	of	class	answers	rc 0
 MapCollection	makeArray	instance	answers	rc 163
 MapCollection	putAll	instance	answers	rc 163
 MapCollection	[]	instance	answers	rc 163
@@ -594,7 +594,7 @@ Directory	intersection	instance	answers	rc 163
 Directory	subset	instance	answers	rc 163
 Directory	union	instance	answers	rc 163
 Directory	xor	instance	answers	rc 163
-Directory	of	class	loud	ARG option "A" answers an Array, which
+Directory	of	class	answers	rc 0
 Directory	putAll	instance	answers	rc 163
 IdentityTable	new	class	answers	rc 0
 IdentityTable	[]	instance	answers	rc 168
@@ -620,7 +620,7 @@ IdentityTable	intersection	instance	answers	rc 163
 IdentityTable	subset	instance	answers	rc 163
 IdentityTable	union	instance	answers	rc 163
 IdentityTable	xor	instance	answers	rc 163
-IdentityTable	of	class	loud	ARG option "A" answers an Array, which
+IdentityTable	of	class	answers	rc 0
 IdentityTable	putAll	instance	answers	rc 163
 List	new	class	answers	rc 0
 List	of	class	answers	rc 0
@@ -690,7 +690,7 @@ Properties	subset	instance	answers	rc 163
 Properties	supplier	instance	answers	rc 0
 Properties	union	instance	answers	rc 163
 Properties	xor	instance	answers	rc 163
-Properties	of	class	loud	ARG option "A" answers an Array, which
+Properties	of	class	answers	rc 0
 Properties	putAll	instance	answers	rc 163
 Properties	new	class	answers	rc 0
 Properties	empty	instance	answers	rc 0
@@ -777,7 +777,7 @@ Relation	uniqueIndexes	instance	answers	rc 0
 Relation	xor	instance	answers	rc 163
 Relation	disjoint	instance	answers	rc 163
 Relation	equivalent	instance	answers	rc 163
-Relation	of	class	loud	ARG option "A" answers an Array, which
+Relation	of	class	answers	rc 0
 Relation	putAll	instance	answers	rc 163
 Set	new	class	answers	rc 0
 Set	of	class	answers	rc 0
@@ -832,7 +832,7 @@ Stem	intersection	instance	answers	rc 163
 Stem	subset	instance	answers	rc 163
 Stem	union	instance	answers	rc 163
 Stem	xor	instance	answers	rc 163
-Stem	of	class	loud	ARG option "A" answers an Array, which
+Stem	of	class	answers	rc 0
 Stem	putAll	instance	answers	rc 163
 StringTable	new	class	answers	rc 0
 StringTable	[]	instance	answers	rc 168
@@ -863,7 +863,7 @@ StringTable	intersection	instance	answers	rc 163
 StringTable	subset	instance	answers	rc 163
 StringTable	union	instance	answers	rc 163
 StringTable	xor	instance	answers	rc 163
-StringTable	of	class	loud	ARG option "A" answers an Array, which
+StringTable	of	class	answers	rc 0
 StringTable	putAll	instance	answers	rc 163
 Table	new	class	answers	rc 0
 Table	[]	instance	answers	rc 168
@@ -889,7 +889,7 @@ Table	intersection	instance	answers	rc 163
 Table	subset	instance	answers	rc 163
 Table	union	instance	answers	rc 163
 Table	xor	instance	answers	rc 163
-Table	of	class	loud	ARG option "A" answers an Array, which
+Table	of	class	answers	rc 0
 Table	putAll	instance	answers	rc 163
 Alarm	attachment	instance	unanswered	a bare `~new` raises; the method was never sent
 Alarm	cancel	instance	unanswered	a bare `~new` raises; the method was never sent

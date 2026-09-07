@@ -46,9 +46,9 @@
 //!
 //! # What is not here, and why it is loud rather than approximated
 //!
-//! Three option letters answer an object this crate's value model has no
-//! representation for, and each fails loudly at the call: `ARG(n,'A')` and
-//! `CONDITION('A')` answer an `Array`, `CONDITION('O')` a `Directory`.
+//! `CONDITION('A')` answers an `Array` and `CONDITION('O')` a `Directory`,
+//! neither of which this crate builds from a condition object, so each fails
+//! loudly at the call.
 //! Measured, inside a `SIGNAL ON SYNTAX` handler after `say substr('abc')`:
 //! `condition('A')~class` is `The Array class` and `condition('A')~items` is
 //! 2, and `condition('O')~items` is 14. The null string would be right for
@@ -59,7 +59,7 @@
 //! `RAISE ... DESCRIPTION` value and does not carry `NOVALUE`'s variable
 //! name -- that one pair is loud too, for the same reason and no other.
 
-use rexx_core::ObjRef;
+use rexx_core::{BehaviourId, Body, ObjRef};
 
 use super::{Args, optional_string, whole_number};
 use crate::Interp;
@@ -365,6 +365,21 @@ pub(crate) fn trace(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result
 /// arg(2,'N')    ''      'N'ormal is `arg(n)` again
 /// ```
 ///
+/// **`'A'` answers the list from that position on, holes included.** The
+/// C++ copies `arglist`'s pointers straight into the array and an omitted
+/// position is `OREF_NULL` there, so the answer carries an empty slot rather
+/// than `.nil` or a shortened list. Measured against the same call, rc 0:
+///
+/// ```text
+/// arg(1,'A')    ~size 3, ~items 2, ~dimension 1, ~hasIndex(2) 0
+/// arg(2,'A')    ~size 2, ~items 1, ~dimension 1
+/// arg(4,'A')    ~size 0,           ~dimension 0
+/// ```
+///
+/// **Position 1 is tested before the past-the-end arm**, so a call with no
+/// arguments at all answers `~dimension` 1 there and 0 at any other
+/// position -- measured, rc 0, and it is the case `MapCollection~of` takes.
+///
 /// **The three checks run in the C++'s own order, and every pair of them
 /// can be told apart.** `optional_integer` first, then the no-position test,
 /// then `positive_integer`, and only then the option's own letter:
@@ -414,7 +429,28 @@ pub(crate) fn arg(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<Ob
         }),
         Some(b'E') => Ok(interp.text(if supplied.is_some() { b"1" } else { b"0" })),
         Some(b'O') => Ok(interp.text(if supplied.is_some() { b"0" } else { b"1" })),
-        Some(b'A') => Err(Loud::builtin_option_object("ARG", b'A', "an Array").into()),
+        Some(b'A') => {
+            let arguments = &interp.call_context.arguments;
+            let slots: Vec<Option<ObjRef>> = if index == 1 {
+                arguments.clone()
+            } else if index > arguments.len() {
+                Vec::new()
+            } else {
+                arguments[index - 1..].to_vec()
+            };
+            // `new_array()` leaves the shape unset, while `ArrayClass(objs,
+            // count)` fixes it when `count` is zero
+            // (`classes/ArrayClass.cpp:314`) -- and position 1 takes the
+            // second even when there are no arguments at all, because the
+            // C++ tests it before the past-the-end arm.
+            let dimensions: Option<Box<[usize]>> =
+                (index == 1 && slots.is_empty()).then(|| Box::from([0].as_slice()));
+            let object = interp.alloc_with(BehaviourId::ARRAY, Body::Array { slots, dimensions });
+            // The array's only root: nothing else names it between here and
+            // the caller storing it.
+            interp.roots.push_temp(object);
+            Ok(object)
+        }
         Some(_) => {
             let found = option.unwrap_or_default();
             Err(Raised::argument_not_in_list(name, 2, VALID, &found).into())
@@ -802,6 +838,30 @@ mod tests {
         );
     }
 
+    /// `ARG(n,'A')` over the same call: the hole survives into the array,
+    /// and a position past the end answers a shapeless empty one.
+    #[test]
+    fn arg_option_a_copies_the_list_holes_and_all() {
+        assert_eq!(
+            output(
+                b"call sub 'p1',,'p3'\nexit\nsub:\na = arg(1,'A')\nsay a~size a~items a~dimension a~hasIndex(2) '['a[1]']['a[3]']'\nb = arg(2,'A')\nsay b~size b~items b~dimension\nc = arg(3,'A')\nsay c~size c~items c~dimension\nd = arg(4,'A')\nsay d~size d~items d~dimension d~class\ne = arg(99,'A')\nsay e~size e~items e~dimension\nreturn\n"
+            ),
+            "3 2 1 0 [p1][p3]\n2 1 1\n1 1 1\n0 0 0 The Array class\n0 0 0\n"
+        );
+    }
+
+    /// The adjacent success for the arm above: with no arguments at all,
+    /// position 1 still answers a shaped array where position 2 does not.
+    #[test]
+    fn arg_option_a_shapes_position_one_even_with_no_arguments() {
+        assert_eq!(
+            output(
+                b"call sub\nexit\nsub:\na = arg(1,'A')\nsay a~size a~items a~dimension\nb = arg(2,'A')\nsay b~size b~items b~dimension\nreturn\n"
+            ),
+            "0 0 1\n0 0 0\n"
+        );
+    }
+
     /// An option with no position is the missing-argument error, not the
     /// bad-option one -- the C++ checks for the position first.
     #[test]
@@ -1117,8 +1177,8 @@ mod tests {
         }
     }
 
-    /// The three options whose answer is an object this crate cannot make
-    /// fail loudly rather than returning a plausible string.
+    /// The options whose answer is an object this crate cannot make fail
+    /// loudly rather than returning a plausible string.
     #[test]
     fn the_object_valued_options_are_loud() {
         for (source, message) in [
@@ -1129,10 +1189,6 @@ mod tests {
             (
                 b"say condition('O')\n".as_slice(),
                 "CONDITION option \"O\" answers a Directory, which is not implemented",
-            ),
-            (
-                b"say arg(1,'A')\n".as_slice(),
-                "ARG option \"A\" answers an Array, which is not implemented",
             ),
         ] {
             let (code, stderr) = failure(source);

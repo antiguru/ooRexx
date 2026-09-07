@@ -71,11 +71,7 @@ struct Case {
 /// crate refuses an answer it cannot build (`Loud::builtin_option_object`).
 ///
 /// Named rather than counted: see the module doc.
-const DECLARED_GAPS: &[&str] = &[
-    "arg_option_array",
-    "condition_additional",
-    "condition_object",
-];
+const DECLARED_GAPS: &[&str] = &["condition_additional", "condition_object"];
 
 const CASES: &[Case] = &[
     // ---- ADDRESS: the default, the forms, byte transparency ----
