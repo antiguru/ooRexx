@@ -806,17 +806,42 @@ unstable rows: the cost is process startup and the callers run in parallel test 
 
 ## 14. Gates
 
-Run in the gate worktree `/home/moritz/dev/repos/ooRexx-5i-gates`, detached at the fix commit.
+Run in the gate worktree `/home/moritz/dev/repos/ooRexx-5i-gates`, detached at **`598fd722a`**, the
+last of this round's three commits. The worktree's own `HEAD` is recorded beside the sha in the
+status file, so the gated tree is the committed tree by construction. Four of the controller's plan
+commits -- `e0646e5ff`, `b37180058`, `81aa7255d` and `6f5a60db2` -- are interleaved among this
+round's on the branch and are therefore covered by this run as well; a reader counting commits
+between the run and the task would otherwise wonder what they were.
 
 | gate | command | result |
 | --- | --- | --- |
-| G1 | `cargo fmt --all --check` | **G1** |
-| G2 | `cargo clippy --workspace --all-targets -- -D warnings` | **G2** |
-| G3 | `cargo test --release --workspace --no-fail-fast` | **G3** |
-| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` (debug) | **G4** |
-| G5 | `cargo test --release -p rexx-exec --test collection_arity` | **G5** |
-| G6 | `cargo test --release -p rexx-exec --test introspection_arity` | **G6** |
-| G7 | `cargo test --release -p rexx-exec --test introspection_scopes` | **G7** |
+| G1 | `cargo fmt --all --check` | exit 0 |
+| G2 | `cargo clippy --workspace --all-targets -- -D warnings` | exit 0 |
+| G3 | `cargo test --release --workspace --no-fail-fast` | exit 0, 116 `test result: ok`, no `FAILED` |
+| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` (debug) | exit 0, 116 `test result: ok`, no `FAILED` |
+| G5 | `cargo test --release -p rexx-exec --test collection_arity` | exit 0, 23 passed |
+| G6 | `cargo test --release -p rexx-exec --test introspection_arity` | exit 0, 25 passed |
+| G7 | `cargo test --release -p rexx-exec --test introspection_scopes` | exit 0, 22 passed |
+
+**G3 and G4 are the second reading of those two commands. The first was void, not failed.**
+`ootest/` and `oodocs/` are gitignored SVN working copies that live inside the working tree, and
+`git worktree add` takes tracked files only, so the pinned worktree had neither: both runs came back
+101 with 30 failed tests and exactly 30 panics, from two sites, every one naming an absent path
+under those directories -- `crates/rexx-extract/tests/extract_docs.rs:54` says so in its own message.
+Failed-test count equalling panic count is what rules out any other failure hiding among them, and
+no binary of this task's was red inside either. The controller symlinked both directories into the
+worktree and re-ran G3 and G4 on this same pinned sha.
+
+**A symlink can produce a false green as easily as a missing directory produced a false red**, so
+the re-run was read for work done rather than for its exit status: the eight binaries that had been
+red -- `assertions` 5, `bif_assertions` 5, `keyword_assertions` 7, `ir_dual` 9, `extract_assertions`
+19, `extract_bif` 10, `extract_docs` 9, `extract_keyword` 22 -- all passed with non-zero counts, the
+four differentials taking 8.15s, 17.64s, 16.62s and 20.21s. They ran; they did not skip.
+
+**G1 and G2 read 0 off a warm worktree target and are provisional to that extent**, per
+`rust/CLAUDE.md`'s rule that a same-session green is only evidence if the linter re-examined the
+code. Every per-task run in this phase is warm, so the clean-target-directory reading cannot
+honestly live in one of them; the controller has put it in the phase's close instead.
 
 ## 15. What this round did not do
 
