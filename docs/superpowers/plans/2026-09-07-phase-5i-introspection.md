@@ -204,9 +204,19 @@ shape would leave five of this phase's own rows unsized: `Package~defaultOptions
 `Method~loadExternalMethod`, `Method~newFile`, `Routine~loadExternalRoutine`, `Routine~newFile`, all
 named verbatim in Tasks 4 and 7. The shared module takes the arm column as a layout flag, off for
 the collection driver, so `corpus/collection-arity.tsv` keeps its four columns and its byte-identity
-control. **`Pointer` and `Buffer` are excluded per (class, arm) rather than per class**: their
-class-arm `new` row is measurable with receiver `.Pointer` and sizes Task 2, and only their instance
-arm is excluded, with the reference citation as its reason.
+control. **`Pointer` and `Buffer` are excluded per (class, arm) rather than per class**: only their instance
+arm is excluded by name, with the reference citation as its reason, and their class-arm `new` row
+goes in as an `EXEMPT:` row whose reason is the measurement, `93.967`.
+
+**The first version of this ruling gave a false reason for a correct outcome, and the correction is
+recorded rather than quietly applied.** It said the class-arm row "is measurable with receiver
+`.Pointer` and sizes Task 2". The oracle *raises* on `.Pointer~new`, so the probe's `SYNTAX` trap
+fires, `SENT` is never printed, and the harness rule -- a row's list is real only if the ORACLE
+completes the send -- refuses it as a data point. **Nothing this instrument can do sizes Task 2**,
+because the row is about a refusal both sides make; Task 2 is sized by `corpus/method-bodies.txt`
+alone, which is legitimate for exactly that reason. What the two rows buy is that the exclusion is
+per (class, arm) and that `93.967` lives in a committed row rather than in a header sentence no test
+reads.
 
 **Deliverable of this task, and it is what sizes every later one:** the number of rows in this
 phase's classes that read `agree` under a real argument list, and the number that read
