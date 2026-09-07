@@ -916,8 +916,30 @@ So: **the receiver Task 0 commits must carry more than one of each**, every witn
 entry back out **by name**, and the report gives each row its arity verdict beside its
 method-bodies verdict.
 
-`addPackage`, `addRoutine`, `addPublicRoutine` and `loadPackage` are writes; each is witnessed by
-the read that should see it, in the same program.
+**The four writes, measured on the oracle 2026-09-07 with the read that sees each one:**
+
+```
+r = .Routine~new('NEWR', 'return 42')
+p~addRoutine('NEWR', r)        -> a Package   ; p~routines      0 -> 1, index NEWR
+p~addPublicRoutine('PUBR', r)  -> a Package   ; p~publicRoutines 0 -> 1, index PUBR
+                                              ; p~findRoutine('NEWR') -> a Routine
+op = .Package~new('other.rex')   -> a Package, ~name the resolved absolute path
+p~addPackage(op)               -> a Package   ; p~importedPackages 0 -> 1
+                                              ; p~importedClasses  -> OTHERC
+                                              ; p~importedRoutines -> OTHERR
+p~loadPackage('other.rex')     -> a Package
+```
+
+where `other.rex` holds `::routine OTHERR public` and `::class OTHERC public`. **All three `add*`
+answer the receiving package itself, not the thing added**, and `addPackage` is what fills
+`importedClasses` and `importedRoutines` — so those two rows cannot be witnessed at all without it,
+which is the reason they are in this task and not Task 7. Witness each write by the read that
+should see it, in the same program, and assert the before value as well as the after: a table that
+was already non-empty makes "the write worked" indistinguishable from "the read answers something".
+
+`.Package~new('<file>')` reads and installs a file, so a witness using it must live under the
+corpus's own rules about files it creates — check what `rust/CLAUDE.md` says about never
+instantiating `.Package~new` on a file inside the repository before writing one.
 
 **The `find*` family and `resource`, measured on the oracle 2026-09-07** on a program with
 `::routine RR public`, `::class K public` and a two-line `::resource R1`:
