@@ -283,11 +283,28 @@ arg(99,'A')  size=0              dimension=0
 arg()        3
 ```
 
-**`dimension` 0 for the past-the-end case is the second detail a naive implementation gets wrong**,
-and the crate has a live example of the wrong answer to copy from: `native_array_of`
-(`dispatch.rs:6509`) sets `dimensions: Some([0])` when its argument list is empty, because
-`.array~of()` answers `~dimension` `1`. `arg(n,'A')` past the end answers `0`, so it wants
-`dimensions: None`. The rest of `native_array_of` is the template — `slots: args.to_vec()` copies
+**`dimension` is the second detail a naive implementation gets wrong, and it does NOT split on
+"past the end" -- it splits on whether the position is 1.** `BuiltinFunctions.cpp:934` tests
+`position == 1` **before** `:938`'s `position > size`, so position 1 always takes
+`new_array(size, arglist)` and never the empty-array limb. Measured on the oracle 2026-09-08 from a
+call with **no arguments at all**:
+
+```
+arg(1,'A')   size=0  items=0  dimension=1
+arg(2,'A')   size=0  items=0  dimension=0
+```
+
+**And position 1 on an empty argument list is exactly the path all eight `of` rows take**, because
+`corpus/method-bodies.txt` sends `of` with no arguments. So the two limbs are: position 1 gets
+`native_array_of`'s own shape -- `dimensions: args.is_empty().then(|| [0])` -- and every other
+position past the end gets `dimensions: None`. Witness both; a single rule for "past the end" gives
+every row this task exists to close a `~dimension` of 0 where the oracle answers 1.
+
+(An earlier version of this paragraph said the past-the-end case "wants `dimensions: None`" and
+offered `arg(4,'A')` as its case. That is true for position != 1 and false for position 1, which is
+the case the phase's own rows take. Task 1's pre-flight caught it before any code was written.)
+
+The rest of `native_array_of` (`dispatch.rs:6509`) is the template -- `slots: args.to_vec()` copies
 the holes through exactly.
 
 **Witnesses this task owes:**
