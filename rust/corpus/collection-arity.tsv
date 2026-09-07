@@ -63,34 +63,34 @@ Array	supplier	agree	rc0
 Array	toString	agree	rc0
 Array	union	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
 Array	xor	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)
-Bag	[]	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	[]=	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	allAt	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	allIndex	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	allIndexes	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	allItems	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	at	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	difference	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	disjoint	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	empty	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	equivalent	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	hasIndex	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	hasItem	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	index	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	intersection	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	isEmpty	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	items	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	makeArray	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	put	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	putAll	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	remove	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	removeAll	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	removeItem	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	subset	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	supplier	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	union	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	uniqueIndexes	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
-Bag	xor	setup-differs	crate rc168: *-* Compiled method "PUT" with scope "Bag".
+Bag	[]	agree	rc0
+Bag	[]=	agree	rc0
+Bag	allAt	agree	rc0
+Bag	allIndex	agree	rc0
+Bag	allIndexes	agree	rc0
+Bag	allItems	agree	rc0
+Bag	at	agree	rc0
+Bag	difference	agree	rc0
+Bag	disjoint	agree	rc0
+Bag	empty	agree	rc0
+Bag	equivalent	agree	rc0
+Bag	hasIndex	agree	rc0
+Bag	hasItem	agree	rc0
+Bag	index	agree	rc0
+Bag	intersection	agree	rc0
+Bag	isEmpty	agree	rc0
+Bag	items	agree	rc0
+Bag	makeArray	agree	rc0
+Bag	put	agree	rc0
+Bag	putAll	agree	rc0
+Bag	remove	agree	rc0
+Bag	removeAll	agree	rc0
+Bag	removeItem	agree	rc0
+Bag	subset	agree	rc0
+Bag	supplier	agree	rc0
+Bag	union	agree	rc0
+Bag	uniqueIndexes	agree	rc0
+Bag	xor	agree	rc0
 CircularQueue	[]	agree	rc0
 CircularQueue	[]=	agree	rc0
 CircularQueue	allIndexes	agree	rc0
@@ -313,34 +313,34 @@ Queue	subset	agree	rc0
 Queue	supplier	agree	rc0
 Queue	union	agree	rc0
 Queue	xor	agree	rc0
-Relation	[]	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	[]=	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	allAt	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	allIndex	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	allIndexes	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	allItems	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	at	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	difference	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	disjoint	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	empty	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	equivalent	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	hasIndex	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	hasItem	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	index	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	intersection	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	isEmpty	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	items	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	makeArray	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	put	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	putAll	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	remove	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	removeAll	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	removeItem	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	subset	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	supplier	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	union	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	uniqueIndexes	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
-Relation	xor	setup-differs	crate rc120: rexx-exec: a message send to a value that is not a hash collection is not implemented (Pha
+Relation	[]	agree	rc0
+Relation	[]=	agree	rc0
+Relation	allAt	agree	rc0
+Relation	allIndex	agree	rc0
+Relation	allIndexes	agree	rc0
+Relation	allItems	agree	rc0
+Relation	at	agree	rc0
+Relation	difference	agree	rc0
+Relation	disjoint	agree	rc0
+Relation	empty	agree	rc0
+Relation	equivalent	agree	rc0
+Relation	hasIndex	agree	rc0
+Relation	hasItem	agree	rc0
+Relation	index	agree	rc0
+Relation	intersection	agree	rc0
+Relation	isEmpty	agree	rc0
+Relation	items	agree	rc0
+Relation	makeArray	agree	rc0
+Relation	put	agree	rc0
+Relation	putAll	agree	rc0
+Relation	remove	agree	rc0
+Relation	removeAll	agree	rc0
+Relation	removeItem	agree	rc0
+Relation	subset	agree	rc0
+Relation	supplier	agree	rc0
+Relation	union	agree	rc0
+Relation	uniqueIndexes	agree	rc0
+Relation	xor	agree	rc0
 Set	[]	agree	rc0
 Set	[]=	agree	rc0
 Set	allIndexes	agree	rc0

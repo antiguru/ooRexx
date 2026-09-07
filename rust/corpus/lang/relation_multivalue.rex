@@ -1,0 +1,119 @@
+/* A Relation holds more than one item per index, and the ORDER it holds them
+ * in is defined: `put` under an index the relation already has adds at the
+ * FRONT of that index's chain, so `allAt` answers newest first and `at`
+ * answers the newest.  A witness built on one entry per index would be a
+ * Table test with a different name on it, so every index below carries two.
+ *
+ * `items` and `supplier` take an optional index here where they take none
+ * everywhere else, and `uniqueIndexes` exists only because indexes repeat --
+ * `allIndexes` answers `j,k,k` where `uniqueIndexes` answers `j,k`.
+ *
+ * A Bag is a Relation whose index is its item, so it keeps duplicates where
+ * a Set collapses them: `.Bag~of('p','p','q')~items` is 3 against
+ * `.Set~of('p','p')~items` of 1.
+ *
+ * The mixin rows run last and after a `union`, for `set_operations.rex`'s
+ * reason: `union` is `self~copy`, and a copy that shares its store makes it
+ * mutate the receiver.
+ */
+
+r = .Relation~new
+r['k'] = 'v1'
+r['k'] = 'v2'
+r['j'] = 'w'
+say 'items    ' r~items r~items('k') r~items('j') r~items('z')
+say 'at       ' r['k'] 'allAt' r~allAt('k')~makeString('L',',')
+say 'indexes  ' r~allIndexes~makeString('L',',') '/' r~uniqueIndexes~makeString('L',',')
+say 'allItems ' r~allItems~makeString('L',',')
+say 'index    ' r~index('v1') r~index('v2') 'allIndex' r~allIndex('v1')~makeString('L',',')
+say 'hasItem  ' r~hasItem('v1') r~hasItem('nope') r~hasItem('v1','k') r~hasItem('v1','j')
+say 'hasIndex ' r~hasIndex('k') r~hasIndex('z')
+s = r~supplier
+do while s~available
+  say '  pair' s~index s~item
+  s~next
+end
+say 'supplier ' r~supplier('k')~item
+
+gone = .Relation~new
+gone['k'] = 'v1'
+gone['k'] = 'v2'
+gone['j'] = 'w'
+say 'removeAll' gone~removeAll('k')~makeString('L',',') gone~items
+say 'absent   ' gone~removeAll('z')~class~id gone~removeAll('z')~items
+pair = .Relation~new
+pair['k'] = 'a'
+pair['k'] = 'b'
+say 'removeIt ' pair~removeItem('a','k') pair~items pair~allAt('k')~makeString('L',',')
+say 'no match ' pair~removeItem('zz')
+say 'remove   ' pair~remove('k') pair~items
+
+b = .Bag~new
+b~put('x')
+b~put('x')
+b~put('y')
+say 'bag      ' b~items b~items('x') b~allIndexes~makeString('L',',')
+say 'bag items' b~allItems~makeString('L',',') '/' b~uniqueIndexes~makeString('L',',')
+say 'bag has  ' b~hasItem('x') b~hasItem('z') b~hasIndex('x')
+say 'bag at   ' b['x'] b~allAt('x')~makeString('L',',')
+b~removeItem('x')
+say 'bag less ' b~items b~items('x')
+say 'bag of   ' .Bag~of('p','p','q')~items .Set~of('p','p')~items
+
+ba = .Bag~of('x','x','y')
+bb = .Bag~of('y','z')
+say 'a before ' ba~allIndexes~makeString('L',',')
+say 'union    ' ba~union(bb)~allIndexes~makeString('L',',')
+say 'a after  ' ba~allIndexes~makeString('L',',')
+say 'isect    ' ba~intersection(bb)~allIndexes~makeString('L',',')
+say 'diff     ' ba~difference(bb)~allIndexes~makeString('L',',')
+say 'xor      ' ba~xor(bb)~allIndexes~makeString('L',',')
+say 'subset   ' bb~subset(ba) ba~subset(ba)
+
+ra = .Relation~new
+ra['k'] = 'v1'
+ra['k'] = 'v2'
+rb = .Relation~new
+rb['k'] = 'v2'
+say 'rel union' ra~union(rb)~items
+say 'rel isect' ra~intersection(rb)~items
+say 'rel diff ' ra~difference(rb)~items
+say 'rel xor  ' ra~xor(rb)~items
+say 'rel sub  ' rb~subset(ra)
+rp = .Relation~new
+rp~putAll(ra)
+say 'rel putAll' rp~items
+
+/* RelationClass's own methods take their index POSITIONALLY where
+ * HashCollection's take it as a named argument, so the two families raise
+ * different errors for the same omission: 93.903 here against `at()`'s
+ * 88.901.  The last send is untrapped so the 93.903 text and the frame line
+ * are compared as bytes.  rc 163.
+ */
+signal on syntax name trapped
+bare = .Relation~new
+n = 0
+
+next:
+n = n + 1
+select
+  when n = 1 then say n 'answered' bare~allAt()
+  when n = 2 then say n 'answered' bare~removeAll()
+  when n = 3 then say n 'answered' bare~allIndex()
+  when n = 4 then say n 'answered' bare~hasItem()
+  when n = 5 then say n 'answered' bare~removeItem()
+  when n = 6 then say n 'answered' bare~at()
+  when n = 7 then say n 'answered' bare~items()
+  when n = 8 then say n 'answered' bare~uniqueIndexes()~items
+  otherwise signal done
+end
+signal next
+
+trapped:
+say n 'raised' rc'.'condition('E')
+signal on syntax name trapped
+signal next
+
+done:
+signal off syntax
+say bare~allAt()

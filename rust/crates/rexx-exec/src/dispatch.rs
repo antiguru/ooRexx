@@ -995,7 +995,10 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // Each allocates a primitive body this crate does not model, so each
     // answers [`native_new`]'s plain instance: the class's own behaviour and
     // the `INIT` send, and nothing that would read the body.
-    ("Bag", "NEW", Arity::Counted, native_new),
+    ("Bag", "NEW", Arity::Counted, hash::native_hash_new),
+    // `AddClassMethod("Of", BagClass::ofRexx, A_COUNT)`, which unlike
+    // `Set~of` keeps the duplicates.
+    ("Bag", "OF", Arity::Counted, hash::native_bag_of),
     ("EventSemaphore", "NEW", Arity::Counted, native_new),
     // `TableClass::newRexx` and `IdentityTable::newRexx` take an optional
     // initial capacity, and it is observable: it decides the bucket count,
@@ -1009,7 +1012,7 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("List", "NEW", Arity::Counted, native_new),
     ("MutexSemaphore", "NEW", Arity::Counted, native_new),
     ("Queue", "NEW", Arity::Counted, native_new),
-    ("Relation", "NEW", Arity::Counted, native_new),
+    ("Relation", "NEW", Arity::Counted, hash::native_hash_new),
     ("Set", "NEW", Arity::Counted, hash::native_hash_new),
     // `AddClassMethod("Of", SetClass::ofRexx, A_COUNT)`: `Set`'s own, unlike
     // the mapped classes whose `of` is `MapCollection~OF` in Rexx.

@@ -124,12 +124,33 @@ fn hash_scope(interp: &mut Interp) -> ObjRef {
 /// Measured as the instrument for that: with the guard missing, the
 /// method-body table reported 38 rows regressing from `answers` to
 /// `diverge`.
-const OWNED: &[&str] = &["Table", "IdentityTable", "Set"];
+const OWNED: &[&str] = &["Table", "IdentityTable", "Set", "Relation", "Bag"];
 
 /// The classes whose `put` takes its index from its value --
 /// `IndexOnlyHashCollection`, whose only two subclasses are `Set` and `Bag`
 /// (`classes/support/HashCollection.cpp:1129`).
-const INDEX_ONLY: &[&str] = &["Set"];
+const INDEX_ONLY: &[&str] = &["Set", "Bag"];
+
+/// The classes whose `put` adds a second entry under an existing index
+/// instead of replacing it -- `MultiValueContents`, whose `put` is
+/// `addFront` (`classes/support/HashContents.cpp:1650`).
+const MULTI_VALUE: &[&str] = &["Relation", "Bag"];
+
+/// Whether `receiver` holds more than one item per index.
+fn multi_value(interp: &mut Interp, receiver: ObjRef) -> bool {
+    let Some(class) = interp.class_of_value(receiver) else {
+        return false;
+    };
+    for name in MULTI_VALUE {
+        let Some(base) = interp.classes().lookup(name) else {
+            continue;
+        };
+        if interp.classes().is_a(class, base) {
+            return true;
+        }
+    }
+    false
+}
 
 /// Whether `receiver`'s `put` is the index-only one.
 fn index_only(interp: &mut Interp, receiver: ObjRef) -> bool {
@@ -548,8 +569,100 @@ fn expand(interp: &mut Interp, receiver: ObjRef) -> Result<(), Failure> {
     let buckets = calculate_bucket_size(store.total * 2);
     install_store(interp, receiver, buckets);
     for (index, item) in carried {
-        insert(interp, receiver, index, item)?;
+        // **Never `insert`**, which replaces an index the table already
+        // holds: a `Relation` carries duplicate indexes and would lose one
+        // per pair on every growth. `reMerge` adds rather than puts
+        // (`classes/support/HashContents.cpp:1238`), and adding in the old
+        // walk order is what keeps each index's chain in its order.
+        append_entry(interp, receiver, index, item)?;
     }
+    Ok(())
+}
+
+/// Appends an entry at the end of its bucket's chain without looking for an
+/// index the table already holds -- `HashContents::append`'s half of `put`.
+///
+/// The caller has already made room.
+fn append_entry(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    index: ObjRef,
+    item: Option<ObjRef>,
+) -> Result<(), Failure> {
+    let store = store_of(interp, receiver)?;
+    if store.free >= store.total {
+        expand(interp, receiver)?;
+        return append_entry(interp, receiver, index, item);
+    }
+    let store = store_of(interp, receiver)?;
+    let keys = keys_of(interp, receiver);
+    let hash = hash_of(interp, keys, index)?;
+    let bucket = (hash % store.buckets as u64) as usize;
+    if slot_at(interp, store.indexes, bucket)?.is_none() {
+        write_slot(interp, store.indexes, bucket, Some(index));
+        write_slot(interp, store.items, bucket, item);
+        write_link(interp, &store, bucket, store.no_more());
+        return Ok(());
+    }
+    let mut last = bucket;
+    loop {
+        let next = link_at(interp, &store, last)?;
+        if next >= store.total {
+            break;
+        }
+        last = next;
+    }
+    let slot = store.free;
+    let next_free = link_at(interp, &store, slot)?;
+    set_free(interp, receiver, next_free);
+    write_slot(interp, store.indexes, slot, Some(index));
+    write_slot(interp, store.items, slot, item);
+    write_link(interp, &store, last, slot);
+    write_link(interp, &store, slot, store.no_more());
+    Ok(())
+}
+
+/// `HashContents::addFront` (`classes/support/HashContents.cpp:1650`): a new
+/// entry for an index the table already holds goes to the FRONT of that
+/// index's chain.
+///
+/// The bucket slot cannot move, so the entry that was there is copied into a
+/// free slot and chained behind the new one -- `HashContents::insert`
+/// (`:313`). Measured: a `Relation` given `k -> v1` then `k -> v2` answers
+/// `allAt('k')` as `v2,v1` and `at('k')` as `v2`.
+fn insert_front(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    index: ObjRef,
+    item: Option<ObjRef>,
+) -> Result<(), Failure> {
+    let store = store_of(interp, receiver)?;
+    if store.free >= store.total {
+        expand(interp, receiver)?;
+        return insert_front(interp, receiver, index, item);
+    }
+    let store = store_of(interp, receiver)?;
+    let keys = keys_of(interp, receiver);
+    let hash = hash_of(interp, keys, index)?;
+    let bucket = (hash % store.buckets as u64) as usize;
+    if slot_at(interp, store.indexes, bucket)?.is_none() {
+        write_slot(interp, store.indexes, bucket, Some(index));
+        write_slot(interp, store.items, bucket, item);
+        write_link(interp, &store, bucket, store.no_more());
+        return Ok(());
+    }
+    let moved = store.free;
+    let next_free = link_at(interp, &store, moved)?;
+    set_free(interp, receiver, next_free);
+    let head_index = slot_at(interp, store.indexes, bucket)?;
+    let head_item = slot_at(interp, store.items, bucket)?;
+    let head_next = link_at(interp, &store, bucket)?;
+    write_slot(interp, store.indexes, moved, head_index);
+    write_slot(interp, store.items, moved, head_item);
+    write_link(interp, &store, moved, head_next);
+    write_slot(interp, store.indexes, bucket, Some(index));
+    write_slot(interp, store.items, bucket, item);
+    write_link(interp, &store, bucket, moved);
     Ok(())
 }
 
@@ -600,30 +713,68 @@ fn take(interp: &mut Interp, receiver: ObjRef, index: ObjRef) -> Result<Option<O
     let Some(slot) = found.found else {
         return Ok(None);
     };
+    let previous = found.last.filter(|last| *last != slot);
+    remove_at(interp, receiver, &store, slot, previous)
+}
+
+/// [`take`] for an entry the caller has already found, named by its slot
+/// rather than by its index -- what `removeItem` needs, since two entries
+/// under one index differ only by their item.
+fn take_at(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    index: ObjRef,
+    slot: usize,
+) -> Result<Option<ObjRef>, Failure> {
+    let store = store_of(interp, receiver)?;
+    let keys = keys_of(interp, receiver);
+    let hash = hash_of(interp, keys, index)?;
+    let bucket = (hash % store.buckets as u64) as usize;
+    let mut previous = None;
+    let mut cursor = bucket;
+    while cursor < store.total && cursor != slot {
+        previous = Some(cursor);
+        cursor = link_at(interp, &store, cursor)?;
+    }
+    if cursor != slot {
+        return Ok(None);
+    }
+    remove_at(interp, receiver, &store, slot, previous)
+}
+
+/// Unlinks the entry at `slot`, whose chain predecessor is `previous`, and
+/// answers the item it held.
+fn remove_at(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    store: &Store,
+    slot: usize,
+    previous: Option<usize>,
+) -> Result<Option<ObjRef>, Failure> {
     let item = slot_at(interp, store.items, slot)?;
-    let next = link_at(interp, &store, slot)?;
+    let next = link_at(interp, store, slot)?;
     if slot < store.buckets {
         // A bucket slot cannot be freed, so the chain is closed by copying
         // the next entry into it -- `HashContents::closeChain`.
         if next < store.total {
             let moved_index = slot_at(interp, store.indexes, next)?;
             let moved_item = slot_at(interp, store.items, next)?;
-            let moved_next = link_at(interp, &store, next)?;
+            let moved_next = link_at(interp, store, next)?;
             write_slot(interp, store.indexes, slot, moved_index);
             write_slot(interp, store.items, slot, moved_item);
-            write_link(interp, &store, slot, moved_next);
-            free_slot(interp, receiver, &store, next);
+            write_link(interp, store, slot, moved_next);
+            free_slot(interp, receiver, store, next);
         } else {
             write_slot(interp, store.indexes, slot, None);
             write_slot(interp, store.items, slot, None);
-            write_link(interp, &store, slot, store.no_more());
+            write_link(interp, store, slot, store.no_more());
         }
         return Ok(item);
     }
-    if let Some(previous) = found.last {
-        write_link(interp, &store, previous, next);
+    if let Some(previous) = previous {
+        write_link(interp, store, previous, next);
     }
-    free_slot(interp, receiver, &store, slot);
+    free_slot(interp, receiver, store, slot);
     Ok(item)
 }
 
@@ -694,7 +845,11 @@ pub(super) fn store_put(
     } else {
         index_argument(args, 2)?
     };
-    insert(interp, receiver, index, Some(item))?;
+    if multi_value(interp, receiver) {
+        insert_front(interp, receiver, index, Some(item))?;
+    } else {
+        insert(interp, receiver, index, Some(item))?;
+    }
     Ok(None)
 }
 
@@ -925,6 +1080,262 @@ pub(super) fn native_hash_new(
     Ok(Some(object))
 }
 
+// ---- `Relation` and `Bag`'s own surface ----
+
+/// Every slot whose index matches, in chain order.
+fn slots_for(interp: &mut Interp, receiver: ObjRef, index: ObjRef) -> Result<Vec<usize>, Failure> {
+    let store = store_of(interp, receiver)?;
+    let keys = keys_of(interp, receiver);
+    let mut found = Vec::new();
+    for slot in walk(interp, receiver)? {
+        if same_index(interp, &store, keys, slot, index)? {
+            found.push(slot);
+        }
+    }
+    Ok(found)
+}
+
+/// `RelationClass::allAt(index)`: every item under that index, newest first.
+fn native_relation_all_at(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !owns(interp, receiver) {
+        return Err(not_this_task(interp, receiver, b"ALLAT"));
+    }
+    // **93.903 and not 88.901.** `RelationClass`'s own methods take their
+    // index positionally where `HashCollection`'s take it as a named
+    // argument: measured on a `.Relation~new`, `allAt()` and `removeAll()`
+    // report `Missing argument in method; argument 1 is required.` where
+    // `at()` and `remove()` report `Missing argument; argument index is
+    // required.`
+    let index = super::collection::item_argument(args)?;
+    let store = store_of(interp, receiver)?;
+    let mut items = Vec::new();
+    for slot in slots_for(interp, receiver, index)? {
+        items.push(slot_at(interp, store.items, slot)?.unwrap_or(ObjRef::NIL));
+    }
+    Ok(Some(super::collection::array_of(interp, items)))
+}
+
+/// `RelationClass::allIndexRexx(item)`: every index whose item matches.
+fn native_relation_all_index(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !owns(interp, receiver) {
+        return Err(not_this_task(interp, receiver, b"ALLINDEX"));
+    }
+    let wanted = super::collection::item_argument(args)?;
+    let mut indexes = Vec::new();
+    for (index, item) in pairs(interp, receiver)? {
+        if super::collection::same_item(interp, wanted, item)? {
+            indexes.push(index);
+        }
+    }
+    Ok(Some(super::collection::array_of(interp, indexes)))
+}
+
+/// `RelationClass::uniqueIndexes`: each index once, in first-seen order.
+fn native_relation_unique_indexes(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !owns(interp, receiver) {
+        return Err(not_this_task(interp, receiver, b"UNIQUEINDEXES"));
+    }
+    let keys = keys_of(interp, receiver);
+    let mut unique: Vec<ObjRef> = Vec::new();
+    for (index, _) in pairs(interp, receiver)? {
+        let mut seen = false;
+        for held in &unique {
+            if match keys {
+                Keys::Identity => *held == index,
+                Keys::Equality => super::collection::same_item(interp, index, *held)?,
+            } {
+                seen = true;
+                break;
+            }
+        }
+        if !seen {
+            unique.push(index);
+        }
+    }
+    Ok(Some(super::collection::array_of(interp, unique)))
+}
+
+/// `RelationClass::itemsRexx([index])`: the whole count, or the count under
+/// one index. Measured, a relation holding `k -> v1`, `k -> v2` and `j -> w`
+/// answers `items` 3, `items('k')` 2 and `items('z')` 0.
+fn native_relation_items(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !owns(interp, receiver) {
+        return Err(not_this_task(interp, receiver, b"ITEMS"));
+    }
+    let count = match args.first().copied().flatten() {
+        Some(index) => slots_for(interp, receiver, index)?.len(),
+        None => walk(interp, receiver)?.len(),
+    };
+    Ok(Some(interp.counted(count)))
+}
+
+/// `RelationClass::removeAll(index)`: takes every entry under that index out
+/// and answers them as an array, newest first -- an empty `Array` for an
+/// index the relation does not hold.
+fn native_relation_remove_all(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !owns(interp, receiver) {
+        return Err(not_this_task(interp, receiver, b"REMOVEALL"));
+    }
+    // **93.903 and not 88.901.** `RelationClass`'s own methods take their
+    // index positionally where `HashCollection`'s take it as a named
+    // argument: measured on a `.Relation~new`, `allAt()` and `removeAll()`
+    // report `Missing argument in method; argument 1 is required.` where
+    // `at()` and `remove()` report `Missing argument; argument index is
+    // required.`
+    let index = super::collection::item_argument(args)?;
+    let mut removed = Vec::new();
+    while let Some(item) = take(interp, receiver, index)? {
+        interp.roots.push_temp(item);
+        removed.push(item);
+    }
+    Ok(Some(super::collection::array_of(interp, removed)))
+}
+
+/// `RelationClass::supplierRexx([index])`: a supplier over the whole
+/// relation, or over one index's items.
+fn native_relation_supplier(
+    interp: &mut Interp,
+    cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !owns(interp, receiver) {
+        return Err(not_this_task(interp, receiver, b"SUPPLIER"));
+    }
+    let Some(index) = args.first().copied().flatten() else {
+        return native_hash_supplier(interp, cleared, receiver, &[]);
+    };
+    let store = store_of(interp, receiver)?;
+    let mut items = Vec::new();
+    let mut indexes = Vec::new();
+    for slot in slots_for(interp, receiver, index)? {
+        items.push(slot_at(interp, store.items, slot)?.unwrap_or(ObjRef::NIL));
+        indexes.push(slot_at(interp, store.indexes, slot)?.unwrap_or(ObjRef::NIL));
+    }
+    let items = super::collection::array_of(interp, items);
+    let indexes = super::collection::array_of(interp, indexes);
+    super::collection::new_supplier(interp, items, indexes).map(Some)
+}
+
+/// `RelationClass::hasItemRexx(item [, index])`: whether the relation holds
+/// that item, optionally under that index. Measured, `hasItem('v1','k')` is
+/// 1 and `hasItem('v1','j')` is 0 for a relation holding `k -> v1`.
+fn native_relation_has_item(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !owns(interp, receiver) {
+        return Err(not_this_task(interp, receiver, b"HASITEM"));
+    }
+    let wanted = super::collection::item_argument(args)?;
+    let under = args.get(1).copied().flatten();
+    let store = store_of(interp, receiver)?;
+    let keys = keys_of(interp, receiver);
+    for slot in walk(interp, receiver)? {
+        let Some(item) = slot_at(interp, store.items, slot)? else {
+            continue;
+        };
+        if !super::collection::same_item(interp, wanted, item)? {
+            continue;
+        }
+        match under {
+            None => return Ok(Some(crate::eval::logical(true))),
+            Some(index) if same_index(interp, &store, keys, slot, index)? => {
+                return Ok(Some(crate::eval::logical(true)));
+            }
+            Some(_) => {}
+        }
+    }
+    Ok(Some(crate::eval::logical(false)))
+}
+
+/// `RelationClass::removeItemRexx(item [, index])`: takes out the first entry
+/// holding that item, optionally under that index, and answers it.
+fn native_relation_remove_item(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !owns(interp, receiver) {
+        return Err(not_this_task(interp, receiver, b"REMOVEITEM"));
+    }
+    let wanted = super::collection::item_argument(args)?;
+    let under = args.get(1).copied().flatten();
+    let store = store_of(interp, receiver)?;
+    let keys = keys_of(interp, receiver);
+    for slot in walk(interp, receiver)? {
+        let Some(item) = slot_at(interp, store.items, slot)? else {
+            continue;
+        };
+        if !super::collection::same_item(interp, wanted, item)? {
+            continue;
+        }
+        let held = slot_at(interp, store.indexes, slot)?;
+        let matches = match under {
+            None => true,
+            Some(index) => same_index(interp, &store, keys, slot, index)?,
+        };
+        if matches && let Some(held) = held {
+            take_at(interp, receiver, held, slot)?;
+            return Ok(Some(item));
+        }
+    }
+    Ok(Some(ObjRef::NIL))
+}
+
+/// `Bag~of(item, ...)`: `BagClass::ofRexx`, which unlike `Set~of` keeps the
+/// duplicates -- measured, `.Bag~of('p','p','q')~items` is 3.
+pub(super) fn native_bag_of(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = super::class_receiver(interp, receiver)?;
+    for (at, argument) in args.iter().enumerate() {
+        if argument.is_none() {
+            return Err(Raised::missing_method_argument(at + 1).into());
+        }
+    }
+    let object = new_instance(interp, class)?;
+    interp.roots.push_temp(object);
+    install_store(interp, object, MINIMUM_BUCKET_SIZE);
+    let caller = interp.caller();
+    interp.send_message(object, super::INIT, None, &[], caller)?;
+    for argument in args.iter().flatten() {
+        insert_front(interp, object, *argument, Some(*argument))?;
+    }
+    Ok(Some(object))
+}
+
 /// `SetClass::ofRexx`: a new `Set` of the receiver's own class holding the
 /// arguments, each of which is its own index.
 ///
@@ -1051,4 +1462,58 @@ pub(super) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // [`OWNED`] alone left it refusing.
     ("Set", "HASITEM", Arity::Fixed(1), native_hash_has_index),
     ("Set", "REMOVEITEM", Arity::Fixed(1), native_hash_remove),
+    // **`Relation` and `Bag` have identical native entry-point sets**, which
+    // is why they are one task: `Setup.cpp` writes `Bag`'s `AllAt`,
+    // `AllIndex`, `Items`, `RemoveAll`, `Supplier` and `UniqueIndexes` as
+    // `RelationClass::` bodies, and only `HasItem` and `RemoveItem` are
+    // `BagClass::` -- and those two answer the same thing here, because a
+    // `Bag`'s index is its item.
+    //
+    // `ITEMS` and `SUPPLIER` take an optional index where every other class's
+    // take none, so they shadow the shared bodies rather than sharing them.
+    ("Relation", "ALLAT", Arity::Fixed(1), native_relation_all_at),
+    (
+        "Relation",
+        "ALLINDEX",
+        Arity::Fixed(1),
+        native_relation_all_index,
+    ),
+    (
+        "Relation",
+        "UNIQUEINDEXES",
+        Arity::Fixed(0),
+        native_relation_unique_indexes,
+    ),
+    ("Relation", "ITEMS", Arity::Fixed(1), native_relation_items),
+    (
+        "Relation",
+        "REMOVEALL",
+        Arity::Fixed(1),
+        native_relation_remove_all,
+    ),
+    (
+        "Relation",
+        "SUPPLIER",
+        Arity::Fixed(1),
+        native_relation_supplier,
+    ),
+    (
+        "Relation",
+        "HASITEM",
+        Arity::Fixed(2),
+        native_relation_has_item,
+    ),
+    (
+        "Relation",
+        "REMOVEITEM",
+        Arity::Fixed(2),
+        native_relation_remove_item,
+    ),
+    ("Bag", "HASITEM", Arity::Fixed(2), native_relation_has_item),
+    (
+        "Bag",
+        "REMOVEITEM",
+        Arity::Fixed(2),
+        native_relation_remove_item,
+    ),
 ];

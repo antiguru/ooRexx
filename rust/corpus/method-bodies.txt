@@ -485,32 +485,32 @@ Array	union	instance	answers	rc 163
 Array	xor	instance	answers	rc 163
 Array	appendAll	instance	answers	rc 163
 Bag	new	class	answers	rc 0
-Bag	of	class	loud	method "OF" of class "Bag"
+Bag	of	class	answers	rc 0
 Bag	[]	instance	answers	rc 168
 Bag	[]=	instance	answers	rc 168
-Bag	allAt	instance	loud	method "ALLAT" of class "Bag"
-Bag	allIndex	instance	loud	method "ALLINDEX" of class "Bag"
-Bag	allIndexes	instance	loud	method "ALLINDEXES" of class "Bag"
-Bag	allItems	instance	loud	method "ALLITEMS" of class "Bag"
+Bag	allAt	instance	answers	rc 163
+Bag	allIndex	instance	answers	rc 163
+Bag	allIndexes	instance	answers	rc 0
+Bag	allItems	instance	answers	rc 0
 Bag	at	instance	answers	rc 168
 Bag	difference	instance	answers	rc 163
-Bag	empty	instance	loud	method "EMPTY" of class "Bag"
-Bag	hasIndex	instance	loud	method "HASINDEX" of class "Bag"
-Bag	hasItem	instance	loud	method "HASITEM" of class "Bag"
-Bag	index	instance	loud	method "INDEX" of class "Bag"
+Bag	empty	instance	answers	rc 0
+Bag	hasIndex	instance	answers	rc 168
+Bag	hasItem	instance	answers	rc 163
+Bag	index	instance	answers	rc 163
 Bag	intersection	instance	answers	rc 163
-Bag	isEmpty	instance	loud	method "ISEMPTY" of class "Bag"
-Bag	items	instance	loud	method "ITEMS" of class "Bag"
-Bag	makeArray	instance	loud	method "MAKEARRAY" of class "Bag"
+Bag	isEmpty	instance	answers	rc 0
+Bag	items	instance	answers	rc 0
+Bag	makeArray	instance	answers	rc 0
 Bag	put	instance	answers	rc 168
 Bag	putAll	instance	answers	rc 163
-Bag	remove	instance	loud	method "REMOVE" of class "Bag"
-Bag	removeAll	instance	loud	method "REMOVEALL" of class "Bag"
-Bag	removeItem	instance	loud	method "REMOVEITEM" of class "Bag"
+Bag	remove	instance	answers	rc 168
+Bag	removeAll	instance	answers	rc 163
+Bag	removeItem	instance	answers	rc 163
 Bag	subset	instance	answers	rc 163
-Bag	supplier	instance	loud	method "SUPPLIER" of class "Bag"
+Bag	supplier	instance	answers	rc 0
 Bag	union	instance	answers	rc 163
-Bag	uniqueIndexes	instance	loud	method "UNIQUEINDEXES" of class "Bag"
+Bag	uniqueIndexes	instance	answers	rc 0
 Bag	xor	instance	answers	rc 163
 Bag	disjoint	instance	answers	rc 163
 Bag	equivalent	instance	answers	rc 163
@@ -752,28 +752,28 @@ Queue	stableSortWith	instance	answers	rc 163
 Relation	new	class	answers	rc 0
 Relation	[]	instance	answers	rc 168
 Relation	[]=	instance	answers	rc 168
-Relation	allAt	instance	loud	method "ALLAT" of class "Relation"
-Relation	allIndex	instance	loud	method "ALLINDEX" of class "Relation"
-Relation	allIndexes	instance	loud	method "ALLINDEXES" of class "Relation"
-Relation	allItems	instance	loud	method "ALLITEMS" of class "Relation"
+Relation	allAt	instance	answers	rc 163
+Relation	allIndex	instance	answers	rc 163
+Relation	allIndexes	instance	answers	rc 0
+Relation	allItems	instance	answers	rc 0
 Relation	at	instance	answers	rc 168
 Relation	difference	instance	answers	rc 163
-Relation	empty	instance	loud	method "EMPTY" of class "Relation"
-Relation	hasIndex	instance	loud	method "HASINDEX" of class "Relation"
-Relation	hasItem	instance	loud	method "HASITEM" of class "Relation"
-Relation	index	instance	loud	method "INDEX" of class "Relation"
+Relation	empty	instance	answers	rc 0
+Relation	hasIndex	instance	answers	rc 168
+Relation	hasItem	instance	answers	rc 163
+Relation	index	instance	answers	rc 163
 Relation	intersection	instance	answers	rc 163
-Relation	isEmpty	instance	loud	method "ISEMPTY" of class "Relation"
-Relation	items	instance	loud	method "ITEMS" of class "Relation"
-Relation	makeArray	instance	loud	method "MAKEARRAY" of class "Relation"
+Relation	isEmpty	instance	answers	rc 0
+Relation	items	instance	answers	rc 0
+Relation	makeArray	instance	answers	rc 0
 Relation	put	instance	answers	rc 168
-Relation	remove	instance	loud	method "REMOVE" of class "Relation"
-Relation	removeAll	instance	loud	method "REMOVEALL" of class "Relation"
-Relation	removeItem	instance	loud	method "REMOVEITEM" of class "Relation"
+Relation	remove	instance	answers	rc 168
+Relation	removeAll	instance	answers	rc 163
+Relation	removeItem	instance	answers	rc 163
 Relation	subset	instance	answers	rc 163
-Relation	supplier	instance	loud	method "SUPPLIER" of class "Relation"
+Relation	supplier	instance	answers	rc 0
 Relation	union	instance	answers	rc 163
-Relation	uniqueIndexes	instance	loud	method "UNIQUEINDEXES" of class "Relation"
+Relation	uniqueIndexes	instance	answers	rc 0
 Relation	xor	instance	answers	rc 163
 Relation	disjoint	instance	answers	rc 163
 Relation	equivalent	instance	answers	rc 163
