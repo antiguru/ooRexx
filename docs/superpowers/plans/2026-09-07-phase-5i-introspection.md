@@ -69,6 +69,14 @@ prose the executor never reads.
 * **No task may cite the `answers` verdict of `corpus/method-bodies.txt` as a reason a row needs no
   work.** Task 0's instrument is what a later task reads. A row this phase declines to do is
   declined in a report sentence naming why, not by a green cell.
+* **The full gate suite runs in the gate worktree `/home/moritz/dev/repos/ooRexx-5i-gates`, not in
+  the working tree** -- `git -C <that> checkout --detach <your commit>`, then the seven commands
+  from `<that>/rust`. Both its builds are warm. `rust/CLAUDE.md`'s ordering rule is unchanged and
+  still binds: **commit first, then gate**. What changes is that the working tree no longer belongs
+  to the run, because a pinned worktree cannot drift -- the property the freeze rule protects is
+  stronger here, and the next task does not wait behind you. Your own `fmt`, `clippy` and
+  `cargo test --release --workspace --no-fail-fast` stay in the working tree, before the commit.
+  Never touch `/home/moritz/dev/repos/ooRexx-gates` or `-gates-b`.
 * **Wait in ~1-hour stretches**, never ten-minute polls. A backgrounded command re-invokes its
   caller when it exits; the timer is the fallback against a hang, not the mechanism.
 
@@ -504,6 +512,13 @@ Twenty-four rows, and the task the three after it depend on.
 `Routine` (8): `loadExternalRoutine` and `newFile` on the class arm; `[]`, `call`, `callWith`,
 `package`, `setSecurityManager`, `source` on the instance arm.
 
+**Plus one row Task 0 found and the scope note does not count: `Routine~new` on the class arm.**
+`corpus/method-bodies.txt` calls it `answers`, because a zero-argument send agrees about an arity
+error; `corpus/introspection-arity.tsv` calls it `send-differs` under
+`.Routine~new('R9', 'return 1')`. Ruled into this task 2026-09-07 because this phase's own
+witnesses are already written against it -- Task 8's `addRoutine` witness is
+`.Routine~new('NEWR', 'return 42')`. **Twenty-five rows.**
+
 **What exists.** `Interp::method_object` (`environment.rs:1369`) already builds a `.Method`
 instance, sets its scope, and caches it keyed by (class, name); `compile_method_source`
 (`dispatch.rs:5062`) builds one and `record_compiled_body` (`lib.rs:6501`) files the parsed program
@@ -664,6 +679,27 @@ everything inherited, not the class's own dictionary — a body that answers onl
 gives `2` for `.KK` where the oracle gives `34`. `~subclasses` on a freshly made subclass is empty
 while `.Object`'s is 53, so the empty answer proves nothing on its own. And `instanceMethod` of a
 name the receiver does not have is `.nil`, not a raise.
+
+**`Class~enhanced` is a silent wrong answer and this task owns it.** Found by Task 0 re-running its
+own `agree` rows with the result printed, and confirmed independently by the controller on both
+engines:
+
+```
+k = .Object~subclass('K'); st = .StringTable~new
+st['EXTRA'] = .Method~new('EXTRA','return 99')
+o = k~enhanced(st); say o~string; say o~class~id; say o~extra
+
+oracle : enhanced K / K / 99
+ir     : a K        / K / 99
+tree   : a K        / K / 99
+```
+
+**The method works** -- `extra` answers `99` on both sides -- and only the *rendering* is wrong: an
+enhanced object renders as `enhanced <id>` where this crate gives it the ordinary `a <id>`. It is a
+wrong answer at rc 0, not a missing one, and no instrument in this tree saw it:
+`corpus/method-bodies.txt` records the row `answers rc 163` and `corpus/introspection-arity.tsv`
+records `agree`, which means only that neither side raised. Fix it here, and give it a witness that
+reads the rendering rather than the send's success.
 
 **The `Supplier`'s ORDER is hash order and no witness may assert it.** Measured, the oracle hands
 back `M1` and `M2` interleaved among `Object`'s entries in neither alphabetical nor definition
@@ -853,6 +889,11 @@ Twelve rows: `source`, `sourceLine`, `sourceSize`, `digits`, `form`, `fuzz`, `tr
 `prolog`, `loadLibrary`, `setSecurityManager` on the instance arm, and `defaultOptions` on the class
 arm.
 
+**Plus one row Task 0 found and the scope note does not count: `Package~new` on the class arm**,
+`send-differs` under `('p9.rex', .Array~of('return 1'))` -- so it does not even need a file on disk.
+Ruled into this task 2026-09-07 for the same reason as `Routine~new` in Task 4: Task 8's
+`addPackage` witness is written against it. **Thirteen rows.**
+
 **Measured on the oracle 2026-09-07 on a program package** — the 28-line file described above:
 
 ```
@@ -874,9 +915,13 @@ and `sourceSize` `28` against `0`; and `options`' last field is `TRACE NORMAL` a
 `TRACE ?n/a?`. A reader that answers the program package correctly and the REXX package by
 accident will get at least one of those four wrong — assert all four pairs.
 
-`~options` answering a String and `defaultOptions` apparently ignoring its argument are both
-surprising; **re-measure them yourself before implementing**, with more than one option name and
-with a package that carries a real `::OPTIONS` directive, and implement what you measure.
+**`~options` takes an argument, and the plan's first measurement of it was incomplete.** Task 0
+measured the missing half: `p~options` answers the whole `::OPTIONS ...` string,
+`p~options('DIGITS')` answers `9`, and `p~options('DIGITS', 1)` also answers `9`. So it is a
+**per-option reader with a no-argument summary form**, not a single string. `defaultOptions`
+apparently ignoring its argument is still surprising; **re-measure that one yourself before
+implementing**, with more than one option name and with a package carrying a real `::OPTIONS`
+directive, and implement what you measure.
 `defaultOptions` also raises `88.901 Missing argument; argument optionName is required` when sent
 none.
 
@@ -983,6 +1028,25 @@ resource('R1')  -> Array(2), [1] = "line one"     resource('ZZ')    -> The NIL o
 resources/classes/routines ~allIndexes -> R1 / K / RR
 ```
 
+**The four rows once thought unmeasurable are measurable, and the receiver is how.** Task 0 reported
+`importedPackages`, `importedClasses`, `importedRoutines` and `namespaces` as empty on both sides
+and unreachable, on the ground that a `::requires` needs a file on this build's search path and
+nothing is on it. That is falsified: a relative `::requires` resolves against the **calling
+program's own directory**, and the arity harness already writes a fixture file into each temp probe
+directory. Measured by the controller 2026-09-07, with `lib.rex` beside the probe holding
+`::routine LIBR public` and `::class LIBC public`, and the probe carrying
+`::requires 'lib.rex' namespace NS`:
+
+```
+namespaces        1   NS          importedClasses   1   LIBC
+importedPackages  1               importedRoutines  1   LIBR
+findNamespace('NS')       -> a Package
+findNamespace('NS')~name  -> .../lib.rex
+```
+
+So all four have a non-empty witness, and `findNamespace` gains a hit case to go with its miss.
+**A body answering an empty container is not allowed to pass any of them.**
+
 **Two of those are the ones a guess gets wrong.** `findClass` and even `findPublicClass` reach past
 the program's own table into the environment — `'ARRAY'` answers the `Array` class from both — so a
 body that searches only the package's own `classes` table answers `.nil` where the oracle answers a
@@ -1008,11 +1072,21 @@ for each one's search order, measure the miss as well as the hit, and assert bot
    deleting the state it reads leave it green? Report the rows where the answer is uncomfortable.
    The classes to look at hardest are the ones whose oracle answer is an empty container or a
    constant — `Package`'s tables, `RexxInfo`'s platform facts, the three `setSecurityManager` rows.
-4. **The handover, which is a deliverable and not a formality.** It names, for the next phase to
+4. **Two things this phase found and declined, which the close must carry with their
+   measurements.** `Class~new` on the class arm is `send-differs` under a real argument list and is
+   **declined with a destination**: measured, `.Class~new('NEWCLS')` answers a class whose id is
+   `NEWCLS` and whose superclass is `Object`, and whose instances then cannot be constructed at all
+   -- `c~new` is `97.1 Object "The NEWCLS class" does not understand message "NEW"`. It is the raw
+   metaclass primitive, class *creation* rather than class introspection, and belongs with the
+   class-definition surface. And **turning the arity instrument's value comparison on for the
+   collection driver as well is an open opportunity with a named cost**: it re-verdicts
+   `corpus/collection-arity.tsv`'s `agree` rows, and whatever it finds is a Phase 5g or 5h defect
+   rather than a 5i one. `Class~enhanced` is what that comparison found on this phase's own classes.
+5. **The handover, which is a deliverable and not a formality.** It names, for the next phase to
    read: `Pointer` and `Buffer` as classes with no constructible instance and Phase 8 as the owner;
    `Message` and the two semaphores as Phase 6's; `Stream`, `File` and `RexxQueue` as Phase 7's,
    with `RexxQueue` additionally gated on D7; and any row this phase declined.
-5. **Update the scope note in place** with what the phase actually cost against what it was scoped
+6. **Update the scope note in place** with what the phase actually cost against what it was scoped
    at, and say which of its predictions were wrong. The prediction most likely to be wrong is "the
    cheapest first move is `ARG` option `A`, nine rows on one fix" — it is measured, so if it did not
    hold, that is the finding.
