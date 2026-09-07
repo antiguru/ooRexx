@@ -415,15 +415,32 @@ current `NUMERIC` state agrees with the oracle on every probe that does not chan
 every probe anyone writes by accident. **The witness must change them first**, and that witness is
 this task's proof that the reader reads the right state.
 
-**`name` is exactly the `PARSE VERSION` string.** Measured, `.RexxInfo~name = v` after
-`parse version v` is `1`. This crate already produces that string; read it from wherever `PARSE
-VERSION` reads it rather than writing a second copy, and assert the equality in the witness so the
-two can never drift.
+**`name` is exactly the `PARSE VERSION` string, and this crate already has it in one place.**
+Measured, `.RexxInfo~name = v` after `parse version v` is `1`. The constant is
+`crates/rexx-exec/src/parse_template.rs:97`:
 
-**`version`, `majorVersion`, `release`, `modification`, `revision`, `languageLevel` and `date` come
-out of the same version constants.** Find them, cite them, and read them. A literal `"5"` in the
-`majorVersion` body is the defect this plan's first NEW constraint names: it agrees with the
-differential and is not an implementation.
+```rust
+const VERSION: &[u8] = b"REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026";
+```
+
+**Read that, do not copy it.** Its own doc comment says why: it is a claim about the oracle
+*binary*, its third field is the oracle's build date which nothing here can derive, and
+`tests/parse_version_oracle.rs` is the only thing that can notice it going stale — it runs `parse
+version` through both interpreters under `REXX_CORPUS_GATE`. A second copy of the string would go
+stale on the next oracle rebuild with that harness still green for the first copy. Assert
+`.RexxInfo~name = v` in this task's witness so the two readers can never drift apart.
+
+**`version`, `majorVersion`, `release`, `modification`, `revision`, `languageLevel` and `date` are
+fields of that same string** — `5.3.0`, `5`, `3`, `0`, `0`, `6.06`, `30 Jul 2026`. Decide whether
+they are parsed out of it or whether the constant is restructured into components that the
+`PARSE VERSION` renderer then assembles, say which you chose and why, and either way keep **one**
+source. A literal `"5"` in the `majorVersion` body is the defect this plan's first NEW constraint
+names: it agrees with the differential and is not an implementation.
+
+**`revision` and `modification` are both `0` on this build**, which makes them indistinguishable
+from each other and from a stub. Read `RexxInfo`'s C++ (`Setup.cpp:1735`-`:1737` builds the
+instance; find the methods) and say which field of the version each one is, so the two are right
+for a build where they differ rather than right by coincidence here.
 
 **Two rows cannot agree with the oracle, and this task must not pretend otherwise.**
 `executable` and `libraryPath` answer the path of the *running interpreter's own file*. The oracle
