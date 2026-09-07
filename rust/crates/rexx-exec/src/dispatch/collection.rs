@@ -1926,16 +1926,27 @@ fn native_list_is_empty(
     Ok(Some(crate::eval::logical(empty)))
 }
 
-/// `List~empty`: drops every entry. The freed handles go back on the stack,
-/// which is what keeps `append` after `empty` answering what the oracle does.
+/// `List~empty`: drops every entry, after which the handles start again from
+/// zero.
+///
+/// **Not the same as removing each entry in turn.** Removal frees its handle
+/// onto the stack `append` reuses, so emptying entry by entry would leave the
+/// next four appends answering `2 1 0 3`. `ListContents::empty` resets the
+/// free chains along with the entries
+/// (`classes/support/ListContents.cpp:706`), and the measured answer is
+/// `0 1 2 3`. The stack goes with them here for the same reason.
 fn native_list_empty(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    while !list_pairs(interp, receiver)?.is_empty() {
-        list_take(interp, receiver, 0)?;
+    let (items, handles, free) = list_state(interp, receiver)?;
+    for store in [items, handles, free] {
+        match interp.heap.get_mut(store).map(|object| &mut object.body) {
+            Some(Body::Array { slots, .. }) => slots.clear(),
+            _ => return Err(Loud::receiver_class("a value that is not a list").into()),
+        }
     }
     // Answers the receiver, as `Array~empty` does -- measured, `say l~empty`
     // prints `a List` at rc 0.
@@ -2112,9 +2123,13 @@ fn native_list_section(
         Some(count) => super::array_size_argument(interp, Some(count), 2)?.min(available),
         None => available,
     };
-    let class = interp
-        .class_of_value(receiver)
-        .ok_or_else(|| Failure::from(Loud::receiver_class("a value that is not a list")))?;
+    // **Always a `List`, and never the receiver's class.**
+    // `ListClass::section` is an unconditional `new ListClass`
+    // (`classes/ListClass.cpp:429`), where `Array` and `Queue` both build
+    // from the receiver's. Measured, with one subclass of each:
+    // `.MyList~of('a','b','c')~section(0,2)~class~id` is `List`, while the
+    // `Queue` subclass answers `MYQ` and the `Array` subclass `MYARR`.
+    let class = list_scope(interp);
     let section = new_instance(interp, class)?;
     interp.roots.push_temp(section);
     let caller = interp.caller();
