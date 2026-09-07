@@ -61,11 +61,19 @@ prose the executor never reads.
   report mode and exits 0 on a divergence. Cite the STRICT run and its matching line.
 * **Mutation runs build with `--profile mutation`**, under `memcap 8G`, with `--no-fail-fast`.
 * Every family's witness sends a **short argument list as well as a good one**.
-* Every family files both witnesses in `corpus/phase-5c.txt` **and** `EXPECTED_SUBSET_5C`
-  (`crates/rexx-exec/tests/coverage.rs`), generates a
-  `crates/rexx-parse/tests/sourceline_oracle/<name>.txt`, refreshes `corpus/method-bodies.txt`
-  under `REXX_METHOD_BODIES_REFRESH=1`, and adds its file to `dispatch_seam.rs`'s
-  `CLEARANCE_CONSUMERS` if it is a new one.
+* Every family generates a `crates/rexx-parse/tests/sourceline_oracle/<name>.txt` and adds its file
+  to `dispatch_seam.rs`'s `CLEARANCE_CONSUMERS` if it is a new one.
+* **The four shared artifacts belong to the controller and no task commits them**:
+  `corpus/method-bodies.txt`, the two arity tables, `corpus/phase-5c.txt`, and
+  `EXPECTED_SUBSET_5C` in `crates/rexx-exec/tests/coverage.rs`. Refresh them locally, record each
+  row's verdict **before and after** your change in your report with the refresh command quoted,
+  restore them from a `cp` copy (never `git checkout --`), and file your witness paths and subset
+  additions in `.superpowers/sdd/2026-09-07-phase-5i-introspection/task-<N>-tables.md`. The
+  controller lands them in one table commit. **The evidence standard is unchanged** -- the
+  before/after verdicts are the proof; the committed table is only where they are filed. This is
+  what lets two tasks run at once, because those four files are the only thing coupling them.
+* **Your dispatch names the files you may touch; touch nothing outside it**, and use
+  `rustfmt <path>` rather than `cargo fmt -p <crate>` while a sibling is live.
 * **No task may cite the `answers` verdict of `corpus/method-bodies.txt` as a reason a row needs no
   work.** Task 0's instrument is what a later task reads. A row this phase declines to do is
   declined in a report sentence naming why, not by a green cell.
