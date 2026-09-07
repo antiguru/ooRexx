@@ -121,7 +121,12 @@ prose the executor never reads.
 * **A row whose answer is an object of a class this phase also builds must be witnessed through a
   second send.** Project memory `one-send-to-a-fresh-receiver`: a harness that sends once to a
   freshly built receiver cannot see a defect that needs two sends, and four such defects shipped
-  past eight green gates. `Package~classes` answering a `StringTable` proves nothing until
+  past eight green gates.
+  **And the instrument cannot see an object's CLASS at all.** `corpus/introspection-arity.tsv`'s
+  value comparison prints `vv~string`, so a body answering the right *rendering* with the wrong
+  class agrees. Measured 2026-09-08: `RexxInfo~executable` answers a **`.File`**, and the table
+  showed it as a bare path -- which is how it reached this plan, and a ruling made on it, as a
+  string. That is the reason behind the rule, and it is stronger than the rule. `Package~classes` answering a `StringTable` proves nothing until
   something reads an entry out of it; `Object~instanceMethod` answering a `Method` proves nothing
   until that `Method` is asked its `~scope`.
 
@@ -542,28 +547,40 @@ they are parsed out of it or whether the constant is restructured into component
 source. A literal `"5"` in the `majorVersion` body is the defect this plan's first NEW constraint
 names: it agrees with the differential and is not an implementation.
 
-**`revision` and `modification` are both `0` on this build**, which makes them indistinguishable
-from each other and from a stub. Read `RexxInfo`'s C++ (`Setup.cpp:1735`-`:1737` builds the
-instance; find the methods) and say which field of the version each one is, so the two are right
-for a build where they differ rather than right by coincidence here.
+**`revision` and `modification` are both `0` on this build, and only one of them is a version field
+at all.** `modification` is `ORX_MOD`, the third component of `5.3.0`. **`revision` is `ORX_BLD`** --
+`CMakeLists.txt:87` defaults it to `0` and `:143` overrides it with `ORX_WC_LAST_CHANGED_REV` when
+the source is an SVN working copy -- a fourth, independent number that never appears in
+`PARSE VERSION`. So on a build where they differ, `modification` follows the version string and
+`revision` does not. (This plan first asked which *field of the version* each one was, which
+presumes an answer that is false for `revision`. Task 3's pre-flight established it.)
 
-**Two rows cannot agree with the oracle, and this task must not pretend otherwise.**
-`executable` and `libraryPath` answer the path of the *running interpreter's own file*. The oracle
-answers its `bin/rexx` and its `lib`; this crate would answer `rexx-run` and wherever its library
-lives. They are different files, so the honest implementation **diverges by construction**.
+**Two rows are DECLINED, and the reason is not the one this plan first gave.** `executable` and
+`libraryPath` do not answer path strings: `RexxInfoClass.cpp:502`-`:505` builds a **`.File`** --
+`fileClass->sendMessage(GlobalNames::NEW, pathString, result)` -- and measured on the oracle,
+`~executable~class~id` is `File` and `~exists` is `1`. The arity table showed them as bare paths
+because its value comparison prints `vv~string`, which is exactly the blindness the constraint above
+now names.
 
-`corpus/method-bodies.txt`'s gate is one rule — *a row that was not diverging may not start* — so
-implementing these two correctly turns two `loud` rows into two `diverge` rows and reddens the
-gate. **This is a decision, not a coding problem, and it is Moritz's.** Put it to him before
-writing either body, with these three options and your recommendation:
+So the three options this plan first put to Moritz -- leave them loud, license the divergence,
+normalise the path -- were all reasoning about a String that does not exist, and so was the ruling
+made on them. **Decided 2026-09-08 after Task 3's pre-flight measured it: decline both, with the
+measurement, and revisit in Phase 7.**
 
-1. leave both rows `loud`, declined in the report with this reason, and note them in the close as
-   the phase's only declined rows;
-2. implement both and license the divergence by name in `method_bodies.rs`, in the shape of the
-   existing `ORACLE_CRASHING_SENDS` list — which is guarded so that an entry naming a row that does
-   not exist is itself a failure, and any new list must carry the same guard;
-3. implement both and have the harness compare something other than the raw string, which asserts
-   nothing and is named here only so it is rejected explicitly rather than by silence.
+* Answering a String would **agree** on the harness's `~string` comparison and diverge on
+  `~class~id`, `~exists`, `~parent` and every other `File` send -- a wrong answer the instrument
+  cannot see, which is this plan's first NEW constraint exactly.
+* `.File` is not constructible here: measured, `.File~new('/tmp/x')` is
+  `the LIBRARY REXX entry point "file_qualify" is not implemented (Phase 7)` at rc 120 on both
+  engines.
+* `libraryPath` has **no source at all** in this workspace. `SysProcess::getLibraryLocation`
+  (`common/platform/unix/SysProcess.cpp:309`) is `dladdr` on the address of `RexxCreateQueue`, the
+  directory holding `librexx.so`; no crate here declares a `crate-type`, so no such directory
+  exists and answering the executable's directory would be inventing a value. `executable` by
+  contrast is knowable -- the C++ is `readlink("/proc/self/exe")` then `realpath()`
+  (`:265`-`:296`), which is `std::env::current_exe()` -- and is declined only because of its class.
+
+**So Task 3 is 26 rows implemented and 2 declined with reasons**, and the close carries both.
 
 **Everything else in the list is a real reader.** `platform`, `architecture`, `directorySeparator`,
 `pathSeparator`, `endofline`, `caseSensitiveFiles`, `maxPathLength` are platform facts — find the
