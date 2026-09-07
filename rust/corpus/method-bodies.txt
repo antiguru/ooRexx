@@ -583,10 +583,10 @@ Directory	remove	instance	answers	rc 168
 Directory	removeEntry	instance	answers	rc 168
 Directory	removeItem	instance	answers	rc 163
 Directory	setEntry	instance	answers	rc 168
-Directory	setMethod	instance	loud	method "SETMETHOD" of class "Directory"
+Directory	setMethod	instance	answers	rc 168
 Directory	supplier	instance	answers	rc 0
 Directory	unknown	instance	answers	rc 163
-Directory	unsetMethod	instance	loud	method "UNSETMETHOD" of class "Directory"
+Directory	unsetMethod	instance	answers	rc 168
 Directory	difference	instance	answers	rc 163
 Directory	disjoint	instance	answers	rc 163
 Directory	equivalent	instance	answers	rc 163
@@ -701,9 +701,9 @@ Properties	remove	instance	answers	rc 168
 Properties	removeEntry	instance	answers	rc 168
 Properties	removeItem	instance	answers	rc 163
 Properties	setEntry	instance	answers	rc 168
-Properties	setMethod	instance	loud	method "SETMETHOD" of class "Directory"
+Properties	setMethod	instance	answers	rc 168
 Properties	unknown	instance	answers	rc 163
-Properties	unsetMethod	instance	loud	method "UNSETMETHOD" of class "Directory"
+Properties	unsetMethod	instance	answers	rc 168
 Queue	new	class	answers	rc 0
 Queue	of	class	answers	rc 0
 Queue	[]	instance	answers	rc 163

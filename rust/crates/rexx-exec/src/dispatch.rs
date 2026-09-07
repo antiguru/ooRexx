@@ -7468,6 +7468,12 @@ const COLLECTION_STORES: &[(&str, &[u8])] = &[
     ("Table", b"HASHINDEXES"),
     ("Table", b"HASHITEMS"),
     ("Table", b"HASHNEXT"),
+    // A `Directory`'s method table travels with the copy and is its own --
+    // `DirectoryClass::copy` copies it rather than sharing it. Measured:
+    // `g = f~copy` then `g~unsetMethod('M')` leaves `f['M']` answering.
+    ("Table", b"METHODINDEXES"),
+    ("Table", b"METHODITEMS"),
+    ("Table", b"METHODNEXT"),
 ];
 
 /// Replaces each of [`COLLECTION_STORES`] on `copy` with an array of its own.
@@ -10197,14 +10203,23 @@ fn native_message_new(
 }
 
 /// `Method~new(name, source, ...)` and `Routine~new(name, source, ...)`: both
-/// arguments are required and this crate compiles no executable from them --
-/// `BaseExecutable::processNewExecutableArgs`
+/// arguments are required -- `BaseExecutable::processNewExecutableArgs`
 /// (`execution/BaseExecutable.cpp:225`), which `MethodClass::newRexx` and
 /// `RoutineClass::newRexx` share.
 ///
 /// Measured, oracle rc 168: `.Method~new` is `88.901 Missing argument;
 /// argument name is required.` and `.Method~new('m')` is `88.901 Missing
 /// argument; argument source is required.`
+///
+/// The two-argument `Method` form is built here, through the same
+/// [`compile_method_source`] that `Object~setMethod` compiles a source string
+/// with. Measured, oracle rc 0: `.Method~new('MM', 'return 7')` answers a
+/// `Method` whose `~scope` is `.nil` and whose `~annotations` is an empty
+/// `StringTable`, and setting it into a directory answers 7.
+///
+/// `Routine` shares this function and still compiles nothing, and so does a
+/// `Method~new` carrying the optional third argument -- a package, measured
+/// rc 0, where anything else is rc 40.
 fn native_executable_new(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -10212,11 +10227,16 @@ fn native_executable_new(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let class = class_receiver(interp, receiver)?;
-    executable_name_argument(interp, args)?;
-    if args.get(1).copied().flatten().is_none() {
+    let name = executable_name_argument(interp, args)?;
+    let Some(source) = args.get(1).copied().flatten() else {
         return Err(Raised::missing_named_argument("source").into());
+    };
+    if args.len() > 2 || class != interp.method_class() {
+        return Err(unbuilt_new(interp, class));
     }
-    Err(unbuilt_new(interp, class))
+    let name = interp.to_text(name).to_vec();
+    let method = compile_method_source(interp, &name, source, "source")?;
+    Ok(Some(method))
 }
 
 /// `Package~new(name, source, ...)`: the name is required, the source is not,

@@ -73,6 +73,48 @@ const HASH_NEXT: &[u8] = b"HASHNEXT";
 const HASH_BUCKETS: &[u8] = b"HASHBUCKETS";
 const HASH_FREE: &[u8] = b"HASHFREE";
 
+/// The five pool entries one store occupies.
+///
+/// A `Directory` holds two of these at the same scope: the contents every
+/// mapped collection has, and the method table `setMethod` fills
+/// (`classes/DirectoryClass.cpp:496`). They are the same geometry, which is
+/// why this is a name set rather than a second structure -- measured, a
+/// directory given the methods `AAA` and `MMM` enumerates them `MMM AAA`,
+/// which is the order a plain directory gives those two names as ordinary
+/// entries.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Half {
+    indexes: &'static [u8],
+    items: &'static [u8],
+    next: &'static [u8],
+    buckets: &'static [u8],
+    free: &'static [u8],
+}
+
+/// The store every mapped collection has.
+const CONTENTS: Half = Half {
+    indexes: HASH_INDEXES,
+    items: HASH_ITEMS,
+    next: HASH_NEXT,
+    buckets: HASH_BUCKETS,
+    free: HASH_FREE,
+};
+
+/// `DirectoryClass::methodTable`, which only a `Directory` ever installs.
+const METHODS: Half = Half {
+    indexes: b"METHODINDEXES",
+    items: b"METHODITEMS",
+    next: b"METHODNEXT",
+    buckets: b"METHODBUCKETS",
+    free: b"METHODFREE",
+};
+
+/// `DirectoryClass::unknownMethod`: the one method `setMethod` keeps out of
+/// the method table, because `UNKNOWN` is not an entry -- it is what answers
+/// when there is none. Measured: with it set, `items` is still 1 for a
+/// directory holding one ordinary entry and `allIndexes` does not name it.
+const UNKNOWN_METHOD: &[u8] = b"METHODUNKNOWN";
+
 /// `HashCollection::MinimumBucketSize` (`classes/support/HashCollection.hpp:126`).
 const MINIMUM_BUCKET_SIZE: usize = 17;
 
@@ -285,7 +327,7 @@ fn counted_pool_variable(
 
 /// Builds a store of `buckets` primary slots and as many overflow slots, and
 /// binds it to `receiver`.
-fn install_store(interp: &mut Interp, receiver: ObjRef, buckets: usize) -> Store {
+fn install_store(interp: &mut Interp, receiver: ObjRef, half: Half, buckets: usize) -> Store {
     let total = buckets * 2;
     let scope = hash_scope(interp);
     let indexes = interp.alloc_with(BehaviourId::ARRAY, Body::array(vec![None; total]));
@@ -308,11 +350,11 @@ fn install_store(interp: &mut Interp, receiver: ObjRef, buckets: usize) -> Store
     interp.roots.push_temp(next);
     let buckets_value = interp.counted(buckets);
     let free_value = interp.counted(buckets);
-    interp.set_pool_variable(receiver, scope, HASH_INDEXES, indexes);
-    interp.set_pool_variable(receiver, scope, HASH_ITEMS, items);
-    interp.set_pool_variable(receiver, scope, HASH_NEXT, next);
-    interp.set_pool_variable(receiver, scope, HASH_BUCKETS, buckets_value);
-    interp.set_pool_variable(receiver, scope, HASH_FREE, free_value);
+    interp.set_pool_variable(receiver, scope, half.indexes, indexes);
+    interp.set_pool_variable(receiver, scope, half.items, items);
+    interp.set_pool_variable(receiver, scope, half.next, next);
+    interp.set_pool_variable(receiver, scope, half.buckets, buckets_value);
+    interp.set_pool_variable(receiver, scope, half.free, free_value);
     Store {
         indexes,
         items,
@@ -328,24 +370,47 @@ fn install_store(interp: &mut Interp, receiver: ObjRef, buckets: usize) -> Store
 /// On demand for [`super::collection::store_of`]'s reason: upstream the
 /// contents belong to the object the allocator returns, so a subclass whose
 /// `INIT` does not forward still has them.
-fn store_of(interp: &mut Interp, receiver: ObjRef) -> Result<Store, Failure> {
+/// The store `half` names, or `None` when the receiver has not installed it.
+///
+/// A `Directory` installs its method table only when `setMethod` is first
+/// sent, so every other class and every directory that has never been sent
+/// one pays a single absent-slot read per merged operation.
+fn read_store(interp: &mut Interp, receiver: ObjRef, half: Half) -> Result<Option<Store>, Failure> {
     let scope = hash_scope(interp);
     if let (Some(indexes), Some(items), Some(next), Some(buckets), Some(free)) = (
-        pool_variable(interp, receiver, scope, HASH_INDEXES),
-        pool_variable(interp, receiver, scope, HASH_ITEMS),
-        pool_variable(interp, receiver, scope, HASH_NEXT),
-        counted_pool_variable(interp, receiver, scope, HASH_BUCKETS),
-        counted_pool_variable(interp, receiver, scope, HASH_FREE),
+        pool_variable(interp, receiver, scope, half.indexes),
+        pool_variable(interp, receiver, scope, half.items),
+        pool_variable(interp, receiver, scope, half.next),
+        counted_pool_variable(interp, receiver, scope, half.buckets),
+        counted_pool_variable(interp, receiver, scope, half.free),
     ) {
         let total = array_slots(interp, indexes)?.len();
-        return Ok(Store {
+        return Ok(Some(Store {
             indexes,
             items,
             next,
             buckets,
             free,
             total,
-        });
+        }));
+    }
+    Ok(None)
+}
+
+/// The store `half` names, installing an empty one if it is not there yet.
+fn store_in(interp: &mut Interp, receiver: ObjRef, half: Half) -> Result<Store, Failure> {
+    if half == CONTENTS {
+        return store_of(interp, receiver);
+    }
+    match read_store(interp, receiver, half)? {
+        Some(store) => Ok(store),
+        None => Ok(install_store(interp, receiver, half, MINIMUM_BUCKET_SIZE)),
+    }
+}
+
+fn store_of(interp: &mut Interp, receiver: ObjRef) -> Result<Store, Failure> {
+    if let Some(store) = read_store(interp, receiver, CONTENTS)? {
+        return Ok(store);
     }
     // **A `Body::Native` receiver is not this store's**, and the check has to
     // be here because the two are one method. `Setup.cpp` donates
@@ -363,13 +428,18 @@ fn store_of(interp: &mut Interp, receiver: ObjRef) -> Result<Store, Failure> {
     {
         return Err(Loud::receiver_class("a value that is not a hash collection").into());
     }
-    Ok(install_store(interp, receiver, MINIMUM_BUCKET_SIZE))
+    Ok(install_store(
+        interp,
+        receiver,
+        CONTENTS,
+        MINIMUM_BUCKET_SIZE,
+    ))
 }
 
-fn set_free(interp: &mut Interp, receiver: ObjRef, free: usize) {
+fn set_free(interp: &mut Interp, receiver: ObjRef, half: Half, free: usize) {
     let scope = hash_scope(interp);
     let value = interp.counted(free);
-    interp.set_pool_variable(receiver, scope, HASH_FREE, value);
+    interp.set_pool_variable(receiver, scope, half.free, value);
 }
 
 fn slot_at(interp: &Interp, array: ObjRef, slot: usize) -> Result<Option<ObjRef>, Failure> {
@@ -556,6 +626,17 @@ struct Probe {
 
 fn probe(interp: &mut Interp, receiver: ObjRef, index: ObjRef) -> Result<(Store, Probe), Failure> {
     let store = store_of(interp, receiver)?;
+    probe_in(interp, receiver, store, index)
+}
+
+/// [`probe`] against a store the caller has already read, so that a
+/// `Directory`'s method table can be searched with the same chain walk.
+fn probe_in(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    store: Store,
+    index: ObjRef,
+) -> Result<(Store, Probe), Failure> {
     let keys = keys_of(interp, receiver);
     let hash = hash_of(interp, keys, index)?;
     let bucket = (hash % store.buckets as u64) as usize;
@@ -601,12 +682,17 @@ fn probe(interp: &mut Interp, receiver: ObjRef, index: ObjRef) -> Result<(Store,
 /// `HashContents::TableIterator`.
 fn walk(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<usize>, Failure> {
     let store = store_of(interp, receiver)?;
+    walk_in(interp, &store)
+}
+
+/// [`walk`] over a store the caller has already read.
+fn walk_in(interp: &Interp, store: &Store) -> Result<Vec<usize>, Failure> {
     let mut order = Vec::new();
     for bucket in 0..store.buckets {
         let mut slot = bucket;
         while slot < store.total && slot_at(interp, store.indexes, slot)?.is_some() {
             order.push(slot);
-            slot = link_at(interp, &store, slot)?;
+            slot = link_at(interp, store, slot)?;
         }
     }
     Ok(order)
@@ -614,9 +700,9 @@ fn walk(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<usize>, Failure> {
 
 /// Grows the table and re-adds every entry in old bucket order --
 /// `HashCollection::expandContents` and `HashContents::reMerge`.
-fn expand(interp: &mut Interp, receiver: ObjRef) -> Result<(), Failure> {
-    let store = store_of(interp, receiver)?;
-    let order = walk(interp, receiver)?;
+fn expand(interp: &mut Interp, receiver: ObjRef, half: Half) -> Result<(), Failure> {
+    let store = store_in(interp, receiver, half)?;
+    let order = walk_in(interp, &store)?;
     let mut carried = Vec::with_capacity(order.len());
     for slot in order {
         let index = slot_at(interp, store.indexes, slot)?;
@@ -630,14 +716,14 @@ fn expand(interp: &mut Interp, receiver: ObjRef) -> Result<(), Failure> {
         }
     }
     let buckets = calculate_bucket_size(store.total * 2);
-    install_store(interp, receiver, buckets);
+    install_store(interp, receiver, half, buckets);
     for (index, item) in carried {
         // **Never `insert`**, which replaces an index the table already
         // holds: a `Relation` carries duplicate indexes and would lose one
         // per pair on every growth. `reMerge` adds rather than puts
         // (`classes/support/HashContents.cpp:1238`), and adding in the old
         // walk order is what keeps each index's chain in its order.
-        append_entry(interp, receiver, index, item)?;
+        append_entry(interp, receiver, half, index, item)?;
     }
     Ok(())
 }
@@ -649,15 +735,16 @@ fn expand(interp: &mut Interp, receiver: ObjRef) -> Result<(), Failure> {
 fn append_entry(
     interp: &mut Interp,
     receiver: ObjRef,
+    half: Half,
     index: ObjRef,
     item: Option<ObjRef>,
 ) -> Result<(), Failure> {
-    let store = store_of(interp, receiver)?;
+    let store = store_in(interp, receiver, half)?;
     if store.free >= store.total {
-        expand(interp, receiver)?;
-        return append_entry(interp, receiver, index, item);
+        expand(interp, receiver, half)?;
+        return append_entry(interp, receiver, half, index, item);
     }
-    let store = store_of(interp, receiver)?;
+    let store = store_in(interp, receiver, half)?;
     let keys = keys_of(interp, receiver);
     let hash = hash_of(interp, keys, index)?;
     let bucket = (hash % store.buckets as u64) as usize;
@@ -677,7 +764,7 @@ fn append_entry(
     }
     let slot = store.free;
     let next_free = link_at(interp, &store, slot)?;
-    set_free(interp, receiver, next_free);
+    set_free(interp, receiver, half, next_free);
     write_slot(interp, store.indexes, slot, Some(index));
     write_slot(interp, store.items, slot, item);
     write_link(interp, &store, last, slot);
@@ -701,7 +788,7 @@ fn insert_front(
 ) -> Result<(), Failure> {
     let store = store_of(interp, receiver)?;
     if store.free >= store.total {
-        expand(interp, receiver)?;
+        expand(interp, receiver, CONTENTS)?;
         return insert_front(interp, receiver, index, item);
     }
     let store = store_of(interp, receiver)?;
@@ -716,7 +803,7 @@ fn insert_front(
     }
     let moved = store.free;
     let next_free = link_at(interp, &store, moved)?;
-    set_free(interp, receiver, next_free);
+    set_free(interp, receiver, CONTENTS, next_free);
     let head_index = slot_at(interp, store.indexes, bucket)?;
     let head_item = slot_at(interp, store.items, bucket)?;
     let head_next = link_at(interp, &store, bucket)?;
@@ -738,17 +825,35 @@ fn insert(
     index: ObjRef,
     item: Option<ObjRef>,
 ) -> Result<(), Failure> {
+    // `DirectoryClass::put`: a put replaces any method of the same name.
+    // Measured: `setMethod('M', 'return 2')` then `d['M'] = 5` answers 5, and
+    // `unsetMethod('M')` afterwards still answers 5.
+    if method_store(interp, receiver)?.is_some() {
+        take_in(interp, receiver, METHODS, index)?;
+    }
+    insert_in(interp, receiver, CONTENTS, index, item)
+}
+
+/// [`insert`] into either half of a `Directory`.
+fn insert_in(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    half: Half,
+    index: ObjRef,
+    item: Option<ObjRef>,
+) -> Result<(), Failure> {
     // **The fullness test comes first, and it is the free chain rather than
     // the item count** (`classes/support/HashContents.hpp:297`): a table can
     // run its overflow dry while primary buckets stand empty, and upstream
     // expands before every `put` rather than only when one needs a slot.
     // Measured through the simulation this was written from: testing the item
     // count instead runs the free chain out on the forty-integer case.
-    let store = store_of(interp, receiver)?;
+    let store = store_in(interp, receiver, half)?;
     if store.free >= store.total {
-        expand(interp, receiver)?;
+        expand(interp, receiver, half)?;
     }
-    let (store, found) = probe(interp, receiver, index)?;
+    let store = store_in(interp, receiver, half)?;
+    let (store, found) = probe_in(interp, receiver, store, index)?;
     if let Some(slot) = found.found {
         write_slot(interp, store.items, slot, item);
         return Ok(());
@@ -761,7 +866,7 @@ fn insert(
     };
     let slot = store.free;
     let next_free = link_at(interp, &store, slot)?;
-    set_free(interp, receiver, next_free);
+    set_free(interp, receiver, half, next_free);
     write_slot(interp, store.indexes, slot, Some(index));
     write_slot(interp, store.items, slot, item);
     write_link(interp, &store, last, slot);
@@ -772,12 +877,25 @@ fn insert(
 /// `HashContents::remove`: unlinks the entry and returns its slot to the free
 /// chain, answering the item it held.
 fn take(interp: &mut Interp, receiver: ObjRef, index: ObjRef) -> Result<Option<ObjRef>, Failure> {
-    let (store, found) = probe(interp, receiver, index)?;
+    take_in(interp, receiver, CONTENTS, index)
+}
+
+/// [`take`] from either half of a `Directory`.
+fn take_in(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    half: Half,
+    index: ObjRef,
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(store) = read_store(interp, receiver, half)? else {
+        return Ok(None);
+    };
+    let (store, found) = probe_in(interp, receiver, store, index)?;
     let Some(slot) = found.found else {
         return Ok(None);
     };
     let previous = found.last.filter(|last| *last != slot);
-    remove_at(interp, receiver, &store, slot, previous)
+    remove_at(interp, receiver, half, &store, slot, previous)
 }
 
 /// [`take`] for an entry the caller has already found, named by its slot
@@ -802,7 +920,7 @@ fn take_at(
     if cursor != slot {
         return Ok(None);
     }
-    remove_at(interp, receiver, &store, slot, previous)
+    remove_at(interp, receiver, CONTENTS, &store, slot, previous)
 }
 
 /// Unlinks the entry at `slot`, whose chain predecessor is `previous`, and
@@ -810,6 +928,7 @@ fn take_at(
 fn remove_at(
     interp: &mut Interp,
     receiver: ObjRef,
+    half: Half,
     store: &Store,
     slot: usize,
     previous: Option<usize>,
@@ -826,7 +945,7 @@ fn remove_at(
             write_slot(interp, store.indexes, slot, moved_index);
             write_slot(interp, store.items, slot, moved_item);
             write_link(interp, store, slot, moved_next);
-            free_slot(interp, receiver, store, next);
+            free_slot(interp, receiver, half, store, next);
         } else {
             write_slot(interp, store.indexes, slot, None);
             write_slot(interp, store.items, slot, None);
@@ -837,16 +956,202 @@ fn remove_at(
     if let Some(previous) = previous {
         write_link(interp, store, previous, next);
     }
-    free_slot(interp, receiver, store, slot);
+    free_slot(interp, receiver, half, store, slot);
     Ok(item)
 }
 
-fn free_slot(interp: &mut Interp, receiver: ObjRef, store: &Store, slot: usize) {
+fn free_slot(interp: &mut Interp, receiver: ObjRef, half: Half, store: &Store, slot: usize) {
     write_slot(interp, store.indexes, slot, None);
     write_slot(interp, store.items, slot, None);
     let free = store.free;
     write_link(interp, store, slot, free);
-    set_free(interp, receiver, slot);
+    set_free(interp, receiver, half, slot);
+}
+
+// ---- `Directory`'s method table ----
+
+/// The method table's store, or `None` when `setMethod` has never been sent
+/// to this receiver.
+fn method_store(interp: &mut Interp, receiver: ObjRef) -> Result<Option<Store>, Failure> {
+    read_store(interp, receiver, METHODS)
+}
+
+/// `DirectoryClass::unknownMethod`, or `None` when there is none.
+///
+/// Cleared by writing `.nil` rather than by dropping the pool entry, so that
+/// `unsetMethod('UNKNOWN')` needs no delete the pool does not offer.
+fn unknown_method(interp: &mut Interp, receiver: ObjRef) -> Option<ObjRef> {
+    let scope = hash_scope(interp);
+    pool_variable(interp, receiver, scope, UNKNOWN_METHOD).filter(|held| *held != ObjRef::NIL)
+}
+
+fn set_unknown_method(interp: &mut Interp, receiver: ObjRef, held: Option<ObjRef>) {
+    let scope = hash_scope(interp);
+    let value = held.unwrap_or(ObjRef::NIL);
+    interp.set_pool_variable(receiver, scope, UNKNOWN_METHOD, value);
+}
+
+/// Whether the name is the one `setMethod` keeps outside the table.
+fn is_unknown_name(interp: &mut Interp, name: ObjRef) -> bool {
+    interp.to_text(name).as_ref() == b"UNKNOWN"
+}
+
+/// Runs a stored method with the directory as the receiver.
+///
+/// The item slot holds the minted [`rexx_core::MethodId`] rather than the
+/// `Method` object: nothing Rexx-visible reads the object back out --
+/// `Directory` has no method that answers one -- and minting per read would
+/// grow `method_bodies` without bound.
+fn run_stored_method(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    name: &[u8],
+    stored: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    let Decoded::SmallInt(id) = stored.decode() else {
+        return Err(
+            Loud::method_from_source("a directory method entry that holds no method").into(),
+        );
+    };
+    let resolution = super::Resolution {
+        scope: ObjRef::NIL,
+        method: rexx_core::MethodId(id as u32),
+    };
+    Ok(interp
+        .invoke(resolution, receiver, name, args)?
+        .unwrap_or(ObjRef::NIL))
+}
+
+/// `DirectoryClass::methodTableValue`: the result of the method stored under
+/// `index`, run with NO arguments and under its own name.
+fn method_table_value(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    index: ObjRef,
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(store) = method_store(interp, receiver)? else {
+        return Ok(None);
+    };
+    let (store, found) = probe_in(interp, receiver, store, index)?;
+    let Some(slot) = found.found else {
+        return Ok(None);
+    };
+    let Some(stored) = slot_at(interp, store.items, slot)? else {
+        return Ok(None);
+    };
+    let name = interp.to_text(index).to_vec();
+    run_stored_method(interp, receiver, &name, stored, &[]).map(Some)
+}
+
+/// `DirectoryClass::unknownValue`: run under the name `UNKNOWN` and with the
+/// index as its ONE argument -- unlike a method table entry, which is run
+/// with none.
+fn unknown_value(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    index: ObjRef,
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(stored) = unknown_method(interp, receiver) else {
+        return Ok(None);
+    };
+    run_stored_method(interp, receiver, b"UNKNOWN", stored, &[Some(index)]).map(Some)
+}
+
+/// `DirectoryClass::get`: the contents, then the method table, then the
+/// unknown method.
+fn merged_get(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    index: ObjRef,
+) -> Result<Option<ObjRef>, Failure> {
+    let (store, found) = probe(interp, receiver, index)?;
+    if let Some(slot) = found.found {
+        return Ok(Some(
+            slot_at(interp, store.items, slot)?.unwrap_or(ObjRef::NIL),
+        ));
+    }
+    if let Some(value) = method_table_value(interp, receiver, index)? {
+        return Ok(Some(value));
+    }
+    unknown_value(interp, receiver, index)
+}
+
+/// `DirectoryClass::hasIndex`: either half, and **not** the unknown method.
+/// Measured, with an `UNKNOWN` method set: `hasIndex('nosuch')` is 0 while
+/// `d['nosuch']` answers what the method returns.
+fn merged_has_index(interp: &mut Interp, receiver: ObjRef, index: ObjRef) -> Result<bool, Failure> {
+    let (_, found) = probe(interp, receiver, index)?;
+    if found.found.is_some() {
+        return Ok(true);
+    }
+    let Some(store) = method_store(interp, receiver)? else {
+        return Ok(false);
+    };
+    let (_, found) = probe_in(interp, receiver, store, index)?;
+    Ok(found.found.is_some())
+}
+
+/// Every (index, result) the method table answers, in its own store order.
+///
+/// Every entry is read out of the table before any of them runs: a body may
+/// write to the directory -- measured, a method that increments an entry
+/// answers 1, 2 and 3 over three reads -- and a walk interleaved with that
+/// would be following a chain its own callee had moved.
+fn method_pairs(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<(ObjRef, ObjRef)>, Failure> {
+    let Some(store) = method_store(interp, receiver)? else {
+        return Ok(Vec::new());
+    };
+    let mut held = Vec::new();
+    for slot in walk_in(interp, &store)? {
+        let Some(index) = slot_at(interp, store.indexes, slot)? else {
+            continue;
+        };
+        let Some(stored) = slot_at(interp, store.items, slot)? else {
+            continue;
+        };
+        interp.roots.push_temp(index);
+        held.push((index, stored));
+    }
+    let mut pairs = Vec::with_capacity(held.len());
+    for (index, stored) in held {
+        let name = interp.to_text(index).to_vec();
+        let item = run_stored_method(interp, receiver, &name, stored, &[])?;
+        interp.roots.push_temp(item);
+        pairs.push((index, item));
+    }
+    Ok(pairs)
+}
+
+/// How many entries the method table holds, WITHOUT running any of them --
+/// `DirectoryClass::items` adds the two counts. The unknown method is not one
+/// of them: measured, a directory holding one ordinary entry and an `UNKNOWN`
+/// method answers `items` as 1.
+fn method_count(interp: &mut Interp, receiver: ObjRef) -> Result<usize, Failure> {
+    let Some(store) = method_store(interp, receiver)? else {
+        return Ok(0);
+    };
+    Ok(walk_in(interp, &store)?.len())
+}
+
+/// `DirectoryClass::remove`: answers what `get` would -- which may run a
+/// method, or the unknown method -- and then drops the name from both halves.
+///
+/// Measured: with an `UNKNOWN` method set, `d~remove('nosuch')` answers what
+/// it returns, while `d~removeItem` over the same value answers `.nil`,
+/// because `removeItem` goes by `getIndex` and that does not consult it.
+fn take_merged(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    index: ObjRef,
+) -> Result<Option<ObjRef>, Failure> {
+    if method_store(interp, receiver)?.is_none() && unknown_method(interp, receiver).is_none() {
+        return take(interp, receiver, index);
+    }
+    let old = merged_get(interp, receiver, index)?;
+    take(interp, receiver, index)?;
+    take_in(interp, receiver, METHODS, index)?;
+    Ok(old)
 }
 
 // ---- the shared surface ----
@@ -872,12 +1177,8 @@ pub(super) fn store_at(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let index = index_argument(args, 1)?;
-    let (store, found) = probe(interp, receiver, index)?;
-    let Some(slot) = found.found else {
-        return Ok(Some(ObjRef::NIL));
-    };
     Ok(Some(
-        slot_at(interp, store.items, slot)?.unwrap_or(ObjRef::NIL),
+        merged_get(interp, receiver, index)?.unwrap_or(ObjRef::NIL),
     ))
 }
 
@@ -931,6 +1232,11 @@ fn pairs(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<(ObjRef, ObjRef)>,
         interp.roots.push_temp(item);
         pairs.push((index, item));
     }
+    // `DirectoryClass::allIndexes` and its siblings append the method table
+    // AFTER the contents, each half in its own store order. Measured: a
+    // directory given `AAA`(method), `zzz`, `MMM`(method), `bbb` answers
+    // `zzz bbb MMM AAA`.
+    pairs.extend(method_pairs(interp, receiver)?);
     Ok(pairs)
 }
 
@@ -990,7 +1296,7 @@ fn native_hash_items(
     if !owns(interp, receiver) {
         return Err(not_this_task(interp, receiver, b"ITEMS"));
     }
-    let count = walk(interp, receiver)?.len();
+    let count = walk(interp, receiver)?.len() + method_count(interp, receiver)?;
     Ok(Some(interp.counted(count)))
 }
 
@@ -1003,7 +1309,7 @@ fn native_hash_is_empty(
     if !owns(interp, receiver) {
         return Err(not_this_task(interp, receiver, b"ISEMPTY"));
     }
-    let empty = walk(interp, receiver)?.is_empty();
+    let empty = walk(interp, receiver)?.is_empty() && method_count(interp, receiver)? == 0;
     Ok(Some(crate::eval::logical(empty)))
 }
 
@@ -1018,7 +1324,7 @@ fn native_hash_empty(
         return Err(not_this_task(interp, receiver, b"EMPTY"));
     }
     let store = store_of(interp, receiver)?;
-    install_store(interp, receiver, store.buckets);
+    install_store(interp, receiver, CONTENTS, store.buckets);
     Ok(Some(receiver))
 }
 
@@ -1032,8 +1338,8 @@ fn native_hash_has_index(
         return Err(not_this_task(interp, receiver, b"HASINDEX"));
     }
     let index = index_argument(args, 1)?;
-    let (_, found) = probe(interp, receiver, index)?;
-    Ok(Some(crate::eval::logical(found.found.is_some())))
+    let held = merged_has_index(interp, receiver, index)?;
+    Ok(Some(crate::eval::logical(held)))
 }
 
 fn native_hash_has_item(
@@ -1082,7 +1388,9 @@ fn native_hash_remove(
         return Err(not_this_task(interp, receiver, b"REMOVE"));
     }
     let index = index_argument(args, 1)?;
-    Ok(Some(take(interp, receiver, index)?.unwrap_or(ObjRef::NIL)))
+    Ok(Some(
+        take_merged(interp, receiver, index)?.unwrap_or(ObjRef::NIL),
+    ))
 }
 
 fn native_hash_remove_item(
@@ -1097,7 +1405,7 @@ fn native_hash_remove_item(
     let wanted = super::collection::item_argument(args)?;
     for (index, item) in pairs(interp, receiver)? {
         if super::collection::same_item(interp, wanted, item)? {
-            take(interp, receiver, index)?;
+            take_merged(interp, receiver, index)?;
             return Ok(Some(item));
         }
     }
@@ -1137,7 +1445,7 @@ pub(super) fn native_hash_new(
     let capacity = super::optional_length_argument(interp, args, 0)?.unwrap_or(0);
     let object = new_instance(interp, class)?;
     interp.roots.push_temp(object);
-    install_store(interp, object, calculate_bucket_size(capacity));
+    install_store(interp, object, CONTENTS, calculate_bucket_size(capacity));
     let caller = interp.caller();
     interp.send_message(object, super::INIT, None, args, caller)?;
     Ok(Some(object))
@@ -1818,12 +2126,8 @@ pub(super) fn store_entry_read(
     receiver: ObjRef,
     index: ObjRef,
 ) -> Result<Option<ObjRef>, Failure> {
-    let (store, found) = probe(interp, receiver, index)?;
-    let Some(slot) = found.found else {
-        return Ok(Some(ObjRef::NIL));
-    };
     Ok(Some(
-        slot_at(interp, store.items, slot)?.unwrap_or(ObjRef::NIL),
+        merged_get(interp, receiver, index)?.unwrap_or(ObjRef::NIL),
     ))
 }
 
@@ -1848,12 +2152,8 @@ fn native_hash_entry(
         return Err(not_this_task(interp, receiver, b"ENTRY"));
     }
     let name = entry_name(interp, args)?;
-    let (store, found) = probe(interp, receiver, name)?;
-    let Some(slot) = found.found else {
-        return Ok(Some(ObjRef::NIL));
-    };
     Ok(Some(
-        slot_at(interp, store.items, slot)?.unwrap_or(ObjRef::NIL),
+        merged_get(interp, receiver, name)?.unwrap_or(ObjRef::NIL),
     ))
 }
 
@@ -1867,8 +2167,8 @@ fn native_hash_has_entry(
         return Err(not_this_task(interp, receiver, b"HASENTRY"));
     }
     let name = entry_name(interp, args)?;
-    let (_, found) = probe(interp, receiver, name)?;
-    Ok(Some(crate::eval::logical(found.found.is_some())))
+    let held = merged_has_index(interp, receiver, name)?;
+    Ok(Some(crate::eval::logical(held)))
 }
 
 /// `~setEntry(name [, value])`: stores under the upper-cased name, and
@@ -1887,8 +2187,76 @@ fn native_hash_set_entry(
     match args.get(1).copied().flatten() {
         Some(value) => insert(interp, receiver, name, Some(value))?,
         None => {
-            take(interp, receiver, name)?;
+            take_merged(interp, receiver, name)?;
         }
+    }
+    Ok(None)
+}
+
+/// `DirectoryClass::setMethodRexx` (`classes/DirectoryClass.cpp:480`):
+/// attaches a method whose RESULT is the entry's item, recomputed on every
+/// read.
+///
+/// The index is `stringArgument(name, "index")->upper()`, so an omitted one
+/// is the named 88.901 and a number is fine -- measured, `setMethod()` is 88
+/// while `setMethod(5, 'return 1')` is rc 0. A third argument is 93, which
+/// the `Fixed(2)` arity reports.
+///
+/// An omitted method is a REMOVAL rather than an error, and either way the
+/// name is dropped from the contents: `contents->remove(entryname)` runs on
+/// both branches. Measured: `g['AAA'] = 'value'` then
+/// `setMethod('AAA', 'return 1')` then `unsetMethod('AAA')` leaves the
+/// directory empty, because the ordinary entry was destroyed rather than
+/// shadowed.
+fn native_directory_set_method(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !owns(interp, receiver) {
+        return Err(not_this_task(interp, receiver, b"SETMETHOD"));
+    }
+    let name = entry_name(interp, args)?;
+    interp.roots.push_temp(name);
+    let unknown = is_unknown_name(interp, name);
+    match args.get(1).copied().flatten() {
+        Some(source) => {
+            let body = super::run_method_body(interp, source)?;
+            let method = interp.classes().mint_method_id();
+            interp.method_bodies.insert(method, body);
+            let stored = interp.counted(method.0 as usize);
+            if unknown {
+                set_unknown_method(interp, receiver, Some(stored));
+            } else {
+                insert_in(interp, receiver, METHODS, name, Some(stored))?;
+            }
+        }
+        None if unknown => set_unknown_method(interp, receiver, None),
+        None => {
+            take_in(interp, receiver, METHODS, name)?;
+        }
+    }
+    take(interp, receiver, name)?;
+    Ok(None)
+}
+
+/// `DirectoryClass::unsetMethodRexx`: drops a method, and unlike `setMethod`
+/// leaves the contents alone.
+fn native_directory_unset_method(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !owns(interp, receiver) {
+        return Err(not_this_task(interp, receiver, b"UNSETMETHOD"));
+    }
+    let name = entry_name(interp, args)?;
+    if is_unknown_name(interp, name) {
+        set_unknown_method(interp, receiver, None);
+    } else {
+        take_in(interp, receiver, METHODS, name)?;
     }
     Ok(None)
 }
@@ -1903,7 +2271,9 @@ fn native_hash_remove_entry(
         return Err(not_this_task(interp, receiver, b"REMOVEENTRY"));
     }
     let name = entry_name(interp, args)?;
-    Ok(Some(take(interp, receiver, name)?.unwrap_or(ObjRef::NIL)))
+    Ok(Some(
+        take_merged(interp, receiver, name)?.unwrap_or(ObjRef::NIL),
+    ))
 }
 
 // ---- `Relation` and `Bag`'s own surface ----
@@ -2159,7 +2529,7 @@ pub(super) fn native_bag_of(
     }
     let object = new_instance(interp, class)?;
     interp.roots.push_temp(object);
-    install_store(interp, object, MINIMUM_BUCKET_SIZE);
+    install_store(interp, object, CONTENTS, MINIMUM_BUCKET_SIZE);
     let caller = interp.caller();
     interp.send_message(object, super::INIT, None, &[], caller)?;
     for argument in args.iter().flatten() {
@@ -2188,7 +2558,7 @@ pub(super) fn native_set_of(
     }
     let object = new_instance(interp, class)?;
     interp.roots.push_temp(object);
-    install_store(interp, object, MINIMUM_BUCKET_SIZE);
+    install_store(interp, object, CONTENTS, MINIMUM_BUCKET_SIZE);
     let caller = interp.caller();
     interp.send_message(object, super::INIT, None, &[], caller)?;
     for argument in args.iter().flatten() {
@@ -2361,6 +2731,22 @@ pub(super) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         "REMOVEENTRY",
         Arity::Fixed(1),
         native_hash_remove_entry,
+    ),
+    // `Directory`'s own two, which override `Object`'s private pair. Neither
+    // reaches `StringTable`: `setMethodRexx` is declared only in
+    // `DirectoryClass.cpp`, and a `setMethod` send to a `StringTable` falls
+    // through to its `unknown` and answers `.nil`.
+    (
+        "Directory",
+        "SETMETHOD",
+        Arity::Fixed(2),
+        native_directory_set_method,
+    ),
+    (
+        "Directory",
+        "UNSETMETHOD",
+        Arity::Fixed(1),
+        native_directory_unset_method,
     ),
     ("Stem", "AT", Arity::Counted, native_stem_at),
     ("Stem", "[]", Arity::Counted, native_stem_at),

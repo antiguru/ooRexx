@@ -1,0 +1,141 @@
+/* `Directory~setMethod` attaches a method whose RESULT is the entry's item,
+ * recomputed on every read -- it is not a stored value.  The tick counter
+ * below answers 1, 2, 3 over three reads of one entry.
+ *
+ * The methods live in a SECOND table, appended after the contents on every
+ * enumeration, each half in its own store order.  `Directory` is the only
+ * class with these: `StringTable` has no `setMethod` at all and a send to one
+ * falls through to its `unknown`, answering `.nil`, while a `Table` and a
+ * plain object report 97.2 for the private `Object` method of that name.
+ *
+ * A write to either half destroys the name in the other.  `setMethod` over an
+ * ordinary entry removes it, so a later `unsetMethod` leaves nothing behind
+ * rather than uncovering the old value; a `[]=` or `setEntry` over a method
+ * removes the method.
+ *
+ * `UNKNOWN` is not an entry: it goes to a place of its own, answers when
+ * nothing else does, is run with the index as its ONE argument, and is
+ * neither counted by `items` nor named by `allIndexes`.  A method-table entry
+ * is run with no arguments at all, even when the send carried some.
+ *
+ * `EMPTY` clears only the contents: the Rexx-visible method is
+ * `HashCollection::emptyRexx`, which never reaches `DirectoryClass::empty`.
+ */
+
+d = .Directory~new
+d['plain'] = 1
+d~setMethod('GREET', 'return "hi"')
+say 'basic   ' d~items d['GREET'] d~greet d~entry('greet')
+say 'reads   ' d~allItems~makeString('L',',') d~allIndexes~makeString('L',',')
+say 'tests   ' d~hasIndex('GREET') d~hasEntry('GREET') d~hasItem('hi') d~index('hi') d~isEmpty
+say 'array   ' d~makeArray~makeString('L',',')
+s = d~supplier
+line = ''
+do while s~available
+  line = line s~index'='s~item
+  s~next
+end
+say 'supplier' line
+
+/* recomputed on every read, and the body may write to the directory */
+t = .Directory~new
+t['n'] = 0
+t~setMethod('TICK', 'self["n"] = self["n"] + 1; return self["n"]')
+say 'tick    ' t['TICK'] t['TICK'] t~tick
+
+/* the body sees self, and takes no arguments however it is reached */
+v = .Directory~new
+v['p'] = 7
+v~setMethod('SELFTEST', 'return self~class~id "/" self["p"]')
+v~setMethod('ARGS', 'return arg()')
+say 'self    ' v['SELFTEST'] v['ARGS'] v~args(1,2)
+
+/* the name is upper-cased; the index family is not */
+u = .Directory~new
+u~setMethod('lower', 'return 1')
+u['keep'] = 2
+say 'case    ' u~allIndexes~makeString('L',',')
+
+/* contents first, then the method table, each in its own order */
+o = .Directory~new
+o~setMethod('AAA', 'return "a"')
+o['zzz'] = 'z'
+o~setMethod('MMM', 'return "m"')
+o['bbb'] = 'b'
+say 'order   ' o~allIndexes~makeString('L',',') o~items
+
+/* setMethod destroys an ordinary entry of the same name */
+g = .Directory~new
+g['AAA'] = 'value'
+g~setMethod('AAA', 'return 1')
+say 'collide ' g~allIndexes~makeString('L',',') g['AAA'] g~items
+g~unsetMethod('AAA')
+say 'unset   ' g~items g['AAA']
+
+/* and a put over a method destroys the method */
+e = .Directory~new
+e~setMethod('M', 'return 2')
+e['M'] = 5
+e~unsetMethod('M')
+say 'put over' e['M'] e~items
+f = .Directory~new
+f~setMethod('M', 'return 2')
+f~setEntry('M', 'plain')
+f~unsetMethod('M')
+say 'setEntry' f['M']
+
+/* remove answers what a read would, through either half */
+r = .Directory~new
+r['plain'] = 1
+r~setMethod('GREET', 'return "hi"')
+say 'remove  ' r~remove('GREET') r~items r['GREET']
+r2 = .Directory~new
+r2~setMethod('GREET', 'return "hi"')
+say 'rmEntry ' r2~removeEntry('greet') r2~items
+
+/* EMPTY leaves the method table standing */
+k = .Directory~new
+k['p'] = 1
+k~setMethod('M', 'return 2')
+k~empty
+say 'empty   ' k~items k['M']
+
+/* a copy carries the method table, and it is the copy's own */
+c = .Directory~new
+c~setMethod('M', 'return 2')
+c2 = c~copy
+c2~unsetMethod('M')
+say 'copy    ' c['M'] c2['M'] c2~items
+
+/* the no-method form removes and creates nothing */
+n = .Directory~new
+n['p'] = 1
+n~setMethod('P')
+say 'nomethod' n~allIndexes~makeString('L',',') n~hasIndex('P')
+
+/* UNKNOWN answers when nothing else does, and is counted by nothing */
+w = .Directory~new
+w['p'] = 1
+w~setMethod('UNKNOWN', 'return "got["arg(1)"] n="arg()')
+say 'unknown ' w['nosuch'] w~someName
+say 'unk keep' w['p'] w~items w~allIndexes~makeString('L',',') w~hasIndex('nosuch')
+say 'unk rm  ' w~remove('nosuch') w~removeItem('nothing')
+w~unsetMethod('UNKNOWN')
+say 'unk gone' w['nosuch']
+
+/* growth past the minimum bucket count keeps the store's own order */
+big = .Directory~new
+do i = 1 to 20
+  big~setMethod('M'i, 'return' i*i)
+end
+say 'grown   ' big~items big['M20'] big~hasIndex('M7')
+say 'grown i ' big~allIndexes~makeString('L',',')
+
+/* Properties inherits Directory's pair; StringTable has none of it */
+p = .Properties~new
+p['plain'] = 1
+p~setMethod('GREET', 'return "hi"')
+say 'props   ' p~items p['GREET'] p~allIndexes~makeString('L',',')
+st = .StringTable~new
+st['p'] = 1
+say 'st      ' st~setMethod('X', 'return 1') st~x st~items

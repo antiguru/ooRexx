@@ -1479,6 +1479,8 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/directory_string_keys.rex",
     "lang/stem_collection.rex",
     "lang/collection_copy.rex",
+    "lang/directory_set_method.rex",
+    "lang/method_new.rex",
 ];
 
 #[test]
