@@ -71,8 +71,13 @@ prose the executor never reads.
   to `dispatch_seam.rs`'s `CLEARANCE_CONSUMERS` **only if it is a source file naming the `Cleared`
   seam token** -- a builtin in `builtin/state.rs` takes no clearance and must not be added.
 * **A task commits the shared artifacts its change moves**: `corpus/method-bodies.txt`, the arity
-  tables, `corpus/phase-5c.txt`, `corpus/unfiled.txt` and `EXPECTED_SUBSET_5C` in
-  `crates/rexx-exec/tests/coverage.rs`. Refresh them, and record each moved row's verdict **before
+  tables, `corpus/phase-5c.txt`, `corpus/unfiled.txt`, `EXPECTED_SUBSET_5C` in
+  `crates/rexx-exec/tests/coverage.rs`, and **`corpus/refusal-sites.tsv`** -- which
+  `crates/rexx-exec/tests/refusal_sites.rs` re-derives from `src/` on every run, so adding a `Loud`
+  or `Raised` constructor moves it, and so does calling an existing one from a new *surface*.
+  Task 2 measured that there is no way to raise a new error number that leaves that file alone:
+  a named constructor adds a row and shifts later rows' `definition` lines, and an inline
+  `Raised::syntax(...)` flips `Raised::syntax`'s own row from `body` to `body+send`. Refresh them, and record each moved row's verdict **before
   and after** your change in your report with the refresh command quoted -- that is the evidence,
   and it is required whether or not the table is where it is filed.
   (A constraint saying the controller owned those four was in force between `a85183fbb` and Task 1's
