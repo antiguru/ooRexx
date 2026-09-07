@@ -634,10 +634,33 @@ or start answering. Whether `97.1` for the arithmetic operators is in scope here
 yours to measure and rule on; say which, and why, in the report.
 
 *The five readers* — `isAbstract`, `isMetaclass`, `methods`, `queryMixinClass`, `subclasses`.
-Measured on the oracle: `.Array~isMetaclass` is `0`, `.Object~isAbstract` is `0`,
-`.Object~subclasses` is an **Array**, `.Array~methods` is a **Supplier**. `subclasses` and
-`methods` are the two that need real state — a class's subclass list and its method table — and
-both must be witnessed by a second send that reads an element out.
+**Measured on the oracle 2026-09-07**, on `class-set.txt`'s own receiver `k = .Object~subclass('k')`
+and on a `::class KK` with two methods:
+
+```
+k~isAbstract=0   k~isMetaclass=0   k~queryMixinClass=0   k~subclasses=Array(0)
+k~methods=Supplier, 32 entries -- ALL of Object's, not k's own
+.KK~methods=Supplier, 34 entries: M1 and M2 at scope KK, the other 32 at scope Object
+.Object~subclasses~items=53
+o~isInstanceOf(.Object)=1   o~isInstanceOf(.String)=0
+o~instanceMethod('OBJECTNAME') -> a Method whose ~scope~id is Object
+o~instanceMethod('ZZZ') -> The NIL object
+o~instanceMethods -> Supplier, 32 entries; with .Object as the argument, also 32
+```
+
+**Three things that measurement settles.** `~methods` answers the **whole** resolved set including
+everything inherited, not the class's own dictionary — a body that answers only own-scope methods
+gives `2` for `.KK` where the oracle gives `34`. `~subclasses` on a freshly made subclass is empty
+while `.Object`'s is 53, so the empty answer proves nothing on its own. And `instanceMethod` of a
+name the receiver does not have is `.nil`, not a raise.
+
+**The `Supplier`'s ORDER is hash order and no witness may assert it.** Measured, the oracle hands
+back `M1` and `M2` interleaved among `Object`'s entries in neither alphabetical nor definition
+order. Project memory `oorexx-hash-iteration-order` is the rule: string keys reproduce across runs
+of the *same* interpreter, and nothing makes two different interpreters agree. So a corpus witness
+that prints the supplier in the order it comes will diverge for a reason that is not a defect —
+**sort, or assert membership and count**, and say in the witness's own comment which of the two it
+does and why.
 
 **The subclass list already exists**: `class_graph.rs:128`'s `subclasses: Vec<ObjRef>`, written by
 the same path for `subclass()` and `inherit()` the way the oracle's `addSubClass` is, and read out
