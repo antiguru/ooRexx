@@ -264,6 +264,11 @@ which the scope note itself says cascade off `new`. Set-differenced row by row a
 > per-class prose two paragraphs down already sums to. So it was stated as a seven-row shortfall
 > where it is a two-row surplus, wrong in magnitude and in sign, on the number the brief's "say so
 > and stop" trigger keys on. The conclusion — no re-slice — is unchanged and correct.
+>
+> **The finding that caught it named only the inner figure.** Correcting 133 to 124 and stopping
+> would have left "128 against the scope note's 139" standing, and 139 is the same set eight rows
+> wider — a correction that fixes one of two wrong numbers in one sentence, which is the shape this
+> project keeps hitting. The controller agreed the fuller rewrite was the right call.
 
 **Three rows `method-bodies.txt` calls `answers` are `send-differs` under a real argument list.**
 All three are class-arm constructors that the zero-argument probe never gets past:
@@ -640,13 +645,29 @@ strings for `hashCode`; two runs answer `-140458910717729` and `-140371917186849
 `identityHash`. So they are `unstable`, not a divergence needing a licence.
 `every_unstable_row_is_really_unstable` re-runs the **oracle** twice on every marked row and fails
 if its two answers agree — the same inversion that keeps `REFUSED:` honest, and control K is it
-tested in the other direction. `hashCode`'s answer is also raw binary, which is a second reason it
-has no business in a TSV.
+tested in the other direction. `hashCode`'s answer is also raw binary rather than a printable number —
+three runs put three different unprintable octet strings on stdout — which is a second reason it
+has no business in a TSV, and `corpus/introspection-arguments.tsv`'s header now says so, so that
+nobody later writes a probe that prints one. The controller re-measured the premise independently
+on three further runs and reports the same: the values are address-derived and ASLR moves them.
+What a red on that test would mean is at the assertion: either the answer stopped being
+address-derived, or two addresses collided.
 
-**What it found, which is the point of the exercise.** `Class~enhanced` reads
-`send-differs  oracle rc0 VALUE enhanced K; crate rc0 VALUE a K` — rc 0 on both sides, the send
-completing on both, and no instrument in this tree could see it before. `method-bodies.txt` calls
-that row `answers` and the arity table called it `agree`.
+**What it found, which is the point of the exercise.** The row moved, and it is the row the flag
+was turned on for:
+
+```
+corpus/method-bodies.txt      Class enhanced instance answers        rc 163
+corpus/introspection-arity.tsv (before)                agree         rc0
+corpus/introspection-arity.tsv (after)                 send-differs  oracle rc0 VALUE enhanced K; crate rc0 VALUE a K
+```
+
+rc 0 on both sides, the send completing on both, and **the method itself works**: measured here on
+all three sides, `d['EXTRA'] = .Method~new('EXTRA','return 99')` then `o = .K~enhanced(d)` answers
+`extra= 99` on the oracle, on `ir` and on `tree-walker` alike, and only `o~string` differs —
+`enhanced K` against `a K`. So the divergence is in the enhanced instance's own name and nothing
+else, which is what Task 5 inherits. No instrument in this tree could see it before: one table
+calls the row `answers`, and the other called it `agree`.
 
 **Two defects of the instrument that only value comparison exposed**, both fixed here:
 
@@ -771,10 +792,12 @@ Run in the gate worktree `/home/moritz/dev/repos/ooRexx-5i-gates`, detached at t
 
 ## 15. What this round did not do
 
-Three of the review's minor findings are outside the nine and are left as they are, so that a later
-reader does not mistake them for closed: **5.2**, `read_table`/`corpus_root` living in the arity
-module rather than in a corpus one; **5.3**, `introspection_scopes.rs`'s `NO_EVIDENCE` doing duty as
-both the table's placeholder and the directives sentinel where `arity::NONE` is the constant that
-means that; and **6.2**, `support/arity.rs`'s three lines of "an earlier version of the rule asked
-only for oracle exit 0", which is history that `rust/CLAUDE.md` excludes and whose measurement was
-dropped in the move that kept the narrative.
+Two of the review's minor findings are outside the nine and are deferred to the whole-branch
+review by the controller, so that a later reader does not mistake them for closed: **5.2**,
+`read_table`/`corpus_root` living in the arity module rather than in a corpus one; and **5.3**,
+`introspection_scopes.rs`'s `NO_EVIDENCE` doing duty as both the table's placeholder and the
+directives sentinel where `arity::NONE` is the constant that means that.
+
+**6.2 is done**, on the controller's instruction: `support/arity.rs`'s "an earlier version of the
+rule asked only for oracle exit 0" is deleted. It was history, which `rust/CLAUDE.md` excludes, and
+the move that carried it here had dropped the measurement behind it and kept the narrative.

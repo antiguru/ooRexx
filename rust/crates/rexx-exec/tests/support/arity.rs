@@ -28,10 +28,6 @@
 //! fill in argument lists for a couple of rows and leave the rest empty, or
 //! send two arguments to everything and let both sides agree on 93.902.
 //!
-//! An earlier version of the rule asked only for oracle exit 0, and the probe
-//! traps `SYNTAX` and exits 0, so a list that *raised* satisfied it.
-//! Requiring `SENT` is what closed it.
-//!
 //! # The verdicts
 //!
 //! * `agree` -- the oracle and both engines give identical three descriptors.

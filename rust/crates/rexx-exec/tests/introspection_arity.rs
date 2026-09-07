@@ -147,6 +147,9 @@ fn every_refused_row_is_really_refused() {
 ///
 /// The marker suppresses this row's value comparison, so it has to be earned
 /// by the oracle's own two answers differing rather than claimed in a header.
+/// A failure here means one of two things: the row's answer stopped being
+/// address-derived, or two addresses collided. The first wants the marker
+/// dropped and a real comparison; the second wants the test run again.
 #[test]
 fn every_unstable_row_is_really_unstable() {
     let stable = arity::stable_rows_marked_unstable(&layout());

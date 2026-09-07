@@ -18,7 +18,10 @@
 # between two of its own runs, so no value comparison could say anything
 # about it. The value is not printed for such a row and the verdict is
 # `unstable`; the marker is earned by running the oracle twice and is a test
-# failure on a row whose two answers agree.
+# failure on a row whose two answers agree. Object~hashCode is address-derived
+# and answers RAW BYTES rather than a printable number -- measured, three runs
+# of one program put three different unprintable octet strings on stdout --
+# so a probe of its own must not print one.
 #
 # `REFUSED:` marks a row the ORACLE refuses BY DESIGN, where the refusal is
 # the measurement and no argument list would change it. The row is still
