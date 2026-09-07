@@ -29,3 +29,13 @@ shell's directory had reset, so `cargo` reported `could not find Cargo.toml`
 and exited 101 -- which looks exactly like the failure it was meant to check.
 The reading above is from the run after that, launched with an explicit
 directory.
+
+## Tasks 4, 5 and 6, over `8cbeb5d2b` -- the phase close
+
+G1 0, G2 0, G3 0, G4 0, G5 0, G6 0, G7 0, `failed-suites=0` on each of the
+five suite-running gates (`scratchpad/gates-h6.status`). The console test that
+went red under load in the earlier run passed here.
+
+So the phase closes on three gate runs: all seven zero over Task 1, six zero
+and a flaky G5 over Tasks 2 and 3 with G5 clean on its own retry, and all
+seven zero over the close.
