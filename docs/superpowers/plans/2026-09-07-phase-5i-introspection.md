@@ -75,8 +75,14 @@ prose the executor never reads.
   refresh whatever the commit boundary -- removed its only justification, and it stayed in force
   long enough to make one task's commit red by construction against five test binaries that assert
   the committed tables match the tree. Revoked.)
-* **Your dispatch names the files you may touch; touch nothing outside it**, and use
-  `rustfmt <path>` rather than `cargo fmt -p <crate>` while a sibling is live.
+* **Your dispatch names the files you may touch; touch nothing outside it.**
+* **Formatting, while a sibling is live in the same crate.** `cargo fmt -p <crate>` is package-wide
+  and reformats a sibling's uncommitted file, which has already happened on this project. But bare
+  `rustfmt <path>` is the wrong replacement **in this tree**: without an edition it applies the 2015
+  `use`-ordering and rewrites `use super::{NONE, Receiver, program}`, which `cargo fmt --all --check`
+  then rejects -- measured 2026-09-08, and it nearly shipped. Use **`rustfmt --edition 2024 <path>`**
+  to format one file and `rustfmt --edition 2024 --check <path>` to check it. `cargo fmt --all
+  --check` is safe beside a sibling because it only reads.
 * **No task may cite the `answers` verdict of `corpus/method-bodies.txt` as a reason a row needs no
   work.** Task 0's instrument is what a later task reads. A row this phase declines to do is
   declined in a report sentence naming why, not by a green cell.
