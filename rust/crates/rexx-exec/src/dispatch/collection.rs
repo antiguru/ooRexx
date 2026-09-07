@@ -88,6 +88,13 @@ fn position_in(
 /// user subclass of `Array` are all reached by the same [`store_of`].
 const QUEUE_ITEMS: &[u8] = b"ITEMS";
 
+/// The allocated extent a `Queue` was built with, which its index bound is
+/// measured against and which is not its item count.
+const QUEUE_CAPACITY: &[u8] = b"CAPACITY";
+
+/// `ArrayClass::DefaultArraySize` (`classes/ArrayClass.hpp:327`).
+const DEFAULT_ARRAY_SIZE: usize = 16;
+
 /// The scope the Array-shaped store is bound under.
 fn store_scope(interp: &mut Interp) -> ObjRef {
     interp
@@ -156,6 +163,22 @@ fn ordered_pairs(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<(ObjRef, O
         // that on `array_enumeration.rex`'s multi-dimensional half, and
         // nothing in the ordinary run saw it.
         interp.roots.push_temp(index);
+        // **The item is rooted too, and for a different reason than the
+        // index.** The index is a fresh allocation; the item is only
+        // reachable through the collection, and the very next thing a caller
+        // does with these pairs is send `==` or `compare`, which runs Rexx
+        // that may empty the collection.
+        //
+        // **This is held on evidence I did not reproduce.** The phase's
+        // review panicked at `not_in_arena`'s "a live value" on three such
+        // programs, driving `run_program_collect_every_alloc` from its own
+        // binary, with two controls that discriminated unrooting from
+        // allocation volume. `corpus/lang/collection_callback_mutates.rex`
+        // exercises the same shape and does **not** reproduce it: removing
+        // these two roots leaves `collect_stress` green. So the rooting is
+        // right and nothing in this tree witnesses it -- see the Task 9
+        // report.
+        interp.roots.push_temp(item);
         pairs.push((index, item));
     }
     Ok(pairs)
@@ -203,7 +226,15 @@ fn array_of(interp: &mut Interp, items: Vec<ObjRef>) -> ObjRef {
     array
 }
 
-/// Whether `left` and `right` are the same item to a collection.
+/// Whether the collection holds `wanted`, comparing it against `element`.
+///
+/// **The SEARCHED-FOR value receives the `==`, not the element.**
+/// `ArrayClass::findSingleIndexItem` is `item->equalValue(test)` with `item`
+/// the argument and `test` the slot's contents
+/// (`classes/ArrayClass.cpp:2094`). Measured, and every line of it reverses
+/// if the operands are swapped: an array holding a plain string answers
+/// `hasItem(aK)` as `1` when `K` defines `::METHOD "==" return 1`, while an
+/// array holding that `K` answers `hasItem('plain')` as `0`.
 ///
 /// **A send and not a comparison of handles.** `ArrayClass::hasItemRexx`
 /// reaches `equalValue`, which for anything but a primitive is the `==`
@@ -215,7 +246,8 @@ fn array_of(interp: &mut Interp, items: Vec<ObjRef>) -> ObjRef {
 /// right: `'1'` matches `1`, `' 2'` does **not** match `2`, and `1` does not
 /// match `1.0` -- so it is neither byte equality of the source spelling nor
 /// numeric equality, but `==` on string values.
-fn same_item(interp: &mut Interp, left: ObjRef, right: ObjRef) -> Result<bool, Failure> {
+fn same_item(interp: &mut Interp, wanted: ObjRef, element: ObjRef) -> Result<bool, Failure> {
+    let (left, right) = (wanted, element);
     let answer = interp.apply_binary(Operator::StrictEqual, left, right)?;
     let text = interp.to_text(answer);
     Ok(crate::eval::logical_value(&text).unwrap_or(false))
@@ -333,7 +365,7 @@ fn native_array_has_item(
 ) -> Result<Option<ObjRef>, Failure> {
     let wanted = item_argument(args)?;
     for (_, item) in ordered_pairs(interp, receiver)? {
-        if same_item(interp, item, wanted)? {
+        if same_item(interp, wanted, item)? {
             return Ok(Some(crate::eval::logical(true)));
         }
     }
@@ -350,7 +382,7 @@ fn native_array_index(
 ) -> Result<Option<ObjRef>, Failure> {
     let wanted = item_argument(args)?;
     for (index, item) in ordered_pairs(interp, receiver)? {
-        if same_item(interp, item, wanted)? {
+        if same_item(interp, wanted, item)? {
             return Ok(Some(index));
         }
     }
@@ -410,7 +442,7 @@ fn native_array_remove_item(
     let slots = slots_of(interp, receiver)?;
     for (offset, slot) in slots.iter().enumerate() {
         let Some(item) = *slot else { continue };
-        if same_item(interp, item, wanted)? {
+        if same_item(interp, wanted, item)? {
             clear_array_slot(interp, receiver, offset)?;
             return Ok(Some(item));
         }
@@ -729,8 +761,15 @@ fn array_step(
     forward: bool,
 ) -> Result<Option<ObjRef>, Failure> {
     let receiver = store_of(interp, receiver)?;
-    let Some(position) = position_in(interp, receiver, args, IndexUse::Get)? else {
-        return Ok(Some(ObjRef::NIL));
+    // **An index past the end still steps.** Measured:
+    // `.Array~of('a','b')~previous(5)` answers `2`, where bailing out on the
+    // out-of-range subscript answers `.nil`.
+    let position = match position_in(interp, receiver, args, IndexUse::Get)? {
+        Some(position) => position,
+        None => match args {
+            [Some(only)] => super::positive_index(interp, *only, 1)?,
+            _ => return Ok(Some(ObjRef::NIL)),
+        },
     };
     let offsets = occupied(interp, receiver)?;
     let found = if forward {
@@ -791,6 +830,38 @@ fn native_array_append(
     Ok(Some(interp.counted(at + 1)))
 }
 
+/// A `Queue`'s two-tier index bound, which is two different errors.
+///
+/// `QueueClass::putRexx` (`classes/QueueClass.cpp:199`) validates the index
+/// first -- past the **allocated** extent that is `Error_Incorrect_method_index`,
+/// 93.918 -- and only then calls `checkInsertIndex`, which raises 93.966 for a
+/// position inside the extent but past the last item. Measured on a one-item
+/// queue: `~put('Y', 2)` is 93.966 and `~put('Y', 99)` is 93.918.
+fn queue_bound(interp: &mut Interp, receiver: ObjRef, position: usize) -> Result<(), Failure> {
+    if !is_queue(interp, receiver) {
+        return Ok(());
+    }
+    // The extent is the larger of what the queue was built with and what it
+    // now holds -- measured, a default queue grown to 20 items bounds at 20.
+    let scope = store_scope(interp);
+    let declared = match pool_variable(interp, receiver, scope, QUEUE_CAPACITY) {
+        Some(value) => match value.decode() {
+            Decoded::SmallInt(value) => value as usize,
+            _ => DEFAULT_ARRAY_SIZE,
+        },
+        None => DEFAULT_ARRAY_SIZE,
+    };
+    let extent = declared.max(slots_of(interp, receiver)?.iter().flatten().count());
+    if position > extent {
+        let written = position.to_string().into_bytes();
+        return Err(Raised::incorrect_list_index(&written).into());
+    }
+    if position > last_item(interp, receiver)? {
+        return Err(Raised::incorrect_queue_index(position).into());
+    }
+    Ok(())
+}
+
 /// Whether `receiver` is a `Queue` or something deriving from one.
 ///
 /// **A `Queue` and a subclass of `Array` are both instances carrying a store,
@@ -835,9 +906,7 @@ fn native_array_insert(
             // "the position must be location of an existing item within the
             // bounds of the queue, unlike an array which can insert at empty
             // slots or beyond the existing bounds".
-            if is_queue(interp, receiver) && position > last_item(interp, receiver)? {
-                return Err(Raised::incorrect_queue_index(position).into());
-            }
+            queue_bound(interp, receiver, position)?;
             position
         }
         // Omitted: after the last OCCUPIED slot, not the end of the array.
@@ -888,7 +957,11 @@ fn native_array_fill(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let item = item_argument(args)?;
-    match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
+    // Through the store like everything else -- reaching `receiver` directly
+    // made this the one row that worked on an `Array` and refused on a
+    // subclass of one.
+    let store = store_of(interp, receiver)?;
+    match interp.heap.get_mut(store).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
             for slot in slots.iter_mut() {
                 *slot = Some(item);
@@ -1094,9 +1167,27 @@ fn sort_by(
     receiver: ObjRef,
     order: &Order,
 ) -> Result<Option<ObjRef>, Failure> {
+    let before = slots_of(interp, receiver)?.iter().flatten().count();
     let items = dense_items(interp, receiver)?;
+    // The whole run is held across every `COMPARE`/`COMPARETO`, each of which
+    // runs Rexx that may empty the receiver -- so the items are rooted for
+    // the duration rather than living only in the `Vec`.
+    for item in &items {
+        interp.roots.push_temp(*item);
+    }
     let sorted = merge_sort(interp, order, items)?;
-    write_back(interp, receiver, sorted)?;
+    // **Upstream sorts in place, so a comparator that changes the receiver
+    // under the sort loses the sort's writes.** This crate sorts a copy, so
+    // it has to notice: measured, `sortWith` over a comparator that empties
+    // the array leaves it holding nothing on the oracle, where writing the
+    // copy back would restore the pre-sort contents. Approximated by the item
+    // count, which is what a callback that empties or refills moves; a
+    // callback that swaps one item for another is not distinguished and is
+    // not measured.
+    let after = slots_of(interp, receiver)?.iter().flatten().count();
+    if after == before {
+        write_back(interp, receiver, sorted)?;
+    }
     Ok(Some(receiver))
 }
 
@@ -1292,11 +1383,16 @@ fn native_queue_init(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    super::optional_length_argument(interp, args, 0)?;
+    let asked = super::optional_length_argument(interp, args, 0)?.unwrap_or(0);
     let store = interp.alloc_with(BehaviourId::ARRAY, Body::array(Vec::new()));
     interp.roots.push_temp(store);
     let scope = store_scope(interp);
     interp.set_pool_variable(receiver, scope, QUEUE_ITEMS, store);
+    // Measured: `.Queue~new(5)` bounds at 16 and `.Queue~new(50)` at 50, so
+    // the requested extent is floored at the default rather than replacing
+    // it.
+    let capacity = interp.counted(asked.max(DEFAULT_ARRAY_SIZE));
+    interp.set_pool_variable(receiver, scope, QUEUE_CAPACITY, capacity);
     Ok(None)
 }
 
@@ -1402,12 +1498,9 @@ fn native_queue_put(
     // `putRexx` calls `checkInsertIndex` (`classes/QueueClass.cpp:205`)
     // before anything else can refuse, so an index past the last item is
     // 93.966 and never the 93.918 an unheld index would answer.
-    let bound = last_item(interp, receiver)?;
     if let Some(index) = args.get(1).copied().flatten() {
         let position = super::positive_index(interp, index, 2)?;
-        if position > bound {
-            return Err(Raised::incorrect_queue_index(position).into());
-        }
+        queue_bound(interp, receiver, position)?;
     }
     let Some(position) = array_position(interp, store, &args[1..], IndexUse::Get)? else {
         return Err(refuse(interp));
@@ -1720,7 +1813,7 @@ fn native_list_remove_item(
     let held = array_slots_owned(interp, items)?;
     for (offset, slot) in held.iter().enumerate() {
         if let Some(slot) = *slot
-            && same_item(interp, slot, wanted)?
+            && same_item(interp, wanted, slot)?
         {
             return list_take(interp, receiver, offset);
         }
@@ -1733,11 +1826,18 @@ fn list_pairs(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<(ObjRef, ObjR
     let (items, handles, _) = list_state(interp, receiver)?;
     let items = array_slots_owned(interp, items)?;
     let handles = array_slots_owned(interp, handles)?;
-    Ok(handles
+    let pairs: Vec<(ObjRef, ObjRef)> = handles
         .into_iter()
         .zip(items)
         .filter_map(|(handle, item)| Some((handle?, item?)))
-        .collect())
+        .collect();
+    // Rooted for [`ordered_pairs`]'s reason: a caller sends `==` per pair and
+    // the callback may empty the list.
+    for (handle, item) in &pairs {
+        interp.roots.push_temp(*handle);
+        interp.roots.push_temp(*item);
+    }
+    Ok(pairs)
 }
 
 fn native_list_all_items(
@@ -1921,7 +2021,7 @@ fn native_list_has_item(
 ) -> Result<Option<ObjRef>, Failure> {
     let wanted = item_argument(args)?;
     for (_, item) in list_pairs(interp, receiver)? {
-        if same_item(interp, item, wanted)? {
+        if same_item(interp, wanted, item)? {
             return Ok(Some(crate::eval::logical(true)));
         }
     }
@@ -1937,7 +2037,7 @@ fn native_list_index(
 ) -> Result<Option<ObjRef>, Failure> {
     let wanted = item_argument(args)?;
     for (handle, item) in list_pairs(interp, receiver)? {
-        if same_item(interp, item, wanted)? {
+        if same_item(interp, wanted, item)? {
             return Ok(Some(handle));
         }
     }

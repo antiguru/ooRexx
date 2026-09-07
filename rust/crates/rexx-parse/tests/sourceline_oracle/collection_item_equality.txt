@@ -1,0 +1,40 @@
+count 39
+/* Which operand receives the `==` when a collection searches for an item.
+
+   `ArrayClass::findSingleIndexItem` is `item->equalValue(test)`: the value
+   being SEARCHED FOR receives the message and the slot's contents is its
+   argument.  Every line below reverses if the two are swapped, and a witness
+   that puts a K in and asks for a K cannot see the difference because both
+   directions answer 1. */
+
+k = .Array~of('plain')
+say 'holds a string, asked for a K' k~hasItem(.K~new) k~index(.K~new)
+
+j = .Array~new
+j~append(.K~new)
+say 'holds a K, asked for a string' j~hasItem('plain') j~index('plain')
+
+l = .List~of('plain')
+say 'list holds a string, asked for a K' l~hasItem(.K~new) l~index(.K~new)
+
+m = .List~new
+zz = m~append(.K~new)
+say 'list holds a K, asked for a string' m~hasItem('plain')
+
+/* The same asymmetry holds with `.nil`, whose `==` is identity upstream, and
+   this program does NOT exercise it: `.nil == 'The NIL object'` answers 1 in
+   this crate and 0 on the oracle, at the language level and with no
+   collection involved.  That is a pre-existing comparison defect recorded in
+   Phase 5g's Task 9 report, and a line here would be red for a reason that is
+   not this file's subject. */
+
+/* And removeItem searches the same way. */
+p = .Array~of('plain')
+say 'removeItem finds it' p~removeItem(.K~new) 'leaving' p~items
+q = .Array~new
+q~append(.K~new)
+say 'and does not, the other way round' q~removeItem('plain') 'leaving' q~items
+
+::CLASS K
+::METHOD "=="
+  return 1

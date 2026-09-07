@@ -1462,6 +1462,9 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/collection_of.rex",
     "lang/array_append_index.rex",
     "lang/queue_bounds.rex",
+    "lang/collection_item_equality.rex",
+    "lang/queue_extent.rex",
+    "lang/collection_callback_mutates.rex",
 ];
 
 #[test]
