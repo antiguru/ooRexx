@@ -359,15 +359,30 @@ this task's commit sha, per the constraints. Cells are
 filled from the status file after the run, per the controller's ruling that the implementer writes
 its own gate lines.
 
+Read from
+`/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/t1/gates/status.txt`,
+whose first line is `9308ca9bd1d01bd28afe1d5cb680f85a9bc8412e` and whose last is
+`finished 2026-09-08T00:52:00+02:00`:
+
 | gate | command | result |
 | --- | --- | --- |
-| G1 | `cargo fmt --all --check` | **G1** |
-| G2 | `cargo clippy --workspace --all-targets -- -D warnings` | **G2** |
-| G3 | `cargo test --release --workspace --no-fail-fast` | **G3** |
-| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` (debug) | **G4** |
-| G5 | `cargo test --release -p rexx-exec --test collection_arity` | **G5** |
-| G6 | `cargo test --release -p rexx-exec --test introspection_arity` | **G6** |
-| G7 | `cargo test --release -p rexx-exec --test introspection_scopes` | **G7** |
+| G1 | `cargo fmt --all --check` | exit 0 |
+| G2 | `cargo clippy --workspace --all-targets -- -D warnings` | exit 0 |
+| G3 | `cargo test --release --workspace --no-fail-fast` | exit 0, 116 `test result: ok`, no `test result: FAILED` |
+| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` (debug) | exit 0, 116 `test result: ok`, no `test result: FAILED` |
+| G5 | `cargo test --release -p rexx-exec --test collection_arity` | exit 0, 23 passed |
+| G6 | `cargo test --release -p rexx-exec --test introspection_arity` | exit 0, 25 passed |
+| G7 | `cargo test --release -p rexx-exec --test introspection_scopes` | exit 0, 22 passed |
+
+All seven zero. **The STRICT corpus differential inside G4 reports `443 of 443 matching`**, which
+is the run that includes `lang/arg_option_array.rex` and `lang/map_collection_of.rex`; the plain
+`--test corpus` binary is report mode and exits 0 on a divergence, so that is the line to cite and
+not the report-mode one beside it. G5's 23, G6's 25 and G7's 22 are the same counts Task 0's tip
+recorded, so the two new witnesses moved no arity or scope row.
+
+The suite started after the commit and ran in the pinned gate worktree, so the gated tree is the
+committed tree by construction. `memcap` is present in this session and G4 ran under it; G3 did
+not, for the reason in concern 4 below.
 
 ## 10. Concerns
 
