@@ -1597,7 +1597,7 @@ fn stem_tail(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<Vec<u8>, Fa
         if !tail.is_empty() {
             tail.push(b'.');
         }
-        tail.extend_from_slice(&interp.to_text(argument).into_owned());
+        tail.extend_from_slice(&interp.to_text(argument));
     }
     Ok(tail)
 }
