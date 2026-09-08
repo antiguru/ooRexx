@@ -992,6 +992,32 @@ their count as its own progress measure is measuring 5c.
   property of where the behaviour lives, not a rule restated at each mutator: a live walk of the
   class graph on every send satisfies the `~inherit` case and silently fails the `~define` case at
   rc 0, and a copy on both families fails the `~inherit` case the same way.
+* **D59 CORRECTED, 2026-09-08 by Moritz. It records a temporary licence as a permanent decision,
+  and the sentence "expected to outlive Phase 5" is exactly the part that is wrong.** His words:
+  *"it was licensed as a temporary state to unblock the object model work without having weak
+  references. it is fine to declare built-in classes with a static lifetime, but all others should be
+  collected like regular objects. (no permgen). we can move the fix to after phase 5i, but before we
+  start new work."*
+
+  **So the decision is: built-in classes may have a static lifetime; every other class is collected
+  like any other object.** D59 below is left in place because the measurements in it are real and
+  because a spec that quietly acquires the right answer teaches nothing about how it was reached --
+  but it does not state the decision, and nothing may cite it as licensing anything from this date.
+
+  **The licence's own premise expired inside Phase 5i.** It was taken because there were no weak
+  references; Phase 5i's Task 2 made `Body::WeakRef` constructible and `heap.rs`'s weak protocol
+  reachable from a Rexx program for the first time. The reason to hold the licence went away in the
+  phase that was still citing it.
+
+  **D59a's four consequences are therefore time-boxed, not licensed**: a class's `UNINIT` running
+  later than the oracle's, `~subclasses` counting a dropped class, a `WeakReference` to a dropped
+  class still answering it, and OOM under class accumulation. Each is a defect with a deadline
+  rather than an accepted divergence.
+
+  **D60 rests on D59 and is reopened with it.**
+
+  **When**: after Phase 5i closes and before any new work starts.
+
 * **D59. Class objects are not collected.** Class identities stay outside the arena, the registry
   stays monotone, and `Interp::class_variables` stays a permanent root -- so what a class-scope
   instance variable holds is permanently live too. Measured cost and measured benefit above. This is
