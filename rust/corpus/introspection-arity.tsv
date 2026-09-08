@@ -47,12 +47,12 @@
 # Their class arm is here, marked REFUSED: in the argument file -- the oracle
 # answers 93.967 and that refusal is what the row measures.
 Buffer	new	class	agree	rc0
-Class	<>	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: method "<>" of class "Class" is not implemented (Phase 5)
-Class	=	instance	send-differs	oracle rc0 VALUE 0; crate rc120 rexx-exec: method "=" of class "Class" is not implemented (Phase 5)
-Class	==	instance	send-differs	oracle rc0 VALUE 0; crate rc120 rexx-exec: method "==" of class "Class" is not implemented (Phase 5)
-Class	><	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: method "><" of class "Class" is not implemented (Phase 5)
-Class	\=	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: method "\=" of class "Class" is not implemented (Phase 5)
-Class	\==	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: method "\==" of class "Class" is not implemented (Phase 5)
+Class	<>	instance	agree	rc0
+Class	=	instance	agree	rc0
+Class	==	instance	agree	rc0
+Class	><	instance	agree	rc0
+Class	\=	instance	agree	rc0
+Class	\==	instance	agree	rc0
 Class	activate	instance	no-value	rc0, the send returned no result to compare
 Class	annotation	instance	agree	rc0
 Class	annotations	instance	agree	rc0
@@ -61,21 +61,21 @@ Class	defaultName	instance	agree	rc0
 Class	define	instance	no-value	rc0, the send returned no result to compare
 Class	defineMethods	instance	no-value	rc0, the send returned no result to compare
 Class	delete	instance	no-value	rc0, the send returned no result to compare
-Class	enhanced	instance	send-differs	oracle rc0 VALUE enhanced K; crate rc0 VALUE a K
+Class	enhanced	instance	agree	rc0
 Class	id	instance	agree	rc0
 Class	inherit	instance	no-value	rc0, the send returned no result to compare
-Class	isAbstract	instance	send-differs	oracle rc0 VALUE 0; crate rc120 rexx-exec: method "ISABSTRACT" of class "Class" is not implemented (Phase 5)
-Class	isMetaclass	instance	send-differs	oracle rc0 VALUE 0; crate rc120 rexx-exec: method "ISMETACLASS" of class "Class" is not implemented (Phase 5)
+Class	isAbstract	instance	agree	rc0
+Class	isMetaclass	instance	agree	rc0
 Class	isSubclassOf	instance	agree	rc0
 Class	metaClass	instance	agree	rc0
 Class	method	instance	agree	rc0
-Class	methods	instance	send-differs	oracle rc0 VALUE a Supplier; crate rc120 rexx-exec: method "METHODS" of class "Class" is not implemented (Phase 5)
+Class	methods	instance	agree	rc0
 Class	mixinClass	instance	agree	rc0
 Class	new	class	send-differs	oracle rc0 VALUE The C9 class; crate rc120 rexx-exec: method "NEW" of class "Class" is not implemented (Phase 5)
 Class	package	instance	agree	rc0
-Class	queryMixinClass	instance	send-differs	oracle rc0 VALUE 0; crate rc120 rexx-exec: method "QUERYMIXINCLASS" of class "Class" is not implemented (Phase 5)
+Class	queryMixinClass	instance	agree	rc0
 Class	subclass	instance	agree	rc0
-Class	subclasses	instance	send-differs	oracle rc0 VALUE an Array; crate rc120 rexx-exec: method "SUBCLASSES" of class "Class" is not implemented (Phase 5)
+Class	subclasses	instance	agree	rc0
 Class	superClass	instance	agree	rc0
 Class	superClasses	instance	agree	rc0
 Class	uninherit	instance	no-value	rc0, the send returned no result to compare
@@ -113,10 +113,10 @@ Object	defaultName	instance	agree	rc0
 Object	hasMethod	instance	agree	rc0
 Object	hashCode	instance	unstable	rc0, the oracle does not reproduce its own answer
 Object	identityHash	instance	unstable	rc0, the oracle does not reproduce its own answer
-Object	instanceMethod	instance	send-differs	oracle rc0 VALUE a Method; crate rc120 rexx-exec: method "INSTANCEMETHOD" of class "Object" is not implemented (Phase 5)
-Object	instanceMethods	instance	send-differs	oracle rc0 VALUE a Supplier; crate rc120 rexx-exec: method "INSTANCEMETHODS" of class "Object" is not implemented (Phase 5)
+Object	instanceMethod	instance	agree	rc0
+Object	instanceMethods	instance	agree	rc0
 Object	isA	instance	agree	rc0
-Object	isInstanceOf	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: method "ISINSTANCEOF" of class "Object" is not implemented (Phase 5)
+Object	isInstanceOf	instance	agree	rc0
 Object	isNil	instance	agree	rc0
 Object	new	class	exempt	the oracle refuses an argument here -- measured, .Object~new('x') raises 93.902 while .Object~new answers, so Setup.cpp's A_COUNT is a maximum and not a minimum
 Object	objectName	instance	agree	rc0

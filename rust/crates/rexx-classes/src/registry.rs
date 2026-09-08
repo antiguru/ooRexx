@@ -300,6 +300,11 @@ impl ClassRegistry {
         self.graph.is_metaclass(class)
     }
 
+    /// `~queryMixinClass` -- see [`ClassGraph::is_mixin`].
+    pub fn is_mixin(&self, class: ObjRef) -> bool {
+        self.graph.is_mixin(class)
+    }
+
     /// See [`ClassGraph::bootstrap_metaclass`].
     pub fn bootstrap_metaclass(&mut self, class: ObjRef) {
         self.graph.bootstrap_metaclass(class);
@@ -507,6 +512,14 @@ impl ClassRegistry {
     /// `~hasMethod` against a behaviour a receiver holds.
     pub fn has_method_at(&self, handle: BehaviourHandle, name: &str) -> bool {
         self.graph.has_method_at(handle, name)
+    }
+
+    /// Every name a behaviour a receiver holds resolves -- what
+    /// `Object~instanceMethods` walks, the counterpart of
+    /// [`ClassRegistry::instance_method_names`] for a receiver that carries a
+    /// handle rather than a class (D58).
+    pub fn method_names_at(&self, handle: BehaviourHandle) -> std::collections::BTreeSet<String> {
+        self.graph.method_names_at(handle)
     }
 
     /// True once `scope` is folded into a behaviour a receiver holds -- what

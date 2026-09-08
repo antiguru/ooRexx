@@ -1748,8 +1748,17 @@ impl Interp {
         let Decoded::Heap { slot, generation } = value.decode() else {
             return None;
         };
+        // **A class object is an operator receiver on the same terms `.nil`
+        // is**, and it names no arena slot, so it answers before the fetch
+        // below. `Setup.cpp`'s `Class` block declares `=`, `==`, `\\=`,
+        // `\\==`, `<>` and `><` and no other operator, so the six are
+        // `Object`'s identity test and every other operator is a name the
+        // behaviour does not hold -- measured, oracle rc 0, `.array = .array`
+        // is `1` and `.array = 'The Array class'` is `0`; oracle rc 159,
+        // `.array > .array` and `.array + 1` are both `97.1 Object "The Array
+        // class" does not understand message`.
         if is_class_slot(slot, generation) {
-            return None;
+            return Some(value);
         }
         match &self.heap.get(value)?.body {
             Body::Instance { .. } => Some(value),
@@ -3698,26 +3707,14 @@ mod object_operand_tests {
     fn an_operator_sent_to_an_object_is_loud() {
         // (source, the operator the message must name, the shape it must name)
         let cases: &[(&[u8], &str, &str)] = &[
-            // oracle 0 -- identity, not a comparison of renderings
-            (
-                b"say (.array == 'The Array class')\n",
-                "==",
-                "a class object",
-            ),
-            (b"say (.array = 'The Array class')\n", "=", "a class object"),
-            (
-                b"say (.array \\== 'The Array class')\n",
-                "\\==",
-                "a class object",
-            ),
-            // oracle 97.1 at rc 159 -- the operator is a message the class
-            // does not answer
-            (b"say (.array > .array)\n", ">", "a class object"),
-            (b"say (.array + 1)\n", "+", "a class object"),
-            (b"say (.array ** 1)\n", "**", "a class object"),
-            (b"say (.array & 1)\n", "&", "a class object"),
-            (b"say -.array\n", "-", "a class object"),
-            (b"say \\.array\n", "\\", "a class object"),
+            // **No `.array` row here**, and that is the property rather than
+            // an omission: a class object is an operator *receiver*
+            // (`Interp::operator_message_receiver`), so every operator
+            // reaches it as a message and none of them reports a gap.
+            // `a_class_objects_operators_are_sent_as_messages` is where they
+            // are asserted, and the rows below are the control -- a change
+            // that widened past class handles would move one of them.
+            //
             // oracle 0, "The NIL object" -- Directory answers `+` through its
             // own UNKNOWN, which this crate models nothing of
             (
@@ -3782,6 +3779,84 @@ mod object_operand_tests {
                 (code, stdout.as_str(), stderr.as_str()),
                 (120, "", expected.as_str()),
                 "{:?}",
+                String::from_utf8_lossy(source)
+            );
+        }
+    }
+
+    /// A class object answers the comparison operators by **identity** and
+    /// refuses every other one the way the oracle does, at both spellings.
+    ///
+    /// `memory/Setup.cpp`'s `Class` block declares `=`, `==`, `\\=`, `\\==`,
+    /// `<>` and `><` (`:485`-`:490`) and no other operator, so an arithmetic
+    /// or ordering operator is a name the behaviour does not hold and the
+    /// send reports 97.1 -- the oracle's own answer, not a gap of this
+    /// crate's.
+    ///
+    /// **Both spellings, because they are two code paths that must agree.**
+    /// `(.Array = .Array)` is an expression and reaches
+    /// `Interp::operator_message_receiver`; `.Array~'='(.Array)` is a message
+    /// and reaches `Interp::invocable`. A fix at one leaves the other loud.
+    #[test]
+    fn a_class_objects_operators_are_sent_as_messages() {
+        // Identity and not a comparison of renderings, which is what the
+        // `'The Array class'` rows pin: measured, oracle rc 0.
+        for (source, expected) in [
+            (&b"say (.array = .array)\n"[..], "1"),
+            (b"say (.array == .array)\n", "1"),
+            (b"say (.array = 'The Array class')\n", "0"),
+            (b"say (.array == 'The Array class')\n", "0"),
+            (b"say (.array \\= .array)\n", "0"),
+            (b"say (.array \\== .array)\n", "0"),
+            (b"say (.array <> .string)\n", "1"),
+            (b"say (.array >< .string)\n", "1"),
+            // The message spelling of the same six.
+            (b"say .Array~'='(.Array)\n", "1"),
+            (b"say .Array~'=='(.Array)\n", "1"),
+            (b"say .Array~'\\='(.Array)\n", "0"),
+            (b"say .Array~'\\=='(.Array)\n", "0"),
+            (b"say .Array~'<>'(.String)\n", "1"),
+            (b"say .Array~'><'(.String)\n", "1"),
+            // Concatenation never asked the gap and still does not, which is
+            // the control for the receiver change: measured, oracle rc 0.
+            (b"say (.array || 'x')\n", "The Array classx"),
+            (b"say (.array 'x')\n", "The Array class x"),
+        ] {
+            let (code, stdout, stderr) = both_engines(source);
+            assert_eq!(
+                (code, stdout.as_str(), stderr.as_str()),
+                (0, format!("{expected}\n").as_str(), ""),
+                "{:?}",
+                String::from_utf8_lossy(source)
+            );
+        }
+
+        // Every other operator, at rc 159 rather than this crate's own
+        // refusal. Measured, oracle: `Object "The Array class" does not
+        // understand message`.
+        for (source, message) in [
+            (&b"say (.array > .array)\n"[..], ">"),
+            (b"say (.array < .string)\n", "<"),
+            (b"say (.array + 1)\n", "+"),
+            (b"say (.array ** 1)\n", "**"),
+            (b"say (.array & 1)\n", "&"),
+            (b"say -.array\n", "-"),
+            (b"say \\.array\n", "\\"),
+            (b"say .Array~'+'(1)\n", "+"),
+        ] {
+            let (code, stdout, stderr) = both_engines(source);
+            assert_eq!(
+                (code, stdout.as_str()),
+                (159, ""),
+                "{:?}",
+                String::from_utf8_lossy(source)
+            );
+            assert!(
+                stderr.contains(&format!(
+                    "Error 97.1:  Object \"The Array class\" does not understand message \
+                     \"{message}\"."
+                )),
+                "{:?} reported {stderr:?}",
                 String::from_utf8_lossy(source)
             );
         }
@@ -3940,29 +4015,55 @@ mod object_operand_tests {
     /// in through one assignment: measured, `a. = .array; say (a. == 'The
     /// Array class')` answered `1` where the oracle answers `0`.
     ///
-    /// The last row is the control that says the hole was the indirection: a
-    /// compound read yields the class handle itself and was loud already.
+    /// The redirect now reaches `Interp::operator_message_receiver` rather
+    /// than only the gap, so the operator rows answer the oracle's own
+    /// answers instead of refusing. The `DO` header row is the one that still
+    /// refuses, and it is the control: `Interp::header_number` asks the gap
+    /// and never the send, so a class reached through a stem is loud there
+    /// where the oracle is 97.1.
     #[test]
-    fn an_object_reached_through_a_stem_default_is_loud() {
-        for source in [
-            &b"a. = .array\nsay (a. == 'The Array class')\n"[..],
-            b"a. = .array\nsay a. + 1\n",
-            b"a. = .array\ndo i = 1 to a.\nend\n",
-            b"a. = .array\nsay a.zz + 1\n",
+    fn an_object_reached_through_a_stem_default_answers_as_the_object() {
+        // Measured, oracle rc 0 and rc 159: the redirect reaches the class
+        // itself, so the identity test and the 97.1 are the oracle's.
+        for (source, code, stdout, message) in [
+            (
+                &b"a. = .array\nsay (a. == 'The Array class')\n"[..],
+                0,
+                "0\n",
+                None,
+            ),
+            (b"a. = .array\nsay a. + 1\n", 159, "", Some("+")),
+            (b"a. = .array\nsay a.zz + 1\n", 159, "", Some("+")),
         ] {
-            let (code, stdout, stderr) = both_engines(source);
+            let (actual, out, stderr) = both_engines(source);
             assert_eq!(
-                (code, stdout.as_str()),
-                (120, ""),
+                (actual, out.as_str()),
+                (code, stdout),
                 "{:?} reported {stderr:?}",
                 String::from_utf8_lossy(source)
             );
-            assert!(
-                stderr.contains("a class object"),
-                "{:?} must name the shape it refused, got {stderr:?}",
-                String::from_utf8_lossy(source)
-            );
+            if let Some(message) = message {
+                assert!(
+                    stderr.contains(&format!(
+                        "Error 97.1:  Object \"The Array class\" does not understand message \
+                         \"{message}\"."
+                    )),
+                    "{:?} reported {stderr:?}",
+                    String::from_utf8_lossy(source)
+                );
+            }
         }
+
+        // The control, and a gap this crate still has: a `DO` header converts
+        // through `Interp::header_number`, which asks
+        // `Interp::operator_operand_gap` and never the send, so this refuses
+        // where the oracle answers 97.1 at rc 159.
+        let (code, stdout, stderr) = both_engines(b"a. = .array\ndo i = 1 to a.\nend\n");
+        assert_eq!((code, stdout.as_str()), (120, ""), "reported {stderr:?}");
+        assert!(
+            stderr.contains("a class object"),
+            "must name the shape it refused, got {stderr:?}"
+        );
     }
 
     /// A controlled loop's own increment adds to the control variable, and

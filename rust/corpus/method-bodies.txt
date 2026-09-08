@@ -54,12 +54,12 @@
 # local timezone: measured, `utcIsoDate` reads `answers` under TZ=UTC and
 # `diverge` under CEST+0200, because the oracle applies the offset and this
 # crate does not.
-Class	=	instance	loud	method "=" of class "Class"
-Class	==	instance	loud	method "==" of class "Class"
-Class	<>	instance	loud	method "<>" of class "Class"
-Class	><	instance	loud	method "><" of class "Class"
-Class	\=	instance	loud	method "\=" of class "Class"
-Class	\==	instance	loud	method "\==" of class "Class"
+Class	=	instance	answers	rc 163
+Class	==	instance	answers	rc 163
+Class	<>	instance	answers	rc 163
+Class	><	instance	answers	rc 163
+Class	\=	instance	answers	rc 163
+Class	\==	instance	answers	rc 163
 Class	activate	instance	answers	rc 165
 Class	annotation	instance	answers	rc 168
 Class	annotations	instance	answers	rc 0
@@ -71,18 +71,18 @@ Class	delete	instance	answers	rc 168
 Class	enhanced	instance	answers	rc 163
 Class	id	instance	answers	rc 0
 Class	inherit	instance	answers	rc 168
-Class	isAbstract	instance	loud	method "ISABSTRACT" of class "Class"
-Class	isMetaclass	instance	loud	method "ISMETACLASS" of class "Class"
+Class	isAbstract	instance	answers	rc 0
+Class	isMetaclass	instance	answers	rc 0
 Class	isSubclassOf	instance	answers	rc 168
 Class	metaClass	instance	answers	rc 0
 Class	method	instance	answers	rc 168
-Class	methods	instance	loud	method "METHODS" of class "Class"
+Class	methods	instance	answers	rc 0
 Class	mixinClass	instance	answers	rc 168
 Class	new	class	answers	rc 163
 Class	package	instance	answers	rc 0
-Class	queryMixinClass	instance	loud	method "QUERYMIXINCLASS" of class "Class"
+Class	queryMixinClass	instance	answers	rc 0
 Class	subclass	instance	answers	rc 168
-Class	subclasses	instance	loud	method "SUBCLASSES" of class "Class"
+Class	subclasses	instance	answers	rc 0
 Class	superClass	instance	answers	rc 0
 Class	superClasses	instance	answers	rc 0
 Class	uninherit	instance	answers	rc 168
@@ -143,10 +143,10 @@ Object	defaultName	instance	answers	rc 0
 Object	hashCode	instance	unstable	the oracle
 Object	hasMethod	instance	answers	rc 163
 Object	identityHash	instance	unstable	the oracle
-Object	instanceMethod	instance	loud	method "INSTANCEMETHOD" of class "Object"
-Object	instanceMethods	instance	loud	method "INSTANCEMETHODS" of class "Object"
+Object	instanceMethod	instance	answers	rc 163
+Object	instanceMethods	instance	answers	rc 0
 Object	isA	instance	answers	rc 168
-Object	isInstanceOf	instance	loud	method "ISINSTANCEOF" of class "Object"
+Object	isInstanceOf	instance	answers	rc 168
 Object	isNil	instance	answers	rc 0
 Object	objectName	instance	answers	rc 0
 Object	objectName=	instance	answers	rc 163

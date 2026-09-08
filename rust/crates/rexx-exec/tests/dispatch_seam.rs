@@ -369,6 +369,7 @@ const CLEARANCE_CONSUMERS: &[&str] = &[
     "src/dispatch/hash.rs",
     "src/dispatch/rexx_info.rs",
     "src/dispatch/executable.rs",
+    "src/dispatch/introspection.rs",
 ];
 
 /// **Every consumer of the seam's token is written in one of

@@ -465,6 +465,15 @@ pub struct ObjectMethod {
 pub struct ObjectMethods {
     set: Vec<(Box<[u8]>, Option<ObjectMethod>)>,
     enhanced: Vec<(Box<[u8]>, ObjectMethod)>,
+    /// `RexxBehaviour::setEnhanced`, which `RexxClass::enhanced` sets on the
+    /// object it returns (`classes/ClassClass.cpp:1478`) and
+    /// `RexxObject::defaultName` reads to answer `enhanced <id>` in place of
+    /// the article form (`classes/ObjectClass.cpp:1763`-`:1767`).
+    ///
+    /// **Not derivable from `enhanced` being non-empty**: measured, oracle
+    /// rc 0, `k~enhanced(.StringTable~new)` over an empty table still renders
+    /// `enhanced K`.
+    enhanced_instance: bool,
 }
 
 impl ObjectMethods {
@@ -472,7 +481,35 @@ impl ObjectMethods {
         ObjectMethods {
             set: Vec::new(),
             enhanced: Vec::new(),
+            enhanced_instance: false,
         }
+    }
+
+    /// Marks the object one `Class~enhanced` built.
+    pub fn mark_enhanced_instance(&mut self) {
+        self.enhanced_instance = true;
+    }
+
+    /// Whether `Class~enhanced` built this object.
+    pub fn is_enhanced_instance(&self) -> bool {
+        self.enhanced_instance
+    }
+
+    /// Every name either level defines, upper case, `setMethod`'s hidden
+    /// entries excluded -- what `Object~instanceMethods(.nil)` walks.
+    pub fn defined_names(&self) -> Vec<Box<[u8]>> {
+        let mut names: Vec<Box<[u8]>> = self
+            .set
+            .iter()
+            .filter(|(_, entry)| entry.is_some())
+            .map(|(name, _)| name.clone())
+            .collect();
+        for (name, _) in &self.enhanced {
+            if Self::find(&self.set, name).is_none() {
+                names.push(name.clone());
+            }
+        }
+        names
     }
 
     /// What this object answers for `name`: `None` when neither level holds

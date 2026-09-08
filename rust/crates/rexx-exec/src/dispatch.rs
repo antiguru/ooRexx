@@ -180,6 +180,9 @@ mod rexx_info;
 // `Method`'s and `Routine`'s own readers, chained the same way.
 pub(crate) mod executable;
 
+// `Class`'s graph readers and `Object`'s three, chained the same way.
+mod introspection;
+
 /// One primitive method's implementation.
 ///
 /// The [`Cleared`] parameter is the seam's own enforcement and is never read
@@ -318,6 +321,22 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // (`instructions/ClassDirective.cpp:288`) sends it to every class the
     // package installed.
     ("Class", "ACTIVATE", Arity::Fixed(0), native_no_op),
+    // The comparison operators `memory/Setup.cpp`'s `Class` block declares
+    // (`:485`-`:490`), each at count 1 and each `RexxClass::equal`,
+    // `strictEqual` or `notEqual` -- the same identity test `Object`'s rows
+    // below carry, bound
+    // again here because `Class` names its own and a name resolves to the
+    // more specific scope. `Interp::operator_message_receiver` is the send,
+    // so these answer the expression `(.Array = .Array)` and the message
+    // `.Array~'='(.Array)` alike. Measured, oracle rc 0: `.array = .array` is
+    // `1`, `.array = 'The Array class'` is `0` -- identity, not a comparison
+    // of renderings.
+    ("Class", "=", Arity::Fixed(1), native_object_identical),
+    ("Class", "==", Arity::Fixed(1), native_object_identical),
+    ("Class", "\\=", Arity::Fixed(1), native_object_different),
+    ("Class", "\\==", Arity::Fixed(1), native_object_different),
+    ("Class", "<>", Arity::Fixed(1), native_object_different),
+    ("Class", "><", Arity::Fixed(1), native_object_different),
     // `RexxClass::getAnnotationRexx` and `RexxClass::getAnnotations`
     // (`memory/Setup.cpp:499`, `:498`). The same pair is bound at `Method`
     // and `Routine` out of `BaseExecutable` (`:1112`/`:1111` and
@@ -1264,6 +1283,7 @@ impl ObjectModel {
             .chain(collection::NATIVE_METHODS)
             .chain(rexx_info::NATIVE_METHODS)
             .chain(executable::NATIVE_METHODS)
+            .chain(introspection::NATIVE_METHODS)
             .chain(extra)
         {
             // **The kernel directory as well as the environment one**, since
@@ -4516,7 +4536,17 @@ fn native_default_name(
     let Some(class) = native_class(interp, cleared, receiver, &[])? else {
         return Err(Loud::receiver_class("a value with no class of its own").into());
     };
-    let name = crate::environment::default_object_name(interp.classes().id_string(class));
+    // **An enhanced object takes no article**, returning before the `a`/`an`
+    // choice -- `RexxObject::defaultName` (`classes/ObjectClass.cpp:1763`).
+    // Measured, oracle rc 0: `.Object~subclass('K')~enhanced(t)~defaultName`
+    // is `enhanced K`.
+    let enhanced = is_enhanced_instance(interp, receiver);
+    let id = interp.classes().id_string(class);
+    let name = if enhanced {
+        format!("enhanced {id}")
+    } else {
+        crate::environment::default_object_name(id)
+    };
     Ok(Some(interp.text_built(name.into_bytes())))
 }
 
@@ -8137,12 +8167,41 @@ fn native_enhanced(
     let installed = install_enhancing_object_methods(interp, object, table, &names);
     interp.roots.pop_frame(frame);
     installed?;
+    // `enhanced_object->behaviour->setEnhanced()` (`:1478`), which
+    // `RexxObject::defaultName` reads. **Unconditional, and not folded into
+    // the walk above**: an empty table installs no method and still renders
+    // `enhanced <id>` -- measured, oracle rc 0, `k~enhanced(.StringTable~new)`
+    // answers `enhanced K` for `~string` and `~defaultName` alike.
+    mark_enhanced_instance(interp, object);
     // `dummy_subclass->sendMessage(GlobalNames::NEW, args + 1, ...)`
     // (`:1470`), whose `INIT` send is `completeNewObject`'s -- the enhancing
     // `INIT` by then, since it is already in the behaviour.
     let caller = interp.caller();
     interp.send_message(object, INIT, None, &args[1..], caller)?;
     Ok(Some(object))
+}
+
+/// Marks `object` as one [`native_enhanced`] built, creating its
+/// [`ObjectMethods`] when an empty enhancing table left it without one.
+fn mark_enhanced_instance(interp: &mut Interp, object: ObjRef) {
+    if let Some(Object {
+        body: Body::Instance { own, .. },
+        ..
+    }) = interp.heap.get_mut(object)
+    {
+        own.get_or_insert_with(|| Box::new(ObjectMethods::new()))
+            .mark_enhanced_instance();
+    }
+}
+
+/// Whether `Class~enhanced` built `value`, which
+/// [`crate::environment::default_object_name`] is not given because the
+/// answer takes no article.
+fn is_enhanced_instance(interp: &Interp, value: ObjRef) -> bool {
+    matches!(
+        interp.heap.get(value).map(|object| &object.body),
+        Some(Body::Instance { own: Some(own), .. }) if own.is_enhanced_instance()
+    )
 }
 
 /// [`native_enhanced`]'s walk, split out so the root frame it runs inside is

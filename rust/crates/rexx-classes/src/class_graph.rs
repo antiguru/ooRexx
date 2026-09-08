@@ -1008,6 +1008,12 @@ impl ClassGraph {
         self.classes[&class].is_metaclass
     }
 
+    /// `~queryMixinClass` -- oracle's `isMixinClass`, the same
+    /// [`ClassKind`] `inherit`'s `Error_Execution_mixinclass` check reads.
+    pub fn is_mixin(&self, class: ObjRef) -> bool {
+        matches!(self.classes[&class].kind, ClassKind::Mixin)
+    }
+
     /// `~baseClass` -- oracle's `getBaseClass` (`Setup.cpp:455` binds it as a
     /// method of `.Class`). A `Regular` class answers itself; a `Mixin`
     /// answers whatever its `MIXINCLASS` target's own base class is, which is

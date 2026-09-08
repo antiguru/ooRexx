@@ -1493,6 +1493,7 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     // Task 4's two witnesses.
     "lang/method_introspection.rex",
     "lang/routine_introspection.rex",
+    "lang/class_introspection.rex",
 ];
 
 #[test]

@@ -152,3 +152,8 @@ lang/rexx_info_readers.rex
 # three that run code sent twice to one object.
 lang/method_introspection.rex
 lang/routine_introspection.rex
+
+# Task 5: `Class`'s five graph readers, `Object`'s `isInstanceOf`,
+# `instanceMethod` and `instanceMethods`, the comparison operators a class
+# answers as messages in both spellings, and `Class~enhanced`'s rendering.
+lang/class_introspection.rex
