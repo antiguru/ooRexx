@@ -1482,11 +1482,19 @@ impl Interp {
         // so nothing the clone reaches can be swept while it is detached.
         let object = self.alloc_with(BehaviourId::OBJECT, Body::Native(copy));
         self.roots.push_temp(object);
-        // The copy reports on the same directive the original did. Measured,
-        // oracle rc 0: `.K2~define("X", .K~method("M"))` then
-        // `.K2~method("X")~source` answers `M`'s own body lines.
+        // The copy reports on the same directive the original did, and
+        // carries the flag writes the four setters made on it -- both are
+        // `RexxObject::copy`'s doing, which duplicates the whole method
+        // object including its flag word. Measured, oracle rc 0:
+        // `.K2~define("X", .K~method("M"))` then `.K2~method("X")~source`
+        // answers `M`'s own body lines, and the same copy taken after
+        // `setPrivate` and `setUnguarded` answers `1 0` for `isPrivate` and
+        // `isGuarded` where the directive alone answers `0 1`.
         if let Some(source) = self.executable_sources.get(&method).copied() {
             self.executable_sources.insert(object, source);
+        }
+        if let Some(writes) = self.method_flag_writes.get(&method).copied() {
+            self.method_flag_writes.insert(object, writes);
         }
         Some(object)
     }

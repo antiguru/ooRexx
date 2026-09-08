@@ -662,3 +662,29 @@ both are a corpus program's inability to contain a refusal, not an unmeasured cl
 after the fix: `newFile` on an **empty** file (`Array(0)`), on a file that is **only** directives
 (`Array(0)`), and on a file whose first line is a `::CLASS` (`Array(0)`, and the class is not
 visible to the caller -- `.C~id` is 97 on both sides); and a **tab**-separated descriptor.
+
+## A third divergence, in the same copy the first report already fixed once
+
+The hunt's last pass ran the setters against the copy `~define` makes, and found that
+**`method_new_scope` carried the executable record across it and not the flag writes.** Measured,
+oracle rc 0: `.K~method('MM')~setPrivate` and `~setUnguarded`, then
+`.K2~define('X', .K~method('MM'))`, and the copy answers `isPrivate` `1` and `isGuarded` `0` where
+this crate answered `0` and `1` -- the directive's own values, because only the directive had been
+carried. `RexxObject::copy` duplicates the whole method object including its flag word, so both
+travel; the fix is the second half of the same `if let`, and the witness's section J now sets a flag
+on the original before the `~define` and reads it back on the copy.
+
+**Control C18 CONFIRMED exactly**: with the flag-write copy removed, the method witness is red on
+`copy-flags` (`0 0 0 0 0 1 1` -> `0 0 0 0 0 1 0`) and on `copy-carries-the-setter-write` (`1` ->
+`0`), on both engines, and green everywhere else.
+
+**What the pass cleared**, measured and matching on both engines: the writes survive
+`~defineMethods`' **two** `method_new_scope` copies; the original is untouched by them; and a setter
+sent to the copy does not change the original.
+
+**Three divergences, all in rows that had already passed a green gate, and none found by reading.**
+Range arithmetic over a program's source, then descriptor parsing, then the copy. Each was found by
+naming the class the row's defects would share and enumerating spellings of it against the oracle,
+and in each case the committed witnesses were green beforehand -- because they had been written
+against the shapes I had implemented rather than against the shapes the oracle distinguishes. That
+is the finding worth carrying out of this task, above any of the twenty-five rows.

@@ -19,7 +19,9 @@
  * store the object it is handed when that object already carries a scope: it
  * stores a COPY, a fresh handle in none of the tables the other three
  * receivers are in. Section J is that receiver, and it is the reason the copy
- * carries the record forward.
+ * carries the record forward -- and the flag writes with it, which is a
+ * second thing to carry and was a second defect: the copy is
+ * RexxObject::copy, which duplicates the flag word the setters wrote.
  *
  * ~source IS A LINE RANGE AND THE RANGE HAS TWO EDGES THE C++ PUTS THERE.
  * The block starts on the line after the directive and ends on the line
@@ -138,6 +140,7 @@ call refuses 'package-with-an-argument'
 
 say 'J -- the fourth kind of receiver: the copy a ~define makes'
 d = .K~method('UP')
+d~setProtected
 .K2~define('X', d)
 c = .K2~method('X')
 say 'copy-class' c~class~id
@@ -149,6 +152,7 @@ do i = 1 to cs~items
   say '  <'cs[i]'>'
 end
 say 'copy-package-name-is-the-source' (c~package~name == source)
+say 'copy-carries-the-setter-write' c~isProtected
 
 say 'K -- newFile, whose file is this one'
 f = .Method~newFile(source)
