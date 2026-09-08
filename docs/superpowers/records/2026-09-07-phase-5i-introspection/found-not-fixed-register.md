@@ -49,8 +49,8 @@ that prints a collection prints it to stdout.
   while the members differ, and one that prints every member and is compared sorted does not. This
   turns a declared divergence into an asserted property.
 * **`Package`'s table rows, and this is the timely one.** The merged Task 7+8 has not started and
-  will witness `classes`, `routines`, `publicClasses`, `publicRoutines`, `resources`, `namespaces`
-  and `definedMethods` -- every one a `StringTable`, whose `~allIndexes` order is hash order on both
+  will witness `classes`, `routines`, `publicRoutines`, `importedClasses`, `importedRoutines`,
+  `resources`, `namespaces` and `definedMethods` -- every one answering a `StringTable`, whose `~allIndexes` order is hash order on both
   sides and reproduces on neither across interpreters. Without this it writes another hand-rolled
   membership assertion or declares another divergence.
 
