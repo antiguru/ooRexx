@@ -84,3 +84,74 @@ security-manager interception points (D12), cold start measured against C++
 (D2), and rung L2. No delivery evidence was found for the last three.
 
 Closing Phase 5 is blocked on that assessment, not on these 133 rows.
+
+---
+
+# What the phase actually cost, written at its close
+
+Added 2026-09-08 by Task 9, against `532cbe2cf`. The sections above are left as
+written on 2026-09-07 so that the predictions can be read against the outcome.
+
+## The row count
+
+`corpus/method-bodies.txt`, refreshed at the tip with
+`REXX_METHOD_BODIES_REFRESH=1 cargo test --release -p rexx-exec --test method_bodies`
+and byte-identical to the committed table:
+
+| | at `bc9d991cc` | at `532cbe2cf` |
+| --- | --- | --- |
+| `loud` | 204 | 67 |
+| `answers` | 1058 | 1190 |
+| `unanswered` | 71 | 76 |
+| `diverge` | 2 | 2 |
+| `unstable` | 4 | 4 |
+| `uncomparable` | 8 | 8 |
+
+Every row that moved moved one of two ways: 132 `loud` -> `answers`, and five
+`loud` -> `unanswered`. **No row went from `answers` to anything**, and the two
+`diverge` rows are the same two -- `DateTime~date` and `~timeOfDay`, the
+builtin-argument-run defect.
+
+The five are `Pointer`'s instance rows -- `=`, `==`, `\=`, `\==` and `isNull`.
+That is the outcome this note predicted when it took Pointer in: `.Pointer~new`
+now raises `93.967` on both sides, so the probe's receiver is never built and
+the row learns nothing about its own method rather than recording a refusal.
+
+**Every in-scope class ends at zero `loud` except `RexxInfo`, which ends at
+two**: `executable` and `libraryPath`, declined because they answer a `.File`
+and `File` is Phase 7's. So 137 of the scoped 139 closed and two were declined
+with a destination. The 67 that remain are exactly the classes this note put out
+of scope -- `Stream`, `RexxQueue`, `Message`, `EventSemaphore`, `MutexSemaphore`,
+`File` -- plus those two.
+
+## The predictions
+
+* **"The cheapest first move is `ARG` option `A`: nine rows on one fix" -- HELD.**
+  The eight `of` rows closed on it, and `corpus/collection-arity.tsv`'s
+  `Properties setLogical` moved from `send-differs` to `agree` in the same
+  change. Task 1's own report qualifies it in a way this note did not: the eight
+  rows close on the *zero-argument* path, so they are closed rows rather than
+  fully exercised bodies.
+* **"Pointer's six rows and Buffer's one are the same error site" -- HELD**, and
+  the cascade this note predicted is visible in the table above.
+* **The row count was right and the instrument was not.** The number 139 was
+  taken from an instrument that sends every method with no arguments, and the
+  phase then built a second one -- `corpus/introspection-arity.tsv` -- that sends
+  an argument list a method could accept. Its verdicts do not reduce to the first
+  table's, and neither of them compares the contents of an object-valued answer.
+  What that cost is the subject of Task 9's report.
+
+## The blocker this note named is still the blocker
+
+**Phase 5's own exit gate has still never been assessed.** Nothing in Phase 5i
+assessed it, and the three clauses with no delivery evidence -- security-manager
+interception points (D12), cold start measured against C++ (D2), and rung L2 --
+are unchanged. Closing **Phase 5** remains blocked on that. Closing **Phase 5i**
+does not.
+
+## What Phase 5i added to the ledger of things owed
+
+`docs/superpowers/records/2026-09-07-phase-5i-introspection/found-not-fixed-register.md`.
+Its D59 row is the one that binds first: D59 was a temporary licence, Task 2
+retired its premise by making weak references reachable, and its removal is
+owed **after this phase closes and before new work starts**.
