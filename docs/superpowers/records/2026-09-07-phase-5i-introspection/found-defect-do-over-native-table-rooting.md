@@ -34,8 +34,14 @@ sound. Everything below is about that rooting.
 * **Ran** — at the panic the handle is in the root set (`temps` and a variable
   slot) and `Heap::get` rejects it: `Heap { slot: 44, generation: 1 }`,
   a slot whose generation has moved on.
-* **Ran** — adding `roots.add_global` beside the existing `push_temp` makes all
-  five `Package` witnesses pass under the stress mode.
+* **Ran** — adding `roots.add_global` beside the existing `push_temp` makes
+  every `Package` witness that enumerates a table pass under the stress mode.
+  Re-measured 2026-09-08 at `1a9c2efce`, over long-named copies of
+  `package_tables.rex`, `package_writes.rex` and `package_rexx.rex` in a
+  scratch directory: all three PANIC against the tree as committed and all
+  three answer rc 0 with the diagnostic root added. (The witnesses that do not
+  enumerate a table -- `package_settings`, `package_options`, `package_find`
+  -- cannot reach this and were not part of that measurement.)
 * **Ran** — putting the items in one `Array` and `push_temp`ing that does
   **not** fix it.
 * **NOT established** — where between the two the temporary stops protecting
@@ -91,7 +97,8 @@ observation.**
 * **NOT observed in an ordinary run, and that is not the same as "an ordinary
   run is safe".** Every reproduction here is under
   `run_program_collect_every_alloc`. The corpus differential, which runs the
-  same programs normally against the oracle, is green on all five witnesses.
+  same programs normally against the oracle, is green on every `Package`
+  witness.
   **Whether an ordinary run can open the window was NOT ATTEMPTED.** No probe
   was written for it, no allocation pressure was applied, and nothing here
   bounds how much would be needed. A reader deciding priority must not read
@@ -119,8 +126,14 @@ not add up and was not resolved.
 
 **A durable root fixes it**, measured: adding
 `self.roots.add_global(&format!("…{n}"), item)` beside the existing
-`push_temp` makes all five `Package` witnesses pass under the stress mode.
-That is a diagnostic, not a fix — it leaks a global per index.
+`push_temp` makes every witness that enumerates a package table pass under the
+stress mode. Re-measured 2026-09-08 at `1a9c2efce` over long-named copies of
+`package_tables.rex`, `package_writes.rex` and `package_rexx.rex` in a scratch
+directory: all three PANIC against the tree as committed and all three answer
+rc 0 with the root added. **That run is the documented revert exercised**, so
+the regression test below is known to reproduce the failure rather than merely
+believed to. The root is a diagnostic and not a fix — it leaks a global per
+index.
 
 **Wrapping the items in one `Array` and `push_temp`ing that does not fix it**,
 measured — which is the same shape the converted-target branch already uses,

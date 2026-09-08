@@ -512,6 +512,15 @@ fn every_opted_in_comparison_names_a_program_the_subset_runs() {
 ///
 /// It walks the whole subset rather than a chosen few, and asserts the list is
 /// neither empty nor the whole of it, so this cannot pass over nothing.
+///
+/// **What it CANNOT catch, stated so nobody mistakes it for the guard on the
+/// list.** [`stdout_mode`]'s body *is* [`HASH_ORDERED_STDOUT`], so the equality
+/// this asserts is a tautology with respect to the list's contents: adding a
+/// path to the list passes here, because both sides of the comparison move
+/// together. What catches a list that has grown without earning it is
+/// [`the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else`],
+/// whose raw-stdout half fails for any entry that did not need the relaxation.
+/// This test's subject is the *selection function*, not the list.
 #[test]
 fn the_multiset_stdout_mode_is_selected_for_exactly_the_licensed_list() {
     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");

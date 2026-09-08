@@ -1491,13 +1491,18 @@ DEVIATIONS -- permanent, chosen
      on: where the order is not a specified observable, matching one of the
      orders is the whole of what is owed.
 
-     WHAT THE LIST DOES NOT HOLD, AND WHY THAT MATTERS. The other four
-     `Package` witnesses -- `package_settings`, `package_tables`,
-     `package_find` and `package_rexx` -- are compared byte for byte and are
-     not on the list. `package_rexx` prints all 67 of the REXX package's class
-     names and reads each back BY NAME from a list it carries itself, rather
-     than enumerating the table, so its output is in the program's own order
-     on both sides.
+     WHAT THE LIST DOES NOT HOLD, AND WHY THAT MATTERS. Every `Package`
+     witness except the one named above is compared byte for byte and is not
+     on the list: `package_settings`, `package_options`, `package_tables`,
+     `package_find` and `package_rexx`. The set is named and not counted --
+     a count here is a claim about this document that whoever adds the next
+     witness will not know to re-check, and `corpus/phase-5c.txt` is where
+     the membership actually lives.
+
+     `package_rexx` is the one worth a sentence: it prints every one of the
+     REXX package's class names and reads each back BY NAME from a list it
+     carries itself, rather than enumerating the table, so its output is in
+     the program's own order on both sides and needs no licence.
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------

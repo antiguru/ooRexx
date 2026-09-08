@@ -1,8 +1,7 @@
 # Phase 5i, Tasks 7 and 8 (merged): `Package`'s thirty-three rows
 
 BASE `59d25e938`. Code commit `2ebeba1c8`, records `3c53fdbc6` and `bb5d69274`,
-fix round 1 `<SHA-R1>` — the sha of the commit this line is in, read back from
-`git log` after committing and quoted in the report to the controller.
+fix round 1 `1a9c2efce`, fix round 2 the commit this line is in.
 
 ## Outcome
 
@@ -107,7 +106,7 @@ crate cannot carry:
 | 2026-09-08 — `Package~setSecurityManager`: no-argument form only, refuse the with-argument form naming D12 and Phase 7; the row stays `send-differs` and is declined with the measurement | **Applied.** The no-argument form answers `1`. **The ruling's reason does not transfer, and the code says so:** `PackageClass::setSecurityManagerRexx` ends `return TheTrueObject` (`classes/PackageClass.cpp:2049`) whatever it was given, so on a `Package` receiver the answer *is* a constant, unlike the `0`/`1`-by-code-kind reader Task 4 measured on `Method` and `Routine`. Measured, oracle rc 0: `p~setSecurityManager` is `1`. The decision is unchanged; only its justification is. The row is declined, not closed. |
 | 2026-09-08 — the arity instrument cannot see an object's class; witness each row through a second send reading `~class~id` as well as a value | **Applied throughout.** Every collection row prints each entry's own `~class~id`; `~source` and `~resource` are read by position; `~prolog`'s `Routine` is asked for its `~source~items`; `~findProgram`'s answer is asked whether it is a `String` and an absolute path. It found nothing wrong here — every class matched — but it is what makes the rows evidence rather than agreement about a rendering. |
 | 2026-09-08 — a live defect your witnesses can trip over: a send inside a multi-argument builtin's argument list corrupts the argument run; assign to a variable first | **Applied, and it fired.** `package_rexx.rex`'s first draft had `right(rexx~findProgram('package_rexx.rex'), 16)` and reported `40.12 RIGHT argument 2 must be a whole number; found "<the path>"` where the oracle answered. Every such site is now assigned first. |
-| 2026-09-08 — sorted comparison for the table rows, and it needs a stdout mode first: one implementation, one control, opt-in per program by path, a named licence entry | **Built.** `StdoutComparison`, `stdout_multiset` and `descriptor_diff_modes` in `tests/support/oracle.rs`; `HASH_ORDERED_STDOUT` and `stdout_mode` in `tests/corpus.rs`; **DEVIATION 8** in `docs/superpowers/plans/phase-4-exclusions.txt`. The control is `the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else`, and it holds the list in **both** directions — an entry's raw stdout must differ (so a program that does not need the relaxation cannot sit there) and its sorted stdout must agree (so a content difference is not hidden) — plus Deviation 7's empty-stdout guard. **The list has one entry**, `lang/package_writes.rex`; see below for why the other four are compared byte for byte. |
+| 2026-09-08 — sorted comparison for the table rows, and it needs a stdout mode first: one implementation, one control, opt-in per program by path, a named licence entry | **Built.** `StdoutComparison`, `stdout_multiset` and `descriptor_diff_modes` in `tests/support/oracle.rs`; `HASH_ORDERED_STDOUT` and `stdout_mode` in `tests/corpus.rs`; **DEVIATION 8** in `docs/superpowers/plans/phase-4-exclusions.txt`. The control is `the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else`, and it holds the list in **both** directions — an entry's raw stdout must differ (so a program that does not need the relaxation cannot sit there) and its sorted stdout must agree (so a content difference is not hidden) — plus Deviation 7's empty-stdout guard. The list holds `lang/package_writes.rex` and nothing else; every other `Package` witness -- `package_settings`, `package_options`, `package_tables`, `package_find` and `package_rexx` -- is compared byte for byte, for the reasons below. |
 | 2026-09-08 pre-flight, 1 — the 33 rows are confirmed | Confirmed against the tree before starting. |
 | 2026-09-08 pre-flight, 2 — the arity table cannot see order or contents; an `agree` row is not evidence the contents match | **Applied.** No row here is reported closed on its arity verdict alone; every collection row has a corpus witness that reads its entries back by name. |
 | 2026-09-08 pre-flight, 3 — `source` and `resource` answer Arrays whose order the oracle specifies and must never opt in; `importedPackages` is unknown, report what you find | **Applied.** Neither opts in, and neither program printing them is on the list. **`importedPackages`' order is specified**: `PackageClass::addPackage` appends to `loadedPackages` and `getImportedPackagesRexx` copies it, so it is insertion order — `::REQUIRES` in source order, then `~addPackage`/`~loadPackage` in call order. It is read by position here and compared byte for byte. |
@@ -189,8 +188,8 @@ a group of three where the header said a pair. `SHARED_ANSWERS` in
 two together. **The header's claim that a transposition inside such a group
 leaves every test green was re-measured for the new member rather than assumed**:
 swapping `argument_not_a_class`'s `answer` and `witness` with
-`argument_not_an_instance`'s left all five tests in that binary passing, and the
-file was restored from a copy afterwards.
+`argument_not_an_instance`'s left every test in `refusal_sites.rs` passing, and
+the file was restored from a copy afterwards.
 
 ## The witnesses
 
@@ -222,7 +221,12 @@ BASE `59d25e938` in the gate worktree**: the long-name form panics at
 prints every entry at rc 0.
 
 It surfaced because `collect_stress.rs` runs the corpus subset under
-collect-on-every-allocation, and three of the five witnesses tripped it. A
+collect-on-every-allocation, and the witnesses that enumerate a package table
+-- `package_tables.rex`, `package_writes.rex` and `package_rexx.rex` -- tripped
+it; the ones that do not, `package_settings.rex`, `package_options.rex` and
+`package_find.rex`, cannot reach it. Re-measured over long-named copies at
+`1a9c2efce`: all three panic, and all three answer rc 0 with the durable root
+added, which is the documented revert exercised rather than assumed. A
 durable root fixes it (measured); wrapping the items in one `Array` and
 `push_temp`ing that does not (also measured), which suggests the converted-
 target branch beside it is equally unprotected and passes only because its
@@ -327,16 +331,34 @@ published rather than the count:
 
 | set | cases | wrong answers | loud refusals | engines |
 | --- | --- | --- | --- | --- |
-| the **32 instance method names** of the 33 `send-differs` rows, 2 receivers × 12 lists | 768 | **0** | **12** | agree on all |
-| **all 40 `Package` rows** — 38 instance × 2 receivers, plus 2 class-arm rows — × 12 lists | 936 | **0** | **17** | agree on all |
+| the narrower set published below, 2 receivers × 12 lists | 768 | **0** | **12** | agree on all |
+| every `Package` row — each instance-arm row × 2 receivers, plus each class-arm row — × 12 lists | 936 | **0** | **17** | agree on all |
 
-**What my sentence claimed and why it was false.** It said "every one of the 33
-methods, on both receivers". The matrix that produced 768 ran only the instance
-arm: `defaultOptions` and `new` are class methods and I ran those in a
-*separate* loop with a different list set, so their cases never entered the 768
-at all. The reviewer's 17 is over the full 40 rows and is the number to quote
-for that set. **Neither figure was adjusted toward the other**; both were
-re-measured here and each is reported with the set it ranges over.
+**The narrower set, published rather than described**, because describing it is
+how the first account went wrong. It is exactly the instance-arm method names
+the sweep's own list carried:
+
+    addPackage       addPublicRoutine   addRoutine         classes
+    definedMethods   digits             findClass          findNamespace
+    findProgram      findPublicClass    findPublicRoutine  findRoutine
+    form             fuzz               importedClasses    importedPackages
+    importedRoutines loadLibrary        loadPackage        namespaces
+    options          prolog             publicClasses      publicRoutines
+    resource         resources          routines           setSecurityManager
+    source           sourceLine         sourceSize         trace
+
+**That is the instance-arm `send-differs` rows plus `publicClasses`**, which
+reads `agree` at BASE and is in the list because it is the row this task's
+headline is about. **It is not "the 33 rows"**: `defaultOptions` and `new` are
+the class-arm rows and never entered this matrix -- I ran the class arm in a
+*separate* loop with a different set of argument lists. My report's sentence
+said "every one of the 33 methods, on both receivers", which was false of the
+matrix that produced 768, and the arithmetic is what caught it.
+
+The wider set is every row of `corpus/introspection-arity.tsv`'s `Package`
+block, instance and class, which is where the reviewer's 17 comes from.
+**Neither figure was adjusted toward the other**; both were re-measured here
+and each is reported with its set beside it.
 
 **The five cases the wider set adds**, all loud, none a wrong answer:
 
@@ -383,9 +405,9 @@ confirmed, and one reddened more than predicted.
 
 | mutation | before fix round 1 | after, and what catches it | predicted / observed |
 | --- | --- | --- | --- |
-| `stdout_multiset` body → `String::new()` | whole corpus binary green, **gate included** | `support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else` FAILS — sorting must accept a reordering and still catch a changed, missing, added or duplicated line and a lost final newline | predicted FAIL for that test and pass for the other four; **observed exactly that**, 26 passed 1 failed |
-| `StdoutComparison::Raw` made to compare multisets — the licence leaking to every program | green at 462/462 | `support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering` FAILS — the raw mode must report a stdout difference on a pure reordering | predicted FAIL for that test alone; **observed exactly that**, 26 passed 1 failed |
-| `settings_of` made to ignore its package | gate, whole `rexx-exec` suite and `introspection_arity` all green | `corpus_differential` FAILS on `lang/package_options.rex`, the new witness whose package declares seven settings: `digits 9` against the oracle's `13`, `SCIENTIFIC` against `ENGINEERING`, `trace [N]` against `[L]` | predicted FAIL on that program; **observed exactly that**, 462 of 463 |
+| `stdout_multiset` body → `String::new()` | whole corpus binary green, **gate included** | `support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else` FAILS — sorting must accept a reordering and still catch a changed, missing, added or duplicated line and a lost final newline | predicted FAIL for that test, and pass for `only_the_multiset_stdout_mode_ignores_ordering`, `the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else`, `the_multiset_stdout_mode_is_selected_for_exactly_the_licensed_list` and `corpus_differential`; **observed exactly that** |
+| `StdoutComparison::Raw` made to compare multisets — the licence leaking to every program | green at 462/462 | `support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering` FAILS — the raw mode must report a stdout difference on a pure reordering | predicted FAIL for that test alone; **observed exactly that** |
+| `settings_of` made to ignore its package | gate, whole `rexx-exec` suite and `introspection_arity` all green | `corpus_differential` FAILS on `lang/package_options.rex`, the new witness whose package declares seven settings: `digits 9` against the oracle's `13`, `SCIENTIFIC` against `ENGINEERING`, `trace [N]` against `[L]` | predicted FAIL on that program; **observed exactly that** |
 | `importedPackages` order reversed | green at 462/462 | `corpus_differential` FAILS on `lang/package_writes.rex`, which now reads `~importedPackages[1]` and `[2]` **by position** | predicted FAIL on the differential; **observed that AND the Deviation 8 control**, which reported the same program differing as a multiset — one more than predicted, because reversing the order also changes which name each line carries |
 
 **A fourth control, for the other direction of the licence.**
@@ -432,9 +454,16 @@ the commit above.
 * **G6** `cargo test --release -p rexx-exec --test collect_stress` — exit 0
 * **G7** `cargo test --release -p rexx-exec --test method_bodies` — exit 0
 
-**Fix round 1 changes code, so the seven are re-run at its commit.** Those
-readings are `**R1-G1**`–`**R1-G7**` and are filled in only from the status
-file that run writes.
+**Fix round 1 changed code, so the seven were re-run at `1a9c2efce`. All seven
+read exit 0 there too**, from `gate-status-r1.txt`, whose first line is that
+sha and whose last line is `finished`: `fmt`, `clippy`,
+`cargo test --release --workspace --no-fail-fast`,
+`REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast`,
+`REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test corpus`,
+`collect_stress` and `method_bodies`.
+
+**Fix round 2 changes prose only** -- the counts this project keeps shipping
+wrong, deleted rather than corrected -- so the readings above stand for it.
 
 Before the commit, in the working tree:
 
