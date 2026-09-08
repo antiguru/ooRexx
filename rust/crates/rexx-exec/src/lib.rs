@@ -3353,12 +3353,6 @@ struct Interp {
     ///
     /// [`package_classes`]: Interp::package_classes
     class_packages: HashMap<ObjRef, ClassPackage>,
-    /// The package objects `~package` answers, keyed by the package itself
-    /// -- see [`crate::plan::Package`] for why the interpreter's own is a
-    /// variant rather than an absent program id.
-    ///
-    /// Cached rather than built per send, because the oracle answers one
-    /// object: measured, `(.Array~package == .String~package)` is `1`.
     /// The one empty argument list every call that has none shares.
     ///
     /// **`Rc<[T]>::from(&[])` allocates a header even for a zero-length
@@ -3368,6 +3362,12 @@ struct Interp {
     /// iteration -- +3.481% against BASE with the allocation and +0.093%
     /// with this.
     empty_arguments: Rc<[Option<ObjRef>]>,
+    /// The package objects `~package` answers, keyed by the package itself
+    /// -- see [`crate::plan::Package`] for why the interpreter's own is a
+    /// variant rather than an absent program id.
+    ///
+    /// Cached rather than built per send, because the oracle answers one
+    /// object: measured, `(.Array~package == .String~package)` is `1`.
     package_objects: HashMap<Package, ObjRef>,
     /// The one `Routine` object standing for a program's own main section --
     /// what `RexxContext~executable` answers from a `PROGRAM` or

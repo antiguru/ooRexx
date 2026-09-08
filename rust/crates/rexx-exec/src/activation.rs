@@ -1419,6 +1419,21 @@ impl Activation {
         }
     }
 
+    /// The name this activation was invoked under, empty for one that has
+    /// not started running -- see [`Activation::call_name`].
+    pub(crate) fn invoked_as(&self) -> &[u8] {
+        if let Some(identity) = &self.method_identity {
+            return &identity.name;
+        }
+        self.call_name.as_deref().unwrap_or_default()
+    }
+
+    /// The arguments this activation was entered with, the other half of
+    /// [`Activation::invoked_as`].
+    pub(crate) fn invoked_with(&self) -> &[Option<ObjRef>] {
+        self.call_arguments.as_deref().unwrap_or_default()
+    }
+
     /// Appends every `ObjRef` this activation holds to `out`.
     ///
     /// **For an activation that is off every stack**, which is what a `REPLY`
@@ -1439,21 +1454,6 @@ impl Activation {
     /// `TrappedCondition`, none of which holds one; the instrument for that is
     /// `run_program_collect_every_alloc`, which collects at every allocation
     /// and so reaches a missed root as a wrong answer rather than as luck.
-    /// The name this activation was invoked under, empty for one that has
-    /// not started running -- see [`Activation::call_name`].
-    pub(crate) fn invoked_as(&self) -> &[u8] {
-        if let Some(identity) = &self.method_identity {
-            return &identity.name;
-        }
-        self.call_name.as_deref().unwrap_or_default()
-    }
-
-    /// The arguments this activation was entered with, the other half of
-    /// [`Activation::invoked_as`].
-    pub(crate) fn invoked_with(&self) -> &[Option<ObjRef>] {
-        self.call_arguments.as_deref().unwrap_or_default()
-    }
-
     pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
         let Activation {
             id: _,

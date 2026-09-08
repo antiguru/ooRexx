@@ -333,12 +333,17 @@ fn context_invocation(
 
 /// `RexxContext::getThread`: `activation->getActivity()->getIdntfr()`.
 ///
-/// **A constant, and the state it stands for is the activity table**:
-/// `Activity::getIdntfr` (`concurrency/Activity.cpp:108`) mints one id per
-/// *system thread* off a counter of its own, so the first thread to ask is
-/// `1`. This crate runs every activation on one interpreter thread -- D12 and
-/// Phase 6 own concurrency, and `Object~start` is refused loudly today -- so
-/// there is exactly one thread to have an id and `1` is its.
+/// **A constant, and it is already wrong.** `Activity::getIdntfr`
+/// (`concurrency/Activity.cpp:108`) mints one id per *system thread* off a
+/// counter of its own, so the first thread to ask is `1`. This crate runs
+/// every activation on the one interpreter thread, and `Object~start` does
+/// **not** refuse: it runs the send, so a method that has `REPLY`d is on
+/// another thread on the oracle and on the same one here. Measured, rc 0 and
+/// stderr identical, a `::method` that replies and then reads
+/// `.context~thread`: the oracle answers a different id from the main
+/// thread's `1` and this answers `1`. The id itself is not fixed -- it counts
+/// system threads the interpreter has touched -- so what diverges is that it
+/// differs at all, not which number it is.
 fn context_thread(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -681,11 +686,13 @@ fn read_snapshot(interp: &Interp, depth: usize) -> Result<Snapshot, Failure> {
     let activation = interp
         .frame_at(depth)
         .ok_or_else(|| Failure::from(Raised::context_not_active()))?;
-    // `RexxActivation::createStackFrame`'s own cascade. `FRAME_INTERPRET` and
-    // `FRAME_COMPILE` are the two of the six this crate cannot produce: a
-    // fragment runs inside the enclosing activation here rather than pushing
-    // one of its own, and a compile frame belongs to the parser
+    // `RexxActivation::createStackFrame`'s own cascade, whose whole value set
+    // is `StackFrameClass.cpp`'s `FRAME_*` constants. `FRAME_INTERPRET` needs
+    // an activation for a fragment, which `run_fragment` does not push, and
+    // `FRAME_COMPILE` belongs to the parser
     // (`LanguageParser::createStackFrame`, `parser/LanguageParser.cpp:866`).
+    // The phase's `found-not-fixed-register.md` is where which kinds this
+    // crate reaches is recorded, because that is a boundary that moves.
     let (kind, target) = match activation.entry {
         Entry::TopLevel => (&b"PROGRAM"[..], None),
         Entry::InternalCall => (&b"INTERNALCALL"[..], None),

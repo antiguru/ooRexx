@@ -1875,12 +1875,14 @@ fn package_root_key(package: Package) -> String {
     }
 }
 
-/// The [`rexx_core::RootSet::add_global`] key one `Method` object is held
-/// under.
+/// The [`rexx_core::RootSet::add_global`] key one program's own main-section
+/// `Routine` object is held under.
 fn program_routine_root_key(program: ProgramId) -> String {
     format!("the main routine of the program {}", program.0)
 }
 
+/// The [`rexx_core::RootSet::add_global`] key one `Method` object is held
+/// under.
 fn method_object_root_key(class: ObjRef, name: &[u8]) -> String {
     format!(
         "the instance method {} of the class at {}",
