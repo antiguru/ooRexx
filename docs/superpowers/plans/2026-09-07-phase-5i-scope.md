@@ -75,10 +75,17 @@ instrument that runs them, and it is the one the counts above come from.
 
 ## Not this phase, and not any sub-phase
 
-**Phase 5's own exit gate has never been assessed.** Every closed phase has a
+**Phase 5's own exit gate has never been assessed.** ~~Every closed phase has a
 gate document -- `phase-2-gate.md`, `phase-3-gate.md`, `phase-4a` through
-`4e`. Phase 5 has only `2026-08-26-phase-5a-gate-close.md`, a sub-phase.
-Its exit clauses in the parent plan include `CoreClasses.orx` executing, the
+`4e`. Phase 5 has only `2026-08-26-phase-5a-gate-close.md`, a sub-phase.~~
+**FALSE, corrected 2026-09-08 in the close section below**: that is a universal
+over a set nobody enumerated, and `find docs/superpowers -iname '*gate*'` returns
+files it does not name, `records/2026-09-07-phase-5h-mapped-collections/gates.md`
+among them. **The heading's own claim -- that Phase 5's exit gate has never been
+assessed -- survives**, and the enumeration supporting it is in *One correction
+to the struck sentence above*.
+
+Phase 5's exit clauses in the parent plan include `CoreClasses.orx` executing, the
 64-class wiring set, `RexxInfo` present as an instance rather than a class,
 security-manager interception points (D12), cold start measured against C++
 (D2), and rung L2. No delivery evidence was found for the last three.
@@ -149,21 +156,42 @@ interception points (D12), cold start measured against C++ (D2), and rung L2 --
 are unchanged. Closing **Phase 5** remains blocked on that. Closing **Phase 5i**
 does not.
 
-**One correction to the sentence above it, which this note wrote and Task 9's
-report then repeated.** "Every closed phase has a gate document" is a universal
-over a set nobody enumerated, and it does not hold. Enumerated 2026-09-08 from
-`docs/superpowers/`: the gate documents present are `plans/phase-2-gate.md`,
-`plans/phase-3-gate.md`, `plans/phase-4a-gate.md` through
-`plans/phase-4e-gate.md`, `plans/ppwizard-gate.md`, and
-`plans/2026-08-26-phase-5a-gate-close.md` beside a
-`records/2026-08-26-phase-5a-gate-close` **directory** of the same name. There is
-none for Phase 4f, none for any of the 5b--5h sub-phases, and none for Phase 5 as
-a whole.
+## One correction to the struck sentence above
 
-**The conclusion this note drew survives the correction and now rests on the
-enumeration**: the only Phase 5 gate document of any kind is 5a's, a sub-phase.
-The original sentence is left above rather than edited, because it is what the
-phase was scoped against.
+**"Every closed phase has a gate document" is false**, and so was the first
+correction of it, which replaced the universal with a hand-written list that
+missed four files. A hand-written list looks like evidence and is only a memory,
+so this one is the command and its output, run 2026-09-08 from the repository
+root:
+
+```
+$ find docs/superpowers -iname '*gate*' | sort
+docs/superpowers/plans/2026-08-26-phase-5a-gate-close.md
+docs/superpowers/plans/phase-2-gate.md
+docs/superpowers/plans/phase-3-gate.md
+docs/superpowers/plans/phase-4a-gate.md
+docs/superpowers/plans/phase-4b-gate.md
+docs/superpowers/plans/phase-4c-gate.md
+docs/superpowers/plans/phase-4d-gate.md
+docs/superpowers/plans/phase-4e-gate.md
+docs/superpowers/plans/ppwizard-gate.md
+docs/superpowers/records/2026-07-28-phase-3-parser/gate-report.md
+docs/superpowers/records/2026-08-15-phase-5-object-model/review-r2-gate.md
+docs/superpowers/records/2026-08-26-phase-5a-gate-close
+docs/superpowers/records/2026-08-27-phase-5b/gate-parallelization.md
+docs/superpowers/records/2026-09-07-phase-5h-mapped-collections/gates.md
+```
+
+**Phase 5h has one** -- `records/2026-09-07-phase-5h-mapped-collections/gates.md`,
+opening `# Phase 5h - gate readings`. The other three the hand-written list
+missed were opened: the Phase 3 file is an implementer's report pointing at
+`plans/phase-3-gate.md`, the 5b one is about parallelizing gate *runs*, and
+`records/2026-08-15-phase-5-object-model/review-r2-gate.md` reviews the criteria
+the Phase 5 spec proposes rather than assessing whether Phase 5 met them.
+
+**What this note actually rests on survives, narrowed to what the command
+supports**: of the files `find` returns, none assesses Phase 5's own exit
+clauses. Task 9's report carries the same enumeration and the same narrowing.
 
 ## What Phase 5i added to the ledger of things owed
 

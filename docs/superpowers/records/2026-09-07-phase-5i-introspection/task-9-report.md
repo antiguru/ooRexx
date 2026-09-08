@@ -41,8 +41,9 @@ this phase's own rulings and reports.
 
 3. **A row probes one instance per class, fixed as an expression.**
    `corpus/introspection-receivers.tsv` gives a class at most a `class` arm and an `instance` arm —
-   the class object and *one* instance — never two alternative instances, and several classes there
-   carry only one of the two (§8's table shows which). `Package`'s is
+   the class object and *one* instance — never two alternative instances, and some classes there carry only
+   one of the two: `RexxContext`, `RexxInfo` and `StackFrame` have no class arm, `Pointer` and
+   `Buffer` no instance arm (§8's table marks each). `Package`'s is
    `r = .context~package`, a program's package, so `.Class~package`, the REXX package with empty
    tables and `sourceSize 0`, **is unreachable by any argument list**: the arguments file varies only
    what is *sent*. `Package~publicClasses` read `agree` while the crate refused outright on the REXX
@@ -456,12 +457,12 @@ cannot.
 | `Method` | `r = .K~method('MM')`, a Rexx-coded method | **a native method** (`.Object~method('objectName')`), whose `~source` is an empty Array — the receivers file says in its own header that the native one cannot discriminate a body that reads the source from one that answers an empty Array | **yes** — `method_introspection.rex` sends the flag and line rows to `.Object~method('OBJECTNAME')` |
 | `Class` | `r = .K`, a user class with an inherited mixin | **a built-in class** (`.Array`, `.String`), whose identity lives outside the arena in `rexx-classes` | **yes** — `class_introspection.rex` sends the operator rows to `.Array`, and this task's probe sent `~package`, `~methods`, `~method('ITEMS')~source`/`~scope`/`~package` to `.Array`; all agree |
 | `Routine` | `r = .routines['R']`, a directive's routine | **a routine built at run time** (`.Routine~new`, `~newFile`), and an external routine | **yes** for `.Routine~new` — `routine_introspection.rex`, `package_rexx.rex`, `package_writes.rex`. **No** for an external routine: `loadExternalRoutine` is declined to Phase 7. |
-| `RexxContext` | `r = .context` **inside a call** | **the top-level context** (no caller), and a context inside a method | **yes** for the top level — `rexx_context.rex` reads `.context~name` and `~line` at the top level |
-| `StackFrame` | `r = .context~stackFrames[1]` inside a call | a `PROGRAM` frame, a `METHOD` frame, an `INTERPRET` frame | **partly** — `stack_frames.rex` prints `~type` for the frames it walks; the `INTERPRET` and `COMPILE` values are **unreachable here** and are register row 6 |
+| `RexxContext` | `r = .context` **inside a call**; **no class arm** | **the top-level context** (no caller), and a context inside a method | **yes** for the top level — `rexx_context.rex` reads `.context~name` and `~line` at the top level |
+| `StackFrame` | `r = .context~stackFrames[1]` inside a call; **no class arm** | a `PROGRAM` frame, a `METHOD` frame, an `INTERPRET` frame | **partly** — `stack_frames.rex` prints `~type` for the frames it walks; the `INTERPRET` and `COMPILE` values are **unreachable here** and are register row 6 |
 | `WeakReference` | `r = .WeakReference~new(o)` over a live referent | **a reference whose referent has been collected** — the state the class exists for | **yes, but not from a corpus program**: the witness's own header says the clearing half is not observable from Rexx, and it is asserted in `collect_stress.rs`'s `a_weak_reference_clears_only_when_its_referent_becomes_unreachable` |
 | `Object` | `r = .K~new`, a user object | **a String, an integer, a class object, `.nil`**, and any object whose body is a `Body::Native` | **no, before this task — and it is where the sweep found both of §5's divergences**, `Object~copy` and the six identity operators |
-| `RexxInfo` | `r = .RexxInfo` | **there is no second instance a program can build** — both sides refuse `.RexxInfo~class~new`, so the limitation does not arise, **but they refuse differently**: see below | n/a |
-| `Pointer`, `Buffer` | no instance arm at all, named absent by the receivers file | any instance — none is constructible from Rexx | n/a; Phase 8 owns making one |
+| `RexxInfo` | `r = .RexxInfo`; **no class arm** | **there is no second instance a program can build** — both sides refuse `.RexxInfo~class~new`, so the limitation does not arise, **but they refuse differently**: see below | n/a |
+| `Pointer`, `Buffer` | **class arm only** — no instance arm at all, named absent by the receivers file | any instance — none is constructible from Rexx | n/a; Phase 8 owns making one |
 
 **An undeclared loud-versus-loud difference, found while establishing that row.** Re-measured
 2026-09-08 from a fresh directory, three descriptors, both engines: `.RexxInfo~class~new` is
@@ -715,16 +716,51 @@ task's. The parent plan's exit clauses with no delivery evidence are:
 * **cold start measured against C++ (D2)**;
 * **rung L2**.
 
-An earlier draft supported that with "every closed phase has a gate document", a universal over a
-set nobody had enumerated. **Enumerated instead**, from `docs/superpowers/`: the gate documents
-present are `plans/phase-2-gate.md`, `plans/phase-3-gate.md`, `plans/phase-4a-gate.md` through
-`plans/phase-4e-gate.md`, `plans/ppwizard-gate.md`, and `plans/2026-08-26-phase-5a-gate-close.md`
-beside a `records/2026-08-26-phase-5a-gate-close` **directory** of the same name. There is **none**
-for Phase 4f, none for any of the 5b–5h sub-phases, and none for Phase 5 as a whole.
+Two earlier drafts of this paragraph were wrong in the same way, and the second was the fix for the
+first. It said "every closed phase has a gate document" — a universal over a set nobody had
+enumerated — and the correction replaced it with a **hand-written** list, which missed four files.
+A hand-written list looks like evidence and is only a memory. So here is the command and its output,
+run 2026-09-08 from the repository root:
 
-The conclusion is unchanged and now rests on the enumeration rather than on the universal: **the
-only Phase 5 gate document of any kind is 5a's, a sub-phase. Closing Phase 5i is not blocked on
-that. Closing Phase 5 is.**
+```
+$ find docs/superpowers -iname '*gate*' | sort
+docs/superpowers/plans/2026-08-26-phase-5a-gate-close.md
+docs/superpowers/plans/phase-2-gate.md
+docs/superpowers/plans/phase-3-gate.md
+docs/superpowers/plans/phase-4a-gate.md
+docs/superpowers/plans/phase-4b-gate.md
+docs/superpowers/plans/phase-4c-gate.md
+docs/superpowers/plans/phase-4d-gate.md
+docs/superpowers/plans/phase-4e-gate.md
+docs/superpowers/plans/ppwizard-gate.md
+docs/superpowers/records/2026-07-28-phase-3-parser/gate-report.md
+docs/superpowers/records/2026-08-15-phase-5-object-model/review-r2-gate.md
+docs/superpowers/records/2026-08-26-phase-5a-gate-close
+docs/superpowers/records/2026-08-27-phase-5b/gate-parallelization.md
+docs/superpowers/records/2026-09-07-phase-5h-mapped-collections/gates.md
+```
+
+**So "none for the 5b-5h sub-phases" was false**:
+`records/2026-09-07-phase-5h-mapped-collections/gates.md` opens `# Phase 5h - gate readings`. Each of
+the four the hand-written list missed was opened and read rather than judged by its name: the Phase 3
+one is an implementer's report on that phase's gate closure and points at `plans/phase-3-gate.md` for
+the assessment itself; the 5b one is about **parallelizing gate runs**, not about a phase's gate; the
+5h one is per-task gate readings; and `records/2026-08-15-phase-5-object-model/review-r2-gate.md` is
+a **reviewer's review of the criteria the Phase 5 spec proposes** -- its own opening says the lens is
+"find a criterion that cannot fail" -- not an assessment of whether Phase 5 met them.
+
+**The load-bearing conclusion narrows to what that command can support, and survives**: of the files
+`find` returns, **none assesses Phase 5's own exit clauses**. How each was ruled out, so the ruling
+can be checked rather than trusted -- the `plans/phase-2`, `-3` and `-4a` through `-4e` files name a
+different phase in their own filenames; `plans/ppwizard-gate.md` opens
+"PPWIZARD as a gate ... parked the same day"; `plans/2026-08-26-phase-5a-gate-close.md` opens
+"# Phase 5a gate close" and is the sub-phase; the four `records/` files are the ones read above. The
+nearest thing to an assessment is `review-r2-gate.md`, which reviews the criteria rather than
+recording delivery evidence for D12, D2 or rung L2.
+
+The wider claim -- that no such assessment exists anywhere under any filename -- is the scope note's,
+taken from its own search, and was **not** re-derived here; `find -iname '*gate*'` cannot support it.
+**Closing Phase 5i is not blocked on that. Closing Phase 5 is.**
 
 ---
 
@@ -794,9 +830,9 @@ was checked by reading the logs rather than assumed:
 So every gate the earlier tasks asserted is asserted here, and the three tables this task refreshed
 are asserted as well.
 
-**These cells are the readings taken at `1284ef198` and were not re-run.** The fix round after them
-changed this report and the found-and-not-fixed register only — nothing under `rust/` — so a re-run
-would measure the same code against the same corpus.
+**These cells are the readings taken at `1284ef198` and were not re-run.** The fix rounds after them
+changed this report, the found-and-not-fixed register and `2026-09-07-phase-5i-scope.md` — docs only,
+nothing under `rust/` — so a re-run would measure the same code against the same corpus.
 
 **Where this table lives, relative to the commit it describes.** The gated commit is `1284ef198`.
 Filling these cells is itself an edit, so the commits carrying the filled table and the fix round
