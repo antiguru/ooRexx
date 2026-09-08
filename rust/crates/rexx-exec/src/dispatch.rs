@@ -177,6 +177,9 @@ pub(crate) mod hash;
 // `RexxInfo`'s readers, chained the same way.
 mod rexx_info;
 
+// `Method`'s and `Routine`'s own readers, chained the same way.
+pub(crate) mod executable;
+
 /// One primitive method's implementation.
 ///
 /// The [`Cleared`] parameter is the seam's own enforcement and is never read
@@ -1246,6 +1249,7 @@ impl ObjectModel {
             .chain(hash::NATIVE_METHODS)
             .chain(collection::NATIVE_METHODS)
             .chain(rexx_info::NATIVE_METHODS)
+            .chain(executable::NATIVE_METHODS)
             .chain(extra)
         {
             // **The kernel directory as well as the environment one**, since
@@ -1898,6 +1902,12 @@ impl Interp {
     /// asks for.
     pub(crate) fn method_class(&mut self) -> ObjRef {
         self.object_model().method
+    }
+
+    /// `.Routine`: the class of the objects `.ROUTINES` holds and
+    /// `Routine~new` answers.
+    pub(crate) fn routine_class(&mut self) -> ObjRef {
+        self.object_model().routine
     }
 
     /// Which native class a value answers to, or the value's own shape when
@@ -4949,8 +4959,13 @@ fn native_method(
             Err(Raised::no_method(&target, &name).into())
         }
         Some(MethodSlot::Hidden) => Ok(Some(ObjRef::NIL)),
-        Some(MethodSlot::Defined { scope, .. }) => {
-            Ok(Some(interp.method_object(class, &name, scope)))
+        Some(MethodSlot::Defined { scope, method }) => {
+            let record = crate::ExecutableRecord {
+                source: interp.installed_executable_source(method),
+                installed: Some(method),
+                routine: None,
+            };
+            Ok(Some(interp.method_object(class, &name, scope, record)))
         }
     }
 }
@@ -5119,6 +5134,44 @@ fn compile_method_source(
     interp.compiled_methods += 1;
     interp.attach_annotations(object, site);
     interp.record_compiled_body(object, name, parsed);
+    Ok(object)
+}
+
+/// `RoutineClass::newRexx`'s compiling arm (`classes/RoutineClass.cpp:379`):
+/// [`compile_method_source`] answering a `Routine` instead.
+///
+/// The two share their argument checking, their parse and their annotation
+/// table, and differ in the class of the object and in the directive kind the
+/// body is filed under -- [`Interp::record_compiled_routine`] carries the
+/// measurement that makes the second observable.
+fn compile_routine_source(
+    interp: &mut Interp,
+    name: &[u8],
+    source: ObjRef,
+    position: &'static str,
+) -> Result<ObjRef, Failure> {
+    let lines = method_source_lines(interp, source, position)?;
+    let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
+    let parsed = rexx_parse::parse_lines(&borrowed).map_err(|error| {
+        Failure::from(Loud::method_from_source(&format!(
+            "reporting a routine source that does not parse ({}, {error})",
+            String::from_utf8_lossy(name)
+        )))
+    })?;
+    // The oracle installs them and this crate does not: measured, oracle rc
+    // 0, `.Routine~new('R', <four lines with a ::ROUTINE among them>)~call`
+    // resolves the declared routine and answers. Refused loudly here rather
+    // than dropped, and it is the refusal [`compile_method_source`] already
+    // makes over the same shape.
+    if !parsed.directives.is_empty() {
+        return Err(Loud::method_from_source("a routine source that carries a directive").into());
+    }
+    let routine_class = interp.routine_class();
+    let object = interp.native_instance(routine_class);
+    let site = crate::environment::Annotated::Compiled(interp.compiled_methods);
+    interp.compiled_methods += 1;
+    interp.attach_annotations(object, site);
+    interp.record_compiled_routine(object, name, parsed);
     Ok(object)
 }
 
@@ -10262,9 +10315,12 @@ fn native_message_new(
 /// `Method` whose `~scope` is `.nil` and whose `~annotations` is an empty
 /// `StringTable`, and setting it into a directory answers 7.
 ///
-/// `Routine` shares this function and still compiles nothing, and so does a
-/// `Method~new` carrying the optional third argument -- a package, measured
-/// rc 0, where anything else is rc 40.
+/// The `Routine` form is built here too, through [`compile_routine_source`].
+/// Measured, oracle rc 0: `.Routine~new('NEWR', 'return 42')~call` answers
+/// `42` and answers it again on a second send.
+///
+/// A `~new` carrying the optional third argument -- a package, measured rc 0,
+/// where anything else is rc 40 -- still compiles nothing.
 fn native_executable_new(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -10276,12 +10332,17 @@ fn native_executable_new(
     let Some(source) = args.get(1).copied().flatten() else {
         return Err(Raised::missing_named_argument("source").into());
     };
-    if args.len() > 2 || class != interp.method_class() {
+    let routine = class == interp.routine_class();
+    if args.len() > 2 || !(routine || class == interp.method_class()) {
         return Err(unbuilt_new(interp, class));
     }
     let name = interp.to_text(name).to_vec();
-    let method = compile_method_source(interp, &name, source, "source")?;
-    Ok(Some(method))
+    let object = if routine {
+        compile_routine_source(interp, &name, source, "source")?
+    } else {
+        compile_method_source(interp, &name, source, "source")?
+    };
+    Ok(Some(object))
 }
 
 /// `Package~new(name, source, ...)`: the name is required, the source is not,

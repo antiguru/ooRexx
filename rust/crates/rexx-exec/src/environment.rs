@@ -377,12 +377,25 @@ enum TableValue {
     /// `.METHODS`, and a message neither the class's dictionary nor
     /// `NATIVE_METHODS` holds is 97.1 on either side.
     ///
-    /// **The directive is carried for `Class~defineClassMethod`**, which is
-    /// the one caller that takes an object out of `.METHODS` and installs it
-    /// where it can be sent to: `CoreClasses.orx:73` hands
+    /// **`runnable` is for `Class~defineClassMethod`**, which is the one
+    /// caller that takes an object out of `.METHODS` and installs it where it
+    /// can be sent to: `CoreClasses.orx:73` hands
     /// `.methods[("string_cls_" || name)~upper]` to `.String`. Nothing else
     /// reads it.
-    Instance(&'static str, Annotated, Option<(ProgramId, usize)>),
+    ///
+    /// `declared` is the directive the object's own readers report on, which
+    /// every entry has and which a generated accessor has as much as a
+    /// written body does -- measured, oracle rc 0, `.K~method('ATT')` for
+    /// `::attribute ATT` answers `isAttribute` `1`.
+    Instance {
+        class: &'static str,
+        site: Annotated,
+        declared: (ProgramId, usize),
+        runnable: bool,
+        /// Whether the directive is a `::ROUTINE`, which is the body
+        /// `Routine~call` enters.
+        routine: bool,
+    },
     /// A `::RESOURCE`'s own body lines, which is what `.RESOURCES` holds --
     /// `resources->put(resource, internalname)` over an `ArrayClass`
     /// (`parser/DirectiveParser.cpp:2344`). Measured, a two-line resource's
@@ -872,14 +885,28 @@ impl Interp {
         let frame = self.roots.push_frame();
         for (name, value) in entries {
             let value = match value {
-                TableValue::Instance(id, site, body) => {
+                TableValue::Instance {
+                    class: id,
+                    site,
+                    declared: (program, directive),
+                    runnable,
+                    routine,
+                } => {
                     let class = self
                         .classes()
                         .lookup(id)
                         .expect("every TableValue::Instance names a native class");
                     let object = self.native_instance(class);
                     self.attach_annotations(object, site);
-                    if let Some((program, directive)) = body {
+                    self.executable_sources.insert(
+                        object,
+                        crate::ExecutableRecord {
+                            source: crate::ExecutableSource::Directive { program, directive },
+                            installed: None,
+                            routine: routine.then_some((program, directive)),
+                        },
+                    );
+                    if runnable {
                         self.table_method_bodies
                             .insert(object, crate::InstalledMethodBody { program, directive });
                     }
@@ -1366,13 +1393,25 @@ impl Interp {
     /// because `MethodDictionary::setMethodScope` rewrites a dictionary's
     /// entries to another class's scope and `~inheritInstanceMethods` runs it
     /// over the donor's own dictionary (`classes/ClassClass.cpp:560`-`:563`).
-    pub(crate) fn method_object(&mut self, class: ObjRef, name: &[u8], scope: ObjRef) -> ObjRef {
+    ///
+    /// `record` is what the object's own readers report on -- its seven
+    /// flags, its `~source`, its `~package` and the dictionary entry
+    /// `~setPrivate` acts on. The caller supplies it for `scope`'s reason: it
+    /// holds that entry, and this function has only a name.
+    pub(crate) fn method_object(
+        &mut self,
+        class: ObjRef,
+        name: &[u8],
+        scope: ObjRef,
+        record: crate::ExecutableRecord,
+    ) -> ObjRef {
         let key = (class, Box::<[u8]>::from(name));
         if let Some(found) = self.method_objects.get(&key).copied() {
             return found;
         }
         let method_class = self.method_class();
         let object = self.native_instance(method_class);
+        self.executable_sources.insert(object, record);
         let held = self.heap.get_mut(object).expect("just allocated");
         let Body::Native(native) = &mut held.body else {
             unreachable!("allocated as Body::Native by native_instance")
@@ -1443,6 +1482,12 @@ impl Interp {
         // so nothing the clone reaches can be swept while it is detached.
         let object = self.alloc_with(BehaviourId::OBJECT, Body::Native(copy));
         self.roots.push_temp(object);
+        // The copy reports on the same directive the original did. Measured,
+        // oracle rc 0: `.K2~define("X", .K~method("M"))` then
+        // `.K2~method("X")~source` answers `M`'s own body lines.
+        if let Some(source) = self.executable_sources.get(&method).copied() {
+            self.executable_sources.insert(object, source);
+        }
         Some(object)
     }
 
@@ -1710,6 +1755,13 @@ impl Interp {
             // `.context~package~name` is that file's own path where the
             // requiring program's is its own.
             //
+            // **`PARSE SOURCE`'s third word and not the path**, which are the
+            // same string for a program loaded from a file and differ for one
+            // compiled from source text: measured, oracle rc 0,
+            // `.Routine~new('NEWR', 'return 42')~package~name` is `NEWR`, and
+            // so is `.context~package~name` read from inside a body
+            // `.K~define('MM', ...)` compiled.
+            //
             // **The interpreter's own library is three more programs**, and
             // each has a package object of its own that answers the running
             // program's path here. None is reachable from a program: a
@@ -1717,7 +1769,7 @@ impl Interp {
             // library installed answers `Package::Rexx` because
             // `Interp::record_package_class` leaves it out of
             // `class_packages`.
-            Package::Program(program) => self.package_path(program).as_bytes().to_vec(),
+            Package::Program(program) => self.program_display_name(program).to_vec(),
         })
     }
 
@@ -1814,22 +1866,27 @@ fn package_table_entries(
     program: &rexx_parse::Program,
     kind: PackageTable,
 ) -> Vec<(Vec<u8>, TableValue)> {
-    // The body is carried for a written `::METHOD` alone. An `::ATTRIBUTE`
+    // `runnable` is set for a written `::METHOD` alone. An `::ATTRIBUTE`
     // and a `::CONSTANT` file generated accessors, whose bodies are
     // `Interp::generated_methods` rather than `Interp::method_bodies`, and
     // handing one of those to `Class~defineClassMethod` would install a row
     // naming a body of the wrong kind. Nothing in the interpreter's own
     // library does that -- `CoreClasses.orx:73` hands it plain `::METHOD`s --
     // so the absence is a refusal there rather than a gap here.
-    let written_method = |name: &[u8], index: usize| {
-        TableValue::Instance(
-            "Method",
-            Annotated::Unattached(id, name.into()),
-            Some((id, index)),
-        )
+    let written_method = |name: &[u8], index: usize| TableValue::Instance {
+        class: "Method",
+        site: Annotated::Unattached(id, name.into()),
+        declared: (id, index),
+        runnable: true,
+        routine: false,
     };
-    let generated_method =
-        |name: &[u8]| TableValue::Instance("Method", Annotated::Unattached(id, name.into()), None);
+    let generated_method = |name: &[u8], index: usize| TableValue::Instance {
+        class: "Method",
+        site: Annotated::Unattached(id, name.into()),
+        declared: (id, index),
+        runnable: false,
+        routine: false,
+    };
     let mut entries = Vec::new();
     let mut seen_class = false;
     for (index, directive) in program.directives.iter().enumerate() {
@@ -1850,7 +1907,7 @@ fn package_table_entries(
                 // `addMethod` calls are at `:2418` and `:2474`.
                 if method.attribute {
                     let setter = crate::accessor_setter_name(&upper);
-                    let value = generated_method(&setter);
+                    let value = generated_method(&setter, index);
                     entries.push((setter, value));
                 }
                 let value = written_method(&upper, index);
@@ -1869,17 +1926,17 @@ fn package_table_entries(
                 // set` puts `ZZ=` alone.
                 match attribute.style {
                     rexx_parse::AttributeStyle::Both => {
-                        let getter_value = generated_method(&upper);
-                        let setter_value = generated_method(&setter);
+                        let getter_value = generated_method(&upper, index);
+                        let setter_value = generated_method(&setter, index);
                         entries.push((upper, getter_value));
                         entries.push((setter, setter_value));
                     }
                     rexx_parse::AttributeStyle::Get => {
-                        let value = generated_method(&upper);
+                        let value = generated_method(&upper, index);
                         entries.push((upper, value));
                     }
                     rexx_parse::AttributeStyle::Set => {
-                        let value = generated_method(&setter);
+                        let value = generated_method(&setter, index);
                         entries.push((setter, value));
                     }
                 }
@@ -1892,7 +1949,7 @@ fn package_table_entries(
                 // (`parser/DirectiveParser.cpp:2536`). Measured,
                 // `::constant sep '/'` leaves `.methods~items` `1`.
                 let upper = constant.name.to_ascii_uppercase();
-                let value = generated_method(&upper);
+                let value = generated_method(&upper, index);
                 entries.push((upper, value));
             }
             rexx_parse::DirectiveKind::Routine(routine) if kind == PackageTable::Routines => {
@@ -1903,7 +1960,13 @@ fn package_table_entries(
                 // leaves `.routines~items` `2`.
                 entries.push((
                     routine.name.to_ascii_uppercase(),
-                    TableValue::Instance("Routine", Annotated::Routine(id, index), None),
+                    TableValue::Instance {
+                        class: "Routine",
+                        site: Annotated::Routine(id, index),
+                        declared: (id, index),
+                        runnable: false,
+                        routine: true,
+                    },
                 ));
             }
             rexx_parse::DirectiveKind::Resource(resource) if kind == PackageTable::Resources => {

@@ -961,6 +961,25 @@ impl Loud {
     ///   `Error 42 running M line 1:`.
     ///
     /// [`compile_method_source`]: crate::dispatch::compile_method_source
+    /// `Method~setSecurityManager` and the two rows beside it, given a
+    /// manager to install.
+    ///
+    /// **The state is kept nowhere because keeping it would be the wrong
+    /// answer.** An installed manager is consulted at the next
+    /// environment-symbol lookup, which is D12's interception points and
+    /// Phase 7's: measured, oracle rc 159,
+    /// `.K~method('MM')~setSecurityManager(.Object~new)` then
+    /// `.routines~rr~class~id` is
+    /// `97.1 Object "an Object" does not understand message "LOCAL".`, where
+    /// the same program without that line is rc 0. The no-argument form
+    /// installs nothing -- measured, `.routines~rr` still answers -- and is
+    /// the form this phase answers.
+    fn security_manager() -> Loud {
+        Loud {
+            message: owned_message("a security manager", Some("D12, Phase 7")),
+        }
+    }
+
     fn method_from_source(what: &str) -> Loud {
         Loud {
             message: owned_message(what, Some("Phase 5")),
@@ -3430,6 +3449,20 @@ struct Interp {
     /// only for a written `::METHOD`; `environment.rs`'s `written_method`
     /// carries why an `::ATTRIBUTE` or `::CONSTANT` accessor is absent.
     table_method_bodies: HashMap<ObjRef, InstalledMethodBody>,
+    /// What each `Method` and `Routine` object this crate has handed out
+    /// reports on -- see [`ExecutableSource`], which carries why this is not
+    /// [`Interp::table_method_bodies`] with more rows in it.
+    ///
+    /// A row holds no [`ObjRef`], so an object that dies takes nothing with
+    /// it but this row -- the position [`Interp::method_objects`] is in.
+    executable_sources: HashMap<ObjRef, ExecutableRecord>,
+    /// What `Method`'s four setters have written on each object they have
+    /// been sent to, over what its directive declared -- see
+    /// [`dispatch::executable::MethodFlagWrites`].
+    ///
+    /// Empty until a program sends one, which is what keeps the readers off a
+    /// hash lookup in the ordinary case, and it holds no [`ObjRef`].
+    method_flag_writes: HashMap<ObjRef, dispatch::executable::MethodFlagWrites>,
     /// What the send behind each `Message` object this crate has built ended
     /// with -- `MessageClass`'s `flagResultReturned` and `flagRaiseError`
     /// (`classes/MessageClass.hpp:61`-`:62`) and its `condition` field (`:135`).
@@ -4231,6 +4264,54 @@ struct InstalledRoutine {
     directive: usize,
 }
 
+/// One `Method` or `Routine` object this crate has handed out, as its own
+/// readers see it.
+///
+/// Separate from [`Interp::table_method_bodies`], which names only the bodies
+/// `Class~defineClassMethod` and `Object~setMethod` may install: a
+/// `::CONSTANT` getter and a `::ROUTINE` are rows here and must not be rows
+/// there.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) struct ExecutableRecord {
+    /// What the seven flags, `~source` and `~package` report on.
+    pub(crate) source: ExecutableSource,
+    /// The dictionary entry this object *is*, which is what makes
+    /// `Method~setPrivate` change how a send resolves. `None` for an object
+    /// no class has taken -- a `.METHODS` entry, or one compiled from source
+    /// text.
+    pub(crate) installed: Option<MethodId>,
+    /// The `::ROUTINE` directive `Routine~call` enters, which is not always
+    /// the directive [`ExecutableRecord::source`] names: a `Routine`
+    /// compiled from source text reports the whole of its own program as its
+    /// source and runs the sole directive that program carries.
+    ///
+    /// `None` for a `Method`, whose body a send reaches through
+    /// [`Interp::method_bodies`] instead.
+    pub(crate) routine: Option<(ProgramId, usize)>,
+}
+
+/// What a `Method` or `Routine` object's own readers report on -- its seven
+/// flags, its `~source` and its `~package`.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) enum ExecutableSource {
+    /// A directive of a program: a `::METHOD`, an `::ATTRIBUTE`, a
+    /// `::CONSTANT` or a `::ROUTINE`.
+    Directive {
+        program: ProgramId,
+        directive: usize,
+    },
+    /// A program's own main section, which is what a body compiled from
+    /// source text is: `translateBlock` starts such a block at line 1
+    /// (`parser/LanguageParser.cpp:1193`) where a directive's starts after
+    /// the directive clause.
+    Main { program: ProgramId },
+    /// A primitive or an `EXTERNAL` binding, which has no directive to report
+    /// on: `BaseCode::getSource` answers an empty array
+    /// (`execution/BaseCode.cpp:120`) and `BaseCode::setSecurityManager`
+    /// answers `0` (`:133`).
+    Native,
+}
+
 /// What a namespace qualifier resolved to.
 ///
 /// The `REXX` variant is a package this crate has no [`ProgramId`] for -- the
@@ -4516,6 +4597,8 @@ impl Interp {
             compiled_method_names: HashMap::new(),
             object_methods: false,
             table_method_bodies: HashMap::new(),
+            executable_sources: HashMap::new(),
+            method_flag_writes: HashMap::new(),
             message_outcomes: HashMap::new(),
             generated_methods: HashMap::new(),
             native_externals: HashMap::new(),
@@ -6535,6 +6618,164 @@ impl Interp {
                 directive: 0,
             },
         );
+        self.executable_sources.insert(
+            object,
+            ExecutableRecord {
+                source: ExecutableSource::Main {
+                    program: program_id,
+                },
+                installed: None,
+                routine: None,
+            },
+        );
+    }
+
+    /// [`Interp::record_compiled_body`] for a `Routine`: the same program of
+    /// its own, carrying a `::ROUTINE` rather than a `::METHOD`.
+    ///
+    /// **The directive kind is what the callee's calling convention reads**,
+    /// and it is observable: measured, oracle rc 0, `parse source` inside
+    /// `.Routine~new('NEWR', ...)~call` answers `LINUX SUBROUTINE NEWR`,
+    /// where the same text through `.Method~new` and `Object~run` answers
+    /// `LINUX METHOD`.
+    ///
+    /// No `table_method_bodies` row, which is the other half of the same
+    /// distinction: a `Routine` is not a body `Object~setMethod` or
+    /// `Class~defineClassMethod` may install.
+    fn record_compiled_routine(&mut self, object: ObjRef, name: &[u8], parsed: Program) {
+        let Program {
+            source,
+            main,
+            symbols,
+            ..
+        } = parsed;
+        let program = Rc::new(Program {
+            source,
+            main: CodeBody::default(),
+            directives: vec![Directive {
+                kind: DirectiveKind::Routine(Box::new(rexx_parse::RoutineDirective {
+                    name: name.into(),
+                    access: Access::default(),
+                    external: None,
+                    body: Some(main),
+                })),
+                clause_span: 0..0,
+            }],
+            symbols,
+        });
+        let program_id = ProgramId(self.programs.len());
+        self.programs.push(program);
+        self.compiled_method_names.insert(program_id, name.into());
+        self.executable_sources.insert(
+            object,
+            ExecutableRecord {
+                source: ExecutableSource::Main {
+                    program: program_id,
+                },
+                installed: None,
+                routine: Some((program_id, 0)),
+            },
+        );
+    }
+
+    /// What the `Method` object for one installed method reports on: the
+    /// directive that declared it, or [`ExecutableSource::Native`] for a
+    /// primitive and for an `EXTERNAL` binding, neither of which has one.
+    pub(crate) fn installed_executable_source(&self, method: MethodId) -> ExecutableSource {
+        if let Some(installed) = self.method_bodies.get(&method) {
+            return ExecutableSource::Directive {
+                program: installed.program,
+                directive: installed.directive,
+            };
+        }
+        if let Some(generated) = self.generated_methods.get(&method) {
+            return ExecutableSource::Directive {
+                program: generated.program,
+                directive: generated.directive,
+            };
+        }
+        ExecutableSource::Native
+    }
+
+    /// `Method~setPrivate`'s half that a send can see: the dictionary entry
+    /// this object *is* stops answering a sender outside its scope.
+    ///
+    /// The oracle needs no such step, because the object `Class~method`
+    /// answers is the very method the dictionary holds and `isSpecial()`
+    /// reads the flag word off it. Here the dictionary holds a
+    /// [`MethodId`] and the access scopes are a table beside it, so the
+    /// write has to reach that table. Measured, oracle: `o~mm` answers `1`,
+    /// then `.K~method('MM')~setPrivate`, then the same `o~mm` is 97 at rc
+    /// 159.
+    ///
+    /// **`PRIVATE` and `PACKAGE` are one field here and two flags in the
+    /// C++**, so a `PACKAGE` method this makes private keeps answering `1`
+    /// to `isPackage` while resolving as private -- which is the C++'s own
+    /// order, since `isPrivate()` is the first arm of the `else if`
+    /// (`classes/ObjectClass.cpp:874`-`:894`).
+    ///
+    /// Nothing happens for an object no class has taken, which is right:
+    /// its flag has no dictionary entry to act on.
+    pub(crate) fn make_method_private(&mut self, object: ObjRef) {
+        let Some(method) = self
+            .executable_sources
+            .get(&object)
+            .and_then(|record| record.installed)
+        else {
+            return;
+        };
+        let package = match self.installed_executable_source(method) {
+            ExecutableSource::Directive { program, .. } | ExecutableSource::Main { program } => {
+                plan::Package::Program(program)
+            }
+            ExecutableSource::Native => plan::Package::Rexx,
+        };
+        // Inserted at the search's own insertion point rather than pushed,
+        // because `Interp::access_scope_of` binary-searches these rows and a
+        // send that misses reports a `PRIVATE` method as an ordinary one.
+        match self
+            .special_methods
+            .binary_search_by_key(&method.0, |&(key, _)| key.0)
+        {
+            Ok(at) => self.special_methods[at].1.access = Access::Private,
+            Err(at) => self.special_methods.insert(
+                at,
+                (
+                    method,
+                    dispatch::AccessScope {
+                        access: Access::Private,
+                        protected: false,
+                        package,
+                    },
+                ),
+            ),
+        }
+    }
+
+    /// One `::ROUTINE` run over the arguments given, for `Routine~call` and
+    /// the two rows beside it.
+    ///
+    /// **A `SUBROUTINE` call**, which `parse source` inside the routine
+    /// reports -- measured, oracle rc 0, `LINUX SUBROUTINE <the declaring
+    /// file>` -- and a written one, which is
+    /// [`run::CallEntry::Written`]'s receiver.
+    ///
+    /// **A routine that returns nothing answers nothing**, and the 91.999
+    /// that follows is the sending message's own: measured, oracle rc 165,
+    /// `say .routines~noret~call` on a bare `return` is
+    /// `Message "CALL" did not return a result.` and the same send spelled
+    /// `~'[]'()` names `[]`, so the name in the message is the row's and not
+    /// the routine's.
+    ///
+    /// [`run::CallEntry::Written`]: run::CallEntry
+    pub(crate) fn enter_installed_routine(
+        &mut self,
+        program: ProgramId,
+        directive: usize,
+        arguments: Vec<Option<ObjRef>>,
+    ) -> Result<Option<ObjRef>, Failure> {
+        let installed = InstalledRoutine { program, directive };
+        self.call_over_installed_routine(installed, arguments)
     }
 
     /// `PARSE SOURCE`'s third word: a compiled method's own name, the file a

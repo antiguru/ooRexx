@@ -1490,6 +1490,9 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/weak_reference_value.rex",
     // Task 3's witness.
     "lang/rexx_info_readers.rex",
+    // Task 4's two witnesses.
+    "lang/method_introspection.rex",
+    "lang/routine_introspection.rex",
 ];
 
 #[test]

@@ -6179,6 +6179,37 @@ impl Interp {
         }
     }
 
+    /// One `::ROUTINE` entered from a native method body: `Routine~call`,
+    /// `~callWith` and `~'[]'`.
+    ///
+    /// **A `SUBROUTINE` call and not a `FUNCTION` one**, which is observable
+    /// two ways and measured on both: `parse source` inside a routine reached
+    /// through `~call` answers `LINUX SUBROUTINE <the declaring file>` at rc
+    /// 0, and a routine that returns nothing answers nothing rather than
+    /// raising 44 here -- the 91.999 the caller then sees names the *message*
+    /// (`CALL`, `[]`), so it comes from the send and not from this call.
+    ///
+    /// The name is only ever read on a failure, and no failure below can
+    /// report it: the two arms that name one are the builtin path, which
+    /// `Resolved::Routine` is not on, and `no_data_returned`, which this does
+    /// not raise.
+    pub(crate) fn call_over_installed_routine(
+        &mut self,
+        installed: InstalledRoutine,
+        arguments: Vec<Option<ObjRef>>,
+    ) -> Result<Option<ObjRef>, Failure> {
+        match self.invoke_call_over(
+            Resolved::Routine(installed),
+            b"CALL",
+            arguments,
+            CallType::Subroutine,
+            CallEntry::Written,
+        )? {
+            Ended::Exited(value) => Err(Failure::Exited(value)),
+            Ended::Returned(returned) => Ok(returned),
+        }
+    }
+
     /// [`Interp::invoke_call`] past its argument evaluation: everything a
     /// callee needs once its arguments are values.
     ///

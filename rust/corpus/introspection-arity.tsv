@@ -81,24 +81,24 @@ Class	superClasses	instance	agree	rc0
 Class	uninherit	instance	no-value	rc0, the send returned no result to compare
 Method	annotation	instance	agree	rc0
 Method	annotations	instance	agree	rc0
-Method	isAbstract	instance	send-differs	oracle rc0 VALUE 0; crate rc120 rexx-exec: method "ISABSTRACT" of class "Method" is not implemented (Phase 5)
-Method	isAttribute	instance	send-differs	oracle rc0 VALUE 0; crate rc120 rexx-exec: method "ISATTRIBUTE" of class "Method" is not implemented (Phase 5)
-Method	isConstant	instance	send-differs	oracle rc0 VALUE 0; crate rc120 rexx-exec: method "ISCONSTANT" of class "Method" is not implemented (Phase 5)
-Method	isGuarded	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: method "ISGUARDED" of class "Method" is not implemented (Phase 5)
-Method	isPackage	instance	send-differs	oracle rc0 VALUE 0; crate rc120 rexx-exec: method "ISPACKAGE" of class "Method" is not implemented (Phase 5)
-Method	isPrivate	instance	send-differs	oracle rc0 VALUE 0; crate rc120 rexx-exec: method "ISPRIVATE" of class "Method" is not implemented (Phase 5)
-Method	isProtected	instance	send-differs	oracle rc0 VALUE 0; crate rc120 rexx-exec: method "ISPROTECTED" of class "Method" is not implemented (Phase 5)
+Method	isAbstract	instance	agree	rc0
+Method	isAttribute	instance	agree	rc0
+Method	isConstant	instance	agree	rc0
+Method	isGuarded	instance	agree	rc0
+Method	isPackage	instance	agree	rc0
+Method	isPrivate	instance	agree	rc0
+Method	isProtected	instance	agree	rc0
 Method	loadExternalMethod	class	send-differs	oracle rc0 VALUE The NIL object; crate rc120 rexx-exec: method "LOADEXTERNALMETHOD" of class "Method" is not implemented (Phase 5)
 Method	new	class	agree	rc0
 Method	newFile	class	send-differs	oracle rc0 VALUE a Method; crate rc120 rexx-exec: method "NEWFILE" of class "Method" is not implemented (Phase 5)
-Method	package	instance	send-differs	oracle rc0 VALUE a Package; crate rc120 rexx-exec: method "PACKAGE" of class "Method" is not implemented (Phase 5)
+Method	package	instance	agree	rc0
 Method	scope	instance	agree	rc0
-Method	setGuarded	instance	send-differs	oracle rc0 NORESULT; crate rc120 rexx-exec: method "SETGUARDED" of class "Method" is not implemented (Phase 5)
-Method	setPrivate	instance	send-differs	oracle rc0 NORESULT; crate rc120 rexx-exec: method "SETPRIVATE" of class "Method" is not implemented (Phase 5)
-Method	setProtected	instance	send-differs	oracle rc0 NORESULT; crate rc120 rexx-exec: method "SETPROTECTED" of class "Method" is not implemented (Phase 5)
-Method	setSecurityManager	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: method "SETSECURITYMANAGER" of class "Method" is not implemented (Phase 5)
-Method	setUnguarded	instance	send-differs	oracle rc0 NORESULT; crate rc120 rexx-exec: method "SETUNGUARDED" of class "Method" is not implemented (Phase 5)
-Method	source	instance	send-differs	oracle rc0 VALUE an Array; crate rc120 rexx-exec: method "SOURCE" of class "Method" is not implemented (Phase 5)
+Method	setGuarded	instance	no-value	rc0, the send returned no result to compare
+Method	setPrivate	instance	no-value	rc0, the send returned no result to compare
+Method	setProtected	instance	no-value	rc0, the send returned no result to compare
+Method	setSecurityManager	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: a security manager is not implemented (D12, Phase 7)
+Method	setUnguarded	instance	no-value	rc0, the send returned no result to compare
+Method	source	instance	agree	rc0
 Object	(abuttal)	instance	exempt	the book's displayed name is not a message name -- measured, o~'(abuttal)'('x') raises 97.1 while o~''('x') answers
 Object	(blank)	instance	exempt	the book's displayed name is not a message name -- measured, o~'(blank)'('x') raises 97.1 while o~' '('x') answers
 Object	<>	instance	agree	rc0
@@ -215,17 +215,17 @@ RexxInfo	platform	instance	agree	rc0
 RexxInfo	release	instance	agree	rc0
 RexxInfo	revision	instance	agree	rc0
 RexxInfo	version	instance	agree	rc0
-Routine	[]	instance	send-differs	oracle rc0 VALUE a; crate rc120 rexx-exec: method "[]" of class "Routine" is not implemented (Phase 5)
+Routine	[]	instance	agree	rc0
 Routine	annotation	instance	agree	rc0
 Routine	annotations	instance	agree	rc0
-Routine	call	instance	send-differs	oracle rc0 VALUE a; crate rc120 rexx-exec: method "CALL" of class "Routine" is not implemented (Phase 5)
-Routine	callWith	instance	send-differs	oracle rc0 VALUE a; crate rc120 rexx-exec: method "CALLWITH" of class "Routine" is not implemented (Phase 5)
+Routine	call	instance	agree	rc0
+Routine	callWith	instance	agree	rc0
 Routine	loadExternalRoutine	class	send-differs	oracle rc0 VALUE a Routine; crate rc120 rexx-exec: method "LOADEXTERNALROUTINE" of class "Routine" is not implemented (Phase 5)
-Routine	new	class	send-differs	oracle rc0 VALUE a Routine; crate rc120 rexx-exec: method "NEW" of class "Routine" is not implemented (Phase 5)
+Routine	new	class	agree	rc0
 Routine	newFile	class	send-differs	oracle rc0 VALUE a Routine; crate rc120 rexx-exec: method "NEWFILE" of class "Routine" is not implemented (Phase 5)
-Routine	package	instance	send-differs	oracle rc0 VALUE a Package; crate rc120 rexx-exec: method "PACKAGE" of class "Routine" is not implemented (Phase 5)
-Routine	setSecurityManager	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: method "SETSECURITYMANAGER" of class "Routine" is not implemented (Phase 5)
-Routine	source	instance	send-differs	oracle rc0 VALUE an Array; crate rc120 rexx-exec: method "SOURCE" of class "Routine" is not implemented (Phase 5)
+Routine	package	instance	agree	rc0
+Routine	setSecurityManager	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: a security manager is not implemented (D12, Phase 7)
+Routine	source	instance	agree	rc0
 StackFrame	arguments	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
 StackFrame	context	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
 StackFrame	invocation	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)

@@ -112,21 +112,21 @@ Method	loadExternalMethod	class	loud	method "LOADEXTERNALMETHOD" of class "Metho
 Method	newFile	class	loud	method "NEWFILE" of class "Method"
 Method	annotation	instance	answers	rc 168
 Method	annotations	instance	answers	rc 0
-Method	isAbstract	instance	loud	method "ISABSTRACT" of class "Method"
-Method	isAttribute	instance	loud	method "ISATTRIBUTE" of class "Method"
-Method	isConstant	instance	loud	method "ISCONSTANT" of class "Method"
-Method	isGuarded	instance	loud	method "ISGUARDED" of class "Method"
-Method	isPackage	instance	loud	method "ISPACKAGE" of class "Method"
-Method	isPrivate	instance	loud	method "ISPRIVATE" of class "Method"
-Method	isProtected	instance	loud	method "ISPROTECTED" of class "Method"
-Method	package	instance	loud	method "PACKAGE" of class "Method"
+Method	isAbstract	instance	answers	rc 0
+Method	isAttribute	instance	answers	rc 0
+Method	isConstant	instance	answers	rc 0
+Method	isGuarded	instance	answers	rc 0
+Method	isPackage	instance	answers	rc 0
+Method	isPrivate	instance	answers	rc 0
+Method	isProtected	instance	answers	rc 0
+Method	package	instance	answers	rc 0
 Method	scope	instance	answers	rc 0
-Method	setGuarded	instance	loud	method "SETGUARDED" of class "Method"
-Method	setPrivate	instance	loud	method "SETPRIVATE" of class "Method"
-Method	setProtected	instance	loud	method "SETPROTECTED" of class "Method"
-Method	setSecurityManager	instance	loud	method "SETSECURITYMANAGER" of class "Method"
-Method	setUnguarded	instance	loud	method "SETUNGUARDED" of class "Method"
-Method	source	instance	loud	method "SOURCE" of class "Method"
+Method	setGuarded	instance	answers	rc 165
+Method	setPrivate	instance	answers	rc 165
+Method	setProtected	instance	answers	rc 165
+Method	setSecurityManager	instance	answers	rc 0
+Method	setUnguarded	instance	answers	rc 165
+Method	source	instance	answers	rc 0
 Object	new	class	answers	rc 0
 Object	=	instance	answers	rc 163
 Object	==	instance	answers	rc 163
@@ -202,14 +202,14 @@ Package	trace	instance	loud	method "TRACE" of class "Package"
 Routine	new	class	answers	rc 168
 Routine	loadExternalRoutine	class	loud	method "LOADEXTERNALROUTINE" of class "Routine"
 Routine	newFile	class	loud	method "NEWFILE" of class "Routine"
-Routine	[]	instance	loud	method "[]" of class "Routine"
+Routine	[]	instance	answers	rc 165
 Routine	annotation	instance	answers	rc 168
 Routine	annotations	instance	answers	rc 0
-Routine	call	instance	loud	method "CALL" of class "Routine"
-Routine	callWith	instance	loud	method "CALLWITH" of class "Routine"
-Routine	package	instance	loud	method "PACKAGE" of class "Routine"
-Routine	setSecurityManager	instance	loud	method "SETSECURITYMANAGER" of class "Routine"
-Routine	source	instance	loud	method "SOURCE" of class "Routine"
+Routine	call	instance	answers	rc 165
+Routine	callWith	instance	answers	rc 163
+Routine	package	instance	answers	rc 0
+Routine	setSecurityManager	instance	answers	rc 0
+Routine	source	instance	answers	rc 0
 String	new	class	answers	rc 163
 String	alnum	class	answers	rc 0
 String	alpha	class	answers	rc 0

@@ -145,3 +145,10 @@ lang/map_collection_of.rex
 lang/pointer_buffer_new_refused.rex
 lang/weak_reference_value.rex
 lang/rexx_info_readers.rex
+
+# Task 4: `Method`'s seven flags, `~source`, `~package` and its four setters
+# over one directive of every kind that makes a method; and `Routine`'s
+# `~call`, `~callWith`, `~'[]'`, `~source`, `~package` and `~new`, each of the
+# three that run code sent twice to one object.
+lang/method_introspection.rex
+lang/routine_introspection.rex
