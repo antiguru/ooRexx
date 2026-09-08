@@ -7850,11 +7850,6 @@ fn every_directive_this_crate_can_install_leaves_the_program_alone() {
 ///
 /// The measured oracle answer for each, rc 0 unless stated:
 ///
-/// * `.Array~package~publicClasses` is `a StringTable`, and `["ARRAY"]` on
-///   it is `The Array class` -- a name no table this crate could answer from
-///   holds, which is why the partial table is refused rather than answered.
-///   See `Loud::rexx_package_classes` for where the two halves of the
-///   oracle's one table live here.
 /// * `.K~defineMethods(.local)` is **rc 163**, `93.974`: the oracle reads
 ///   `.local`'s entries and finds they are not methods, where this crate
 ///   cannot read them at all.
@@ -7866,10 +7861,6 @@ fn every_directive_this_crate_can_install_leaves_the_program_alone() {
 #[test]
 fn the_refusals_this_task_leaves_where_the_oracle_answers_still_fire() {
     let cases: &[(&[u8], &str)] = &[
-        (
-            b"say .Array~package~publicClasses\n",
-            "the REXX package's class table is not implemented (Phase 5)",
-        ),
         (
             b".K~defineMethods(.local)\n::class K\n",
             "a directory whose entries this crate does not fill is not implemented (Phase 7)",

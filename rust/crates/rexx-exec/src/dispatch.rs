@@ -186,6 +186,9 @@ mod introspection;
 // `RexxContext`'s and `StackFrame`'s readers, chained the same way.
 mod context;
 
+// `Package`'s readers and its four writes, chained the same way.
+mod package;
+
 /// One primitive method's implementation.
 ///
 /// The [`Cleared`] parameter is the seam's own enforcement and is never read
@@ -865,12 +868,6 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     ("Package", "LOCAL", Arity::Fixed(0), native_package_local),
     ("Package", "NAME", Arity::Fixed(0), native_package_name),
-    (
-        "Package",
-        "PUBLICCLASSES",
-        Arity::Fixed(0),
-        native_package_public_classes,
-    ),
     // `QueueClass::initRexx` (`memory/Setup.cpp:777`) and the donation
     // `InheritInstanceMethods(IdentityTable)` makes at `Relation` (`:958`).
     ("Relation", "INIT", Arity::Fixed(1), native_capacity_init),
@@ -1283,6 +1280,7 @@ impl ObjectModel {
             .chain(executable::NATIVE_METHODS)
             .chain(introspection::NATIVE_METHODS)
             .chain(context::NATIVE_METHODS)
+            .chain(package::NATIVE_METHODS)
             .chain(extra)
         {
             // **The kernel directory as well as the environment one**, since
@@ -1315,6 +1313,7 @@ impl ObjectModel {
         for (class_id, method_name, arity, run) in NATIVE_CLASS_METHODS
             .iter()
             .chain(context::NATIVE_CLASS_METHODS)
+            .chain(package::NATIVE_CLASS_METHODS)
         {
             let class = classes.lookup(class_id).unwrap_or_else(|| {
                 panic!(
@@ -5997,25 +5996,6 @@ fn add_installed_class(
     }
 }
 
-/// `Package~publicClasses`: a fresh `StringTable` of the classes this
-/// package exports -- `PackageClass::getPublicClassesRexx`
-/// (`classes/PackageClass.cpp:1563`).
-///
-/// The REXX package's own table is [`Loud::rexx_package_classes`], which
-/// carries why.
-fn native_package_public_classes(
-    interp: &mut Interp,
-    _cleared: Cleared,
-    receiver: ObjRef,
-    _args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
-    match interp.which_package(receiver) {
-        Some(Package::Program(program)) => Ok(Some(interp.public_classes_table(program))),
-        Some(Package::Rexx) => Err(Loud::rexx_package_classes().into()),
-        None => Err(Loud::receiver_class("a package object this crate did not build").into()),
-    }
-}
-
 /// An array receiver's own slots, borrowed, or the refusal for a receiver that
 /// is not one.
 ///
@@ -6247,6 +6227,16 @@ fn multi_dimension_position(
         multiplier *= dimension;
     }
     Ok(Some(offset + 1))
+}
+
+/// Whether `value` is a whole number at `Numerics::ARGUMENT_DIGITS`, which is
+/// what `numberArgument` accepts.
+fn is_whole_method_argument(interp: &mut Interp, value: ObjRef) -> bool {
+    interp
+        .to_number(value)
+        .ok()
+        .and_then(|number| number.whole_value(rexx_num::ARGUMENT_DIGITS))
+        .is_some()
 }
 
 /// A subscript converted under `Numerics::ARGUMENT_DIGITS` rather than under

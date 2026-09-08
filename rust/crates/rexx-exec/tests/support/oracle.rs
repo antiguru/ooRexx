@@ -649,6 +649,34 @@ pub enum StderrComparison {
     Multiset,
 }
 
+/// How `stdout` is compared: byte-for-byte, or as a sorted multiset of lines.
+///
+/// **Opt-in per program, exactly as [`StderrComparison::Multiset`] is.** Raw
+/// is the default and stays the default; the sorted mode exists for a program
+/// whose stdout is a hash-ordered collection's contents, an order neither
+/// interpreter reproduces for the other. `phase-4-exclusions.txt`'s
+/// Deviation 8 is the licence, and the opt-in list there IS the licence: a
+/// sorted comparison hides a genuine ordering defect in any program that
+/// takes it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum StdoutComparison {
+    /// Byte-for-byte. The default.
+    Raw,
+    /// Byte-for-byte after sorting each side's lines: Deviation 8's licence.
+    Multiset,
+}
+
+/// One side's `stdout` in the form [`StdoutComparison::Multiset`] compares.
+///
+/// The same shape as [`stderr_multiset`], and split the same way, so a
+/// truncated `stdout` still differs.
+pub fn stdout_multiset(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes).into_owned();
+    let mut lines: Vec<&str> = text.split('\n').collect();
+    lines.sort_unstable();
+    lines.join("\n")
+}
+
 /// One side's `stderr` in the form [`StderrComparison::Multiset`] compares,
 /// exposed so the licence has one implementation and one control.
 ///
@@ -728,8 +756,27 @@ pub fn descriptor_diff_with(
     cpp: &CppOutcome,
     stderr_mode: StderrComparison,
 ) -> DescriptorDiff {
+    descriptor_diff_modes(rust, cpp, StdoutComparison::Raw, stderr_mode)
+}
+
+/// [`descriptor_diff_with`] with `stdout`'s comparison chosen as well.
+///
+/// Kept as the one place both channels' modes are applied, so that
+/// Deviation 8's licence has a single implementation the way Deviation 7's
+/// does.
+pub fn descriptor_diff_modes(
+    rust: &Outcome,
+    cpp: &CppOutcome,
+    stdout_mode: StdoutComparison,
+    stderr_mode: StderrComparison,
+) -> DescriptorDiff {
     DescriptorDiff {
-        stdout: rust.stdout != cpp.stdout,
+        stdout: match stdout_mode {
+            StdoutComparison::Raw => rust.stdout != cpp.stdout,
+            StdoutComparison::Multiset => {
+                stdout_multiset(&rust.stdout) != stdout_multiset(&cpp.stdout)
+            }
+        },
         stderr: match stderr_mode {
             StderrComparison::Normalized => {
                 super::normalize_stderr(&rust.stderr) != super::normalize_stderr(&cpp.stderr)
@@ -751,6 +798,16 @@ pub fn descriptor_diffs_with(
     stderr_mode: StderrComparison,
 ) -> Vec<&'static str> {
     descriptor_diff_with(rust, cpp, stderr_mode).labels()
+}
+
+/// [`descriptor_diff_modes`] rendered as its labels.
+pub fn descriptor_diffs_modes(
+    rust: &Outcome,
+    cpp: &CppOutcome,
+    stdout_mode: StdoutComparison,
+    stderr_mode: StderrComparison,
+) -> Vec<&'static str> {
+    descriptor_diff_modes(rust, cpp, stdout_mode, stderr_mode).labels()
 }
 
 #[cfg(test)]

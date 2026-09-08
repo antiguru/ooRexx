@@ -1707,6 +1707,44 @@ impl Raised {
         Raised::syntax(93, 902, vec![arity.to_string().into_bytes()])
     }
 
+    /// 93.953: a method argument that has to be one of a set of classes is
+    /// none of them. `wanted` is the description the raise site supplies.
+    ///
+    /// Measured at rc 163: `.Package~new('X', 'Y', 'Z')` reports `Method
+    /// argument 3 could not be converted to type Method, Routine, or Package
+    /// object.`
+    pub(crate) fn argument_not_convertible(position: usize, wanted: &str) -> Raised {
+        Raised::syntax(
+            93,
+            953,
+            vec![
+                position.to_string().into_bytes(),
+                wanted.as_bytes().to_vec(),
+            ],
+        )
+    }
+
+    /// 93.900: `Error_Incorrect_method_user_defined`, whose whole message the
+    /// raise site supplies.
+    ///
+    /// Measured at rc 163: `p~options('DIGITS', '')` reports `argument 2 must
+    /// not be empty.`
+    pub(crate) fn method_user_defined(text: &str) -> Raised {
+        Raised::syntax(93, 900, vec![text.as_bytes().to_vec()])
+    }
+
+    /// 93.905: a method argument that has to be a whole number is not one.
+    ///
+    /// Measured at rc 163: `.Package~defaultOptions('C', 'x')` reports
+    /// `Method argument 2 must be a whole number; found "x".`
+    pub(crate) fn method_argument_not_whole(position: usize, found: &[u8]) -> Raised {
+        Raised::syntax(
+            93,
+            905,
+            vec![position.to_string().into_bytes(), found.to_vec()],
+        )
+    }
+
     /// 93.965: a message resolved to an `ABSTRACT` method.
     ///
     /// `name` is the **message** as the send spelled it after upcasing, not
@@ -1948,6 +1986,41 @@ impl Raised {
             88,
             914,
             vec![argument.as_bytes().to_vec(), b"Class".to_vec()],
+        )
+    }
+
+    /// 88.914 for a class other than `.Class`: `classArgument(routine,
+    /// TheRoutineClass, "routine")` and its neighbours, which substitute the
+    /// argument's name and the required class's id.
+    ///
+    /// Measured at rc 168: `p~addRoutine('X', 5)` reports `Argument routine
+    /// must be an instance of the Routine class.` and `p~addPackage(5)`
+    /// reports `Argument package must be an instance of the Package class.`
+    pub(crate) fn argument_not_an_instance(argument: &str, class: &str) -> Raised {
+        Raised::syntax(
+            88,
+            914,
+            vec![argument.as_bytes().to_vec(), class.as_bytes().to_vec()],
+        )
+    }
+
+    /// 93.914: a method argument that has to name one of a list --
+    /// `Error_Incorrect_method_list`. It substitutes the argument's position,
+    /// the list as the raise site spells it (its own quoting included), and
+    /// the value found.
+    ///
+    /// Measured at rc 163: `.Package~defaultOptions('FORM')` reports `Method
+    /// argument 1 must be one of "D[efineDefaultOptions] or
+    /// C[ountOverrides]"; found "FORM".`
+    pub(crate) fn method_argument_not_in_list(position: usize, list: &str, found: &[u8]) -> Raised {
+        Raised::syntax(
+            93,
+            914,
+            vec![
+                position.to_string().into_bytes(),
+                list.as_bytes().to_vec(),
+                found.to_vec(),
+            ],
         )
     }
 

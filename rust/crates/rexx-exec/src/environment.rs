@@ -883,12 +883,37 @@ impl Interp {
         program: ProgramId,
         kind: PackageTable,
     ) -> Option<ObjRef> {
+        self.build_package_string_table(program, kind, false)
+    }
+
+    /// [`Interp::package_string_table`] for a caller that is about to write an
+    /// entry into it, which builds the table even when the program's own
+    /// directives declare none of that kind.
+    ///
+    /// `Package~addRoutine` is what needs it: `addInstalledRoutine`
+    /// (`classes/PackageClass.cpp:1432`) creates the field when it is null,
+    /// so a package that declared no `::ROUTINE` has one afterwards and
+    /// `.ROUTINES` starts answering a table where it answered its own name.
+    pub(crate) fn package_string_table_for_write(
+        &mut self,
+        program: ProgramId,
+        kind: PackageTable,
+    ) -> Option<ObjRef> {
+        self.build_package_string_table(program, kind, true)
+    }
+
+    fn build_package_string_table(
+        &mut self,
+        program: ProgramId,
+        kind: PackageTable,
+        force: bool,
+    ) -> Option<ObjRef> {
         if let Some(found) = self.package_tables.get(&(program, kind)).copied() {
             return Some(found);
         }
         let source = std::rc::Rc::clone(self.programs.get(program.0)?);
         let entries = package_table_entries(program, &source, kind);
-        if entries.is_empty() {
+        if entries.is_empty() && !force {
             return None;
         }
         let class = self.environment_model().string_table;
@@ -928,6 +953,10 @@ impl Interp {
                         self.table_method_bodies
                             .insert(object, crate::InstalledMethodBody { program, directive });
                     }
+                    if routine {
+                        self.routine_objects
+                            .insert(crate::InstalledRoutine { program, directive }, object);
+                    }
                     object
                 }
                 TableValue::Lines(lines) => self.line_array(&lines),
@@ -940,6 +969,66 @@ impl Interp {
         }
         self.roots.pop_frame(frame);
         Some(table)
+    }
+
+    /// A fresh `StringTable` holding `entries`, sorted by name.
+    ///
+    /// **Fresh on every ask, which is what the `Package` table readers
+    /// answer**: each of them is a `->copy()` in the C++
+    /// (`classes/PackageClass.cpp:1542` onwards). Measured, oracle rc 0,
+    /// `(p~resources == p~resources)` is `0`, and a `~put` into one is
+    /// invisible to the next ask.
+    ///
+    /// The order the entries go in is observable -- `DO OVER` a `StringTable`
+    /// iterates its indexes -- so it is sorted rather than left to a hash
+    /// walk, which is also what keeps the allocation sequence the same from
+    /// run to run.
+    pub(crate) fn string_table_of(&mut self, mut entries: Vec<(Box<[u8]>, ObjRef)>) -> ObjRef {
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
+        let frame = self.roots.push_frame();
+        for (_, value) in &entries {
+            self.roots.push_temp(*value);
+        }
+        let class = self.environment_model().string_table;
+        let table = self.native_instance(class);
+        let object = self.heap.get_mut(table).expect("just allocated and rooted");
+        let Body::Native(native) = &mut object.body else {
+            unreachable!("allocated as Body::Native by native_instance")
+        };
+        for (name, value) in entries {
+            native.set_entry(&name, value);
+        }
+        self.roots.pop_frame(frame);
+        self.roots.push_temp(table);
+        table
+    }
+
+    /// A fresh `Array` holding `items` in the order given.
+    pub(crate) fn object_array(&mut self, items: Vec<ObjRef>) -> ObjRef {
+        let frame = self.roots.push_frame();
+        for item in &items {
+            self.roots.push_temp(*item);
+        }
+        let slots: Vec<Option<ObjRef>> = items.into_iter().map(Some).collect();
+        let array = self.alloc_with(BehaviourId::ARRAY, Body::array(slots));
+        self.roots.pop_frame(frame);
+        self.roots.push_temp(array);
+        array
+    }
+
+    /// The one `Routine` object standing for `installed`.
+    ///
+    /// Built on the first ask, by materialising the declaring program's own
+    /// `.ROUTINES` table -- which is where a `::ROUTINE`'s object lives and
+    /// which fills [`Interp::routine_objects`] as it goes. `None` is a
+    /// routine whose declaring program this crate cannot reach, which no
+    /// program can produce.
+    pub(crate) fn routine_object(&mut self, installed: crate::InstalledRoutine) -> Option<ObjRef> {
+        if let Some(found) = self.routine_objects.get(&installed).copied() {
+            return Some(found);
+        }
+        self.package_string_table(installed.program, PackageTable::Routines);
+        self.routine_objects.get(&installed).copied()
     }
 
     /// One `::RESOURCE`'s body as the `Array` of strings `.RESOURCES` holds.
@@ -1291,43 +1380,6 @@ impl Interp {
                 .or_default()
                 .insert(name.to_ascii_uppercase().into(), class);
         }
-    }
-
-    /// `Package~publicClasses` for a program's own package: a fresh
-    /// `StringTable` holding what the `::CLASS ... PUBLIC` directives and
-    /// `~addPublicClass` have put there.
-    ///
-    /// **Fresh on every ask, not one kept table**, which is the oracle's own
-    /// answer: `getPublicClassesRexx` returns `installedPublicClasses->copy()`
-    /// (`classes/PackageClass.cpp:1570`) or a new empty one. Measured at rc
-    /// 0, `p~publicClasses == p~publicClasses` is `0` where
-    /// `.context~package == .context~package` is `1`.
-    ///
-    /// The table is filled in sorted name order, and **that order is
-    /// observable**: `DO OVER` a `StringTable` iterates its indexes, and
-    /// `Interp::hash_collection_indexes` carries what this crate's order
-    /// costs against the oracle's. Sorting is also what keeps the allocation
-    /// sequence the same from run to run.
-    pub(crate) fn public_classes_table(&mut self, program: ProgramId) -> ObjRef {
-        let class = self.environment_model().string_table;
-        let table = self.native_instance(class);
-        let mut entries: Vec<(Box<[u8]>, ObjRef)> = self
-            .package_public_classes
-            .get(&program)
-            .map(|held| held.iter().map(|(k, v)| (k.clone(), *v)).collect())
-            .unwrap_or_default();
-        entries.sort_by(|a, b| a.0.cmp(&b.0));
-        let object = self.heap.get_mut(table).expect("just allocated and rooted");
-        let Body::Native(native) = &mut object.body else {
-            unreachable!("allocated as Body::Native by native_instance")
-        };
-        // Every value is a class identity, which names no arena slot, so
-        // nothing here can be collected between two of these writes and the
-        // table needs no per-value rooting.
-        for (name, id) in entries {
-            native.set_entry(&name, id);
-        }
-        table
     }
 
     /// The package object `class~package` answers, or `.nil` for a class that
@@ -1851,6 +1903,184 @@ impl Interp {
             // `class_packages`.
             Package::Program(program) => self.program_display_name(program).to_vec(),
         })
+    }
+
+    /// The REXX package's own class table: this crate's native class registry
+    /// -- `completeSystemClass` (`memory/Setup.cpp:199`-`:206`) files every
+    /// `Setup.cpp` class there -- plus what the shipped `.orx` files' own
+    /// `::CLASS` directives installed.
+    ///
+    /// `public_only` selects `installedPublicClasses` over
+    /// `installedClasses`, which is the whole of the difference between
+    /// `~publicClasses` and `~classes` on that receiver. Every registry class
+    /// is public; the ones that are not are the library's own mixins.
+    /// Measured, oracle rc 0: `.Class~package~classes` has 67 entries and
+    /// `~publicClasses` 62, and the five that part are `BAGMIXIN`,
+    /// `LOCALSERVER`, `MANYITEMMIXIN`, `SETMIXIN` and `SUPPLIERMIXIN`.
+    pub(crate) fn rexx_package_class_table(
+        &mut self,
+        public_only: bool,
+    ) -> Vec<(Box<[u8]>, ObjRef)> {
+        let mut entries: Vec<(Box<[u8]>, ObjRef)> = self
+            .classes()
+            .registered()
+            .map(|(name, class)| (name.as_bytes().into(), class))
+            .collect();
+        for program in self.library_programs.clone() {
+            let held = if public_only {
+                self.package_public_classes.get(&program)
+            } else {
+                self.package_classes.get(&program)
+            };
+            entries.extend(
+                held.into_iter()
+                    .flatten()
+                    .map(|(name, class)| (name.clone(), *class)),
+            );
+        }
+        entries
+    }
+
+    /// `PackageClass::findClass` (`classes/PackageClass.cpp:1085`): the whole
+    /// search order a package resolves a class name over, from `package`.
+    ///
+    /// `.nil` for a miss, which is `resultOrNil` at the `findClassRexx` stub.
+    /// `upper` is already uppercased, which is how every table here is keyed.
+    ///
+    /// **The security-manager steps are absent and cannot fire**: a manager
+    /// only reaches a package through `~setSecurityManager`, whose
+    /// argument-taking form this crate refuses.
+    pub(crate) fn package_find_class(
+        &mut self,
+        package: Option<ProgramId>,
+        upper: &[u8],
+    ) -> ObjRef {
+        if let Some(found) = self.installed_class_of(package, upper) {
+            return found;
+        }
+        if let Some(found) = self.package_public_class_of(package, upper) {
+            return found;
+        }
+        let local = self.package_local(match package {
+            Some(program) => Package::Program(program),
+            None => Package::Rexx,
+        });
+        if let Some(found) = self.native_map_entry(local, upper) {
+            return found;
+        }
+        if let Ok(Some(found)) =
+            self.directory_lookup(&[EnvScope::Local, EnvScope::Environment], upper)
+        {
+            return found;
+        }
+        ObjRef::NIL
+    }
+
+    /// `PackageClass::findPublicClass` (`classes/PackageClass.cpp:1013`) at
+    /// the `findPublicClassRexx` stub: this package's own public classes, the
+    /// ones it imported, and then the REXX package's.
+    pub(crate) fn package_find_public_class(
+        &mut self,
+        package: Option<ProgramId>,
+        upper: &[u8],
+    ) -> ObjRef {
+        self.package_public_class_of(package, upper)
+            .unwrap_or(ObjRef::NIL)
+    }
+
+    /// `installedClasses`: the classes `package`'s own directives and
+    /// `~addClass` installed, which for the REXX package is the native class
+    /// registry plus what the shipped `.orx` files declared.
+    fn installed_class_of(&mut self, package: Option<ProgramId>, upper: &[u8]) -> Option<ObjRef> {
+        let Some(program) = package else {
+            for program in self.library_programs.clone() {
+                if let Some(found) = self
+                    .package_classes
+                    .get(&program)
+                    .and_then(|held| held.get(upper))
+                {
+                    return Some(*found);
+                }
+            }
+            return self.classes().lookup(&String::from_utf8_lossy(upper));
+        };
+        self.package_classes.get(&program)?.get(upper).copied()
+    }
+
+    /// `PackageClass::findPublicClass`'s three steps, as an `Option`.
+    fn package_public_class_of(
+        &mut self,
+        package: Option<ProgramId>,
+        upper: &[u8],
+    ) -> Option<ObjRef> {
+        let Some(program) = package else {
+            return self.rexx_package_class(upper);
+        };
+        if let Some(found) = self
+            .package_public_classes
+            .get(&program)
+            .and_then(|held| held.get(upper))
+        {
+            return Some(*found);
+        }
+        if let Some(found) = self
+            .merged_public_classes
+            .get(&program)
+            .and_then(|held| held.get(upper))
+        {
+            return Some(*found);
+        }
+        self.rexx_package_class(upper)
+    }
+
+    /// `PackageClass::findRoutine` (`classes/PackageClass.cpp:897`):
+    /// `findLocalRoutine` and then `findPublicRoutine`, as the `Routine`
+    /// object or `.nil`.
+    ///
+    /// The REXX package declares no routine at all -- measured, oracle rc 0,
+    /// `.Class~package~routines` is empty -- so it answers `.nil` for every
+    /// name.
+    pub(crate) fn package_find_routine(
+        &mut self,
+        package: Option<ProgramId>,
+        upper: &[u8],
+    ) -> ObjRef {
+        let Some(program) = package else {
+            return ObjRef::NIL;
+        };
+        let found = [
+            &self.routines,
+            &self.package_public_routines,
+            &self.merged_public_routines,
+        ]
+        .into_iter()
+        .find_map(|table| {
+            table
+                .get(&program)
+                .and_then(|held| held.get(upper))
+                .copied()
+        });
+        match found.and_then(|installed| self.routine_object(installed)) {
+            Some(object) => object,
+            None => ObjRef::NIL,
+        }
+    }
+
+    /// The file `name` resolves to from `package`'s own directory --
+    /// `PackageClass::resolveProgramName`, which `~findProgram` and
+    /// `~loadPackage` each reach with their own resolve type.
+    ///
+    /// `requires` selects `RESOLVE_REQUIRES`, whose one difference is the
+    /// `.cls` extension tried ahead of every other; `~findProgram` passes
+    /// `RESOLVE_DEFAULT` and so does not try it.
+    pub(crate) fn resolve_program_name(
+        &self,
+        package: Option<ProgramId>,
+        name: &[u8],
+        requires: bool,
+    ) -> Option<String> {
+        let program = package.map(|program| self.package_path(program));
+        self.resolve_search(program, name, requires)
     }
 
     /// Which package a package object stands for, or `None` for a handle

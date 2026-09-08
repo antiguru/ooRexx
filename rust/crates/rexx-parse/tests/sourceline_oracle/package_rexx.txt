@@ -1,0 +1,182 @@
+count 181
+/* The interpreter's own package, which is the receiver almost every Package
+   row was first measured against and the one an implementation gets right by
+   accident.
+
+   Its class table is the only thing in it with content: 67 classes of which
+   62 are public, and the five that part are the mixins the shipped library
+   declares without PUBLIC. Every other table is empty, every write refuses
+   with 98.984, and four readers answer differently from a program's package
+   -- ~trace, ~prolog, ~source and ~options.
+
+   Every class name is printed, because a body answering a StringTable of the
+   wrong 67 names agrees with any test that reads only the rendering or the
+   count. */
+
+rexx = .Class~package
+
+/* The class names are read back from a list this program carries, not
+   enumerated: the REXX package's own names are longer than seven bytes and a
+   DO OVER over one of the interpreter's own StringTables binds a dead handle
+   for such a name under collect-on-every-allocation -- a defect this program
+   found and does not own, reproduced with `.methods` alone in
+   docs/superpowers/records/2026-09-07-phase-5i-introspection/found-defect-do-over-native-table-rooting.md.
+   Reading back by name is the stronger witness anyway: it says WHICH names
+   must be there, where an enumeration only says how many. The count below is
+   what says there are no others. */
+
+expected = .array~new
+expected~append('ALARM')
+expected~append('ALARMNOTIFICATION')
+expected~append('ARGUTIL')
+expected~append('ARRAY')
+expected~append('BAG')
+expected~append('BAGMIXIN')
+expected~append('BUFFER')
+expected~append('CASELESSCOLUMNCOMPARATOR')
+expected~append('CASELESSCOMPARATOR')
+expected~append('CASELESSDESCENDINGCOMPARATOR')
+expected~append('CIRCULARQUEUE')
+expected~append('CLASS')
+expected~append('COLLECTION')
+expected~append('COLUMNCOMPARATOR')
+expected~append('COMPARABLE')
+expected~append('COMPARATOR')
+expected~append('DATETIME')
+expected~append('DESCENDINGCOMPARATOR')
+expected~append('DIRECTORY')
+expected~append('EVENTSEMAPHORE')
+expected~append('FILE')
+expected~append('IDENTITYTABLE')
+expected~append('INPUTOUTPUTSTREAM')
+expected~append('INPUTSTREAM')
+expected~append('INVERTINGCOMPARATOR')
+expected~append('LIST')
+expected~append('LOCALSERVER')
+expected~append('MANYITEMMIXIN')
+expected~append('MAPCOLLECTION')
+expected~append('MESSAGE')
+expected~append('MESSAGENOTIFICATION')
+expected~append('METHOD')
+expected~append('MONITOR')
+expected~append('MUTABLEBUFFER')
+expected~append('MUTEXSEMAPHORE')
+expected~append('NUMERICCOMPARATOR')
+expected~append('OBJECT')
+expected~append('ORDERABLE')
+expected~append('ORDEREDCOLLECTION')
+expected~append('OUTPUTSTREAM')
+expected~append('PACKAGE')
+expected~append('POINTER')
+expected~append('PROPERTIES')
+expected~append('QUEUE')
+expected~append('RELATION')
+expected~append('REXXCONTEXT')
+expected~append('REXXQUEUE')
+expected~append('ROUTINE')
+expected~append('SET')
+expected~append('SETCOLLECTION')
+expected~append('SETMIXIN')
+expected~append('SINGLETON')
+expected~append('STACKFRAME')
+expected~append('STEM')
+expected~append('STREAM')
+expected~append('STREAMSUPPLIER')
+expected~append('STRING')
+expected~append('STRINGTABLE')
+expected~append('SUPPLIER')
+expected~append('SUPPLIERMIXIN')
+expected~append('TABLE')
+expected~append('TICKER')
+expected~append('TIMESPAN')
+expected~append('TRACEOBJECT')
+expected~append('VALIDATE')
+expected~append('VARIABLEREFERENCE')
+expected~append('WEAKREFERENCE')
+notPublic = .array~of('BAGMIXIN', 'LOCALSERVER', 'MANYITEMMIXIN', ,
+                      'SETMIXIN', 'SUPPLIERMIXIN')
+
+do i = 1 to expected~items
+  name = expected[i]
+  public = (notPublic~index(name) == .nil)
+  say name 'in classes is a' rexx~classes[name]~class~id ,
+      'in publicClasses is a' rexx~publicClasses[name]~class~id ,
+      'and is public' public
+end
+
+classes = 0
+do name over rexx~classes
+  classes = classes + 1
+end
+say 'classes total' classes
+
+public = 0
+do name over rexx~publicClasses
+  public = public + 1
+end
+say 'publicClasses total' public
+
+say 'a Setup.cpp class is in both' rexx~classes['ARRAY']~id rexx~publicClasses['ARRAY']~id
+
+call empty 'routines', rexx~routines
+call empty 'publicRoutines', rexx~publicRoutines
+call empty 'importedRoutines', rexx~importedRoutines
+call empty 'importedClasses', rexx~importedClasses
+call empty 'definedMethods', rexx~definedMethods
+call empty 'resources', rexx~resources
+call empty 'namespaces', rexx~namespaces
+say 'importedPackages class' rexx~importedPackages~class~id 'items' rexx~importedPackages~items
+
+say 'name' rexx~name
+say 'sourceSize' rexx~sourceSize 'source items' rexx~source~items
+say 'source class' rexx~source~class~id
+say 'sourceLine 1 [' || rexx~sourceLine(1) || ']'
+say 'trace [' || rexx~trace || ']'
+say 'prolog' rexx~prolog~class~id
+say 'options [' || rexx~options || ']'
+say 'digits' rexx~digits 'form' rexx~form 'fuzz' rexx~fuzz
+say 'local class' rexx~local~class~id
+
+say 'findClass environment' rexx~findClass('ARRAY')~id
+say 'findClass miss' rexx~findClass('NoSuchClassAnywhere')~class~id
+say 'findPublicClass environment' rexx~findPublicClass('ARRAY')~id
+say 'findRoutine miss' rexx~findRoutine('NoSuchRoutine')~class~id
+say 'findNamespace rexx' rexx~findNamespace('REXX')~class~id
+say 'findNamespace miss' rexx~findNamespace('NoSuchNamespace')~class~id
+say 'resource miss' rexx~resource('NOSUCH')~class~id
+/* An absolute name, because the REXX package has no program directory of its
+   own to resolve a bare one against: it searches the CURRENT directory, and
+   the two interpreters are not run from the same one here. */
+mine = .context~package~name
+say 'findProgram an absolute name' (rexx~findProgram(mine) == mine)
+say 'findProgram miss' rexx~findProgram('no_such_file_at_all.rex')~class~id
+
+added = .Routine~new('ADDED', .array~of('return 1'))
+say 'addRoutine:' try('rexx~addRoutine("Q", added)')
+say 'addPublicRoutine:' try('rexx~addPublicRoutine("Q", added)')
+say 'addClass:' try('rexx~addClass("Q", .Object)')
+say 'addPublicClass:' try('rexx~addPublicClass("Q", .Object)')
+say 'addPackage:' try('rexx~addPackage(.context~package)')
+say 'loadPackage:' try('rexx~loadPackage("package_tables_dep.cls")')
+say 'setSecurityManager:' try('rexx~setSecurityManager')
+
+exit 0
+
+empty:
+  parse arg emptylabel
+  emptytable = arg(2)
+  emptycount = 0
+  do emptyname over emptytable
+    emptycount = emptycount + 1
+    say emptylabel 'unexpectedly holds' emptyname
+  end
+  say emptylabel 'class' emptytable~class~id 'entries' emptycount
+  return
+
+try:
+  parse arg trysource
+  signal on syntax name raised
+  interpret 'tryanswer =' trysource
+  return 'answered a' tryanswer~class~id
+raised:
+  return 'raised' rc || '.' || condition('e')

@@ -592,7 +592,11 @@ const SHARED_ANSWERS: &[(&str, &[&str])] = &[
     ),
     (
         "88.914",
-        &["argument_not_a_class", "scope_override_not_a_class"],
+        &[
+            "argument_not_a_class",
+            "argument_not_an_instance",
+            "scope_override_not_a_class",
+        ],
     ),
 ];
 

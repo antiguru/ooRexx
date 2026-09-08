@@ -69,6 +69,55 @@ pub(crate) struct PackageOptions {
     /// the program, and suppresses it when another file requires this one --
     /// the directives install either way.
     pub(crate) suppress_prolog: bool,
+    /// Which options a `::OPTIONS` directive named, as opposed to which are
+    /// in force -- `PackageClass::isExplicit*Option`, which
+    /// `Package~options('X')` renders and which the class-level override
+    /// mechanism consults before it writes.
+    explicit: Explicit,
+}
+
+/// The `::OPTIONS` subkeywords a package's directives actually named, in the
+/// order `PackageClass::optionsExplicitlySetToString`
+/// (`classes/PackageClass.cpp:2910`) writes them.
+///
+/// `PROLOG` and `NOPROLOG` are two flags there and two here: measured,
+/// oracle rc 0, `::options prolog numeric noinherit` renders
+/// `NUMERIC PROLOG` and `::options noprolog ...` renders `NOPROLOG`.
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+struct Explicit {
+    named: [bool; EXPLICIT_WORDS.len()],
+}
+
+/// The subkeyword each [`Explicit`] flag stands for, in rendering order.
+const EXPLICIT_WORDS: [&str; 13] = [
+    "DIGITS",
+    "FORM",
+    "FUZZ",
+    "NUMERIC",
+    "ERROR",
+    "FAILURE",
+    "LOSTDIGITS",
+    "NOSTRING",
+    "NOTREADY",
+    "NOVALUE",
+    "NOPROLOG",
+    "PROLOG",
+    "TRACE",
+];
+
+impl Explicit {
+    /// The blank-delimited subkeyword list, empty for a package whose
+    /// directives named none -- measured, oracle rc 0, a file with no
+    /// `::OPTIONS` renders the null string.
+    fn to_text(self) -> Vec<u8> {
+        let named: Vec<&str> = EXPLICIT_WORDS
+            .iter()
+            .zip(self.named)
+            .filter(|(_, named)| *named)
+            .map(|(word, _)| *word)
+            .collect();
+        named.join(" ").into_bytes()
+    }
 }
 
 /// Which conditions one activation raises as a SYNTAX error rather than as a
@@ -155,6 +204,34 @@ impl PackageOptions {
     /// directive's: measured, `::options fuzz 5` and `::options digits 3` in
     /// separate directives is the same 33.1 the two written together give.
     pub(crate) fn apply(&mut self, option: &PackageOption) -> Result<(), SettingsError> {
+        let mut names = |word: &str| {
+            let which = EXPLICIT_WORDS
+                .iter()
+                .position(|candidate| *candidate == word)
+                .expect("every name passed here is an EXPLICIT_WORDS entry");
+            self.explicit.named[which] = true;
+        };
+        match option {
+            PackageOption::Digits(_) => names("DIGITS"),
+            PackageOption::Fuzz(_) => names("FUZZ"),
+            PackageOption::Form(_) => names("FORM"),
+            PackageOption::Trace(_) => names("TRACE"),
+            PackageOption::Condition { which, .. } => match which {
+                ConditionOption::All => {
+                    for name in ESCALATABLE {
+                        names(&String::from_utf8_lossy(name));
+                    }
+                }
+                ConditionOption::Error => names("ERROR"),
+                ConditionOption::Failure => names("FAILURE"),
+                ConditionOption::LostDigits => names("LOSTDIGITS"),
+                ConditionOption::NoString => names("NOSTRING"),
+                ConditionOption::NotReady => names("NOTREADY"),
+                ConditionOption::NoValue => names("NOVALUE"),
+            },
+            PackageOption::Prolog(enabled) => names(if *enabled { "PROLOG" } else { "NOPROLOG" }),
+            PackageOption::NumericInherit(_) => names("NUMERIC"),
+        }
         match option {
             PackageOption::Digits(digits) => self.numeric.set_digits(*digits as u64)?,
             PackageOption::Fuzz(fuzz) => self.numeric.set_fuzz(*fuzz as u64)?,
@@ -186,6 +263,164 @@ impl PackageOptions {
     /// asks in order to arm the arithmetic path's own gate.
     pub(crate) fn escalates_lostdigits(&self) -> bool {
         self.syntax.raises(b"LOSTDIGITS")
+    }
+
+    /// `PackageSetting::toString` (`execution/PackageSetting.hpp:122`): these
+    /// settings written back as the `::OPTIONS` directive that would produce
+    /// them, which `Package~options` answers when sent no option name.
+    ///
+    /// `trace` is the setting the package carries, and `None` renders
+    /// `?n/a?` -- the oracle's own last arm, reached by a `PackageSetting`
+    /// whose trace flags were never defaulted. Measured, oracle rc 0: the
+    /// REXX package's `~options` ends `TRACE ?n/a?` where a program
+    /// package's ends `TRACE NORMAL`.
+    pub(crate) fn to_options_string(&self, trace: Option<TraceMode>) -> Vec<u8> {
+        let condition = |which: &[u8]| {
+            if self.syntax.raises(which) {
+                "SYNTAX"
+            } else {
+                "CONDITION"
+            }
+        };
+        format!(
+            "::OPTIONS DIGITS {} FORM {} FUZZ {} NUMERIC {} ERROR {} FAILURE {} LOSTDIGITS {} \
+NOSTRING {} NOTREADY {} NOVALUE {} {} TRACE {}",
+            self.numeric.digits(),
+            form_word(self.numeric.form()),
+            self.numeric.fuzz(),
+            if self.numeric_inherit {
+                "INHERIT"
+            } else {
+                "NOINHERIT"
+            },
+            condition(b"ERROR"),
+            condition(b"FAILURE"),
+            condition(b"LOSTDIGITS"),
+            condition(b"NOSTRING"),
+            condition(b"NOTREADY"),
+            condition(b"NOVALUE"),
+            if self.suppress_prolog {
+                "NOPROLOG"
+            } else {
+                "PROLOG"
+            },
+            trace.map_or("?n/a?", trace_word),
+        )
+        .into_bytes()
+    }
+
+    /// What `Package~options(name)` answers for one option name.
+    ///
+    /// The oracle switches on the first byte and, for `F` and the `NO`
+    /// spellings, on the second -- `PackageClass::options`
+    /// (`classes/PackageClass.cpp:2190`), whose own list of accepted names is
+    /// what [`OptionQuery::Unknown`] reports. Measured at rc 0 in one program
+    /// carrying `::options digits 13 novalue syntax`, one send per name:
+    /// `EXPLICITLYDEFINED` answers `CONDITION` because its `E` reaches the
+    /// ERROR arm first, `INITIALOPTIONS` and `RESETOPTIONS` both answer the
+    /// whole `::OPTIONS` string, and `SETOPTIONS` and `ALL` are argument
+    /// errors rather than answers because each needs the second argument.
+    ///
+    /// **`I` and `R` answer these settings and not the language defaults.**
+    /// `saveInitialPackageSettings` snapshots the package's own settings, and
+    /// nothing here can move them afterwards -- the setting form of
+    /// `~options` is refused -- so the snapshot and the current settings are
+    /// the same string. Measured: in the program above both answer
+    /// `DIGITS 13 ... NOVALUE SYNTAX`, not `DIGITS 9 ... NOVALUE CONDITION`.
+    pub(crate) fn option_query(&self, name: &[u8], trace: Option<TraceMode>) -> OptionQuery {
+        let upper: Vec<u8> = name.to_ascii_uppercase();
+        let condition = |which: &[u8]| {
+            OptionQuery::Value(
+                if self.syntax.raises(which) {
+                    "SYNTAX"
+                } else {
+                    "CONDITION"
+                }
+                .as_bytes()
+                .to_vec(),
+            )
+        };
+        let text = |value: &str| OptionQuery::Value(value.as_bytes().to_vec());
+        let Some(first) = upper.first() else {
+            return OptionQuery::Unknown;
+        };
+        match (first, upper.get(1), upper.get(2)) {
+            (b'A', _, _) => OptionQuery::NeedsValue,
+            (b'D', _, _) => text(&self.numeric.digits().to_string()),
+            (b'E', _, _) => condition(b"ERROR"),
+            (b'F', Some(b'A'), _) => condition(b"FAILURE"),
+            (b'F', Some(b'O'), _) => text(form_word(self.numeric.form())),
+            (b'F', Some(b'U'), _) => text(&self.numeric.fuzz().to_string()),
+            (b'I' | b'R', _, _) => OptionQuery::ReadOnly1(self.to_options_string(trace)),
+            (b'L', _, _) => condition(b"LOSTDIGITS"),
+            (b'N', Some(b'U'), _) => text(if self.numeric_inherit {
+                "INHERIT"
+            } else {
+                "NOINHERIT"
+            }),
+            (b'N', Some(b'O'), Some(b'S')) => condition(b"NOSTRING"),
+            (b'N', Some(b'O'), Some(b'T')) => condition(b"NOTREADY"),
+            (b'N', Some(b'O'), Some(b'V')) => condition(b"NOVALUE"),
+            (b'P', _, _) => text(if self.suppress_prolog {
+                "NOPROLOG"
+            } else {
+                "PROLOG"
+            }),
+            (b'S', _, _) => OptionQuery::MissingSecond,
+            (b'T', _, _) => text(trace.map_or("?n/a?", trace_word)),
+            (b'X', _, _) => OptionQuery::ReadOnly1(self.explicit.to_text()),
+            _ => OptionQuery::Unknown,
+        }
+    }
+}
+
+/// What one `Package~options(name)` send answers, or which refusal it earns.
+///
+/// The three refusing arms are separate because the oracle raises three
+/// different errors and the caller substitutes the name into one of them:
+/// measured at rc 0 for the answers and rc 163 for each refusal, `~options('S')`
+/// is 93.901, `~options('A')` is 93.903 and `~options('N')` is 93.914.
+pub(crate) enum OptionQuery {
+    /// The option's current value.
+    Value(Vec<u8>),
+    /// An option that answers a value and refuses to be set: `I`, `R` and
+    /// `X`, each of which is 93.902 `1 expected` when a second argument
+    /// arrives. Measured at rc 163, one send each.
+    ReadOnly1(Vec<u8>),
+    /// `S[etOptions]`, which reads nothing and needs the second argument --
+    /// `stringArgument(strNewValue, ARG_TWO)`, 93.901.
+    MissingSecond,
+    /// `A[ll]`, whose own arm raises before the switch -- 93.903.
+    NeedsValue,
+    /// A name none of the arms accept -- 93.914, naming the whole list.
+    Unknown,
+}
+
+/// `NUMERIC FORM`'s two words, as `PackageSetting::toString` writes them.
+fn form_word(form: Form) -> &'static str {
+    match form {
+        Form::Scientific => "SCIENTIFIC",
+        Form::Engineering => "ENGINEERING",
+    }
+}
+
+/// The word `PackageSetting::toString` writes for one trace setting.
+///
+/// Keyed off [`TraceMode::letter`] rather than off the flags, because the C++
+/// tests the flags in a fixed order where the letters are already one per
+/// setting. Measured, oracle rc 0, one `::OPTIONS TRACE <letter>` per run:
+/// the nine letters answer these nine words.
+fn trace_word(mode: TraceMode) -> &'static str {
+    match mode.letter {
+        b'A' => "ALL",
+        b'C' => "COMMANDS",
+        b'E' => "ERROR",
+        b'F' => "FAILURE",
+        b'I' => "INTERMEDIATES",
+        b'L' => "LABELS",
+        b'O' => "OFF",
+        b'R' => "RESULTS",
+        _ => "NORMAL",
     }
 }
 

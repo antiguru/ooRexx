@@ -45,7 +45,7 @@ mod gate_walk;
 use std::ops::Range;
 
 use gate_walk::{body_of_directive, children_of, corpus_dir, each_expr, rex_files_under};
-use rexx_parse::{Expr, ExprKind, Operator, Program, parse_program};
+use rexx_parse::{DirectiveKind, Expr, ExprKind, Operator, Program, parse_program};
 
 /// The non-whitespace-class bytes of `text[range]`, each with its offset.
 ///
@@ -292,7 +292,12 @@ fn tiling_errors(text: &[u8], spans: &[Range<usize>], errors: &mut Vec<String>) 
 
 /// The program's clause spans in source order: the main body's instructions,
 /// then each directive's own clause followed by its body's instructions.
-fn clause_spans(p: &Program) -> Vec<Range<usize>> {
+///
+/// **A `::RESOURCE` owns lines rather than instructions**, and they are the
+/// one thing here that is not reachable through a `CodeBody`: `Resource`
+/// carries a range per body line, and its terminator line carries no range at
+/// all, so [`resource_span`] derives one from the marker the directive named.
+fn clause_spans(p: &Program, text: &[u8]) -> Vec<Range<usize>> {
     let mut spans: Vec<Range<usize>> = p
         .main
         .instructions
@@ -304,8 +309,27 @@ fn clause_spans(p: &Program) -> Vec<Range<usize>> {
         if let Some(body) = body_of_directive(&d.kind) {
             spans.extend(body.instructions.iter().map(|i| i.clause_span.clone()));
         }
+        if let DirectiveKind::Resource(resource) = &d.kind {
+            spans.extend(resource.lines.iter().cloned());
+            spans.push(resource_span(text, d.clause_span.end, resource));
+        }
     }
     spans
+}
+
+/// The span of one `::RESOURCE`'s terminator line.
+///
+/// The parser keeps the marker's text and not its position, so it is found
+/// here: the first occurrence at or after the body, which is what ended the
+/// body in the first place.
+fn resource_span(text: &[u8], after: usize, resource: &rexx_parse::Resource) -> Range<usize> {
+    let from = resource.lines.last().map_or(after, |line| line.end);
+    let marker = &resource.end_marker;
+    let at = text[from..]
+        .windows(marker.len())
+        .position(|window| window == marker.as_ref())
+        .map_or(from, |offset| from + offset);
+    at..at + marker.len()
 }
 
 #[test]
@@ -325,7 +349,7 @@ fn every_corpus_program_tiles() {
             binary_tightness_errors(&text, e, &mut errors);
             prefix_order_errors(e, &mut errors);
         });
-        tiling_errors(&text, &clause_spans(&p), &mut errors);
+        tiling_errors(&text, &clause_spans(&p, &text), &mut errors);
 
         for error in errors {
             failures.push(format!("{}: {error}", path.display()));

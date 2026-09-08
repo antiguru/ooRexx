@@ -882,29 +882,6 @@ impl Loud {
         }
     }
 
-    /// `~publicClasses` sent to the package the primitive classes belong to.
-    ///
-    /// `completeSystemClass` files every `Setup.cpp` class in that package as
-    /// a public class (`memory/Setup.cpp:205`), and the library's own
-    /// `::CLASS ... PUBLIC` directives install into the same package, so the
-    /// oracle's table holds both sets. **This crate keeps them apart**: a
-    /// class the library declares is filed in the declaring program's own
-    /// table by `Interp::record_package_class`, and a `Setup.cpp` class is in
-    /// `ClassRegistry` and in no package table at all. Measured, oracle
-    /// rc 0: `.Array~package~publicClasses["ARRAY"]` is `The Array class`,
-    /// and `ARRAY` is a name no table this crate could answer from holds.
-    /// Answering from what it has would make that read `The NIL
-    /// object`, which is the shape of wrong answer a `StringTable` cannot
-    /// refuse its way out of: `.environment` reaches the same names through
-    /// [`Loud::environment_entry`] because a `Directory` this crate builds is
-    /// asked by identity, and `~publicClasses` hands back a fresh table on
-    /// every ask.
-    fn rexx_package_classes() -> Loud {
-        Loud {
-            message: owned_message("the REXX package's class table", Some("Phase 5")),
-        }
-    }
-
     /// A collection this crate can name but cannot read: one whose entries
     /// the oracle has and this crate answers per name through
     /// [`Loud::environment_entry`] instead of building.
@@ -1008,6 +985,29 @@ impl Loud {
     fn security_manager() -> Loud {
         Loud {
             message: owned_message("a security manager", Some("D12, Phase 7")),
+        }
+    }
+
+    /// `Package~options(name, value)` and `Package~defaultOptions(name,
+    /// value)`, each of which writes a package setting rather than reading
+    /// one.
+    ///
+    /// Measured, oracle rc 0: `p~options('DIGITS', 5)` answers the previous
+    /// `9` and leaves `p~digits` at `5`, so the write is observable through
+    /// every later read of that package's settings. Answering the previous
+    /// value without performing it would run on at rc 0 with the wrong
+    /// settings in force.
+    fn package_option_write() -> Loud {
+        Loud {
+            message: owned_message("a package settings write", Some("D12, Phase 7")),
+        }
+    }
+
+    /// `Package~loadPackage(name, source)`, whose second argument builds a
+    /// package out of source lines under a name that is not a file.
+    fn package_from_source() -> Loud {
+        Loud {
+            message: owned_message("a loadPackage source array", Some("Phase 7")),
         }
     }
 
@@ -3274,7 +3274,7 @@ struct Interp {
     /// the required file's public class answer `.Widget` and its public
     /// routine answer a bare call. One file may be registered under several
     /// qualifiers.
-    package_namespaces: HashMap<ProgramId, HashMap<Box<[u8]>, ProgramId>>,
+    package_namespaces: HashMap<ProgramId, HashMap<Box<[u8]>, Package>>,
     /// The `Directory` `Package~local` answers, per package, built on first
     /// ask -- `PackageClass::getPackageLocal` (`classes/PackageClass.cpp:2131`
     /// region), which creates it lazily too.
@@ -3396,6 +3396,41 @@ struct Interp {
     ///
     /// [`Interp::package_objects`]: Interp::package_objects
     package_tables: HashMap<(ProgramId, environment::PackageTable), ObjRef>,
+    /// The one `Routine` object standing for each installed routine.
+    ///
+    /// **The identity is observable and is the reason this exists.**
+    /// Measured, oracle rc 0: `p~addRoutine('NEWR', r)` then
+    /// `(p~routines['NEWR'] == r)` is `1`, and so is
+    /// `(p~findRoutine('NEWR') == r)`. `Package~routines`,
+    /// `~publicRoutines`, `~importedRoutines` and the two `find*Routine`
+    /// readers all answer out of here, so an object reached through a
+    /// package's own table and one reached through an import are the same
+    /// object.
+    ///
+    /// Keyed by the routine rather than by a package and a name, because an
+    /// imported name and the name it was declared under need not be the same
+    /// -- `~addPublicRoutine` files a `Routine` under any name the caller
+    /// gives, and `mergeRequired` carries that name into the importing
+    /// package.
+    ///
+    /// Rooted by the `.ROUTINES` table each entry is also in, which is a
+    /// [`rexx_core::RootSet::add_global`]; nothing here roots on its own.
+    routine_objects: HashMap<InstalledRoutine, ObjRef>,
+    /// The packages each program has imported, in the order they were added
+    /// -- `PackageClass`'s `loadedPackages`, which `~importedPackages`
+    /// answers a copy of.
+    ///
+    /// **Appended by a `::REQUIRES` as well as by `~addPackage`**, because
+    /// `PackageClass::loadRequires` ends with `addPackage(packageInstance)`
+    /// (`classes/PackageClass.cpp:1331`). Measured, oracle rc 0: a file
+    /// carrying one `::requires 'lib.rex'` answers `~importedPackages~items`
+    /// `1`.
+    ///
+    /// **A package is added once**: `addPackage` returns early when the list
+    /// already holds it (`classes/PackageClass.cpp:1377`). Measured, oracle
+    /// rc 0, `p~addPackage` of two separate `.Package~new('other.rex')`
+    /// answers leaves the count at `1`, because both name one loaded package.
+    package_imports: HashMap<ProgramId, Vec<Package>>,
     /// The value each `::CONSTANT` accessor answers, keyed by the directive
     /// that declared it.
     ///
@@ -4332,7 +4367,7 @@ struct Interp {
 /// under and the `Rc<Program>` the activation holds -- must name the same
 /// program or a routine would run under another program's plan. Both come
 /// from this one field, so they cannot come apart.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 struct InstalledRoutine {
     program: ProgramId,
     directive: usize,
@@ -4681,6 +4716,8 @@ impl Interp {
             package_objects: HashMap::new(),
             program_routine_objects: HashMap::new(),
             package_tables: HashMap::new(),
+            routine_objects: HashMap::new(),
+            package_imports: HashMap::new(),
             constant_values: HashMap::new(),
             annotations: HashMap::new(),
             compiled_methods: 0,
@@ -5472,6 +5509,7 @@ impl Interp {
             };
             match self.load_requires(id, &requires.name) {
                 Ok(required) => {
+                    self.add_imported_package(id, Package::Program(required));
                     self.merge_required(id, required);
                     // `RequiresDirective::install`
                     // (`instructions/RequiresDirective.cpp:137`): the
@@ -5483,7 +5521,7 @@ impl Interp {
                         self.package_namespaces
                             .entry(id)
                             .or_default()
-                            .insert(name, required);
+                            .insert(name, Package::Program(required));
                     }
                 }
                 Err(failure) => {
@@ -5563,6 +5601,44 @@ impl Interp {
         Ok(())
     }
 
+    /// `PackageClass::addPackage` (`classes/PackageClass.cpp:1367`): records
+    /// `from` as one of `into`'s imports, once.
+    ///
+    /// Answers whether the list grew, which is what `~addPackage` needs to
+    /// know before it merges -- the C++ returns from `addPackage` without
+    /// merging when the package is already there.
+    ///
+    /// **The interpreter's own package can be imported**, which is why this
+    /// takes a [`Package`] rather than a program: measured, oracle rc 0,
+    /// `.context~package~addPackage(.Class~package)` answers a `Package`,
+    /// leaves `~importedPackages` at one entry whose `~name` is `REXX`, and
+    /// fills `~importedClasses` with 62 entries.
+    fn add_imported_package(&mut self, into: ProgramId, from: Package) -> bool {
+        let held = self.package_imports.entry(into).or_default();
+        if held.contains(&from) {
+            return false;
+        }
+        held.push(from);
+        true
+    }
+
+    /// [`Interp::merge_required`] for either kind of package.
+    ///
+    /// The interpreter's own contributes its public classes and no routines
+    /// -- measured, oracle rc 0, importing it leaves `~importedRoutines`
+    /// empty and `~importedClasses` at the 62 names `~publicClasses` answers
+    /// for it.
+    fn merge_package(&mut self, into: ProgramId, from: Package) {
+        let from = match from {
+            Package::Program(program) => return self.merge_required(into, program),
+            Package::Rexx => self.rexx_package_class_table(true),
+        };
+        let target = self.merged_public_classes.entry(into).or_default();
+        for (name, class) in from {
+            target.entry(name).or_insert(class);
+        }
+    }
+
     /// The public routines and classes `from` contributes to `into`: its own
     /// first, then the ones it imported.
     ///
@@ -5615,7 +5691,10 @@ impl Interp {
             .get(&package)?
             .get(upper)
             .copied()
-            .map(Namespace::Package)
+            .map(|package| match package {
+                Package::Rexx => Namespace::Rexx,
+                Package::Program(program) => Namespace::Package(program),
+            })
     }
 
     /// The class `namespace:name` names from `package`, or the oracle's own
@@ -5713,22 +5792,76 @@ impl Interp {
     /// candidate is put to -- `stat` plus `S_ISREG`, which is
     /// `SysFileSystem::checkCurrentFile` (`platform/unix/SysFileSystem.cpp:435`).
     fn resolve_requires(&self, id: ProgramId, name: &[u8]) -> Option<String> {
+        self.resolve_search(Some(self.package_path(id)), name, true)
+    }
+
+    /// [`Interp::resolve_requires`] for a caller that names the searching
+    /// package's path itself and chooses the resolve type.
+    ///
+    /// `program` is `None` for a search with no package directory to start
+    /// from, which is what the REXX package's own `~findProgram` is;
+    /// `requires` is `RESOLVE_REQUIRES`, whose one difference is the `.cls`
+    /// extension tried ahead of every other.
+    pub(crate) fn resolve_search(
+        &self,
+        program: Option<&str>,
+        name: &[u8],
+        requires: bool,
+    ) -> Option<String> {
         let name = std::str::from_utf8(name).ok()?;
-        let program = self.package_path(id);
         let entries = require::search_entries(
-            require::program_directory(program),
+            program.and_then(require::program_directory),
             std::env::var("REXX_PATH").ok().as_deref(),
             std::env::var("PATH").ok().as_deref(),
         );
         let cwd = std::env::current_dir().ok()?;
         let cwd = cwd.to_str()?;
-        for candidate in require::candidates(name, &entries, require::program_extension(program)) {
+        let extension = program.and_then(require::program_extension);
+        for candidate in require::candidates(name, &entries, extension, requires) {
             let resolved = require::normalize(&candidate, cwd);
             if std::fs::metadata(&resolved).is_ok_and(|meta| meta.is_file()) {
                 return Some(resolved);
             }
         }
         None
+    }
+
+    /// `PackageClass::loadPackageRexx`'s load: the same
+    /// [`Interp::load_requires`] a `::REQUIRES` performs, which is what the
+    /// C++ calls too (`classes/PackageClass.cpp:1842`).
+    pub(crate) fn load_package(
+        &mut self,
+        program: ProgramId,
+        name: &[u8],
+    ) -> Result<ProgramId, Failure> {
+        self.load_requires(program, name)
+    }
+
+    /// `PackageClass::newRexx`'s in-memory form: a package compiled from
+    /// source lines, its directives installed and its prologue run.
+    ///
+    /// **The name is kept as written and not resolved**, which is what
+    /// `~name` then answers -- measured, oracle rc 0,
+    /// `.Package~new('inmem.rex', <lines>)~name` is `inmem.rex` where the
+    /// file form answers the resolved absolute path.
+    pub(crate) fn package_from_source(
+        &mut self,
+        name: &[u8],
+        lines: &[Vec<u8>],
+    ) -> Result<ProgramId, Failure> {
+        let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
+        let parsed = rexx_parse::parse_lines(&borrowed).map_err(|error| {
+            Failure::from(Loud::required_source(
+                &String::from_utf8_lossy(name),
+                &format!("{error}"),
+            ))
+        })?;
+        let parsed = Rc::new(parsed);
+        let id = ProgramId(self.programs.len());
+        self.programs.push(Rc::clone(&parsed));
+        self.compiled_method_names.insert(id, name.into());
+        self.run_loaded(parsed, id, CallType::Requires)?;
+        Ok(id)
     }
 
     /// Moves what the first walk recorded for one `::CLASS` and for the

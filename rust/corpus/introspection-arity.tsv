@@ -132,45 +132,45 @@ Object	string	instance	agree	rc0
 Object	unsetMethod	instance	exempt	private on Object -- measured, a send from outside a method answers 97.2, Object 'a K' cannot accept private message 'UNSETMETHOD' from this context, and self~unsetMethod from inside one works
 Object	||	instance	agree	rc0
 Package	addClass	instance	agree	rc0
-Package	addPackage	instance	send-differs	oracle rc0 VALUE a Package; crate rc120 rexx-exec: method "ADDPACKAGE" of class "Package" is not implemented (Phase 5)
+Package	addPackage	instance	agree	rc0
 Package	addPublicClass	instance	agree	rc0
-Package	addPublicRoutine	instance	send-differs	oracle rc0 VALUE a Package; crate rc120 rexx-exec: method "ADDPUBLICROUTINE" of class "Package" is not implemented (Phase 5)
-Package	addRoutine	instance	send-differs	oracle rc0 VALUE a Package; crate rc120 rexx-exec: method "ADDROUTINE" of class "Package" is not implemented (Phase 5)
+Package	addPublicRoutine	instance	agree	rc0
+Package	addRoutine	instance	agree	rc0
 Package	annotation	instance	agree	rc0
 Package	annotations	instance	agree	rc0
-Package	classes	instance	send-differs	oracle rc0 VALUE a StringTable; crate rc120 rexx-exec: method "CLASSES" of class "Package" is not implemented (Phase 5)
-Package	defaultOptions	class	send-differs	oracle rc0 VALUE ::OPTIONS DIGITS 9 FORM SCIENTIFIC FUZZ 0 NUMERIC NOIN; crate rc120 rexx-exec: method "DEFAULTOPTIONS" of class "Package" is not implemented (Phase 5)
-Package	definedMethods	instance	send-differs	oracle rc0 VALUE a StringTable; crate rc120 rexx-exec: method "DEFINEDMETHODS" of class "Package" is not implemented (Phase 5)
-Package	digits	instance	send-differs	oracle rc0 VALUE 9; crate rc120 rexx-exec: method "DIGITS" of class "Package" is not implemented (Phase 5)
-Package	findClass	instance	send-differs	oracle rc0 VALUE The K class; crate rc120 rexx-exec: method "FINDCLASS" of class "Package" is not implemented (Phase 5)
-Package	findNamespace	instance	send-differs	oracle rc0 VALUE The NIL object; crate rc120 rexx-exec: method "FINDNAMESPACE" of class "Package" is not implemented (Phase 5)
-Package	findProgram	instance	send-differs	oracle rc0 VALUE <probe directory>/source.rex; crate rc120 rexx-exec: method "FINDPROGRAM" of class "Package" is not implemented (Phase 5)
-Package	findPublicClass	instance	send-differs	oracle rc0 VALUE The K class; crate rc120 rexx-exec: method "FINDPUBLICCLASS" of class "Package" is not implemented (Phase 5)
-Package	findPublicRoutine	instance	send-differs	oracle rc0 VALUE a Routine; crate rc120 rexx-exec: method "FINDPUBLICROUTINE" of class "Package" is not implemented (Phase 5)
-Package	findRoutine	instance	send-differs	oracle rc0 VALUE a Routine; crate rc120 rexx-exec: method "FINDROUTINE" of class "Package" is not implemented (Phase 5)
-Package	form	instance	send-differs	oracle rc0 VALUE SCIENTIFIC; crate rc120 rexx-exec: method "FORM" of class "Package" is not implemented (Phase 5)
-Package	fuzz	instance	send-differs	oracle rc0 VALUE 0; crate rc120 rexx-exec: method "FUZZ" of class "Package" is not implemented (Phase 5)
-Package	importedClasses	instance	send-differs	oracle rc0 VALUE a StringTable; crate rc120 rexx-exec: method "IMPORTEDCLASSES" of class "Package" is not implemented (Phase 5)
-Package	importedPackages	instance	send-differs	oracle rc0 VALUE an Array; crate rc120 rexx-exec: method "IMPORTEDPACKAGES" of class "Package" is not implemented (Phase 5)
-Package	importedRoutines	instance	send-differs	oracle rc0 VALUE a StringTable; crate rc120 rexx-exec: method "IMPORTEDROUTINES" of class "Package" is not implemented (Phase 5)
-Package	loadLibrary	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: method "LOADLIBRARY" of class "Package" is not implemented (Phase 5)
-Package	loadPackage	instance	send-differs	oracle rc0 VALUE a Package; crate rc120 rexx-exec: method "LOADPACKAGE" of class "Package" is not implemented (Phase 5)
+Package	classes	instance	agree	rc0
+Package	defaultOptions	class	agree	rc0
+Package	definedMethods	instance	agree	rc0
+Package	digits	instance	agree	rc0
+Package	findClass	instance	agree	rc0
+Package	findNamespace	instance	agree	rc0
+Package	findProgram	instance	agree	rc0
+Package	findPublicClass	instance	agree	rc0
+Package	findPublicRoutine	instance	agree	rc0
+Package	findRoutine	instance	agree	rc0
+Package	form	instance	agree	rc0
+Package	fuzz	instance	agree	rc0
+Package	importedClasses	instance	agree	rc0
+Package	importedPackages	instance	agree	rc0
+Package	importedRoutines	instance	agree	rc0
+Package	loadLibrary	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: a native library load is not implemented (Phase 7)
+Package	loadPackage	instance	agree	rc0
 Package	local	instance	agree	rc0
 Package	name	instance	agree	rc0
-Package	namespaces	instance	send-differs	oracle rc0 VALUE a StringTable; crate rc120 rexx-exec: method "NAMESPACES" of class "Package" is not implemented (Phase 5)
-Package	new	class	send-differs	oracle rc0 VALUE a Package; crate rc120 rexx-exec: method "NEW" of class "Package" is not implemented (Phase 5)
-Package	options	instance	send-differs	oracle rc0 VALUE 9; crate rc120 rexx-exec: method "OPTIONS" of class "Package" is not implemented (Phase 5)
-Package	prolog	instance	send-differs	oracle rc0 VALUE a Routine; crate rc120 rexx-exec: method "PROLOG" of class "Package" is not implemented (Phase 5)
+Package	namespaces	instance	agree	rc0
+Package	new	class	agree	rc0
+Package	options	instance	agree	rc0
+Package	prolog	instance	agree	rc0
 Package	publicClasses	instance	agree	rc0
-Package	publicRoutines	instance	send-differs	oracle rc0 VALUE a StringTable; crate rc120 rexx-exec: method "PUBLICROUTINES" of class "Package" is not implemented (Phase 5)
-Package	resource	instance	send-differs	oracle rc0 VALUE an Array; crate rc120 rexx-exec: method "RESOURCE" of class "Package" is not implemented (Phase 5)
-Package	resources	instance	send-differs	oracle rc0 VALUE a StringTable; crate rc120 rexx-exec: method "RESOURCES" of class "Package" is not implemented (Phase 5)
-Package	routines	instance	send-differs	oracle rc0 VALUE a StringTable; crate rc120 rexx-exec: method "ROUTINES" of class "Package" is not implemented (Phase 5)
-Package	setSecurityManager	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: method "SETSECURITYMANAGER" of class "Package" is not implemented (Phase 5)
-Package	source	instance	send-differs	oracle rc0 VALUE an Array; crate rc120 rexx-exec: method "SOURCE" of class "Package" is not implemented (Phase 5)
-Package	sourceLine	instance	send-differs	oracle rc0 VALUE r = .context~package; crate rc120 rexx-exec: method "SOURCELINE" of class "Package" is not implemented (Phase 5)
-Package	sourceSize	instance	send-differs	oracle rc0 VALUE 36; crate rc120 rexx-exec: method "SOURCESIZE" of class "Package" is not implemented (Phase 5)
-Package	trace	instance	send-differs	oracle rc0 VALUE N; crate rc120 rexx-exec: method "TRACE" of class "Package" is not implemented (Phase 5)
+Package	publicRoutines	instance	agree	rc0
+Package	resource	instance	agree	rc0
+Package	resources	instance	agree	rc0
+Package	routines	instance	agree	rc0
+Package	setSecurityManager	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: a security manager is not implemented (D12, Phase 7)
+Package	source	instance	agree	rc0
+Package	sourceLine	instance	agree	rc0
+Package	sourceSize	instance	agree	rc0
+Package	trace	instance	agree	rc0
 Pointer	new	class	agree	rc0
 RexxContext	args	instance	agree	rc0
 RexxContext	condition	instance	agree	rc0

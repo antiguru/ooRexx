@@ -182,6 +182,18 @@
 //! it is not a specified observable. [`stderr_mode`] is where a program's
 //! comparison is chosen, and the scope, the controls and what the licence does
 //! **not** cover are `phase-4-exclusions.txt`'s Deviation 7.
+//!
+//! # DEVIATION 8: some programs' stdout is compared as a multiset of lines
+//!
+//! [`HASH_ORDERED_STDOUT`] names the programs whose `stdout` is sorted on both
+//! sides before comparison, through `StdoutComparison::Multiset`, because what
+//! they print is a hash-ordered collection's contents and neither
+//! interpreter's bucket order reproduces the other's. [`stdout_mode`] is where
+//! a program's comparison is chosen; the scope, the control and what the
+//! licence does **not** cover are `phase-4-exclusions.txt`'s Deviation 8.
+//! The list IS the licence: a sorted comparison hides a genuine ordering
+//! defect in any program that takes it, so an entry that does not need it is
+//! a red test rather than a harmless one.
 
 mod support;
 mod watchdog;
@@ -196,7 +208,8 @@ use std::process::{Command, Stdio};
 
 use rexx_exec::Outcome;
 use support::oracle::{
-    Oracle, StderrComparison, descriptor_diffs_with, did_not_finish, wrapped_exit_code,
+    Oracle, StderrComparison, StdoutComparison, descriptor_diffs_modes, did_not_finish,
+    wrapped_exit_code,
 };
 
 /// Env var that flips this test from a progress report into the phase gate.
@@ -400,6 +413,36 @@ const RAW_STDERR_COMPARISON: &[&str] = &[
 /// multiset, while both crate engines answered one ordering thirty times.
 const CONCURRENTLY_TRACED: &[&str] = &["lang/directive_options_trace_reply.rex"];
 
+/// Corpus programs whose `stdout` is compared as a multiset of lines, per
+/// DEVIATION 8: what they print is the contents of a hash-ordered
+/// `StringTable`, whose iteration order is a bucket walk on both sides and
+/// reproduces on neither.
+///
+/// **Each entry owes a reason, and the entries here share one**: a `Package`
+/// table reader answers a fresh `StringTable`, and `DO OVER` on it iterates
+/// that table's own order. Printing only a count instead would pass while the
+/// members differed, which is the weaker witness this licence exists to
+/// avoid.
+///
+/// `the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else`
+/// holds the list in both directions: every entry's raw stdout must actually
+/// differ, so a program that does not need the licence cannot sit here, and
+/// its sorted stdout must agree, so a real content difference is not hidden
+/// by it.
+const HASH_ORDERED_STDOUT: &[&str] = &["lang/package_writes.rex"];
+
+/// The `stdout` comparison one corpus entry gets.
+///
+/// Byte-for-byte is the default and every program not named in
+/// [`HASH_ORDERED_STDOUT`] keeps it.
+fn stdout_mode(rel_path: &str) -> StdoutComparison {
+    if HASH_ORDERED_STDOUT.contains(&rel_path) {
+        StdoutComparison::Multiset
+    } else {
+        StdoutComparison::Raw
+    }
+}
+
 /// The `stderr` comparison one corpus entry gets, and no entry may ask for two.
 ///
 /// DEVIATION 0's normalisation is the default; [`RAW_STDERR_COMPARISON`] is
@@ -420,8 +463,8 @@ fn stderr_mode(rel_path: &str) -> StderrComparison {
     }
 }
 
-/// Every entry in [`RAW_STDERR_COMPARISON`] and [`CONCURRENTLY_TRACED`] is a
-/// line some phase subset file actually names.
+/// Every entry in [`RAW_STDERR_COMPARISON`], [`CONCURRENTLY_TRACED`] and
+/// [`HASH_ORDERED_STDOUT`] is a line some phase subset file actually names.
 ///
 /// **[`stderr_mode`] matches by exact string equality against `rel_path`**,
 /// and nothing else checks that an entry corresponds to a real subset
@@ -435,7 +478,7 @@ fn stderr_mode(rel_path: &str) -> StderrComparison {
 /// **Both lists hold entries, so this test is load-bearing rather than an
 /// iteration over zero rows.**
 #[test]
-fn every_opted_in_stderr_comparison_names_a_program_the_subset_runs() {
+fn every_opted_in_comparison_names_a_program_the_subset_runs() {
     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
     let paths: Vec<PathBuf> = SUBSET_FILES
         .iter()
@@ -445,6 +488,7 @@ fn every_opted_in_stderr_comparison_names_a_program_the_subset_runs() {
     for (list, opted_into) in [
         (RAW_STDERR_COMPARISON, "raw"),
         (CONCURRENTLY_TRACED, "multiset"),
+        (HASH_ORDERED_STDOUT, "sorted stdout"),
     ] {
         for listed in list {
             assert!(
@@ -457,6 +501,48 @@ fn every_opted_in_stderr_comparison_names_a_program_the_subset_runs() {
     }
 }
 
+/// DEVIATION 8's own control: for every program on [`HASH_ORDERED_STDOUT`],
+/// the two sides' `stdout` **differs** raw and **agrees** sorted.
+///
+/// **Both halves are the licence.** The sorted half is what the entry claims;
+/// the raw half is what stops the list growing to cover a program that never
+/// needed it -- a relaxation nothing has to earn is one nobody will remove.
+/// A program whose raw stdout already agrees belongs on neither list, and a
+/// program whose sorted stdout differs has a content defect the licence does
+/// not cover and must not hide.
+///
+/// **And it does not license asserting nothing.** A sorted comparison of two
+/// empty strings agrees with anything, so a listed program whose oracle stdout
+/// is empty is a failure naming that, exactly as Deviation 7's guard is.
+#[test]
+fn the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else() {
+    let oracle = support::oracle::locate();
+    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+    assert!(
+        !HASH_ORDERED_STDOUT.is_empty(),
+        "the licensed list is empty, so this control iterates over nothing"
+    );
+    for listed in HASH_ORDERED_STDOUT {
+        let abs = fs::canonicalize(corpus_dir.join(listed))
+            .unwrap_or_else(|e| panic!("cannot resolve {listed}: {e}"));
+        let rust = run_rust(&abs);
+        let cpp = oracle.run(&abs);
+        assert!(
+            !cpp.stdout.is_empty(),
+            "{listed} is on HASH_ORDERED_STDOUT and the oracle wrote no stdout, so the              sorted comparison would agree with anything"
+        );
+        assert_ne!(
+            rust.stdout, cpp.stdout,
+            "{listed} agrees on stdout byte for byte, so it does not need Deviation 8 and              must not carry a relaxation that hides an ordering defect"
+        );
+        assert_eq!(
+            support::oracle::stdout_multiset(&rust.stdout),
+            support::oracle::stdout_multiset(&cpp.stdout),
+            "{listed} differs on stdout as a multiset of lines, which Deviation 8 does not              license: the two sides printed different content, not the same content in a              different order"
+        );
+    }
+}
+
 /// Runs one corpus entry under both interpreters and compares all three
 /// observable channels. `None` when they agree.
 fn check_case(oracle: &Oracle, corpus_dir: &Path, rel_path: &str) -> Option<Mismatch> {
@@ -466,7 +552,7 @@ fn check_case(oracle: &Oracle, corpus_dir: &Path, rel_path: &str) -> Option<Mism
     let rust = run_rust(&abs);
     let cpp = oracle.run(&abs);
 
-    // Checked before `descriptor_diffs_with` calls `cpp.expect_exit_code()`
+    // Checked before `descriptor_diffs_modes` calls `cpp.expect_exit_code()`
     // itself: that panic has no `rel_path` in it and fires from inside
     // `support/oracle.rs`, while this file's own report is built from the
     // `Mismatch`es this function returns and printed only after the whole
@@ -506,7 +592,7 @@ fn check_case(oracle: &Oracle, corpus_dir: &Path, rel_path: &str) -> Option<Mism
 
     let rust_exit = wrapped_exit_code(rust.exit_code);
 
-    let diffs = descriptor_diffs_with(&rust, &cpp, stderr_mode(rel_path));
+    let diffs = descriptor_diffs_modes(&rust, &cpp, stdout_mode(rel_path), stderr_mode(rel_path));
     if diffs.is_empty() {
         return None;
     }

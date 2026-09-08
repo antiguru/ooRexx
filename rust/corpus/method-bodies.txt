@@ -160,45 +160,45 @@ Object	startWith	instance	answers	rc 168
 Object	string	instance	answers	rc 0
 Object	unsetMethod	instance	answers	rc 159
 Package	new	class	answers	rc 168
-Package	defaultOptions	class	loud	method "DEFAULTOPTIONS" of class "Package"
+Package	defaultOptions	class	answers	rc 168
 Package	addClass	instance	answers	rc 168
-Package	addPackage	instance	loud	method "ADDPACKAGE" of class "Package"
+Package	addPackage	instance	answers	rc 168
 Package	addPublicClass	instance	answers	rc 168
-Package	addPublicRoutine	instance	loud	method "ADDPUBLICROUTINE" of class "Package"
-Package	addRoutine	instance	loud	method "ADDROUTINE" of class "Package"
+Package	addPublicRoutine	instance	answers	rc 168
+Package	addRoutine	instance	answers	rc 168
 Package	annotation	instance	answers	rc 168
 Package	annotations	instance	answers	rc 0
-Package	classes	instance	loud	method "CLASSES" of class "Package"
-Package	definedMethods	instance	loud	method "DEFINEDMETHODS" of class "Package"
-Package	digits	instance	loud	method "DIGITS" of class "Package"
-Package	findClass	instance	loud	method "FINDCLASS" of class "Package"
-Package	findNamespace	instance	loud	method "FINDNAMESPACE" of class "Package"
-Package	findProgram	instance	loud	method "FINDPROGRAM" of class "Package"
-Package	findPublicClass	instance	loud	method "FINDPUBLICCLASS" of class "Package"
-Package	findPublicRoutine	instance	loud	method "FINDPUBLICROUTINE" of class "Package"
-Package	findRoutine	instance	loud	method "FINDROUTINE" of class "Package"
-Package	form	instance	loud	method "FORM" of class "Package"
-Package	fuzz	instance	loud	method "FUZZ" of class "Package"
-Package	importedClasses	instance	loud	method "IMPORTEDCLASSES" of class "Package"
-Package	importedPackages	instance	loud	method "IMPORTEDPACKAGES" of class "Package"
-Package	importedRoutines	instance	loud	method "IMPORTEDROUTINES" of class "Package"
-Package	loadLibrary	instance	loud	method "LOADLIBRARY" of class "Package"
-Package	loadPackage	instance	loud	method "LOADPACKAGE" of class "Package"
+Package	classes	instance	answers	rc 0
+Package	definedMethods	instance	answers	rc 0
+Package	digits	instance	answers	rc 0
+Package	findClass	instance	answers	rc 168
+Package	findNamespace	instance	answers	rc 168
+Package	findProgram	instance	answers	rc 168
+Package	findPublicClass	instance	answers	rc 168
+Package	findPublicRoutine	instance	answers	rc 168
+Package	findRoutine	instance	answers	rc 168
+Package	form	instance	answers	rc 0
+Package	fuzz	instance	answers	rc 0
+Package	importedClasses	instance	answers	rc 0
+Package	importedPackages	instance	answers	rc 0
+Package	importedRoutines	instance	answers	rc 0
+Package	loadLibrary	instance	answers	rc 168
+Package	loadPackage	instance	answers	rc 163
 Package	local	instance	answers	rc 0
 Package	name	instance	answers	rc 0
-Package	namespaces	instance	loud	method "NAMESPACES" of class "Package"
-Package	options	instance	loud	method "OPTIONS" of class "Package"
-Package	prolog	instance	loud	method "PROLOG" of class "Package"
-Package	publicClasses	instance	loud	the REXX package's class table
-Package	publicRoutines	instance	loud	method "PUBLICROUTINES" of class "Package"
-Package	resource	instance	loud	method "RESOURCE" of class "Package"
-Package	resources	instance	loud	method "RESOURCES" of class "Package"
-Package	routines	instance	loud	method "ROUTINES" of class "Package"
-Package	setSecurityManager	instance	loud	method "SETSECURITYMANAGER" of class "Package"
-Package	source	instance	loud	method "SOURCE" of class "Package"
-Package	sourceLine	instance	loud	method "SOURCELINE" of class "Package"
-Package	sourceSize	instance	loud	method "SOURCESIZE" of class "Package"
-Package	trace	instance	loud	method "TRACE" of class "Package"
+Package	namespaces	instance	answers	rc 0
+Package	options	instance	answers	rc 0
+Package	prolog	instance	answers	rc 0
+Package	publicClasses	instance	answers	rc 0
+Package	publicRoutines	instance	answers	rc 0
+Package	resource	instance	answers	rc 168
+Package	resources	instance	answers	rc 0
+Package	routines	instance	answers	rc 0
+Package	setSecurityManager	instance	answers	rc 158
+Package	source	instance	answers	rc 0
+Package	sourceLine	instance	answers	rc 163
+Package	sourceSize	instance	answers	rc 0
+Package	trace	instance	answers	rc 0
 Routine	new	class	answers	rc 168
 Routine	loadExternalRoutine	class	answers	rc 168
 Routine	newFile	class	answers	rc 168

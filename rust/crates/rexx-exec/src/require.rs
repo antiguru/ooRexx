@@ -82,10 +82,15 @@ const PATH_SEPARATOR: char = ':';
 /// whole pass over `entries`, so a `.cls` in the last entry of `PATH` is found
 /// ahead of a `.rex` in the requiring program's own directory -- measured
 /// against the oracle, which answers the `.cls`.
+///
+/// `requires` is `RESOLVE_REQUIRES`, and [`REQUIRES_EXTENSION`] is the whole
+/// of what it selects. `Package~findProgram` passes `RESOLVE_DEFAULT`
+/// (`classes/PackageClass.cpp:955`) and so never tries it.
 pub(crate) fn candidates(
     name: &str,
     entries: &[String],
     parent_extension: Option<&str>,
+    requires: bool,
 ) -> Vec<String> {
     let lower = name.to_lowercase();
     // `primitiveSearchName`'s own `iterations`: the second pass exists only
@@ -100,7 +105,9 @@ pub(crate) fn candidates(
     if has_extension(name) {
         extensions.push(None);
     } else {
-        extensions.push(Some(REQUIRES_EXTENSION));
+        if requires {
+            extensions.push(Some(REQUIRES_EXTENSION));
+        }
         extensions.extend(parent_extension.map(Some));
         extensions.extend(DEFAULT_EXTENSIONS.iter().map(|ext| Some(*ext)));
         extensions.push(None);
@@ -201,7 +208,7 @@ mod tests {
     fn the_four_routes_are_searched_in_the_oracles_order() {
         let entries = search_entries(Some("/prog/"), Some("/rp1:/rp2"), Some("/pp"));
         assert_eq!(entries, vec!["/prog/", ".", "/rp1", "/rp2", "/pp"]);
-        let tried = candidates("lib.rex", &entries, Some(".rex"));
+        let tried = candidates("lib.rex", &entries, Some(".rex"), true);
         assert_eq!(
             tried,
             vec![
@@ -244,7 +251,7 @@ mod tests {
     fn the_extension_order_is_cls_then_the_parents_then_the_defaults() {
         let entries = search_entries(Some("/prog/"), None, None);
         assert_eq!(
-            candidates("lib", &entries, Some(".rex")),
+            candidates("lib", &entries, Some(".rex"), true),
             vec![
                 "/prog/lib.cls",
                 "./lib.cls",
@@ -261,13 +268,27 @@ mod tests {
         // A requiring program with no extension of its own drops that step
         // and nothing else.
         assert_eq!(
-            candidates("lib", &["/prog/".to_string()], None),
+            candidates("lib", &["/prog/".to_string()], None, true),
             vec![
                 "/prog/lib.cls",
                 "/prog/lib.REX",
                 "/prog/lib.rex",
                 "/prog/lib",
             ]
+        );
+    }
+
+    /// `RESOLVE_DEFAULT` drops the `.cls` step and keeps every other.
+    ///
+    /// `Package~findProgram` is the caller that passes it
+    /// (`classes/PackageClass.cpp:955`), so a name with no extension resolves
+    /// there to a `.REX` where a `::REQUIRES` of the same name resolves to a
+    /// `.cls` sitting beside it.
+    #[test]
+    fn the_default_resolve_does_not_try_the_requires_extension() {
+        assert_eq!(
+            candidates("lib", &["/prog/".to_string()], None, false),
+            vec!["/prog/lib.REX", "/prog/lib.rex", "/prog/lib"]
         );
     }
 
@@ -278,7 +299,7 @@ mod tests {
     #[test]
     fn a_name_with_an_extension_is_searched_once() {
         assert_eq!(
-            candidates("lib.rex", &["/prog/".to_string()], Some(".rex")),
+            candidates("lib.rex", &["/prog/".to_string()], Some(".rex"), true),
             vec!["/prog/lib.rex"]
         );
     }
@@ -291,11 +312,11 @@ mod tests {
     #[test]
     fn each_extension_is_tried_in_the_written_case_and_then_in_lower_case() {
         assert_eq!(
-            candidates("LIB.REX", &["/prog/".to_string()], None),
+            candidates("LIB.REX", &["/prog/".to_string()], None, true),
             vec!["/prog/LIB.REX", "/prog/lib.rex"]
         );
         assert_eq!(
-            candidates("LIB", &["/prog/".to_string()], None),
+            candidates("LIB", &["/prog/".to_string()], None, true),
             vec![
                 "/prog/LIB.cls",
                 "/prog/lib.cls",
@@ -321,15 +342,15 @@ mod tests {
     fn a_directory_qualified_name_bypasses_the_path() {
         let entries = search_entries(Some("/prog/"), None, None);
         assert_eq!(
-            candidates("./sub/lib.rex", &entries, None),
+            candidates("./sub/lib.rex", &entries, None, true),
             vec!["./sub/lib.rex"]
         );
         assert_eq!(
-            candidates("/abs/lib.rex", &entries, None),
+            candidates("/abs/lib.rex", &entries, None, true),
             vec!["/abs/lib.rex"]
         );
         assert_eq!(
-            candidates("sub/lib.rex", &entries, None),
+            candidates("sub/lib.rex", &entries, None, true),
             vec!["/prog/sub/lib.rex", "./sub/lib.rex"]
         );
     }

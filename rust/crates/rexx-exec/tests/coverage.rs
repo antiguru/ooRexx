@@ -172,16 +172,30 @@ fn is_admitted_directive_kind(kind: &DirectiveKind) -> bool {
         | DirectiveKind::Constant(_)
         | DirectiveKind::Options(_)
         | DirectiveKind::Annotate(_)
-        | DirectiveKind::Requires(_) => true,
-        DirectiveKind::Resource(_) => false,
+        | DirectiveKind::Requires(_)
+        // `::RESOURCE` owns lines rather than instructions, so `each_instruction`'s
+        // own `_ => None` already walks all of it there is to walk.
+        | DirectiveKind::Resource(_) => true,
     }
 }
 
 fn assert_program_has_only_admitted_directives(path: &Path, p: &Program) {
+    assert_directives_admitted_by(path, p, is_admitted_directive_kind);
+}
+
+/// [`assert_program_has_only_admitted_directives`] with the predicate as a
+/// parameter.
+///
+/// **Its only other caller is the negative control**, which needs a predicate
+/// that refuses something: every `DirectiveKind` variant is admitted now, so
+/// a control passing the real predicate would have no subject and would go
+/// green over an empty list. Passing one is what keeps the panic path itself
+/// witnessed.
+fn assert_directives_admitted_by(path: &Path, p: &Program, admit: fn(&DirectiveKind) -> bool) {
     let others: Vec<&str> = p
         .directives
         .iter()
-        .filter(|d| !is_admitted_directive_kind(&d.kind))
+        .filter(|d| !admit(&d.kind))
         .map(|d| d.kind.keyword())
         .collect();
     assert!(
@@ -226,7 +240,7 @@ fn every_directive_keyword_is_correctly_admitted_or_refused() {
         ("::method m\n  return 1\n", "METHOD", true),
         ("::options noprolog\n", "OPTIONS", true),
         ("::requires \"nosuch\"\n", "REQUIRES", true),
-        ("::resource d\nbody\n::END\n", "RESOURCE", false),
+        ("::resource d\nbody\n::END\n", "RESOURCE", true),
         ("::routine r\n  return 1\n", "ROUTINE", true),
     ];
     for (text, expected_keyword, expected_admitted) in cases {
@@ -296,14 +310,22 @@ fn the_walker_descends_into_a_method_body_and_an_attribute_body() {
     );
 }
 
-/// Pairs with the success above: a directive kind [`is_admitted_directive_kind`]
-/// still marks `false` must still panic, or the widening silently removed the
-/// guard rather than widening it.
+/// Pairs with the success above: a directive kind the predicate refuses must
+/// still panic, or a widening silently removed the guard rather than widening
+/// it.
+///
+/// **The predicate is a stand-in and has to be**, because
+/// [`is_admitted_directive_kind`] now admits every variant of the enum: this
+/// control's subject is the assertion's own reporting path, not which kinds
+/// are admitted, and [`every_directive_keyword_is_correctly_admitted_or_refused`]
+/// is what holds the real predicate against every variant.
 #[test]
 #[should_panic(expected = "has a `::` directive this walker does not admit")]
 fn an_unadmitted_directive_still_panics() {
     let p = parse_program(b"::RESOURCE d\nbody\n::END\n".to_vec()).expect("::RESOURCE parses");
-    assert_program_has_only_admitted_directives(Path::new("<phase-5a-task-1-demo>"), &p);
+    assert_directives_admitted_by(Path::new("<phase-5a-task-1-demo>"), &p, |kind| {
+        !matches!(kind, DirectiveKind::Resource(_))
+    });
 }
 
 /// Every direct child expression of `expr`, in source order. Exhaustive so a
@@ -1504,6 +1526,11 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/stack_frame_new.rex",
     "lang/map_collection_of_index.rex",
     "lang/map_collection_of_pair.rex",
+    "lang/package_settings.rex",
+    "lang/package_tables.rex",
+    "lang/package_find.rex",
+    "lang/package_writes.rex",
+    "lang/package_rexx.rex",
 ];
 
 #[test]

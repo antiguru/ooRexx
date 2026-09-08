@@ -170,3 +170,18 @@ lang/rexx_context_new.rex
 lang/stack_frame_new.rex
 lang/map_collection_of_index.rex
 lang/map_collection_of_pair.rex
+
+# Tasks 7 and 8: `Package`'s thirty-three rows -- its source and settings
+# readers, its ten table readers, the six `find*` readers and its four writes,
+# on both receivers. `package_tables_lib.cls` and `package_tables_dep.cls` are
+# the two helpers, `.cls` so that no corpus scan reads them as programs of
+# their own; each declares two public classes and two public routines, so that
+# a body answering a one-entry table cannot pass.
+# `package_writes` is on corpus.rs's HASH_ORDERED_STDOUT for Deviation 8:
+# what it prints is a StringTable's own iteration order, which is a bucket
+# walk on both sides.
+lang/package_settings.rex
+lang/package_tables.rex
+lang/package_find.rex
+lang/package_writes.rex
+lang/package_rexx.rex

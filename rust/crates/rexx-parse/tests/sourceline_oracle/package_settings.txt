@@ -1,0 +1,92 @@
+count 91
+/* Package's source and settings readers, on the two receivers that answer
+   them differently: this program's own package and the interpreter's.
+
+   Four readers part between the two, and each pair is asserted here: ~trace
+   is N against the null string, ~prolog is a Routine against .nil, ~source
+   and ~sourceSize are this file against an empty Array and 0, and ~options
+   ends TRACE NORMAL against TRACE ?n/a?. A reader that answers this program
+   correctly by accident gets at least one of those wrong.
+
+   Each answer is put through a second send, because the value comparison
+   `a StringTable`, `an Array` and `a Routine` make is blind to what is
+   inside. */
+
+p = .context~package
+rexx = .Class~package
+
+say 'program trace [' || p~trace || '] rexx trace [' || rexx~trace || ']'
+say 'program prolog' p~prolog~class~id 'rexx prolog' rexx~prolog~class~id
+say 'program sourceSize' p~sourceSize 'rexx sourceSize' rexx~sourceSize
+say 'program source items' p~source~items 'rexx source items' rexx~source~items
+say 'program options [' || p~options || ']'
+say 'rexx options [' || rexx~options || ']'
+
+say 'source class' p~source~class~id
+say 'source line 1 [' || p~source[1] || ']'
+say 'sourceLine 1 [' || p~sourceLine(1) || ']'
+say 'sourceLine 1 class' p~sourceLine(1)~class~id
+say 'sourceLine past the end is the null string [' || p~sourceLine(9999) || ']'
+say 'sourceSize agrees with source items' (p~sourceSize == p~source~items)
+last = p~sourceSize
+say 'the last line reads [' || p~sourceLine(last) || ']'
+
+say 'digits' p~digits 'form' p~form 'fuzz' p~fuzz
+say 'digits class' p~digits~class~id 'form class' p~form~class~id
+say 'rexx digits' rexx~digits 'form' rexx~form 'fuzz' rexx~fuzz
+
+/* ~prolog answers the leading code section as a Routine, and the second send
+   is what tells that from any other Routine: its source is this file. */
+say 'prolog source items' p~prolog~source~items
+
+say 'options DIGITS [' || p~options('DIGITS') || ']'
+say 'options FORM [' || p~options('FORM') || ']'
+say 'options FUZZ [' || p~options('FUZZ') || ']'
+say 'options TRACE [' || p~options('TRACE') || ']'
+say 'options NOVALUE [' || p~options('NOVALUE') || ']'
+say 'options PROLOG [' || p~options('PROLOG') || ']'
+say 'options X [' || p~options('X') || ']'
+say 'options class' p~options~class~id
+say 'rexx options TRACE [' || rexx~options('TRACE') || ']'
+
+say 'defaultOptions D [' || .Package~defaultOptions('DefineDefaultOptions') || ']'
+say 'defaultOptions C [' || .Package~defaultOptions('CountOverrides') || ']'
+say 'defaultOptions ignores all but the first letter' ,
+    (.Package~defaultOptions('DIGITS') == .Package~defaultOptions('DefineDefaultOptions'))
+
+say 'setSecurityManager' p~setSecurityManager
+
+/* .Package~new from an array of lines: the prologue runs, the name is kept
+   as written rather than resolved, and the new package answers its own
+   source rather than this one's. */
+made = .Package~new('package_settings_inmem.rex', ,
+                    .array~of('say "the new package prologue ran"', 'return 1'))
+say 'new class' made~class~id
+say 'new name' made~name
+say 'new sourceSize' made~sourceSize
+say 'new source 1 [' || made~source[1] || ']'
+say 'new prolog' made~prolog~class~id
+say 'new digits' made~digits 'trace [' || made~trace || ']'
+
+say 'sourceLine 0:' try('p~sourceLine(0)')
+say 'sourceLine -1:' try('p~sourceLine(-1)')
+say 'sourceLine a:' try("p~sourceLine('a')")
+say 'sourceLine none:' try('p~sourceLine()')
+say 'options ZZZ:' try("p~options('ZZZ')")
+say 'options S:' try("p~options('S')")
+say 'options A:' try("p~options('A')")
+say 'defaultOptions none:' try('.Package~defaultOptions()')
+say 'defaultOptions FORM:' try(".Package~defaultOptions('FORM')")
+say 'new none:' try('.Package~new()')
+
+exit 0
+
+/* No PROCEDURE: the expressions below name `p`, which is the main body's
+   own variable. */
+try:
+  parse arg trysource
+  signal on syntax name raised
+  interpret 'tryanswer =' trysource
+  return 'answered' tryanswer
+raised:
+  return 'raised' rc || '.' || condition('e')

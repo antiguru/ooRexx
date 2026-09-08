@@ -1443,6 +1443,62 @@ DEVIATIONS -- permanent, chosen
      family's sources, and the LOSTDIGITS table, which drives programs of its
      own and has nothing to do with the corpus subset.
 
+
+  8. A HASH-ORDERED COLLECTION'S ITERATION ORDER IS NOT A SPECIFIED
+     OBSERVABLE, AND ONE PROGRAM'S STDOUT IS COMPARED AS A MULTISET OF LINES.
+
+     IMPLEMENTED by Phase 5i Tasks 7+8. The harness is
+     `rust/crates/rexx-exec/tests/corpus.rs`: `HASH_ORDERED_STDOUT` names the
+     programs whose stdout is sorted before comparison, on BOTH sides, and
+     `stdout_mode` is what chooses it. `support::oracle::stdout_multiset` is
+     the one implementation, written in the shape of Deviation 7's
+     `stderr_multiset`.
+
+     SCOPE -- THE ORDER OF STDOUT LINES FOR A NAMED PROGRAM, AND NOTHING ELSE.
+     Deliberately narrow, in Deviation 0's and Deviation 7's register. It does
+     NOT license:
+
+       - a line whose content differs.
+       - a line that is missing, added or duplicated.
+       - a stdout that lost its final newline. The comparison splits on `\n`
+         rather than using `str::lines`, so the empty trailing element a final
+         newline produces survives the sort and a truncation still differs.
+       - any difference in stderr, or in exit status, on either side.
+       - the ordering of stdout lines for any program NOT named in that list.
+
+     THE OPT-IN LIST IS THE LICENCE, AND EACH ENTRY OWES A REASON. A sorted
+     comparison hides a genuine ordering defect in any program that takes it,
+     so `the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else`
+     holds the list in BOTH directions: for every entry the two sides' raw
+     stdout must differ -- a program that does not need the relaxation cannot
+     sit here -- and their sorted stdout must agree, so a content difference is
+     not hidden by it. And a listed program whose oracle stdout is empty is a
+     failure naming that, because a sorted comparison of two empty strings
+     agrees with anything; that is Deviation 7's own guard, restated.
+
+     WHY. `Interp::hash_collection_indexes` walks a `StringTable`'s keys in
+     sorted order and the oracle walks its `HashContents` bucket-ascending,
+     which is the divergence `hash_collection_indexes`' own doc comment
+     records and prices. Both orders are deterministic; neither reproduces the
+     other. Measured 2026-09-08: `corpus/lang/package_writes.rex` differs from
+     the oracle on stdout byte for byte and agrees line for line once both
+     sides are sorted, over the same run.
+
+     WHAT IT IS NOT. Unlike Deviation 7 this is not about a non-deterministic
+     reference. The oracle answers one order and this crate answers another,
+     both stably. What is licensed is the same thing Deviations 1, 5 and 6
+     license for collection ordering, extended to the channel a witness prints
+     on: where the order is not a specified observable, matching one of the
+     orders is the whole of what is owed.
+
+     WHAT THE LIST DOES NOT HOLD, AND WHY THAT MATTERS. The other four
+     `Package` witnesses -- `package_settings`, `package_tables`,
+     `package_find` and `package_rexx` -- are compared byte for byte and are
+     not on the list. `package_rexx` prints all 67 of the REXX package's class
+     names and reads each back BY NAME from a list it carries itself, rather
+     than enumerating the table, so its output is in the program's own order
+     on both sides.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 
