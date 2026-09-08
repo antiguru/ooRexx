@@ -637,6 +637,24 @@ under it; `method_scope` (`environment.rs:1686`) reads `NativeObject::scope`. `A
 `ANNOTATIONS` and `SCOPE` already answer for `Method`; `ANNOTATION` and `ANNOTATIONS` for
 `Routine`; both have a class-side `NEW` through `native_executable_new`.
 
+**The asymmetry runs the OTHER way, and this paragraph had it backwards until Task 4's pre-flight
+measured it.** The `Routine` link is one argument: `environment.rs:1906` passes `None` as
+`TableValue::Instance`'s third field, which is the `Option<(ProgramId, usize)>` that fills
+`table_method_bodies` at `:882`-`:885`, and the annotation key beside it already carries the same
+pair. **The expensive half is the `Method` side the paragraph below calls done**:
+`Interp::method_object` (`:1369`) files no body row at all -- `run_method_body`'s own doc says a
+method from `Class~method` "names a dictionary entry and carries no body a send could enter" -- so
+`~source`, `~package` and the seven flags need a resolver from the object to `(class, name)` to
+`own_instance_slot` to `MethodSlot::Defined`, and `method_objects` is keyed the wrong way for the
+first step. **And a fourth producer needs the same row**: `method_new_scope` (`:1425`) clones the
+`NativeObject` into a fresh `ObjRef`, so `.K2~define("X", .K~method("M"))` then `.K2~method("X")` is
+an object in none of those tables.
+
+What the paragraph got right is that there IS an asymmetry and that it costs; what it got wrong is
+which side pays. It is kept below rather than deleted, because the citations in it are correct and
+because a plan that quietly acquires the right answer teaches nothing about how it was reached.
+
+
 **`Routine` is the asymmetric half and its rows cost more than `Method`'s.** Read against the tree
 2026-09-07: a `Method` object reaches its body through `table_method_bodies`
 (`lib.rs:3432`, filled at `environment.rs:875`-`:884` for `.methods` entries and at `lib.rs:6501`
@@ -697,14 +715,28 @@ constraint asks for, and it is what catches a body that consumes its program on 
 witness** — set, then read back, then send the method and see the behaviour change where it can be
 seen. A setter whose only witness is "it did not raise" is the shell `rust/CLAUDE.md` forbids.
 
-**`setSecurityManager` is the one row in this family that cannot be witnessed through behaviour.**
-Measured on the oracle: `p~setSecurityManager` with no argument and `p~setSecurityManager(.Object~new)`
-both answer `1`, and nothing in the language reads the manager back. D12's interception points are
-Phase 5's exit-gate work with no delivery evidence, and Phase 7 adds the rest. **Store the object on
-the receiver and answer `1`** — real state, and the reason the state is unobservable today goes in
-the report naming D12 as its owner. If you think that is the forbidden shell rather than a kept
-state nothing yet reads, **ask before implementing**; it is a fair reading and the decision should
-be made once, out loud, for all three classes that carry the row.
+**`setSecurityManager` was the one row this plan got wrong twice in one paragraph, and Task 4's
+pre-flight falsified both halves.** It is not a constant `1` and it IS witnessable through
+behaviour.
+
+* `BaseCode::setSecurityManager` returns false (`execution/BaseCode.cpp:133`) and
+  `RexxCode::setSecurityManager` returns true (`RexxCode.cpp:245`-`:249`), so measured on the oracle
+  in one program: a native method, an `::attribute` accessor, a `::constant` getter and an
+  `abstract` method answer **`0`**, while a written `::method` or `::routine` answers **`1`**. That
+  is the same axis `~source` and the seven flags read -- a genuine reader, not a shell.
+* The manager lands on the method's **package**, and `SecurityManager::checkLocalAccess` sends it
+  `LOCAL` at the next environment-symbol lookup. Measured: `m~setSecurityManager(.Object~new)` then
+  `.routines~rr~class~id` is `97.1  Object "an Object" does not understand message "LOCAL"` at
+  rc 159; the same program with that one line deleted is rc 0. The no-argument form installs a null
+  manager and intercepts nothing.
+
+**Ruled 2026-09-08, once, for all three classes that carry the row: implement the NO-ARGUMENT form
+with the `0`/`1`-by-code-kind reader, and refuse the with-argument form loudly, naming D12 and
+Phase 7.** Storing the manager without intercepting would close the row and ship a **silent wrong
+answer** -- rc 0 where the oracle raises, for any program that installs a manager and then reads an
+environment symbol. A loud refusal is never wrong, and this plan's own constraints prefer it. The
+consequence is stated rather than hidden: the row stays `send-differs` under an argument-passing
+list and is **declined with the measurement**.
 
 **`Routine~call` and `~callWith` actually run code**, and `~[]` is `call` under another name. They
 are the only rows in this phase that are not readers. Their witnesses assert the return value, the
