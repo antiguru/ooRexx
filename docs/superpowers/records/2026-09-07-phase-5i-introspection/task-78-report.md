@@ -109,7 +109,7 @@ crate cannot carry:
 | 2026-09-08 pre-flight, 1 — the 33 rows are confirmed | Confirmed against the tree before starting. |
 | 2026-09-08 pre-flight, 2 — the arity table cannot see order or contents; an `agree` row is not evidence the contents match | **Applied.** No row here is reported closed on its arity verdict alone; every collection row has a corpus witness that reads its entries back by name. |
 | 2026-09-08 pre-flight, 3 — `source` and `resource` answer Arrays whose order the oracle specifies and must never opt in; `importedPackages` is unknown, report what you find | **Applied.** Neither opts in, and neither program printing them is on the list. **`importedPackages`' order is specified**: `PackageClass::addPackage` appends to `loadedPackages` and `getImportedPackagesRexx` copies it, so it is insertion order — `::REQUIRES` in source order, then `~addPackage`/`~loadPackage` in call order. It is read by position here and compared byte for byte. |
-| 2026-09-08 pre-flight — `publicClasses` is the `agree` row most likely to be silently wrong | **It was wrong, and it is the task's headline.** The row read `agree` only because the arity receiver is a *program's* package, where both sides answered a one-entry `StringTable`. On the REXX package this crate refused outright (`Loud::rexx_package_classes`). `corpus/lang/package_rexx.rex` now reads all 67 class names back by name from a list it carries and asserts the 62/5 public split. |
+| 2026-09-08 pre-flight — `publicClasses` is the `agree` row most likely to be silently wrong | **It was wrong, and *why* is sharper than the ruling that predicted it.** The row was green not merely because the instrument cannot see inside a collection, but because **it probes a receiver on which the defect does not arise**: the arity receiver is a *program's* package, where both sides answered a one-entry `StringTable` and this crate's body was correct. The defect lived on the other receiver — on the REXX package the crate refused outright (`Loud::rexx_package_classes`) — and no argument list could have reached it, because the receiver is fixed by `corpus/introspection-receivers.tsv` and not by the argument. **A blind instrument can be sharpened; a receiver that cannot exercise the bug cannot.** `corpus/lang/package_rexx.rex` is the answer: a witness whose receiver is the one the row could not reach, reading all 67 class names back by name and asserting the 62/5 public split. |
 
 The rulings and the brief did not conflict anywhere except on
 `setSecurityManager`'s justification, noted in the table above; the ruling's
@@ -134,7 +134,9 @@ answering an empty or a one-entry table cannot pass.
 ## A defect found, not owned, and worked around
 
 **`DO OVER` over one of the interpreter's own `Body::Native` tables binds a
-dead handle once the index string is longer than seven bytes.** Written up in
+dead handle once the index string is longer than seven bytes — and that
+seven-byte boundary is where the defect becomes *visible*, not where it
+begins: a shorter name is not an allocation at all.** Written up in
 `found-defect-do-over-native-table-rooting.md` beside this file, with a
 reproduction that uses `.methods` and no `Package` method at all, **run at
 BASE `59d25e938` in the gate worktree**: the long-name form panics at
