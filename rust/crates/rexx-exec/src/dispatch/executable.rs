@@ -463,23 +463,24 @@ fn block_source_lines(
     let Some(source) = interp.programs.get(program.0) else {
         return Vec::new();
     };
-    let first = match directive {
-        None => 1,
+    let text = &source.source;
+    let (first, from) = match directive {
+        None => (1, 0),
         Some(directive) => match block_start(source, directive) {
-            Some(start) => source.source.line_of(start) + 1,
+            Some(start) => block_first_line(text, start),
             None => return Vec::new(),
         },
     };
     let next = directive.map_or(0, |directive| directive + 1);
-    let last = match source.directives.get(next) {
+    let (last, upto) = match source.directives.get(next) {
         // A synthetic directive covers no source: it is the one
         // `Interp::record_compiled_body` files over a text that had none, and
         // a written directive's clause always spans at least `::method x`.
-        Some(next) if !next.clause_span.is_empty() => source
-            .source
-            .line_of(next.clause_span.start)
-            .saturating_sub(1),
-        _ => source.source.line_count(),
+        Some(next) if !next.clause_span.is_empty() => block_last_line(text, next.clause_span.start),
+        _ => {
+            let last = text.line_count();
+            (last, text.line_span(last).map_or(0, |span| span.end))
+        }
     };
     // `extractSourceLines`' own step back over an end that sits at the start
     // of a line (`parser/ProgramSource.cpp:224`-`:233`): the block's end
@@ -489,14 +490,70 @@ fn block_source_lines(
     // and one blank, at the end of the file and before a following directive
     // alike; and a `::method` with nothing after it but one blank line
     // answers `Array(0)`.
-    let last = match source.source.line(last) {
-        Some([]) => last.saturating_sub(1),
-        _ => last,
+    let (last, upto) = match text.line_span(last) {
+        Some(span) if span.is_empty() => {
+            let stepped = last.saturating_sub(1);
+            (stepped, text.line_span(stepped).map_or(0, |span| span.end))
+        }
+        _ => (last, upto),
     };
     (first..=last)
-        .map_while(|line| source.source.line(line))
-        .map(<[u8]>::to_vec)
+        .map_while(|line| {
+            let span = text.line_span(line)?;
+            let cut = span.start.max(from)..span.end.min(upto);
+            text.span_bytes(cut.clone())
+                .map(<[u8]>::to_vec)
+                .or_else(|| Some(Vec::new()))
+        })
         .collect()
+}
+
+/// The line a block begins on, and the byte within the text it begins at.
+///
+/// **A clause ended by `;` leaves the block starting on its own line**, where
+/// one ended by the line itself leaves it starting on the next -- the two
+/// positions `nextClause` can leave the scanner in, and
+/// `blockLocation.setStart(lineNumber, lineOffset)`
+/// (`parser/LanguageParser.cpp:1193`) records whichever it is. Measured,
+/// oracle rc 0: `::method MSEMI; return 7` answers `Array(1)` holding
+/// `< return 7>`, an `::attribute ... get` whose first body line is
+/// `  a = 1;   b = 2` answers `<   b = 2>` and the body's remaining lines,
+/// and one whose first body line ends `a = 1;` answers an **empty** first
+/// line rather than dropping it.
+fn block_first_line(text: &rexx_parse::ProgramSource, start: usize) -> (usize, usize) {
+    // The `;` may be inside the clause's own span or just past it, which is a
+    // difference between a directive clause and a body clause and not one the
+    // answer turns on.
+    let after = match text.span_bytes(start..start + 1) {
+        Some(b";") => start + 1,
+        _ => start,
+    };
+    match text.span_bytes(after.saturating_sub(1)..after) {
+        Some(b";") => (text.line_of(after.saturating_sub(1)), after),
+        _ => (text.line_of(start) + 1, 0),
+    }
+}
+
+/// The line a block ends on, and the byte it ends at, for a block terminated
+/// by the directive clause beginning at `next`.
+///
+/// **A directive that does not begin its line cuts that line short**, which is
+/// `translateBlock`'s `else` arm (`parser/LanguageParser.cpp:1657`) against
+/// the `getOffset() == 0` arm above it. Measured, oracle rc 0:
+/// `  return 1; ::method B` answers `Array(1)` holding `<  return 1; >`, the
+/// bytes up to the `::` and no further.
+fn block_last_line(text: &rexx_parse::ProgramSource, next: usize) -> (usize, usize) {
+    let line = text.line_of(next);
+    match text.line_span(line) {
+        Some(span) if span.start < next => (line, next),
+        _ => {
+            let previous = line.saturating_sub(1);
+            (
+                previous,
+                text.line_span(previous).map_or(0, |span| span.end),
+            )
+        }
+    }
 }
 
 /// The byte the block whose source is being extracted begins after, or `None`

@@ -483,12 +483,47 @@ transcripts, and restores from a `cp` backup -- never `git checkout --`.
    (`parser/DirectiveParser.cpp:189`) consumes the first clause and `reclaimClause()`s it without
    restoring the scanner's line position. It is unfiled; three signals are not in hand, and one
    measurement is one.
-4. **One `~source` shape is unmeasured and this crate guesses it.** Where a directive's block would
-   *start* mid-line -- two clauses sharing the first body line of an `::ATTRIBUTE ... GET` --
-   the C++ records a non-zero start offset and `extractSourceLines` answers a partial first line.
-   This crate answers whole lines only. Neither side was measured for that shape; the witness does
-   not contain one.
-5. **The `~source` end-offset shape has the same hole at the other edge.** A directive clause that
-   does not begin at column 0 makes `translateBlock` take its `else` branch
-   (`LanguageParser.cpp:1657`) and end the block mid-line. Whether a directive can be reached that
-   way at all was not measured.
+4. **CLOSED, and it was a defect rather than a gap.** Both `~source` edges can land mid-line and
+   the first commit answered whole lines only. Measured, fixed, witnessed and controlled -- see
+   *A divergence found after the first commit* at the end of this report. It is the reason there
+   is a third commit and a second gate run.
+
+## A divergence found after the first commit, and fixed
+
+**Concern 4 and concern 5 above were not gaps; they were a defect, and probing them found it.**
+Both edges of `~source`'s range can land mid-line, and the first commit answered whole lines only.
+Measured on the oracle, four shapes, all of them rc 0 and all of them wrong here at `546bd9ed6`:
+
+```
+::attribute AB get / "  a = 1;b = 2"        Array(2): "b = 2", "  return a + b"     -- was Array(1)
+::attribute AB get / "  a = 1;   b = 2"     Array(2): "   b = 2", ...               -- was Array(1)
+::attribute AB get / "  a = 1;"             Array(2): "", "  return a"              -- was Array(1)
+::method MSEMI; return 7                    Array(1): " return 7"                   -- was Array(0)
+::method A / "  return 1; ::method B"       Array(1): "  return 12; "               -- was Array(0)
+```
+
+**The rule, and it is one rule at each edge.** A clause the parser ended with `;` leaves the scanner
+on its own line at the byte after it, where a clause ended by the line itself leaves it at the start
+of the next -- `blockLocation.setStart(lineNumber, lineOffset)`
+(`parser/LanguageParser.cpp:1193`) records whichever. And a terminating directive clause that does
+not begin its line cuts that line short at the `::` --  `translateBlock`'s `else` arm at `:1657`
+against the `getOffset() == 0` arm above it. `block_first_line` and `block_last_line` are the two,
+and `block_source_lines` now works in absolute byte offsets and clamps each line to them, which is
+`extractSourceLines`' own shape.
+
+A continued first clause was measured too and agrees either way: `a = 1 +,` over `      2` answers
+`Array(1)`.
+
+**Four rows added to `corpus/lang/method_introspection.rex`**, and control **C10 CONFIRMED exactly**:
+with both rules reverted to whole lines, the method witness is red on
+`semicolon-in-an-attribute-body` (2 -> 1), `semicolon-on-the-directive-line` (1 -> 0) and
+`a-directive-cutting-a-line-short` (1 -> 0), `after-that-cut` is unchanged, and the routine witness
+is green. **The first attempt at C10 did not run at all** -- its second `str.replace` asserted
+against text `rustfmt` had since rewrapped, so nothing was written and the unmutated binary reported
+STILL GREEN four times. The assertion is what caught it; a script that had written the first
+replacement and skipped the second would have reported a half-mutation as a whole one.
+
+No shared table moves for this fix: `cargo test --release -p rexx-exec --test introspection_arity
+--test refusal_sites --test coverage` is exit 0 (25, 5 and 20 passed) and
+`cargo test --release -p rexx-parse --test sourceline_oracle` is exit 0 against the regenerated
+expectation.

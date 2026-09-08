@@ -25,6 +25,13 @@
  * The block starts on the line after the directive and ends on the line
  * before the next one, so blank lines and whole-line comments INSIDE it are
  * its own -- ::method PAD below is the row that says so. And an end that
+ * A `;` puts either edge of the range mid-line, and the four rows named for it
+ * in section B are what say so: a clause the parser ended with `;` leaves the
+ * block starting on its OWN line at the byte after it, and a directive that
+ * does not begin its line cuts the line before it short. An implementation
+ * answering whole lines only is right about every other row here.
+ *
+ * An end that
  * lands on an empty line steps back one (ProgramSource::extractSourceLines),
  * which is what the two blank lines below ::method STEP and the one at the end
  * of this file are for: STEP answers two of its three candidate lines and
@@ -60,6 +67,10 @@ call lines 'constant', .K~method('CON')
 call lines 'external', .K~method('EX')
 call lines 'attribute-with-body', .K~method('AB')
 call lines 'step', .K~method('STEP')
+call lines 'semicolon-in-an-attribute-body', .K~method('SEMI')
+call lines 'semicolon-on-the-directive-line', .K~method('SEMIDIR')
+call lines 'a-directive-cutting-a-line-short', .K~method('CUT')
+call lines 'after-that-cut', .K~method('AFTERCUT')
 
 say 'C -- ~package, and the two packages a Method can belong to'
 p = .Object~method('OBJECTNAME')~package
@@ -203,6 +214,16 @@ refused:
   return a
 
 ::METHOD EX EXTERNAL 'LIBRARY REXX file_separator'
+
+::ATTRIBUTE SEMI GET
+  a = 1;   b = 2
+  return a + b
+
+::METHOD SEMIDIR; return 11
+
+::METHOD CUT
+  return 12; ::METHOD AFTERCUT
+  return 13
 
 ::METHOD PAD
 
