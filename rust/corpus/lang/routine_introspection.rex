@@ -17,6 +17,9 @@
  * from a reader of the running program: its package name is the executable's
  * own name, not this file's.
  *
+ * ~newFile IS NEVER CALLED HERE. Its file is this one, so calling what it
+ * answers would re-run this program from inside itself.
+ *
  * NO ::ROUTINE EXTERNAL HERE. It is a Phase 7 gap that refuses at INSTALL
  * time, so one such directive would make every row above it unreachable on
  * this crate; the external arm of ~source and ~setSecurityManager is
@@ -85,6 +88,14 @@ call refuses 'callWith-with-no-arguments'
 call refuses 'callWith-a-short-list'
 say 'a-string-argument-list' .routines~COUNTARGS~callWith('one')
 say 'a-long-argument-list' .routines~COUNTARGS~call(1, 2, 3)
+
+say 'H -- newFile, whose file is this one and which is NOT called'
+f = .Routine~newFile(source)
+say 'file-class' f~class~id
+say 'file-package-name-is-the-source' (f~package~name == source)
+say 'file-has-source' (f~source~items > 0)
+say 'file-ssm' f~setSecurityManager
+call refuses 'newFile-a-file-that-is-not-there'
 exit 0
 
 refuses:
@@ -95,6 +106,7 @@ refuses:
     when which == 'index-with-no-result' then say .routines~NORET~'[]'()
     when which == 'callWith-with-no-arguments' then say .routines~RR~callWith
     when which == 'callWith-a-short-list' then say .routines~RR~callWith()
+    when which == 'newFile-a-file-that-is-not-there' then say .Routine~newFile('zzznosuchfile.rex')
     otherwise say .routines~RR~call(1, 2, 3)
   end
   say which 'WAS NOT REFUSED'

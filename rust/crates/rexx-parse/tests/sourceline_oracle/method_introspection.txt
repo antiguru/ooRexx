@@ -1,4 +1,4 @@
-count 241
+count 277
 /* Method's own readers, over one directive of every kind that makes a method.
  *
  * WHAT SEPARATES A READER OF THE FLAGS FROM A READER OF NOTHING. The receiver
@@ -150,6 +150,34 @@ do i = 1 to cs~items
   say '  <'cs[i]'>'
 end
 say 'copy-package-name-is-the-source' (c~package~name == source)
+
+say 'K -- newFile, whose file is this one'
+f = .Method~newFile(source)
+say 'file-class' f~class~id
+say 'file-scope' f~scope
+say 'file-package-name-is-the-source' (f~package~name == source)
+say 'file-has-source' (f~source~items > 0)
+say 'file-flags' f~isAbstract f~isAttribute f~isConstant f~isGuarded f~isPackage f~isPrivate f~isProtected
+say 'file-ssm' f~setSecurityManager
+call refuses 'newFile-a-file-that-is-not-there'
+call refuses 'newFile-with-no-argument'
+
+say 'L -- loadExternalMethod, over the REXX library'
+x = .Method~loadExternalMethod('file_separator', 'LIBRARY REXX')
+say 'external-class' x~class~id
+say 'external-scope' x~scope
+say 'external-source' x~source~items
+say 'external-package-name' x~package~name
+say 'external-ssm' x~setSecurityManager
+say 'external-flags' x~isAbstract x~isAttribute x~isConstant x~isGuarded x~isPackage x~isPrivate x~isProtected
+say 'external-named-entry' .Method~loadExternalMethod('M9', 'LIBRARY REXX file_separator')~class~id
+say 'external-unknown-entry' .Method~loadExternalMethod('M9', 'LIBRARY REXX')~string
+call refuses 'loadExternal-a-descriptor-that-is-not-one'
+call refuses 'loadExternal-a-descriptor-with-one-word'
+call refuses 'loadExternal-a-descriptor-whose-first-word-is-not-LIBRARY'
+call refuses 'loadExternal-a-descriptor-with-a-fourth-word'
+call refuses 'loadExternal-an-empty-descriptor'
+call refuses 'loadExternal-with-no-descriptor'
 exit 0
 
 flags:
@@ -172,7 +200,15 @@ refuses:
   select
     when which == 'flag-with-an-argument' then say .K~method('MM')~isGuarded(1)
     when which == 'source-with-an-argument' then say .K~method('MM')~source(1)
-    otherwise say .K~method('MM')~package(1)
+    when which == 'package-with-an-argument' then say .K~method('MM')~package(1)
+    when which == 'newFile-a-file-that-is-not-there' then say .Method~newFile('zzznosuchfile.rex')
+    when which == 'newFile-with-no-argument' then say .Method~newFile()
+    when which == 'loadExternal-a-descriptor-that-is-not-one' then say .Method~loadExternalMethod('M9', 'garbage')
+    when which == 'loadExternal-a-descriptor-with-one-word' then say .Method~loadExternalMethod('M9', 'LIBRARY')
+    when which == 'loadExternal-a-descriptor-whose-first-word-is-not-LIBRARY' then say .Method~loadExternalMethod('M9', 'REGISTERED junk')
+    when which == 'loadExternal-a-descriptor-with-a-fourth-word' then say .Method~loadExternalMethod('M9', 'LIBRARY REXX file_separator extra')
+    when which == 'loadExternal-an-empty-descriptor' then say .Method~loadExternalMethod('M9', '')
+    otherwise say .Method~loadExternalMethod('M9')
   end
   say which 'WAS NOT REFUSED'
   return

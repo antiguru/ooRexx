@@ -1040,9 +1040,23 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // loudly past it.
     ("Class", "NEW", Arity::Counted, native_class_new),
     ("Message", "NEW", Arity::Counted, native_message_new),
+    (
+        "Method",
+        "LOADEXTERNALMETHOD",
+        Arity::Fixed(2),
+        native_load_external,
+    ),
     ("Method", "NEW", Arity::Counted, native_executable_new),
+    ("Method", "NEWFILE", Arity::Fixed(2), native_new_file),
     ("Package", "NEW", Arity::Counted, native_package_new),
+    (
+        "Routine",
+        "LOADEXTERNALROUTINE",
+        Arity::Fixed(2),
+        native_load_external,
+    ),
     ("Routine", "NEW", Arity::Counted, native_executable_new),
+    ("Routine", "NEWFILE", Arity::Fixed(2), native_new_file),
     (
         "WeakReference",
         "NEW",
@@ -10343,6 +10357,124 @@ fn native_executable_new(
         compile_method_source(interp, &name, source, "source")?
     };
     Ok(Some(object))
+}
+
+/// `Method~newFile(name [, context])` and `Routine~newFile(name [, context])`:
+/// the executable a file's own text becomes -- `MethodClass::newFileRexx`
+/// (`classes/MethodClass.cpp:521`) and `RoutineClass::newFileRexx`
+/// (`classes/RoutineClass.cpp:341`).
+///
+/// [`Interp::new_file_executable`] carries what the load does and the three
+/// measurements that pin it.
+///
+/// **The second argument is refused rather than ignored.** It is the package
+/// context the loaded file resolves names against, and accepting it without
+/// honouring it would answer at rc 0 where the resolution differs. Measured,
+/// oracle rc 0: `.Method~newFile('body.rex', .context~package)` answers a
+/// `Method`; and rc 216, a second argument that is none of `"PROGRAMSCOPE"`,
+/// a `Method`, a `Routine` or a `Package` is `40.904`.
+///
+/// [`Interp::new_file_executable`]: crate::Interp
+fn native_new_file(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    let name = executable_name_argument(interp, args)?;
+    let routine = class == interp.routine_class();
+    if !routine && class != interp.method_class() {
+        return Err(unbuilt_new(interp, class));
+    }
+    if args.get(1).copied().flatten().is_some() {
+        return Err(Loud::executable_context().into());
+    }
+    let name = interp.to_text(name).to_vec();
+    interp.new_file_executable(&name, routine).map(Some)
+}
+
+/// `MethodClass::loadExternalMethod(name, descriptor)` and
+/// `RoutineClass::loadExternalRoutine` (`memory/Setup.cpp:1091`, `:1130`).
+///
+/// **`loadExternalMethod`'s `LIBRARY REXX` arm is the one this phase answers**,
+/// and the boundary is `crate::directive_gap`'s, drawn in the same two places
+/// -- see [`Loud::external_entry_point`] for both halves. Measured, oracle rc
+/// 0, and it is why the refused arm cannot be answered from a constant either:
+/// on this machine `LIBRARY rxmath RxCalcPi` answers a `Routine` and
+/// `LIBRARY rexxutil SysCurPos` answers `.nil`, because `build/lib` holds one
+/// library and not the other; and `loadExternalRoutine('Filespec', 'LIBRARY
+/// REXX')` answers a `Routine` where the same entry point is absent from the
+/// method registry this crate keeps.
+///
+/// [`Loud::external_entry_point`]: crate::Loud
+///
+/// **A descriptor that is not `LIBRARY <name> [<entry>]` is 99.917, before
+/// any library is looked for.** Measured, oracle rc 157 for `garbage`, for
+/// `LIBRARY` alone, for the empty string, and -- unlike a `::ROUTINE
+/// EXTERNAL` -- for `REGISTERED junk`, which `loadExternalRoutine` does not
+/// accept.
+///
+/// **The entry point defaults to the name as written**, case included:
+/// measured, oracle rc 0, `loadExternalMethod('file_separator', 'LIBRARY
+/// REXX')` answers a `Method` where the same call under the name `M9` answers
+/// `.nil`.
+fn native_load_external(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    let name = executable_name_argument(interp, args)?;
+    let routine = class == interp.routine_class();
+    if !routine && class != interp.method_class() {
+        return Err(unbuilt_new(interp, class));
+    }
+    let Some(descriptor) = args.get(1).copied().flatten() else {
+        return Err(Raised::missing_named_argument("descriptor").into());
+    };
+    let descriptor = required_string_named_argument(interp, descriptor, "descriptor")?;
+    let descriptor = interp.to_text(descriptor).to_vec();
+    let name = interp.to_text(name).to_vec();
+    let Some((library, entry)) = external_specification(&descriptor, &name) else {
+        return Err(Raised::bad_external_specification(&descriptor).into());
+    };
+    if routine {
+        return Err(Loud::external_entry_point("loadExternalRoutine").into());
+    }
+    if !library.eq_ignore_ascii_case(b"REXX") {
+        return Err(Loud::external_entry_point(
+            "loadExternalMethod naming a library other than REXX",
+        )
+        .into());
+    }
+    if native::entry_point(&entry).is_none() {
+        return Ok(Some(ObjRef::NIL));
+    }
+    let object = interp.native_instance(class);
+    interp.record_native_executable(object);
+    Ok(Some(object))
+}
+
+/// A `loadExternal*` descriptor split into its library and its entry point,
+/// or `None` for one that is not an external name specification.
+///
+/// `LIBRARY` and two or three words is the whole of what either row accepts;
+/// the entry point falls back to the executable's own name as written.
+fn external_specification(descriptor: &[u8], name: &[u8]) -> Option<(Vec<u8>, Vec<u8>)> {
+    let mut words = descriptor
+        .split(|byte| byte.is_ascii_whitespace())
+        .filter(|word| !word.is_empty());
+    if !words.next()?.eq_ignore_ascii_case(b"LIBRARY") {
+        return None;
+    }
+    let library = words.next()?.to_vec();
+    let entry = words.next().map_or_else(|| name.to_vec(), <[u8]>::to_vec);
+    if words.next().is_some() {
+        return None;
+    }
+    Some((library, entry))
 }
 
 /// `Package~new(name, source, ...)`: the name is required, the source is not,

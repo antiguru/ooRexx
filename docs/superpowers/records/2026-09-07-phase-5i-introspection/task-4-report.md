@@ -5,9 +5,12 @@ start of the task.
 
 ## Status
 
-Twenty-one of the twenty-five rows are implemented and agree with the oracle on all three
-descriptors under both engines. Two rows are declined by ruling with the measurement attached, and
-two are blocked on a file the dispatch does not list.
+**All twenty-five rows are implemented** and agree with the oracle on all three descriptors under
+both engines, with two arms declined by ruling and one refused by choice, each with its measurement:
+`setSecurityManager`'s argument-taking form, `loadExternalRoutine`, and `newFile`'s second argument.
+The report below was written as the work went and its early sections say "twenty-one" where four
+rows were still blocked on a file boundary the controller then granted; the last section is where
+those four land.
 
 ## Rulings applied
 
@@ -20,8 +23,19 @@ section before writing this line.
   Implemented that way: the no-argument form answers `0`/`1` by code-object kind, and any supplied
   argument -- `.nil` included, which the oracle treats as a manager and not an absence -- is
   `Loud::security_manager`, `a security manager is not implemented (D12, Phase 7)`.
-* **`loadExternalMethod`/`loadExternalRoutine`: the `LIBRARY REXX` arm only** (2026-09-08). NOT
-  implemented -- see *Blocked* below; the blocker is the error constructor, not the design.
+* **`loadExternalMethod`/`loadExternalRoutine`: the `LIBRARY REXX` arm only** (2026-09-08).
+  Implemented, once `error.rs` was granted -- and the refused half turned out to include
+  `loadExternalRoutine`'s own `LIBRARY REXX` arm, for the reason `directive_gap` keeps every
+  `::ROUTINE EXTERNAL` form.
+* **`error.rs` is on the touch list** (2026-09-08). Two constructors added,
+  `Raised::executable_file_unreadable` and `Raised::bad_external_specification`, and
+  `corpus/refusal-sites.tsv` refreshed with them.
+* **The synthetic directive for `newFile`, with an assertion** (2026-09-08). Done, and the assertion
+  is `no_written_directive_has_an_empty_clause_span`.
+* **Report every row the two behaviour changes move** (2026-09-08). Done; both tables' moved rows
+  are listed below and **every one of them is a `Method` or `Routine` row** -- 21 rows over 42
+  changed lines in the arity table and 20 over 40 in `method-bodies.txt` on the first refresh, and
+  4 over 8 and 4 over 8 on the second, so no row belonging to another task moved.
 * **The live builtin-argument-run defect** (2026-09-08). Every message send in both witnesses is
   assigned to a variable before it reaches a multi-argument builtin. Neither witness calls one.
 * **The arity instrument cannot see an object's class** (2026-09-08). Every row that answers an
@@ -281,14 +295,10 @@ program with that one line deleted is rc 0 and prints `Routine`. **D12 owns the 
 points and Phase 7 the rest.** The no-argument form is provably inert -- measured, `.routines~rr`
 still answers after it -- and is implemented, answering `0` or `1` by code-object kind.
 
-**`loadExternalMethod`, `loadExternalRoutine`, `Method~newFile` and `Routine~newFile` are NOT
-implemented, and the blocker is a file boundary rather than the work.** All four need a `Raised`
-constructor that does not exist, and `Raised`'s constructors live in
-`crates/rexx-exec/src/error.rs`, which this task's dispatch does not list: `3.1 Failure during
-initialization: File "nope.rex" is unreadable.` for `newFile`, and `99.917 Incorrect external name
-specification "garbage".` for the two `loadExternal` rows. Everything else about all four is
-measured and in reach, and is recorded in PF2 and PF6 above so the next hand does not re-measure
-it.
+**`loadExternalMethod`, `loadExternalRoutine`, `Method~newFile` and `Routine~newFile` were blocked
+here on a file boundary** -- all four need a `Raised` constructor and `Raised`'s constructors live in
+`crates/rexx-exec/src/error.rs`, which the dispatch did not list. **The controller granted it**, and
+the four are landed; see the last section.
 
 
 ## Witnesses
@@ -387,7 +397,11 @@ Fast checks, in the working tree, before the commit:
   `Finished \`dev\` profile`. (It was exit 101 once, `clippy::redundant_guards` on this file's
   own `Some(text) if text.is_empty()`; fixed to `Some([])` and re-run.)
 * `cargo test --release --workspace --no-fail-fast` -- exit 0, 116 `test result:` lines, none
-  `FAILED`. Two earlier runs of the same command were red and each named its own fix:
+  `FAILED`. Run again before each of the three commits, exit 0 each time; the third adds
+  `no_written_directive_has_an_empty_clause_span`, confirmed to exist by
+  `cargo test --release -p rexx-exec --lib no_written_directive` reporting `1 passed` rather than
+  `0 passed; 787 filtered out`. Two earlier runs of the same command were red and each named its own
+  fix:
   `every_lang_program_is_run_or_named_unfiled` before the two witnesses were filed in
   `corpus/phase-5c.txt`, and `the_table_matches_the_three_sides` before the arity table was
   refreshed.
@@ -466,13 +480,11 @@ transcripts, and restores from a `cp` backup -- never `git checkout --`.
 
 ## Concerns and hand-offs
 
-1. **Four rows are unbuilt and the reason is a file boundary.** `Method~newFile`, `Routine~newFile`,
-   `loadExternalMethod` and `loadExternalRoutine` each need a `Raised` constructor, and `Raised`'s
-   constructors live in `crates/rexx-exec/src/error.rs`, which this task's dispatch does not list.
-   `3.1 Failure during initialization: File "..." is unreadable.` and
-   `99.917 Incorrect external name specification "...".` are the two. Everything else about all
-   four is measured and recorded above -- the cwd-relative resolution, the unabsolutised
-   `~package~name`, the install-without-running, and the three `loadExternal` arms.
+1. **CLOSED.** The four rows are landed; `error.rs` was granted. What is left of them is three
+   deliberate refusals, each named in the last section with its measurement:
+   `loadExternalRoutine` (the routine entry-point table this crate does not keep),
+   `loadExternalMethod` naming any other library (a `dlopen`), and `newFile`'s second argument (the
+   package context the loaded file would resolve names against).
 2. **`setSecurityManager`'s argument form stays a divergence, by ruling.** The oracle installs a
    manager and raises `97.1` at the next environment-symbol lookup; this crate refuses loudly. The
    row is `send-differs` in `corpus/introspection-arity.tsv` and will stay so until D12's
@@ -527,3 +539,95 @@ No shared table moves for this fix: `cargo test --release -p rexx-exec --test in
 --test refusal_sites --test coverage` is exit 0 (25, 5 and 20 passed) and
 `cargo test --release -p rexx-parse --test sourceline_oracle` is exit 0 against the regenerated
 expectation.
+
+## The hunt that found it, and what else it cleared
+
+The defect above was not found by review. It was found by naming the class this task's own defects
+would share -- **range arithmetic over a program's source, and the calling convention a `~call`
+enters under** -- and running shapes of it against the oracle rather than reasoning about them.
+Each of these was measured on the oracle and on both engines after the fix; every one agrees on all
+three descriptors.
+
+*Source-range shapes.* A directive clause **continued** onto a second line (`::method CONT ,` over
+`  unguarded`) -- the block starts on the third line, `Array(1)`. A body's last line ending in `;`
+-- the whole line is kept, `<  return 2;>`, because that edge is the next directive's and not the
+`;`'s. A `::CONSTANT` whose parenthesised expression spans two lines -- `Array(0)`, a
+`ConstantGetterCode`. A `.Method~new` over a two-element `Array` -- `Array(2)`, the elements
+verbatim. The **first** directive after its `::CLASS`. And the two the previous section fixed.
+
+*Package shapes.* A method declared in a `::REQUIRES`-loaded file, read from the requiring program:
+its `~package~name` is **not** the requiring file (`0` against `PARSE SOURCE`'s third word), and its
+`~source` and flags are the required file's own. A `~define` with a source string: `~package~name`
+is `DS`, the name `~define` was given, and `~setSecurityManager` is `1`. A `~defineMethods(.methods)`
+entry, which goes through `Interp::method_new_scope` **twice**: `~source` is the unattached
+`::METHOD`'s own line and `~scope` is the receiving class.
+
+*Call-convention shapes.* `exit 55` inside a routine reached by `~call` answers `55` to the caller
+and lets the program run on, rather than exiting it. A failure inside one reports the routine's own
+clause, then `Compiled method "CALL" with scope "Routine".`, then the sending clause, at rc 214 --
+stderr byte-identical. And a routine that calls itself through `.routines~R~call` five deep answers
+`15`.
+
+## The last four rows, after the controller granted `error.rs`
+
+`Method~newFile`, `Routine~newFile`, `loadExternalMethod` and `loadExternalRoutine` are landed. The
+two `Raised` constructors the 2026-09-08 ruling granted are `executable_file_unreadable` (3.1) and
+`bad_external_specification` (99.917); both messages were already in `rexx-inventory`'s generated
+catalogue, so neither is hand-transcribed.
+
+**`newFile` loads a package and files its main section as a synthetic directive**, the shape the
+2026-09-08 ruling approved. Three walks skip a directive whose clause span is empty --
+`Interp::install_directives`, `class_members` (without which the main section would attach to the
+file's **last class**) and `environment.rs`'s `package_table_entries` (without which it would appear
+in that package's `.METHODS`). **The assertion the ruling asked for is
+`no_written_directive_has_an_empty_clause_span`**, which parses every `.rex` under `corpus/` and
+fails if any written directive carries one; it also asserts the walk found more than a hundred
+directives, so an empty walk cannot pass it.
+
+**Measured, oracle rc 0, and matching on both engines**: `newFile('body.rex')` answers a `Method`
+with `~scope` `.nil`, `~package~name` `body.rex` (the argument as written, unabsolutised),
+`~source` the file's two lines, default flags and `~setSecurityManager` `1`; the same on `Routine`,
+whose `~call` answers `5` and answers it again from a file that is `return 5` above a
+`::routine helper`. `newFile('nope.rex')` is `Error 3.1: Failure during initialization: File
+"nope.rex" is unreadable.` at rc 253, **byte-identical on all three descriptors**.
+
+**`loadExternalMethod`'s `LIBRARY REXX` arm is answered and everything else is refused**, per the
+ruling. The refused half grew by one arm the pre-flight had not separated: **`loadExternalRoutine`
+cannot answer even `LIBRARY REXX`**, because a routine entry point resolves against
+`rexx_routines[]` and this crate keeps only the method registry -- measured, oracle rc 0,
+`loadExternalRoutine('Filespec', 'LIBRARY REXX')` answers a `Routine` where the same entry point is
+absent from `dispatch::native`'s table. That is the same boundary `directive_gap` draws when it
+keeps **every** `::ROUTINE EXTERNAL` form, the `LIBRARY REXX` spelling included, on Phase 7's list.
+
+Answered and matching: a known entry by name or as the executable's own name (case included --
+`loadExternalMethod('file_separator', 'LIBRARY REXX')` answers where the same call under `M9` does
+not), `.nil` for an unknown REXX entry, and 99.917 for a descriptor that is not one -- `garbage`,
+`LIBRARY` alone, `REGISTERED junk`, a fourth word, and the empty string, each byte-identical.
+
+**The second `newFile` argument is refused rather than accepted**, and that is a deliberate
+divergence: it is the package context the loaded file resolves names against, so accepting it
+without honouring it would answer at rc 0 where the resolution differs.
+
+**One property is measured but NOT witnessed in the corpus, and it is stated rather than papered
+over**: that `newFile` installs the loaded file's directives. A corpus program has no second file to
+load, and loading itself and calling what that answers would re-run the program from inside itself
+-- so both witnesses call `newFile` on their own file and never call the result. The evidence for
+the property is the probe above, `return helper(3)` over a `::routine helper` answering `33`.
+
+### Controls for these rows
+
+| control | mutation | predicted | outcome |
+| --- | --- | --- | --- |
+| C12 | every descriptor is a valid external specification | method witness RED on the descriptor rows | **FALSIFIED first, then confirmed** -- see below |
+| C13 | `loadExternalMethod` files no executable record | method witness RED at `external-source`, loud | CONFIRMED, rc 120, `a message send to an executable this crate did not build` |
+| C14 | an unknown REXX entry point still answers an object | method witness RED at `external-unknown-entry` | CONFIRMED exactly, `The NIL object` -> `a Method` |
+| C15 | an unreadable file is a loud refusal rather than 3.1 | both witnesses RED at their `newFile-a-file-that-is-not-there` row | CONFIRMED, rc 120 on both |
+| C16 | `newFile` files a native record rather than its own program | both witnesses RED at `file-has-source` | CONFIRMED, and it also flipped `file-package-name-is-the-source` and `file-ssm` |
+
+**C12 is the one worth reading.** It came back STILL GREEN on both witnesses and both engines, and
+the mutation was real. The three descriptor rows the witness had -- `garbage`, `LIBRARY`, and the
+empty string -- fail on the descriptor's **arity** and never reach the `LIBRARY` keyword test, so
+removing that test changed nothing they could see. This is "can fail is not adds coverage" from the
+other side: three red-able rows, none of them covering the branch they appeared to. Two rows were
+added -- `REGISTERED junk` (two words, wrong keyword) and a four-word descriptor -- and C12 is red
+on both engines with them, at the first of them.

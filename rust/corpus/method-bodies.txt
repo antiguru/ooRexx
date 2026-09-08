@@ -108,8 +108,8 @@ Message	triggered	instance	loud	method "TRIGGERED" of class "Message"
 Message	wait	instance	loud	method "WAIT" of class "Message"
 Message	cancel	instance	answers	rc 165
 Method	new	class	answers	rc 168
-Method	loadExternalMethod	class	loud	method "LOADEXTERNALMETHOD" of class "Method"
-Method	newFile	class	loud	method "NEWFILE" of class "Method"
+Method	loadExternalMethod	class	answers	rc 168
+Method	newFile	class	answers	rc 168
 Method	annotation	instance	answers	rc 168
 Method	annotations	instance	answers	rc 0
 Method	isAbstract	instance	answers	rc 0
@@ -200,8 +200,8 @@ Package	sourceLine	instance	loud	method "SOURCELINE" of class "Package"
 Package	sourceSize	instance	loud	method "SOURCESIZE" of class "Package"
 Package	trace	instance	loud	method "TRACE" of class "Package"
 Routine	new	class	answers	rc 168
-Routine	loadExternalRoutine	class	loud	method "LOADEXTERNALROUTINE" of class "Routine"
-Routine	newFile	class	loud	method "NEWFILE" of class "Routine"
+Routine	loadExternalRoutine	class	answers	rc 168
+Routine	newFile	class	answers	rc 168
 Routine	[]	instance	answers	rc 165
 Routine	annotation	instance	answers	rc 168
 Routine	annotations	instance	answers	rc 0

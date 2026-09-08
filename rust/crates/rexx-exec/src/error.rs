@@ -853,6 +853,36 @@ impl Raised {
         Raised::syntax(43, 901, vec![name.to_vec()])
     }
 
+    /// 3.1: `Method~newFile` or `Routine~newFile` naming a file that cannot
+    /// be read. One substitution, **the name as the program wrote it** rather
+    /// than anything resolved from it.
+    ///
+    /// Measured, oracle rc 253 with stdout empty:
+    /// `.Method~newFile('nope.rex')` reports
+    /// `Error 3 running <path> line 1:  Failure during initialization.` and
+    /// `Error 3.1:  Failure during initialization: File "nope.rex" is
+    /// unreadable.`, under a `Compiled method "NEWFILE" with scope "Method".`
+    /// frame, and `.Routine~newFile` reports the same pair under its own
+    /// class's frame.
+    pub(crate) fn executable_file_unreadable(name: &[u8]) -> Raised {
+        Raised::syntax(3, 1, vec![name.to_vec()])
+    }
+
+    /// 99.917: `loadExternalMethod` or `loadExternalRoutine` given a
+    /// descriptor that is not an external name specification. One
+    /// substitution, the descriptor.
+    ///
+    /// **Raised before any library is looked for**, which is what makes it
+    /// answerable here: measured, oracle rc 157,
+    /// `.Method~loadExternalMethod('M9', 'garbage')` reports
+    /// `Error 99.917:  Incorrect external name specification "garbage".`
+    /// under a `Compiled method "LOADEXTERNALMETHOD" with scope "Method".`
+    /// frame, on a machine where a well-formed descriptor naming the same
+    /// missing library answers `.nil` instead.
+    pub(crate) fn bad_external_specification(descriptor: &[u8]) -> Raised {
+        Raised::syntax(99, 917, vec![descriptor.to_vec()])
+    }
+
     /// 98.952: a `::REQUIRES` naming a package whose own directives are still
     /// installing. One substitution, the **resolved** path.
     ///

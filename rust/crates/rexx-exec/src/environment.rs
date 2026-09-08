@@ -1890,6 +1890,11 @@ fn package_table_entries(
     let mut entries = Vec::new();
     let mut seen_class = false;
     for (index, directive) in program.directives.iter().enumerate() {
+        // A synthetic directive is in no package table either -- `lib.rs`'s
+        // `Interp::install_directives` carries the rule and what asserts it.
+        if directive.clause_span.is_empty() {
+            continue;
+        }
         let unattached = !seen_class;
         match &directive.kind {
             rexx_parse::DirectiveKind::Class(_) => seen_class = true,

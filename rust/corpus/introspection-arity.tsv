@@ -88,9 +88,9 @@ Method	isGuarded	instance	agree	rc0
 Method	isPackage	instance	agree	rc0
 Method	isPrivate	instance	agree	rc0
 Method	isProtected	instance	agree	rc0
-Method	loadExternalMethod	class	send-differs	oracle rc0 VALUE The NIL object; crate rc120 rexx-exec: method "LOADEXTERNALMETHOD" of class "Method" is not implemented (Phase 5)
+Method	loadExternalMethod	class	send-differs	oracle rc0 VALUE The NIL object; crate rc120 rexx-exec: loadExternalMethod naming a library other than REXX is not implemented (Phase 7
 Method	new	class	agree	rc0
-Method	newFile	class	send-differs	oracle rc0 VALUE a Method; crate rc120 rexx-exec: method "NEWFILE" of class "Method" is not implemented (Phase 5)
+Method	newFile	class	agree	rc0
 Method	package	instance	agree	rc0
 Method	scope	instance	agree	rc0
 Method	setGuarded	instance	no-value	rc0, the send returned no result to compare
@@ -220,9 +220,9 @@ Routine	annotation	instance	agree	rc0
 Routine	annotations	instance	agree	rc0
 Routine	call	instance	agree	rc0
 Routine	callWith	instance	agree	rc0
-Routine	loadExternalRoutine	class	send-differs	oracle rc0 VALUE a Routine; crate rc120 rexx-exec: method "LOADEXTERNALROUTINE" of class "Routine" is not implemented (Phase 5)
+Routine	loadExternalRoutine	class	send-differs	oracle rc0 VALUE a Routine; crate rc120 rexx-exec: loadExternalRoutine is not implemented (Phase 7)
 Routine	new	class	agree	rc0
-Routine	newFile	class	send-differs	oracle rc0 VALUE a Routine; crate rc120 rexx-exec: method "NEWFILE" of class "Routine" is not implemented (Phase 5)
+Routine	newFile	class	agree	rc0
 Routine	package	instance	agree	rc0
 Routine	setSecurityManager	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: a security manager is not implemented (D12, Phase 7)
 Routine	source	instance	agree	rc0

@@ -974,6 +974,37 @@ impl Loud {
     /// the same program without that line is rc 0. The no-argument form
     /// installs nothing -- measured, `.routines~rr` still answers -- and is
     /// the form this phase answers.
+    /// `Method~newFile` and `Routine~newFile` given the package context their
+    /// second argument is.
+    ///
+    /// **Refused rather than ignored.** It is what the loaded file resolves
+    /// names against, so accepting it and loading without it would answer at
+    /// rc 0 where the resolution differs. Measured, oracle rc 0:
+    /// `.Method~newFile('body.rex', .context~package)` answers a `Method`.
+    fn executable_context() -> Loud {
+        Loud {
+            message: owned_message("a newFile package context", Some("Phase 7")),
+        }
+    }
+
+    /// `loadExternalMethod` and `loadExternalRoutine` for an entry point this
+    /// phase cannot resolve.
+    ///
+    /// **The boundary is `directive_gap`'s, drawn in the same two places.**
+    /// A library other than `REXX` is a `dlopen`, whose answer is a property
+    /// of the machine's shared libraries rather than of the program --
+    /// measured, oracle rc 0 on this machine, `LIBRARY rxmath RxCalcPi`
+    /// answers a `Routine` and `LIBRARY rexxutil SysCurPos` answers `.nil`.
+    /// And a **routine** entry point resolves against `rexx_routines[]`,
+    /// which `dispatch::native`'s registry is not -- the reason
+    /// `::ROUTINE EXTERNAL` keeps every one of its forms, the `LIBRARY REXX`
+    /// spelling included, on that same list.
+    fn external_entry_point(what: &'static str) -> Loud {
+        Loud {
+            message: owned_message(what, Some("Phase 7")),
+        }
+    }
+
     fn security_manager() -> Loud {
         Loud {
             message: owned_message("a security manager", Some("D12, Phase 7")),
@@ -2086,6 +2117,13 @@ fn class_members(program: &Program) -> HashMap<usize, Vec<usize>> {
     let mut members: HashMap<usize, Vec<usize>> = HashMap::new();
     let mut current: Option<usize> = None;
     for (index, directive) in program.directives.iter().enumerate() {
+        // A synthetic directive belongs to no class -- see the skip in
+        // `Interp::install_directives`, which carries why an empty clause
+        // span is what tells one from a written directive. This one is what
+        // keeps a loaded file's main section out of that file's last class.
+        if directive.clause_span.is_empty() {
+            continue;
+        }
         match &directive.kind {
             DirectiveKind::Class(_) => current = Some(index),
             DirectiveKind::Method(_) | DirectiveKind::Attribute(_) | DirectiveKind::Constant(_) => {
@@ -4997,6 +5035,18 @@ impl Interp {
         // the install pass creates one.
         let mut staged: BTreeMap<AnnotatedSite, Vec<(Box<[u8]>, Box<[u8]>)>> = BTreeMap::new();
         for (index, directive) in program.directives.iter().enumerate() {
+            // **A synthetic directive installs nothing**, which is what lets
+            // `Interp::new_file_executable` file a loaded file's main section
+            // as a directive of its own without also declaring it under a
+            // name a program could call. The whole set of them is the ones
+            // this crate builds, and each carries an empty clause span where
+            // a written directive's spans at least `::method x` --
+            // `no_written_directive_has_an_empty_clause_span` asserts that
+            // over every corpus program, so this is a narrow rule rather than
+            // a trap that silently drops a real directive.
+            if directive.clause_span.is_empty() {
+                continue;
+            }
             // **Before the arms below, because the oracle checks before it
             // adds.** `constantDirective` calls `checkDuplicateMethod` ahead
             // of `createConstantGetterMethod`, which is what raises 99.906
@@ -6678,6 +6728,128 @@ impl Interp {
         );
     }
 
+    /// `MethodClass::newFileRexx` and `RoutineClass::newFileRexx`
+    /// (`classes/MethodClass.cpp:521`, `classes/RoutineClass.cpp:341`): the
+    /// executable a file's own text becomes.
+    ///
+    /// **The file is resolved against the current directory and not against
+    /// the running program**, which is measured and is the opposite of what
+    /// `::REQUIRES` does: the same `newFile('body2.rex')` raises 3.1 from one
+    /// working directory and answers from another with the program unmoved.
+    /// The name is answered back unchanged, so `~package~name` is what the
+    /// caller wrote -- measured, `newFile('nf/body.rex')~package~name` is
+    /// `nf/body.rex`.
+    ///
+    /// **The directives install and the main section does not run**, which is
+    /// the difference from a `::REQUIRES` load: measured, oracle rc 0, a file
+    /// whose text is `return helper(3)` above a `::routine helper` answers
+    /// `33` from `~call` and prints nothing when `newFile` builds it.
+    ///
+    /// The main section is filed as a directive appended after the file's
+    /// own, carrying an empty clause span so that the three directive walks
+    /// leave it alone -- [`Interp::install_directives`] has the rule.
+    pub(crate) fn new_file_executable(
+        &mut self,
+        name: &[u8],
+        routine: bool,
+    ) -> Result<ObjRef, Failure> {
+        let path = String::from_utf8_lossy(name).into_owned();
+        let Ok(text) = std::fs::read(&path) else {
+            return Err(Raised::executable_file_unreadable(name).into());
+        };
+        let parsed = match rexx_parse::parse_program(text) {
+            Ok(parsed) => parsed,
+            Err(error) => {
+                return Err(Loud::method_from_source(&format!(
+                    "reporting a file that does not parse ({path}, {error})"
+                ))
+                .into());
+            }
+        };
+        let Program {
+            source,
+            main,
+            mut directives,
+            symbols,
+        } = parsed;
+        let body = directives.len();
+        directives.push(Directive {
+            kind: if routine {
+                DirectiveKind::Routine(Box::new(rexx_parse::RoutineDirective {
+                    name: name.into(),
+                    access: Access::default(),
+                    external: None,
+                    body: Some(main),
+                }))
+            } else {
+                DirectiveKind::Method(Box::new(MethodDirective {
+                    name: name.into(),
+                    class_method: false,
+                    attribute: false,
+                    abstract_: false,
+                    access: Access::default(),
+                    protection: Protection::default(),
+                    guard: GuardOption::default(),
+                    external: None,
+                    delegate: None,
+                    body: Some(main),
+                }))
+            },
+            clause_span: 0..0,
+        });
+        let program = Rc::new(Program {
+            source,
+            main: CodeBody::default(),
+            directives,
+            symbols,
+        });
+        let id = ProgramId(self.programs.len());
+        self.programs.push(Rc::clone(&program));
+        self.required_paths.insert(id, path.into());
+        self.install_directives(id, &program)?;
+        let class = if routine {
+            self.routine_class()
+        } else {
+            self.method_class()
+        };
+        let object = self.native_instance(class);
+        let site = environment::Annotated::Compiled(self.compiled_methods);
+        self.compiled_methods += 1;
+        self.attach_annotations(object, site);
+        self.executable_sources.insert(
+            object,
+            ExecutableRecord {
+                source: ExecutableSource::Main { program: id },
+                installed: None,
+                routine: routine.then_some((id, body)),
+            },
+        );
+        if !routine {
+            self.table_method_bodies.insert(
+                object,
+                InstalledMethodBody {
+                    program: id,
+                    directive: body,
+                },
+            );
+        }
+        Ok(object)
+    }
+
+    /// Records a `Method` or `Routine` object whose body is a primitive, so
+    /// that its readers answer `BaseCode`'s: an empty `~source`, the `REXX`
+    /// package, and `0` from `~setSecurityManager`.
+    pub(crate) fn record_native_executable(&mut self, object: ObjRef) {
+        self.executable_sources.insert(
+            object,
+            ExecutableRecord {
+                source: ExecutableSource::Native,
+                installed: None,
+                routine: None,
+            },
+        );
+    }
+
     /// What the `Method` object for one installed method reports on: the
     /// directive that declared it, or [`ExecutableSource::Native`] for a
     /// primitive and for an `EXTERNAL` binding, neither of which has one.
@@ -7924,6 +8096,53 @@ mod tests {
     use super::{Interp, ProgramId, form_name, parse_program, run_program};
     use rexx_parse::{DirectiveKind, Expr, ExprKind, Operator, PrefixOp, Program};
     use std::rc::Rc;
+
+    /// An empty clause span is what tells a directive this crate synthesised
+    /// from one a program wrote, and three walks skip on it --
+    /// [`Interp::install_directives`], `class_members` and
+    /// `environment.rs`'s `package_table_entries`.
+    ///
+    /// **Asserted rather than relied on.** If a written directive could ever
+    /// carry an empty span, those three would silently stop installing it and
+    /// nothing would point at the cause; this is what makes the rule narrow
+    /// instead of a trap. Every `.rex` file under `corpus/` is the population,
+    /// which is every directive form this crate parses.
+    #[test]
+    fn no_written_directive_has_an_empty_clause_span() {
+        let corpus = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+        let mut directives = 0usize;
+        let mut directories = vec![corpus];
+        while let Some(directory) = directories.pop() {
+            for entry in std::fs::read_dir(&directory).expect("a readable corpus directory") {
+                let path = entry.expect("a readable directory entry").path();
+                if path.is_dir() {
+                    directories.push(path);
+                    continue;
+                }
+                if path.extension().and_then(|extension| extension.to_str()) != Some("rex") {
+                    continue;
+                }
+                let bytes = std::fs::read(&path).expect("a readable corpus program");
+                let Ok(program) = parse_program(bytes) else {
+                    continue;
+                };
+                for directive in &program.directives {
+                    assert!(
+                        !directive.clause_span.is_empty(),
+                        "{} has a written directive whose clause span is empty, so the three \
+                         walks that skip on an empty span would stop installing it",
+                        path.display()
+                    );
+                    directives += 1;
+                }
+            }
+        }
+        assert!(
+            directives > 100,
+            "the walk found {directives} directives, which is too few for the corpus to have \
+             been read at all"
+        );
+    }
 
     /// The path these tests report programs under.
     ///
