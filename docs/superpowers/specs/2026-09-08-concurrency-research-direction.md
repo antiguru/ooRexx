@@ -78,7 +78,24 @@ hand-written **Rexx Semaphore Class** as an example.
 
 ---
 
-## 2. The documented model is Eiffel's SCOOP, and the implementation collapsed it
+## 2. The documented model is SCOOP-shaped, and the implementation collapsed it
+
+**Two corrections before the comparison, both of which cut against the easy reading.**
+
+*SCOOP is not a standardised Eiffel feature.* ECMA-367 2nd edition (June 2006, adopted as
+ISO/IEC 25436) contains zero occurrences of "SCOOP" and zero of "concurren"; `separate`
+appears in the reserved-word list and is given no semantics anywhere in the prose. (Measured
+by the survey with `pdftotext` and `grep -c -a -i` over the standard; I did not re-run it.)
+SCOOP is Meyer's research model plus a vendor implementation, and its three primary
+sources -- OOSC2 ch. 30, Nienaltowski's thesis, the ETH papers -- disagree in load-bearing
+ways.
+
+*SCOOP is not the absence of a global lock; it is a partitioned one.* Its safety comes from
+the reservation rule: a routine with N separate arguments atomically acquires N processor
+locks and **holds them until the routine returns**, across user-code call boundaries. For a
+project whose motivation is escaping a global lock, that is the thing to internalise -- SCOOP
+replaces one coarse lock with many coarse locks whose granularity the programmer picks by
+choosing argument lists.
 
 The concurrency chapter of the reference (`oodocs/rexxref/en-US/xconcur.xml`) opens:
 
@@ -106,12 +123,74 @@ That is a handler per object. And the lock it specifies is per *(object, scope)*
 | precondition as wait condition | `GUARD ON WHEN expr`, re-tested when an exposed object variable changes |
 
 **Where Rexx is weaker than SCOOP**, and this is the part a design must decide rather than
-inherit: SCOOP reserves *every separate argument of a routine* for that routine's duration,
-where Rexx locks only the receiver's scope for the duration of one message. A read-modify-write
-spanning two sends is therefore unprotected in Rexx by construction. The manual's semaphore
-class is the evidence that this was understood and pushed to the user. Rexx also has no
-`separate` type, so nothing in the language assigns objects to handlers -- a SCOOP-faithful
-implementation would have to derive that assignment, and the derivation is the design.
+inherit. SCOOP reserves *every separate argument of a routine* for that routine's duration;
+Rexx locks only the receiver's scope, for the duration of one message. Four exposures follow,
+and the first is the one that matters:
+
+1. **Multi-object atomicity violation.** A `GUARDED` method holds `self` for its whole body
+   but takes and releases `target`'s lock only around each send to it:
+
+       ::method transfer
+         expose balance
+         use arg target, amount
+         balance = balance - amount
+         target~deposit(amount)
+
+   Between those two clauses another activity can observe `target`, or run the opposite
+   transfer. `self~balance + target~balance = const` is observably broken. In SCOOP the
+   program is not expressible: `target` must be a formal argument to be a legal separate
+   call target, and being a formal argument is what reserves its handler for the whole
+   routine -- the atomicity is forced by the same rule that makes the call legal.
+   Nienaltowski's thesis names this class as the reason the reservation rule exists.
+   **This example is derived from the documented locking rule and was not executed.**
+2. **Intra-object concurrency across scopes.** Rexx's lock is per *(object, scope)*, so a
+   subclass method and a superclass method on the **same object** run concurrently by design
+   -- the manual demonstrates it with interleaved output. Any invariant spanning two scopes
+   of one object is unprotected. SCOOP forbids intra-object concurrency outright.
+3. **`UNGUARDED` takes no lock at all**, so it can race with a guarded method on the same
+   scope at the level of individual variable reads and writes -- the low-level race class
+   SCOOP eliminates.
+4. **No documented ordering between two `~start` messages to one receiver.** SCOOP guarantees
+   FIFO for consecutive calls on the same target. Whether ooRexx provides it is open and
+   measurable; nobody has looked.
+
+The manual's hand-written semaphore class is the evidence that (1) was understood and pushed
+to the user. And Rexx has no `separate` type, so nothing in the language assigns objects to
+handlers -- a SCOOP-faithful implementation would have to derive that assignment, and **the
+derivation is the design**.
+
+### 2.1 What SCOOP costs, measured by its own authors
+
+West, Nanz and Meyer, *Efficient and Reasonable Object-Oriented Concurrency* (ESEC/FSE 2015):
+their optimised runtime is **15× faster than a straightforward semantics-faithful
+implementation** of the same model, with sync coalescing alone worth 12×-250× on parallel
+benchmarks "due to the copying of large arrays between handlers", which it says "puts solving
+data-heavy problems within reach of SCOOP, which it was not previously".
+
+Read honestly, the cross-language table in that paper puts optimised SCOOP at a geomean of
+1.32 s against Go 0.57 s, Haskell 0.89 s and C++/TBB 0.32 s -- so the paper's headline "2×
+faster than other well-known safe concurrent languages" is carried by Erlang's 18.07 s
+outlier, and against Go and Haskell SCOOP is 1.5-2× *slower*. **The 15× is the number for us:
+the cost is in the model's synchronisation points, not incidental to one implementation.**
+
+SCOOP also does not prevent deadlock.
+
+### 2.2 The verdict on "Rexx is already SCOOP"
+
+Half right, and the wrong half is the expensive one. Right: Rexx has per-object exclusive
+state, futures with wait-by-necessity, an opt-out for read-only work, and condition
+synchronisation folded into the method. Wrong: SCOOP's guarantees rest on two things Rexx has
+neither of -- a **fixed object-to-handler map**, so exclusivity is ownership rather than a
+lock, and the **reservation rule**, so a routine body is atomic with respect to everything it
+will touch. Without those, Rexx gives object-level mutual exclusion and no composition rule.
+Adding `separate`-style ownership is not a small change: it is the change that broke Ractor
+adoption in Ruby.
+
+The realistic target is therefore **passive-region SCOOP over the existing per-scope lock**,
+not classic SCOOP: keep the shared heap, keep the scope as the region, and replace "lock the
+receiver's scope" with "reserve, atomically and for the method's duration, the set of regions
+this method will touch". In Eiffel that set is the argument list. **What plays that role in
+Rexx is the open design question**, and this document does not answer it.
 
 ---
 
@@ -268,10 +347,12 @@ is chosen.
 **Stage 3 -- the experiment, with an escape hatch.** Two candidates against the same corpus,
 built as an alternative configuration rather than a replacement:
 
-* *handler-per-object*, the model the reference describes: an object's handler is derived
-  (creating activity, with migration), a send across handlers is asynchronous, `~result` is
-  wait-by-necessity. Rexx already spells the surface; what it lacks is the reservation rule,
-  so this design must decide what to do about read-modify-write across two sends.
+* *passive-region SCOOP over the existing per-scope lock* (section 2.2), **not** classic
+  SCOOP: shared heap kept, the scope as the region, and "lock the receiver's scope" replaced
+  by "reserve the set of regions this method will touch, atomically, for its duration". The
+  unanswered part is what determines that set, since Rexx has no argument list to read it
+  from. Budget against the 15× that separates a semantics-faithful SCOOP from an optimised
+  one.
 * *shared heap with per-object locks*, CPython's route, with the arena's per-operation cost
   addressed first or not at all.
 
@@ -307,9 +388,14 @@ than against a hoped-for speedup.
 * Whether the single allocation in section 4's last row is literal interning (inferred from a
   doc comment, not measured).
 * Anything about how a handler assignment would be derived for objects that no `separate`
-  type marks -- section 2 names it as the design problem, and does not solve it.
-* The SCOOP literature's own measurements of what the model costs. A survey was commissioned
-  and had not returned when this was written; fold it in rather than restating from memory.
+  type marks, or what plays the role of Eiffel's argument list in a reservation rule for
+  Rexx -- section 2 names both as the design problem and solves neither.
+* Whether ooRexx orders two `~start` messages to one receiver (section 2, exposure 4).
+  Measurable, unmeasured.
+* The ECMA-367 keyword counts in section 2 are the survey's measurement, not mine; I did not
+  re-run them.
+* The `transfer` example in section 2 is derived from the documented locking rule and was not
+  executed against the oracle.
 
 ---
 
