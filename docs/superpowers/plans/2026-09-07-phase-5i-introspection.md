@@ -540,6 +540,19 @@ version` through both interpreters under `REXX_CORPUS_GATE`. A second copy of th
 stale on the next oracle rebuild with that harness still green for the first copy. Assert
 `.RexxInfo~name = v` in this task's witness so the two readers can never drift apart.
 
+**Two failure modes, two instruments, and neither catches both -- measured, and correcting a
+prediction this plan got wrong.** This paragraph used to imply that breaking the shared source
+reddens both consumers together. It does not:
+
+```
+break VERSION's VALUE    ->  parse_version_oracle RED, arity table RED, corpus 446 of 446 GREEN
+break `name`'s LINK to it ->  corpus 445 of 446 RED,                    parse_version_oracle GREEN
+```
+
+So the `.RexxInfo~name = v` assertion catches a **link** that drifts and is blind to a **value**
+that is wrong, while `parse_version_oracle` is the reverse. Both are needed and the report should
+say which one covers which.
+
 **`version`, `majorVersion`, `release`, `modification`, `revision`, `languageLevel` and `date` are
 fields of that same string** — `5.3.0`, `5`, `3`, `0`, `0`, `6.06`, `30 Jul 2026`. Decide whether
 they are parsed out of it or whether the constant is restructured into components that the
