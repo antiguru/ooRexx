@@ -406,15 +406,31 @@ Fast checks, in the working tree, before the commit:
   `corpus/phase-5c.txt`, and `the_table_matches_the_three_sides` before the arity table was
   refreshed.
 
+Run in the gate worktree `/home/moritz/dev/repos/ooRexx-5i-gates`, detached at the tip
+`8bc2df809` (`worktree HEAD: 8bc2df80909c33cb565b4b51ee8928357fb66ae4`, dirty only with the two
+gitignored SVN symlinks, recorded by the script before G1). Each status written unpiped to
+`gate-status.txt` as it went. **All seven zero.**
+
 | gate | command | result |
 | --- | --- | --- |
-| G1 | | **G1** |
-| G2 | | **G2** |
-| G3 | | **G3** |
-| G4 | | **G4** |
-| G5 | | **G5** |
-| G6 | | **G6** |
-| G7 | | **G7** |
+| G1 | `cargo fmt --all --check` | exit 0 |
+| G2 | `cargo clippy --workspace --all-targets -- -D warnings` | exit 0 |
+| G3 | `cargo test --release --workspace --no-fail-fast` | exit 0, 116 `test result: ok`, no `FAILED`, 2281 passed |
+| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` (debug) | exit 0, 116 `test result: ok`, no `FAILED`, 2282 passed |
+| G5 | `cargo test --release -p rexx-exec --test collection_arity` | exit 0, 23 passed |
+| G6 | `cargo test --release -p rexx-exec --test introspection_arity` | exit 0, 25 passed |
+| G7 | `cargo test --release -p rexx-exec --test introspection_scopes` | exit 0, 22 passed |
+
+G4's own stderr carries `mode: STRICT (the gate) -- REXX_CORPUS_GATE is set` and
+**`448 of 448 matching`**, the run that includes both new witnesses. G3 is one higher than the two
+earlier readings at 2280, which is `no_written_directive_has_an_empty_clause_span`.
+
+**Two earlier full readings are on record and both are all-seven-zero**: at `546bd9ed6` (2280 / 2281
+/ 448 of 448) and at `aecefc191` (the same). **Two runs were abandoned rather than finished**, at
+`5d833ec6d` and `552d108b0`, each because the hunt found a divergence in a row that run was testing;
+their partial files are kept beside the finished ones. Abandoning was the choice: a reading for a
+commit I was about to supersede is a number nobody would use, and the machine time was better spent
+on the fix.
 
 ## Negative controls
 
@@ -688,3 +704,20 @@ naming the class the row's defects would share and enumerating spellings of it a
 and in each case the committed witnesses were green beforehand -- because they had been written
 against the shapes I had implemented rather than against the shapes the oracle distinguishes. That
 is the finding worth carrying out of this task, above any of the twenty-five rows.
+
+## The two tables, checked the way the ruling asks rather than by eye
+
+The 2026-09-08 ruling asks for every row the two behaviour changes move, because both can move rows
+that are not this task's, and because `corpus/method-bodies.txt`'s gate rule is that a row which was
+answering may not stop. Run over the whole span, `acf617abd..HEAD`:
+
+* **No row stopped answering.** `git diff acf617abd..HEAD -- corpus/method-bodies.txt` has **zero**
+  removed lines carrying the `answers` verdict, and 24 added ones.
+* **No row left `agree`.** The same diff over `corpus/introspection-arity.tsv` has zero removed
+  lines carrying it.
+* **Every moved row is this task's.** 48 changed rows in `method-bodies.txt`, 48 of them matching
+  `^[-+](Method|Routine)\t`; 50 and 50 in the arity table. The counts are equal, so no row belonging
+  to another class -- and so to another task -- moved at all.
+
+That is a check rather than a reading: an eye over a two-hundred-line diff would have said the same
+thing whether or not it was true.
