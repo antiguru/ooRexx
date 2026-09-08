@@ -2193,6 +2193,14 @@ impl Interp {
                                         {
                                             break 'cold Err(failure);
                                         }
+                                        // Which register roots a flattened
+                                        // `DO OVER`'s snapshot, recorded here
+                                        // because this op is the only place
+                                        // that knows it -- see
+                                        // `LoopState::OverItems`.
+                                        if matches!(role, crate::run::HeaderRole::Over) {
+                                            values.over_register = Some(*src);
+                                        }
                                     }
                                     // The construct itself, from the values the ops
                                     // above filed. `run_loop_with_header` is the
@@ -2218,6 +2226,7 @@ impl Interp {
                                         // which is the op after this region.
                                         let values = match self.flat_loop_start(
                                             code, index, clause, body, source, values, end,
+                                            registers,
                                         ) {
                                             Ok(crate::run::FlatStart::Flat {
                                                 body_start,

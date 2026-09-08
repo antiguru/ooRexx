@@ -815,28 +815,24 @@ enum LoopState {
     /// target takes the loud path in `run_loop_with_header` before one of
     /// these is ever built): binds `control` to each of `items` in turn.
     ///
-    /// `items` is `requestArray`'s answer, which [`Interp::over_items`]
-    /// computes: an array's own non-empty slots, a `StringTable`'s own
-    /// indexes, and otherwise the target itself as a list of one -- measured,
-    /// `do e over 'abc'` iterates once yielding `abc`.
+    /// `snapshot` is one non-sparse `Body::Array` of the values to bind, which
+    /// [`Interp::over_snapshot`] builds, and `items` is its slots again so
+    /// that a pass reads one vector index rather than resolving a handle.
     ///
-    /// **Rooted by the header, not by this state**, and the two kinds of item
-    /// reach that rooting differently. `eval_loop_header` `push_temp`s the
-    /// target and the loop runs inside that clause, so the target outlives
-    /// every pass. An array's items are its own slots and are reachable
-    /// through it; nothing in this phase can put a slot of a live array out of
-    /// reach, because `.Array` answers no method that writes one. A
-    /// `StringTable`'s items are **freshly built index strings that the
-    /// table does not hold**, so [`Interp::over_items`] `push_temp`s each
-    /// one as it builds it, at the same level and therefore with the same
-    /// lifetime as the target.
-    ///
-    /// `remaining` is `FOR`'s own budget, already validated, independent of
-    /// how many items are left.
+    /// **`snapshot` is the root and `items` is only a cursor**: every entry of
+    /// `items` is a slot of `snapshot`, so none of them can be collected while
+    /// it is rooted, and removing `snapshot` would leave `items` dangling.
+    /// A `LoopState` outlives the clause that built it on the compiled
+    /// engine's flattened path, so who roots `snapshot` differs by engine: the
+    /// tree-walker and the nested path are covered by `over_snapshot`'s own
+    /// `push_temp`, and the flattened path by the register write in
+    /// [`Interp::flat_loop_start`]. `remaining` is `FOR`'s own budget,
+    /// independent of how many items are left.
     OverItems {
         control: SymbolId,
         /// [`control_slot`], taken once when this loop was entered.
         at: Option<usize>,
+        snapshot: ObjRef,
         items: Vec<ObjRef>,
         next: usize,
         remaining: Option<u64>,
@@ -1168,6 +1164,10 @@ pub(crate) struct LoopHeaderValues {
     for_remaining: Option<u64>,
     /// A `DO OVER`'s target value.
     over: Option<ObjRef>,
+    /// The register `over` was evaluated into, `None` off the compiled engine
+    /// and for every loop that is not a `DO OVER`. [`Interp::flat_loop_start`]
+    /// writes the snapshot back into it; see [`LoopState::OverItems`].
+    pub(crate) over_register: Option<u16>,
     /// A bare `DO expr`'s repeat count.
     count: Option<u64>,
 }
@@ -8449,7 +8449,7 @@ impl Interp {
             // target to `requestArray`. Measured, `do e over .array` is
             // 98.913 at rc 158 and `do e over .environment` iterates the
             // directory's own entries, neither of which this crate answers.
-            // An array and a string both do -- see [`Interp::over_items`].
+            // An array and a string both do -- see [`Interp::over_snapshot`].
             HeaderRole::Over => {
                 if let Some(kind) = self.over_target_gap(value) {
                     return Err(Loud::object_position(role.value_name(), kind).into());
@@ -8485,7 +8485,7 @@ impl Interp {
     /// conversion's answer.
     ///
     /// `makeArray` runs exactly once per loop, measured with a counter, which
-    /// is why the conversion is here rather than in [`Interp::over_items`].
+    /// is why the conversion is here rather than in [`Interp::over_snapshot`].
     fn over_target_array(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
         if self.array_slots_of(value).is_some() {
             return Ok(value);
@@ -8561,43 +8561,47 @@ impl Interp {
     /// yields `1`, `The NIL object` and `3` -- an explicit `.nil` is an item
     /// and an empty slot is not.
     ///
-    /// **The conversion happens HERE and not where the header value was
-    /// accepted**, because this is the level whose rooting covers the loop:
-    /// each item is `push_temp`ed at the same level `LoopState::OverItems`
-    /// documents, and the tree-walker's header temps do not survive the IR
-    /// engine's op boundary -- there a header value is kept alive by a
-    /// REGISTER, so a freshly built array filed in `LoopHeaderValues` is
-    /// swept before the loop runs. Measured: converting at header time made
-    /// `do_over_string_table.rex` bind a dead handle under
-    /// `collect_on_every_allocation` and panic rendering it.
-    ///
-    /// It still runs once per loop, which is what the oracle does -- measured
-    /// with a counting `makeArray` -- because a `LoopState` is built once per
-    /// entry.
-    fn over_items(&mut self, value: ObjRef) -> Result<Vec<ObjRef>, Failure> {
+    /// **The array is what roots the items and the vector is what a pass
+    /// reads**, so a loop's whole item list costs one rooted handle and a pass
+    /// costs no handle resolution. The conversion happens here and not where
+    /// the header value was accepted, because this is the level whose rooting
+    /// covers the loop.
+    fn over_snapshot(&mut self, value: ObjRef) -> Result<(ObjRef, Vec<ObjRef>), Failure> {
         // The one collection whose order is this crate's rather than the
         // oracle's answers from its own walk -- see
         // [`Interp::hash_collection_indexes`] for why it is sorted and what
         // that costs. It cannot go through `MAKEARRAY` either: a
         // `Body::Native` receiver is not the store `hash.rs` owns.
-        if self.is_hash_collection(value) {
-            return Ok(self.hash_collection_indexes(value));
-        }
-        let array = self.over_target_array(value)?;
-        let items: Vec<ObjRef> = match self.heap.get(array).map(|object| &object.body) {
-            Some(Body::Array { slots, .. }) => slots.iter().flatten().copied().collect(),
-            _ => vec![array],
+        let items: Vec<ObjRef> = if self.is_hash_collection(value) {
+            self.hash_collection_indexes(value)
+        } else {
+            let array = self.over_target_array(value)?;
+            // Rooted before its slots are read out: a converted array is a
+            // different object from the target the source named, and its items
+            // are reachable only through it.
+            if array != value {
+                self.roots.push_temp(array);
+            }
+            match self.heap.get(array).map(|object| &object.body) {
+                Some(Body::Array { slots, .. }) => slots.iter().flatten().copied().collect(),
+                _ => vec![array],
+            }
         };
-        // **A converted array is rooted here for the loop's lifetime.** The
-        // target the source named is already rooted -- a clause temp on the
-        // tree-walker, a register on the IR engine, and every register is a
-        // root because the register file is a region of the same `temps` the
-        // collector walks. What `makeArray` built is a different object, and
-        // its items are reachable only through it.
-        if array != value {
-            self.roots.push_temp(array);
-        }
-        Ok(items)
+        // Every item is already reachable here, which is what `alloc_with`
+        // collecting before it allocates asks of this site.
+        let snapshot = self.alloc_with(
+            BehaviourId::ARRAY,
+            Body::array(items.iter().copied().map(Some).collect()),
+        );
+        self.roots.push_temp(snapshot);
+        debug_assert_eq!(
+            self.array_slots(snapshot)
+                .map(|slots| slots.iter().copied().flatten().collect::<Vec<_>>())
+                .as_deref(),
+            Some(items.as_slice()),
+            "a DO OVER's cursor is not the snapshot's own slots, so the snapshot does not root it"
+        );
+        Ok((snapshot, items))
     }
 
     /// A `StringTable`'s indexes, as the values a `DO OVER` binds in turn.
@@ -8919,17 +8923,21 @@ impl Interp {
                 shape: shape_of(code.symbols.name(ctrl.control).as_bytes()),
                 stepped: false,
             },
-            LoopKind::Over { control, .. } => LoopState::OverItems {
-                control: *control,
-                at: control_slot(code, *control),
-                items: self.over_items(
+            LoopKind::Over { control, .. } => {
+                let (snapshot, items) = self.over_snapshot(
                     values
                         .over
                         .expect("a DO OVER's plan always names its target"),
-                )?,
-                next: 0,
-                remaining: values.for_remaining,
-            },
+                )?;
+                LoopState::OverItems {
+                    control: *control,
+                    at: control_slot(code, *control),
+                    snapshot,
+                    items,
+                    next: 0,
+                    remaining: values.for_remaining,
+                }
+            }
             LoopKind::With { .. } => unreachable!("DO WITH takes the loud path above"),
         };
         self.run_repeating(
@@ -9434,6 +9442,7 @@ impl Interp {
         source: Option<&ProgramSource>,
         values: LoopHeaderValues,
         op_body: u32,
+        registers: FrameId,
     ) -> Result<FlatStart, Failure> {
         // SPIKE: the switch is a run-time one so that both arms are the same
         // binary -- the per-op checks this spike adds to the driver's loop are
@@ -9449,6 +9458,7 @@ impl Interp {
         {
             return Ok(FlatStart::Fallback(values));
         }
+        let over_register = values.over_register;
         let state = match &body.kind {
             LoopKind::Forever => LoopState::Forever,
             LoopKind::Count(_) => LoopState::Count {
@@ -9472,17 +9482,21 @@ impl Interp {
                 shape: shape_of(code.symbols.name(ctrl.control).as_bytes()),
                 stepped: false,
             },
-            LoopKind::Over { control, .. } => LoopState::OverItems {
-                control: *control,
-                at: control_slot(code, *control),
-                items: self.over_items(
+            LoopKind::Over { control, .. } => {
+                let (snapshot, items) = self.over_snapshot(
                     values
                         .over
                         .expect("a DO OVER's plan always names its target"),
-                )?,
-                next: 0,
-                remaining: values.for_remaining,
-            },
+                )?;
+                LoopState::OverItems {
+                    control: *control,
+                    at: control_slot(code, *control),
+                    snapshot,
+                    items,
+                    next: 0,
+                    remaining: values.for_remaining,
+                }
+            }
             // A block, not a loop: one pass, its own trace shape, and
             // `run_loop_with_header`'s own arm resolves the whole of it
             // without ever reaching a pass boundary. `DO WITH` is refused
@@ -9491,6 +9505,17 @@ impl Interp {
                 return Ok(FlatStart::Fallback(values));
             }
         };
+        // **The snapshot's only root once this answers `Flat`**: the driver
+        // then closes this clause and pops the temps frame `over_snapshot`
+        // pushed into, while the loop runs on. A loop header's registers are
+        // allocated in the enclosing scope and released past the whole loop
+        // (`ir/compile.rs`), and nothing reads the target again, so its
+        // register holds the snapshot instead.
+        if let LoopState::OverItems { snapshot, .. } = &state
+            && let Some(register) = over_register
+        {
+            self.roots.set_temp(registers, register as usize, *snapshot);
+        }
         let end_index = body
             .end
             .expect("an unclosed DO/LOOP is error 14.1/14.5, so a body that parsed has this set");
@@ -9929,6 +9954,7 @@ impl Interp {
             LoopState::OverItems {
                 control,
                 at,
+                snapshot: _,
                 items,
                 next,
                 remaining,

@@ -3940,7 +3940,7 @@ mod object_operand_tests {
     /// iterates its own entries -- `do e over .environment` prints
     /// `INPUTOUTPUTSTREAM` first. Binding the target once and yielding the
     /// object's rendering would be a single wrong line at rc 0 for each,
-    /// which is why the refusal is here and not in `Interp::over_items`.
+    /// which is why the refusal is here and not in `Interp::over_snapshot`.
     ///
     /// **A `Directory` and not a `StringTable`**, which is the split
     /// `ObjectModel::iterable_collection_class` carries: a `StringTable`
@@ -4217,7 +4217,7 @@ mod object_operand_tests {
             (b"say value('.LOCAL')\n", "The Local Directory\n"),
             (b"x = .array; say x\n", "The Array class\n"),
             // `DO OVER` on a string still iterates once yielding itself,
-            // which is `Interp::over_items`' own rule for a target that is
+            // which is `Interp::over_snapshot`' own rule for a target that is
             // not an array.
             (b"do e over 'abc'\nsay e\nend\n", "abc\n"),
             // A stem whose default is an ordinary value is untouched by the
