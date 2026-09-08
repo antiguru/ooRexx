@@ -663,7 +663,10 @@ sub-phase. **Closing Phase 5i is not blocked on that. Closing Phase 5 is.**
 
 ## 17. Gates
 
-Fast checks, in the working tree, before the commit — read unpiped, each from output on screen:
+### Fast checks, in the working tree, before the commit
+
+Read unpiped, each from output on screen. The commit these precede touches no `.rs` file, so the
+code state they measured is the code state the commit carries.
 
 | check | command | result |
 | --- | --- | --- |
@@ -672,21 +675,57 @@ Fast checks, in the working tree, before the commit — read unpiped, each from 
 | clippy, **clean target directory** | the same command with a fresh `CARGO_TARGET_DIR`, per `rust/CLAUDE.md`'s phase-boundary rule | exit 0, and the log shows `rexx-core`, `rexx-parse` and `rexx-exec` were checked rather than reused |
 | tests | `cargo test --release --workspace --no-fail-fast` | exit 0, 116 `test result: ok`, 2332 passed, no `FAILED` |
 
-The full suite, in the gate worktree `/home/moritz/dev/repos/ooRexx-5i-gates`, pinned to this task's
-commit. **`532cbe2cf` was never gated**; this run is what establishes the phase's final gated state.
+### The full suite, at `1284ef198`
+
+Run in the gate worktree `/home/moritz/dev/repos/ooRexx-5i-gates`, `git checkout --detach`ed to this
+report's own commit, which nobody edits while it runs. **`532cbe2cf` was never gated**; this run is
+what establishes the phase's final gated state. Every cell is read from a `gate-status.txt` whose
+first line is `1284ef198501e2f210e1df0ce63e97ca534aea06`, written as each command exited —
+`started 2026-09-08T15:04:08+02:00`, `finished 15:15:50`, with G8 appended after at the same pinned
+commit.
 
 | gate | command | result |
 | --- | --- | --- |
-| G1 | `cargo fmt --all --check` | **G1** |
-| G2 | `cargo clippy --workspace --all-targets -- -D warnings` | **G2** |
-| G3 | `cargo test --release --workspace --no-fail-fast` | **G3** |
-| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` (debug) | **G4** |
-| G5 | `cargo test --release -p rexx-exec --test collection_arity` | **G5** |
-| G6 | `cargo test --release -p rexx-exec --test introspection_arity` | **G6** |
-| G7 | `cargo test --release -p rexx-exec --test introspection_scopes` | **G7** |
+| G1 | `cargo fmt --all --check` | exit 0 |
+| G2 | `cargo clippy --workspace --all-targets -- -D warnings` | exit 0 |
+| G3 | `cargo test --release --workspace --no-fail-fast` | exit 0, 116 `test result: ok`, 2332 passed, no `FAILED` |
+| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` (debug) | exit 0, 116 `test result: ok`, 2333 passed, no `FAILED`, `mode: STRICT`, `463 of 463 matching` |
+| G5 | `cargo test --release -p rexx-exec --test collection_arity` | exit 0, 25 passed |
+| G6 | `cargo test --release -p rexx-exec --test introspection_arity` | exit 0, 27 passed |
+| G7 | `cargo test --release -p rexx-exec --test introspection_scopes` | exit 0, 24 passed |
+| G8 | `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test corpus` | exit 0, 27 passed, `mode: STRICT`, `463 of 463 matching` |
 
-Every cell above marked `**Gn**` or `**FCn**` is a placeholder and **not** a result. It is filled in
-from a status file whose first line is this commit's sha, never written ahead of the run.
+G4 reports one more passing test than G3 because it is the **debug** run: `[profile.release]` sets
+`debug = true` for symbols and does not set `debug-assertions`, so every `debug_assert` in the
+workspace — `Interp::enter_clause`'s tripwire among them — is compiled out of everything a
+`--release` gate runs.
+
+### Which instrument asserts the differential, and in which profile
+
+**G5, G6 and G7 here are not the same three commands earlier tasks in this phase ran.** They ran the
+STRICT corpus differential, `collect_stress` and `method_bodies`; this run puts the two arity tables
+and the scopes table in those slots, because they are the instruments this task refreshed and read.
+So the substitution is stated rather than left to be noticed, and the coverage it might have dropped
+was checked by reading the logs rather than assumed:
+
+* **`collect_stress` and `method_bodies` ran inside both G3 and G4** as workspace members —
+  confirmed from the `Running tests/…` lines: `collect_stress` 9 passed in each,
+  `method_bodies` 23 passed in each, `corpus.rs` 27 passed in each.
+* **The differential is asserted in both profiles.** G4 is the debug STRICT run
+  (`463 of 463 matching`) and **G8 is the release STRICT run** (`463 of 463 matching`), added for
+  exactly this reason. G3's own `corpus.rs` carries no `REXX_CORPUS_GATE`, so it runs in **report
+  mode and exits 0 on a divergence** — its `463 of 463 matching` line is a reading, not an
+  assertion, and nothing here rests on it.
+
+So every gate the earlier tasks asserted is asserted here, and the three tables this task refreshed
+are asserted as well.
+
+**Where this table lives, relative to the commit it describes.** The gated commit is `1284ef198`.
+Filling these cells is itself an edit, so the commit carrying the filled table is that commit's
+**docs-only child** — a report cannot contain the results of the run that measured it. The child
+changes this one file and no `.rs`, so `1284ef198` remains the state the seven gates and G8 were
+taken at, and the child is not separately gated. That is the same shape as the delta the phase
+inherited at `532cbe2cf`, stated here rather than left for the next reader to discover.
 
 ---
 
