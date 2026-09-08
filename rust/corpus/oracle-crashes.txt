@@ -524,3 +524,43 @@ cannot be run at all**, not rows where the two sides agree. Nothing in
 arguments and an empty entry needs one send to create.
 
 Found 2026-09-07 by the Phase 5g review. **No upstream ticket.**
+
+## 9. `::OPTIONS TRACE ?<letter>` -- a package trace setting with the `?` prefix
+
+    say 'anything'
+    ::options trace ?r
+
+Effect: **neither a SIGSEGV nor an exhaustion -- an indefinite block**, the
+third mode this file's header names, and the reason this entry is here rather
+than left as a note: a block gives no signal at all, so it costs a session the
+way an OOM does and offers less to diagnose it with.
+
+Measured 2026-09-08 under the standard wrapper with no deadline: the run
+produced nothing on stdout, nothing on stderr, and did not return; it had to
+be killed by name. No `timeout` figure is quoted because none was set on that
+run, and this file forbids running the program again to obtain one.
+
+**The "waiting for a line on the console" half is predicted, not measured.**
+`?` is `TraceSetting`'s debug prefix, and interactive debug pauses after a
+traced clause to read a command from the console; the wrapper gives the child
+no terminal and nothing else ever writes to it, so nothing can satisfy that
+read. It was not confirmed at the C++ site, and confirming it means running
+this program.
+
+The neighbour bounds it and is clean: `::options trace r` -- the same letter
+with no `?` -- answers rc 0 and this crate agrees with the oracle on all three
+descriptors, as it does for each of the nine plain letters. So it is the `?`
+and not the letter.
+
+**What to do instead if a probe needs this surface.** Read the setting back
+rather than letting it take effect: `Package~trace` answers the one letter and
+`Package~options('TRACE')` answers the word, neither of which runs a traced
+clause. `corpus/lang/package_settings.rex` reads both. If the *debug* form
+itself has to be exercised, it needs a deadline on both sides and a decision
+about what a console-less interactive pause should even mean, which no phase
+has taken.
+
+Found 2026-09-08 by Phase 5i Tasks 7+8, while measuring what `Package~trace`
+answers for each `::OPTIONS TRACE` letter. **No upstream ticket** -- it is not
+established that this is a defect rather than interactive debug behaving as
+documented with no console attached.

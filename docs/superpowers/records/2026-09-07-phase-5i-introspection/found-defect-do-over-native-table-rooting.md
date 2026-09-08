@@ -88,11 +88,15 @@ observation.**
   long members all print every entry at rc 0. So the defect is confined to
   `Body::Native` tables and does not touch the collection classes a program
   builds itself.
-* **NOT observed in an ordinary run.** Every reproduction here is under
+* **NOT observed in an ordinary run, and that is not the same as "an ordinary
+  run is safe".** Every reproduction here is under
   `run_program_collect_every_alloc`. The corpus differential, which runs the
   same programs normally against the oracle, is green on all five witnesses.
-  Whether an ordinary run can open the window was **not** established either
-  way — it was not attempted.
+  **Whether an ordinary run can open the window was NOT ATTEMPTED.** No probe
+  was written for it, no allocation pressure was applied, and nothing here
+  bounds how much would be needed. A reader deciding priority must not read
+  this bullet as evidence that the window stays shut: it is an absence of
+  measurement, not a measurement of absence.
 
 ## What it is not
 
@@ -154,8 +158,14 @@ neither `DO OVER` nor the table.
 
 So a reader who sees three corpus programs iterating tables under short names
 and concludes the shape is safe has drawn the wrong conclusion. **The names are
-short because of this defect, not because short names are better.** When it is
-fixed, the workaround should be reverted -- long names in
-`package_tables.rex`, `package_writes.rex` and the two `.cls` helpers, and
-`package_rexx.rex` back to enumerating -- and that revert is itself the
-regression test.
+short because of this defect, not because short names are better.** **REVERTING THE WORKAROUND IS THE REGRESSION TEST, and whoever owns the fix
+does not have to design one.** Restore long names in `package_tables.rex`,
+`package_writes.rex`, `package_tables_lib.cls` and `package_tables_dep.cls`,
+and put `package_rexx.rex` back to enumerating its class table with `DO OVER`
+instead of reading a committed list; then run
+`cargo test --release -p rexx-exec --test collect_stress`. Before the fix that
+run panics at `Interp::not_in_arena`; after it, it must pass. `git show` of
+the commit that introduced this record is where the long-named versions are.
+One consequence to expect: `package_tables.rex` and `package_rexx.rex` will
+need putting back on `HASH_ORDERED_STDOUT`, because long names restore the
+order difference that the short ones happened to remove.

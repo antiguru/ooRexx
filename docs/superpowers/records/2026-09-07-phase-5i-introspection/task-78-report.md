@@ -115,6 +115,35 @@ The rulings and the brief did not conflict anywhere except on
 `setSecurityManager`'s justification, noted in the table above; the ruling's
 *decision* was followed.
 
+## A finding about what an `agree` row is worth, and it is not only this row's
+
+**`Package~publicClasses` read `agree` because the arity probe's receiver is a
+program's package — a receiver on which the defect cannot arise.**
+
+That is stronger than "the instrument cannot see inside a collection", which is
+what this phase had recorded. Both are true here, but only the second one is
+fixable by sharpening the instrument. The body was **correct** for the receiver
+the row probes: on a program's package this crate answered the same one-entry
+`StringTable` the oracle did, contents and all. The defect was on the other
+receiver — on the REXX package the crate refused outright
+(`Loud::rexx_package_classes`), 67 entries where it had none — and **no
+argument list could have reached it**, because the receiver is fixed by
+`corpus/introspection-receivers.tsv` and the argument file only varies what is
+sent.
+
+**A blind instrument can be sharpened. A receiver that cannot exercise the bug
+cannot.** So the reading generalises past `Package`: an `agree` row in
+`corpus/introspection-arity.tsv` says the crate matches the oracle *for one
+receiver*, chosen once per class, and says nothing at all about any other
+receiver that class can have. Where a class has two receivers that behave
+differently — and `Package` has exactly that, four readers parting between them
+— half its rows are unexamined however many arguments are tried.
+
+The answer here was a corpus witness whose receiver is the one the row could
+not reach: `corpus/lang/package_rexx.rex` reads all 67 class names back by name
+and asserts the 62/5 public split, and `package_settings.rex` asserts all four
+of the readers that part.
+
 ## The witnesses
 
 Five corpus programs, in `corpus/phase-5c.txt` where Phase 5i's other tasks
@@ -244,10 +273,15 @@ descriptors and exit status compared against the oracle, both engines.
 **768 cases: zero wrong answers, 12 loud refusals, all of them the deliberately
 declined surfaces above. The two engines agree on all 768.**
 
-This sweep is what found the two argument-order defects the first
-implementation shipped (`~loadLibrary`'s receiver check ahead of its name
-check, and `~loadPackage`'s named-instead-of-numbered argument), both of which
-`method-bodies.txt` also caught, and the `~options('X','')` ordering.
+**The zero is credible because the sweep caught its own author.** It found
+three defects in this task's *first* implementation and they are why the final
+run is clean, not evidence that the first one was: `~loadLibrary` checked its
+receiver ahead of its name, so `.Class~package~loadLibrary` answered 98.984
+where the oracle answers 88.901; `~loadPackage` named its first argument where
+the oracle numbers it, so a missing name was 88.901 against the oracle's
+93.903; and `~options('X','')` took the read-only arm ahead of the
+empty-argument check, 93.902 against the oracle's 93.900. A sweep that catches
+nobody has not been shown to be able to catch anyone.
 
 ## What would be observably different if a claim here were false
 
