@@ -477,6 +477,19 @@ const RECEIVER_OVERRIDES: &[(&str, &str)] = &[
         ".Properties~new~~put('v1','k1')~~put('v2','k2')",
     ),
     ("Stem", ".Stem~new~~put('v1','k1')~~put('v2','k2')"),
+    // **Phase 5i Task 6.** `StackFrame` has no construction expression in
+    // `corpus/docs/class-set.txt` -- the reference says the user cannot make
+    // one -- so the fallback receiver is a bare `~new`, which the oracle and
+    // this crate both refuse at `93.967`. That leaves all ten instance rows
+    // `unanswered`: the method was never sent, on either side.
+    //
+    // **Binding `~new` is what makes this override necessary rather than
+    // sufficient.** With `new` bound and no override the rows move off `loud`
+    // and onto `unanswered`, which is honest but measures nothing; the
+    // interpreter's own route to a frame is what measures the ten methods.
+    // Unlike `Pointer` and `Buffer`, whose refusal is the whole of what either
+    // interpreter can reach, a `StackFrame` really works once you have one.
+    ("StackFrame", ".context~stackFrames[1]"),
 ];
 
 /// The expression a row's send is made to, or `None` for the class arm, which
@@ -492,6 +505,25 @@ fn instance_receiver(class: &ClassRow) -> String {
         Some(program) => program.clone(),
         None => format!(".{}~new", class.name),
     }
+}
+
+/// Whether this class's instance receiver is an expression this table
+/// **committed**, rather than the bare `~new` fallback -- which is the whole
+/// of what "the method was really sent" turns on below.
+///
+/// **An override counts, and until Phase 5i nothing said so**, because every
+/// override before `StackFrame` was on a class that also had a construction
+/// expression, so the two questions had the same answer and the difference
+/// could not show. `StackFrame` has no construction expression --
+/// `class-set.txt` marks it `not-covered`, the reference says the user cannot
+/// make one -- and reaches a real receiver only through the override. Reading
+/// `class.construction` alone recorded its ten rows `unanswered` with the
+/// override in force and the methods genuinely being sent.
+fn receiver_is_committed(class: &ClassRow) -> bool {
+    class.construction.is_some()
+        || RECEIVER_OVERRIDES
+            .iter()
+            .any(|(name, _)| *name == class.name)
 }
 
 /// The text of one row's probe program.
@@ -1001,7 +1033,7 @@ fn no_row_started_diverging_or_stopped_answering() {
             key: row.key(),
             subject,
             abs,
-            constructs: class.construction.is_some(),
+            constructs: receiver_is_committed(class),
             arm: row.arm.clone(),
             crate_side: crate_side.outcome,
             oracle: cpp,

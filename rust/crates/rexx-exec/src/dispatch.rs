@@ -183,6 +183,9 @@ pub(crate) mod executable;
 // `Class`'s graph readers and `Object`'s three, chained the same way.
 mod introspection;
 
+// `RexxContext`'s and `StackFrame`'s readers, chained the same way.
+mod context;
+
 /// One primitive method's implementation.
 ///
 /// The [`Cleared`] parameter is the seam's own enforcement and is never read
@@ -871,15 +874,6 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `QueueClass::initRexx` (`memory/Setup.cpp:777`) and the donation
     // `InheritInstanceMethods(IdentityTable)` makes at `Relation` (`:958`).
     ("Relation", "INIT", Arity::Fixed(1), native_capacity_init),
-    // `.context`'s own package, which is the running program's -- the one
-    // route to it, since `Class~package` above answers `REXX` for every
-    // class the bootstrap registered.
-    (
-        "RexxContext",
-        "PACKAGE",
-        Arity::Fixed(0),
-        native_context_package,
-    ),
     ("Routine", "ANNOTATION", Arity::Fixed(1), native_annotation),
     (
         "Routine",
@@ -1232,6 +1226,10 @@ pub(crate) struct ObjectModel {
     /// The scope [`WEAK_REFERENT`] is bound in, so that a subclass's instance
     /// keeps its referent where `WeakReference~value` looks for it.
     weak_reference: ObjRef,
+    /// The class `RexxContext~stackFrames` builds its elements from. Reached
+    /// here rather than by name at every build, exactly as `context` beside
+    /// it is.
+    stack_frame: ObjRef,
 }
 
 impl ObjectModel {
@@ -1284,6 +1282,7 @@ impl ObjectModel {
             .chain(rexx_info::NATIVE_METHODS)
             .chain(executable::NATIVE_METHODS)
             .chain(introspection::NATIVE_METHODS)
+            .chain(context::NATIVE_METHODS)
             .chain(extra)
         {
             // **The kernel directory as well as the environment one**, since
@@ -1313,7 +1312,10 @@ impl ObjectModel {
                 },
             );
         }
-        for (class_id, method_name, arity, run) in NATIVE_CLASS_METHODS {
+        for (class_id, method_name, arity, run) in NATIVE_CLASS_METHODS
+            .iter()
+            .chain(context::NATIVE_CLASS_METHODS)
+        {
             let class = classes.lookup(class_id).unwrap_or_else(|| {
                 panic!(
                     "NATIVE_CLASS_METHODS names class {class_id:?}, which is not in the registry"
@@ -1368,6 +1370,9 @@ impl ObjectModel {
         let weak_reference = classes
             .lookup("WeakReference")
             .expect("WeakReference is a native class");
+        let stack_frame = classes
+            .lookup("StackFrame")
+            .expect("StackFrame is a native class");
         ObjectModel {
             classes,
             natives,
@@ -1386,6 +1391,7 @@ impl ObjectModel {
             variable_reference,
             stem,
             weak_reference,
+            stack_frame,
         }
     }
 }
@@ -1485,6 +1491,10 @@ enum Primitive {
     /// A `Body::Native` whose class is `.RexxContext` -- what `.context`
     /// answers. Measured, `.context~class` is `The RexxContext class`.
     Context,
+    /// A `Body::Native` whose class is `.StackFrame` -- what
+    /// `RexxContext~stackFrames` fills its array with. Measured,
+    /// `.context~stackFrames[1]~class~id` is `StackFrame`.
+    StackFrame,
     /// A `Body::Native` whose class is the `RexxInfo` one -- the single
     /// pre-built instance `.RexxInfo` answers (`Setup.cpp:1735`-`:1737`).
     /// Measured, `.RexxInfo~class~id` is `RexxInfo` and
@@ -2075,6 +2085,17 @@ impl Interp {
                     {
                         Ok(Primitive::RexxInfo)
                     }
+                    // One element of `RexxContext~stackFrames`, in the same
+                    // position `.context` above is: the class is in the
+                    // registry with `Setup.cpp`'s whole instance set, so a
+                    // name it does not hold is 97.1 and a name it holds with
+                    // no row here is this crate's own gap.
+                    Body::Native(native)
+                        if self.object_model.as_ref().map(|model| model.stack_frame)
+                            == Some(native.class()) =>
+                    {
+                        Ok(Primitive::StackFrame)
+                    }
                     Body::Native(native)
                         if self.object_model.as_ref().map(|model| model.message)
                             == Some(native.class()) =>
@@ -2120,6 +2141,7 @@ impl Interp {
             Primitive::Directory => model.directory,
             Primitive::StringTable(class) => class,
             Primitive::Context => model.context,
+            Primitive::StackFrame => model.stack_frame,
             Primitive::RexxInfo => model.rexx_info,
             Primitive::Message => model.message,
             Primitive::VariableReference => model.variable_reference,
@@ -2993,11 +3015,12 @@ impl Interp {
         // Saved and restored with the level state further down -- which is
         // where `Interp::invoke_call` does all of it -- and replaced ahead of
         // that group because the bindings below read out of it.
+        let arguments = self.shared_arguments(args);
         let saved_context = std::mem::replace(
             &mut self.call_context,
             crate::CallContext {
                 name: name.to_vec(),
-                arguments: args.to_vec(),
+                arguments,
                 receiver: Some(receiver),
             },
         );
@@ -4646,6 +4669,7 @@ fn native_class(
         Primitive::Directory => model.directory,
         Primitive::StringTable(class) => class,
         Primitive::Context => model.context,
+        Primitive::StackFrame => model.stack_frame,
         Primitive::RexxInfo => model.rexx_info,
         Primitive::Message => model.message,
         Primitive::VariableReference => model.variable_reference,
@@ -5908,29 +5932,6 @@ fn inherit_refusal(
             Raised::not_inherited(&class_name, &other_name).into()
         }
     }
-}
-
-/// `RexxContext~package`: the package of the program the running activation
-/// belongs to -- `RexxContext::getPackage` (`classes/ContextClass.cpp:160`).
-///
-/// **The one route to the running program's package object**, which is why
-/// it is here rather than left to `Class~package`: measured,
-/// `.Array~package~name` is `REXX`, so a class the bootstrap registered
-/// reaches the interpreter's own package and not this one.
-fn native_context_package(
-    interp: &mut Interp,
-    _cleared: Cleared,
-    _receiver: ObjRef,
-    _args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
-    // `checkValid` (`ContextClass.cpp:162`) is what refuses a context object
-    // whose activation has returned; nothing here hands one out that
-    // outlives its activation, and a context object exists only while one is
-    // running.
-    interp
-        .running_package_object()
-        .map(Some)
-        .ok_or_else(|| Loud::receiver_class("a context object outside a running program").into())
 }
 
 /// `Package~addClass(name, class)` and `Package~addPublicClass(name, class)`
@@ -7289,6 +7290,21 @@ fn native_object_name(
         Primitive::VariableReference => {
             crate::environment::default_object_name("VariableReference").into_bytes()
         }
+        // The object's own `rendered` bytes rather than `string_value_text`,
+        // which for this receiver answers the **traceback line**:
+        // `StackFrameClass` overrides `stringValue()` and leaves
+        // `defaultName()` alone, the split `NativeObject::string_value`
+        // carries. Measured, oracle rc 0, six renderings of one frame:
+        // `say f`, `~string`, `~makeString` and an `Array` join are the
+        // traceback line where `~objectName` and `~defaultName` are
+        // `a StackFrame`. Read rather than derived, so a name
+        // `~objectName=` has set still wins -- measured, `f~objectName =
+        // 'tagged'` then `f~objectName` is `tagged` while `say f` is
+        // unchanged.
+        Primitive::StackFrame => match interp.heap.get(receiver).map(|held| &held.body) {
+            Some(Body::Native(native)) => native.rendered().to_vec(),
+            _ => return Err(Loud::receiver_class("a stack frame this crate did not build").into()),
+        },
         // Derived for the same reason, and the two answers part here too: a
         // stem's `string_value_text` is its default. Measured, oracle rc 0:
         // `s. = 'dflt'; o = s.; say o~objectName` is `a Stem` where
@@ -7357,6 +7373,7 @@ fn native_object_name_set(
         | Primitive::Directory
         | Primitive::StringTable(_)
         | Primitive::Context
+        | Primitive::StackFrame
         | Primitive::RexxInfo
         | Primitive::Message => {
             let Some(object) = interp.heap.get_mut(receiver) else {

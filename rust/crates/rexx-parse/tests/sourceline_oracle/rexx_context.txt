@@ -1,0 +1,116 @@
+count 115
+/* `.CONTEXT`'s fifteen readers, and the two whose meaning differs from the
+   same name on `.RexxInfo`.
+
+   WHICH WRONG ANSWER EACH BLOCK PRINTS.
+
+   B: digits/form/fuzz are the settings IN FORCE at the context, where
+   `.RexxInfo`'s three are the interpreter's DEFAULTS. One method name, two
+   meanings, and the only way to tell them apart is to change the settings and
+   ask both classes -- an engine reading the defaults here prints B1 as
+   `[9][SCIENTIFIC][0]`, which is B2's line, and an engine reading the context
+   for `.RexxInfo` prints B2 as B1's.
+
+   C3/R6: the invocation id is minted when it is first ASKED for, off a
+   counter, so it is NOT the frame's depth. This program asks at the top level
+   before calling anything, so C3 is 1 -- and R6, taken from inside a
+   ::ROUTINE two frames down, then reads the routine's own id first and the
+   program's 1 second. An engine numbering by depth from the innermost prints
+   R6 as `[1][2]`, which is the reading `stack_frames.rex` cannot tell apart
+   because nothing has asked there before its walk.
+
+   D: `~variables` is the context's own pool, and only the names that have a
+   value. A stem is one entry under its trailing-period name and a compound is
+   no entry at all, so D2 is `[1][1][0]` -- an engine that filed `ST.1`
+   separately prints `[1][1][1]`. D4 asks whether the directory is fresh by
+   writing into one and reading the next: an engine answering one cached
+   object prints `[1]`.
+
+   Nothing here traps a condition, and that is deliberate rather than
+   incidental: building a condition object costs the oracle an invocation id
+   for every frame live at the raise, so a trapped condition anywhere above R6
+   shifts its first field. Measured, oracle rc 0, two programs differing only
+   by a trapped `SIGNAL ON SYNTAX`: the routine's id reads 2 without it and 3
+   with. `rexx_context_arity.rex` is where the argument refusal is witnessed
+   instead.
+
+   G/R: a label shares its caller's pool and a ::ROUTINE does not, so G2 is 1
+   and R4's first field is 0. An engine that gave a label a pool of its own
+   prints G2 as 0.
+
+   M: `SELF` and `SUPER` are ordinary entries of a method's pool, measured on
+   the oracle; an engine holding them outside the pool prints M3 as
+   `[1][1][0][0]`.
+
+   No path is printed: A1 compares `~name` against `parse source`'s third word
+   instead, which is how corpus/lang keeps the filesystem out of its output. */
+
+parse source . . me
+say 'A1 [' || (.context~name == me) || ']'
+say 'A2 [' || .context~line || ']'
+say 'A3 [' || .context~class~id || ']'
+
+numeric digits 5
+numeric form engineering
+numeric fuzz 2
+say 'B1 [' || .context~digits || '][' || .context~form || '][' || .context~fuzz || ']'
+say 'B2 [' || .RexxInfo~digits || '][' || .RexxInfo~form || '][' || .RexxInfo~fuzz || ']'
+say 'B3 [' || digits() || '][' || form() || '][' || fuzz() || ']'
+numeric digits
+numeric form
+numeric fuzz
+
+say 'C1 [' || .context~rs~string || '][' || .context~condition~string || ']'
+say 'C2 [' || .context~thread || '][' || .context~interpreter || ']'
+say 'C3 [' || .context~invocation || '][' || (.context~invocation = .context~invocation) || ']'
+say 'C4 [' || .context~package~class~id || '][' || (.context~package~identityHash = .context~package~identityHash) || ']'
+say 'C5 [' || .context~executable~class~id || '][' || (.context~executable~identityHash = .context~executable~identityHash) || ']'
+
+vv = 'plain'
+st. = 'default'
+st.1 = 'one'
+d = .context~variables
+say 'D1 [' || d~class~id || '][' || d~items || ']'
+say 'D2 [' || d~hasIndex('VV') || '][' || d~hasIndex('ST.') || '][' || d~hasIndex('ST.1') || ']'
+say 'D3 [' || d['VV'] || '][' || d['ST.']~class~id || ']'
+d['ZZMARK'] = 'written'
+say 'D4 [' || .context~variables~hasIndex('ZZMARK') || ']'
+
+say 'E1 [' || .context~args~class~id || '][' || .context~args~items || ']'
+say 'E2 [' || .context~stackFrames~class~id || '][' || .context~stackFrames~items || ']'
+
+call in_a_label
+z = .kk~new~m(11, 22)
+say 'H1 [' || z || ']'
+call rtn 'aa', , 'cc'
+exit 0
+
+in_a_label:
+  say 'G1 [' || .context~name || '][' || .context~line || ']'
+  say 'G2 [' || .context~variables~hasIndex('VV') || ']'
+  say 'G3 [' || .context~stackFrames~items || ']'
+  return
+
+::class kk
+::method m
+  expose ov
+  ov = 'objvar'
+  loc = 'local'
+  say 'M1 [' || .context~name || '][' || .context~executable~class~id || ']'
+  say 'M2 [' || .context~args~items || '][' || .context~args[1] || '][' || .context~args[2] || ']'
+  dd = .context~variables
+  say 'M3 [' || dd~hasIndex('OV') || '][' || dd~hasIndex('LOC') || '][' || dd~hasIndex('SELF') || '][' || dd~hasIndex('SUPER') || ']'
+  say 'M4 [' || (dd['SELF']~identityHash = self~identityHash) || ']'
+  say 'M5 [' || (.context~executable~identityHash = .kk~method('M')~identityHash) || ']'
+  return 'ok'
+
+::routine rtn
+  say 'R1 [' || .context~name || '][' || .context~executable~class~id || ']'
+  aa = .context~args
+  say 'R2 [' || aa~class~id || '][' || aa~items || '][' || aa~size || ']'
+  say 'R3 [' || aa[1] || '][' || (aa[2] == .nil) || '][' || aa[3] || ']'
+  say 'R4 [' || .context~variables~hasIndex('VV') || '][' || .context~variables~hasIndex('AA') || ']'
+  say 'R5 [' || (.context~executable~identityHash = .routines['RTN']~identityHash) || ']'
+  ff = .context~stackFrames
+  say 'R6 [' || ff[1]~invocation || '][' || ff[2]~invocation || ']'
+  return

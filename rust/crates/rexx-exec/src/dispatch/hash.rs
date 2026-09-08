@@ -2896,3 +2896,30 @@ pub(super) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         native_relation_remove_item,
     ),
 ];
+
+/// A fresh `Directory` holding one entry per pair, string-keyed --
+/// `VariableDictionary::getVariableDirectory`
+/// (`execution/VariableDictionary.cpp`), which `RexxContext~variables`
+/// answers.
+///
+/// **A new object on every call**, which is measured rather than assumed:
+/// oracle rc 0, `(.context~variables == .context~variables)` is `0` where
+/// `(.context~package == .context~package)` is `1`.
+///
+/// Each key's string is pushed as a temporary as it is built, because the
+/// next allocation collects and the directory does not hold it yet.
+pub(super) fn directory_of(
+    interp: &mut Interp,
+    entries: Vec<(Vec<u8>, ObjRef)>,
+) -> Result<ObjRef, Failure> {
+    let class = interp.object_model().directory;
+    let directory = new_instance(interp, class)?;
+    let frame = interp.roots.push_frame();
+    for (name, value) in entries {
+        let key = interp.text_built(name);
+        interp.roots.push_temp(key);
+        insert(interp, directory, key, Some(value))?;
+    }
+    interp.roots.pop_frame(frame);
+    Ok(directory)
+}

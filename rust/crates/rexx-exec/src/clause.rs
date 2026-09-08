@@ -314,6 +314,30 @@ pub(crate) struct ClauseState {
     /// the C++ architecture that produces it (`run_fragment` still runs
     /// inside the creating activation, not a nested one of its own).
     current_clause_line: usize,
+    /// The index, in the running activation's own body, of the clause being
+    /// stepped -- the one piece `StackFrame~traceLine` needs that the two
+    /// fields above do not carry, since a clause's *text* is its
+    /// instruction's `clause_span` and nothing else records which
+    /// instruction is running (`Activation::pc` stands on the enclosing
+    /// construct, per [`crate::activation::ClauseSnapshot`]).
+    ///
+    /// **One `usize` and set under a guard**, unlike its two neighbours,
+    /// and both halves are a measurement. Writing the whole snapshot through
+    /// the running activation on every clause cost `instructions:u` +2.370%
+    /// on `bench-programs/emptyloop.rex` and +1.924% on `varlookup.rex`;
+    /// this shape, with the rest of the snapshot taken once per call in
+    /// `Interp::push_activation`, is what that became. The guard is
+    /// `clause_line_override`: an `INTERPRET` fragment's index belongs to
+    /// the fragment's body and not to this activation's, so a fragment
+    /// leaves the enclosing `INTERPRET` clause's index in force -- which is
+    /// the clause the oracle reports on that same frame.
+    ///
+    /// **`pub(crate)` where `current_clause_line` beside it is private**, the
+    /// same asymmetry `current_value_indent` carries and for its reason: an
+    /// index that is momentarily wrong renders a wrong `~traceLine`, where a
+    /// *line* that is momentarily wrong means a clause boundary did not
+    /// happen. Only the second needs the boundary dragged along with it.
+    pub(crate) current_clause_index: usize,
 }
 
 impl ClauseState {
@@ -325,11 +349,17 @@ impl ClauseState {
         self.current_clause_line
     }
 
+    /// The clause index [`ClauseState::current_clause_index`] holds.
+    pub(crate) fn clause_index(&self) -> usize {
+        self.current_clause_index
+    }
+
     /// The zero state `Interp::new` starts from.
     pub(crate) fn new() -> ClauseState {
         ClauseState {
             current_value_indent: 0,
             current_clause_line: 0,
+            current_clause_index: 0,
             // `false` is the state an interpreter with nothing running is in,
             // matching `Interp::trace_cache`'s own `TraceMode::OFF`.
             instructions_traced_at_entry: false,
@@ -747,6 +777,7 @@ impl Interp {
         SavedClauseState(ClauseState {
             current_value_indent: self.clause_state.current_value_indent,
             current_clause_line: self.clause_state.current_clause_line,
+            current_clause_index: self.clause_state.current_clause_index,
             instructions_traced_at_entry: self.clause_state.instructions_traced_at_entry,
         })
     }

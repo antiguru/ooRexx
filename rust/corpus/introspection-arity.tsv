@@ -172,21 +172,21 @@ Package	sourceLine	instance	send-differs	oracle rc0 VALUE r = .context~package; 
 Package	sourceSize	instance	send-differs	oracle rc0 VALUE 36; crate rc120 rexx-exec: method "SOURCESIZE" of class "Package" is not implemented (Phase 5)
 Package	trace	instance	send-differs	oracle rc0 VALUE N; crate rc120 rexx-exec: method "TRACE" of class "Package" is not implemented (Phase 5)
 Pointer	new	class	agree	rc0
-RexxContext	args	instance	send-differs	oracle rc0 VALUE an Array; crate rc120 rexx-exec: method "ARGS" of class "RexxContext" is not implemented (Phase 5)
-RexxContext	condition	instance	send-differs	oracle rc0 VALUE The NIL object; crate rc120 rexx-exec: method "CONDITION" of class "RexxContext" is not implemented (Phase 5)
-RexxContext	digits	instance	send-differs	oracle rc0 VALUE 9; crate rc120 rexx-exec: method "DIGITS" of class "RexxContext" is not implemented (Phase 5)
-RexxContext	executable	instance	send-differs	oracle rc0 VALUE a Routine; crate rc120 rexx-exec: method "EXECUTABLE" of class "RexxContext" is not implemented (Phase 5)
-RexxContext	form	instance	send-differs	oracle rc0 VALUE SCIENTIFIC; crate rc120 rexx-exec: method "FORM" of class "RexxContext" is not implemented (Phase 5)
-RexxContext	fuzz	instance	send-differs	oracle rc0 VALUE 0; crate rc120 rexx-exec: method "FUZZ" of class "RexxContext" is not implemented (Phase 5)
-RexxContext	interpreter	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: method "INTERPRETER" of class "RexxContext" is not implemented (Phase 5)
-RexxContext	invocation	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: method "INVOCATION" of class "RexxContext" is not implemented (Phase 5)
-RexxContext	line	instance	send-differs	oracle rc0 VALUE 18; crate rc120 rexx-exec: method "LINE" of class "RexxContext" is not implemented (Phase 5)
-RexxContext	name	instance	send-differs	oracle rc0 VALUE PROBE; crate rc120 rexx-exec: method "NAME" of class "RexxContext" is not implemented (Phase 5)
+RexxContext	args	instance	agree	rc0
+RexxContext	condition	instance	agree	rc0
+RexxContext	digits	instance	agree	rc0
+RexxContext	executable	instance	agree	rc0
+RexxContext	form	instance	agree	rc0
+RexxContext	fuzz	instance	agree	rc0
+RexxContext	interpreter	instance	agree	rc0
+RexxContext	invocation	instance	agree	rc0
+RexxContext	line	instance	agree	rc0
+RexxContext	name	instance	agree	rc0
 RexxContext	package	instance	agree	rc0
-RexxContext	rs	instance	send-differs	oracle rc0 VALUE The NIL object; crate rc120 rexx-exec: method "RS" of class "RexxContext" is not implemented (Phase 5)
-RexxContext	stackFrames	instance	send-differs	oracle rc0 VALUE an Array; crate rc120 rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
-RexxContext	thread	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: method "THREAD" of class "RexxContext" is not implemented (Phase 5)
-RexxContext	variables	instance	send-differs	oracle rc0 VALUE a Directory; crate rc120 rexx-exec: method "VARIABLES" of class "RexxContext" is not implemented (Phase 5)
+RexxContext	rs	instance	agree	rc0
+RexxContext	stackFrames	instance	agree	rc0
+RexxContext	thread	instance	agree	rc0
+RexxContext	variables	instance	agree	rc0
 RexxInfo	architecture	instance	agree	rc0
 RexxInfo	caseSensitiveFiles	instance	agree	rc0
 RexxInfo	date	instance	agree	rc0
@@ -226,15 +226,15 @@ Routine	newFile	class	agree	rc0
 Routine	package	instance	agree	rc0
 Routine	setSecurityManager	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: a security manager is not implemented (D12, Phase 7)
 Routine	source	instance	agree	rc0
-StackFrame	arguments	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
-StackFrame	context	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
-StackFrame	invocation	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
-StackFrame	line	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
-StackFrame	makeString	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
-StackFrame	name	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
-StackFrame	string	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
-StackFrame	target	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
-StackFrame	traceLine	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
-StackFrame	type	instance	setup-differs	crate rc120: rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
+StackFrame	arguments	instance	agree	rc0
+StackFrame	context	instance	agree	rc0
+StackFrame	invocation	instance	agree	rc0
+StackFrame	line	instance	agree	rc0
+StackFrame	makeString	instance	agree	rc0
+StackFrame	name	instance	agree	rc0
+StackFrame	string	instance	agree	rc0
+StackFrame	target	instance	agree	rc0
+StackFrame	traceLine	instance	agree	rc0
+StackFrame	type	instance	agree	rc0
 WeakReference	new	class	agree	rc0
 WeakReference	value	instance	agree	rc0

@@ -602,6 +602,17 @@ impl ObjectMethods {
 /// out one that silently forgets. The kinds of object that carry one are the
 /// ones `memory/Setup.cpp` gives an `Annotations` method to.
 ///
+/// `string_value` is `RexxObject::stringValue()` where `rendered` is
+/// `defaultName()`, and the two are separate because the C++ separates them:
+/// a class may override one and not the other. `None` means the string value
+/// **is** the default name, which is the C++ default and what every native
+/// class here but one leaves it at. `StackFrameClass` is the one --
+/// `stringValue()` and `makeString()` both answer the traceback line while
+/// `defaultName()` does not. Measured, oracle rc 0, six renderings of one
+/// frame: `say f`, `f~string`, `f~makeString` and `say .array~of(f)` are the
+/// traceback line, and `f~objectName` and `f~defaultName` are `a StackFrame`.
+/// One field cannot answer both.
+///
 /// `scope` is `MethodClass::scope`, the class a method object has been
 /// installed on, and only a `Method` object ever carries one. It is
 /// observable: `MethodClass::newScope` (`classes/MethodClass.cpp:183`) hands
@@ -616,6 +627,7 @@ impl ObjectMethods {
 pub struct NativeObject {
     class: ObjRef,
     rendered: Box<[u8]>,
+    string_value: Option<Box<[u8]>>,
     entries: HashMap<Box<[u8]>, ObjRef>,
     annotations: Option<ObjRef>,
     scope: Option<ObjRef>,
@@ -626,6 +638,7 @@ impl NativeObject {
         NativeObject {
             class,
             rendered: rendered.into(),
+            string_value: None,
             entries: HashMap::new(),
             annotations: None,
             scope: None,
@@ -640,6 +653,18 @@ impl NativeObject {
     /// The bytes `SAY` prints for this object.
     pub fn rendered(&self) -> &[u8] {
         &self.rendered
+    }
+
+    /// `RexxObject::stringValue()`: what this object renders as in a
+    /// conversion, which falls back to the default name when the class does
+    /// not separate the two. See the field.
+    pub fn string_value(&self) -> &[u8] {
+        self.string_value.as_deref().unwrap_or(&self.rendered)
+    }
+
+    /// Gives this object a string value distinct from its default name.
+    pub fn set_string_value(&mut self, bytes: &[u8]) {
+        self.string_value = Some(bytes.into());
     }
 
     /// `~objectName=`: replaces the answer to `~objectName`, and with it

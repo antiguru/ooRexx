@@ -432,7 +432,7 @@ pub(crate) fn arg(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<Ob
         Some(b'A') => {
             let arguments = &interp.call_context.arguments;
             let slots: Vec<Option<ObjRef>> = if index == 1 {
-                arguments.clone()
+                arguments.to_vec()
             } else if index > arguments.len() {
                 Vec::new()
             } else {

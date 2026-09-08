@@ -1494,6 +1494,16 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/method_introspection.rex",
     "lang/routine_introspection.rex",
     "lang/class_introspection.rex",
+    // Task 6: `RexxContext`, `StackFrame`, and the two `MapCollection~of`
+    // raises that substitute `.context~name`.
+    "lang/rexx_context.rex",
+    "lang/rexx_context_arity.rex",
+    "lang/rexx_context_edges.rex",
+    "lang/stack_frames.rex",
+    "lang/rexx_context_new.rex",
+    "lang/stack_frame_new.rex",
+    "lang/map_collection_of_index.rex",
+    "lang/map_collection_of_pair.rex",
 ];
 
 #[test]

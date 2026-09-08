@@ -1,0 +1,6 @@
+count 5
+/* `.StackFrame~new`'s half of `rexx_context_new.rex`'s pair. */
+
+say 'A1 [' || .StackFrame~class~id || ']'
+q = .StackFrame~new
+say 'A2 [not reached]'

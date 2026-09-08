@@ -827,9 +827,18 @@ impl Interp {
     /// string is the whole of its behaviour in this phase.
     fn rexx_variable(&mut self, bare: &[u8]) -> Option<ObjRef> {
         match bare {
-            b"METHODS" => self.package_string_table(PackageTable::UnattachedMethods),
-            b"ROUTINES" => self.package_string_table(PackageTable::Routines),
-            b"RESOURCES" => self.package_string_table(PackageTable::Resources),
+            b"METHODS" => {
+                let program = self.running_program()?;
+                self.package_string_table(program, PackageTable::UnattachedMethods)
+            }
+            b"ROUTINES" => {
+                let program = self.running_program()?;
+                self.package_string_table(program, PackageTable::Routines)
+            }
+            b"RESOURCES" => {
+                let program = self.running_program()?;
+                self.package_string_table(program, PackageTable::Resources)
+            }
             // `new_integer(current->getLineNumber())`. `clause_state.line()`
             // is the same quantity `SIGL` reads and carries the same
             // `INTERPRET` rule the oracle's own `isInterpret` delegation
@@ -863,8 +872,17 @@ impl Interp {
     /// (`parser/DirectiveParser.cpp:617`) upcases, and so do `.ROUTINES`'s
     /// and `.RESOURCES`'s own keys. Measured, `::method "MiXeD"` puts `MIXED`
     /// in `.METHODS` and `::routine "r"` puts `R` in `.ROUTINES`.
-    fn package_string_table(&mut self, kind: PackageTable) -> Option<ObjRef> {
-        let program = self.running_program()?;
+    /// **`program` is a parameter rather than the running program**, because
+    /// `RexxContext~executable` reads a `::ROUTINE`'s object out of this same
+    /// table and the routine's declaring program is not always the running
+    /// one -- a `::REQUIRES`d routine is declared in another. The three
+    /// `.NAME` readers pass the running program, which is what they answer
+    /// for.
+    pub(crate) fn package_string_table(
+        &mut self,
+        program: ProgramId,
+        kind: PackageTable,
+    ) -> Option<ObjRef> {
         if let Some(found) = self.package_tables.get(&(program, kind)).copied() {
             return Some(found);
         }
@@ -958,15 +976,32 @@ impl Interp {
     /// write does, since `.CONTEXT` is resolved from inside the activation
     /// evaluating it.
     fn context_object(&mut self) -> ObjRef {
-        if let Some(found) = self.running_activation().and_then(|a| a.context_object) {
-            return found;
+        self.context_object_at(0).unwrap_or_else(|| {
+            let class = self.environment_model().context;
+            self.native_instance(class)
+        })
+    }
+
+    /// [`Interp::context_object`] for the activation at `depth`, which
+    /// `RexxContext~stackFrames` needs: `RexxActivation::createStackFrame`
+    /// passes `getContextObject()`, so **building a frame creates the
+    /// context object of an activation that never asked for one**. Measured,
+    /// oracle rc 0: every frame of a four-frame stack answers
+    /// `~context~class~id` `RexxContext` in a program where only the
+    /// innermost ever named `.context`.
+    ///
+    /// `None` has no activation at that depth, which is how a unit test
+    /// against a bare `Interp` reaches [`Interp::context_object`]; nothing a
+    /// program can write does, since `.CONTEXT` is resolved from inside the
+    /// activation evaluating it.
+    pub(crate) fn context_object_at(&mut self, depth: usize) -> Option<ObjRef> {
+        if let Some(found) = self.frame_at(depth)?.context_object {
+            return Some(found);
         }
         let class = self.environment_model().context;
         let object = self.native_instance(class);
-        if let Some(activation) = self.running.as_deref_mut() {
-            activation.context_object = Some(object);
-        }
-        object
+        self.frame_at_mut(depth)?.context_object = Some(object);
+        Some(object)
     }
 
     /// An instance of `class` with no entries, rendered the way
@@ -1426,23 +1461,60 @@ impl Interp {
         object
     }
 
-    /// The package object of the program that is running -- what
-    /// `RexxContext~package` answers, `RexxContext::getPackage`
-    /// (`classes/ContextClass.cpp:160`, bound by `memory/Setup.cpp:1218`).
+    /// The one `Method` object for the method `name` defined at `scope` --
+    /// what `RexxContext~executable` answers from a `::METHOD` context.
     ///
-    /// `None` when no activation is running, which is the position
-    /// [`Interp::running_program`] is in and is how a unit test against a
-    /// bare `Interp` reaches this.
-    ///
-    /// **The same object `~package` answers for a class the program
-    /// declared**, because both go through [`Interp::package_object_for`]'s
-    /// cache under one key. Measured, oracle rc 0: with `::class K public`,
-    /// `.context~package == .K~package` is `1`,
-    /// `.context~package == .context~package` is `1`, and
-    /// `.context~package == .Array~package` is `0`.
-    pub(crate) fn running_package_object(&mut self) -> Option<ObjRef> {
-        let program = self.running_program()?;
-        Some(self.package_object(Package::Program(program)))
+    /// **The same object `Class~method` hands out**, which is measured:
+    /// oracle rc 0, inside `::method m` of `::class kk`,
+    /// `.context~executable == .kk~method('M')` is `1`. Keyed on the
+    /// *defining* class rather than on the class the send arrived at, because
+    /// that is the dictionary the method really lives in.
+    pub(crate) fn method_executable(
+        &mut self,
+        scope: ObjRef,
+        name: &[u8],
+    ) -> Result<ObjRef, crate::error::Failure> {
+        let found = self
+            .classes()
+            .own_instance_slot(scope, &String::from_utf8_lossy(name));
+        match found {
+            Some(rexx_classes::MethodSlot::Defined { scope, method }) => {
+                let record = crate::ExecutableRecord {
+                    source: self.installed_executable_source(method),
+                    installed: Some(method),
+                    routine: None,
+                };
+                Ok(self.method_object(scope, name, scope, record))
+            }
+            _ => Err(crate::Loud::receiver_class(
+                "a method context whose scope no longer defines it",
+            )
+            .into()),
+        }
+    }
+
+    /// The one `Routine` object standing for `program`'s own main section --
+    /// what `RexxContext~executable` answers from a `PROGRAM` or
+    /// `INTERNALCALL` context. [`Interp::program_routine_objects`] carries
+    /// why the identity is kept.
+    pub(crate) fn program_routine_object(&mut self, program: ProgramId) -> ObjRef {
+        if let Some(found) = self.program_routine_objects.get(&program).copied() {
+            return found;
+        }
+        let class = self.routine_class();
+        let object = self.native_instance(class);
+        self.roots
+            .add_global(&program_routine_root_key(program), object);
+        self.program_routine_objects.insert(program, object);
+        self.executable_sources.insert(
+            object,
+            crate::ExecutableRecord {
+                source: crate::ExecutableSource::Main { program },
+                installed: None,
+                routine: None,
+            },
+        );
+        object
     }
 
     /// `MethodClass::newScope` (`classes/MethodClass.cpp:183`): the same
@@ -1805,6 +1877,10 @@ fn package_root_key(package: Package) -> String {
 
 /// The [`rexx_core::RootSet::add_global`] key one `Method` object is held
 /// under.
+fn program_routine_root_key(program: ProgramId) -> String {
+    format!("the main routine of the program {}", program.0)
+}
+
 fn method_object_root_key(class: ObjRef, name: &[u8]) -> String {
     format!(
         "the instance method {} of the class at {}",

@@ -815,6 +815,24 @@ impl Raised {
         Raised::syntax(98, 985, Vec::new())
     }
 
+    /// 98.981: a `RexxContext` whose activation has ended. No substitutions.
+    ///
+    /// `Error_Execution_context_not_active`, which `RexxContext::checkValid`
+    /// (`classes/ContextClass.cpp:147`) raises and which every one of that
+    /// class's own readers calls first. Measured, rc 158 with stdout empty,
+    /// on a `.context` returned out of a `::routine` and read after the
+    /// return: `Error 98.981:  Target RexxContext is no longer active.`
+    /// under `       *-* Compiled method "NAME" with scope "RexxContext".`
+    ///
+    /// **A `StackFrame` captured from the same context does not raise it**,
+    /// measured in the same program: it answers its `~name`, `~line`,
+    /// `~traceLine`, `~type`, `~target`, `~invocation`, `~context` and a
+    /// two-item `~arguments` afterwards, because a frame is a snapshot taken
+    /// when `stackFrames` built it and a context is a live handle.
+    pub(crate) fn context_not_active() -> Raised {
+        Raised::syntax(98, 981, Vec::new())
+    }
+
     /// 98.984: `~addClass` or `~addPublicClass` sent to the package the
     /// primitive classes belong to. No substitutions.
     ///

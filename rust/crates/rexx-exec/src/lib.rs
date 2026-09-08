@@ -3107,6 +3107,16 @@ struct Interp {
     /// reused -- see that type for the two defects that needed an identity a
     /// stack depth could not supply.
     next_activation_id: u64,
+    /// The counter `RexxContext~invocation` mints from --
+    /// `RexxActivation.cpp:94`'s file-scope `counter`.
+    ///
+    /// **Separate from [`Interp::next_activation_id`] and not derivable from
+    /// it**, because the two are minted at different moments: an
+    /// `ActivationId` is assigned when the activation is built and this is
+    /// assigned when something first *asks*, which is what makes the
+    /// numbers follow the ask order. [`crate::activation::Activation::
+    /// invocation`] has the measurement that tells the two apart.
+    next_invocation: u32,
     /// Every program the loader has issued an id for, indexed by that id.
     ///
     /// This is what makes a `ProgramId` a durable identity rather than a
@@ -3349,7 +3359,33 @@ struct Interp {
     ///
     /// Cached rather than built per send, because the oracle answers one
     /// object: measured, `(.Array~package == .String~package)` is `1`.
+    /// The one empty argument list every call that has none shares.
+    ///
+    /// **`Rc<[T]>::from(&[])` allocates a header even for a zero-length
+    /// slice**, so building one per call would put a `malloc`/`free` pair on
+    /// every argument-less send. Measured, `instructions:u` on
+    /// `bench-programs/dispatch.rex` -- one no-argument message send per
+    /// iteration -- +3.481% against BASE with the allocation and +0.093%
+    /// with this.
+    empty_arguments: Rc<[Option<ObjRef>]>,
     package_objects: HashMap<Package, ObjRef>,
+    /// The one `Routine` object standing for a program's own main section --
+    /// what `RexxContext~executable` answers from a `PROGRAM` or
+    /// `INTERNALCALL` context.
+    ///
+    /// **Cached because the identity is observable**: measured, oracle rc 0,
+    /// `(.context~executable == .context~executable)` is `1`. A `::ROUTINE`
+    /// or a `::METHOD` context has a cache of its own already -- the
+    /// `.ROUTINES` table and `Interp::method_objects` -- and answers out of
+    /// it, which is what makes `.context~executable == .routines['R']`
+    /// answer `1` here as it does on the oracle.
+    ///
+    /// Globally rooted, the position [`Interp::package_objects`]'s entries
+    /// are in: the object outlives every send that can reach it and nothing
+    /// else refers to it.
+    ///
+    /// [`Interp::package_objects`]: Interp::package_objects
+    program_routine_objects: HashMap<ProgramId, ObjRef>,
     /// The `.METHODS`/`.ROUTINES`/`.RESOURCES` tables, keyed by the program
     /// whose directives fill them and by which of those names it answers.
     ///
@@ -4515,7 +4551,15 @@ struct CallContext {
     /// The arguments in source order, an omitted position (`call sub 1,,3`)
     /// left as `None` rather than closed up. Measured: that call into `use
     /// arg p, q, r` gives `[1] [Q] [3]`, so an omission holds its place.
-    arguments: Vec<Option<ObjRef>>,
+    ///
+    /// **Shared with the activation this convention entered**
+    /// ([`crate::activation::Activation::call_arguments`]), which is what
+    /// lets an outer frame answer `StackFrame~arguments`: this field is one
+    /// `Interp` slot saved and restored in a Rust local, so nothing but the
+    /// running activation could otherwise read it. A refcount clone rather
+    /// than a copy, so the sharing costs no allocation --
+    /// [`Interp::shared_arguments`] keeps the empty case free too.
+    arguments: Rc<[Option<ObjRef>]>,
     /// **The receiver, which is part of the calling convention** (D24): the
     /// object a message send was addressed to, and `None` for a call that has
     /// none.
@@ -4529,6 +4573,17 @@ struct CallContext {
     /// both come from here**, which is what the oracle's single
     /// `getReceiver` makes them.
     receiver: Option<ObjRef>,
+}
+
+impl Interp {
+    /// `values` as the shared slice a [`CallContext`] carries, without
+    /// allocating for an empty one -- see [`Interp::empty_arguments`].
+    pub(crate) fn shared_arguments(&self, values: &[Option<ObjRef>]) -> Rc<[Option<ObjRef>]> {
+        if values.is_empty() {
+            return Rc::clone(&self.empty_arguments);
+        }
+        Rc::from(values)
+    }
 }
 
 /// Where a variable lives: a frame slot, or a name in a scope pool on some
@@ -4622,7 +4677,9 @@ impl Interp {
             package_classes: HashMap::new(),
             package_public_classes: HashMap::new(),
             class_packages: HashMap::new(),
+            empty_arguments: Rc::from(&[][..]),
             package_objects: HashMap::new(),
+            program_routine_objects: HashMap::new(),
             package_tables: HashMap::new(),
             constant_values: HashMap::new(),
             annotations: HashMap::new(),
@@ -4651,6 +4708,7 @@ impl Interp {
             pending_traps: VecDeque::new(),
             active_condition: None,
             next_activation_id: 0,
+            next_invocation: 0,
             current_case_text: None,
             indent_offset: 0,
             activation_indent: 0,
@@ -4795,7 +4853,7 @@ impl Interp {
             &mut self.call_context,
             CallContext {
                 name: program.name.as_bytes().to_vec(),
-                arguments,
+                arguments: Rc::from(arguments),
                 receiver: None,
             },
         );
@@ -7064,7 +7122,7 @@ impl Interp {
             &mut self.call_context,
             CallContext {
                 name: b"::CONSTANT".to_vec(),
-                arguments: Vec::new(),
+                arguments: Rc::from(&[][..]),
                 receiver: Some(class),
             },
         );
@@ -7204,6 +7262,25 @@ impl Interp {
     fn activation_exposes(&self, frame: SlotFrame) -> bool {
         let activation = self.activation();
         !activation.exposed.is_empty() && activation.frame == frame
+    }
+
+    /// [`Interp::variable`] for a **named** activation rather than the running
+    /// one -- what `RexxContext~variables` reads a suspended context's pool
+    /// through.
+    ///
+    /// [`Interp::variable`] cannot answer it: its exposure test compares the
+    /// frame against the *running* activation's, so a suspended activation
+    /// that exposed a name would read the empty frame slot the exposure left
+    /// behind. This asks the activation it was handed, which is the same
+    /// question `Interp::exposure_in` already takes an activation for.
+    pub(crate) fn variable_in(&self, activation: &Activation, slot: usize) -> Option<ObjRef> {
+        let frame = activation.frame;
+        match Interp::exposure_in(activation, frame, slot) {
+            Some(var) => self
+                .pools_of(var.owner)
+                .and_then(|pools| pools.get(var.scope, &var.name)),
+            None => self.roots.frame_slot(frame, slot),
+        }
     }
 
     /// [`Interp::variable`]'s exposed half. A slot the list does not name is
@@ -7947,7 +8024,7 @@ fn execute(
             // collector, so without this the value is unreachable the first time
             // anything allocates.
             interp.roots.push_temp(value);
-            interp.call_context.arguments = vec![Some(value)];
+            interp.call_context.arguments = Rc::from(&[Some(value)][..]);
         }
         interp.run(program)
     });

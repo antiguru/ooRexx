@@ -1428,6 +1428,27 @@ impl Interp {
         // The body comes from the activation's own selector rather than being
         // hardcoded to `program.main` (Task 3): `body_of` is the one place
         // that mapping lives, shared with `BodyKey::directive`'s own.
+        // **The one point at which the running activation and the calling
+        // convention it was entered under are both in place**, on every path
+        // that starts a body: `invoke_call_over` pushes before it replaces
+        // the convention and `enter_method_body` replaces before it pushes,
+        // so neither of those two sites can take the snapshot itself and a
+        // third site would be a list to keep in step.
+        let arguments = Rc::clone(&self.call_context.arguments);
+        // **The name is copied only where nothing else records it.** A
+        // method activation already carries the message name it was entered
+        // under on `Activation::method_identity`, and that is the hot path:
+        // measured, `instructions:u` on `bench-programs/dispatch.rex`, one
+        // no-argument send per iteration, +1.732% against BASE with an
+        // `Rc<[u8]>` built here for every send and +0.093% with this test in
+        // front of it.
+        let name = (self.activation().entry != crate::activation::Entry::Method)
+            .then(|| Rc::from(&self.call_context.name[..]));
+        let activation = self.activation_mut();
+        if let Some(name) = name {
+            activation.call_name = Some(name);
+        }
+        activation.call_arguments = Some(arguments);
         let program = Rc::clone(&self.activation().program);
         let plan = Rc::clone(&self.activation().plan);
         let selector = self.activation().body;
@@ -6506,6 +6527,7 @@ impl Interp {
         let saved_offset = std::mem::take(&mut self.indent_offset);
         let saved_line = std::mem::take(&mut self.clause_line_override);
         let inherited = entered_receiver(entered, entry, self.call_context.receiver);
+        let arguments = self.shared_arguments(&arguments);
         let saved_context = std::mem::replace(
             &mut self.call_context,
             CallContext {
@@ -7267,6 +7289,16 @@ impl Interp {
                 .unwrap_or_else(|| self.clause_state.line()),
             "the chunk's line table disagrees with the plan's for instruction {index}"
         );
+        // The frame readers' own view of this clause
+        // ([`crate::activation::ClauseSnapshot`], which carries where this
+        // has to be and why the line cannot come from `Activation::pc`).
+        // **Skipped while a fragment is running**, so the enclosing
+        // `INTERPRET` clause stays in force for this activation -- the
+        // answer the oracle gives the frame beneath its own
+        // `FRAME_INTERPRET` one.
+        if self.clause_line_override.is_none() {
+            self.clause_state.current_clause_index = index;
+        }
         let entry = self.enter_clause(line, counted);
         // **`Echo::Gated` asks whether the setting in force echoes this
         // clause; `Echo::Compiled` is a clause whose chunk already answered

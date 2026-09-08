@@ -401,6 +401,46 @@ pub(crate) enum ReplyState {
     Owed,
 }
 
+/// The clause an activation is executing, as `StackFrame~line`,
+/// `~traceLine` and `RexxContext~line` report it.
+///
+/// **Written once per *call*, by `Interp::push_activation`, from the clause
+/// state in force as the activation is suspended** -- not once per clause.
+/// The running activation has no need of it: `Interp::clause_state` already
+/// carries that clause's line, indent and index, and reading it there is
+/// what keeps this off the clause loop. `ClauseState::current_clause_index`
+/// carries the measurement that settled the shape and the
+/// `clause_line_override` guard that goes with it.
+///
+/// **The line is carried rather than derived from `Activation::pc`**, which
+/// cannot answer it: `run_bounded_instructions` steps a nested construct's
+/// clauses on a **local** program counter, so a call made from inside a `DO`
+/// leaves `pc` on the `DO`.
+///
+/// `index` names an instruction of the body [`Activation::body`] selects.
+#[derive(Copy, Clone)]
+pub(crate) struct ClauseSnapshot {
+    /// `RexxActivation::getContextLineNumber`
+    /// (`execution/RexxActivation.cpp:2941`), whose answer with no current
+    /// instruction is `1`.
+    pub(crate) line: usize,
+    /// The `*-*` echo's own indent: `PackageClass::traceBack`'s
+    /// `indent * INDENT_SPACING`, already doubled here as
+    /// `Interp::printed_indent` produces it.
+    pub(crate) indent: usize,
+    pub(crate) index: usize,
+}
+
+impl Default for ClauseSnapshot {
+    fn default() -> ClauseSnapshot {
+        ClauseSnapshot {
+            line: 1,
+            indent: 0,
+            index: 0,
+        }
+    }
+}
+
 /// One activation: everything about the frame currently executing.
 pub(crate) struct Activation {
     /// This activation's own identity, unique for the life of the `Interp`.
@@ -814,6 +854,51 @@ pub(crate) struct Activation {
     /// `dispatch_seam.rs`'s `heap_collect_is_called_from_collect_now_alone`
     /// asserts rather than leaving to this paragraph.
     pub(crate) context_object: Option<ObjRef>,
+    /// The clause this activation is executing. [`ClauseSnapshot`] carries
+    /// where it is written and why it is carried rather than derived.
+    pub(crate) clause: ClauseSnapshot,
+    /// This activation's `~invocation` id, minted on the first ask.
+    ///
+    /// **`RexxActivation::getIdntfr` (`execution/RexxActivation.cpp:94`) is
+    /// `if (idntfr == 0) idntfr = ++counter;` off a process-global atomic,
+    /// so the numbers follow the order they were first *asked* for and not
+    /// the depth.** Measured, oracle rc 0: a program reading
+    /// `.context~invocation` at the top level before calling gets `1`, and
+    /// its own `PROGRAM` frame then reads `1` while the `ROUTINE` and
+    /// `INTERNALCALL` frames above it read `2` and `3`. Minting eagerly
+    /// would answer `3` there.
+    pub(crate) invocation: Option<u32>,
+    /// The name this activation was invoked under -- `settings.messageName`,
+    /// which `StackFrame~name` and `RexxContext~name` both answer.
+    ///
+    /// **`None` for a `Entry::Method` activation**, whose message name is
+    /// already on [`Activation::method_identity`]: [`Activation::invoked_as`]
+    /// reads it from there, and `Interp::run_activation` carries why the two
+    /// sources are not merged.
+    ///
+    /// **The name as the caller wrote it, not the declared spelling.**
+    /// Measured, oracle rc 0: `::routine MiXeD` reached by `call MiXeD`
+    /// answers `MIXED` (the parser upcased the symbol) and `::routine
+    /// 'lower'` reached by `call 'lower'` answers `lower`.
+    ///
+    /// A refcount clone of [`crate::CallContext::name`], taken where that
+    /// convention is established, because the convention itself is one
+    /// `Interp` field saved and restored in a Rust local and so cannot be
+    /// read for any activation but the running one.
+    /// **`None` rather than an empty slice**, and that is a measurement:
+    /// `Rc<[T]>::from(&[])` allocates a header even for a zero-length slice,
+    /// so a plain `Rc` field would have put two `malloc`/`free` pairs on
+    /// every activation this crate builds. Measured with them,
+    /// `instructions:u` on `bench-programs/dispatch.rex` -- one message send
+    /// per iteration -- was +6.579% against BASE; the same build with these
+    /// two fields optional reads +0.093%.
+    pub(crate) call_name: Option<Rc<[u8]>>,
+    /// The arguments this activation was entered with, the other half of
+    /// [`call_name`]'s snapshot -- `StackFrame~arguments` and
+    /// `RexxContext~args`.
+    ///
+    /// [`call_name`]: Activation::call_name
+    pub(crate) call_arguments: Option<Rc<[Option<ObjRef>]>>,
 }
 
 /// How control arrived at an activation.
@@ -1062,6 +1147,10 @@ impl Activation {
             cached_clock: None,
             clock_stale: true,
             context_object: None,
+            clause: ClauseSnapshot::default(),
+            invocation: None,
+            call_name: None,
+            call_arguments: None,
         }
     }
 
@@ -1177,6 +1266,10 @@ impl Activation {
             cached_clock: None,
             clock_stale: true,
             context_object: None,
+            clause: ClauseSnapshot::default(),
+            invocation: None,
+            call_name: None,
+            call_arguments: None,
         }
     }
 
@@ -1239,6 +1332,10 @@ impl Activation {
             cached_clock: None,
             clock_stale: true,
             context_object: None,
+            clause: ClauseSnapshot::default(),
+            invocation: None,
+            call_name: None,
+            call_arguments: None,
         }
     }
 
@@ -1298,6 +1395,10 @@ impl Activation {
             cached_clock: None,
             clock_stale: true,
             context_object: None,
+            clause: ClauseSnapshot::default(),
+            invocation: None,
+            call_name: None,
+            call_arguments: None,
         }
     }
 
@@ -1338,6 +1439,21 @@ impl Activation {
     /// `TrappedCondition`, none of which holds one; the instrument for that is
     /// `run_program_collect_every_alloc`, which collects at every allocation
     /// and so reaches a missed root as a wrong answer rather than as luck.
+    /// The name this activation was invoked under, empty for one that has
+    /// not started running -- see [`Activation::call_name`].
+    pub(crate) fn invoked_as(&self) -> &[u8] {
+        if let Some(identity) = &self.method_identity {
+            return &identity.name;
+        }
+        self.call_name.as_deref().unwrap_or_default()
+    }
+
+    /// The arguments this activation was entered with, the other half of
+    /// [`Activation::invoked_as`].
+    pub(crate) fn invoked_with(&self) -> &[Option<ObjRef>] {
+        self.call_arguments.as_deref().unwrap_or_default()
+    }
+
     pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
         let Activation {
             id: _,
@@ -1367,8 +1483,23 @@ impl Activation {
             cached_clock: _,
             clock_stale: _,
             context_object,
+            clause: _,
+            invocation: _,
+            call_name: _,
+            call_arguments,
         } = self;
         out.extend(*context_object);
+        // The convention's own values, which `Interp::park_reply` already
+        // hands over from `CallContext` while the activation is off every
+        // stack. Named here too because this activation now holds a
+        // refcount clone of the same slice, and a root the collector cannot
+        // see through one route is not made safe by the other route
+        // existing.
+        out.extend(
+            call_arguments
+                .iter()
+                .flat_map(|args| args.iter().flatten().copied()),
+        );
         if let Some(MethodIdentity {
             name: _,
             scope,
@@ -1460,6 +1591,82 @@ impl Interp {
         id
     }
 
+    /// The activation stack innermost first -- the order
+    /// `Activity::generateStackFrames` (`concurrency/Activity.cpp:1141`)
+    /// walks it and the order `RexxContext~stackFrames` answers in.
+    ///
+    /// [`Interp::suspended`] is oldest first, so the running activation is
+    /// followed by that vector reversed.
+    ///
+    /// [`Interp::suspended`]: crate::Interp::suspended
+    pub(crate) fn frames(&self) -> impl DoubleEndedIterator<Item = &Activation> {
+        self.running
+            .iter()
+            .map(std::ops::Deref::deref)
+            .chain(self.suspended.iter().rev().map(Box::as_ref))
+    }
+
+    /// The activation at `depth`, counted as [`Interp::frames`] counts: `0`
+    /// is the running one.
+    pub(crate) fn frame_at(&self, depth: usize) -> Option<&Activation> {
+        self.frames().nth(depth)
+    }
+
+    /// The clause the activation at `depth` is stopped on.
+    ///
+    /// **Depth `0` is answered from [`Interp::clause_state`] and not from the
+    /// activation**, because the running activation's own snapshot is only
+    /// written as it is suspended: keeping it fresh per clause is the cost
+    /// [`ClauseSnapshot`] declines, and the clause state already carries the
+    /// same three values for whichever activation is running.
+    ///
+    /// [`Interp::clause_state`]: crate::Interp::clause_state
+    pub(crate) fn clause_of(&self, depth: usize) -> ClauseSnapshot {
+        if depth == 0 && self.running.is_some() {
+            return ClauseSnapshot {
+                line: self.clause_state.line(),
+                indent: self.clause_state.current_value_indent,
+                index: self.clause_state.clause_index(),
+            };
+        }
+        self.frame_at(depth)
+            .map(|activation| activation.clause)
+            .unwrap_or_default()
+    }
+
+    /// [`Interp::frame_at`] for a caller that has to write.
+    ///
+    /// Indexed rather than iterated, because a `DoubleEndedIterator` over
+    /// `&mut` through two fields is not what `frames` is.
+    pub(crate) fn frame_at_mut(&mut self, depth: usize) -> Option<&mut Activation> {
+        // **The two indexings are separate code and this is what holds them
+        // equal.** `frames` counts forwards from the running activation and
+        // this counts backwards into a vector that is oldest first, so an
+        // off-by-one here would write one activation's `~invocation` id onto
+        // its caller -- a wrong answer with nothing to notice it, since both
+        // are plausible numbers.
+        //
+        // **Taken from what this function is about to return**, and not from
+        // the same arithmetic written twice: a first version recomputed the
+        // backward index inside the assertion, which made it compare `frames`
+        // against a formula rather than against the answer, and an off-by-one
+        // mutation of the line below left it green.
+        let expected = self.frame_at(depth).map(|activation| activation.id);
+        let found = match depth.checked_sub(usize::from(self.running.is_some())) {
+            None => self.running.as_deref_mut(),
+            Some(below) => match self.suspended.len().checked_sub(below + 1) {
+                None => None,
+                Some(index) => self.suspended.get_mut(index).map(Box::as_mut),
+            },
+        };
+        debug_assert_eq!(
+            found.as_ref().map(|activation| activation.id),
+            expected,
+            "frame_at and frame_at_mut disagree about the activation at depth {depth}"
+        );
+        found
+    }
+
     pub(crate) fn activation(&self) -> &Activation {
         self.running.as_deref().expect("a live activation")
     }
@@ -1540,7 +1747,19 @@ impl Interp {
         // `trace_cache`'s own invariant: the setting travels with whichever
         // activation is running, and this changes which one that is.
         self.trace_cache = boxed.trace_mode;
-        if let Some(outer) = self.running.replace(boxed) {
+        // The clause the activation being suspended is stopped on, which is
+        // what its own `StackFrame` reports for as long as it stays
+        // suspended: `Interp::clause_state` is about to start describing the
+        // callee's clauses instead. Taken here rather than at each of the
+        // sites that push, for the reason `Interp::run_activation` takes the
+        // calling convention there: this is the one place every push passes.
+        let clause = ClauseSnapshot {
+            line: self.clause_state.line(),
+            indent: self.clause_state.current_value_indent,
+            index: self.clause_state.clause_index(),
+        };
+        if let Some(mut outer) = self.running.replace(boxed) {
+            outer.clause = clause;
             self.suspended.push(outer);
         }
     }

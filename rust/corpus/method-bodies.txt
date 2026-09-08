@@ -1160,21 +1160,21 @@ Pointer	==	instance	unanswered	a bare `~new` raises; the method was never sent
 Pointer	\=	instance	unanswered	a bare `~new` raises; the method was never sent
 Pointer	\==	instance	unanswered	a bare `~new` raises; the method was never sent
 Pointer	isNull	instance	unanswered	a bare `~new` raises; the method was never sent
-RexxContext	args	instance	loud	method "ARGS" of class "RexxContext"
-RexxContext	condition	instance	loud	method "CONDITION" of class "RexxContext"
-RexxContext	digits	instance	loud	method "DIGITS" of class "RexxContext"
-RexxContext	executable	instance	loud	method "EXECUTABLE" of class "RexxContext"
-RexxContext	form	instance	loud	method "FORM" of class "RexxContext"
-RexxContext	fuzz	instance	loud	method "FUZZ" of class "RexxContext"
-RexxContext	interpreter	instance	loud	method "INTERPRETER" of class "RexxContext"
-RexxContext	invocation	instance	loud	method "INVOCATION" of class "RexxContext"
-RexxContext	line	instance	loud	method "LINE" of class "RexxContext"
-RexxContext	name	instance	loud	method "NAME" of class "RexxContext"
+RexxContext	args	instance	answers	rc 0
+RexxContext	condition	instance	answers	rc 0
+RexxContext	digits	instance	answers	rc 0
+RexxContext	executable	instance	answers	rc 0
+RexxContext	form	instance	answers	rc 0
+RexxContext	fuzz	instance	answers	rc 0
+RexxContext	interpreter	instance	answers	rc 0
+RexxContext	invocation	instance	answers	rc 0
+RexxContext	line	instance	answers	rc 0
+RexxContext	name	instance	answers	rc 0
 RexxContext	package	instance	answers	rc 0
-RexxContext	rs	instance	loud	method "RS" of class "RexxContext"
-RexxContext	stackFrames	instance	loud	method "STACKFRAMES" of class "RexxContext"
-RexxContext	thread	instance	loud	method "THREAD" of class "RexxContext"
-RexxContext	variables	instance	loud	method "VARIABLES" of class "RexxContext"
+RexxContext	rs	instance	answers	rc 0
+RexxContext	stackFrames	instance	answers	rc 0
+RexxContext	thread	instance	answers	rc 0
+RexxContext	variables	instance	answers	rc 0
 RexxInfo	architecture	instance	answers	rc 0
 RexxInfo	caseSensitiveFiles	instance	answers	rc 0
 RexxInfo	date	instance	answers	rc 0
@@ -1222,16 +1222,16 @@ RexxQueue	queued	instance	loud	the LIBRARY REXX entry point "rexx_query_queue"
 RexxQueue	say	instance	loud	the LIBRARY REXX entry point "rexx_queue_queue"
 RexxQueue	set	instance	answers	rc 163
 Singleton	new	class	answers	rc 163
-StackFrame	arguments	instance	loud	method "NEW" of class "StackFrame"
-StackFrame	context	instance	loud	method "NEW" of class "StackFrame"
-StackFrame	invocation	instance	loud	method "NEW" of class "StackFrame"
-StackFrame	line	instance	loud	method "NEW" of class "StackFrame"
-StackFrame	makeString	instance	loud	method "NEW" of class "StackFrame"
-StackFrame	name	instance	loud	method "NEW" of class "StackFrame"
-StackFrame	string	instance	loud	method "NEW" of class "StackFrame"
-StackFrame	target	instance	loud	method "NEW" of class "StackFrame"
-StackFrame	traceLine	instance	loud	method "NEW" of class "StackFrame"
-StackFrame	type	instance	loud	method "NEW" of class "StackFrame"
+StackFrame	arguments	instance	answers	rc 0
+StackFrame	context	instance	answers	rc 0
+StackFrame	invocation	instance	answers	rc 0
+StackFrame	line	instance	answers	rc 0
+StackFrame	makeString	instance	answers	rc 0
+StackFrame	name	instance	answers	rc 0
+StackFrame	string	instance	answers	rc 0
+StackFrame	target	instance	answers	rc 0
+StackFrame	traceLine	instance	answers	rc 0
+StackFrame	type	instance	answers	rc 0
 StreamSupplier	available	instance	unanswered	a bare `~new` raises; the method was never sent
 StreamSupplier	index	instance	unanswered	a bare `~new` raises; the method was never sent
 StreamSupplier	init	instance	unanswered	a bare `~new` raises; the method was never sent
