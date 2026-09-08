@@ -1175,34 +1175,34 @@ RexxContext	rs	instance	loud	method "RS" of class "RexxContext"
 RexxContext	stackFrames	instance	loud	method "STACKFRAMES" of class "RexxContext"
 RexxContext	thread	instance	loud	method "THREAD" of class "RexxContext"
 RexxContext	variables	instance	loud	method "VARIABLES" of class "RexxContext"
-RexxInfo	architecture	instance	loud	method "ARCHITECTURE" of class "RexxInfo"
-RexxInfo	caseSensitiveFiles	instance	loud	method "CASESENSITIVEFILES" of class "RexxInfo"
-RexxInfo	date	instance	loud	method "DATE" of class "RexxInfo"
-RexxInfo	debug	instance	loud	method "DEBUG" of class "RexxInfo"
-RexxInfo	digits	instance	loud	method "DIGITS" of class "RexxInfo"
-RexxInfo	directorySeparator	instance	loud	method "DIRECTORYSEPARATOR" of class "RexxInfo"
-RexxInfo	endofline	instance	loud	method "ENDOFLINE" of class "RexxInfo"
+RexxInfo	architecture	instance	answers	rc 0
+RexxInfo	caseSensitiveFiles	instance	answers	rc 0
+RexxInfo	date	instance	answers	rc 0
+RexxInfo	debug	instance	answers	rc 0
+RexxInfo	digits	instance	answers	rc 0
+RexxInfo	directorySeparator	instance	answers	rc 0
+RexxInfo	endofline	instance	answers	rc 0
 RexxInfo	executable	instance	loud	method "EXECUTABLE" of class "RexxInfo"
-RexxInfo	form	instance	loud	method "FORM" of class "RexxInfo"
-RexxInfo	fuzz	instance	loud	method "FUZZ" of class "RexxInfo"
-RexxInfo	internalDigits	instance	loud	method "INTERNALDIGITS" of class "RexxInfo"
-RexxInfo	internalMaxNumber	instance	loud	method "INTERNALMAXNUMBER" of class "RexxInfo"
-RexxInfo	internalMinNumber	instance	loud	method "INTERNALMINNUMBER" of class "RexxInfo"
-RexxInfo	languageLevel	instance	loud	method "LANGUAGELEVEL" of class "RexxInfo"
+RexxInfo	form	instance	answers	rc 0
+RexxInfo	fuzz	instance	answers	rc 0
+RexxInfo	internalDigits	instance	answers	rc 0
+RexxInfo	internalMaxNumber	instance	answers	rc 0
+RexxInfo	internalMinNumber	instance	answers	rc 0
+RexxInfo	languageLevel	instance	answers	rc 0
 RexxInfo	libraryPath	instance	loud	method "LIBRARYPATH" of class "RexxInfo"
-RexxInfo	majorVersion	instance	loud	method "MAJORVERSION" of class "RexxInfo"
-RexxInfo	maxArraySize	instance	loud	method "MAXARRAYSIZE" of class "RexxInfo"
-RexxInfo	maxExponent	instance	loud	method "MAXEXPONENT" of class "RexxInfo"
-RexxInfo	maxPathLength	instance	loud	method "MAXPATHLENGTH" of class "RexxInfo"
-RexxInfo	minExponent	instance	loud	method "MINEXPONENT" of class "RexxInfo"
-RexxInfo	modification	instance	loud	method "MODIFICATION" of class "RexxInfo"
-RexxInfo	name	instance	loud	method "NAME" of class "RexxInfo"
-RexxInfo	package	instance	loud	method "PACKAGE" of class "RexxInfo"
-RexxInfo	pathSeparator	instance	loud	method "PATHSEPARATOR" of class "RexxInfo"
-RexxInfo	platform	instance	loud	method "PLATFORM" of class "RexxInfo"
-RexxInfo	release	instance	loud	method "RELEASE" of class "RexxInfo"
-RexxInfo	revision	instance	loud	method "REVISION" of class "RexxInfo"
-RexxInfo	version	instance	loud	method "VERSION" of class "RexxInfo"
+RexxInfo	majorVersion	instance	answers	rc 0
+RexxInfo	maxArraySize	instance	answers	rc 0
+RexxInfo	maxExponent	instance	answers	rc 0
+RexxInfo	maxPathLength	instance	answers	rc 0
+RexxInfo	minExponent	instance	answers	rc 0
+RexxInfo	modification	instance	answers	rc 0
+RexxInfo	name	instance	answers	rc 0
+RexxInfo	package	instance	answers	rc 0
+RexxInfo	pathSeparator	instance	answers	rc 0
+RexxInfo	platform	instance	answers	rc 0
+RexxInfo	release	instance	answers	rc 0
+RexxInfo	revision	instance	answers	rc 0
+RexxInfo	version	instance	answers	rc 0
 RexxQueue	new	class	answers	rc 0
 RexxQueue	create	class	loud	the LIBRARY REXX entry point "rexx_create_queue"
 RexxQueue	delete	class	loud	the LIBRARY REXX entry point "rexx_delete_queue"

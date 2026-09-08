@@ -1488,6 +1488,8 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     // Task 2's two witnesses.
     "lang/pointer_buffer_new_refused.rex",
     "lang/weak_reference_value.rex",
+    // Task 3's witness.
+    "lang/rexx_info_readers.rex",
 ];
 
 #[test]

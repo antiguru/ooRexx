@@ -187,34 +187,34 @@ RexxContext	rs	instance	send-differs	oracle rc0 VALUE The NIL object; crate rc12
 RexxContext	stackFrames	instance	send-differs	oracle rc0 VALUE an Array; crate rc120 rexx-exec: method "STACKFRAMES" of class "RexxContext" is not implemented (Phase 5)
 RexxContext	thread	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: method "THREAD" of class "RexxContext" is not implemented (Phase 5)
 RexxContext	variables	instance	send-differs	oracle rc0 VALUE a Directory; crate rc120 rexx-exec: method "VARIABLES" of class "RexxContext" is not implemented (Phase 5)
-RexxInfo	architecture	instance	send-differs	oracle rc0 VALUE 64; crate rc120 rexx-exec: method "ARCHITECTURE" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	caseSensitiveFiles	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: method "CASESENSITIVEFILES" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	date	instance	send-differs	oracle rc0 VALUE 30 Jul 2026; crate rc120 rexx-exec: method "DATE" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	debug	instance	send-differs	oracle rc0 VALUE 0; crate rc120 rexx-exec: method "DEBUG" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	digits	instance	send-differs	oracle rc0 VALUE 9; crate rc120 rexx-exec: method "DIGITS" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	directorySeparator	instance	send-differs	oracle rc0 VALUE /; crate rc120 rexx-exec: method "DIRECTORYSEPARATOR" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	endofline	instance	send-differs	oracle rc0 VALUE; crate rc120 rexx-exec: method "ENDOFLINE" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	architecture	instance	agree	rc0
+RexxInfo	caseSensitiveFiles	instance	agree	rc0
+RexxInfo	date	instance	agree	rc0
+RexxInfo	debug	instance	agree	rc0
+RexxInfo	digits	instance	agree	rc0
+RexxInfo	directorySeparator	instance	agree	rc0
+RexxInfo	endofline	instance	agree	rc0
 RexxInfo	executable	instance	send-differs	oracle rc0 VALUE /home/moritz/dev/repos/ooRexx/build/bin/rexx; crate rc120 rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	form	instance	send-differs	oracle rc0 VALUE SCIENTIFIC; crate rc120 rexx-exec: method "FORM" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	fuzz	instance	send-differs	oracle rc0 VALUE 0; crate rc120 rexx-exec: method "FUZZ" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	internalDigits	instance	send-differs	oracle rc0 VALUE 18; crate rc120 rexx-exec: method "INTERNALDIGITS" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	internalMaxNumber	instance	send-differs	oracle rc0 VALUE 999999999999999999; crate rc120 rexx-exec: method "INTERNALMAXNUMBER" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	internalMinNumber	instance	send-differs	oracle rc0 VALUE -999999999999999999; crate rc120 rexx-exec: method "INTERNALMINNUMBER" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	languageLevel	instance	send-differs	oracle rc0 VALUE 6.06; crate rc120 rexx-exec: method "LANGUAGELEVEL" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	form	instance	agree	rc0
+RexxInfo	fuzz	instance	agree	rc0
+RexxInfo	internalDigits	instance	agree	rc0
+RexxInfo	internalMaxNumber	instance	agree	rc0
+RexxInfo	internalMinNumber	instance	agree	rc0
+RexxInfo	languageLevel	instance	agree	rc0
 RexxInfo	libraryPath	instance	send-differs	oracle rc0 VALUE /home/moritz/dev/repos/ooRexx/build/lib; crate rc120 rexx-exec: method "LIBRARYPATH" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	majorVersion	instance	send-differs	oracle rc0 VALUE 5; crate rc120 rexx-exec: method "MAJORVERSION" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	maxArraySize	instance	send-differs	oracle rc0 VALUE 100000000000000000; crate rc120 rexx-exec: method "MAXARRAYSIZE" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	maxExponent	instance	send-differs	oracle rc0 VALUE 999999999; crate rc120 rexx-exec: method "MAXEXPONENT" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	maxPathLength	instance	send-differs	oracle rc0 VALUE 4096; crate rc120 rexx-exec: method "MAXPATHLENGTH" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	minExponent	instance	send-differs	oracle rc0 VALUE -999999999; crate rc120 rexx-exec: method "MINEXPONENT" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	modification	instance	send-differs	oracle rc0 VALUE 0; crate rc120 rexx-exec: method "MODIFICATION" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	name	instance	send-differs	oracle rc0 VALUE REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026; crate rc120 rexx-exec: method "NAME" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	package	instance	send-differs	oracle rc0 VALUE The REXX Package; crate rc120 rexx-exec: method "PACKAGE" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	pathSeparator	instance	send-differs	oracle rc0 VALUE :; crate rc120 rexx-exec: method "PATHSEPARATOR" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	platform	instance	send-differs	oracle rc0 VALUE LINUX; crate rc120 rexx-exec: method "PLATFORM" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	release	instance	send-differs	oracle rc0 VALUE 3; crate rc120 rexx-exec: method "RELEASE" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	revision	instance	send-differs	oracle rc0 VALUE 0; crate rc120 rexx-exec: method "REVISION" of class "RexxInfo" is not implemented (Phase 5)
-RexxInfo	version	instance	send-differs	oracle rc0 VALUE 5.3.0; crate rc120 rexx-exec: method "VERSION" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	majorVersion	instance	agree	rc0
+RexxInfo	maxArraySize	instance	agree	rc0
+RexxInfo	maxExponent	instance	agree	rc0
+RexxInfo	maxPathLength	instance	agree	rc0
+RexxInfo	minExponent	instance	agree	rc0
+RexxInfo	modification	instance	agree	rc0
+RexxInfo	name	instance	agree	rc0
+RexxInfo	package	instance	agree	rc0
+RexxInfo	pathSeparator	instance	agree	rc0
+RexxInfo	platform	instance	agree	rc0
+RexxInfo	release	instance	agree	rc0
+RexxInfo	revision	instance	agree	rc0
+RexxInfo	version	instance	agree	rc0
 Routine	[]	instance	send-differs	oracle rc0 VALUE a; crate rc120 rexx-exec: method "[]" of class "Routine" is not implemented (Phase 5)
 Routine	annotation	instance	agree	rc0
 Routine	annotations	instance	agree	rc0

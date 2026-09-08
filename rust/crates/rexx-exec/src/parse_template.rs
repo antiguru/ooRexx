@@ -73,7 +73,10 @@ use rexx_parse::{ExprKind, Parse, ParseSource, ParseTrigger, TriggerKind};
 /// Measured on this host: `parse source` answers `LINUX COMMAND <path>` with
 /// the program's own absolute path. Which word other platforms use was not
 /// measured, since one machine cannot show it.
-const PLATFORM: &[u8] = b"LINUX";
+///
+/// `SystemInterpreter::getPlatformName` (`platform/unix/MiscSystem.cpp:81`)
+/// answers this same `ORX_SYS_STR`, so `RexxInfo~platform` reads it too.
+pub(crate) const PLATFORM: &[u8] = b"LINUX";
 
 /// `PARSE VERSION`'s string.
 ///
@@ -94,7 +97,86 @@ const PLATFORM: &[u8] = b"LINUX";
 /// No corpus program prints it: a committed differential over a build date
 /// would break on the next rebuild and say nothing about this engine, and the
 /// corpus's own determinism rule excludes it anyway.
-const VERSION: &[u8] = b"REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026";
+///
+/// `RexxInfo~name` is this same string -- `RexxInfo::initialize` assigns
+/// `Interpreter::getVersionString()`, which is what `PARSE VERSION` reads --
+/// and the fields below are cut back out of it.
+pub(crate) const VERSION: &[u8] = b"REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026";
+
+/// `RexxInfo~version`: `ORX_VER.ORX_REL.ORX_MOD`, which
+/// `RexxInfo::initialize` renders with the same `%d.%d.%d` that
+/// `Interpreter::getVersionString` (`runtime/Version.cpp:73`) embeds in
+/// [`VERSION`].
+///
+/// **Cut out of [`VERSION`] rather than kept beside it.** `Version.cpp:73`
+/// assembles that string from `ORX_VER`, `ORX_REL`, `ORX_MOD`, the pointer
+/// width, the language level and `__DATE__`; holding the pieces here would
+/// put that assembly rule in this crate as a second thing that can be wrong,
+/// and only `tests/parse_version_oracle.rs` could notice. Derived, every
+/// field moves with the constant and none of them can drift from `~name`.
+///
+/// The cuts are computed at compile time, so a [`VERSION`] missing a
+/// delimiter fails the build rather than a test.
+pub(crate) const VERSION_NUMBER: &[u8] = part(VERSION, UNDERSCORE + 1, PAREN);
+
+/// `RexxInfo~majorVersion`: `ORX_VER`, [`VERSION_NUMBER`]'s first field.
+pub(crate) const MAJOR_VERSION: &[u8] = part(VERSION_NUMBER, 0, FIRST_DOT);
+
+/// `RexxInfo~release`: `ORX_REL`, [`VERSION_NUMBER`]'s second field.
+pub(crate) const RELEASE: &[u8] = part(VERSION_NUMBER, FIRST_DOT + 1, SECOND_DOT);
+
+/// `RexxInfo~modification`: `ORX_MOD`, [`VERSION_NUMBER`]'s third field.
+///
+/// **Not `RexxInfo~revision`**, which is `ORX_BLD` and appears nowhere in
+/// [`VERSION`] -- see `dispatch::rexx_info`.
+pub(crate) const MODIFICATION: &[u8] = part(VERSION_NUMBER, SECOND_DOT + 1, VERSION_NUMBER.len());
+
+/// `RexxInfo~languageLevel`: `Interpreter::getLanguageLevelString()`, the
+/// word `Version.cpp:73` writes after the `-bit` one.
+pub(crate) const LANGUAGE_LEVEL: &[u8] = part(VERSION, BIT_BLANK + 1, LEVEL_BLANK);
+
+/// `RexxInfo~date`: the interpreter's build date, `__DATE__` reformatted as
+/// `day month year` and the tail of [`VERSION`].
+pub(crate) const BUILD_DATE: &[u8] = part(VERSION, LEVEL_BLANK + 1, VERSION.len());
+
+/// The pointer width `Version.cpp:73` writes in front of `-bit`, from
+/// `__REXX64__`. `RexxInfo~architecture` reads `sizeof(void *) * 8` instead
+/// and the two must agree, which is what this constant exists to let a test
+/// say.
+#[cfg(test)]
+const BIT_WIDTH: &[u8] = part(VERSION, SECOND_UNDERSCORE + 1, DASH);
+
+const UNDERSCORE: usize = seek(VERSION, b'_', 0);
+const PAREN: usize = seek(VERSION, b'(', UNDERSCORE);
+#[cfg(test)]
+const SECOND_UNDERSCORE: usize = seek(VERSION, b'_', PAREN);
+#[cfg(test)]
+const DASH: usize = seek(VERSION, b'-', SECOND_UNDERSCORE);
+const FIRST_DOT: usize = seek(VERSION_NUMBER, b'.', 0);
+const SECOND_DOT: usize = seek(VERSION_NUMBER, b'.', FIRST_DOT + 1);
+const BIT_BLANK: usize = seek(VERSION, b' ', 0);
+const LEVEL_BLANK: usize = seek(VERSION, b' ', BIT_BLANK + 1);
+
+/// The offset of the first `byte` at or after `from`.
+///
+/// # Panics
+///
+/// When there is none, which for every caller here is a const evaluation and
+/// so a compile error.
+const fn seek(bytes: &[u8], byte: u8, from: usize) -> usize {
+    let mut at = from;
+    while at < bytes.len() {
+        if bytes[at] == byte {
+            return at;
+        }
+        at += 1;
+    }
+    panic!("VERSION does not carry the delimiter its fields are cut at")
+}
+
+const fn part(bytes: &'static [u8], from: usize, to: usize) -> &'static [u8] {
+    bytes.split_at(to).0.split_at(from).1
+}
 
 /// The two bytes `PARSE` treats as whitespace when carving a section into
 /// words: blank and tab, and nothing else (`RexxTarget::getWord`,
@@ -1418,6 +1500,44 @@ mod tests {
         expected.extend_from_slice(VERSION);
         expected.push(b'\n');
         assert_eq!(outcome.stdout, expected);
+    }
+
+    /// The `RexxInfo` fields reassemble into [`VERSION`] exactly as
+    /// `runtime/Version.cpp:73` assembles it.
+    ///
+    /// Written as the assembly rather than as six expected strings, so it
+    /// holds for whatever [`VERSION`] the next oracle rebuild puts here. Six
+    /// expected strings would be a second copy of the constant, which is the
+    /// shape its own doc comment rules out.
+    #[test]
+    fn the_version_fields_reassemble_into_the_constant() {
+        let mut rebuilt = b"REXX-ooRexx_".to_vec();
+        rebuilt.extend_from_slice(MAJOR_VERSION);
+        rebuilt.push(b'.');
+        rebuilt.extend_from_slice(RELEASE);
+        rebuilt.push(b'.');
+        rebuilt.extend_from_slice(MODIFICATION);
+        rebuilt.extend_from_slice(b"(MT)_");
+        rebuilt.extend_from_slice(BIT_WIDTH);
+        rebuilt.extend_from_slice(b"-bit ");
+        rebuilt.extend_from_slice(LANGUAGE_LEVEL);
+        rebuilt.push(b' ');
+        rebuilt.extend_from_slice(BUILD_DATE);
+        assert_eq!(rebuilt, VERSION);
+        let mut number = MAJOR_VERSION.to_vec();
+        number.push(b'.');
+        number.extend_from_slice(RELEASE);
+        number.push(b'.');
+        number.extend_from_slice(MODIFICATION);
+        assert_eq!(number, VERSION_NUMBER);
+        assert_eq!(
+            BIT_WIDTH,
+            (size_of::<*const ()>() * 8).to_string().as_bytes(),
+            "`__REXX64__` in Version.cpp:73 and `sizeof(void *) * 8` in \
+             RexxInfo::getArchitecture are the same fact, so a VERSION whose \
+             width disagrees with this build would make `RexxInfo~architecture` \
+             and `RexxInfo~name` contradict each other"
+        );
     }
 
     /// A fractional, non-numeric or negative positional operand is 26.4, and

@@ -174,6 +174,9 @@ mod string;
 mod collection;
 pub(crate) mod hash;
 
+// `RexxInfo`'s readers, chained the same way.
+mod rexx_info;
+
 /// One primitive method's implementation.
 ///
 /// The [`Cleared`] parameter is the seam's own enforcement and is never read
@@ -1242,11 +1245,20 @@ impl ObjectModel {
             .chain(string::NATIVE_METHODS)
             .chain(hash::NATIVE_METHODS)
             .chain(collection::NATIVE_METHODS)
+            .chain(rexx_info::NATIVE_METHODS)
             .chain(extra)
         {
-            let class = classes.lookup(class_id).unwrap_or_else(|| {
-                panic!("NATIVE_METHODS names class {class_id:?}, which is not in the registry")
-            });
+            // **The kernel directory as well as the environment one**, since
+            // `RexxInfo` is registered only in the former: `ClassRegistry`'s
+            // two tables are disjoint, so the fallback cannot reach a
+            // different class than the row names, and a name in neither still
+            // panics.
+            let class = classes
+                .lookup(class_id)
+                .or_else(|| classes.system_lookup(class_id))
+                .unwrap_or_else(|| {
+                    panic!("NATIVE_METHODS names class {class_id:?}, which is not in the registry")
+                });
             let (_, method) = classes
                 .lookup_instance_method(class, method_name)
                 .unwrap_or_else(|| {
