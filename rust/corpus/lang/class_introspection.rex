@@ -57,6 +57,20 @@ say 'isMetaclass    ' k~isMetaclass
 say 'queryMixinClass' k~queryMixinClass
 say 'Class isMeta   ' .Class~isMetaclass
 
+/* EVERY PREDICATE IS ASKED WHERE THE ANSWER IS 1 AS WELL AS WHERE IT IS 0.
+ * The three rows above answer 0 and .Class~isMetaclass answers 1, so without
+ * the two directives below a body returning a constant 0 for isAbstract and
+ * queryMixinClass would satisfy every other row in this file. ABSTRACT and
+ * MIXINCLASS are the only directives that set them. */
+say '-- B2. the same predicates where the answer is 1 --'
+say 'ABS isAbstract ' .ABS~isAbstract
+say 'MIX queryMixin ' .MIX~queryMixinClass
+/* Each predicate reads its own flag and not the other's, which one class
+ * carrying one flag cannot show. */
+say 'ABS queryMixin ' .ABS~queryMixinClass
+say 'MIX isAbstract ' .MIX~isAbstract
+say 'ABS isMetaclass' .ABS~isMetaclass
+
 say '-- C. ~subclasses is an Array, read through a second send --'
 sub = k~subclasses
 say 'class          ' sub~class~id
@@ -205,3 +219,8 @@ caught:
   return 1
 ::method M2
   return 2
+
+/* The two classes section B2 needs: the only directives that turn either
+ * predicate on. */
+::class ABS abstract
+::class MIX mixinclass Object

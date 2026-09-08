@@ -275,6 +275,52 @@ takes the list from 0 to 1, and asks whether `KID` is in it by `~id`.
 `~instanceMethods` through `~class~id` plus a walk, `~subclasses` through `~class~id` and `~items`
 and an element's `~id`, and `instanceMethod` through `~class~id`, `~scope~id` and `~scope~class~id`.
 
+### Every predicate is asked where the answer is 1, and two of them were not
+
+**Found in review, and it was a real gap in the first commit.** Sections B and B2 now ask each
+predicate on both branches, but `a43d780bc` asked `isAbstract` and `queryMixinClass` **only where
+the answer is 0**. `isMetaclass` had both branches from the start (`k` answers 0, `.Class` answers
+1); the other two did not, and **a body returning a constant `0` for either would have satisfied
+every other row in the file**. That is `rust/CLAUDE.md`'s "a test that cannot fail is a defect", and
+the answer to its own question — what degenerate implementation satisfies this? — was "a stub".
+
+`::CLASS X ABSTRACT` and `::CLASS X MIXINCLASS Y` are the only directives that turn either flag on,
+and both are already supported here. The shipped bodies answered correctly all along, so this is a
+witness change and not a code change: measured, oracle and both engines, `.ABS~isAbstract` is `1`
+and `.MIX~queryMixinClass` is `1`.
+
+Section B2 also asks each predicate for the flag it does **not** carry — `.ABS~queryMixinClass` and
+`.MIX~isAbstract` are both `0`, and `.ABS~isMetaclass` is `0` — because one class carrying one flag
+cannot show that each predicate reads its own.
+
+**The mutation pair, run in the order that makes it mean something.** A red mutation proves a test
+can fail, not that it adds coverage, so the candidate was run against the witness *without* the new
+rows first. Both bodies replaced by a constant `false`:
+
+| witness | predicted | measured |
+| --- | --- | --- |
+| the `a43d780bc` version, no section B2 | green — the gap is real | **GREEN**, oracle and crate byte-identical |
+| with section B2 | red, on exactly the two added rows | **RED**, diverging only at `ABS isAbstract` and `MIX queryMixin` |
+
+The first row is the finding: under a constant-`false` stub the shipped witness could not tell.
+
+### The same pass over every other row
+
+The gap generalises, so each reader was checked for a row where the answer is not the default. The
+other rows already had both branches, which is why only two lines were added:
+
+| reader | default branch | non-default branch |
+| --- | --- | --- |
+| `isAbstract` | `k` -> 0 | **added**: `.ABS` -> 1 |
+| `queryMixinClass` | `k` -> 0 | **added**: `.MIX` -> 1 |
+| `isMetaclass` | `k` -> 0 | `.Class` -> 1 |
+| `subclasses` | `k` -> empty | section E: 0 -> 1, and `KID` found by `~id` |
+| `methods` | omitted -> 34 | `.KK` -> 2, `.Object` -> 32, `.nil` -> 2, non-class -> 0 |
+| `instanceMethods` | omitted -> 34 | `.KK` -> 2, `.nil` -> 0 |
+| `instanceMethod` | hit -> a `Method` | miss -> `.nil` |
+| `isInstanceOf` | `.Object` -> 1 | `.String` -> 0, over four receiver kinds |
+| `enhanced` | `enhanced K` | the plain instance beside it -> `a K` |
+
 **The short argument list sits beside the good one**: section J runs sixteen refusals under
 `SIGNAL ON SYNTAX` so each is a row of output rather than the end of the program, covering every
 reader's arity, `isInstanceOf`'s non-class argument, and every operator a class does not answer.
@@ -464,6 +510,14 @@ with it. Re-read at the end, not from memory.
 | **BASE is the HEAD you find on release; no rebase** | **Applied.** BASE `8bc2df809`, stated at the top of this report. |
 
 ## Concerns
+
+**0. Two predicates shipped in `a43d780bc` with false-branch coverage only, and I did not disclose
+it.** `isAbstract` and `queryMixinClass` were asserted only where the answer is `0`, so a
+constant-`false` stub would have passed everything this task added — confirmed by mutation, which
+left the shipped witness green. Fixed in the follow-up commit with two directives and five
+assertions; no code change was needed. It belongs at the top of this list because it is the same
+shape as everything else in it, and unlike the rest of them I found it only when review pointed at
+it. The rest of this section was written before that review; this entry is the one it added.
 
 **1. Three sites still refuse loudly where the oracle answers 97.1, and this task deliberately did
 not close them.** `Interp::header_number` (`run.rs:8674`), `Interp::controlled_step_wide`
