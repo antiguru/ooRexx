@@ -344,14 +344,41 @@ each, `lang/rexx_info_readers.rex`.
 
 ## Gates
 
+Run in the gate worktree `/home/moritz/dev/repos/ooRexx-5i-gates`, detached at `acf617abd`
+(`worktree HEAD: acf617abdc8ab6cc598b244aecb01cf1458f2fc9`, recorded by the script before G1). Each
+status written unpiped to `gate-status.txt` as it went. **All seven zero.**
+
 | gate | command | result |
 | --- | --- | --- |
-| G1 | | **G1** |
-| G2 | | **G2** |
-| G3 | | **G3** |
-| G4 | | **G4** |
-| G5 | | **G5** |
-| G6 | | **G6** |
-| G7 | | **G7** |
+| G1 | `cargo fmt --all --check` | exit 0, no output on either descriptor |
+| G2 | `cargo clippy --workspace --all-targets -- -D warnings` | exit 0 |
+| G3 | `cargo test --release --workspace --no-fail-fast` | exit 0, 116 `test result: ok`, no `test result: FAILED`, 2280 passed |
+| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` (debug) | exit 0, 116 `test result: ok`, no `test result: FAILED`, 2281 passed |
+| G5 | `cargo test --release -p rexx-exec --test collection_arity` | exit 0, 23 passed |
+| G6 | `cargo test --release -p rexx-exec --test introspection_arity` | exit 0, 25 passed |
+| G7 | `cargo test --release -p rexx-exec --test introspection_scopes` | exit 0, 22 passed |
+
+G4's own stderr carries `mode: STRICT (the gate) -- REXX_CORPUS_GATE is set` and
+`446 of 446 matching`, which is the run that includes `lang/rexx_info_readers.rex`. The one test in G4's list and not G3's, found by
+`comm` over the two runs' test names, is
+`bytes::tests::the_bytes_past_len_are_never_part_of_the_value`, which carries
+`#[cfg(debug_assertions)]` — the reason `rust/CLAUDE.md`'s Gates section keeps the debug run beside
+the release ones.
 
 ## Concerns
+
+1. **An unowned pre-existing defect** — the nested-builtin argument loss above. It is not
+   `RexxInfo`'s and nothing in this phase owns it.
+2. **`caseSensitiveFiles` is the one row of the 26 whose agreement is conditional on this
+   filesystem.** It mirrors a fallback because the C++ probe needs an ioctl this workspace cannot
+   make. On a casefolded ext4 directory the oracle would answer `0` and this crate `1`.
+3. **`==` on a native object is loud**, so the identity of `.RexxInfo~package` and `.Array~package`
+   is unasserted from Rexx. It holds by construction through `Interp::package_object`'s memo. Worth
+   revisiting when Task 5 lands `Class`'s operators.
+4. **`corpus/introspection-arity.tsv` cannot see an answer's class.** Established here by
+   `~executable`, now in the plan's Global constraints. Every remaining task in this phase with an
+   object-valued row inherits the problem, and `Method`, `Routine`, `Package` and `StackFrame` all
+   have them.
+5. **The brief's `name` red control describes something that does not happen.** Corrected above and
+   worth carrying into the phase close, since the same sentence would mislead a later task told to
+   "break the shared source".
