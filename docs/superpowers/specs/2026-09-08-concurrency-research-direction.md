@@ -159,6 +159,31 @@ to the user. And Rexx has no `separate` type, so nothing in the language assigns
 handlers -- a SCOOP-faithful implementation would have to derive that assignment, and **the
 derivation is the design**.
 
+### 2.0 One place where Rexx is STRONGER than any implemented SCOOP
+
+SCOOP's wait-by-necessity is weaker than its reputation: the client blocks at the query
+**call**, not at the point the result is used, and the stronger Eiffel// form "has never been
+implemented in any SCOOP system" (the survey's reading of the literature, not mine).
+
+**Rexx has the stronger form, and this is measured.** A caller that does `m = o~start('SLOW')`
+then five steps of its own then `m~result` prints all five of its own steps first, then the
+started method's five, then the result -- so the block is at the *use*, not at the call:
+
+    caller: past the start
+    caller: working 1 .. 5
+    caller: now asking for the result
+      slow: step 1 .. 5
+    caller: got done
+
+(`programs/waitbynecessity.rex` in the record beside this spec. The ordering is also
+consistent with section 1.2's finding that the started activity does not get the lock until
+the caller blocks; both readings support "the block is at the use".)
+
+The other side of it: `~result` **is** a blocking query, and blocking queries are the residual
+deadlock source that SCOOP/Qs could not remove -- it made commands non-blocking and still says
+"deadlock is still possible in SCOOP/Qs". Of the models surveyed only E and AmbientTalk get
+deadlock freedom, and they buy it by outlawing blocking altogether.
+
 ### 2.1 What SCOOP costs, measured by its own authors
 
 West, Nanz and Meyer, *Efficient and Reasonable Object-Oriented Concurrency* (ESEC/FSE 2015):
@@ -191,6 +216,28 @@ not classic SCOOP: keep the shared heap, keep the scope as the region, and repla
 receiver's scope" with "reserve, atomically and for the method's duration, the set of regions
 this method will touch". In Eiffel that set is the argument list. **What plays that role in
 Rexx is the open design question**, and this document does not answer it.
+
+Two cautions on that recommendation. The passive-region refinement (Morandi, COORDINATION
+2014) is credited with "several orders of magnitude" on data-intensive programs, but **that
+figure is second-hand in the survey and the paper was not read** -- get it before planning
+against the number. And the recommendation inherits SCOOP's deadlock exposure, which no
+version of the model removes.
+
+### 2.3 Why a Pony-style static answer is not available to us
+
+Pony is the design that gets actor isolation *and* zero-copy sharing, through reference
+capabilities (`iso`, `val`, `ref`, `box`, `trn`, `tag`) that are *denials* rather than
+permissions, with sendability decided statically. Its measured annotation cost is modest --
+**89.3% of about 10,000 lines of its standard library needed no capability annotation at
+all** -- and what it gave up is ambient mutable global state, plus the ecosystem that a new
+language does not have.
+
+**But the survey's structural finding closes this route: nobody has retrofitted a *static*
+model onto a dynamic language.** Every real retrofit -- Ractors, subinterpreters, ithreads,
+apartments -- is isolation-by-copying enforced by a **run-time** check, because a dynamic
+language has no types to check. Rexx is dynamically typed, so Pony's guarantee is not
+something we can adopt; at most we could adopt its *discipline* as a run-time one, which is
+what Ruby did and what Ruby is still paying for.
 
 ---
 
@@ -394,6 +441,10 @@ than against a hoped-for speedup.
   Measurable, unmeasured.
 * The ECMA-367 keyword counts in section 2 are the survey's measurement, not mine; I did not
   re-run them.
+* That SCOOP blocks at the query call rather than at result use (section 2.0) is the survey's
+  reading of the literature. The **Rexx** half of that comparison is measured.
+* The passive-region refinement's claimed "several orders of magnitude" (section 2.2) is
+  second-hand; the paper was not read.
 * The `transfer` example in section 2 is derived from the documented locking rule and was not
   executed against the oracle.
 

@@ -22,6 +22,7 @@ with `/usr/bin/time -f "%e wall %P cpu"` for the timings. Machine had 32 cores.
 | `interleave.rex` | switch detector, pure computation. **0, 0, 0** |
 | `interleave2.rex` | **the positive control** -- the same detector with one `charout` per iteration. **653, 708, 605** |
 | `docex.rex` | the reference manual's own default-concurrency example, which interleaves because its loop body is a `SAY` |
+| `waitbynecessity.rex` | the caller runs all five of its own steps, then the started method's, then takes the result -- so `~start`/`~result` blocks at the **use**, not at the call |
 
 `interleave2.rex` is the reason `interleave.rex`'s zero can be believed. Without it a zero is
 indistinguishable from a detector that cannot fire.
