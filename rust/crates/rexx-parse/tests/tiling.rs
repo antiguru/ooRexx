@@ -322,14 +322,51 @@ fn clause_spans(p: &Program, text: &[u8]) -> Vec<Range<usize>> {
 /// The parser keeps the marker's text and not its position, so it is found
 /// here: the first occurrence at or after the body, which is what ended the
 /// body in the first place.
+///
+/// **The marker may be empty**, which `::RESOURCE d END ''` writes and both
+/// interpreters accept at rc 0 -- measured, each prints the program's own
+/// output and exits 0. An empty marker matches nothing and is given an empty
+/// span, so the bytes after it are reported as belonging to no node rather
+/// than crashing the walk: `slice::windows(0)` panics, and this function is
+/// the one place that count is not known in advance.
 fn resource_span(text: &[u8], after: usize, resource: &rexx_parse::Resource) -> Range<usize> {
     let from = resource.lines.last().map_or(after, |line| line.end);
     let marker = &resource.end_marker;
+    if marker.is_empty() || from >= text.len() {
+        return from..from;
+    }
     let at = text[from..]
         .windows(marker.len())
         .position(|window| window == marker.as_ref())
         .map_or(from, |offset| from + offset);
     at..at + marker.len()
+}
+
+/// [`resource_span`] is total over the marker shapes the parser produces.
+///
+/// **`::RESOURCE d END ''` is the shape that made it panic**, and it is not a
+/// program either interpreter refuses: measured 2026-09-08, both print the
+/// program's own output and exit 0. The parser records an empty `end_marker`
+/// and no body lines for it, so the length the search would use is zero and
+/// `slice::windows(0)` panics -- which is a crash in this walker over a
+/// program the corpus is allowed to gain.
+#[test]
+fn the_resource_span_is_total_over_the_markers_the_parser_produces() {
+    for source in [
+        b"say 'hi'\n::resource d end ''\nbody line\n\n".to_vec(),
+        b"say 'hi'\n::resource d\nbody line\n::END\n".to_vec(),
+        b"say 'hi'\n::resource d end 'STOP'\nbody line\nSTOP\n".to_vec(),
+    ] {
+        let p = parse_program(source.clone())
+            .unwrap_or_else(|e| panic!("{source:?} failed to parse: {e:?}"));
+        let spans = clause_spans(&p, &source);
+        for span in &spans {
+            assert!(
+                span.start <= span.end && span.end <= source.len(),
+                "{source:?} produced the out-of-range span {span:?}"
+            );
+        }
+    }
 }
 
 #[test]

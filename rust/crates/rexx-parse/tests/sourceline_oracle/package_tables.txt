@@ -1,4 +1,4 @@
-count 94
+count 101
 /* Package's ten table readers, on a package carrying more than one of every
    kind: two classes public and one not, two routines public and one not, two
    unattached methods, two resources, and one ::REQUIRES under a namespace.
@@ -7,8 +7,15 @@ count 94
    Every entry is read back BY NAME and its own class asked, because the
    table's rendering is `a StringTable` whatever is inside it.
 
-   This program's stdout is compared as a sorted multiset -- the tables are
-   hash-ordered on both sides and neither order reproduces the other.
+   This program's stdout is compared BYTE FOR BYTE. The tables it prints are
+   hash-ordered on both sides, and the two orders differ in general -- but the
+   names here are short enough that this crate's sorted walk and the oracle's
+   bucket walk happen to agree, so it is not on corpus.rs's
+   HASH_ORDERED_STDOUT and Deviation 8 does not cover it. `package_writes.rex`
+   is the one program that needs the licence. **The agreement is a
+   coincidence of these names, not a property**: restoring long names, which
+   is what the defect below asks for once it is fixed, will need this program
+   put back on that list.
 
    Every name a table is keyed under here is at most seven bytes, so that the
    index string a DO OVER binds sits in the handle rather than on the heap.

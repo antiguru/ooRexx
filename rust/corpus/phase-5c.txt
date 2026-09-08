@@ -179,8 +179,11 @@ lang/map_collection_of_pair.rex
 # a body answering a one-entry table cannot pass.
 # `package_writes` is on corpus.rs's HASH_ORDERED_STDOUT for Deviation 8:
 # what it prints is a StringTable's own iteration order, which is a bucket
-# walk on both sides.
+# walk on both sides. `package_settings` reads the settings of a package that
+# declares none and `package_options` of one that declares seven, which is
+# what stops a settings reader that ignores its receiver passing both.
 lang/package_settings.rex
+lang/package_options.rex
 lang/package_tables.rex
 lang/package_find.rex
 lang/package_writes.rex

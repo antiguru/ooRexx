@@ -501,6 +501,41 @@ fn every_opted_in_comparison_names_a_program_the_subset_runs() {
     }
 }
 
+/// [`stdout_mode`] answers the multiset mode for exactly the licensed list.
+///
+/// **The other direction of the licence.**
+/// [`the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else`]
+/// says every entry needs the relaxation; this says nothing else gets it. The
+/// two together are what "the opt-in list IS the licence" means, and neither
+/// half implies the other: a `stdout_mode` that answered `Multiset` for every
+/// path would satisfy the first test and fail this one.
+///
+/// It walks the whole subset rather than a chosen few, and asserts the list is
+/// neither empty nor the whole of it, so this cannot pass over nothing.
+#[test]
+fn the_multiset_stdout_mode_is_selected_for_exactly_the_licensed_list() {
+    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+    let paths: Vec<PathBuf> = SUBSET_FILES
+        .iter()
+        .map(|name| corpus_dir.join(name))
+        .collect();
+    let subset = read_subset(&paths.iter().map(PathBuf::as_path).collect::<Vec<_>>());
+    assert!(
+        !HASH_ORDERED_STDOUT.is_empty() && HASH_ORDERED_STDOUT.len() < subset.len(),
+        "the licensed list is empty or is the whole subset, so this control          separates nothing"
+    );
+    for entry in &subset {
+        let listed = HASH_ORDERED_STDOUT.contains(&entry.as_str());
+        let mode = stdout_mode(entry);
+        assert_eq!(
+            mode == StdoutComparison::Multiset,
+            listed,
+            "{entry} is compared as {mode:?} and is {} on HASH_ORDERED_STDOUT",
+            if listed { "" } else { "not" }
+        );
+    }
+}
+
 /// DEVIATION 8's own control: for every program on [`HASH_ORDERED_STDOUT`],
 /// the two sides' `stdout` **differs** raw and **agrees** sorted.
 ///
@@ -529,16 +564,23 @@ fn the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else() {
         let cpp = oracle.run(&abs);
         assert!(
             !cpp.stdout.is_empty(),
-            "{listed} is on HASH_ORDERED_STDOUT and the oracle wrote no stdout, so the              sorted comparison would agree with anything"
+            "{listed}: on HASH_ORDERED_STDOUT and the oracle wrote no stdout, so \
+the sorted comparison would agree with anything"
         );
-        assert_ne!(
-            rust.stdout, cpp.stdout,
-            "{listed} agrees on stdout byte for byte, so it does not need Deviation 8 and              must not carry a relaxation that hides an ordering defect"
+        // Both compared as booleans rather than with `assert_ne!`/`assert_eq!`
+        // on the transcripts: the message is the useful part, and those macros
+        // would print two whole `Vec<u8>`s as byte arrays.
+        assert!(
+            rust.stdout != cpp.stdout,
+            "{listed}: agrees on stdout byte for byte, so it does not need \
+Deviation 8 and must not carry a relaxation that hides an ordering defect"
         );
-        assert_eq!(
-            support::oracle::stdout_multiset(&rust.stdout),
-            support::oracle::stdout_multiset(&cpp.stdout),
-            "{listed} differs on stdout as a multiset of lines, which Deviation 8 does not              license: the two sides printed different content, not the same content in a              different order"
+        assert!(
+            support::oracle::stdout_multiset(&rust.stdout)
+                == support::oracle::stdout_multiset(&cpp.stdout),
+            "{listed}: differs on stdout as a MULTISET of lines, which \
+Deviation 8 does not license -- the two sides printed different content, not \
+the same content in a different order"
         );
     }
 }

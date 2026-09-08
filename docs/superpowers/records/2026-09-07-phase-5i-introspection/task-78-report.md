@@ -1,6 +1,8 @@
 # Phase 5i, Tasks 7 and 8 (merged): `Package`'s thirty-three rows
 
-BASE `59d25e938`. Commit `<SHA>`.
+BASE `59d25e938`. Code commit `2ebeba1c8`, records `3c53fdbc6` and `bb5d69274`,
+fix round 1 `<SHA-R1>` — the sha of the commit this line is in, read back from
+`git log` after committing and quoted in the report to the controller.
 
 ## Outcome
 
@@ -144,9 +146,55 @@ not reach: `corpus/lang/package_rexx.rex` reads all 67 class names back by name
 and asserts the 62/5 public split, and `package_settings.rex` asserts all four
 of the readers that part.
 
+## `corpus/refusal-sites.tsv`: the before and after
+
+The Global Constraints require each moved row's verdict before and after with
+the refresh command quoted. The refresh is
+`cargo test --release -p rexx-exec --test refusal_sites`, whose
+`the_table_holds_every_constructor_the_source_defines` re-derives columns 1–4
+from `src/` and fails against a stale file; the file is then edited to match
+and the test re-run. It was run twice, because three constructors were added
+after the first refresh.
+
+`git diff 59d25e938 -- corpus/refusal-sites.tsv` moves 142 lines. **Seven rows
+are new, one is deleted, and 64 rows keep their verdict and move only their
+`definition` line**, which is the shift every earlier row takes when a
+constructor is inserted above it in `error.rs`.
+
+**Added** — verdict/reached/answer as committed:
+
+| kind | name | surface | verdict | reached | answer |
+| --- | --- | --- | --- | --- | --- |
+| `Loud` | `package_from_source` | send | recorded | yes | a loadPackage source array |
+| `Loud` | `package_option_write` | send | recorded | yes | a package settings write |
+| `Raised` | `argument_not_an_instance` | send | agrees | yes | 88.914 |
+| `Raised` | `argument_not_convertible` | send | agrees | yes | 93.953 |
+| `Raised` | `method_argument_not_in_list` | send | agrees | yes | 93.914 |
+| `Raised` | `method_argument_not_whole` | send | agrees | yes | 93.905 |
+| `Raised` | `method_user_defined` | send | agrees | yes | argument 2 must not be empty |
+
+**Deleted**: `Loud rexx_package_classes`, which at BASE read
+`send / diverges / yes / the REXX package's class table`. It is gone because
+the REXX package now has one — that row **was** the `publicClasses` refusal,
+and deleting it is the task's headline expressed in the table. Its witness in
+`run/tests.rs`'s `the_refusals_this_task_leaves_where_the_oracle_answers_still_fire`
+went with it, since the send it asserted now answers.
+
+**The header's own claim was rewritten and the rewrite was measured.** The file
+records which rows its checks cannot tell apart, and `argument_not_an_instance`
+joins `argument_not_a_class` and `scope_override_not_a_class` at 88.914, making
+a group of three where the header said a pair. `SHARED_ANSWERS` in
+`refusal_sites.rs` was widened to match, and
+`the_answers_more_than_one_row_shares_are_the_recorded_ones` is what holds the
+two together. **The header's claim that a transposition inside such a group
+leaves every test green was re-measured for the new member rather than assumed**:
+swapping `argument_not_a_class`'s `answer` and `witness` with
+`argument_not_an_instance`'s left all five tests in that binary passing, and the
+file was restored from a copy afterwards.
+
 ## The witnesses
 
-Five corpus programs, in `corpus/phase-5c.txt` where Phase 5i's other tasks
+Six corpus programs, in `corpus/phase-5c.txt` where Phase 5i's other tasks
 put theirs, plus two `.cls` helpers so that no corpus scan reads them as
 programs of their own. Each helper declares **two** public classes and **two**
 public routines, and the main receiver carries two of every kind, so a body
@@ -154,6 +202,7 @@ answering an empty or a one-entry table cannot pass.
 
 | program | what it pins |
 | --- | --- |
+| `package_options.rex` | the same settings readers on a package that **declares** seven of them — `::options digits 13 form engineering fuzz 2 numeric inherit novalue syntax error syntax trace l` — each read back through the method that reports it and printed beside the REXX package's, plus `~options('X')`, which answers the subkeywords the directive **named** rather than the values in force. It is the pair `package_settings.rex` needs: every answer there is a language default, so a reader that ignored its receiver passed it. |
 | `package_settings.rex` | the source and settings readers on **both** receivers, and the four pairs that part between them: `~trace` `N` against the null string, `~prolog` a `Routine` against `.nil`, `~source`/`~sourceSize` this file against `Array(0)`/`0`, and `~options` ending `TRACE NORMAL` against `TRACE ?n/a?`. Plus every `~options` name, `~defaultOptions`' two, `.Package~new`'s array form running its prologue, and ten argument errors. |
 | `package_tables.rex` | the ten table readers, each entry read back by name with its own class; that each answer is a fresh copy a write does not reach; and `~resource`'s Array read by position, its upcasing lookup and its miss. |
 | `package_find.rex` | the six `find*` readers on a hit and a miss each, including the two a body searching only the package's own tables gets wrong (`~findClass('ARRAY')` and `~findPublicClass('ARRAY')` both answer the `Array` class), `~findPublicRoutine` answering a non-`PUBLIC` routine because the C++ stub calls `findRoutine`, and `~findProgram` answering a path `String` rather than a `Package`. |
@@ -263,15 +312,54 @@ interactive debug and waits on a terminal that never answers; a probe using it
 has to be killed. Not added to `corpus/oracle-crashes.txt` because it does not
 crash — it hangs — but it costs a session the same way.
 
-## The argument sweep
+## The argument sweep, and the count I got wrong
 
-Every one of the 33 methods, on **both** receivers, under twelve argument
-lists — none, `()`, `(.nil)`, `(1)`, `('X')`, `('X','Y')`, `('X','Y','Z')`,
-`(,'Y')`, `('DIGITS','Y')`, `('R','Y')`, `('X','')` and `('I','Y')` — three
-descriptors and exit status compared against the oracle, both engines.
+Every `Package` row, on **both** receivers where the row has an instance arm,
+under twelve argument lists — none, `()`, `(.nil)`, `(1)`, `('X')`,
+`('X','Y')`, `('X','Y','Z')`, `(,'Y')`, `('DIGITS','Y')`, `('R','Y')`,
+`('X','')` and `('I','Y')` — three descriptors and exit status compared against
+the oracle, both engines.
 
-**768 cases: zero wrong answers, 12 loud refusals, all of them the deliberately
-declined surfaces above. The two engines agree on all 768.**
+**My report said 12 refusals over 768 cases. The reviewer measured 17. Both
+numbers are right and they are over different sets; my report's sentence around
+mine was wrong.** Re-run 2026-09-08, after the review, with the enumeration
+published rather than the count:
+
+| set | cases | wrong answers | loud refusals | engines |
+| --- | --- | --- | --- | --- |
+| the **32 instance method names** of the 33 `send-differs` rows, 2 receivers × 12 lists | 768 | **0** | **12** | agree on all |
+| **all 40 `Package` rows** — 38 instance × 2 receivers, plus 2 class-arm rows — × 12 lists | 936 | **0** | **17** | agree on all |
+
+**What my sentence claimed and why it was false.** It said "every one of the 33
+methods, on both receivers". The matrix that produced 768 ran only the instance
+arm: `defaultOptions` and `new` are class methods and I ran those in a
+*separate* loop with a different list set, so their cases never entered the 768
+at all. The reviewer's 17 is over the full 40 rows and is the number to quote
+for that set. **Neither figure was adjusted toward the other**; both were
+re-measured here and each is reported with the set it ranges over.
+
+**The five cases the wider set adds**, all loud, none a wrong answer:
+
+    .Package~defaultOptions('DIGITS', 'Y')  a package settings write (D12, Phase 7)
+    .Package~new('X', 'Y')                  a command is not implemented (Phase 7)
+    .Package~new('DIGITS', 'Y')             a command is not implemented (Phase 7)
+    .Package~new('R', 'Y')                  a command is not implemented (Phase 7)
+    .Package~new('I', 'Y')                  a command is not implemented (Phase 7)
+
+The first is the declined settings write. **The four `~new` cases are not this
+task's**: a string is a valid source, so the oracle compiles `'Y'` as a
+one-line program and runs it as a command clause, reporting `+++ "RC(127)"`;
+this crate refuses because a command clause is Phase 7's. `.Package~new` itself
+is correct — it reaches `method_source_lines` and compiles.
+
+**The twelve of the narrower set**, unchanged from the first run:
+
+    p~loadLibrary(1)               p~loadLibrary('X')
+    p~loadPackage('X', 'Y')        p~loadPackage('DIGITS', 'Y')
+    p~loadPackage('R', 'Y')        p~loadPackage('X', '')
+    p~loadPackage('I', 'Y')        p~options('DIGITS', 'Y')
+    p~setSecurityManager(.nil)     p~setSecurityManager(1)
+    p~setSecurityManager('X')      rp~options('DIGITS', 'Y')
 
 **The zero is credible because the sweep caught its own author.** It found
 three defects in this task's *first* implementation and they are why the final
@@ -285,32 +373,68 @@ nobody has not been shown to be able to catch anyone.
 
 ## What would be observably different if a claim here were false
 
-* Every closed row: its arity verdict moves off `agree` on the next refresh,
-  and its corpus witness diverges on stdout.
-* The identity claims (`~routines` answers the object added, `~findRoutine`
-  answers the same one): `package_writes.rex` prints the object's
-  `~objectName` through each reader, which the oracle prints too. A body
-  building a fresh `Routine` per ask would print the default rendering.
-* The 67/62 class table: `package_rexx.rex` names every one of the 67 and
-  asserts the 62/5 split. A body answering a table with the wrong members
-  diverges on the line naming the missing one.
-* **Where nothing here would notice**: the per-option validation inside the
-  `~options` write, named above; and any difference in the *order* of
-  `package_writes.rex`'s stdout, which is what Deviation 8 licenses. Both are
-  stated rather than papered over.
+**This section was wrong in the review's most valuable direction: it listed the
+blind spots it knew about and missed four it did not.** The reviewer mutated
+the change four ways and every one stayed green — including the gate. It is
+rewritten from those mutations, and each is now covered by something that goes
+red. **Predictions were written down before any mutation was applied**
+(`mutation-predictions.txt` in the task's scratch directory); all four were
+confirmed, and one reddened more than predicted.
+
+| mutation | before fix round 1 | after, and what catches it | predicted / observed |
+| --- | --- | --- | --- |
+| `stdout_multiset` body → `String::new()` | whole corpus binary green, **gate included** | `support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else` FAILS — sorting must accept a reordering and still catch a changed, missing, added or duplicated line and a lost final newline | predicted FAIL for that test and pass for the other four; **observed exactly that**, 26 passed 1 failed |
+| `StdoutComparison::Raw` made to compare multisets — the licence leaking to every program | green at 462/462 | `support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering` FAILS — the raw mode must report a stdout difference on a pure reordering | predicted FAIL for that test alone; **observed exactly that**, 26 passed 1 failed |
+| `settings_of` made to ignore its package | gate, whole `rexx-exec` suite and `introspection_arity` all green | `corpus_differential` FAILS on `lang/package_options.rex`, the new witness whose package declares seven settings: `digits 9` against the oracle's `13`, `SCIENTIFIC` against `ENGINEERING`, `trace [N]` against `[L]` | predicted FAIL on that program; **observed exactly that**, 462 of 463 |
+| `importedPackages` order reversed | green at 462/462 | `corpus_differential` FAILS on `lang/package_writes.rex`, which now reads `~importedPackages[1]` and `[2]` **by position** | predicted FAIL on the differential; **observed that AND the Deviation 8 control**, which reported the same program differing as a multiset — one more than predicted, because reversing the order also changes which name each line carries |
+
+**A fourth control, for the other direction of the licence.**
+`the_multiset_stdout_mode_is_selected_for_exactly_the_licensed_list` walks the
+whole subset and asserts `stdout_mode` answers `Multiset` **iff** the entry is
+on `HASH_ORDERED_STDOUT`, and that the list is neither empty nor the whole
+subset. Nothing above implies it: a `stdout_mode` returning `Multiset` for
+every path passes the licence control and fails this one.
+
+**And a panic the review found in code this task wrote.** `resource_span`
+called `slice::windows(marker.len())` with an empty marker, which
+`::RESOURCE d END ''` produces and both interpreters accept at rc 0.
+`the_resource_span_is_total_over_the_markers_the_parser_produces` covers the
+three marker shapes the parser emits; with the guard removed it fails with
+exactly `window size must be non-zero`.
+
+**What still would not be noticed, stated rather than papered over:**
+
+* The per-option validation inside the `~options` write — `p~options('DIGITS',
+  'Y')` is 93.905 on the oracle and a Loud here. It is a refusal, never a wrong
+  answer, and no test asserts the oracle's number for it.
+* The *order* of `package_writes.rex`'s stdout, which is exactly what
+  Deviation 8 licenses and what its two controls bound.
+* **Register row 16**: the tables these rows answer are half-real
+  `StringTable`s. Every collection-returning row in this phase can read `agree`
+  while `~items`, `~hasIndex`, `~allIndexes`, `~supplier` and `~makeArray` on
+  the answered object are rc 120. Nothing here would notice, because nothing
+  here sends them — inherited from Phase 5h and now flagged for Task 9.
 
 ## Gates
 
 Run in the gate worktree `/home/moritz/dev/repos/ooRexx-5i-gates`, detached at
 the commit above.
 
-* **G1** `cargo fmt --all --check` — `**G1**`
-* **G2** `cargo clippy --workspace --all-targets -- -D warnings` — `**G2**`
-* **G3** `cargo test --release --workspace --no-fail-fast` — `**G3**`
-* **G4** `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` — `**G4**`
-* **G5** `cargo test --release -p rexx-exec --test corpus` under `REXX_CORPUS_GATE=1` — `**G5**`
-* **G6** `cargo test --release -p rexx-exec --test collect_stress` — `**G6**`
-* **G7** `cargo test --release -p rexx-exec --test method_bodies` — `**G7**`
+**At the code commit `2ebeba1c8`, all seven read exit 0**, from
+`gate-status.txt`, whose first line is that sha and whose last line is
+`finished`:
+
+* **G1** `cargo fmt --all --check` — exit 0
+* **G2** `cargo clippy --workspace --all-targets -- -D warnings` — exit 0
+* **G3** `cargo test --release --workspace --no-fail-fast` — exit 0
+* **G4** `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` — exit 0
+* **G5** `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test corpus` — exit 0
+* **G6** `cargo test --release -p rexx-exec --test collect_stress` — exit 0
+* **G7** `cargo test --release -p rexx-exec --test method_bodies` — exit 0
+
+**Fix round 1 changes code, so the seven are re-run at its commit.** Those
+readings are `**R1-G1**`–`**R1-G7**` and are filled in only from the status
+file that run writes.
 
 Before the commit, in the working tree:
 

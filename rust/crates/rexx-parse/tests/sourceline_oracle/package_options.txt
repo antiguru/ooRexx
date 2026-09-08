@@ -1,0 +1,45 @@
+count 44
+/* `Package`'s settings readers on a package that DECLARES settings.
+
+   package_settings.rex reads the same methods on a package carrying no
+   `::OPTIONS` at all, so every answer there is the language default and a body
+   that ignored its receiver entirely would pass it. This file is the pair: the
+   directive below sets seven of the twelve fields `~options` renders, and each
+   one is read back through the method that reports it. The REXX package's
+   answers are printed beside them, because that receiver's settings are never
+   defaulted and must not move with this file's.
+
+   `~options('X')` is the one reader whose answer is not a setting but the list
+   of subkeywords the directive NAMED, so it separates "this package declares
+   DIGITS" from "this package's DIGITS happens to be 13". */
+
+p = .context~package
+rexx = .Class~package
+
+say 'digits' p~digits 'against the rexx package' rexx~digits
+say 'form' p~form 'against the rexx package' rexx~form
+say 'fuzz' p~fuzz 'against the rexx package' rexx~fuzz
+say 'trace [' || p~trace || '] against the rexx package [' || rexx~trace || ']'
+say 'options [' || p~options || ']'
+say 'rexx options [' || rexx~options || ']'
+
+do name over .array~of('DIGITS', 'ERROR', 'FAILURE', 'FORM', 'FUZZ', 'LOSTDIGITS', ,
+                       'NUMERIC', 'NOSTRING', 'NOTREADY', 'NOVALUE', 'PROLOG', 'TRACE')
+  say 'option' name '[' || p~options(name) || '] rexx [' || rexx~options(name) || ']'
+end
+
+say 'explicitly named [' || p~options('X') || ']'
+say 'the rexx package names none [' || rexx~options('X') || ']'
+say 'initial options are these settings [' || p~options('I') || ']'
+
+/* The directive reaches a `::ROUTINE` of this package too, which is what makes
+   these settings the package's rather than the main body's. */
+say 'a routine of this package starts at' digitsHere()
+say 'and the main body is at' digits()
+
+exit 0
+
+::options digits 13 form engineering fuzz 2 numeric inherit novalue syntax error syntax trace l
+
+::routine digitsHere
+  return digits()

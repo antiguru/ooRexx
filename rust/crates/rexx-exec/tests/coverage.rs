@@ -1527,6 +1527,7 @@ const EXPECTED_SUBSET_5C: &[&str] = &[
     "lang/map_collection_of_index.rex",
     "lang/map_collection_of_pair.rex",
     "lang/package_settings.rex",
+    "lang/package_options.rex",
     "lang/package_tables.rex",
     "lang/package_find.rex",
     "lang/package_writes.rex",

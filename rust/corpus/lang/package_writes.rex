@@ -76,6 +76,16 @@ say 'importedClasses before importing REXX' rexxclasses
 back = p~addPackage(.Class~package, 'NSR')
 say 'addPackage of the REXX package answers' back~class~id back~objectName
 say 'importedPackages now' p~importedPackages~items
+/* Read BY POSITION, because the order is the oracle's own and not incidental:
+   `PackageClass::addPackage` appends to `loadedPackages` and
+   `getImportedPackagesRexx` copies it, so it is insertion order -- the
+   `::REQUIRES` directives in source order, then each `~addPackage` and
+   `~loadPackage` in call order. Reversing it is a change nothing would notice
+   if only the membership were asserted. */
+first = p~importedPackages[1]~name
+second = p~importedPackages[2]~name
+say 'importedPackages[1] is the one loaded first' (right(first, 22) == 'package_tables_dep.cls')
+say 'importedPackages[2] is the one added second' second
 rexxclasses = 0
 do zz over p~importedClasses
   rexxclasses = rexxclasses + 1

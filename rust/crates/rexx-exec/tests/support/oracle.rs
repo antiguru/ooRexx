@@ -813,8 +813,9 @@ pub fn descriptor_diffs_modes(
 #[cfg(test)]
 mod tests {
     use super::{
-        CppOutcome, DescriptorDiff, StderrComparison, Termination, classify_termination,
-        descriptor_diffs_with, did_not_finish,
+        CppOutcome, DescriptorDiff, StderrComparison, StdoutComparison, Termination,
+        classify_termination, descriptor_diffs_modes, descriptor_diffs_with, did_not_finish,
+        stdout_multiset,
     };
     use rexx_exec::{Outcome, StackSpan};
 
@@ -900,6 +901,107 @@ mod tests {
             "normalized comparison (the default) must PASS on the identical \
              pair, or this is not demonstrating two different modes at all: \
              got {normalized:?}"
+        );
+    }
+
+    fn stdout_outcome(stdout: &[u8]) -> Outcome {
+        Outcome {
+            exit_code: 0,
+            stdout: stdout.to_vec(),
+            stderr: Vec::new(),
+            stack: StackSpan::default(),
+            collections: 0,
+            chunks_refused: 0,
+        }
+    }
+
+    fn cpp_stdout_outcome(stdout: &[u8]) -> CppOutcome {
+        CppOutcome {
+            stdout: stdout.to_vec(),
+            stderr: Vec::new(),
+            termination: Termination::Exited(0),
+        }
+    }
+
+    /// The transcript DEVIATION 8's controls mutate, and its reordering.
+    const LINES: &[u8] = b"alpha\nbravo\ncharlie\n";
+    const REORDERED: &[u8] = b"charlie\nalpha\nbravo\n";
+
+    /// DEVIATION 8's control: [`stdout_multiset`] discards ORDERING and
+    /// nothing else.
+    ///
+    /// **The mutation this exists to catch is the licence's own comparison
+    /// function going inert.** Replacing `stdout_multiset`'s body with
+    /// `String::new()` makes every pair below compare equal, so the five
+    /// "still differs" assertions fail; without them the whole corpus binary
+    /// stays green under that mutation, gate included, which is what a
+    /// licence with no control means. DEVIATION 7's
+    /// `the_multiset_comparison_discards_ordering_and_nothing_else` is the
+    /// same control over `stderr_multiset` and this is its counterpart.
+    #[test]
+    fn the_stdout_multiset_comparison_discards_ordering_and_nothing_else() {
+        assert_eq!(
+            stdout_multiset(LINES),
+            stdout_multiset(REORDERED),
+            "sorting must accept a pure reordering, or the licence covers nothing"
+        );
+        for (what, mutated) in [
+            ("a changed line", b"alpha\nBRAVO\ncharlie\n".as_slice()),
+            ("a missing line", b"alpha\ncharlie\n".as_slice()),
+            (
+                "an added line",
+                b"alpha\nbravo\ncharlie\ndelta\n".as_slice(),
+            ),
+            (
+                "a duplicated line",
+                b"alpha\nbravo\nbravo\ncharlie\n".as_slice(),
+            ),
+            ("a lost final newline", b"alpha\nbravo\ncharlie".as_slice()),
+        ] {
+            assert_ne!(
+                stdout_multiset(LINES),
+                stdout_multiset(mutated),
+                "sorting must still catch {what}, which Deviation 8 does not license"
+            );
+        }
+    }
+
+    /// DEVIATION 8's second control: only the multiset mode ignores stdout
+    /// ordering, so the licence cannot leak to a program off the list.
+    ///
+    /// **The mutation this exists to catch is `StdoutComparison::Raw`'s arm
+    /// being made to compare multisets.** That widens the licence to every
+    /// corpus program at once and nothing else notices -- measured by the
+    /// review, 462 of 462 still matching. Here it makes the first assertion
+    /// fail.
+    #[test]
+    fn only_the_multiset_stdout_mode_ignores_ordering() {
+        let rust = stdout_outcome(REORDERED);
+        let oracle = cpp_stdout_outcome(LINES);
+
+        let raw = descriptor_diffs_modes(
+            &rust,
+            &oracle,
+            StdoutComparison::Raw,
+            StderrComparison::Normalized,
+        );
+        assert_eq!(
+            raw,
+            vec!["stdout"],
+            "the raw mode must report a stdout difference on a pure reordering, \
+             or Deviation 8's licence is in force for every program"
+        );
+
+        let sorted = descriptor_diffs_modes(
+            &rust,
+            &oracle,
+            StdoutComparison::Multiset,
+            StderrComparison::Normalized,
+        );
+        assert!(
+            sorted.is_empty(),
+            "the multiset mode must accept the same reordering, or the two modes \
+             are not being told apart at all: got {sorted:?}"
         );
     }
 
