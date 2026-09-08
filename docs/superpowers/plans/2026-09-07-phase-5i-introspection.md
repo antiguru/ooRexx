@@ -765,6 +765,38 @@ obvious one, and its answer is measurable on the oracle).
 
 **`Class`'s eleven split into two unrelated halves, and only one of them is introspection.**
 
+**Ruled 2026-09-08, after Task 5's pre-flight: the difficulty described below does not exist, and
+following this paragraph literally would have caused three regressions.**
+
+`apply_binary` (`eval.rs:1882`) asks `operator_message_receiver` at `:1901` **before** it reaches
+`compare_values` or `logical_values`, and the prefix (`:1004`) and arithmetic (`:1273`) paths each
+do the same one line before their own gap check. So every operator path already sends the operator
+as a message when the receiver admits one, and `operator_operand_gap` is only the fallback for a
+receiver that does not. `operator_message_receiver` returns `None` for a class handle at
+`eval.rs:1751`-`:1753`, and **that single early-out is the whole reason the six rows are loud.**
+
+So the change is: delete that early-out, add the six names to `NATIVE_METHODS` under `"Class"`, and
+**leave `operator_operand_gap` untouched**. One binding closes both spellings, because
+`.Array~'='(x)` and `(.Array = .Array)` then resolve to the same method id.
+
+**And deleting the gap's class arm -- which the paragraph below implies -- would have broken three
+things that are not operators at all.** `operator_operand_gap` is also asked by `header_number`
+(`run.rs:8674`, a `DO` header's initial/TO/BY), `controlled_step_wide` (`:10379`, the control
+variable) and `RAISE ADDITIONAL` (`:5417`), none of which asks `operator_message_receiver`. Each
+would have fallen out of its loud refusal into a conversion answering `41.1` or worse -- **loud
+becoming silently wrong, which is the failure the paragraph below warns about for `>` and `+`.**
+Leaving the arm alone keeps all three untouched and
+`an_object_in_a_do_headers_numeric_position_is_loud` green unmodified, which is itself the control
+proving the change did not widen.
+
+**The arithmetic operators are in scope and are fixed for free.** Once a class is an
+operator-message receiver, `+` and `>` are sends of a name neither `Class` nor `Object` holds, so
+they reach the same `Miss` path that already answers `97.1` -- matching the oracle's `97.1` at
+rc 159 rather than staying loud.
+
+The paragraph as first written, kept because its citations and measurements are right and only its
+conclusion was wrong:
+
 *The six operators* — `=`, `==`, `<>`, `><`, `\=`, `\==` — are loud at a different site from every
 other row in the phase, and it is **one** site: `Interp::operator_operand_gap`
 (`crates/rexx-exec/src/eval.rs:1812`) answers `Some("a class object")` at `:1819` for every class
@@ -810,7 +842,7 @@ and on a `::class KK` with two methods:
 k~isAbstract=0   k~isMetaclass=0   k~queryMixinClass=0   k~subclasses=Array(0)
 k~methods=Supplier, 32 entries -- ALL of Object's, not k's own
 .KK~methods=Supplier, 34 entries: M1 and M2 at scope KK, the other 32 at scope Object
-.Object~subclasses~items=53
+.Object~subclasses~items=51
 o~isInstanceOf(.Object)=1   o~isInstanceOf(.String)=0
 o~instanceMethod('OBJECTNAME') -> a Method whose ~scope~id is Object
 o~instanceMethod('ZZZ') -> The NIL object
@@ -820,7 +852,7 @@ o~instanceMethods -> Supplier, 32 entries; with .Object as the argument, also 32
 **Three things that measurement settles.** `~methods` answers the **whole** resolved set including
 everything inherited, not the class's own dictionary — a body that answers only own-scope methods
 gives `2` for `.KK` where the oracle gives `34`. `~subclasses` on a freshly made subclass is empty
-while `.Object`'s is 53, so the empty answer proves nothing on its own. And `instanceMethod` of a
+while `.Object`'s is 51, so the empty answer proves nothing on its own. And `instanceMethod` of a
 name the receiver does not have is `.nil`, not a raise.
 
 **`Class~enhanced` is a silent wrong answer and this task owns it.** Found by Task 0 re-running its
