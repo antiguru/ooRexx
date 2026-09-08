@@ -204,6 +204,32 @@ first thing to fix and the first thing to measure.
 CPython's other transferable decision is procedural: it shipped a *second build* with a
 runtime switch to put the lock back, rather than converting the runtime in one step.
 
+### 5.1 Which camp is Rexx in, and the answer is uncomfortable
+
+| runtime | model | cross-activity object references | collector scope |
+|---|---|---|---|
+| Erlang/BEAM | isolation, copying messages | none, except refcounted binaries | per-process, no VM pause |
+| Perl ithreads | isolation, interpreter clone | only `:shared` variables | per-interpreter |
+| Tcl | isolation, apartment | none; scripts posted to event queues | per-interpreter |
+| PHP ZTS | isolation, per-thread globals | none | per-request |
+| JS workers | isolation, structured clone | none; `SharedArrayBuffer` shares bytes, never objects | per-agent |
+| Ruby Ractors | isolation, deep copy or move | only deeply frozen shareable objects | **shared objspace, global stop-the-world** |
+| CPython 3.13+ | **shared heap + per-object locking** | unrestricted | global, with safepoints |
+| Julia | **shared heap, no locking** | unrestricted | with safepoints |
+
+The two runtimes that chose a shared heap are the two that could not choose isolation: Julia
+because scientific code passes large arrays and copying them is the entire cost, and CPython
+because thirty years of code assumes one shared object graph.
+
+**Rexx is in that second camp by construction, and not by anyone's choice.** `.ENVIRONMENT`
+is process-wide; objects are passed to `~start` by reference; and `REPLY` does not merely
+share an object across activities, it *migrates an activation between them* and hands over
+the scope lock. Isolation is therefore not available for the semantics as they stand -- which
+is precisely why goal two matters. **Whether some part of the language could be given an
+isolation story is itself a research question, and it is a language-design question rather
+than an implementation one.** Ruby is the warning about doing this halfway: it chose
+isolation and is still paying for the parts it could not isolate.
+
 ---
 
 ## 6. A staged direction
