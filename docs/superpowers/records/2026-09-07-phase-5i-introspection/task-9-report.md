@@ -3,8 +3,8 @@
 BASE `532cbe2cf`, which is the phase tip and the commit every measurement below was taken at.
 Baseline for the perf work is `bc9d991cc`, the parent of the scope note. This task added **no method
 bodies and touched no `.rs` file**; its commit is this report, the scope note's close section, and
-the rows `Object~copy`, the zero-length `Rc`, and the identity operators added to the
-found-and-not-fixed register.
+the rows `Object~copy`, the zero-length `Rc`, the identity operators and `.RexxInfo~class~new`
+added to the found-and-not-fixed register.
 
 ---
 
@@ -40,8 +40,9 @@ this phase's own rulings and reports.
    comparison on for the collection driver.*
 
 3. **A row probes one instance per class, fixed as an expression.**
-   `corpus/introspection-receivers.tsv` holds a `class` arm and an `instance` arm per class — the
-   class object and *one* instance — not two alternative instances. `Package`'s is
+   `corpus/introspection-receivers.tsv` gives a class at most a `class` arm and an `instance` arm —
+   the class object and *one* instance — never two alternative instances, and several classes there
+   carry only one of the two (§8's table shows which). `Package`'s is
    `r = .context~package`, a program's package, so `.Class~package`, the REXX package with empty
    tables and `sourceSize 0`, **is unreachable by any argument list**: the arguments file varies only
    what is *sent*. `Package~publicClasses` read `agree` while the crate refused outright on the REXX
@@ -170,8 +171,12 @@ this, and would deleting the state it reads leave it green?*
 
 ### `Package`'s tables — answered by running, not by reading
 
-A mutation **pair**, with the prediction written before the build (kept at
-`scratchpad/t9-close/mutation-prediction.txt`):
+A mutation **pair**. **What is attested and what is not**: the prediction text is at
+`scratchpad/t9-close/mutation-prediction.txt`, and its file mtime (15:01:34) is **after** the mutated
+binary's (14:50:52), because the second prediction below was appended to the same file later. So the
+file cannot attest that the first prediction preceded the build — it attests only that both
+predictions exist and that neither was edited after the last append. Read the ordering claim as
+unattested rather than as evidence.
 
 Mutation: `fn classes` (`crates/rexx-exec/src/dispatch/package.rs:538`) answers an empty entry set
 for every receiver, with the `package_of` receiver check left in place. Built in its own target
@@ -182,7 +187,7 @@ directory; `sha256` differs from the unmutated binary and its mtime moved.
 | predicted, unmutated | GREEN | GREEN |
 | **measured, unmutated** | **GREEN**, rc 0 | **GREEN**, rc 0 |
 | predicted, mutated | RED | RED |
-| **measured, mutated** | **RED**, first diff `classes [KA] is a Class` | **RED**, 68 lines differ, crate rc 159 |
+| **measured, mutated** | **RED**, differing from the first stdout line (`classes [KA] is a Class`) | **RED**, differing from the first stdout line, and the crate's run ends early at rc 159 where the oracle runs to the end at rc 0 |
 
 All four cells as predicted. **The witnesses read the state the row answers**; an empty-container
 implementation does not survive them.
@@ -239,10 +244,10 @@ distinction that a single reading cannot see: `RexxInfo`'s three are the default
 `.RexxInfo~maxArraySize` and the limit the array code enforces. The claim that they share a constant
 rests on reading the two sites, not on moving one and watching the other follow.
 
-### The three `setSecurityManager` rows
+### `setSecurityManager` on `Method`, `Routine` and `Package`
 
-The hollowness question does not arise: they are **not closed**. All three are `send-differs`,
-refusing loudly, and are declined because implementing them without interception would ship rc 0
+The hollowness question does not arise: they are **not closed**. Each is `send-differs`, refusing
+loudly, and are declined because implementing them without interception would ship rc 0
 where the oracle raises. That is the right shape — a method that exists and does nothing is not
 implemented.
 
@@ -280,7 +285,8 @@ That is the finding and also its bound.
 | --- | --- | --- |
 | `'abc'`, `42` | rc 0, copies a `String` | **rc 120** |
 | `.K~method('MM')`, `.routines['R']`, `.context~package`, `.context~stackFrames[1]` | rc 0 | **rc 120** |
-| `.context~package~classes`, and `.methods` (which at the top level is the String `.METHODS`, not a table) | rc 0 | **rc 120** |
+| `.context~package~classes` | rc 0 | **rc 120** |
+| `.methods` — which at the top level is the String `.METHODS`, not a table, and which is **not one of the 187 combinations**; it was run as its own program, re-measured 2026-09-08 from a fresh directory: oracle rc 0 `copied String`, both engines rc 120 | rc 0 | **rc 120** |
 | `.RexxInfo` | rc 163 | **rc 120**, different message |
 | `.nil` | rc 159 | **rc 120** |
 | `.Object~new`, `.array~of(1,2)`, `.StringTable~new`, `.Directory~new`, a `WeakReference`, a `Supplier`, both class arms | — | agree |
@@ -418,10 +424,22 @@ do i = 1 to 3; say i '[' || rtn() || ']'; end     REXX_ENGINE=ir         -> RTN,
                                                   REXX_ENGINE=tree-walker -> RTN, RTN, RTN
 ```
 
-The empty name the program prints **is** the Rc that was allocated. **Fixing row 13 removes the
-allocation**; adding an `is_empty()` guard at the site would remove the allocation and leave the
-wrong answer, so the site is not the place to change it. Recorded as **register row 18**, retiring
-with row 13.
+The empty name the program prints **is** the Rc that was allocated.
+
+**What retires with row 13 is the zero-length case, not the allocation.** An earlier draft of this
+section and of register row 18 said "fixing row 13 removes the allocation". That was an unrun
+mechanism claim and it is wrong: row 13's fix makes the name **non-empty**, so `run.rs:1446` still
+builds an `Rc<[u8]>` per non-method activation — the same `malloc`/`free` pair, now with a payload to
+copy. What the fix removes is the *trap's shape* (an allocation for nothing), not its cost. An
+`is_empty()` guard at the site would skip the allocation only while the defect is present, would
+leave the wrong answer, and would never fire once row 13 is fixed — so the guard is not the fix
+either way.
+
+**Removing the cost belongs with Task 6's residue** (§6), which already names "the `Rc` conversion of
+`CallContext.arguments` and the wider `Activation`" as where a redesign starts; the method path
+already avoids it by reading the name from `method_identity`. **The cost at this site was not
+measured** — no A/B was built for it — so this is a named candidate, not a quantified one. Recorded
+as **register row 18**.
 
 ---
 
@@ -442,8 +460,19 @@ cannot.
 | `StackFrame` | `r = .context~stackFrames[1]` inside a call | a `PROGRAM` frame, a `METHOD` frame, an `INTERPRET` frame | **partly** — `stack_frames.rex` prints `~type` for the frames it walks; the `INTERPRET` and `COMPILE` values are **unreachable here** and are register row 6 |
 | `WeakReference` | `r = .WeakReference~new(o)` over a live referent | **a reference whose referent has been collected** — the state the class exists for | **yes, but not from a corpus program**: the witness's own header says the clearing half is not observable from Rexx, and it is asserted in `collect_stress.rs`'s `a_weak_reference_clears_only_when_its_referent_becomes_unreachable` |
 | `Object` | `r = .K~new`, a user object | **a String, an integer, a class object, `.nil`**, and any object whose body is a `Body::Native` | **no, before this task — and it is where the sweep found both of §5's divergences**, `Object~copy` and the six identity operators |
-| `RexxInfo` | `r = .RexxInfo` | **there is no second instance a program can build** — measured, the oracle refuses `.RexxInfo~class~new` with `93 SYNTAX` — so the limitation does not arise | n/a |
+| `RexxInfo` | `r = .RexxInfo` | **there is no second instance a program can build** — both sides refuse `.RexxInfo~class~new`, so the limitation does not arise, **but they refuse differently**: see below | n/a |
 | `Pointer`, `Buffer` | no instance arm at all, named absent by the receivers file | any instance — none is constructible from Rexx | n/a; Phase 8 owns making one |
+
+**An undeclared loud-versus-loud difference, found while establishing that row.** Re-measured
+2026-09-08 from a fresh directory, three descriptors, both engines: `.RexxInfo~class~new` is
+**oracle rc 163**, `Error 93 … Incorrect call to method.` under a
+`Compiled method "NEW" with scope "RexxInfo".` trace line, and **this crate rc 120**,
+`method "NEW" of class "RexxInfo" is not implemented (Phase 5)`. Both refuse, so it is safe; the
+status and the text differ, so it is a divergence. **No table covers it**: `RexxInfo` has only an
+`instance` arm in `corpus/introspection-receivers.tsv`, and neither `corpus/method-bodies.txt` nor
+`corpus/introspection-arity.tsv` carries a `RexxInfo new` row or any `RexxInfo` class arm. Homeless
+in the same way `.VariableReference~new` was, and declared here rather than left in a probe log —
+**register row 20**.
 
 **The pattern**: the classes where a second instance is different *in kind* are the ones whose two
 instances come from different machinery — a program's package versus the interpreter's, a Rexx
@@ -466,9 +495,39 @@ not.
 | `Method~newFile`'s package-context argument | Phase 7 |
 | `Class~new` | the raw metaclass primitive — see below |
 
-Those, plus `Object`'s three `exempt` rows and the two `unstable` ones, are the whole of
-`corpus/introspection-arity.tsv`'s non-`agree` set. **There is no non-`agree` row without a
-destination.**
+### The rest of `corpus/introspection-arity.tsv`'s non-`agree` rows
+
+The declined rows above are its `send-differs` set, with one qualification: `Method~newFile`'s
+package-context argument is a declined **argument form**, not a `send-differs` row — `Method~newFile`
+and `Routine~newFile` both read `agree rc0`. Everything else in that table is `send-differs`, and
+every `send-differs` row is in that table.
+
+The remaining verdicts are not declines and were wrongly folded into a single sentence in an earlier
+draft, which named `Object`'s "three" `exempt` rows — there are more, and they are named below — and
+omitted the `no-value` ones entirely. Enumerated from the committed table:
+
+* **`exempt`**, all on `Object`: `(abuttal)`, `(blank)`, `new` (class arm), `run`, `setMethod`,
+  `unsetMethod`. Each carries a committed reason in the table's own evidence column instead of an
+  argument list.
+* **`unstable`**, both on `Object`: `hashCode` and `identityHash` — licensed to diverge, and policed
+  by `every_unstable_row_is_really_unstable`.
+* **`no-value`**: `Class~activate`, `~define`, `~defineMethods`, `~delete`, `~inherit`,
+  `~uninherit`; `Method~setGuarded`, `~setPrivate`, `~setProtected`, `~setUnguarded`; and
+  `Object~objectName=`. These are **not declines and need no destination** — the send completes
+  identically on both sides and returns nothing, so there is no value to compare, which is what the
+  verdict says. What they need instead is a **side-effect** witness, and all but one have a corpus
+  program that reads the effect back: `method_introspection.rex` for the `Method` setters,
+  `class_behaviour_snapshot_delete`/`_inherit`/`_subclass`/`_uninherit` and
+  `class_mutator_define_methods_supplier` for `define`, `defineMethods`, `delete`, `inherit` and
+  `uninherit`, and `class_context_identity.rex` for `objectName=`.
+* **The exception is `Class~activate`, which has no side effect to read** — and that is correct
+  rather than hollow: it is bound to `native_no_op`, because `memory/Setup.cpp:497`'s own comment
+  says "this is a NOP by default, so we'll just use the object init method as a fill in", and
+  `RexxObject::initRexx` (`classes/ObjectClass.cpp:2546`-`:2549`) takes no arguments, does nothing
+  and answers `OREF_NULL`. A no-op is the oracle's behaviour, not an unimplemented shell.
+
+So every `send-differs` row has a destination, and no other non-`agree` verdict is a row owing
+work.
 
 ### `Class~new` on the class arm — declined **with a destination**, and measured
 
@@ -511,7 +570,7 @@ refuses. Owners are assigned by the **subject each witness names**; none was re-
 | --- | --- | --- |
 | `Loud::accessor_variable` (`lib.rs:1177`) | `say o~"A.B"` over `::attribute "A.B"` | whoever owns directive-generated accessors for non-symbol names |
 | `Loud::builtin_option_object` (`lib.rs:1230`) | `.context~condition` inside a handler | whoever implements `CONDITION('O')` — register row 10 |
-| `Loud::deferred_send` (`native.rs:512`) | `.Stream~new('x')~lineIn(1,2,3,4,5)` | Phase 7 |
+| `Loud::deferred_send` (`dispatch/native.rs:512`) | `.Stream~new('x')~lineIn(1,2,3,4,5)` | Phase 7 |
 | `Loud::delegate_variable` (`lib.rs:1195`) | `::method m delegate a.b` on an instance | whoever owns `DELEGATE` |
 | `Loud::method_from_source` (`lib.rs:1014`) | `self~setMethod('Z', .nil, 'BOGUS')` | whoever owns `setMethod`'s source forms |
 | `Loud::native_method` (`lib.rs:820`) | `m~dimensions`, `'abc'~copy`, `.Message~new` | split: `'abc'~copy` is **register row 17**, `.Message~new` is Phase 6, `m~dimensions` is the mapped-collection surface |
@@ -640,8 +699,8 @@ What the next phase reads.
 `found-not-fixed-register.md` carries what this phase measured and does not own. **Read it before
 scoping anything**: the ones that bite first are the D59 removal (row 2, owed *before* new work),
 the builtin-argument-run panic (row 1), the `DO OVER` use-after-free (row 15), the half-real package
-tables (row 16), and the two rows this task added — `Object~copy` (17) and the zero-length `Rc`
-(18).
+tables (row 16), and the rows this task added — `Object~copy` (17), the zero-length `Rc` (18), the
+identity operators (19), and `.RexxInfo~class~new` (20).
 
 ---
 
@@ -651,13 +710,21 @@ tables (row 16), and the two rows this task added — `Object~copy` (17) and the
 **Phase 5** is blocked on that rather than on these rows. It is not this plan's work and was not any
 task's. The parent plan's exit clauses with no delivery evidence are:
 
-* **security-manager interception points (D12)** — and this phase declined three `setSecurityManager`
-  rows precisely because that machinery does not exist;
+* **security-manager interception points (D12)** — and this phase declined the `setSecurityManager`
+  rows on `Method`, `Routine` and `Package` precisely because that machinery does not exist;
 * **cold start measured against C++ (D2)**;
 * **rung L2**.
 
-Every closed phase has a gate document; Phase 5 has only `2026-08-26-phase-5a-gate-close.md`, a
-sub-phase. **Closing Phase 5i is not blocked on that. Closing Phase 5 is.**
+An earlier draft supported that with "every closed phase has a gate document", a universal over a
+set nobody had enumerated. **Enumerated instead**, from `docs/superpowers/`: the gate documents
+present are `plans/phase-2-gate.md`, `plans/phase-3-gate.md`, `plans/phase-4a-gate.md` through
+`plans/phase-4e-gate.md`, `plans/ppwizard-gate.md`, and `plans/2026-08-26-phase-5a-gate-close.md`
+beside a `records/2026-08-26-phase-5a-gate-close` **directory** of the same name. There is **none**
+for Phase 4f, none for any of the 5b–5h sub-phases, and none for Phase 5 as a whole.
+
+The conclusion is unchanged and now rests on the enumeration rather than on the universal: **the
+only Phase 5 gate document of any kind is 5a's, a sub-phase. Closing Phase 5i is not blocked on
+that. Closing Phase 5 is.**
 
 ---
 
@@ -682,7 +749,10 @@ report's own commit, which nobody edits while it runs. **`532cbe2cf` was never g
 what establishes the phase's final gated state. Every cell is read from a `gate-status.txt` whose
 first line is `1284ef198501e2f210e1df0ce63e97ca534aea06`, written as each command exited —
 `started 2026-09-08T15:04:08+02:00`, `finished 15:15:50`, with G8 appended after at the same pinned
-commit.
+commit. **One irregularity in that file, stated rather than tidied**: G1–G3 and G5–G7 each have a
+`--- Gn: <command>` header line above their status because they went through the script's `run`
+helper, and **G4 has only its `G4 exit 0` line** — it was spelled out inline to carry
+`REXX_CORPUS_GATE=1` and `memcap`, so its command is recorded here and not there.
 
 | gate | command | result |
 | --- | --- | --- |
@@ -694,6 +764,10 @@ commit.
 | G6 | `cargo test --release -p rexx-exec --test introspection_arity` | exit 0, 27 passed |
 | G7 | `cargo test --release -p rexx-exec --test introspection_scopes` | exit 0, 24 passed |
 | G8 | `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test corpus` | exit 0, 27 passed, `mode: STRICT`, `463 of 463 matching` |
+
+`corpus.rs` reports `1 ignored` in G3, G4 and G8. It is `probe_emit_uncaptured_marker`, whose own
+line says why: *ignored, run only by `demonstrate_the_report_reaches_a_plain_cargo_test`, as a child
+process*. It is ignored by design, not skipped.
 
 G4 reports one more passing test than G3 because it is the **debug** run: `[profile.release]` sets
 `debug = true` for symbols and does not set `debug-assertions`, so every `debug_assert` in the
@@ -720,11 +794,15 @@ was checked by reading the logs rather than assumed:
 So every gate the earlier tasks asserted is asserted here, and the three tables this task refreshed
 are asserted as well.
 
+**These cells are the readings taken at `1284ef198` and were not re-run.** The fix round after them
+changed this report and the found-and-not-fixed register only — nothing under `rust/` — so a re-run
+would measure the same code against the same corpus.
+
 **Where this table lives, relative to the commit it describes.** The gated commit is `1284ef198`.
-Filling these cells is itself an edit, so the commit carrying the filled table is that commit's
-**docs-only child** — a report cannot contain the results of the run that measured it. The child
-changes this one file and no `.rs`, so `1284ef198` remains the state the seven gates and G8 were
-taken at, and the child is not separately gated. That is the same shape as the delta the phase
+Filling these cells is itself an edit, so the commits carrying the filled table and the fix round
+are that commit's **docs-only children** — a report cannot contain the results of the run that
+measured it. They change docs and no `.rs`, so `1284ef198` remains the state the seven gates and G8
+were taken at, and they are not separately gated. That is the same shape as the delta the phase
 inherited at `532cbe2cf`, stated here rather than left for the next reader to discover.
 
 ---
@@ -742,7 +820,7 @@ inherited at `532cbe2cf`, stated here rather than left for the next reader to di
 | **Run a coverage mutation as a pair, and the green run is the finding** | **Applied in the form this task could take, and the difference is stated.** Task 9 added no witness, so there is no "with and without the new test" pair to run. What was run instead is the mutation against the **whole corpus gate**, which is the "adds coverage" question in its other form: which programs catch it. Prediction written first, in the scratch file. §4. |
 | **Why coverage gaps are the hardest thing to self-disclose** — say so in the close, because it argues for the review seat | **Applied**, §14, with Task 5's own account quoted and the same argument turned on this report. |
 | **Cumulative perf drift is Task 9's, and it has named axes** | **Applied**, §6. Four axes, interleaved, medians, separate target directories, `sha256` checked, plus a null control. **The phase total is Task 6's single step on all four axes** — the "about what this one step suggests" outcome, not the several-times-it one. |
-| **Sweep the zero-length `Rc::from` trap, after the tree is stable** — a candidate is not a defect; a cold-path hit is a note | **Applied**, §7. Swept at `HEAD` with the tree clean. One live hit (`run.rs:1446`, common-case empty **because of** register row 13, on the call path), two cold notes, the rest not the shape. No code changed: fixing row 13 removes the allocation, and a guard at the site would leave the wrong answer. |
+| **Sweep the zero-length `Rc::from` trap, after the tree is stable** — a candidate is not a defect; a cold-path hit is a note | **Applied**, §7. Swept at `HEAD` with the tree clean. One live hit (`run.rs:1446`, common-case empty **because of** register row 13, on the call path), two cold notes, the rest not the shape. No code changed, and the mechanism claim was corrected: fixing row 13 removes the **zero-length case**, not the allocation — the same `Rc` is then built with a payload — and a guard would leave the wrong answer and never fire afterwards. The cost belongs with Task 6's residue and was not A/B'd. |
 | **The perf baseline commit, pinned to `bc9d991cc`; do not use a stored figure as the baseline side** | **Applied.** Both ends re-measured from their own detached worktrees; no per-task figure was used as a baseline. Task 6's numbers appear only in a comparison column, labelled as its own step. |
 | **The arity instrument probes one instance per class, and that bounds every green row** — say it, name the classes whose second instance differs in kind, do not re-derive it by re-running the tables | **Applied**, §8. Derived by reading the receiver expressions, not by re-running; every class in the table is named with its second instance in kind and whether a corpus witness reached it. Two of the "no" answers turned into this task's findings. |
 | **Pre-flight against the tree; do not cite a line number you have not just checked; the blindness count is four, not three; and Task 9 must not attempt to fix any of them** | **Applied.** Every line number in this report was re-checked at `532cbe2cf` immediately before it was written (`dispatch.rs:7558`, `run.rs:1446`, `package.rs:538`, `eval.rs:1831`, `dispatch.rs:2108`). The four blindnesses are §1's spine. **Nothing was fixed**: this task changed no `.rs` file. |

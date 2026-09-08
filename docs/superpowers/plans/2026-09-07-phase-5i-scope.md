@@ -144,10 +144,26 @@ of scope -- `Stream`, `RexxQueue`, `Message`, `EventSemaphore`, `MutexSemaphore`
 ## The blocker this note named is still the blocker
 
 **Phase 5's own exit gate has still never been assessed.** Nothing in Phase 5i
-assessed it, and the three clauses with no delivery evidence -- security-manager
+assessed it, and the clauses with no delivery evidence -- security-manager
 interception points (D12), cold start measured against C++ (D2), and rung L2 --
 are unchanged. Closing **Phase 5** remains blocked on that. Closing **Phase 5i**
 does not.
+
+**One correction to the sentence above it, which this note wrote and Task 9's
+report then repeated.** "Every closed phase has a gate document" is a universal
+over a set nobody enumerated, and it does not hold. Enumerated 2026-09-08 from
+`docs/superpowers/`: the gate documents present are `plans/phase-2-gate.md`,
+`plans/phase-3-gate.md`, `plans/phase-4a-gate.md` through
+`plans/phase-4e-gate.md`, `plans/ppwizard-gate.md`, and
+`plans/2026-08-26-phase-5a-gate-close.md` beside a
+`records/2026-08-26-phase-5a-gate-close` **directory** of the same name. There is
+none for Phase 4f, none for any of the 5b--5h sub-phases, and none for Phase 5 as
+a whole.
+
+**The conclusion this note drew survives the correction and now rests on the
+enumeration**: the only Phase 5 gate document of any kind is 5a's, a sub-phase.
+The original sentence is left above rather than edited, because it is what the
+phase was scoped against.
 
 ## What Phase 5i added to the ledger of things owed
 
