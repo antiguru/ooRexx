@@ -1,6 +1,8 @@
 # Task 5 — `Object`'s three, and `Class`'s eleven
 
-Status: **implemented.** BASE `8bc2df809`, taken as the HEAD found on release rather than rebased.
+Status: **done, all seven gates green at `d8b013026`.** BASE `8bc2df809`, taken as the HEAD found on
+release rather than rebased. Two commits: `a43d780bc` (the rows) and `d8b013026` (a witness gap
+review found).
 
 Dispatch was held at `5d833ec6d` while Task 4 still had `dispatch.rs` modified and two `cargo` runs
 live in the working tree; that wait is what moved BASE forward twice, to `552d108b0` and then
@@ -478,17 +480,32 @@ above exist rather than separate defects.
 
 Neither run was wrapped in `memcap`, per the ruling.
 
-**Full gate suite**, run in `/home/moritz/dev/repos/ooRexx-5i-gates` pinned to this task's commit:
+**Full gate suite**, run in `/home/moritz/dev/repos/ooRexx-5i-gates` detached at **`d8b013026`**,
+started 06:38:34 and finished 06:49:43 on 2026-09-08. Every cell below is read from that run's
+status file and its per-gate output; none was written before the run.
 
-| gate | result |
-| --- | --- |
-| G1 | **G1** |
-| G2 | **G2** |
-| G3 | **G3** |
-| G4 | **G4** |
-| G5 | **G5** |
-| G6 | **G6** |
-| G7 | **G7** |
+| gate | command | result |
+| --- | --- | --- |
+| G1 | `cargo fmt --all --check` | exit 0, no output |
+| G2 | `cargo clippy --workspace --all-targets -- -D warnings` | exit 0, no warnings |
+| G3 | `cargo test --release --workspace --no-fail-fast` | exit 0, 116 `test result: ok`, **2282 passed, 0 failed** |
+| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` (debug) | exit 0, 116 `test result: ok`, **2283 passed, 0 failed** |
+| G5 | `cargo test --release -p rexx-exec --test collection_arity` | exit 0, **23 passed** |
+| G6 | `cargo test --release -p rexx-exec --test introspection_arity` | exit 0, **25 passed** |
+| G7 | `cargo test --release -p rexx-exec --test introspection_scopes` | exit 0, **22 passed** |
+
+No gate output contains `FAILED` and no gate's stderr contains `panicked`, both checked by grep
+across all seven.
+
+G4 is the strict corpus gate and the debug run, so it is the one that both compares
+`class_introspection.rex` against the live oracle and compiles the `debug_assert`s the release gates
+strip. It carries one test more than G3 because the corpus gate enables a case the release profile
+does not.
+
+**An earlier run at `a43d780bc` reached G1-G3 green and was killed mid-G4**, deliberately, when
+review found the coverage gap: its tip was superseded and a completed run against it would have been
+a green result for a commit nobody was going to merge. Nothing from it is carried into the table
+above.
 
 ## Rulings table
 
