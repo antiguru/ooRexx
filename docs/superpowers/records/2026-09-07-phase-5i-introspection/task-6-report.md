@@ -60,12 +60,14 @@ one entry under its trailing-period name with no entry for a compound.
 
 **The three readers that answer from a constant, and what state each stands for.**
 `~thread` is `Activity::getIdntfr` (`concurrency/Activity.cpp:108`), which mints one id per *system
-thread* off a counter of its own; this crate runs every activation on one interpreter thread, so
-there is exactly one thread to have an id and `1` is its. `~interpreter` is the same one level up,
-per `InterpreterInstance`, and a `rexx-run` process creates one. `~rs` is
-`settings.returnStatus`, which only a **command clause** writes — D12/Phase 7's, refused loudly
-here, the same position `.RS` itself is in (`Interp::rexx_variable`). So `~rs` is the unset branch
-rather than a stand-in: nothing this crate runs can take the other one.
+thread* off a counter of its own. **This one is a constant and it is already wrong** — `Object~start`
+runs the send here, so a `REPLY`d method is on a second thread on the oracle and on the same one
+here; see *Concerns* 3 and register row 11. `~interpreter` is the same shape one level up, per
+`InterpreterInstance`, and it is **correct**: a `rexx-run` process creates one instance and `~start`
+adds a thread within it rather than an instance, measured `interp= 1` on both sides across the same
+`REPLY`. `~rs` is `settings.returnStatus`, which only a **command clause** writes — D12/Phase 7's,
+refused loudly here, the same position `.RS` itself is in (`Interp::rexx_variable`). So `~rs` is the
+unset branch rather than a stand-in: nothing this crate runs can take the other one.
 
 **`~condition` answers `.nil` and refuses the other arm.** Building the condition object is
 `CONDITION('O')`'s job and that is not implemented; answering `.nil` inside a handler would be a
@@ -227,7 +229,9 @@ programs witness `RexxContext~name` from inside a Rexx-coded library method as m
 **A refusal is witnessed untrapped, and that is forced rather than chosen**: inside a `SIGNAL ON
 SYNTAX` handler, `rc` carries only the major code (measured `93`, both sides) and `condition('D')`
 is empty, so the subcode and the message — the part these rows are about — are only visible on
-stderr. That is why five of the seven programs end at a raise.
+stderr. That is why **six of the eight** programs end at an untrapped raise: the six with a non-zero
+exit status in the table above (163, 158, 163, 163, 168, 168). Counted from those readings rather
+than from the sentence this one replaces, which had the numerator wrong as well as the denominator.
 
 ## Controls
 
@@ -332,7 +336,7 @@ The three figures were counted rather than eyeballed, by keying both revisions' 
 and two added"; both were describing diff *lines*, where a changed row is one removal and one
 addition. The row-level count is the one above.)
 
-**`corpus/phase-5c.txt` and `EXPECTED_SUBSET_5C`** — the seven witnesses added to both, in the same
+**`corpus/phase-5c.txt` and `EXPECTED_SUBSET_5C`** — the eight witnesses added to both, in the same
 order, which is what `coverage.rs` holds them against.
 
 **`corpus/method-bodies.txt`** — refreshed with
@@ -394,19 +398,22 @@ ask for by name.
 
 ## Gates
 
-Run in `/home/moritz/dev/repos/ooRexx-5i-gates` pinned to `c2139a45b`, started 08:15:56 and finished
-08:29:11. Every cell below is read from `scratchpad/t6/gate-status.txt`, whose first line is the
-commit sha.
+Run in `/home/moritz/dev/repos/ooRexx-5i-gates`, pinned to the commit named in each column. Every
+cell is read from a `gate-status.txt` whose first line is that commit's sha — never written ahead of
+the run.
 
-| gate | command | result |
-| --- | --- | --- |
-| G1 | `cargo fmt --all --check` | exit 0 |
-| G2 | `cargo clippy --workspace --all-targets -- -D warnings` | exit 0 |
-| G3 | `cargo test --release --workspace --no-fail-fast` | exit 0, 116 `test result: ok`, 2282 passed, no `FAILED` |
-| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` (debug) | exit 0, 116 `test result: ok`, 2283 passed, no `FAILED`, `corpus=457 of 457 matching`, `mode: STRICT` |
-| G5 | `cargo test --release -p rexx-exec --test collection_arity` | exit 0, 23 passed |
-| G6 | `cargo test --release -p rexx-exec --test introspection_arity` | exit 0, 25 passed |
-| G7 | `cargo test --release -p rexx-exec --test introspection_scopes` | exit 0, 22 passed |
+**Fix round 2 touched source** (`context.rs`'s doc and `ir/drive.rs`'s comment), so "the gated tree is
+the committed tree" stopped holding for the first run and the suite was run again.
+
+| gate | command | at `c2139a45b` (08:15:56-08:29:11) | at fix round 2 |
+| --- | --- | --- | --- |
+| G1 | `cargo fmt --all --check` | exit 0 | **G1** |
+| G2 | `cargo clippy --workspace --all-targets -- -D warnings` | exit 0 | **G2** |
+| G3 | `cargo test --release --workspace --no-fail-fast` | exit 0, 116 `test result: ok`, 2282 passed, no `FAILED` | **G3** |
+| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` (debug) | exit 0, 116 `test result: ok`, 2283 passed, no `FAILED`, `corpus=457 of 457 matching`, `mode: STRICT` | **G4** |
+| G5 | `cargo test --release -p rexx-exec --test collection_arity` | exit 0, 23 passed | **G5** |
+| G6 | `cargo test --release -p rexx-exec --test introspection_arity` | exit 0, 25 passed | **G6** |
+| G7 | `cargo test --release -p rexx-exec --test introspection_scopes` | exit 0, 22 passed | **G7** |
 
 **G4 is the debug gate and is where this task's `debug_assert` is exercised**; G3 cannot see it
 (`rust/CLAUDE.md:59`). G4 reports one more passing test than G3 for the same reason the two gates
@@ -467,6 +474,34 @@ The one finding I did not simply accept is the `refusal-sites.tsv` count, becaus
 else's measurement is a new claim: I counted it by keying both revisions on `(kind, name)` and the
 row-level figures are above.
 
+## Fix round 2
+
+Four findings, **all of them sentences the fix-round-1 commit left false beside the ones it
+corrected** — the class this report's *Controls* section describes in code, showing up in prose.
+
+| finding | action |
+| --- | --- |
+| N1 — *Concerns* 3 asserted four things the same commit had just disproved | Rewritten from the measurement, and **`~interpreter` split out**: it is a constant and it is *correct* (`interp= 1` on both sides across the `REPLY` where `thread=` differs). Pairing a correct constant with a broken one is how register row 11 came to read `correct today` |
+| N3 — two witness-count neighbours survived the seven→eight fix | Both corrected. The first had the **numerator** wrong too: six programs end at an untrapped raise, not five, counted from the six non-zero exit statuses in the witness table rather than by adjusting the old sentence |
+| N4 — `context_interpreter`'s doc pointed at a neighbour now headed "already wrong" | Points at the mechanism instead: one `InterpreterInstance` per process, and `~start` adds a *thread* within it rather than an instance |
+| N2 — `ir/drive.rs` still justified the empty spelling with *"no part of that path reads it"* | Corrected, **comment only**. It now says the field is read, by which two rows, that the second execution of a call site answers the null string, and that the fix is register row 13's. No behaviour, signature or test changed |
+
+**A fifth instance, which the review did not name and I found by sweeping rather than by fixing what
+was listed.** The *"three readers that answer from a constant"* section still said "this crate runs
+every activation on one interpreter thread, so there is exactly one thread to have an id and `1` is
+its" — the same falsified claim, one section away from the two that were named. It is corrected, and
+the phrase is now absent from both records; the one surviving mention of a single interpreter thread
+is in `context_thread`'s doc, where it is the *cause* of the divergence rather than a claim the
+answer is right. **The method that found it was grepping the corrected claim's own vocabulary across
+both records**, not re-reading the findings — which is what project memory
+`correction-rounds-introduce-false-statements` prescribes and what a per-finding pass structurally
+cannot do.
+
+`cargo fmt --all --check` exit 0 and `cargo clippy --workspace --all-targets -- -D warnings` exit 0,
+both unpiped; all sixteen witness runs re-verified byte-identical after the round. **This round
+touches source**, so the gates were re-run — the readings are in the table above, and the commit they
+were run against is named beside them.
+
 **This round changes comments, docs and records only** — no code any gate reads, so the gates were
 not re-run, per the ruling. `cargo fmt --all --check` exit 0 and
 `cargo clippy --workspace --all-targets -- -D warnings` exit 0, both read **unpiped**: the first
@@ -508,11 +543,25 @@ per-step threshold structurally cannot see a total, and this is the second Phase
 send axis. Recorded as row 12 of `found-not-fixed-register.md` so it does not depend on being
 remembered.
 
-**3. `~thread` and `~interpreter` are constants and will stay wrong under Phase 6.** Each stands for
-a lazily minted id off a counter this crate has exactly one subject for. The moment a second thread
-or a second interpreter instance exists they are wrong, and nothing in this crate will notice — the
-differential runs one thread. Named here because that is the phase's own rule about readers that
-answer from a constant, and because the row that breaks them is not a row this task can write.
+**3. `~thread` is a constant and it is already wrong.** `Activity::getIdntfr` mints one id per
+*system thread*, and `Object~start` is **not** refused here — it runs the send. So a `::method` that
+`REPLY`s is on another system thread on the oracle and on the same one here: measured, rc 0 with
+stderr identical, the oracle answers an id different from the main thread's `1` and this crate
+answers `1`. The id counts threads the interpreter has touched and is not a fixed number — the review
+read `2` and this run read `3` — so the divergence is that it **differs at all**. Register row 11.
+
+**An earlier version of this section said the opposite in four ways**: that `~thread` will go wrong
+*under Phase 6*, that it breaks "the moment a second thread exists", that "the differential runs one
+thread", and that "the row that breaks them is not a row this task can write". All four were
+falsified by the same commit that corrected the code comment and the register row, and they survived
+it because a correction round leaves the sentences *beside* the corrected one untouched. That is the
+defect class this report's own *Controls* section is about, one medium over.
+
+**`~interpreter` is a constant and it is correct, which is why it is no longer lumped in here.** The
+id is minted per `InterpreterInstance`, a `rexx-run` process creates one, and `~start` makes a second
+*thread* within that one instance rather than a second instance. Measured across the same `REPLY`:
+`interp= 1` on the oracle and here, in the run where `thread=` differs. Pairing a correct constant
+with a broken one is exactly how register row 11 came to read `correct today`.
 
 **4. `~condition` refuses rather than answering inside a handler.** The `.nil` arm is the one the
 tables probe, so both rows close on it; the other arm is `CONDITION('O')`'s and is recorded in

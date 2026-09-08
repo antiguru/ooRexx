@@ -333,9 +333,20 @@ impl Interp {
             return Err(Loud::call_op_off_its_node().into());
         };
         // **The spelling is recovered only when the site has nothing**, which
-        // is the whole reason this op is cheaper than `Op::CallExpr`: a
-        // resolved builtin dispatches through the row the site holds, and no
-        // part of that path reads it.
+        // is what makes this op cheaper than `Op::CallExpr`: a resolved
+        // builtin dispatches through the row the site holds, and that dispatch
+        // does not read it.
+        //
+        // **It is read now, and this is a live defect.** `CallContext::name`
+        // takes whatever is passed here, and Phase 5i's `RexxContext~name` and
+        // `StackFrame~name` read that field -- so from the *second* execution
+        // of one call site onward, where the arm below is skipped, they answer
+        // the null string. The `CALL` form is unaffected and the tree-walker
+        // is correct throughout. Recorded as row 13 of the phase's
+        // `docs/superpowers/records/2026-09-07-phase-5i-introspection/found-not-fixed-register.md`,
+        // which owns the fix; this comment is corrected rather than the code,
+        // because the sentence that used to justify the empty spelling is no
+        // longer true.
         let mut spelling: &[u8] = b"";
         let resolved = match chunk.resolved_call(site) {
             Some(resolved) => {

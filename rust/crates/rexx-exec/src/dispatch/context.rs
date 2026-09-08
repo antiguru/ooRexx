@@ -357,9 +357,13 @@ fn context_thread(
 /// `RexxContext::getInterpreter`:
 /// `activation->getActivity()->getInstance()->getIdntfr()`.
 ///
-/// A constant for [`context_thread`]'s reason one over: the id is minted per
-/// `InterpreterInstance` off a third counter, and a `rexx-run` process creates
-/// one instance.
+/// **A constant, and unlike [`context_thread`] it is correct**: the id is
+/// minted per `InterpreterInstance` off a third counter, and a `rexx-run`
+/// process creates one instance, so there is one instance to have an id and
+/// `1` is its. Nothing a program can do makes a second -- `~start` makes a
+/// second *thread* within the one instance, which is why the two rows part.
+/// Measured, rc 0 both sides, a `::method` that `REPLY`s and then reads both:
+/// `interp= 1` on the oracle and here, where `thread=` differs.
 fn context_interpreter(
     interp: &mut Interp,
     _cleared: Cleared,
