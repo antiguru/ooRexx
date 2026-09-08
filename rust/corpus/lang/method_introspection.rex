@@ -170,6 +170,9 @@ say 'external-package-name' x~package~name
 say 'external-ssm' x~setSecurityManager
 say 'external-flags' x~isAbstract x~isAttribute x~isConstant x~isGuarded x~isPackage x~isPrivate x~isProtected
 say 'external-named-entry' .Method~loadExternalMethod('M9', 'LIBRARY REXX file_separator')~class~id
+say 'external-lowercase-keyword' .Method~loadExternalMethod('M9', 'library REXX file_separator')~class~id
+say 'external-mixed-keyword' .Method~loadExternalMethod('M9', 'LiBrArY REXX file_separator')~class~id
+say 'external-tab-separated' .Method~loadExternalMethod('M9', 'LIBRARY	REXX	file_separator')~class~id
 say 'external-unknown-entry' .Method~loadExternalMethod('M9', 'LIBRARY REXX')~string
 call refuses 'loadExternal-a-descriptor-that-is-not-one'
 call refuses 'loadExternal-a-descriptor-with-one-word'

@@ -10443,7 +10443,12 @@ fn native_load_external(
     if routine {
         return Err(Loud::external_entry_point("loadExternalRoutine").into());
     }
-    if !library.eq_ignore_ascii_case(b"REXX") {
+    // **The keyword is case-insensitive and the library name is not**, which
+    // is measured rather than assumed: oracle rc 0,
+    // `library REXX file_separator` and `LiBrArY REXX file_separator` each
+    // answer a `Method`, while `LIBRARY rexx file_separator` and
+    // `LIBRARY Rexx file_separator` answer `.nil`.
+    if library != b"REXX" {
         return Err(Loud::external_entry_point(
             "loadExternalMethod naming a library other than REXX",
         )

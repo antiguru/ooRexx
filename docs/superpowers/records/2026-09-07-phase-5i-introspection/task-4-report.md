@@ -631,3 +631,34 @@ removing that test changed nothing they could see. This is "can fail is not adds
 other side: three red-able rows, none of them covering the branch they appeared to. Two rows were
 added -- `REGISTERED junk` (two words, wrong keyword) and a four-word descriptor -- and C12 is red
 on both engines with them, at the first of them.
+
+## A second divergence the hunt found, in the row committed an hour earlier
+
+Continuing the same hunt over the `newFile` and `loadExternal` rows found one more, and it is the
+narrowest kind: **the `LIBRARY` keyword is case-insensitive and the library name is not.** Measured,
+oracle rc 0, four spellings of one descriptor:
+
+```
+LIBRARY REXX file_separator   a Method      LIBRARY rexx file_separator   The NIL object
+library REXX file_separator   a Method      LIBRARY Rexx file_separator   The NIL object
+LiBrArY REXX file_separator   a Method
+```
+
+`5d833ec6d` compared the library name with `eq_ignore_ascii_case`, so it answered a `Method` for
+`LIBRARY rexx` where the oracle answers `.nil`. The comparison is now exact; the keyword's own
+comparison stays case-insensitive, which the three spellings above pin.
+
+**Three rows added to the witness** -- the lowercase keyword, a mixed-case keyword, and a
+tab-separated descriptor, all of which answer a `Method` on both sides.
+
+**And one branch is measured but cannot be a corpus row, stated rather than left implied.**
+`LIBRARY rexx` answers `.nil` on the oracle and is this crate's Phase 7 refusal, so a program
+containing it cannot agree; the case-sensitivity of the library *name* rests on the probe above and
+not on a committed witness. The keyword's case-insensitivity does have witness rows. This is the
+second such gap in the task -- the first is `newFile` installing the loaded file's directives -- and
+both are a corpus program's inability to contain a refusal, not an unmeasured claim.
+
+**What the hunt cleared at the same time**, each measured on the oracle and matching on both engines
+after the fix: `newFile` on an **empty** file (`Array(0)`), on a file that is **only** directives
+(`Array(0)`), and on a file whose first line is a `::CLASS` (`Array(0)`, and the class is not
+visible to the caller -- `.C~id` is 97 on both sides); and a **tab**-separated descriptor.
