@@ -1,8 +1,8 @@
 # Phase 5j gate — class lifetime
 
 **Spec:** `docs/superpowers/specs/2026-09-09-phase-5j-class-lifetime.md`, criteria in its §7.
-**Assessed 2026-09-09.** Gated at the commit named in this repository's log for the message
-*"Close Phase 5j: file the witnesses into the differential"*. Toolchain `rustc 1.98.1 (48a229cea 2026-09-01)`, recorded because the
+**Assessed 2026-09-09 at `018486059`**, the commit that filed the witnesses into the
+differential. Toolchain `rustc 1.98.1 (48a229cea 2026-09-01)`, recorded because the
 machine moved from 1.98.0 to 1.98.1 during the phase and one gate run that spanned the change was
 discarded rather than read.
 
@@ -17,6 +17,13 @@ cargo clippy --workspace --all-targets -- -D warnings     # 0
 cargo test --release --workspace --no-fail-fast           # 0, zero `test result: FAILED` lines
 REXX_CORPUS_GATE=1 cargo test --workspace --no-fail-fast  # 0, zero `test result: FAILED` lines
 ```
+
+**One run of the last two was killed by the OOM killer and discarded rather than read.** It was
+running beside this phase's own 200,000-class growth experiments, which peak at 4 GB, and the
+corpus differential spawns oracle subprocesses in parallel. The retry recorded available memory
+before, between and after: 100 GB at all three points. So the kill was load this phase created, not
+a bound on running these gates here — a distinction worth writing down, because recording it the
+other way would bake a false limitation into the phase's record.
 
 ## 2. The witnesses agree with the oracle on three descriptors, both engines
 
