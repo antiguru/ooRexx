@@ -1,0 +1,10 @@
+before = .Object~subclasses~items
+c = .Object~subclass('TEMPC')
+inst = c~new
+drop c
+call gc 'force'
+say 'instance alive, delta:' (.Object~subclasses~items - before)
+say 'instance class:' inst~class~id
+drop inst
+call gc 'force'
+say 'instance gone, delta:' (.Object~subclasses~items - before)

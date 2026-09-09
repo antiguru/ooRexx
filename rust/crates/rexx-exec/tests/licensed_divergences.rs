@@ -110,39 +110,23 @@ struct LicensedDivergence {
 
 /// The DEVIATION rows whose difference from the oracle is licensed, each
 /// with the transcript its row records.
-const LICENSED_DIVERGENCES: &[LicensedDivergence] = &[
-    LicensedDivergence {
-        name: "class-uninit-at-driven-collection",
-        // A metaclass is the route to a class object's finalizer from a
-        // program context: `k~setMethod('UNINIT', ...)` is `Error 97.2` at rc
-        // 159 on the oracle, refused as a private message. This one overrides
-        // no `NEW`, so it is not `corpus/oracle-crashes.txt`'s metaclass shape.
-        program: "k = .Object~subclass('K', .MyMeta)\nsay 'before'\ndrop k\n\
-                  call gc 'force'\nsay 'after'\n\n::CLASS MyMeta SUBCLASS Class\n\
-                  ::METHOD uninit\n  say 'class uninit'\n",
-        exit_code: 0,
-        stderr: "",
-        oracle_stdout: "before\nclass uninit\nafter\n",
-        crate_stdout: "before\nafter\nclass uninit\n",
-    },
-    LicensedDivergence {
-        name: "driven-collection-reaches-a-new-object",
-        // Eight padding clauses, one short of the nine allocations that reach
-        // the oracle's threshold. The padding is the only thing that may sit
-        // between `~new` and `drop`: measured, one `say 'built'` either before
-        // or after it makes the oracle answer `start / built / uninit ran /
-        // after-gc` and both engines agree, three runs each, so the divergence
-        // this row records is gone.
-        program: "say 'start'\no = .K~new\nz1 = 'pad1'\nz2 = 'pad2'\nz3 = 'pad3'\n\
+const LICENSED_DIVERGENCES: &[LicensedDivergence] = &[LicensedDivergence {
+    name: "driven-collection-reaches-a-new-object",
+    // Eight padding clauses, one short of the nine allocations that reach
+    // the oracle's threshold. The padding is the only thing that may sit
+    // between `~new` and `drop`: measured, one `say 'built'` either before
+    // or after it makes the oracle answer `start / built / uninit ran /
+    // after-gc` and both engines agree, three runs each, so the divergence
+    // this row records is gone.
+    program: "say 'start'\no = .K~new\nz1 = 'pad1'\nz2 = 'pad2'\nz3 = 'pad3'\n\
                   z4 = 'pad4'\nz5 = 'pad5'\nz6 = 'pad6'\nz7 = 'pad7'\nz8 = 'pad8'\n\
                   drop o\ncall gc 'force'\nsay 'after-gc'\n\n\
                   ::class k\n::method uninit\n  say 'uninit ran'\n",
-        exit_code: 0,
-        stderr: "",
-        oracle_stdout: "start\nafter-gc\nuninit ran\n",
-        crate_stdout: "start\nuninit ran\nafter-gc\n",
-    },
-];
+    exit_code: 0,
+    stderr: "",
+    oracle_stdout: "start\nafter-gc\nuninit ran\n",
+    crate_stdout: "start\nuninit ran\nafter-gc\n",
+}];
 
 /// Where the prose half lives. `builtin_status.rs`'s own `exclusions_path`,
 /// duplicated because the two are separate integration-test binaries and

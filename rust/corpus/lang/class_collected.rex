@@ -1,0 +1,6 @@
+before = .Object~subclasses~items
+c = .Object~subclass('TEMPC')
+say 'created:' (.Object~subclasses~items - before)
+drop c
+call gc 'force'
+say 'after drop+gc:' (.Object~subclasses~items - before)

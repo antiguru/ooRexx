@@ -410,6 +410,46 @@ impl ClassGraph {
         }
     }
 
+    /// Drops every trace of `dead` from the graph, and scrubs the subclass
+    /// lists of the classes that survive.
+    ///
+    /// **The destructuring is exhaustive and has no `..`**, so a field added
+    /// to this type is a compile error here until someone decides whether a
+    /// collected class leaves anything in it.
+    ///
+    /// `behaviours` is not compacted: a behaviour is named by index and the
+    /// indices of the survivors would move. The entry is left in place, which
+    /// costs the width of one dictionary per collected class and keeps every
+    /// live [`crate::BehaviourHandle`] valid.
+    pub fn expunge(&mut self, dead: &[ObjRef]) {
+        let ClassGraph {
+            classes,
+            behaviours: _,
+            uninit_classes,
+        } = self;
+        for class in dead {
+            classes.remove(class);
+            uninit_classes.retain(|held| held != class);
+        }
+        // A subclass list holds classes that may have died: the oracle's own
+        // `subClasses` is a list of `WeakReference` and `getSubClasses`
+        // prunes as it reads (`ClassClass.hpp:208`, `ClassClass.cpp:473`).
+        for def in classes.values_mut() {
+            def.subclasses.retain(|sub| !dead.contains(sub));
+        }
+    }
+
+    /// Whether `class` is waiting to have its class-side `UNINIT` run.
+    pub fn has_pending_class_uninit(&self, class: ObjRef) -> bool {
+        self.uninit_classes.contains(&class)
+    }
+
+    /// Drops `class` from the pending list, for a finalizer a collection has
+    /// already run.
+    pub fn forget_uninit_class(&mut self, class: ObjRef) {
+        self.uninit_classes.retain(|held| *held != class);
+    }
+
     /// Every class object whose own behaviour answers `UNINIT`, in the order
     /// [`Self::check_uninit`] entered them, taken out of the graph.
     pub fn take_uninit_classes(&mut self) -> Vec<ObjRef> {

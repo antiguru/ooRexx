@@ -1,0 +1,9 @@
+k = .Object~subclass('K', .MyMeta)
+say 'before'
+drop k
+call gc 'force'
+say 'after'
+
+::CLASS MyMeta SUBCLASS Class
+::METHOD uninit
+  say 'class uninit'

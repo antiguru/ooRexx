@@ -307,6 +307,42 @@ impl ClassRegistry {
         self.graph.check_uninit(class);
     }
 
+    /// Drops every row keyed by a class the collector took.
+    ///
+    /// **The destructuring is exhaustive and has no `..`**, so a table added
+    /// to this type is a compile error here until someone decides whether a
+    /// collected class leaves a row in it.
+    pub fn expunge(&mut self, dead: &[ObjRef]) {
+        let ClassRegistry {
+            graph,
+            next_method: _,
+            names,
+            default_names,
+            object_names,
+            by_name,
+            by_system_name,
+            private_native_methods: _,
+        } = self;
+        graph.expunge(dead);
+        for class in dead {
+            names.remove(class);
+            default_names.remove(class);
+            object_names.remove(class);
+        }
+        by_name.retain(|_, class| !dead.contains(class));
+        by_system_name.retain(|_, class| !dead.contains(class));
+    }
+
+    /// See [`ClassGraph::has_pending_class_uninit`].
+    pub fn has_pending_class_uninit(&self, class: ObjRef) -> bool {
+        self.graph.has_pending_class_uninit(class)
+    }
+
+    /// See [`ClassGraph::forget_uninit_class`].
+    pub fn forget_uninit_class(&mut self, class: ObjRef) {
+        self.graph.forget_uninit_class(class);
+    }
+
     /// The class objects with a class-side `UNINIT`, in the order the
     /// oracle's termination sweep runs them, **taken out of the registry**.
     ///

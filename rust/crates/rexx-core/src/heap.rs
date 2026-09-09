@@ -46,6 +46,14 @@ pub struct CollectStats {
     /// Objects that were unreachable but define `UNINIT`. They have been kept
     /// alive so the finalizer does not observe a half-collected graph.
     pub pending_uninit: Vec<ObjRef>,
+    /// The class objects this collection freed, as they were before their
+    /// slots' generations moved on.
+    ///
+    /// The caller keys tables by a class -- its name, its place in the class
+    /// graph, its `~objectName` -- and those rows go with it. The heap cannot
+    /// drop them itself: it does not know what a class is beyond a `Body`
+    /// variant.
+    pub freed_classes: Vec<ObjRef>,
 }
 
 pub struct Heap {
@@ -56,8 +64,7 @@ pub struct Heap {
     /// The slots this heap will never sweep, in allocation order.
     ///
     /// **A root the heap holds itself**, which is what "immortal" means here.
-    /// The alternative shapes were a slot range of its own, as
-    /// [`crate::CLASS_SLOT_BASE`] gives a class identity, and a per-slot flag
+    /// The alternative shapes were a slot range of its own and a per-slot flag
     /// the sweeper reads. A separate range would need a second store behind
     /// [`Heap::get`], which is the hottest read in the interpreter and would
     /// pay a branch on every value; a flag would need the marker to trace
@@ -263,11 +270,27 @@ impl Heap {
         }
 
         let mut swept = 0;
+        let mut freed_classes = Vec::new();
         for slot in 0..self.slots.len() {
             if self.marks[slot] || matches!(self.slots[slot], Slot::Free { .. }) {
                 continue;
             }
             let generation = self.slots[slot].generation();
+            // Reported so the caller can drop the rows it keys by this class.
+            // The handle is still the live one here; after the assignment
+            // below its generation has moved on and it would name nothing.
+            if matches!(
+                self.slots[slot],
+                Slot::Live {
+                    object: Object {
+                        body: Body::Class { .. },
+                        ..
+                    },
+                    ..
+                }
+            ) {
+                freed_classes.push(ObjRef::heap(slot as u32, generation));
+            }
             swept += 1;
             self.live -= 1;
             // A slot whose generation would overflow is retired, not reused:
@@ -292,6 +315,7 @@ impl Heap {
             swept,
             live: self.live,
             pending_uninit,
+            freed_classes,
         }
     }
 

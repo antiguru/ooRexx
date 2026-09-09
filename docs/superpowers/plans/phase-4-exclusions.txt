@@ -1029,135 +1029,28 @@ DEVIATIONS -- permanent, chosen
      to this row, because a group excluded without a reason is
      indistinguishable from a group nobody ran.
 
-  5. A CLASS OBJECT'S UNINIT RUNS IN THE TERMINATION SWEEP RATHER THAN AT THE
-     DRIVEN COLLECTION THAT MADE IT UNREACHABLE.
+  5. WITHDRAWN 2026-09-09 BY PHASE 5j. A CLASS OBJECT'S UNINIT RAN IN THE
+     TERMINATION SWEEP RATHER THAN AT THE DRIVEN COLLECTION.
 
-     IMPLEMENTED by Phase 5b Task 5's third delivery,
-     `Interp::run_termination_uninits` (`rust/crates/rexx-exec/src/
-     dispatch.rs`), drained by `lib.rs`'s end-of-run path. The decision behind
-     it is D59 in `docs/superpowers/specs/2026-08-27-phase-5b-instances.md`: a
-     class identity here is not an arena object, so no collection can ever
-     ready one, and D60 puts the finalizer in the termination sweep instead.
+     This crate now answers `before / class uninit / after`, which is the
+     oracle's own answer, measured again on 2026-09-09 against the live oracle
+     on both engines with all three descriptors read separately. The licence is
+     withdrawn and its witness row is deleted from LICENSED_DIVERGENCES, which
+     is what `licensed_divergences.rs` requires of a fix: "a licence that
+     quietly stopped being needed is a decision to revisit, so the row is
+     deleted with the licence rather than edited to match".
 
-     LICENSED BY MORITZ, 2026-09-01, in the register Deviations 3 and 4 use.
-     His ruling was given on Deviation 6 and is stated over gc ordering
-     generally -- it is quoted in the WHY below -- and was relayed with the
-     direction that this row be written in the same terms rather than as a
-     shortfall against the oracle, because it is the same question.
+     The row's own CONTROL already named this fix -- delivering the class's
+     UNINIT from the driven collection rather than the termination sweep. It
+     was licensed instead of taken because D59 held that a class object is
+     never collected, and Phase 5j reversed that.
 
-     SCOPE -- ORDERING ONLY, AND THE BOUNDARY IS LOAD-BEARING. Deliberately
-     narrow, in Deviation 0's register: this is not licence to differ in
-     anything else, and it must not be cited as precedent for a second licence.
-     "One of the many correct orderings" requires that the finalizer RUN, after
-     the object is unreachable and no later than termination. It does NOT
-     license:
+     `rust/corpus/lang/class_uninit_gc.rex` is the program, now an ordinary
+     witness asserted by `rust/crates/rexx-exec/tests/class_lifetime.rs`.
 
-       - an UNINIT that never runs at all. An absence is not an ordering, and
-         that is D69's subject rather than this row's.
-       - an UNINIT that runs while the object is still reachable.
-       - any difference in exit status, or in stderr, on either side.
-       - any stdout difference other than the position of the finalizer's own
-         output.
-
-     A divergence outside that list is a defect and is not covered here. The
-     5b spec's Risks table names "D59's licence widens by drift" with the
-     consequence "a further silent divergence arrives under cover of the named
-     ones"; the list above is this row's share of the mitigation. It is stated
-     in full in Deviation 6 as well rather than cross-referenced, so that a
-     reader of either row finds it, and the two bulleted lists are textually
-     identical so a diff shows any drift between them.
-
-     Within that boundary: every class object defining a class-side UNINIT still
-     gets it run, because the termination sweep reaches all of them -- which is
-     what keeps `corpus/gate-tables/concepts/obdes.rex` a gated row rather than
-     a re-filed one. Nothing here reaches an instance's UNINIT.
-
-     MEASURED, standard oracle wrapper, a fresh empty directory per run, three
-     descriptors read separately, five runs on each of the three sides. rc 0
-     and zero bytes of stderr on every run:
-
-       k = .Object~subclass('K', .MyMeta)
-       say 'before'
-       drop k
-       call gc 'force'
-       say 'after'
-
-       ::CLASS MyMeta SUBCLASS Class
-       ::METHOD uninit
-         say 'class uninit'
-
-       oracle               before / class uninit / after
-       ir and tree-walker   before / after / class uninit
-
-     Both crate engines agree with each other, so this is a crate-against-
-     oracle row and not an engine-against-engine one, and it is silent: exit
-     status and stderr are identical on all three sides and only the position
-     of one stdout line moves.
-
-     The metaclass is the route rather than `k~setMethod('UNINIT', ...)`, which
-     from a program context is refused before it installs anything -- measured,
-     three runs of three, rc 159, stdout empty: `Error 97.2:  Object "The K
-     class" cannot accept private message "SETMETHOD" from this context.` The
-     metaclass overrides no NEW, so it is not the shape
-     `rust/corpus/oracle-crashes.txt`'s metaclass entry forbids.
-
-     WHY THIS IS A CORRECT ANSWER RATHER THAN A SHORTFALL, and the argument is
-     the language's own documentation. The specified contract is ordering
-     relative to RECLAMATION, not a point in time.
-     `oodocs/rexxref/en-US/provide.xml`'s `id="obdes"` section -- the one
-     `corpus/gate-tables/concepts/obdes.rex` is named after -- reads "Object
-     destruction is implicit.
-     When an object is no longer in use, Rexx automatically reclaims its
-     storage." and "An object requiring uninitialization should define an UNINIT
-     method. If this method is defined, Rexx runs it before reclaiming the
-     object's storage." `oodocs/rexxpg/en-US/classes.xml:447` says the same in
-     one line: "If an object has an UNINIT method, Rexx runs it before
-     reclaiming the object's storage." Neither document says WHEN reclamation
-     happens, how promptly, or in what order across objects. So the oracle's
-     timing is an artifact of its collector rather than a behaviour to match,
-     and both orderings are correct orderings of the same program. Ruled by
-     Moritz, 2026-09-01: "anything that depends on gc ordering is inherently
-     unpredictable, and we shouldn't aim for equal behavior. it just needs to be
-     one of the many correct orderings." Both quoted documents are git-ignored
-     `svn` working copies, checked rather than assumed: `svn info` reports
-     r13198 for each.
-
-     WHERE THAT CITATION AND D59 DO NOT COMPOSE CLEANLY, said here rather than
-     left for a reader to trip over. Under D59 a class object's storage is never
-     reclaimed in this crate, so the document's trigger never fires for one, and
-     the termination sweep runs its UNINIT for storage nothing will reclaim.
-     That is MORE than the document requires, not less: an UNINIT that runs for
-     an object never reclaimed satisfies "before reclaiming" vacuously and
-     satisfies D69's requirement that it run at all, so the crate is inside the
-     contract on both counts.
-
-     A SUPPORTING FACT AND NOT THE REASON. Reaching the oracle's ordering here
-     would mean collecting class objects, which is D59 reversed, and D59 carries
-     its own measured cost and measured benefit for that trade. That is why the
-     ordering is not changed. It is not why the ordering is allowed to differ.
-
-     WITNESS, RUNNABLE. `rust/crates/rexx-exec/tests/licensed_divergences.rs`
-     runs this program through the oracle and through both crate engines and
-     asserts all three descriptors on each side. It reddens if either side's
-     answer moves in either direction -- including a fix, which should delete
-     this row and its witness together rather than update them.
-     LICENSED DIVERGENCE WITNESS: class-uninit-at-driven-collection
-
-     THE WITNESS PINS EXACT BYTES WHERE THE LICENCE DOES NOT, AND BOTH ARE
-     WANTED. The licence says this crate's ordering may legitimately change; the
-     witness asserts both sides' exact stdout so that nothing moves quietly.
-     Read a red witness accordingly: a change on the CRATE's side, inside the
-     boundary in SCOPE, is a deliberate edit to this row by whoever re-timed the
-     finalizer, and not a defect the row caught. A change on the ORACLE's side,
-     or any exit-status or stderr change on either side, is a real finding.
-
-     CONTROL, RECORDED AS RUN. Delivering the class's UNINIT from the driven
-     collection instead of the termination sweep -- `run_termination_uninits`'s
-     class-side drain copied into `Interp::run_ready_uninits` (`dispatch.rs`),
-     which is what `builtin/state.rs`'s `gc` calls after its `collect_now` --
-     makes this crate answer `before / class uninit / after` and reddens the
-     row's crate assertion. Transcript in
-     `.superpowers/sdd/2026-08-27-phase-5b/task-6-report.md`.
+     The number is kept and the body removed rather than the row being deleted
+     outright, so that every later row keeps the identity other documents cite
+     it by.
 
   6. A DRIVEN COLLECTION HERE REACHES A JUST-ALLOCATED OBJECT THE ORACLE'S
      CANNOT, SO AN INSTANCE'S UNINIT CAN RUN A CLAUSE EARLIER.

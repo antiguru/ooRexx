@@ -7979,11 +7979,40 @@ impl Interp {
         // (`MemoryObject::checkUninit`), and `runUninits` is reached from
         // `GC('force')` and from the termination sweep.
         self.uninit_ready.extend(stats.pending_uninit);
+        // The rows `rexx-classes` keys by a class go with the class. Done
+        // here rather than in a pass of its own: the sweeper already knows
+        // which slots it freed, and a scan of the registry per collection
+        // would cost the whole class population to find the few that died.
+        if !stats.freed_classes.is_empty() {
+            let dead = stats.freed_classes;
+            self.classes().expunge(&dead);
+            for class in &dead {
+                self.class_variables.remove(class);
+                self.class_packages.remove(class);
+            }
+            self.method_objects
+                .retain(|(class, _), _| !dead.contains(class));
+        }
         // **Not raised for the stress mode**, which collects on every
         // allocation by definition and must not have its watermark moved
         // out from under it.
         if !self.stress_collect {
             self.collect_at = COLLECT_FLOOR.max(stats.live.saturating_mul(2));
+        }
+    }
+
+    /// Flags a class carrying a class-side `UNINIT` so the collector
+    /// resurrects it rather than freeing it, exactly as it does for an
+    /// instance.
+    ///
+    /// **Without this a collectable class loses its finalizer silently**: the
+    /// pending list `rexx-classes` keeps would hold a handle to a freed slot,
+    /// and the termination sweep would send to nothing. Measured before it
+    /// existed --- `class-uninit-at-driven-collection` stopped printing its
+    /// finalizer at all.
+    pub(crate) fn flag_class_uninit(&mut self, class: ObjRef) {
+        if self.classes().has_pending_class_uninit(class) {
+            self.heap.set_uninit(class);
         }
     }
 
@@ -8003,24 +8032,19 @@ impl Interp {
         }
     }
 
-    /// A class object a program made.
+    /// A class object a program made, which the collector may take.
     ///
-    /// **Immortal, and only until Phase 5j's Task 4.** This task moves a class
-    /// into the arena and changes nothing observable; making a program's class
-    /// collectable is the next task, and it is not a one-line change --- a
-    /// class's `UNINIT` is registered with `rexx-classes` and not with
-    /// `Heap::set_uninit`, so a collectable class silently loses its finalizer
-    /// until the two are connected.
-    ///
-    /// Through [`alloc_immortal_with`] rather than the heap directly, so the
-    /// allocation site stays visible to the collect-on-every-allocation mode.
-    ///
-    /// [`alloc_immortal_with`]: Interp::alloc_immortal_with
+    /// **Rooted before it is returned**, for the reason `.environment` and
+    /// `.local` are: the caller registers it in tables the collector does not
+    /// walk, and everything between here and there can allocate. The temp is
+    /// released with the clause's frame.
     fn mint_class(&mut self) -> ObjRef {
-        self.alloc_immortal_with(
+        let class = self.alloc_with(
             rexx_core::BehaviourId::OBJECT,
             rexx_core::Body::Class { owned: Vec::new() },
-        )
+        );
+        self.roots.push_temp(class);
+        class
     }
 
     /// [`alloc_with`], for an object the collector must never take.

@@ -237,7 +237,16 @@ collection. Deletes the separate expunge pass, and with it the question of where
 the `UNINIT` resurrection: a class with a pending finalizer is resurrected exactly like any other
 object, by the machinery that already does that.
 
-**D72. Subclass lists hold weak entries and are pruned.** Unchanged, and still the decision that
+**D72. Subclass lists are not a root, and dead entries are scrubbed at the sweep.**
+
+**What landed is not what this decision said**, and the difference is worth stating. D72 was
+written as "hold weak entries", copying the oracle's `WeakReference` mechanism. Under D67 the
+registry is not a root at all, so `ClassDef::subclasses` never keeps a class alive and needs no
+weak wrapper; `ClassGraph::expunge` scrubs the dead entries as the sweep reports them. The
+observable is the oracle's --- `~subclasses` returns to its baseline --- and the mechanism is
+Spur's "marked but not traced" rather than Smalltalk's weak arrays. The original text follows.
+
+**D72 as written.** Subclass lists hold weak entries and are pruned. Unchanged, and still the decision that
 decides whether the phase does anything: `.Object`'s strong `subclasses` vector would pin every
 runtime class forever while every gate stayed green. The oracle's own source is the specification —
 `ClassClass.hpp:208` declares `subClasses` a list of `WeakReference`, and `getSubClasses` prunes as

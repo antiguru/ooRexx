@@ -3275,6 +3275,15 @@ impl Interp {
         if !self.answers_uninit(object) {
             return None;
         }
+        // A class is on two lists: the heap's flag, which a collection
+        // readies, and `rexx-classes`' pending list, which the termination
+        // sweep drains. Dropping it from the second here is what keeps a
+        // collection-driven finalizer from running a second time at exit --
+        // measured, `class-uninit-at-driven-collection` printed its line
+        // twice without it.
+        if self.heap.is_class(object) {
+            self.classes().forget_uninit_class(object);
+        }
         let caller = self.caller();
         let outcome = self.send_message(object, UNINIT, None, &[], caller);
         self.failure_site = None;
@@ -5596,6 +5605,7 @@ fn class_factory(
     // `RexxClass::subclass`'s own tail, in its order (`:1615`-`:1637`), which
     // is the same sequence `Interp::install_class_at` makes for a directive.
     interp.classes().check_uninit(id);
+    interp.flag_class_uninit(id);
     let caller = interp.caller();
     interp.send_message(id, INIT, None, &[], caller)?;
     interp.classes().refresh_parent_has_uninit(id);
@@ -5871,6 +5881,7 @@ fn native_inherit_instance_methods(
     let source = class_receiver(interp, source)?;
     interp.classes().inherit_instance_methods(class, source);
     interp.classes().check_uninit(class);
+    interp.flag_class_uninit(class);
     Ok(None)
 }
 
