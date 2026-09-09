@@ -2,6 +2,12 @@
 
 **Assessed 2026-09-09 at `baa8c0057`**, toolchain `rustc 1.98.1 (48a229cea 2026-09-01)`.
 
+**CLOSED 2026-09-09 by Moritz**, on the reading below. `gate_tables::CLOSED_PHASES` now names
+`5a` through `5j`, so the enforcement that a closed phase owns no open row binds every sub-phase
+rather than the first four. That binds nothing extra today — no gate-table row is owned by 5e–5j,
+which is the attribution limitation recorded further down — but it stops the guard being narrower
+than the phase list.
+
 Phase 5 ran without a gate document. This is it, written at the close rather than at the start,
 which is itself worth recording: every criterion below was chosen after the work, so none of it
 constrained the work while it was being done.
