@@ -7747,6 +7747,179 @@ impl Interp {
         }
     }
 
+    /// Appends every `ObjRef` the interpreter must hand the collector to
+    /// `out`, and names every field that does not need to be handed over.
+    ///
+    /// **The destructuring is exhaustive and has no `..`**, the form
+    /// [`crate::activation::Activation::object_roots`] uses and for its
+    /// reason: a field added to `Interp` is a compile error here until
+    /// someone decides whether it is a root, rather than a value that
+    /// silently stops being one. `Interp::flat_top` and `Interp::flat_loops`
+    /// were added holding a `Vec<ObjRef>` that no root named, with nothing
+    /// asking whether they should be rooted; this asks. It does not answer:
+    /// see the limit below.
+    ///
+    /// **Almost every field binds `_`, and that is the ruling rather than a
+    /// shortcut.** A field binds `_` when it holds no arena object, or when
+    /// `RootSet` already reaches its objects as a global, a temp or a park;
+    /// the comments below name which, wherever the type does not say it.
+    /// Handing such a field over again would cost a walk per collection and
+    /// would hide a missing root instead of finding one.
+    ///
+    /// **It cannot see an `ObjRef` inside a type bound `_`**, which is how
+    /// `run::LoopState` sat inside `run::FlatLoop`. This forces the decision;
+    /// it does not prove reachability. The instrument for that remains
+    /// `run_program_collect_every_alloc`.
+    fn object_roots(&self, out: &mut Vec<ObjRef>) {
+        let Interp {
+            heap: _,
+            roots: _,
+            key_buffer: _,
+            // Every push site roots the value as a temp before it lands here.
+            value_buffer: _,
+            parse_buffers: _,
+            text_scratch: _,
+            // Handle-inline strings, which are their own bytes and have no
+            // slot to recycle.
+            text_numbers: _,
+            result_buffer: _,
+            running,
+            trace_cache: _,
+            suspended,
+            // A finished activation's leftovers, overwritten at reuse and read
+            // by nothing in between.
+            spare_activations: _,
+            next_activation_id: _,
+            next_invocation: _,
+            programs: _,
+            package_options: _,
+            plans: _,
+            engine: _,
+            deadline: _,
+            clause_countdown: _,
+            // A chunk's interned literals are allocated immortal.
+            chunks: _,
+            chunks_refused: _,
+            // `Interp::park_reply` hands each entry to `RootSet::park`.
+            deferred: _,
+            routines: _,
+            package_public_routines: _,
+            merged_public_routines: _,
+            // Class identities, which are not arena objects.
+            merged_public_classes: _,
+            package_namespaces: _,
+            // `RootSet::add_global`, under `package_local_root_key`.
+            package_locals: _,
+            // Handles into the class registry, so class identities again.
+            object_model: _,
+            // `.environment` and `.local` are globals; the rest are classes.
+            environment: _,
+            // Keys are class identities and values are globals.
+            class_variables: _,
+            package_classes: _,
+            package_public_classes: _,
+            // Keyed by class identity, and `ClassPackage` holds no `ObjRef`.
+            class_packages: _,
+            // Zero length.
+            empty_arguments: _,
+            // `RootSet::add_global`, under `package_root_key`.
+            package_objects: _,
+            // `RootSet::add_global`, under `program_routine_root_key`.
+            program_routine_objects: _,
+            // `RootSet::add_global`, under `package_table_root_key`.
+            package_tables: _,
+            // Rooted by the `.ROUTINES` table each entry is also in.
+            routine_objects: _,
+            package_imports: _,
+            // `RootSet::add_global`, under `constant_root_key`.
+            constant_values: _,
+            // `RootSet::add_global`, under `annotation_root_key`.
+            annotations: _,
+            compiled_methods: _,
+            // `RootSet::add_global`, under `method_object_root_key`.
+            method_objects: _,
+            method_bodies: _,
+            library_bootstrap: _,
+            collections_before_program: _,
+            library_programs: _,
+            compiled_method_names: _,
+            object_methods: _,
+            // Keyed by an object and holding none: a swept key is a lookup
+            // miss, because the generation bump makes the handle unequal.
+            table_method_bodies: _,
+            executable_sources: _,
+            method_flag_writes: _,
+            message_outcomes: _,
+            generated_methods: _,
+            native_externals: _,
+            special_methods: _,
+            out: _,
+            trace: _,
+            clause_state: _,
+            // The `DO OVER` snapshot sits in a register held for the loop's
+            // lifetime, and `RootSet` reaches a register as a temp.
+            flat_loops: _,
+            flat_top: _,
+            frames: _,
+            // Overwritten at reuse, as `spare_activations` is.
+            flat_spares: _,
+            pending_traps: _,
+            active_condition: _,
+            current_case_text: _,
+            indent_offset: _,
+            activation_indent: _,
+            failure_site: _,
+            failure_sites: _,
+            clause_line_override: _,
+            fragment_depth: _,
+            stress_collect: _,
+            // The collector's own resurrection flag holds each object until
+            // its finalizer clears it.
+            uninit_ready: _,
+            processing_uninits: _,
+            collect_at: _,
+            depth: _,
+            max_depth: _,
+            stack_entry: _,
+            stack_first: _,
+            stack_deepest: _,
+            procedure_permitted: _,
+            // A running call's arguments and receiver are the caller's temps;
+            // `CallContext::object_roots` is the parked case's other route.
+            call_context: _,
+            queue: _,
+            input: _,
+            random_seed: _,
+            elapsed_anchor: _,
+            pending_elapsed_reset: _,
+            reqstr_armed: _,
+            lostdigits_armed: _,
+            program_path: _,
+            required_paths: _,
+            required_packages: _,
+            requires_installing: _,
+        } = self;
+        // The context objects of the activations on the stack. **The one
+        // object an activation owns outright**: everything else it holds is
+        // rooted by its slot frame, by `Interp::class_variables`, or -- a
+        // send's receiver -- by the temporary `Interp::message_term` takes
+        // over the sending clause. A `RexxContext` is created by
+        // `Interp::context_object` and stored on the activation, and nothing
+        // else refers to it. Handed over here rather than kept rooted per
+        // activation because the alternative is a global root whose key has
+        // to be minted, replaced and retired as activations come and go, and
+        // this pays only when a collection actually happens.
+        // `Activation::object_roots` is the same objects' other route, for an
+        // activation a `REPLY` has parked.
+        out.extend(
+            running
+                .iter()
+                .map(std::ops::Deref::deref)
+                .chain(suspended.iter().map(Box::as_ref))
+                .filter_map(|activation| activation.context_object),
+        );
+    }
+
     /// The collection itself, kept out of [`Interp::collect_if_due`]'s body so
     /// that what an allocation pays when nothing is due is the test alone.
     ///
@@ -7768,30 +7941,13 @@ impl Interp {
     /// other three cells read the same on both builds.
     #[inline(never)]
     fn collect_now(&mut self) {
-        // The context objects of the activations on the stack, handed to the
+        // Everything the interpreter holds outside `RootSet`, handed to the
         // collector as temporaries for the length of the sweep.
-        //
-        // **The one object an activation owns outright.** Everything else it
-        // holds is rooted by its slot frame, by `Interp::class_variables`, or
-        // -- a send's receiver -- by the temporary `Interp::message_term`
-        // takes over the sending clause; a `RexxContext` is created by
-        // `Interp::context_object` and stored on the activation, and nothing
-        // else refers to it. Swept here rather than kept rooted per
-        // activation because the alternative is a global root whose key has
-        // to be minted, replaced and retired as activations come and go, and
-        // this pays only when a collection actually happens.
-        // `Activation::object_roots` is the same objects' other route, for an
-        // activation a `REPLY` has parked.
-        let contexts: Vec<ObjRef> = self
-            .running
-            .iter()
-            .map(std::ops::Deref::deref)
-            .chain(self.suspended.iter().map(Box::as_ref))
-            .filter_map(|activation| activation.context_object)
-            .collect();
+        let mut anchor: Vec<ObjRef> = Vec::new();
+        self.object_roots(&mut anchor);
         let frame = self.roots.push_frame();
-        for context in contexts {
-            self.roots.push_temp(context);
+        for object in anchor {
+            self.roots.push_temp(object);
         }
         let stats = self.heap.collect(&self.roots);
         self.roots.pop_frame(frame);

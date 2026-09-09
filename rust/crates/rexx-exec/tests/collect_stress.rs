@@ -854,6 +854,59 @@ fn a_parked_reply_keeps_its_variables_across_a_collection() {
     }
 }
 
+/// A running activation's `RexxContext` survives a collection, with one at
+/// every allocation between the two sends that reach it.
+///
+/// **Nothing but `Activation::context_object` holds it here.** `.context`
+/// stores the object on the activation and hands back the stored one on every
+/// later ask, so the first send's expression temp is gone long before the
+/// second send resolves the same handle -- which makes this the one shape
+/// where `Interp::object_roots` is the only root the object has.
+///
+/// **Checked by taking its subject away**: with `object_roots`' `out.extend`
+/// over the running and suspended activations removed, this fails on both
+/// engines, while the plain run of the same program still prints all three
+/// lines.
+///
+/// **It is not the only witness**, and does not claim to be: the same
+/// mutation reddens [`the_l0_subset_passes_again_under_collect_on_every_allocation`]
+/// on `lang/rexx_context.rex`, `lang/rexx_context_arity.rex`,
+/// `lang/rexx_context_edges.rex` and `lang/package_namespace.rex`. What this
+/// adds is a five-line program that names the root it is about.
+#[test]
+fn a_running_activation_keeps_its_context_object_across_a_collection() {
+    let program = concat!(
+        "a = .context~objectName\n",
+        "say a\n",
+        "b = 'xxxxxxxxxxxxxxxx' || 'yyyyyyyyyyyyyyyy'\n",
+        "say b\n",
+        "say .context~objectName\n",
+    );
+    let expected = concat!(
+        "a RexxContext\n",
+        "xxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyy\n",
+        "a RexxContext\n",
+    );
+    for engine in [rexx_exec::Engine::TreeWalker, rexx_exec::Engine::Ir] {
+        let stress = run_program_collect_every_alloc(
+            "<running-context-rooting>",
+            program.as_bytes().to_vec(),
+            rexx_exec::Invocation::none().with_engine(engine),
+        );
+        assert_eq!(stress.exit_code, 0, "{:?}", engine);
+        assert_eq!(
+            String::from_utf8_lossy(&stress.stdout),
+            expected,
+            "a running activation lost its context object under \
+             collect-on-every-allocation, {engine:?}"
+        );
+        assert!(
+            stress.collections > 0,
+            "the stress mode did not collect, so this proves nothing, {engine:?}"
+        );
+    }
+}
+
 /// A method body that assigns over `SELF` still reads its exposed variables
 /// back, with a collection at every allocation in between.
 ///
