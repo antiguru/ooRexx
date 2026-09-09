@@ -590,6 +590,9 @@ impl Interp {
             let Some(object) = self.heap.get(value) else {
                 return self.not_in_arena(value).len();
             };
+            if matches!(object.body, Body::Class) {
+                return self.not_in_arena(value).len();
+            }
             self.redirect_of(&object.body)
         };
         match redirect {
@@ -857,12 +860,15 @@ impl Interp {
         }
 
         let redirect = {
-            // **The class arm rides the `None` this lookup already
-            // produces**, and costs nothing when it does not fire --
-            // [`Interp::not_in_arena`] has the measurement and the reason.
             let Some(object) = self.heap.get(value) else {
                 return Cow::Borrowed(self.not_in_arena(value));
             };
+            // A class renders its own name rather than anything the value
+            // model holds. Since Phase 5j a class resolves like any other
+            // object, so this is an arm and no longer rides the `None`.
+            if matches!(object.body, Body::Class) {
+                return Cow::Borrowed(self.not_in_arena(value));
+            }
             self.redirect_of(&object.body)
         };
         match redirect {
@@ -1025,6 +1031,9 @@ impl Interp {
         let Some(object) = self.heap.get(value) else {
             return Some(self.not_in_arena(value));
         };
+        if matches!(object.body, Body::Class) {
+            return Some(self.not_in_arena(value));
+        }
         match &object.body {
             Body::Text { bytes, .. } => Some(bytes.as_slice()),
             Body::Num { text, .. } => text.as_deref(),
@@ -1228,9 +1237,13 @@ impl Interp {
         // Deciding the redirect first instead costs every value that is *not*
         // a stem with a default -- which is nearly all of them, `Body::Num`
         // above all -- a second walk of the arena to be told so.
+        if self.heap.is_class(value) {
+            // A class object is not a number. The call is for the tripwire
+            // it carries, not for the bytes.
+            let _ = self.not_in_arena(value);
+            return Err(NotNumeric);
+        }
         let Some(object) = self.heap.get_mut(value) else {
-            // A class object is not a number. The call is for the
-            // tripwire it carries, not for the bytes.
             let _ = self.not_in_arena(value);
             return Err(NotNumeric);
         };

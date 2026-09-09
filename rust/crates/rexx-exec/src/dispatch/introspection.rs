@@ -159,7 +159,7 @@ fn is_instance_of(
     // oracle rc 168: `.Object~new~isInstanceOf(1)` is `88.914 Argument class
     // must be an instance of the Class class.` and the argumentless form is
     // `88.901`, which is `class_argument`'s pair.
-    let argument = super::class_argument(args)?;
+    let argument = super::class_argument(interp, args)?;
     let Some(class) = interp.class_of_value(receiver) else {
         return Ok(Some(logical(false)));
     };

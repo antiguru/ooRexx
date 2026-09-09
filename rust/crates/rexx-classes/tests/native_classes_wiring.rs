@@ -15,6 +15,16 @@ use rexx_classes::{
     setup_class_names,
 };
 use rexx_core::ObjRef;
+
+/// A fresh class identity, standing in for the arena allocation the
+/// interpreter does. The registry only ever uses one as a key, so a
+/// fabricated handle is as good as an allocated one here.
+fn mint() -> ObjRef {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static NEXT: AtomicU32 = AtomicU32::new(1);
+    ObjRef::heap(NEXT.fetch_add(1, Ordering::Relaxed), 0)
+}
+
 use std::collections::BTreeSet;
 
 /// Bootstrap just `.Object`/`.Class`, the way [`native_classes`] does,
@@ -22,8 +32,8 @@ use std::collections::BTreeSet;
 /// build on, isolated from the derived-table machinery.
 fn bootstrap_object_and_class() -> (ClassRegistry, ObjRef, ObjRef) {
     let mut r = ClassRegistry::new();
-    let class_id = r.reserve_id();
-    let object_id = r.define_class("Object", None, ClassKind::Regular, class_id);
+    let class_id = mint();
+    let object_id = r.define_class(mint(), "Object", None, ClassKind::Regular, class_id);
     r.define_reserved(
         class_id,
         "Class",
@@ -60,7 +70,7 @@ fn class_is_an_instance_of_itself_by_identity() {
 // The load-bearing half of the same edge -- "does the self-merge actually
 // carry SUBCLASS etc. onto .Class's own class-behaviour, and does .Object's
 // dedicated bootstrap path do the same" -- is checked below, against the
-// real `native_classes()` bootstrap rather than this file's minimal
+// real `native_classes(&mut mint)` bootstrap rather than this file's minimal
 // two-class helper (which adds no instance methods at all, so it cannot
 // witness a self-merge that has nothing to merge):
 // `every_native_class_answers_metaclass_class_and_isa_object` covers
@@ -89,7 +99,7 @@ fn class_is_an_instance_of_itself_by_identity() {
 #[test]
 fn the_metaclass_merge_carries_the_metaclasss_scope_not_just_its_methods() {
     let (mut r, object, class) = bootstrap_object_and_class();
-    let widget = r.define_class("Widget", Some(object), ClassKind::Regular, class);
+    let widget = r.define_class(mint(), "Widget", Some(object), ClassKind::Regular, class);
     assert!(
         r.class_behaviour_has_scope(widget, class),
         "a merge_methods-only implementation would still copy SUBCLASS etc. \
@@ -115,9 +125,15 @@ fn the_metaclass_merge_carries_the_metaclasss_scope_not_just_its_methods() {
 #[test]
 fn an_ordinary_object_hierarchy_class_cannot_inherit_a_mixinclass_class_mixin() {
     let (mut r, object, class) = bootstrap_object_and_class();
-    let mixin = r.define_class("Mixin", Some(class), ClassKind::Mixin, class);
+    let mixin = r.define_class(mint(), "Mixin", Some(class), ClassKind::Mixin, class);
     r.add_class_method(mixin, "GREET");
-    let ordinary = r.define_class("MySingleton", Some(object), ClassKind::Regular, class);
+    let ordinary = r.define_class(
+        mint(),
+        "MySingleton",
+        Some(object),
+        ClassKind::Regular,
+        class,
+    );
 
     // The refusal carries the base class the recorded message names, which
     // is `.Class` and not the mixin.
@@ -146,9 +162,9 @@ fn an_ordinary_object_hierarchy_class_cannot_inherit_a_mixinclass_class_mixin() 
 #[test]
 fn a_class_subclassing_class_itself_can_inherit_a_mixinclass_class_mixin() {
     let (mut r, _object, class) = bootstrap_object_and_class();
-    let mixin = r.define_class("Mixin", Some(class), ClassKind::Mixin, class);
+    let mixin = r.define_class(mint(), "Mixin", Some(class), ClassKind::Mixin, class);
     r.add_class_method(mixin, "GREET");
-    let mymeta = r.define_class("MyMeta", Some(class), ClassKind::Regular, class);
+    let mymeta = r.define_class(mint(), "MyMeta", Some(class), ClassKind::Regular, class);
 
     r.inherit(mymeta, mixin).expect("a legal inherit");
 
@@ -231,7 +247,7 @@ fn native_class_ids(r: &ClassRegistry) -> Vec<(&'static str, ObjRef)> {
 
 #[test]
 fn every_native_class_answers_metaclass_class_and_isa_object() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     let object = r.lookup("OBJECT").expect(".Object is native");
     let class = r.lookup("CLASS").expect(".Class is native");
 
@@ -248,7 +264,7 @@ fn every_native_class_answers_metaclass_class_and_isa_object() {
 /// and `.Object`'s own (special-cased) entries.
 #[test]
 fn every_native_class_answers_class_instance_methods_on_its_class_side() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     for (name, id) in native_class_ids(&r) {
         assert!(
             r.class_has_method(id, "SUBCLASS"),
@@ -266,7 +282,7 @@ fn every_native_class_answers_class_instance_methods_on_its_class_side() {
 /// subclasses.
 #[test]
 fn is_a_is_false_for_unrelated_and_reversed_pairs() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     let object = r.lookup("OBJECT").unwrap();
     let pointer = r.lookup("POINTER").unwrap();
     let method = r.lookup("METHOD").unwrap();
@@ -332,7 +348,7 @@ const MUTATED_BY_PROLOGUE: &[&str] = &[
 
 #[test]
 fn every_class_untouched_by_the_prologue_matches_the_live_oracle_exactly() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     let object = r.lookup("OBJECT").unwrap();
 
     for &name in UNTOUCHED_BY_PROLOGUE {
@@ -367,7 +383,7 @@ fn every_class_untouched_by_the_prologue_matches_the_live_oracle_exactly() {
 /// classes is Task 13's.
 #[test]
 fn every_prologue_mutated_class_has_the_pre_prologue_superclasses_setup_cpp_builds() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     let object = r.lookup("OBJECT").unwrap();
     for &name in MUTATED_BY_PROLOGUE {
         let id = r.lookup(&name.to_ascii_uppercase()).unwrap();
@@ -388,7 +404,7 @@ fn every_prologue_mutated_class_has_the_pre_prologue_superclasses_setup_cpp_buil
 /// divergence.
 #[test]
 fn class_does_not_answer_the_two_setup_only_methods_remove_setup_methods_deletes() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     let class = r.lookup("CLASS").unwrap();
     assert!(!r.has_method(class, "DEFINECLASSMETHOD"));
     assert!(!r.has_method(class, "INHERITINSTANCEMETHODS"));
@@ -404,7 +420,7 @@ fn class_does_not_answer_the_two_setup_only_methods_remove_setup_methods_deletes
 /// under, so this also doubles as a registration-name sanity check).
 #[test]
 fn id_string_matches_the_recorded_id_for_a_representative_sample() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     for &(name, expected) in &[
         ("Class", "Class"),
         ("Object", "Object"),
@@ -426,7 +442,7 @@ fn id_string_matches_the_recorded_id_for_a_representative_sample() {
 /// Built since Task 3's first submission; this is its first assertion.
 #[test]
 fn objects_subclass_list_contains_every_other_native_class() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     let object = r.lookup("OBJECT").unwrap();
     let object_subclasses: std::collections::HashSet<ObjRef> =
         r.subclasses(object).iter().copied().collect();
@@ -456,7 +472,7 @@ fn objects_subclass_list_contains_every_other_native_class() {
 
 #[test]
 fn every_prologue_mutated_class_matches_its_recorded_own_instance_method_set() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     let cases: &[(&str, &[&str])] = &[
         (
             "String",
@@ -881,7 +897,7 @@ fn every_prologue_mutated_class_matches_its_recorded_own_instance_method_set() {
 /// `task3_fixround1.rex` Part A and this session's earlier probes agree.
 #[test]
 fn every_untouched_class_matches_its_recorded_own_instance_method_set() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     let cases: &[(&str, &[&str])] = &[
         ("WeakReference", &["VALUE"]),
         ("Buffer", &[]),
@@ -1100,7 +1116,7 @@ fn every_untouched_class_matches_its_recorded_own_instance_method_set() {
 /// name below answers `1`.
 #[test]
 fn rexxinfos_own_instance_methods_are_setup_cpps_and_carry_no_id() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     let rexx_info = r.system_lookup("REXXINFO").expect("RexxInfo is native");
     assert_eq!(
         r.own_instance_method_names(rexx_info),
@@ -1147,7 +1163,7 @@ fn rexxinfos_own_instance_methods_are_setup_cpps_and_carry_no_id() {
 /// `registered()` will hand the name to `.environment` as well.
 #[test]
 fn a_system_class_is_absent_from_the_environment_registration() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     assert!(r.system_lookup("REXXINFO").is_some());
     assert_eq!(r.lookup("REXXINFO"), None);
     assert!(
@@ -1179,7 +1195,7 @@ fn a_system_class_is_absent_from_the_environment_registration() {
 /// them.
 #[test]
 fn hiding_leaves_a_tombstone_where_removal_leaves_nothing() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     let queue = r.lookup("QUEUE").unwrap();
     let stem = r.lookup("STEM").unwrap();
     let variable_reference = r.lookup("VARIABLEREFERENCE").unwrap();
@@ -1231,7 +1247,7 @@ fn hiding_leaves_a_tombstone_where_removal_leaves_nothing() {
 /// separately via `hasmethod`, `task3_fixround1.rex` Part E.
 #[test]
 fn object_and_string_answer_the_concatenation_operator_names() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     let object = r.lookup("OBJECT").unwrap();
     let string = r.lookup("STRING").unwrap();
     assert!(r.own_instance_method_names(object).contains(""));
@@ -1246,7 +1262,7 @@ fn object_and_string_answer_the_concatenation_operator_names() {
 /// classes D39/D44's bootstrap-only mechanisms touch directly.
 #[test]
 fn class_and_object_match_their_recorded_own_instance_method_sets() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     let class = r.lookup("CLASS").unwrap();
     let object = r.lookup("OBJECT").unwrap();
     assert_eq!(
@@ -1333,7 +1349,7 @@ fn class_and_object_match_their_recorded_own_instance_method_sets() {
 /// `Of`), by `hasmethod` spot check -- `task3_fixround1.rex` Part B.
 #[test]
 fn every_class_answers_its_recorded_own_class_methods() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     for &(name, expected) in &[
         ("Class", &["NEW"] as &[&str]),
         ("Array", &["NEW", "OF"]),
@@ -1355,7 +1371,7 @@ fn every_class_answers_its_recorded_own_class_methods() {
 }
 
 /// Every native class's own (unflattened) class-method set, exact, for
-/// every checklist entry `native_classes()` builds. Absent a caller like
+/// every checklist entry `native_classes(&mut mint)` builds. Absent a caller like
 /// this one, a build that gave any native class a spurious or missing
 /// class method would pass unnoticed. `Array`/`Set`/`Bag`/`List`'s `Of` and
 /// `Method`/`Routine`/`Package`'s extra entries are corroborated against a
@@ -1366,7 +1382,7 @@ fn every_class_answers_its_recorded_own_class_methods() {
 /// is what this assertion actually reads.
 #[test]
 fn every_native_class_matches_its_recorded_own_class_method_set() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     let new_only = [
         "Object",
         "String",
@@ -1420,7 +1436,7 @@ fn every_native_class_matches_its_recorded_own_class_method_set() {
             "{name}'s own class methods"
         );
     }
-    // The doc above claims this covers every class `native_classes()`
+    // The doc above claims this covers every class `native_classes(&mut mint)`
     // builds, and this is what makes that a fact rather than a note: the two
     // tables together name exactly the registered set, so a class lifted out
     // of the deferral table lands in one of them or fails here.
@@ -1445,7 +1461,7 @@ fn every_native_class_matches_its_recorded_own_class_method_set() {
 /// merge's contribution.
 #[test]
 fn class_method_names_reads_the_flattened_class_side_set() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     let array = r.lookup("ARRAY").unwrap();
     let flattened = r.class_method_names(array);
     assert!(flattened.contains("NEW"));
@@ -1486,7 +1502,7 @@ fn class_method_names_reads_the_flattened_class_side_set() {
 /// never declare them directly would fail.
 #[test]
 fn a_native_classs_flattened_set_includes_its_ancestors_methods_the_cascade_witness() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     let array = r.lookup("ARRAY").unwrap();
     let flattened = r.instance_method_names(array);
     // Array's own method -- present either way, not the interesting half.
@@ -1517,7 +1533,7 @@ fn a_native_classs_flattened_set_includes_its_ancestors_methods_the_cascade_witn
 /// instance and absent from this crate's native (pre-prologue) set.
 #[test]
 fn arrays_flattened_set_is_a_measured_subset_of_the_live_oracles() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     let array = r.lookup("ARRAY").unwrap();
     let native = r.instance_method_names(array);
 
@@ -1572,7 +1588,7 @@ fn arrays_flattened_set_is_a_measured_subset_of_the_live_oracles() {
 /// cannot isolate them once the donation has run.
 #[test]
 fn set_bag_relation_and_supplier_match_their_setup_cpp_derived_own_sets() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     let cases: &[(&str, &[&str])] = &[
         (
             "Set",
@@ -1678,7 +1694,7 @@ fn set_bag_relation_and_supplier_match_their_setup_cpp_derived_own_sets() {
 /// set from a degenerate one that answers nothing at all.
 #[test]
 fn sets_flattened_set_lacks_setmixins_donated_methods() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     let set_class = r.lookup("SET").unwrap();
     let native = r.instance_method_names(set_class);
     assert!(
@@ -1701,7 +1717,7 @@ fn sets_flattened_set_lacks_setmixins_donated_methods() {
 /// `UNION`, `DIFFERENCE`, `XOR`, `INTERSECTION`, `SUBSET`.
 #[test]
 fn relations_flattened_set_lacks_manyitemmixins_donated_methods() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     let relation = r.lookup("RELATION").unwrap();
     let native = r.instance_method_names(relation);
     assert!(
@@ -1727,7 +1743,7 @@ fn relations_flattened_set_lacks_manyitemmixins_donated_methods() {
 /// `PUTALL`).
 #[test]
 fn bags_flattened_set_lacks_manyitemmixin_and_bagmixins_donated_methods() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     let bag = r.lookup("BAG").unwrap();
     let native = r.instance_method_names(bag);
     assert!(
@@ -1760,7 +1776,7 @@ fn bags_flattened_set_lacks_manyitemmixin_and_bagmixins_donated_methods() {
 /// mechanism `Set`/`Bag`/`Relation` above have.
 #[test]
 fn suppliers_flattened_set_lacks_suppliermixins_donated_methods() {
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     let supplier = r.lookup("SUPPLIER").unwrap();
     let native = r.instance_method_names(supplier);
     assert!(
@@ -1805,7 +1821,7 @@ fn every_setup_class_is_native_or_deferred_with_a_reason() {
         "the derived checklist must not be empty"
     );
 
-    let r = native_classes();
+    let r = native_classes(&mut mint);
     for &token in checklist {
         let deferred = deferrals.iter().find(|d| d.setup_class == token);
         match deferred {
@@ -1868,43 +1884,48 @@ fn every_setup_class_is_native_or_deferred_with_a_reason() {
     }
 }
 
-/// **Every identity this registry mints is a class identity**, disjoint from
-/// anything `rexx_core::Heap` can allocate.
+/// **This registry mints nothing.** Every class it holds was given its
+/// identity by the caller, which is what keeps this crate free of the heap.
 ///
-/// The registry's `ObjRef`s travel out of this crate -- a resolved send hands
-/// one back as its scope, and a later phase makes a class object a value -- so
-/// a handle that could equal an arena slot is one a consumer would resolve
-/// against the arena. `rexx_core::CLASS_SLOT_BASE`'s own doc has the failure
-/// mode; `rexx-core`'s `a_class_identity_is_never_an_arena_handle` is the
-/// other half of the pair, over the handle type itself.
-///
-/// **Before `reserve_id` used `ObjRef::class`** it minted `ObjRef::heap(n, 0)`
-/// from a counter starting at zero, so every assertion below answered `None`
-/// and this test fails on the first class it looks at.
+/// **This replaces the test that asserted the opposite.** Until Phase 5j
+/// `reserve_id` minted identities out of `rexx_core::CLASS_SLOT_BASE`'s
+/// reserved range and the test here asserted that no such identity could
+/// equal an arena handle. Since 5j a class *is* an arena object, so the
+/// property worth pinning is the layering one: `rexx-classes` receives
+/// identities and never creates them.
 #[test]
-fn every_registered_class_identity_is_outside_the_arenas_slot_range() {
-    let registry = rexx_classes::native_classes();
+fn the_registry_holds_the_identities_it_was_given_and_mints_none() {
+    let mut given: Vec<ObjRef> = Vec::new();
+    let registry = rexx_classes::native_classes(&mut || {
+        let id = mint();
+        given.push(id);
+        id
+    });
     // Named rather than swept, so a lookup that started answering `None`
-    // fails here instead of silently shrinking what this reads. The bootstrap
-    // pair, a plain class and a donation recipient, which is every
-    // construction path `native_classes` has.
+    // fails here instead of silently shrinking what this reads.
     for name in ["Object", "Class", "String", "Array", "Bag"] {
         let class = registry
             .lookup(name)
             .unwrap_or_else(|| panic!("{name} is a native class"));
         assert!(
-            class.class_id().is_some(),
-            "the class registered for {name} has an identity the arena could also produce"
+            given.contains(&class),
+            "the class registered for {name} has an identity the caller never handed over"
         );
     }
-    // A class installed after the bootstrap takes its identity from the same
-    // counter, so the property has to hold past the native set too.
     let mut registry = registry;
     let object = registry.lookup("Object").expect("Object is a native class");
     let metaclass = registry.lookup("Class").expect("Class is a native class");
-    let user = registry.define_class("Widget", Some(object), ClassKind::Regular, metaclass);
-    assert!(
-        user.class_id().is_some(),
-        "a class installed after the bootstrap has an arena-shaped identity"
+    let handed = mint();
+    let user = registry.define_class(
+        handed,
+        "Widget",
+        Some(object),
+        ClassKind::Regular,
+        metaclass,
     );
+    assert_eq!(
+        user, handed,
+        "a class installed after the bootstrap keeps the identity it was given"
+    );
+    assert_eq!(registry.lookup("Widget"), Some(handed));
 }

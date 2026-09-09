@@ -666,7 +666,7 @@ impl Interp {
         // search is the package's classes and then the environment
         // directory, and `.local` is not in it.
         if let Ok(Some(found)) = self.directory_lookup(&[EnvScope::Environment], upper)
-            && found.class_id().is_some()
+            && self.heap.is_class(found)
         {
             return Some(found);
         }

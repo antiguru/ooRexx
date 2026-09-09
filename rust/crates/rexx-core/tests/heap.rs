@@ -1,4 +1,4 @@
-use rexx_core::{Body, Bytes, Decoded, Heap, ObjRef};
+use rexx_core::{Body, Bytes, Decoded, Heap, ObjRef, RootSet};
 
 #[test]
 fn allocation_returns_a_heap_handle_that_reads_back() {
@@ -67,15 +67,21 @@ fn arrays_hold_handles_to_other_objects() {
 /// reach the class range (`Heap::alloc_with_uncollected`), so the two spaces
 /// are disjoint by construction. This is what says so.
 ///
-/// **Before `ObjRef::class` existed, `ClassRegistry::reserve_id` minted
-/// `ObjRef::heap(n, 0)` from a counter starting at zero**, so the first class
-/// and the first allocated slot were equal: the `allocated.contains` assertion
-/// below fails on the very first pair, and `class_id()` answers `None` for
-/// every class handle, failing the second.
+/// A class object is an ordinary arena object: it has a slot, it has a
+/// generation, and it is told from a value by its body rather than by its
+/// handle.
+///
+/// **This replaces the test that asserted the opposite.** Until Phase 5j a
+/// class identity came from a reserved range above `CLASS_SLOT_BASE` and
+/// resolved to no object at all, and the test here asserted exactly that. The
+/// spec's §4.0 says why that was given up; what is asserted now is the
+/// property the change buys — a freed class handle *misses*, where a
+/// reserved-range identity had no generation to move on and would have
+/// aliased the next class defined.
 #[test]
-fn a_class_identity_is_never_an_arena_handle() {
+fn a_class_is_an_ordinary_arena_object_and_a_freed_one_misses() {
     let mut heap = Heap::new();
-    let allocated: Vec<ObjRef> = (0..64)
+    let values: Vec<ObjRef> = (0..8)
         .map(|n| {
             heap.alloc(Body::Text {
                 bytes: Bytes::from_slice(&n.to_string().into_bytes()),
@@ -83,32 +89,35 @@ fn a_class_identity_is_never_an_arena_handle() {
             })
         })
         .collect();
-    let classes: Vec<ObjRef> = (0..64)
-        .map(|n| ObjRef::class(n).expect("inside the reserved range"))
-        .collect();
+    let class = heap.alloc(Body::Class);
 
-    for class in &classes {
+    assert!(
+        !values.contains(&class),
+        "a class handle is distinct from every value handle"
+    );
+    assert!(
+        matches!(
+            heap.get(class).map(|object| &object.body),
+            Some(Body::Class)
+        ),
+        "a class resolves to an object, and its body is what says it is a class"
+    );
+    for value in &values {
         assert!(
-            !allocated.contains(class),
-            "a class identity equals an arena handle: {class:?}"
-        );
-        assert!(
-            class.class_id().is_some(),
-            "a class handle reads its index back"
-        );
-        assert!(
-            heap.get(*class).is_none(),
-            "a class identity must resolve to no object at all"
+            !matches!(
+                heap.get(*value).map(|object| &object.body),
+                Some(Body::Class)
+            ),
+            "a value must not read back as a class: {value:?}"
         );
     }
-    for value in &allocated {
-        assert!(
-            value.class_id().is_none(),
-            "an arena handle reads back as a class identity: {value:?}"
-        );
-    }
-    // The two ends of the reserved range, which the loop above does not
-    // reach: the highest id there is, and the first id there is not.
-    assert!(ObjRef::class(rexx_core::CLASS_SLOT_BASE - 1).is_some());
-    assert!(ObjRef::class(rexx_core::CLASS_SLOT_BASE).is_none());
+
+    // Nothing roots it, so the collection takes it and the slot's generation
+    // moves on.
+    let roots = RootSet::new();
+    heap.collect(&roots);
+    assert!(
+        heap.get(class).is_none(),
+        "a collected class handle misses rather than answering the slot's next tenant"
+    );
 }

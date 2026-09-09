@@ -1254,16 +1254,19 @@ impl ObjectModel {
     /// `Interp::object_model`'s `get_or_insert_with`, which is its only
     /// caller. `Interp::bootstrap_library` assigns the model itself, so what
     /// this builds is the model of an `Interp` that never ran the bootstrap.
-    fn bootstrap() -> ObjectModel {
-        ObjectModel::build(rexx_classes::native_classes(), &[])
+    fn bootstrap(mint: &mut dyn FnMut() -> ObjRef) -> ObjectModel {
+        ObjectModel::build(rexx_classes::native_classes(mint), &[])
     }
 
     /// [`ObjectModel::bootstrap`] with the two setup-only methods present --
     /// the state the interpreter's own library runs in, and the one
     /// `Interp::bootstrap_library` closes with
     /// `rexx_classes::remove_setup_methods`.
-    pub(crate) fn bootstrap_for_library() -> ObjectModel {
-        ObjectModel::build(rexx_classes::native_classes_for_bootstrap(), SETUP_METHODS)
+    pub(crate) fn bootstrap_for_library(mint: &mut dyn FnMut() -> ObjRef) -> ObjectModel {
+        ObjectModel::build(
+            rexx_classes::native_classes_for_bootstrap(mint),
+            SETUP_METHODS,
+        )
     }
 
     fn build(
@@ -1773,7 +1776,8 @@ impl Interp {
     /// The object model, built on first use.
     pub(crate) fn object_model(&mut self) -> &mut ObjectModel {
         if self.object_model.is_none() {
-            self.install_object_model(ObjectModel::bootstrap());
+            let model = ObjectModel::bootstrap(&mut || self.heap.mint_class());
+            self.install_object_model(model);
         }
         self.object_model
             .as_mut()
@@ -1844,7 +1848,7 @@ impl Interp {
     /// Measured, oracle rc 0: after `.K~objectName = "renamed"`, `say .K`
     /// prints `renamed`.
     pub(crate) fn not_in_arena(&self, value: ObjRef) -> &[u8] {
-        assert!(value.class_id().is_some(), "a live value");
+        assert!(self.heap.is_class(value), "a live value");
         self.class_object_name(value)
     }
 
@@ -1979,11 +1983,6 @@ impl Interp {
             Decoded::Nil => Ok(Primitive::Object),
             Decoded::SmallInt(_) => Ok(Primitive::SmallInt),
             Decoded::Text(_) => Ok(Primitive::String),
-            // **Asked before the arena is**, which is the whole point of
-            // `rexx_core::CLASS_SLOT_BASE`: a class identity is heap-tagged
-            // and names no slot, so reaching for the arena with one answers
-            // from whatever object happens to hold that index.
-            Decoded::Heap { .. } if receiver.class_id().is_some() => Ok(Primitive::Class(receiver)),
             Decoded::Heap { .. } => match self.heap.get(receiver) {
                 // A handle whose slot is gone. A receiver is rooted by the
                 // term that evaluated it, so an expression cannot reach this
@@ -1995,6 +1994,9 @@ impl Interp {
                 // crash.
                 None => Err("a value whose object is no longer live"),
                 Some(object) => match &object.body {
+                    // The class test folds in here rather than guarding the
+                    // arm above: this match already had to fetch the object.
+                    Body::Class => Ok(Primitive::Class(receiver)),
                     Body::Text { .. } | Body::Num { .. } => Ok(Primitive::String),
                     Body::Stem { .. } => Ok(Primitive::Stem),
                     Body::Array { .. } => Ok(Primitive::Array),
@@ -3758,7 +3760,7 @@ impl Interp {
                 // `_super->isInstanceOf(TheClassClass)`, then
                 // `_target->validateScopeOverride(_super)`. Both run before
                 // the arguments are evaluated.
-                if scope.class_id().is_none() {
+                if !self.heap.is_class(scope) {
                     return Err(Raised::scope_override_not_a_class().into());
                 }
                 self.validate_scope_override(receiver, Some(scope))?;
@@ -4216,9 +4218,7 @@ impl Interp {
             Decoded::SmallInt(_) | Decoded::Text(_) => {
                 return StringConversion::Object(value);
             }
-            // Asked before the arena is, for the reason `receiver_kind`
-            // gives: a class identity is heap-tagged and names no slot.
-            Decoded::Heap { .. } if value.class_id().is_some() => {
+            Decoded::Heap { .. } if self.heap.is_class(value) => {
                 return self.make_string_or_none(value);
             }
             Decoded::Heap { .. } => match self.heap.get(value) {
@@ -4492,13 +4492,13 @@ fn class_receiver(interp: &Interp, receiver: ObjRef) -> Result<ObjRef, Failure> 
 /// Measured at rc 168: `.Array~isSubclassOf()` reports `Missing argument;
 /// argument class is required.` and `.Array~isA('abc')` reports `Argument
 /// class must be an instance of the Class class.`
-fn class_argument(args: &[Option<ObjRef>]) -> Result<ObjRef, Failure> {
+fn class_argument(interp: &Interp, args: &[Option<ObjRef>]) -> Result<ObjRef, Failure> {
     let Some(Some(argument)) = args.first().copied() else {
         return Err(Raised::missing_named_argument("class").into());
     };
-    match argument.class_id() {
-        Some(_) => Ok(argument),
-        None => Err(Raised::argument_not_a_class("class").into()),
+    match interp.heap.is_class(argument) {
+        true => Ok(argument),
+        false => Err(Raised::argument_not_a_class("class").into()),
     }
 }
 
@@ -4693,7 +4693,7 @@ fn native_is_a(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let other = class_argument(args)?;
+    let other = class_argument(interp, args)?;
     // `native_class` answers a class object for every receiver kind, so the
     // `None` a `NativeMethod` may now answer is not one of its outcomes -- and
     // a refusal rather than an `expect`, this crate's rule for an internal
@@ -4714,7 +4714,7 @@ fn native_is_subclass_of(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let other = class_argument(args)?;
+    let other = class_argument(interp, args)?;
     let class = class_receiver(interp, receiver)?;
     let answer = interp.classes().is_a(class, other);
     Ok(Some(interp.counted(usize::from(answer))))
@@ -5581,7 +5581,9 @@ fn class_factory(
     let class = class_receiver(interp, receiver)?;
     let metaclass = factory_metaclass(interp, class, args)?;
     let name = class_id_argument(interp, args)?;
-    let id = interp.classes().define_unregistered_class(
+    let id = interp.mint_class();
+    interp.classes().define_unregistered_class(
+        id,
         &String::from_utf8_lossy(&name),
         Some(class),
         kind,
@@ -5861,7 +5863,7 @@ fn native_inherit_instance_methods(
     let Some(Some(argument)) = args.first().copied() else {
         return Err(Loud::setup_method("inheritInstanceMethods with no source class").into());
     };
-    let Some(source) = argument.class_id().map(|_| argument) else {
+    let Some(source) = interp.heap.is_class(argument).then_some(argument) else {
         return Err(
             Loud::setup_method("inheritInstanceMethods with a value that is not a class").into(),
         );
@@ -5983,7 +5985,7 @@ fn add_installed_class(
     let Some(Some(class)) = args.get(1).copied() else {
         return Err(Raised::missing_named_argument("class").into());
     };
-    if class.class_id().is_none() {
+    if !interp.heap.is_class(class) {
         return Err(Raised::argument_not_a_class("class").into());
     }
     match interp.which_package(receiver) {

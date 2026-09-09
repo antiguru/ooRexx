@@ -194,12 +194,7 @@ impl Heap {
             // "Dead" includes unresolvable: a target whose slot was already
             // freed, or whose generation has moved on, died in an earlier
             // cycle and its reference must still clear.
-            // A class identity is not an arena handle, so `resolve` answers
-            // `None` for one and the rule above would read every class as
-            // dead. Nothing collects a class yet, so every class is live;
-            // Phase 5j's expunge replaces this term with the class mark.
-            let target_alive =
-                target.class_id().is_some() || self.resolve(target).is_some_and(|t| self.marks[t]);
+            let target_alive = self.resolve(target).is_some_and(|t| self.marks[t]);
             if !target_alive {
                 let Slot::Live { object, .. } = &mut self.slots[slot] else {
                     unreachable!()
@@ -316,6 +311,16 @@ impl Heap {
     /// is held for the life of the `Heap`, so a caller that interned per
     /// *execution* rather than per distinct constant would leak steadily and
     /// the collector could not tell it was happening.
+    /// A built-in class object, which is a root for the life of the run.
+    ///
+    /// Immortal rather than flagged or range-checked: `collect` chains
+    /// `immortal` into its initial work list, so such a class is marked and
+    /// what it holds is marked with it, and the sweeper skips it by the rule
+    /// it already has.
+    pub fn mint_class(&mut self) -> ObjRef {
+        self.alloc_immortal(BehaviourId::OBJECT, Body::Class)
+    }
+
     pub fn alloc_immortal(&mut self, behaviour: BehaviourId, body: Body) -> ObjRef {
         let handle = self.alloc_with_uncollected(behaviour, body);
         self.immortal.push(handle);
@@ -471,17 +476,6 @@ impl Heap {
             }
             None => {
                 let slot = u32::try_from(self.slots.len()).expect("heap exceeds 2^32 slots");
-                // **The arena never reaches the range a class identity lives
-                // in**, which is what makes a class handle and a value handle
-                // distinguishable at all -- see `CLASS_SLOT_BASE`. Asserted
-                // rather than argued from the arithmetic: an arena that grew
-                // this far would start handing out handles equal to class
-                // identities, and the failure mode is a wrong answer rather
-                // than a crash.
-                assert!(
-                    slot < crate::CLASS_SLOT_BASE,
-                    "the arena reached the slot range reserved for class identities"
-                );
                 self.slots.push(Slot::Live {
                     object: Object {
                         behaviour,
@@ -521,6 +515,16 @@ impl Heap {
             Slot::Live { object, .. } => Some(object),
             Slot::Free { .. } => unreachable!("resolve rejects free slots"),
         }
+    }
+
+    /// Whether `r` names a class object.
+    ///
+    /// **The body is the answer**, not the handle: since Phase 5j a class is
+    /// an ordinary arena object, so this is a resolve and a discriminant test
+    /// rather than a range check. `false` for a handle that resolves to
+    /// nothing, which is what a collected class reads as.
+    pub fn is_class(&self, r: ObjRef) -> bool {
+        matches!(self.get(r).map(|object| &object.body), Some(Body::Class))
     }
 
     pub fn live_count(&self) -> usize {

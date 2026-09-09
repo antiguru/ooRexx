@@ -4830,7 +4830,8 @@ impl Interp {
             "the library bootstrap must build the object model, so nothing may have forced \
              the shipped one before it runs"
         );
-        self.install_object_model(dispatch::ObjectModel::bootstrap_for_library());
+        let model = dispatch::ObjectModel::bootstrap_for_library(&mut || self.heap.mint_class());
+        self.install_object_model(model);
         self.library_bootstrap = true;
         #[cfg(test)]
         ir::drive::suspend_counters();
@@ -6258,9 +6259,9 @@ impl Interp {
         } else {
             ClassKind::Regular
         };
-        let id = self
-            .classes()
-            .define_unregistered_class(&name, Some(superclass), kind, metaclass);
+        let id = self.mint_class();
+        self.classes()
+            .define_unregistered_class(id, &name, Some(superclass), kind, metaclass);
         // **A class the interpreter's own library declares is a class in the
         // image**, and `RexxClass::liveGeneral` sets `REXX_DEFINED` on every
         // class in the image under `PREPARINGIMAGE` (`ClassClass.cpp:136`-
@@ -7805,8 +7806,7 @@ impl Interp {
             routines: _,
             package_public_routines: _,
             merged_public_routines: _,
-            // Class identities, which are not arena objects.
-            merged_public_classes: _,
+            merged_public_classes,
             package_namespaces: _,
             // `RootSet::add_global`, under `package_local_root_key`.
             package_locals: _,
@@ -7816,8 +7816,8 @@ impl Interp {
             environment: _,
             // Keys are class identities and values are globals.
             class_variables: _,
-            package_classes: _,
-            package_public_classes: _,
+            package_classes,
+            package_public_classes,
             // Keyed by class identity, and `ClassPackage` holds no `ObjRef`.
             class_packages: _,
             // Zero length.
@@ -7911,6 +7911,24 @@ impl Interp {
         // this pays only when a collection actually happens.
         // `Activation::object_roots` is the same objects' other route, for an
         // activation a `REPLY` has parked.
+        // **A package pins the classes it declares**, which is the oracle's
+        // behaviour and not a convenience: measured, a `::CLASS` class
+        // survives a forced collection there, because nothing can drop the
+        // binding. Since Phase 5j a class is an ordinary object, so these
+        // tables hold arena handles and an unrooted one would dangle.
+        //
+        // The keys of `class_variables`, `method_objects`, `annotations` and
+        // `class_packages` are deliberately not here: a key is a class, and
+        // rooting one would pin every class that ever existed. A row whose
+        // class has been collected is stale, and the collection is what
+        // removes it.
+        for table in [
+            merged_public_classes,
+            package_classes,
+            package_public_classes,
+        ] {
+            out.extend(table.values().flat_map(|names| names.values().copied()));
+        }
         out.extend(
             running
                 .iter()
@@ -7963,6 +7981,23 @@ impl Interp {
         if !self.stress_collect {
             self.collect_at = COLLECT_FLOOR.max(stats.live.saturating_mul(2));
         }
+    }
+
+    /// A class object a program made.
+    ///
+    /// **Immortal, and only until Phase 5j's Task 4.** This task moves a class
+    /// into the arena and changes nothing observable; making a program's class
+    /// collectable is the next task, and it is not a one-line change --- a
+    /// class's `UNINIT` is registered with `rexx-classes` and not with
+    /// `Heap::set_uninit`, so a collectable class silently loses its finalizer
+    /// until the two are connected.
+    ///
+    /// Through [`alloc_immortal_with`] rather than the heap directly, so the
+    /// allocation site stays visible to the collect-on-every-allocation mode.
+    ///
+    /// [`alloc_immortal_with`]: Interp::alloc_immortal_with
+    fn mint_class(&mut self) -> ObjRef {
+        self.alloc_immortal_with(rexx_core::BehaviourId::OBJECT, rexx_core::Body::Class)
     }
 
     /// [`alloc_with`], for an object the collector must never take.
@@ -9131,7 +9166,7 @@ say 1
     fn a_bare_class_directive_creates_a_class_object() {
         let (interp, _program) = installed(b"say 'main ran'\n::class Foo\n");
         let id = installed_class(&interp, "FOO");
-        assert!(id.class_id().is_some(), "a class identity, not a value");
+        assert!(interp.heap.is_class(id), "a class identity, not a value");
     }
 
     /// **An installed class is not an environment entry**, which is the whole

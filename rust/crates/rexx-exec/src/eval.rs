@@ -77,7 +77,7 @@ use crate::run::CallEntry;
 use crate::run::{Ended, Resolved};
 use crate::value::{canonical_small_int, exact_small_int, within_digits};
 use crate::{Code, Failure, Interp, Loud, StackSpan};
-use rexx_core::{Body, Decoded, INLINE_BYTES, NotNumeric, ObjRef, is_class_slot};
+use rexx_core::{Body, Decoded, INLINE_BYTES, NotNumeric, ObjRef};
 use rexx_num::{CompareOp, DivOp, Number};
 use rexx_parse::{CallTarget, Expr, ExprKind, Operator, PrefixOp, SymbolId};
 
@@ -1363,20 +1363,16 @@ impl Interp {
         match value.decode() {
             Decoded::Nil => false,
             Decoded::SmallInt(_) | Decoded::Text(_) => true,
-            Decoded::Heap { slot, generation } => {
-                if is_class_slot(slot, generation) {
-                    return false;
-                }
-                match self.heap.get(value).map(|object| &object.body) {
-                    Some(Body::Text { .. }) | Some(Body::Num { .. }) => true,
-                    Some(Body::Stem { default: None, .. }) => true,
-                    Some(Body::Stem {
-                        default: Some(default),
-                        ..
-                    }) => self.stem_default_is_string_or_number(*default),
-                    _ => false,
-                }
-            }
+            Decoded::Heap { .. } => match self.heap.get(value).map(|object| &object.body) {
+                Some(Body::Class) => false,
+                Some(Body::Text { .. }) | Some(Body::Num { .. }) => true,
+                Some(Body::Stem { default: None, .. }) => true,
+                Some(Body::Stem {
+                    default: Some(default),
+                    ..
+                }) => self.stem_default_is_string_or_number(*default),
+                _ => false,
+            },
         }
     }
 
@@ -1745,22 +1741,19 @@ impl Interp {
         }
         // A small integer and an inline string leave on this line, which is
         // what keeps this off the cost of a comparison between two numbers.
-        let Decoded::Heap { slot, generation } = value.decode() else {
+        let Decoded::Heap { .. } = value.decode() else {
             return None;
         };
-        // **A class object is an operator receiver on the same terms `.nil`
-        // is**, and it names no arena slot, so it answers before the fetch
-        // below. `Setup.cpp`'s `Class` block declares `=`, `==`, `\\=`,
-        // `\\==`, `<>` and `><` and no other operator, so the six are
-        // `Object`'s identity test and every other operator is a name the
-        // behaviour does not hold -- measured, oracle rc 0, `.array = .array`
-        // is `1` and `.array = 'The Array class'` is `0`; oracle rc 159,
-        // `.array > .array` and `.array + 1` are both `97.1 Object "The Array
-        // class" does not understand message`.
-        if is_class_slot(slot, generation) {
-            return Some(value);
-        }
         match &self.heap.get(value)?.body {
+            // **A class object is an operator receiver on the same terms
+            // `.nil` is.** `Setup.cpp`'s `Class` block declares `=`, `==`,
+            // `\\=`, `\\==`, `<>` and `><` and no other operator, so the six
+            // are `Object`'s identity test and every other operator is a name
+            // the behaviour does not hold -- measured, oracle rc 0,
+            // `.array = .array` is `1` and `.array = 'The Array class'` is
+            // `0`; oracle rc 159, `.array > .array` and `.array + 1` are both
+            // `97.1 Object "The Array class" does not understand message`.
+            Body::Class => Some(value),
             Body::Instance { .. } => Some(value),
             Body::Stem {
                 default: Some(default),
@@ -1821,13 +1814,11 @@ impl Interp {
     pub(crate) fn operator_operand_gap(&self, value: ObjRef) -> Option<&'static str> {
         // A small integer, an inline string and `.nil` all leave on this
         // line: only a heap-tagged handle can be either shape.
-        let Decoded::Heap { slot, generation } = value.decode() else {
+        let Decoded::Heap { .. } = value.decode() else {
             return None;
         };
-        if is_class_slot(slot, generation) {
-            return Some("a class object");
-        }
         match &self.heap.get(value)?.body {
+            Body::Class => Some("a class object"),
             Body::Native(_) => Some("one of the interpreter's own objects"),
             // An array *does* have a string value -- `ArrayClass::makeString`
             // joins its items -- so concatenation, which never asks here,

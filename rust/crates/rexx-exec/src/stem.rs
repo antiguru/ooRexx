@@ -88,6 +88,7 @@ fn body_variant_name(body: &Body) -> &'static str {
         Body::Array { .. } => "Body::Array",
         Body::Instance { .. } => "Body::Instance",
         Body::WeakRef(_) => "Body::WeakRef",
+        Body::Class => "Body::Class",
         Body::Native(_) => "Body::Native",
         Body::VarRef(_) => "Body::VarRef",
     }

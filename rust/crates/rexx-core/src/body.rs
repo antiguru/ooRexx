@@ -233,6 +233,13 @@ pub enum Body {
     /// that is the whole point -- and the collector rewrites the target to
     /// `ObjRef::NIL` once it dies.
     WeakRef(ObjRef),
+    /// A class object.
+    ///
+    /// **The class's structure is not here.** `rexx-classes` holds the graph,
+    /// the method dictionaries and the name tables, keyed by this object's own
+    /// handle; this crate holds only what the collector has to trace. The
+    /// separation is what lets `rexx-classes` stay free of the heap.
+    Class,
     /// The object a `>name` term answers: a variable named rather than read.
     ///
     /// **Boxed for [`Body::Native`]'s reason** -- inline it is the widest
@@ -801,6 +808,9 @@ impl Body {
             // Deliberately reaches nothing: a weak reference must not keep
             // its target alive.
             Body::WeakRef(_) => {}
+            // Nothing yet: what a class owns is still held in `Interp`'s own
+            // tables and rooted from there.
+            Body::Class => {}
             // A cell is rooted by `RootSet::iter`, which is what keeps the
             // referenced value alive; the owning object of an instance
             // variable is not, and the reference is the only handle a

@@ -83,9 +83,7 @@ use crate::{
     ActiveCondition, CallContext, Code, Engine, Failure, InstalledRoutine, Interp, Loud, Novalue,
     PendingTrap, VarHome,
 };
-use rexx_core::{
-    BehaviourId, Body, Decoded, FrameId, ObjRef, ScopePools, SlotFrame, VarRefHome, is_class_slot,
-};
+use rexx_core::{BehaviourId, Body, Decoded, FrameId, ObjRef, ScopePools, SlotFrame, VarRefHome};
 use rexx_num::{ArithError, CompareOp, Form, Number, SettingsError, compare_decoded};
 use rexx_parse::{
     CodeBody, ConditionTrap, ControlExpr, DirectiveKind, EndStyle, Expr, ExprKind, Forward,
@@ -3171,7 +3169,7 @@ impl Interp {
     ///
     /// **Every other receiver is refused**, having nowhere to keep a pool.
     pub(crate) fn pool_owner(&mut self, receiver: ObjRef) -> Result<ObjRef, Failure> {
-        let Some(class) = receiver.class_id() else {
+        if !self.heap.is_class(receiver) {
             if matches!(
                 self.heap.get(receiver).map(|object| &object.body),
                 Some(Body::Instance { .. })
@@ -3179,7 +3177,7 @@ impl Interp {
                 return Ok(receiver);
             }
             return Err(Loud::expose_receiver().into());
-        };
+        }
         if let Some(owner) = self.class_variables.get(&receiver) {
             return Ok(*owner);
         }
@@ -3204,7 +3202,7 @@ impl Interp {
         // a period, so it can collide neither with another class's nor with a
         // Rexx variable name.
         self.roots
-            .add_global(&format!(".class-variables {class}"), owner);
+            .add_global(&format!(".class-variables {receiver:?}"), owner);
         self.class_variables.insert(receiver, owner);
         Ok(owner)
     }
@@ -3847,7 +3845,7 @@ impl Interp {
                 // **Between the evaluate and the trace**, which is where the
                 // C++ raises it (`:168`-`:175`): under `trace i` an invalid
                 // `CLASS` writes its `>L>` line and no `>K>` line at all.
-                if value.class_id().is_none() {
+                if !self.heap.is_class(value) {
                     return Err(Raised::scope_override_not_a_class().into());
                 }
                 self.trace_forward_keyword("CLASS", value);
@@ -4046,14 +4044,12 @@ impl Interp {
             // `RexxInteger::makeArray` and `NumberString::makeArray` both
             // hand the work to their string value's.
             Decoded::SmallInt(_) | Decoded::Text(_) => return Conversion::Lines,
-            // A class object is a primitive with no `makeArray` of its own,
-            // so `requestArray` stops at `TheNilObject`.
-            Decoded::Heap { slot, generation } if is_class_slot(slot, generation) => {
-                return Conversion::Refused;
-            }
             Decoded::Heap { .. } => {}
         }
         match self.heap.get(value).map(|object| &object.body) {
+            // A class object is a primitive with no `makeArray` of its own,
+            // so `requestArray` stops at `TheNilObject`.
+            Some(Body::Class) => Conversion::Refused,
             // A multi-dimensional array shares `TheNilObject`'s raise rather
             // than converting (`instructions/ForwardInstruction.cpp:189`-
             // `:191`).

@@ -33,8 +33,7 @@ pub use body::{
 };
 pub use bytes::{Bytes, INLINE_BYTES};
 pub use handle::{
-    CLASS_SLOT_BASE, Decoded, GENERATION_MAX, INLINE_TEXT, InlineText, ObjRef, SMALL_INT_MAX,
-    SMALL_INT_MIN, is_class_slot,
+    Decoded, GENERATION_MAX, INLINE_TEXT, InlineText, ObjRef, SMALL_INT_MAX, SMALL_INT_MIN,
 };
 pub use heap::{CollectStats, Heap};
 pub use roots::{FrameAliases, FrameId, Parked, RootSet, SlotFrame, SlotRef};

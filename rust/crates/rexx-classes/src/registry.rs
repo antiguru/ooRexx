@@ -39,7 +39,6 @@ use rexx_core::{BehaviourHandle, ObjRef};
 /// the library is being built, before a program's first clause runs.
 pub struct ClassRegistry {
     graph: ClassGraph,
-    next_id: u32,
     next_method: u32,
     /// Id string as declared (`~id`), keyed by identity.
     names: NameMap<ObjRef, String>,
@@ -75,7 +74,6 @@ impl ClassRegistry {
     pub fn new() -> Self {
         Self {
             graph: ClassGraph::new(),
-            next_id: 0,
             next_method: 0,
             names: NameMap::default(),
             default_names: NameMap::default(),
@@ -84,23 +82,6 @@ impl ClassRegistry {
             by_system_name: NameMap::default(),
             private_native_methods: Vec::new(),
         }
-    }
-
-    /// Allocate a fresh identity without registering it as a class yet --
-    /// what bootstrapping `.Object` and `.Class` needs, since each names the
-    /// other's id before either exists (see
-    /// [`ClassGraph::define_class`]'s own doc comment for why a forward
-    /// reference like this is safe).
-    pub fn reserve_id(&mut self) -> ObjRef {
-        // **A class identity comes out of `rexx-core`'s reserved range, not
-        // out of the arena's.** Both counters used to start at zero, so the
-        // first class and the first heap slot were the same sixty-four bits;
-        // `ObjRef::class` is what keeps them disjoint, and `ObjRef::class_id`
-        // is what a consumer asks before treating a handle as a value. See
-        // `rexx_core::CLASS_SLOT_BASE`.
-        let id = ObjRef::class(self.next_id).expect("a program declares fewer than 2^31 classes");
-        self.next_id += 1;
-        id
     }
 
     fn next_method_id(&mut self) -> MethodId {
@@ -133,12 +114,12 @@ impl ClassRegistry {
     /// pair (which must reserve both ids before either is defined).
     pub fn define_class(
         &mut self,
+        id: ObjRef,
         name: &str,
         superclass: Option<ObjRef>,
         kind: ClassKind,
         metaclass: ObjRef,
     ) -> ObjRef {
-        let id = self.reserve_id();
         self.define_reserved(id, name, superclass, kind, metaclass);
         id
     }
@@ -154,12 +135,12 @@ impl ClassRegistry {
     /// what `.environment` is populated from.
     pub fn define_unregistered_class(
         &mut self,
+        id: ObjRef,
         name: &str,
         superclass: Option<ObjRef>,
         kind: ClassKind,
         metaclass: ObjRef,
     ) -> ObjRef {
-        let id = self.reserve_id();
         self.graph.define_class(id, superclass, kind, metaclass);
         self.names.insert(id, name.to_string());
         self.default_names.insert(id, format!("The {name} class"));
@@ -184,12 +165,12 @@ impl ClassRegistry {
     /// table has each of them in exactly one place.
     pub fn define_system_class(
         &mut self,
+        id: ObjRef,
         name: &str,
         superclass: Option<ObjRef>,
         kind: ClassKind,
         metaclass: ObjRef,
     ) -> ObjRef {
-        let id = self.reserve_id();
         self.graph.define_class(id, superclass, kind, metaclass);
         self.names.insert(id, name.to_string());
         self.default_names.insert(id, format!("The {name} class"));

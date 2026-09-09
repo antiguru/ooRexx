@@ -14,10 +14,7 @@
 use rexx_core::{BehaviourHandle, Body, ObjRef, ScopePools};
 
 fn scopes() -> (ObjRef, ObjRef) {
-    (
-        ObjRef::class(0).expect("a class identity"),
-        ObjRef::class(1).expect("a class identity"),
-    )
+    (ObjRef::heap(1_000_000, 0), ObjRef::heap(1_000_000 + 1, 0))
 }
 
 #[test]
@@ -55,7 +52,7 @@ fn a_second_write_to_one_name_replaces_rather_than_shadows() {
     // A shadowing push would leave the first value reachable and would make
     // the pool grow without bound under a loop that assigns one variable.
     let mut out = Vec::new();
-    let class = ObjRef::class(2).expect("a class identity");
+    let class = ObjRef::heap(1_000_000 + 2, 0);
     Body::Instance {
         class,
         behaviour: BehaviourHandle::new(0),

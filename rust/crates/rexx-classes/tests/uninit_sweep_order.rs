@@ -7,13 +7,23 @@
 //! states the program and the stdout it reproduces.
 
 use rexx_classes::{ClassKind, ClassRegistry};
+use rexx_core::ObjRef;
+
+/// A fresh class identity, standing in for the arena allocation the
+/// interpreter does. The registry only ever uses one as a key, so a
+/// fabricated handle is as good as an allocated one here.
+fn mint() -> ObjRef {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static NEXT: AtomicU32 = AtomicU32::new(1);
+    ObjRef::heap(NEXT.fetch_add(1, Ordering::Relaxed), 0)
+}
 
 /// A registry holding `.Object` and `.Class`, and then one directive-style
 /// class per name with a class-side `UNINIT`, declared in the order given.
 fn declare(names: &[&str]) -> ClassRegistry {
     let mut registry = ClassRegistry::new();
-    let class_id = registry.reserve_id();
-    let object_id = registry.define_class("Object", None, ClassKind::Regular, class_id);
+    let class_id = mint();
+    let object_id = registry.define_class(mint(), "Object", None, ClassKind::Regular, class_id);
     registry.define_reserved(
         class_id,
         "Class",
@@ -25,8 +35,13 @@ fn declare(names: &[&str]) -> ClassRegistry {
     registry.bootstrap_root_class_behaviour(object_id, class_id);
 
     for name in names {
-        let id =
-            registry.define_unregistered_class(name, Some(object_id), ClassKind::Regular, class_id);
+        let id = registry.define_unregistered_class(
+            mint(),
+            name,
+            Some(object_id),
+            ClassKind::Regular,
+            class_id,
+        );
         registry.add_class_method(id, "UNINIT");
         registry.check_uninit(id);
     }
@@ -98,8 +113,8 @@ fn a_shared_bucket_keeps_entry_order() {
 #[test]
 fn an_instance_side_uninit_does_not_enter_the_sweep() {
     let mut registry = ClassRegistry::new();
-    let class_id = registry.reserve_id();
-    let object_id = registry.define_class("Object", None, ClassKind::Regular, class_id);
+    let class_id = mint();
+    let object_id = registry.define_class(mint(), "Object", None, ClassKind::Regular, class_id);
     registry.define_reserved(
         class_id,
         "Class",
@@ -110,7 +125,13 @@ fn an_instance_side_uninit_does_not_enter_the_sweep() {
     registry.refresh_class_behaviour(class_id);
     registry.bootstrap_root_class_behaviour(object_id, class_id);
 
-    let id = registry.define_unregistered_class("K", Some(object_id), ClassKind::Regular, class_id);
+    let id = registry.define_unregistered_class(
+        mint(),
+        "K",
+        Some(object_id),
+        ClassKind::Regular,
+        class_id,
+    );
     registry.add_instance_method(id, "UNINIT");
     registry.check_uninit(id);
     assert!(registry.has_uninit(id), "its instances need UNINIT");

@@ -144,6 +144,14 @@ const SUBSET_FILES: &[&str] = &[
     "phase-5d.txt",
 ];
 
+/// **Thirty-six programs left this set in Phase 5j, and none joined it.**
+/// A class became an ordinary arena object, so declaring one is an
+/// allocation and the stress mode has something to fire on. Every one of the
+/// thirty-six contains a `::CLASS`, `~subclass` or `~mixinClass`, derived by
+/// reading them rather than assumed from the names. The direction is the
+/// reassuring one: a program *joining* this set would have had an allocation
+/// silently removed.
+///
 /// The subset programs that allocate nothing, so collect-on-every-allocation
 /// has nothing to fire on.
 ///
@@ -159,148 +167,48 @@ const SUBSET_FILES: &[&str] = &[
 /// A program belongs here because of what it contains, not because it was
 /// inconvenient -- see the both-directions assertion at the use site.
 const NO_ALLOCATION_PROGRAMS: &[&str] = &[
-    // Gate table D's `::ATTRIBUTE EXTERNAL` and `::METHOD EXTERNAL` probes,
-    // which are subset rows as well as table-D probes. Their shape is the
-    // `_missing` refusal below.
     "gate-tables/directives/attribute__external__subkeyword.rex",
     "gate-tables/directives/method__external__subkeyword.rex",
-    // The class-directive refusals: each is refused before the main body's
-    // first clause, and nothing has been asked of the arena by then.
-    "lang/class_abstract_metaclass.rex",
-    "lang/class_abstract_metaclass_after_inherit.rex",
-    "lang/class_abstract_metaclass_subclass.rex",
-    "lang/class_inherit_base_class.rex",
-    "lang/class_inherit_cycle.rex",
-    "lang/class_inherit_not_a_mixin.rex",
-    "lang/class_inherit_not_found.rex",
-    "lang/class_inherit_recursive.rex",
-    "lang/class_inherit_trailing_keyword.rex",
-    "lang/class_metaclass_cycle.rex",
-    "lang/class_metaclass_not_a_metaclass.rex",
-    "lang/class_metaclass_not_found.rex",
-    "lang/class_subclass_cycle.rex",
-    "lang/class_subclass_not_found.rex",
-    // `~defineMethods` refuses its argument before it has read anything out
-    // of it: the value is an inline literal, and the refusal's own
-    // substitution is rendered by the reporting path rather than built as a
-    // value here.
-    "lang/class_mutator_define_methods_supplier.rex",
-    // This runs rather than refusing, and still allocates nothing: every
-    // value it says is either a class method's short literal result or a
-    // class object's own `~defaultName`, which is rendered out of the
-    // registry rather than built as a value.
-    "lang/class_inherit_order.rex",
-    // These reach their first clause and raise 97.1 from the send in it. The
-    // report substitutes the receiver's `~defaultName` and the message name,
-    // both rendered out of the registry and the plan rather than built as
-    // values, so nothing is asked of the arena on that path either.
-    "lang/class_metaclass_class_method_does_not_donate.rex",
-    "lang/class_metaclass_superclass_wins.rex",
-    // `~method`'s own 97.1, which is the same shape: the name it looks up is
-    // upcased into a local buffer and the target is the class object's
-    // `~defaultName`, so the refusal never reaches the arena. Its sibling
-    // `class_method_own_dictionary.rex` does, because the rows before its own
-    // refusal each build a `Method` object.
-    "lang/class_method_class_side_raises.rex",
-    // The `REXX_DEFINED` refusal is reached before the mutator's arguments
-    // are converted, so nothing is allocated on the way to it.
-    "lang/class_rexx_defined_delete.rex",
-    "lang/class_rexx_defined_inherit.rex",
-    "lang/class_rexx_defined_uninherit.rex",
-    // The same refusal on a class the library declares, which reaches the
-    // arena no differently. `_no_mutation` runs a SYNTAX handler after it and
-    // still asks for nothing: the handler's one clause sends `~isA` to a
-    // class object and says a canonical small integer.
-    "lang/class_rexx_defined_library_define.rex",
-    "lang/class_rexx_defined_library_inherit.rex",
-    "lang/class_rexx_defined_library_no_mutation.rex",
-    // A class-side `ACTIVATE` raising 42.3 before the main body's first
-    // clause, which is the same shape as the class-directive refusals above
-    // once the divide has run: the operands are canonical small integers and
-    // the report's own substitutions come from the catalogue.
-    "lang/class_activate_failure_blames_the_last_installed_class.rex",
-    // The same 42.3, reached through a class method a `::CONSTANT`
-    // expression calls, so the run enters and unwinds a method activation
-    // before the main body's first clause and still asks the arena for
-    // nothing: the operands are canonical small integers and the report's
-    // substitutions come from the catalogue. Its siblings
-    // `class_constant_instance_method.rex` and
-    // `class_constant_expression_self.rex` are deliberately absent -- each
-    // builds values the arena holds.
-    "lang/class_constant_expression_method_failure.rex",
-    // The duplicate-member refusals, which are translation errors: the walk
-    // that finds them runs before any class is created and before the main
-    // body's first clause, so nothing has been asked of the arena. The
-    // negative control beside them, `class_member_names_per_side.rex`, runs
-    // and allocates and is deliberately absent.
     "lang/class_duplicate_attribute.rex",
     "lang/class_duplicate_class.rex",
     "lang/class_duplicate_constant.rex",
     "lang/class_duplicate_constant_and_method.rex",
     "lang/class_duplicate_method.rex",
+    "lang/class_inherit_cycle.rex",
     "lang/class_member_class_keyword_needs_class.rex",
+    "lang/class_metaclass_cycle.rex",
+    "lang/class_metaclass_not_a_metaclass.rex",
+    "lang/class_metaclass_not_found.rex",
+    "lang/class_rexx_defined_delete.rex",
+    "lang/class_rexx_defined_inherit.rex",
+    "lang/class_rexx_defined_library_define.rex",
+    "lang/class_rexx_defined_library_inherit.rex",
+    "lang/class_rexx_defined_library_no_mutation.rex",
+    "lang/class_rexx_defined_uninherit.rex",
+    "lang/class_subclass_cycle.rex",
+    "lang/class_subclass_not_found.rex",
     "lang/comparison_families.rex",
     "lang/comparison_operators_remaining.rex",
     "lang/deep_nested_expr.rex",
     "lang/directive_annotate_missing_target.rex",
-    // The `::ATTRIBUTE ... EXTERNAL 'LIBRARY REXX name'` refusals, which
-    // resolve against the same static table the `::METHOD` ones below do.
-    // `directive_attribute_external_bind.rex` and
-    // `directive_attribute_external_arguments.rex` are not here, for the
-    // reason their `::METHOD` siblings are not.
     "lang/directive_attribute_external_get_third_word.rex",
     "lang/directive_attribute_external_missing.rex",
     "lang/directive_attribute_external_set_default.rex",
-    "lang/directive_constant_blames_the_last_installed_class.rex",
-    "lang/directive_constant_expression_blames_the_last_class.rex",
-    "lang/directive_constant_expression_fails.rex",
-    "lang/directive_constant_expression_installs.rex",
     "lang/directive_constant_expression_needs_class.rex",
-    // The `::METHOD ... EXTERNAL 'LIBRARY REXX name'` refusals: each is
-    // answered while the package is still installing, from a table the
-    // registry holds statically, so the arena is never asked for the entry
-    // point's name or the report's substitution. Their siblings
-    // `directive_method_external_bind.rex` and
-    // `directive_method_external_arguments.rex` are not here, because both
-    // reach their main body and build values in it.
+    "lang/directive_method_attribute_external_missing.rex",
     "lang/directive_method_external_before_duplicate.rex",
     "lang/directive_method_external_duplicate_wins.rex",
     "lang/directive_method_external_missing.rex",
-    // The `::METHOD ... ATTRIBUTE EXTERNAL` spelling of the attribute
-    // refusals above.
-    "lang/directive_method_attribute_external_missing.rex",
-    // Not a refusal at all: the bound `::METHOD EXTERNAL` installs and the
-    // `::CONSTANT`'s own divide is what fails. It allocates nothing for the
-    // reason `directive_constant_expression_fails.rex` above does -- the
-    // operands are canonical small integers and the report substitutes
-    // nothing.
-    "lang/directive_method_external_not_a_staged_gap.rex",
     "lang/directive_method_external_source_order.rex",
-    // `::OPTIONS DIGITS` below the package's accumulated `FUZZ`, which raises
-    // 33.1 while the package is still installing, so the main body's first
-    // clause is never reached.
     "lang/directive_options_digits_below_fuzz.rex",
-    // `::OPTIONS TRACE`, whose two assignments are canonical small integers
-    // that ride in the handle, and whose trace lines are built on the
-    // reporting path rather than out of the arena.
     "lang/directive_options_trace.rex",
     "lang/do_loop_forms.rex",
     "lang/exit_no_value.rex",
     "lang/exit_with_value.rex",
-    // Every value it names is short enough to live in the handle, so the run
-    // reaches its 98.992 without asking the arena for anything.
     "lang/expose_outside_a_method.rex",
-    // `FORWARD`'s own legality refusal, and it is here for the reason the
-    // `EXPOSE` one above is: the check is asked before any option's
-    // expression is evaluated, so the `to (unassigned)` the program writes is
-    // never looked at and the report substitutes nothing.
     "lang/forward_outside_method.rex",
     "lang/if_else_chain.rex",
     "lang/iterate_from_select.rex",
-    // A condition raised inside a library method. The traceback frame is a
-    // catalogue message rendered into a `Vec<u8>` on the reporting path, and
-    // the reported package name is a `&'static [u8]`, so neither of the two
-    // lines this pair exists for asks the arena for anything.
     "lang/library_method_traceback.rex",
     "lang/library_method_traceback_nested.rex",
     "lang/message_assignment_form.rex",
@@ -308,66 +216,19 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/message_send_argument_not_a_string.rex",
     "lang/message_send_missing_argument.rex",
     "lang/message_send_scope_override.rex",
-    // `validateScopeOverride`'s own refusal is raised from handles the term
-    // already held.
-    "lang/message_send_scope_override_not_a_scope.rex",
     "lang/message_send_too_many_arguments.rex",
     "lang/message_send_unknown_method.rex",
     "lang/message_send_unknown_method_on_a_number.rex",
     "lang/message_send_unknown_method_on_nil.rex",
-    // A `::METHOD` activation allocates nothing of its own: the frame is
-    // slots and the `SELF`/`SUPER` bindings are handles the caller already
-    // held. So what puts a method program here is whatever its body and its
-    // main line do, exactly as for any other program, and the ones absent
-    // from this list are absent for a concatenation or a wide string rather
-    // than for the activation.
-    "lang/method_access_private_refused.rex",
-    "lang/method_attribute_body.rex",
-    // A refusal that a generated accessor's argument bounds produce is
-    // reached before the accessor touches a pool, so nothing is allocated on
-    // the way to it. The rest of Task 15's programs are absent: the value
-    // program builds strings and stores one of them, and the `no_result` and
-    // `abstract_send` programs each print before they fail.
-    "lang/method_attribute_generated_getter_arguments.rex",
-    "lang/method_attribute_generated_setter_arguments.rex",
-    "lang/method_attribute_generated_setter_omitted.rex",
-    "lang/method_body_raises.rex",
-    "lang/method_class_side_lookup.rex",
-    // Task 16. Both instructions' legality refusals reach their raise before
-    // anything is built, and the two `REPLY` programs beside them hand out
-    // values short enough to ride in the handle. Task 16's other three
-    // programs are absent because they do allocate, which is what puts a
-    // collection between a `REPLY`'s park and its resume;
-    // `a_parked_reply_keeps_its_variables_across_a_collection` below is the
-    // narrow test of that window.
     "lang/method_guard_outside_method.rex",
-    "lang/method_no_result_is_an_error.rex",
-    "lang/method_reply_exit_status.rex",
-    "lang/method_reply_no_result.rex",
     "lang/method_reply_outside_method.rex",
-    "lang/method_reply_twice.rex",
-    "lang/method_trace_invocation.rex",
-    "lang/method_trace_nested.rex",
     "lang/mutation_controlled_order.rex",
     "lang/no_trailing_newline.rex",
     "lang/raise_array_substitution.rex",
-    // Phase 5a (2026-08-17 plan) Task 14: the programs whose whole purpose is a
-    // condition raised inside a `makeString` reached through the
-    // required-string protocol. Each ends on its second clause, before
-    // anything wide enough to allocate, so none collects at all -- the same
-    // reason the refusal programs above are here.
-    "lang/required_string_argument_make_string_raises.rex",
-    "lang/required_string_make_string_raises.rex",
     "lang/select_when.rex",
     "lang/select_when_absorption.rex",
     "lang/select_when_bodies.rex",
-    // `EQUALS` and the abbreviation tests answer the interned text `1` or `0`
-    // and the three-way comparisons `-1`, `0` or `1`, all of which fit in a
-    // handle. Same reason as `string_compare.rex` below.
     "lang/string_caseless.rex",
-    // `ABBREV` answers the interned text `1` or `0` and `COMPARE` a counted
-    // integer, so a whole program of them touches the heap for nothing. Its
-    // refusals sibling is not here: a traceback is a wide string.
     "lang/string_compare.rex",
     "lang/trace_numeric_request.rex",
     "lang/trace_output.rex",

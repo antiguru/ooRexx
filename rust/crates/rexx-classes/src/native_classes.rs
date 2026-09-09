@@ -128,6 +128,7 @@
 
 use crate::class_graph::ClassKind;
 use crate::registry::ClassRegistry;
+use rexx_core::ObjRef;
 
 include!(concat!(env!("OUT_DIR"), "/setup_classes.rs"));
 
@@ -299,8 +300,8 @@ fn replay(
 /// own dedicated two-class bootstrap constructor
 /// (`ClassClass.cpp:654-748`/`:1854-1870`) rather than the ordinary
 /// `subclass()` path every other primitive class goes through).
-pub fn native_classes() -> ClassRegistry {
-    build(false)
+pub fn native_classes(mint: &mut dyn FnMut() -> ObjRef) -> ClassRegistry {
+    build(false, mint)
 }
 
 /// [`native_classes`] with the two methods `removeSetupMethods` deletes
@@ -311,15 +312,15 @@ pub fn native_classes() -> ClassRegistry {
 /// `.String~defineClassMethod` and `.supplier~inheritInstanceMethods` to
 /// resolve while it runs and calls [`remove_setup_methods`] when it is done.
 /// Every other consumer wants [`native_classes`], which is the shipped state.
-pub fn native_classes_for_bootstrap() -> ClassRegistry {
-    build(true)
+pub fn native_classes_for_bootstrap(mint: &mut dyn FnMut() -> ObjRef) -> ClassRegistry {
+    build(true, mint)
 }
 
-fn build(keep_setup_methods: bool) -> ClassRegistry {
+fn build(keep_setup_methods: bool, mint: &mut dyn FnMut() -> ObjRef) -> ClassRegistry {
     let mut registry = ClassRegistry::new();
 
-    let class_id = registry.reserve_id();
-    let object_id = registry.define_class("Object", None, ClassKind::Regular, class_id);
+    let class_id = mint();
+    let object_id = registry.define_class(mint(), "Object", None, ClassKind::Regular, class_id);
     registry.define_reserved(
         class_id,
         "Class",
@@ -391,9 +392,21 @@ fn build(keep_setup_methods: bool) -> ClassRegistry {
         // `REXX_DEFINED` exactly like every other entry here, and differs
         // only in answering `system_lookup` where the rest answer `lookup`.
         let id = if def.system_only {
-            registry.define_system_class(def.name, Some(object_id), ClassKind::Regular, class_id)
+            registry.define_system_class(
+                mint(),
+                def.name,
+                Some(object_id),
+                ClassKind::Regular,
+                class_id,
+            )
         } else {
-            registry.define_class(def.name, Some(object_id), ClassKind::Regular, class_id)
+            registry.define_class(
+                mint(),
+                def.name,
+                Some(object_id),
+                ClassKind::Regular,
+                class_id,
+            )
         };
         replay(&mut registry, id, def, keep_setup_methods);
         // `RexxClass::liveGeneral` sets `REXX_DEFINED` on every class it
@@ -532,7 +545,11 @@ mod tests {
     /// oracle prints.
     #[test]
     fn every_checklist_entry_is_registered_in_the_directory_setup_cpp_names() {
-        let registry = native_classes();
+        let mut next: u32 = 1;
+        let registry = native_classes(&mut || {
+            next += 1;
+            ObjRef::heap(next, 0)
+        });
         for (token, block_name) in CHECKLIST_TO_DEFINITION {
             let upper = block_name.to_ascii_uppercase();
             let environment = registry.lookup(&upper).is_some();

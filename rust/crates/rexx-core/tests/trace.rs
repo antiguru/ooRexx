@@ -32,8 +32,8 @@ fn an_array_reaches_past_an_empty_slot_and_not_through_it() {
 
 #[test]
 fn an_instance_reaches_every_scope_and_every_value_but_no_name() {
-    let sup = ObjRef::class(0).expect("a class identity");
-    let sub = ObjRef::class(1).expect("a class identity");
+    let sup = ObjRef::heap(1_000_000, 0);
+    let sub = ObjRef::heap(1_000_000 + 1, 0);
     let held_by_sup = ObjRef::heap(9, 0);
     let held_by_sub = ObjRef::heap(10, 0);
     let mut pools = ScopePools::new();
@@ -42,7 +42,7 @@ fn an_instance_reaches_every_scope_and_every_value_but_no_name() {
     pools.set(sup, b"V", held_by_sup);
     pools.set(sub, b"V", held_by_sub);
     let mut out = Vec::new();
-    let class = ObjRef::class(2).expect("a class identity");
+    let class = ObjRef::heap(1_000_000 + 2, 0);
     Body::Instance {
         class,
         behaviour: BehaviourHandle::new(0),
@@ -57,13 +57,13 @@ fn an_instance_reaches_every_scope_and_every_value_but_no_name() {
 
 #[test]
 fn an_instance_stops_reaching_a_dropped_variable() {
-    let scope = ObjRef::class(0).expect("a class identity");
+    let scope = ObjRef::heap(1_000_000, 0);
     let value = ObjRef::heap(9, 0);
     let mut pools = ScopePools::new();
     pools.set(scope, b"V", value);
     pools.clear(scope, b"V");
     let mut out = Vec::new();
-    let class = ObjRef::class(2).expect("a class identity");
+    let class = ObjRef::heap(1_000_000 + 2, 0);
     Body::Instance {
         class,
         behaviour: BehaviourHandle::new(0),
