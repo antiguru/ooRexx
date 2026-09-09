@@ -186,6 +186,24 @@ impl ClassRegistry {
         self.by_name.get(&name.to_ascii_uppercase()).copied()
     }
 
+    /// [`Self::lookup`] for a caller that already holds the uppercased name as
+    /// bytes, which every `.NAME` resolution does.
+    ///
+    /// **Two allocations shorter than the `lookup` path it replaces**, and
+    /// that is the whole reason it exists: reaching `lookup` from bytes cost a
+    /// `String::from_utf8_lossy` at the call site and a
+    /// `to_ascii_uppercase` inside it, both of which copy a name this table is
+    /// already keyed by. `from_utf8` validates without copying, and a name
+    /// that is not UTF-8 cannot be a key here, so rejecting it answers `None`
+    /// exactly as a miss does.
+    ///
+    /// The caller owes the uppercasing, which is the same contract
+    /// `Interp::rexx_package_class` and its neighbours already state for their
+    /// own `upper` arguments.
+    pub fn lookup_upper(&self, upper: &[u8]) -> Option<ObjRef> {
+        self.by_name.get(std::str::from_utf8(upper).ok()?).copied()
+    }
+
     /// The kernel directory's own lookup: what [`Self::define_system_class`]
     /// registered, and nothing [`Self::lookup`] answers.
     ///

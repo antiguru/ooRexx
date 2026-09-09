@@ -96,8 +96,8 @@ use std::rc::Rc;
 
 use rexx_classes::{ClassKind, ClassRegistry, InheritRefusal, MethodId, MethodSlot};
 use rexx_core::{
-    BehaviourHandle, BehaviourId, Body, BufferState, Decoded, NameMap, ObjRef, Object,
-    ObjectMethod, ObjectMethods,
+    BehaviourHandle, BehaviourId, Body, BufferState, Decoded, ObjRef, Object, ObjectMethod,
+    ObjectMethods,
 };
 use rexx_parse::{Access, Expr, Operator};
 
@@ -220,6 +220,15 @@ enum Invocable {
     /// outcome is a refusal, which is why it is not folded into `Native`
     /// beside the primitives.
     External(&'static native::NativeExternal),
+}
+
+/// Files one native method under its own id, growing the table to reach it.
+fn put_native(natives: &mut Vec<Option<NativeEntry>>, method: MethodId, entry: NativeEntry) {
+    let index = method.0 as usize;
+    if index >= natives.len() {
+        natives.resize(index + 1, None);
+    }
+    natives[index] = Some(entry);
 }
 
 /// What [`Interp::invoke`] needs about one primitive method beyond its code.
@@ -1190,7 +1199,14 @@ pub(crate) const ACTIVATE: &[u8] = b"ACTIVATE";
 /// every name and implement none.
 pub(crate) struct ObjectModel {
     classes: ClassRegistry,
-    natives: NameMap<MethodId, NativeEntry>,
+    /// Indexed by [`MethodId`]'s own number rather than keyed by it.
+    ///
+    /// **The ids are dense**: `ClassRegistry` mints them from a counter, and
+    /// this table is built once at bootstrap from the static `NATIVE_METHODS`
+    /// tables, so the vector is as long as the highest id a native method
+    /// reaches and `None` at every id belonging to something else. A hash of
+    /// any kind is wasted work on a key that is already an index.
+    natives: Vec<Option<NativeEntry>>,
     /// The classes a value this crate builds answers to, and `.Class`,
     /// resolved once at bootstrap. These are handles into `classes` and not a
     /// second model of it, and holding them buys two things: a send does not
@@ -1272,7 +1288,7 @@ impl ObjectModel {
         classes: rexx_classes::ClassRegistry,
         extra: &[(&str, &str, Arity, NativeMethod)],
     ) -> ObjectModel {
-        let mut natives = NameMap::default();
+        let mut natives: Vec<Option<NativeEntry>> = Vec::new();
         for (class_id, method_name, arity, run) in NATIVE_METHODS
             .iter()
             .chain(string::NATIVE_METHODS)
@@ -1304,7 +1320,8 @@ impl ObjectModel {
                          behaviour does not answer"
                     )
                 });
-            natives.insert(
+            put_native(
+                &mut natives,
                 method,
                 NativeEntry {
                     arity: *arity,
@@ -1330,7 +1347,8 @@ impl ObjectModel {
                          class behaviour does not answer"
                     )
                 });
-            natives.insert(
+            put_native(
+                &mut natives,
                 method,
                 NativeEntry {
                     arity: *arity,
@@ -2599,7 +2617,13 @@ impl Interp {
     /// Asked **before** the seam rather than after, so the seam stays a
     /// single call site with every invocable kind behind it.
     fn invocable(&mut self, resolution: Resolution, name: &[u8]) -> Result<Invocable, Failure> {
-        if let Some(entry) = self.object_model().natives.get(&resolution.method).copied() {
+        if let Some(entry) = self
+            .object_model()
+            .natives
+            .get(resolution.method.0 as usize)
+            .copied()
+            .flatten()
+        {
             return Ok(Invocable::Native(entry));
         }
         if let Some(installed) = self.method_bodies.get(&resolution.method).copied() {

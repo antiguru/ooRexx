@@ -3265,6 +3265,21 @@ struct Interp {
     /// `say .Array` print `The ARRAY class`, so an import shadows
     /// `.environment`.
     merged_public_classes: NameMap<ProgramId, NameMap<Box<[u8]>, ObjRef>>,
+    /// `.NAME` answers [`Interp::rexx_package_class`] has already found,
+    /// keyed by the bare uppercased name.
+    ///
+    /// **Keyed by the name alone, which is only sound for this step.** The two
+    /// steps in front of it in `dot_variable` read the *running* package's
+    /// tables, so their answers depend on who is asking; this one reads
+    /// `library_programs` and the registry, which are the same whoever asks.
+    /// Caching at the top of `dot_variable` instead would answer a routine in
+    /// one package with another package's class.
+    ///
+    /// Measured before it existed: `dot_variable` was 24.6% of `alloc.rex`,
+    /// and 87.7% of that was this step -- a loop over `library_programs`
+    /// hashing each, then a registry lookup, run afresh for a `.array` whose
+    /// answer never changes.
+    rexx_class_cache: NameMap<Box<[u8]>, ObjRef>,
     /// The packages a program's `::REQUIRES ... NAMESPACE` directives
     /// registered, under the upcased qualifier -- `PackageClass::addNamespace`
     /// (`classes/PackageClass.cpp:2152`), whose key is `name->upper()`.
@@ -3489,7 +3504,7 @@ struct Interp {
     /// directives this program declared. [`Interp::record_method_body`] runs
     /// immediately after each mint a directive makes, and asserts the key is
     /// fresh.
-    method_bodies: HashMap<MethodId, InstalledMethodBody>,
+    method_bodies: NameMap<MethodId, InstalledMethodBody>,
     /// Whether the interpreter's own Rexx-written library is running.
     ///
     /// **What it opens, and each is closed again the moment the prologue
@@ -3557,7 +3572,7 @@ struct Interp {
     /// directive the package filed under a name and nothing more. Written
     /// only for a written `::METHOD`; `environment.rs`'s `written_method`
     /// carries why an `::ATTRIBUTE` or `::CONSTANT` accessor is absent.
-    table_method_bodies: HashMap<ObjRef, InstalledMethodBody>,
+    table_method_bodies: NameMap<ObjRef, InstalledMethodBody>,
     /// What each `Method` and `Routine` object this crate has handed out
     /// reports on -- see [`ExecutableSource`], which carries why this is not
     /// [`Interp::table_method_bodies`] with more rows in it.
@@ -4704,6 +4719,7 @@ impl Interp {
             package_public_routines: HashMap::new(),
             merged_public_routines: HashMap::new(),
             merged_public_classes: NameMap::default(),
+            rexx_class_cache: NameMap::default(),
             package_namespaces: HashMap::new(),
             package_locals: HashMap::new(),
             object_model: None,
@@ -4725,10 +4741,10 @@ impl Interp {
             library_bootstrap: false,
             collections_before_program: 0,
             library_programs: Vec::new(),
-            method_bodies: HashMap::new(),
+            method_bodies: NameMap::default(),
             compiled_method_names: HashMap::new(),
             object_methods: false,
-            table_method_bodies: HashMap::new(),
+            table_method_bodies: NameMap::default(),
             executable_sources: HashMap::new(),
             method_flag_writes: HashMap::new(),
             message_outcomes: HashMap::new(),
@@ -4878,6 +4894,9 @@ impl Interp {
         let parsed = Rc::new(parsed);
         let program_id = ProgramId(self.programs.len());
         self.programs.push(Rc::clone(&parsed));
+        // `rexx_package_class` searches this list, so a new library package
+        // can turn a miss into a hit and shadow an earlier answer.
+        self.invalidate_rexx_class_cache();
         self.library_programs.push(program_id);
         let arguments = arguments.unwrap_or_else(|| {
             let package = self.package_object(Package::Program(program_id));
@@ -5634,6 +5653,7 @@ impl Interp {
             Package::Program(program) => return self.merge_required(into, program),
             Package::Rexx => self.rexx_package_class_table(true),
         };
+        self.invalidate_rexx_class_cache();
         let target = self.merged_public_classes.entry(into).or_default();
         for (name, class) in from {
             target.entry(name).or_insert(class);
@@ -5671,6 +5691,7 @@ impl Interp {
             .flatten()
             .map(|(name, class)| (name.clone(), *class))
             .collect();
+        self.invalidate_rexx_class_cache();
         let target = self.merged_public_classes.entry(into).or_default();
         for (name, class) in classes {
             target.entry(name).or_insert(class);
@@ -7807,6 +7828,13 @@ impl Interp {
             package_public_routines: _,
             merged_public_routines: _,
             merged_public_classes,
+            // **Not a root, deliberately.** Its values are class handles, and
+            // rooting them would pin every class a `.NAME` ever resolved --
+            // which is exactly the pinning Phase 5j removed. A cached handle
+            // is instead dropped before it can go stale:
+            // `Interp::collect_now` clears the cache on every collection, and
+            // every write to a table it is derived from clears it too.
+            rexx_class_cache: _,
             package_namespaces: _,
             // `RootSet::add_global`, under `package_local_root_key`.
             package_locals: _,
@@ -7973,6 +8001,9 @@ impl Interp {
         }
         let stats = self.heap.collect(&self.roots);
         self.roots.pop_frame(frame);
+        // A sweep can free a class the registry named, which unlinks its row
+        // and leaves any `.NAME` answer derived from it naming nothing.
+        self.invalidate_rexx_class_cache();
         // `pending_uninit` is what the collector resurrected so a finalizer
         // could run against a whole graph. The finalizer is not sent from
         // here: the oracle's collector only marks

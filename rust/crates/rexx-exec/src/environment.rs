@@ -675,7 +675,7 @@ impl Interp {
         // to the native table -- which is where a `::CLASS` target was
         // resolved before `.environment` was ever consulted, so a miss is the
         // same 98.909 it was.
-        self.classes().lookup(&String::from_utf8_lossy(upper))
+        self.classes().lookup_upper(upper)
     }
 
     /// The first of `scopes` whose directory holds `bare`, or the refusal an
@@ -766,6 +766,29 @@ impl Interp {
     /// `.environment` is not in the REXX package, and reading the directory
     /// would promote it four steps.
     pub(crate) fn rexx_package_class(&mut self, upper: &[u8]) -> Option<ObjRef> {
+        if let Some(&hit) = self.rexx_class_cache.get(upper) {
+            debug_assert_eq!(
+                Some(hit),
+                self.rexx_package_class_uncached(upper),
+                "the .NAME cache answered {upper:?} with a class the search no longer finds, so \
+                 some table this cache is derived from was mutated without \
+                 Interp::invalidate_rexx_class_cache"
+            );
+            return Some(hit);
+        }
+        let found = self.rexx_package_class_uncached(upper)?;
+        // Only a hit is cached. A miss must stay a miss: a later `::CLASS`
+        // install or a `~addPackage` can turn one into a hit, and a cached
+        // miss would outlive that where a cached hit is invalidated with the
+        // table it came from.
+        self.rexx_class_cache.insert(upper.into(), found);
+        Some(found)
+    }
+
+    /// [`Interp::rexx_package_class`]'s own search, with no cache in front of
+    /// it. Kept separate so the cache's debug assertion has something to
+    /// compare against.
+    fn rexx_package_class_uncached(&mut self, upper: &[u8]) -> Option<ObjRef> {
         for program in &self.library_programs {
             if let Some(found) = self
                 .package_public_classes
@@ -775,7 +798,19 @@ impl Interp {
                 return Some(*found);
             }
         }
-        self.classes().lookup(&String::from_utf8_lossy(upper))
+        self.classes().lookup_upper(upper)
+    }
+
+    /// Drops every cached `.NAME` answer.
+    ///
+    /// **Called by every write to a table [`Interp::rexx_package_class`]
+    /// reads**: `library_programs`, the packages' public class tables, and
+    /// `ClassRegistry`'s own name table -- the last of which the collector
+    /// also writes, since sweeping a class unlinks its row. The debug
+    /// assertion on the read path is what says the set is complete: it
+    /// recomputes the search on every hit and fires if any answer went stale.
+    pub(crate) fn invalidate_rexx_class_cache(&mut self) {
+        self.rexx_class_cache.clear();
     }
 
     /// `Package~local`: the package's own environment directory, allocated on
@@ -1312,6 +1347,7 @@ impl Interp {
         class: ObjRef,
         public: bool,
     ) {
+        self.invalidate_rexx_class_cache();
         self.package_classes
             .entry(program)
             .or_default()
@@ -1370,6 +1406,7 @@ impl Interp {
         // `addInstalledClass` writes the package's own two tables and
         // touches no field of the class it is handed, so adding a class to a
         // package's table does not move it.
+        self.invalidate_rexx_class_cache();
         self.package_classes
             .entry(program)
             .or_default()
@@ -2008,7 +2045,7 @@ impl Interp {
                     return Some(*found);
                 }
             }
-            return self.classes().lookup(&String::from_utf8_lossy(upper));
+            return self.classes().lookup_upper(upper);
         };
         self.package_classes.get(&program)?.get(upper).copied()
     }
