@@ -22,3 +22,11 @@ lang/class_pinned_by_instance.rex
 # Task 4: a class-side UNINIT runs at the collection that reaches the class,
 # not at termination. This was a licensed divergence until 5j withdrew it.
 lang/class_uninit_gc.rex
+
+# Found while deriving Phase 5's close gap list, and not a class-lifetime row:
+# a message send in a builtin's argument position. The shared argument stack
+# was cleared on the way into a send and overwritten on the way out, so the
+# send's arguments reached the enclosing builtin and its earlier ones were
+# lost. It is filed here because 5j is the open subset that found it; what it
+# covers is the builtin call path.
+lang/builtin_send_argument.rex

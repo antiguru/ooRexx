@@ -945,7 +945,7 @@ DateTime	addYears	instance	answers	rc 163
 DateTime	baseDate	instance	answers	rc 0
 DateTime	civilTime	instance	answers	rc 0
 DateTime	compareTo	instance	answers	rc 163
-DateTime	date	instance	diverge	diverge-both
+DateTime	date	instance	answers	rc 0
 DateTime	day	instance	answers	rc 0
 DateTime	dayMicroseconds	instance	answers	rc 0
 DateTime	dayMinutes	instance	answers	rc 0
@@ -976,7 +976,7 @@ DateTime	seconds	instance	answers	rc 0
 DateTime	standardDate	instance	answers	rc 0
 DateTime	string	instance	answers	rc 0
 DateTime	ticks	instance	answers	rc 0
-DateTime	timeOfDay	instance	diverge	diverge-both
+DateTime	timeOfDay	instance	answers	rc 0
 DateTime	toLocalTime	instance	answers	rc 0
 DateTime	toTimezone	instance	answers	rc 0
 DateTime	toUtcTime	instance	answers	rc 0

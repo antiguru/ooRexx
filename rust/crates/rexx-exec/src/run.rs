@@ -3850,7 +3850,7 @@ impl Interp {
             }
         };
 
-        let mut values = self.take_value_buffer();
+        let (mut values, mark) = self.take_value_buffer();
         let evaluated = self.forward_arguments(code, forward, &mut values);
         // **After every option and before the send**, which is where
         // `RexxActivation::forward` asks it (`execution/RexxActivation.cpp:
@@ -3867,8 +3867,10 @@ impl Interp {
         let caller = self.caller();
         let sent = owed
             .and_then(|()| self.validate_scope_override(target, start_scope))
-            .and_then(|()| self.send_message(target, &message, start_scope, &values, caller));
-        self.give_value_buffer(values);
+            .and_then(|()| {
+                self.send_message(target, &message, start_scope, &values[mark..], caller)
+            });
+        self.give_value_buffer(values, mark);
         let sent = sent?;
 
         if !forward.continue_ {
@@ -5914,15 +5916,26 @@ impl Interp {
             .copied()
     }
 
-    /// Takes the shared value buffer, empty and ready to build into.
-    pub(crate) fn take_value_buffer(&mut self) -> Vec<Option<ObjRef>> {
-        let mut buffer = std::mem::take(&mut self.value_buffer);
-        buffer.clear();
-        buffer
+    /// Takes the shared value buffer **with the caller's run intact**, and the
+    /// depth to build above it.
+    ///
+    /// **It used to clear**, which is the same mistake in both directions: the
+    /// enclosing call's arguments were discarded on the way in and this run's
+    /// were left behind on the way out. A send in a builtin's argument
+    /// position then handed that builtin its own arguments plus the send's --
+    /// measured, `say length('abc'~copies(1))` answered `3` on the oracle and
+    /// raised 40.4 here. The mark is the same discipline
+    /// [`Interp::run_over_pushed_args`] uses.
+    pub(crate) fn take_value_buffer(&mut self) -> (Vec<Option<ObjRef>>, usize) {
+        let buffer = std::mem::take(&mut self.value_buffer);
+        let mark = buffer.len();
+        (buffer, mark)
     }
 
-    /// Hands the value buffer back for the next builtin call.
-    pub(crate) fn give_value_buffer(&mut self, buffer: Vec<Option<ObjRef>>) {
+    /// Hands the value buffer back with this run removed, whichever way the
+    /// send ended.
+    pub(crate) fn give_value_buffer(&mut self, mut buffer: Vec<Option<ObjRef>>, mark: usize) {
+        buffer.truncate(mark);
         self.value_buffer = buffer;
     }
 

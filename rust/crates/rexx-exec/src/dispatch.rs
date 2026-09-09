@@ -3777,12 +3777,12 @@ impl Interp {
             }
         };
 
-        let mut values = self.take_value_buffer();
+        let (mut values, mark) = self.take_value_buffer();
         let evaluated = self.evaluate_message_arguments(code, args, assigned, &mut values);
         let caller = self.caller();
         let result = evaluated
-            .and_then(|()| self.send_message(receiver, name, start_scope, &values, caller));
-        self.give_value_buffer(values);
+            .and_then(|()| self.send_message(receiver, name, start_scope, &values[mark..], caller));
+        self.give_value_buffer(values, mark);
         let sent = result?;
 
         // `~~` replaces the result with the target **before** the send is
