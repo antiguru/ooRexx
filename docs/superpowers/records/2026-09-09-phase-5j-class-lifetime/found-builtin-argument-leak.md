@@ -60,3 +60,37 @@ It is not an object-model gap and no Phase 5 row is about it; it is the Phase 4 
 path, reachable only when a builtin's argument is a send. The method-body table found it because it
 *sends every documented method name* and the library's own Rexx bodies use the idiom. The
 differential corpus did not, which is a coverage-shape finding about the corpus, not about this bug.
+
+---
+
+# Fixed 2026-09-09
+
+`take_value_buffer` no longer clears, and `give_value_buffer` truncates to the caller's depth —
+the mark discipline `Interp::run_over_pushed_args` already used. Two call sites, both sends:
+`dispatch.rs`'s message send and `run.rs`'s `FORWARD`.
+
+`corpus/lang/builtin_send_argument.rex` is the witness, filed in `corpus/phase-5j.txt` so the
+differential runs it against the live oracle. It separates the parts: a send with arguments, one
+without, one that is not the first argument, one whose result the builtin must convert, and a user
+routine in the same position, which never went through this path and agreed throughout.
+
+**The method-body table now has no `diverge` rows at all** — 1192 `answers`, up from 1190, and the
+two `DateTime` rows that led here are `answers [rc 0]`. `regressions this run: 0`.
+
+## The controls, and one of them was not clean
+
+**B — `give_value_buffer` stops truncating.** Predicted: the witness reddens on line 1,
+`length(s~copies(1))`, the original repro. **Confirmed**, with the original message:
+`Error 40.4: Too many arguments in invocation of LENGTH; maximum expected is 1.`
+
+**A — `take_value_buffer` clears again.** Predicted: the witness reddens on
+`substr(s, s~length - 4, 3)`, the one line with arguments pushed before the send. **Falsified as
+stated.** It reddens, but by panicking — `range start index 1 out of range for slice of length 0` —
+because restoring the clear while keeping the mark leaves the two inconsistent. So A varies two
+things at once and is not a single-variable control: it shows the halves are coupled, not that the
+clear alone produced a wrong answer.
+
+The honest summary is that B isolates the residue half and nothing here isolates the loss half. A
+control for that would have to restore the whole pre-fix shape, and its evidence is the original
+measurement instead: before the fix, `substr(s~copies(1), 2, 3)` reported argument 2 as `"abcdef"`,
+which is a four-argument list whose first entry is the send's `1` — both halves at once.
