@@ -275,10 +275,22 @@ impl Interp {
     /// `expr.kind`'s own already-computed pieces (a `SymbolId`'s name, an
     /// operator's spelling) are read directly; nothing re-derives a value
     /// `eval_node` already produced.
+    ///
+    /// **Split so the untraced path is a predicate and not a call.** The
+    /// guard is a cached field read, but the body is a wide match over
+    /// `expr.kind`, so one function meant every evaluated node paid a call to
+    /// reach a `return`. Measured at 1.8% of `alloc.rex` before the split.
+    #[inline]
     pub(crate) fn trace_intermediate(&mut self, code: &Code<'_>, expr: &Expr, value: ObjRef) {
         if !self.tracing_intermediates() {
             return;
         }
+        self.trace_intermediate_event(code, expr, value);
+    }
+
+    /// [`Interp::trace_intermediate`]'s body, entered only under `TRACE I`.
+    #[inline(never)]
+    fn trace_intermediate_event(&mut self, code: &Code<'_>, expr: &Expr, value: ObjRef) {
         let indent = self.clause_state.current_value_indent;
         match &expr.kind {
             // `Constant`'s own shape is reasoned from `Literal`'s measured
