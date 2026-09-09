@@ -1,0 +1,21 @@
+/* A WeakReference to a class answers the class while the class is live.
+   The ordinary-object line is the control: it is right today either way, so
+   it is what says the class lines are about classes and not about weak
+   references. */
+c = .Object~subclass('TEMPC')
+w = .WeakReference~new(c)
+call gc 'force'
+v = w~value
+if v == .nil then say 'live class: NIL'
+else say 'live class:' v~id
+o = .Object~new
+w2 = .WeakReference~new(o)
+call gc 'force'
+v2 = w2~value
+if v2 == .nil then say 'live object: NIL'
+else say 'live object:' v2~objectName
+w3 = .WeakReference~new(.DECL)
+call gc 'force'
+if w3~value == .nil then say 'declared: NIL'
+else say 'declared:' w3~value~id
+::class DECL

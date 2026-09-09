@@ -194,7 +194,12 @@ impl Heap {
             // "Dead" includes unresolvable: a target whose slot was already
             // freed, or whose generation has moved on, died in an earlier
             // cycle and its reference must still clear.
-            let target_alive = self.resolve(target).is_some_and(|t| self.marks[t]);
+            // A class identity is not an arena handle, so `resolve` answers
+            // `None` for one and the rule above would read every class as
+            // dead. Nothing collects a class yet, so every class is live;
+            // Phase 5j's expunge replaces this term with the class mark.
+            let target_alive =
+                target.class_id().is_some() || self.resolve(target).is_some_and(|t| self.marks[t]);
             if !target_alive {
                 let Slot::Live { object, .. } = &mut self.slots[slot] else {
                     unreachable!()
