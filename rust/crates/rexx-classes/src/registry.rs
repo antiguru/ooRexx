@@ -706,13 +706,6 @@ impl ClassRegistry {
         self.graph.is_rexx_defined(class)
     }
 
-    /// Every class carrying `rexx_defined` -- see
-    /// [`ClassGraph::rexx_defined_classes`] for why the order is not a
-    /// property a caller may use.
-    pub fn rexx_defined_classes(&self) -> Vec<ObjRef> {
-        self.graph.rexx_defined_classes()
-    }
-
     /// Oracle's `setRexxDefined` -- see [`ClassGraph::set_rexx_defined`].
     pub fn set_rexx_defined(&mut self, class: ObjRef) {
         self.graph.set_rexx_defined(class);

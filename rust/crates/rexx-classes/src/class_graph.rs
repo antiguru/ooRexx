@@ -1127,19 +1127,6 @@ impl ClassGraph {
         self.classes[&class].own_instance_methods.slot(name)
     }
 
-    /// Every class carrying `rexx_defined`, in no particular order.
-    ///
-    /// The order is a `HashMap`'s, which is safe only because the one caller
-    /// uses this as a set of collector roots and marking is order-insensitive.
-    /// Anything with a side effect per class must not read it this way.
-    pub fn rexx_defined_classes(&self) -> Vec<ObjRef> {
-        self.classes
-            .iter()
-            .filter(|(_, def)| def.rexx_defined)
-            .map(|(class, _)| *class)
-            .collect()
-    }
-
     /// Oracle's `isRexxDefined` -- see [`ClassDef::rexx_defined`].
     pub fn is_rexx_defined(&self, class: ObjRef) -> bool {
         self.classes[&class].rexx_defined

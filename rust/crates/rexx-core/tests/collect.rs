@@ -8,7 +8,7 @@ fn unreachable_objects_are_swept() {
         bytes: Bytes::from_slice(b"garbage"),
         num: None,
     });
-    let stats = heap.collect(&roots, &());
+    let stats = heap.collect(&roots);
     assert_eq!(stats.swept, 1);
     assert_eq!(heap.live_count(), 0);
 }
@@ -26,7 +26,7 @@ fn objects_reachable_from_a_root_survive() {
         bytes: Bytes::from_slice(b"dropped"),
         num: None,
     });
-    let stats = heap.collect(&roots, &());
+    let stats = heap.collect(&roots);
     assert_eq!(stats.swept, 1);
     assert_eq!(stats.live, 1);
     assert!(heap.get(kept).is_some());
@@ -42,7 +42,7 @@ fn transitively_reachable_objects_survive() {
     });
     let holder = heap.alloc(Body::array(vec![Some(leaf)]));
     roots.add_global(".HOLDER", holder);
-    heap.collect(&roots, &());
+    heap.collect(&roots);
     assert!(heap.get(leaf).is_some());
 }
 
@@ -56,7 +56,7 @@ fn reference_cycles_are_collected() {
         panic!("a exists")
     };
     obj.body = Body::array(vec![Some(b)]);
-    let stats = heap.collect(&roots, &());
+    let stats = heap.collect(&roots);
     assert_eq!(stats.swept, 2, "a cycle with no root must not survive");
 }
 
@@ -68,7 +68,7 @@ fn swept_slots_are_reused_by_the_next_allocation() {
         bytes: Bytes::from_slice(b"x"),
         num: None,
     });
-    heap.collect(&roots, &());
+    heap.collect(&roots);
     let reused = heap.alloc(Body::Text {
         bytes: Bytes::from_slice(b"y"),
         num: None,
@@ -89,7 +89,7 @@ fn a_handle_to_a_swept_object_does_not_alias_the_slots_next_occupant() {
         bytes: Bytes::from_slice(b"x"),
         num: None,
     });
-    heap.collect(&roots, &());
+    heap.collect(&roots);
     let reused = heap.alloc(Body::Text {
         bytes: Bytes::from_slice(b"y"),
         num: None,
@@ -129,7 +129,7 @@ fn a_stems_tails_and_default_are_traced() {
         },
     );
     roots.add_global("a.", stem);
-    heap.collect(&roots, &());
+    heap.collect(&roots);
     assert!(heap.get(tail).is_some(), "a live tail was swept");
     assert!(heap.get(default).is_some(), "the stem default was swept");
 }
@@ -144,10 +144,10 @@ fn slot_frames_keep_locals_alive_and_release_them_on_pop() {
         num: None,
     });
     roots.set_frame_slot(frame, 0, v);
-    heap.collect(&roots, &());
+    heap.collect(&roots);
     assert!(heap.get(v).is_some(), "a live local was swept");
     roots.pop_slots(frame);
-    let stats = heap.collect(&roots, &());
+    let stats = heap.collect(&roots);
     assert_eq!(stats.swept, 1, "the local outlived its frame");
 }
 
@@ -279,13 +279,13 @@ fn a_cleared_slot_stops_being_a_root() {
     });
     roots.set_frame_slot(frame, 0, v);
 
-    let stats = heap.collect(&roots, &());
+    let stats = heap.collect(&roots);
     assert_eq!(stats.swept, 0, "a slot still holding the value is a root");
     assert!(heap.get(v).is_some());
 
     roots.clear_frame_slot(frame, 0);
 
-    let stats = heap.collect(&roots, &());
+    let stats = heap.collect(&roots);
     assert_eq!(stats.swept, 1, "a cleared slot must stop rooting its value");
     assert!(
         heap.get(v).is_none(),
