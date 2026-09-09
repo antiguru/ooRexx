@@ -1189,6 +1189,7 @@ const SUBSET_FILES: &[&str] = &[
     "phase-5b.txt",
     "phase-5c.txt",
     "phase-5d.txt",
+    "phase-5j.txt",
 ];
 
 fn corpus_dir() -> PathBuf {

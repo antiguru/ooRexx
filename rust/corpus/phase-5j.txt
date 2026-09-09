@@ -1,0 +1,24 @@
+# Phase 5j corpus subset -- class lifetime. The union with the earlier
+# phase-*.txt files is what the harnesses read, not this file alone.
+#
+# One path per line, relative to this directory (rust/corpus/). Lines starting
+# with # are comments; blank lines are ignored. Same format as the earlier
+# phase files, and read by the same `read_subset`.
+#
+# Written when 5j closed. While its rows were landing these four lived in
+# corpus/unfiled.txt, because a committed phase-<id>.txt obliges
+# gate_tables::CLOSED_PHASES to name that phase for any table row it owns.
+
+# Task 1: a WeakReference to a live class answers the class, for one made at
+# run time and one a ::CLASS directive installed. The ordinary-object line is
+# the control that says the defect was about class identities.
+lang/weakref_class.rex
+
+# Task 4: a class nothing refers to is collected and leaves its superclass's
+# ~subclasses; a live instance is what keeps it, and only the instance.
+lang/class_collected.rex
+lang/class_pinned_by_instance.rex
+
+# Task 4: a class-side UNINIT runs at the collection that reaches the class,
+# not at termination. This was a licensed divergence until 5j withdrew it.
+lang/class_uninit_gc.rex

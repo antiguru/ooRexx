@@ -690,6 +690,7 @@ const SUBSET_FILES: &[&str] = &[
     "phase-5b.txt",
     "phase-5c.txt",
     "phase-5d.txt",
+    "phase-5j.txt",
 ];
 
 /// The phase subset files that exist in the corpus directory, sorted.

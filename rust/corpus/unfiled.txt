@@ -17,12 +17,3 @@
 # An entry here is a debt, not a category: it says the differential does not
 # compare that program against the oracle.
 
-
-# Phase 5j Task 1's witness. Asserted against the oracle-measured bytes by
-# tests/class_weak_reference.rs, not by the differential: it lands here
-# rather than in a phase subset file because a committed phase-5j.txt would
-# oblige CLOSED_PHASES to name 5j, which cannot happen until 5j closes.
-lang/weakref_class.rex	Phase 5j Task 1; asserted by tests/class_weak_reference.rs until phase-5j.txt exists at close
-lang/class_uninit_gc.rex	Phase 5j Task 4; asserted by tests/class_lifetime.rs until phase-5j.txt exists at close
-lang/class_collected.rex	Phase 5j Task 4; asserted by tests/class_lifetime.rs until phase-5j.txt exists at close
-lang/class_pinned_by_instance.rex	Phase 5j Task 4; asserted by tests/class_lifetime.rs until phase-5j.txt exists at close

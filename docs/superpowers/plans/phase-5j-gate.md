@@ -1,7 +1,8 @@
 # Phase 5j gate — class lifetime
 
 **Spec:** `docs/superpowers/specs/2026-09-09-phase-5j-class-lifetime.md`, criteria in its §7.
-**Assessed 2026-09-09.** Toolchain `rustc 1.98.1 (48a229cea 2026-09-01)`, recorded because the
+**Assessed 2026-09-09.** Gated at the commit named in this repository's log for the message
+*"Close Phase 5j: file the witnesses into the differential"*. Toolchain `rustc 1.98.1 (48a229cea 2026-09-01)`, recorded because the
 machine moved from 1.98.0 to 1.98.1 during the phase and one gate run that spanned the change was
 discarded rather than read.
 
@@ -30,9 +31,18 @@ Oracle under the standard wrapper from a fresh empty directory; crate via `rexx-
 | `corpus/lang/weakref_class.rex` | `live class: TEMPC` / `live object: an Object` / `declared: DECL` |
 
 All four are committed programs asserted by `tests/class_lifetime.rs` and
-`tests/class_weak_reference.rs`, named in `corpus/unfiled.txt` until `corpus/phase-5j.txt` can
-exist — which it cannot before this phase closes, because `gate_table_d.rs` makes a committed
-`phase-<id>.txt` oblige `CLOSED_PHASES` to name that phase.
+`tests/class_weak_reference.rs` against the bytes recorded above, **and filed in
+`corpus/phase-5j.txt` at the close**, which puts them in the differential — so they are compared
+against the live oracle by `no_row_started_diverging_or_stopped_answering` on every run, not only
+against a transcript. They lived in `corpus/unfiled.txt` while the phase's rows were landing,
+because a committed `phase-<id>.txt` obliges `gate_tables::CLOSED_PHASES` to name that phase for any
+table row it owns.
+
+Filing them found five separate copies of the phase-file list — in `corpus.rs`, `collect_stress.rs`,
+`coverage.rs`, `ir_dual.rs` and `trace_oracle.rs` — each with its own guard asserting it reads every
+`phase-*.txt` on disk. Three of the five reddened, which is those guards doing exactly what they
+exist for: a phase file nobody reads is a phase whose programs are never run and whose absence
+keeps the headline green.
 
 ## 3. A negative control for each mechanism, prediction written first
 

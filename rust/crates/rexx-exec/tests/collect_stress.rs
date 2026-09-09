@@ -142,6 +142,7 @@ const SUBSET_FILES: &[&str] = &[
     "phase-5b.txt",
     "phase-5c.txt",
     "phase-5d.txt",
+    "phase-5j.txt",
 ];
 
 /// **Thirty-six programs left this set in Phase 5j, and none joined it.**
