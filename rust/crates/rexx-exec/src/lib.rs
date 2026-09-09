@@ -3264,7 +3264,7 @@ struct Interp {
     /// Measured, oracle rc 0: a required file's `::class Array public` makes
     /// `say .Array` print `The ARRAY class`, so an import shadows
     /// `.environment`.
-    merged_public_classes: HashMap<ProgramId, HashMap<Box<[u8]>, ObjRef>>,
+    merged_public_classes: NameMap<ProgramId, NameMap<Box<[u8]>, ObjRef>>,
     /// The packages a program's `::REQUIRES ... NAMESPACE` directives
     /// registered, under the upcased qualifier -- `PackageClass::addNamespace`
     /// (`classes/PackageClass.cpp:2152`), whose key is `name->upper()`.
@@ -3332,7 +3332,7 @@ struct Interp {
     /// Per program rather than global, because that is what makes the first
     /// step of the order mean anything: two packages may each declare a class
     /// of one name.
-    package_classes: HashMap<ProgramId, HashMap<Box<[u8]>, ObjRef>>,
+    package_classes: NameMap<ProgramId, NameMap<Box<[u8]>, ObjRef>>,
     /// The subset of [`package_classes`] a `::CLASS ... PUBLIC` directive or
     /// `~addPublicClass` filed -- the oracle's `installedPublicClasses`,
     /// which is a second table beside `installedClasses` and not a flag on
@@ -3340,7 +3340,7 @@ struct Interp {
     /// `~publicClasses` is what reads it.
     ///
     /// [`package_classes`]: Interp::package_classes
-    package_public_classes: HashMap<ProgramId, HashMap<Box<[u8]>, ObjRef>>,
+    package_public_classes: NameMap<ProgramId, NameMap<Box<[u8]>, ObjRef>>,
     /// Which program's `::CLASS` directive created a class -- the other
     /// direction of [`package_classes`], which `~package` reads.
     ///
@@ -4703,14 +4703,14 @@ impl Interp {
             routines: HashMap::new(),
             package_public_routines: HashMap::new(),
             merged_public_routines: HashMap::new(),
-            merged_public_classes: HashMap::new(),
+            merged_public_classes: NameMap::default(),
             package_namespaces: HashMap::new(),
             package_locals: HashMap::new(),
             object_model: None,
             class_variables: HashMap::new(),
             environment: None,
-            package_classes: HashMap::new(),
-            package_public_classes: HashMap::new(),
+            package_classes: NameMap::default(),
+            package_public_classes: NameMap::default(),
             class_packages: HashMap::new(),
             empty_arguments: Rc::from(&[][..]),
             package_objects: HashMap::new(),

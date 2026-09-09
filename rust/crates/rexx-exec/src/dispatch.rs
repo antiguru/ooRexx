@@ -92,13 +92,12 @@
 //! that reason: `Cleared` is private to this module, so a function that takes
 //! one has to live here.
 
-use std::collections::HashMap;
 use std::rc::Rc;
 
 use rexx_classes::{ClassKind, ClassRegistry, InheritRefusal, MethodId, MethodSlot};
 use rexx_core::{
-    BehaviourHandle, BehaviourId, Body, BufferState, Decoded, ObjRef, Object, ObjectMethod,
-    ObjectMethods,
+    BehaviourHandle, BehaviourId, Body, BufferState, Decoded, NameMap, ObjRef, Object,
+    ObjectMethod, ObjectMethods,
 };
 use rexx_parse::{Access, Expr, Operator};
 
@@ -1191,7 +1190,7 @@ pub(crate) const ACTIVATE: &[u8] = b"ACTIVATE";
 /// every name and implement none.
 pub(crate) struct ObjectModel {
     classes: ClassRegistry,
-    natives: HashMap<MethodId, NativeEntry>,
+    natives: NameMap<MethodId, NativeEntry>,
     /// The classes a value this crate builds answers to, and `.Class`,
     /// resolved once at bootstrap. These are handles into `classes` and not a
     /// second model of it, and holding them buys two things: a send does not
@@ -1273,7 +1272,7 @@ impl ObjectModel {
         classes: rexx_classes::ClassRegistry,
         extra: &[(&str, &str, Arity, NativeMethod)],
     ) -> ObjectModel {
-        let mut natives = HashMap::new();
+        let mut natives = NameMap::default();
         for (class_id, method_name, arity, run) in NATIVE_METHODS
             .iter()
             .chain(string::NATIVE_METHODS)

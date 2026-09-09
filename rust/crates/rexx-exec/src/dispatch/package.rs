@@ -1146,7 +1146,7 @@ fn package_new(
 }
 
 /// Every (key, value) of one of `Interp`'s per-program tables, owned.
-fn cloned<K: Clone, V: Copy>(held: Option<&HashMap<K, V>>) -> Vec<(K, V)> {
+fn cloned<K: Clone, V: Copy, S>(held: Option<&std::collections::HashMap<K, V, S>>) -> Vec<(K, V)> {
     held.into_iter()
         .flatten()
         .map(|(key, value)| (key.clone(), *value))
