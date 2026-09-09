@@ -3629,28 +3629,35 @@ struct Interp {
     /// oracle's `isSpecial()` set, which is what `RexxObject::messageSend`
     /// consults before it runs anything.
     ///
-    /// **A row only for a method that is special**, which is what lets an
-    /// ordinary send skip the search: `dispatch::Interp::access_scope_of`
-    /// tests for emptiness first, so a program declaring no `PRIVATE`,
-    /// `PACKAGE` or `PROTECTED` method costs a load and a branch per send.
+    /// **Indexed by [`MethodId`]'s own number**, `None` at every method with
+    /// no access scope of its own. The id is a mint counter from
+    /// `ClassRegistry::add_instance_method` and its class-side twin, so it is
+    /// already an index and needs neither a hash nor an order.
     ///
-    /// **Sorted, and searched rather than hashed, because the send path pays
-    /// for it twice.** Measured, `instructions:u`, one build, a program whose
-    /// loop is `.K~outer` over a body doing `self~m`: with the rows in a
-    /// `HashMap` keyed on [`rexx_classes::MethodId`] the pass costs 580
-    /// instructions more as soon as any method in the file is special, and
-    /// the file whose special method neither send resolves to pays the same
-    /// 580 -- the whole of it is the default hasher rather than the check it
-    /// guards. Sorted, the same pair of programs is 23 apart.
+    /// **This table has now been all three shapes, each measured.** Hashed on
+    /// `MethodId` with the default hasher, a program whose loop is `.K~outer`
+    /// over a body doing `self~m` cost 580 `instructions:u` more as soon as
+    /// any method in the file was special -- the whole of it the hasher
+    /// rather than the check it guarded. Sorted and binary-searched, the same
+    /// pair of programs was 23 apart, which is why it was sorted for a while.
+    /// Indexed, the search disappears: it had grown to **15.2% of
+    /// `alloc.rex`** -- 4.3% in `binary_search_by` and the rest in the
+    /// `select_unpredictable` and `get_unchecked` it inlines, a branch the
+    /// predictor cannot learn -- and removing it took that program's retired
+    /// instructions down 8.4%.
     ///
-    /// The sort is an invariant of the push and not a step:
-    /// `ClassRegistry::add_instance_method` and its class-side twin mint from
-    /// one counter that only increments, so appending in mint order appends
-    /// in key order. [`Interp::record_access_scope`] asserts that of the push
-    /// it is making; what catches an order broken some other way is
-    /// `dispatch::Interp::access_scope_of` checking its own answer against a
-    /// scan of the same rows.
-    special_methods: Vec<(MethodId, dispatch::AccessScope)>,
+    /// **The emptiness test the sorted shape carried was measuring the wrong
+    /// program.** It let "an ordinary send skip the search" for a program
+    /// declaring no `PRIVATE`, `PACKAGE` or `PROTECTED` method, and no such
+    /// program exists in practice: the shipped `.orx` library declares them,
+    /// so every program carries rows and every send paid the search. The
+    /// indexed shape needs no guard -- a bounds check and a load answer
+    /// whether there is a row at all.
+    ///
+    /// Nothing here checks its own answer against a scan any more, and that
+    /// is not an omission: the assertion that used to stand here guarded a
+    /// broken sort order, and this shape has no order to break.
+    special_methods: Vec<Option<dispatch::AccessScope>>,
     /// The output sink. `SAY` writes here and `Outcome::stdout` is what it
     /// becomes.
     out: Vec<u8>,
@@ -7115,26 +7122,37 @@ impl Interp {
             }
             ExecutableSource::Native => plan::Package::Rexx,
         };
-        // Inserted at the search's own insertion point rather than pushed,
-        // because `Interp::access_scope_of` binary-searches these rows and a
-        // send that misses reports a `PRIVATE` method as an ordinary one.
-        match self
-            .special_methods
-            .binary_search_by_key(&method.0, |&(key, _)| key.0)
-        {
-            Ok(at) => self.special_methods[at].1.access = Access::Private,
-            Err(at) => self.special_methods.insert(
-                at,
-                (
-                    method,
-                    dispatch::AccessScope {
-                        access: Access::Private,
-                        protected: false,
-                        package,
-                    },
-                ),
-            ),
+        let row = self.special_method_row(method);
+        match row {
+            Some(existing) => existing.access = Access::Private,
+            None => {
+                *self.special_method_row_mut(method) = Some(dispatch::AccessScope {
+                    access: Access::Private,
+                    protected: false,
+                    package,
+                });
+            }
         }
+    }
+
+    /// The access-scope row `method` already has, if it has one.
+    pub(crate) fn special_method_row(
+        &mut self,
+        method: MethodId,
+    ) -> Option<&mut dispatch::AccessScope> {
+        self.special_methods.get_mut(method.0 as usize)?.as_mut()
+    }
+
+    /// The slot `method`'s row lives in, growing the table to reach it.
+    pub(crate) fn special_method_row_mut(
+        &mut self,
+        method: MethodId,
+    ) -> &mut Option<dispatch::AccessScope> {
+        let index = method.0 as usize;
+        if index >= self.special_methods.len() {
+            self.special_methods.resize(index + 1, None);
+        }
+        &mut self.special_methods[index]
     }
 
     /// One `::ROUTINE` run over the arguments given, for `Routine~call` and
@@ -7199,21 +7217,11 @@ impl Interp {
         if !protected && !scoped {
             return;
         }
-        debug_assert!(
-            self.special_methods
-                .last()
-                .is_none_or(|&(last, _)| last.0 < method.0),
-            "the access scopes are appended in mint order and searched in key order, \
-             so a push that is not past the last key loses a row"
-        );
-        self.special_methods.push((
-            method,
-            dispatch::AccessScope {
-                access,
-                protected,
-                package: Package::Program(program),
-            },
-        ));
+        *self.special_method_row_mut(method) = Some(dispatch::AccessScope {
+            access,
+            protected,
+            package: Package::Program(program),
+        });
     }
 
     /// Evaluates a `::CONSTANT` directive's parenthesised expression in the

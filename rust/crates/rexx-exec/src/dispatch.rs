@@ -1807,31 +1807,20 @@ impl Interp {
     /// **The natives are recorded here rather than at their `NATIVE_METHODS`
     /// row** because the identity a row is filed under is the registry's
     /// mint, and only the registry that minted it knows which rows came from
-    /// an `AddPrivateMethod`. Every identity minted afterwards is higher,
-    /// which is what lets [`Interp::record_access_scope`] keep appending in
-    /// mint order.
+    /// an `AddPrivateMethod`.
     pub(crate) fn install_object_model(&mut self, model: ObjectModel) {
         debug_assert!(
             self.special_methods.is_empty(),
             "the natives' access scopes are the first rows filed, so nothing may have filed one \
              before the model that mints them exists"
         );
-        self.special_methods.extend(
-            model
-                .classes
-                .private_native_methods()
-                .iter()
-                .map(|&method| {
-                    (
-                        method,
-                        AccessScope {
-                            access: Access::Private,
-                            protected: false,
-                            package: Package::Rexx,
-                        },
-                    )
-                }),
-        );
+        for &method in model.classes.private_native_methods() {
+            *self.special_method_row_mut(method) = Some(AccessScope {
+                access: Access::Private,
+                protected: false,
+                package: Package::Rexx,
+            });
+        }
         self.object_model = Some(model);
     }
 
@@ -2252,20 +2241,25 @@ impl Interp {
         // Borrowed rather than owned wherever the name is UTF-8, which every
         // name a program can write is: `from_utf8_lossy` allocates only for
         // the bytes it has to replace.
-        let name = String::from_utf8_lossy(name);
+        // `from_utf8` rather than `from_utf8_lossy`: both scan, but this one
+        // has the word-at-a-time ASCII fast path and returns a borrow with no
+        // `Cow`. A name that is not UTF-8 answers `None` here, which is the
+        // same miss the lossy form reached by building a name with
+        // replacement characters that no dictionary holds.
+        let name = std::str::from_utf8(name).ok()?;
         let (scope, method) = match (behaviour, start_scope) {
             (Behaviour::Instance { methods, .. }, None) => {
-                self.classes().lookup_at(methods, &name)?
+                self.classes().lookup_at(methods, name)?
             }
             (Behaviour::Instance { methods, .. }, Some(start)) => {
-                self.classes().lookup_from_scope_at(methods, &name, start)?
+                self.classes().lookup_from_scope_at(methods, name, start)?
             }
             (Behaviour::ClassSide(class), None) => {
-                self.classes().lookup_class_method(class, &name)?
+                self.classes().lookup_class_method(class, name)?
             }
             (Behaviour::ClassSide(class), Some(start)) => self
                 .classes()
-                .lookup_class_method_from_scope(class, &name, start)?,
+                .lookup_class_method_from_scope(class, name, start)?,
         };
         Some(Resolution { scope, method })
     }
@@ -2437,30 +2431,14 @@ impl Interp {
     /// [`Interp::special_methods`] carries why the rows are searched rather
     /// than hashed, with the measurement.
     fn access_scope_of(&self, method: MethodId) -> Option<AccessScope> {
-        if self.special_methods.is_empty() {
-            return None;
-        }
-        // Ordered on the identity's own `u32`, which `MethodId` does not
-        // itself expose an `Ord` for: the ordering is this crate's internal
-        // use of a mint counter and not a property `rexx-classes` publishes.
-        let found = self
-            .special_methods
-            .binary_search_by_key(&method.0, |&(key, _)| key.0)
-            .ok()
-            .map(|at| self.special_methods[at].1);
-        // **Checked against a scan of the same rows**, because the failure
-        // mode of a broken order is silence: a search that misses reports a
-        // `PRIVATE` method as an ordinary one, and the send it should have
-        // refused is answered instead.
-        debug_assert_eq!(
-            found,
-            self.special_methods
-                .iter()
-                .find(|&&(key, _)| key == method)
-                .map(|&(_, scope)| scope),
-            "the search over the access scopes disagrees with a scan of the same rows"
-        );
-        found
+        // One bounds check and one load. The table is indexed by the id, so
+        // there is no order to get wrong and no search to check against a
+        // scan -- the assertion that used to stand here guarded a failure mode
+        // this shape does not have.
+        self.special_methods
+            .get(method.0 as usize)
+            .copied()
+            .flatten()
     }
 
     /// `MethodClass::isProtected` (`classes/MethodClass.hpp:116`), asked by
