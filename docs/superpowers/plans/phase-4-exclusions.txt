@@ -1055,6 +1055,15 @@ DEVIATIONS -- permanent, chosen
   6. A DRIVEN COLLECTION HERE REACHES A JUST-ALLOCATED OBJECT THE ORACLE'S
      CANNOT, SO AN INSTANCE'S UNINIT CAN RUN A CLAUSE EARLIER.
 
+     SCOPE WIDENED 2026-09-09 BY PHASE 5j. The same cause is visible through
+     two observables this row does not name, now that a class object is
+     collected like any other: a `~subclasses` count, and a `WeakReference`.
+     With no clause between `c = .Object~subclass('E3')` and `drop c`, the
+     oracle answers a delta of 1 and this crate 0, after TWO forced
+     collections, so it is not a one-cycle lag; inserting one `say` between
+     them makes both answer 0. Measured ten runs a side, stable. See
+     `docs/superpowers/records/2026-09-09-phase-5j-class-lifetime/task-6-and-eager-collection.md`.
+
      NOT IMPLEMENTED BY ANYTHING. This row records a hold this crate declines
      to build. Found by Phase 5b Task 5, measured by Task 6, and LICENSED BY
      MORITZ, 2026-09-01, whose ruling was to license it and not to build the

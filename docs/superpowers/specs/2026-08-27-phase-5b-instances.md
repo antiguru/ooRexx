@@ -1018,6 +1018,21 @@ their count as its own progress measure is measuring 5c.
 
   **When**: after Phase 5i closes and before any new work starts.
 
+  **RESOLVED 2026-09-09 BY PHASE 5j.** Built-in classes keep a static lifetime by being allocated
+  immortal; every other class is an ordinary arena object and is collected like one. D59, D59a and
+  D60 are closed by that phase, whose spec is
+  `docs/superpowers/specs/2026-09-09-phase-5j-class-lifetime.md` and whose gate is
+  `docs/superpowers/plans/phase-5j-gate.md`.
+
+  Two of D59a's four consequences are fixed with committed witnesses, one was never reproduced --
+  the measured defect was its inverse, a `WeakReference` to a *live* class reading `.NIL` -- and the
+  fourth, growth, is no longer a leak: 196,186 of 200,000 classes collected without forcing, and
+  with collection driven the resident set is below the oracle's. The residual there is the
+  collection trigger rather than class lifetime, and the gate document says so.
+
+  **D59's measurements below stay, and its decision does not.** Nothing may cite it as licensing
+  anything from 2026-09-08, and nothing may cite it as describing the tree from 2026-09-09.
+
 * **D59. Class objects are not collected.** Class identities stay outside the arena, the registry
   stays monotone, and `Interp::class_variables` stays a permanent root -- so what a class-scope
   instance variable holds is permanently live too. Measured cost and measured benefit above. This is

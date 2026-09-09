@@ -1,0 +1,107 @@
+# Every Interp field that holds an ObjRef, and whether object_roots hands it to
+# the collector. Derived, not written by hand:
+#
+#   cd rust && python3 ../docs/superpowers/records/2026-09-09-phase-5j-class-lifetime/derive-holders.py
+#
+# The script reads the struct's own field declarations and object_roots' own
+# destructure, so it cannot drift from either. A field bound `_` is not handed
+# over; object_roots' comment beside it says by what other route its objects
+# are reachable.
+#
+field	holds_objref	handed_to_collector
+heap	no	no
+roots	no	no
+key_buffer	no	no
+value_buffer	yes	no
+parse_buffers	no	no
+text_scratch	no	no
+text_numbers	no	no
+result_buffer	no	no
+running	no	yes
+trace_cache	no	no
+suspended	no	yes
+spare_activations	no	no
+next_activation_id	no	no
+next_invocation	no	no
+programs	no	no
+package_options	no	no
+plans	no	no
+engine	no	no
+deadline	no	no
+clause_countdown	no	no
+chunks	no	no
+chunks_refused	no	no
+deferred	no	no
+routines	no	no
+package_public_routines	no	no
+merged_public_routines	no	no
+merged_public_classes	yes	yes
+package_namespaces	no	no
+package_locals	yes	no
+object_model	no	no
+environment	no	no
+class_variables	yes	no
+package_classes	yes	yes
+package_public_classes	yes	yes
+class_packages	yes	no
+empty_arguments	yes	no
+package_objects	yes	no
+program_routine_objects	yes	no
+package_tables	yes	no
+routine_objects	yes	no
+package_imports	no	no
+constant_values	yes	no
+annotations	yes	no
+compiled_methods	no	no
+method_objects	yes	no
+method_bodies	no	no
+library_bootstrap	no	no
+collections_before_program	no	no
+library_programs	no	no
+compiled_method_names	no	no
+object_methods	no	no
+table_method_bodies	yes	no
+executable_sources	yes	no
+method_flag_writes	yes	no
+message_outcomes	yes	no
+generated_methods	no	no
+native_externals	no	no
+special_methods	no	no
+out	no	no
+trace	no	no
+clause_state	no	no
+flat_loops	no	no
+flat_top	no	no
+frames	no	no
+flat_spares	no	no
+pending_traps	no	no
+active_condition	no	no
+current_case_text	no	no
+indent_offset	no	no
+activation_indent	no	no
+failure_site	no	no
+failure_sites	no	no
+clause_line_override	no	no
+fragment_depth	no	no
+stress_collect	no	no
+uninit_ready	yes	no
+processing_uninits	no	no
+collect_at	no	no
+depth	no	no
+max_depth	no	no
+stack_entry	no	no
+stack_first	no	no
+stack_deepest	no	no
+procedure_permitted	no	no
+call_context	no	no
+queue	no	no
+input	no	no
+random_seed	no	no
+elapsed_anchor	no	no
+pending_elapsed_reset	no	no
+reqstr_armed	no	no
+lostdigits_armed	no	no
+program_path	no	no
+required_paths	no	no
+required_packages	no	no
+requires_installing	no	no

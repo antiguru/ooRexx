@@ -417,17 +417,29 @@ impl ClassGraph {
     /// to this type is a compile error here until someone decides whether a
     /// collected class leaves anything in it.
     ///
-    /// `behaviours` is not compacted: a behaviour is named by index and the
-    /// indices of the survivors would move. The entry is left in place, which
-    /// costs the width of one dictionary per collected class and keeps every
-    /// live [`crate::BehaviourHandle`] valid.
+    /// `behaviours` is not compacted, because a behaviour is named by its
+    /// index and compacting would move every later one. The two entries a dead
+    /// class owned are emptied instead, which is where the weight is; the slots
+    /// themselves stay, so every live [`crate::BehaviourHandle`] remains valid.
+    ///
+    /// Emptying is safe because nothing live names them: an instance traces its
+    /// class, so a class with a live instance is never in `dead`.
     pub fn expunge(&mut self, dead: &[ObjRef]) {
         let ClassGraph {
             classes,
-            behaviours: _,
+            behaviours,
             uninit_classes,
         } = self;
         for class in dead {
+            // The dictionaries are the weight: a flattened behaviour holds
+            // every method the class answers, inherited ones included.
+            // Emptied rather than removed, because a behaviour is named by
+            // its index and removing one would move every later index.
+            if let Some(def) = classes.get(class) {
+                for handle in [def.instance_behaviour, def.class_behaviour] {
+                    behaviours[handle.index()].dict.clear();
+                }
+            }
             classes.remove(class);
             uninit_classes.retain(|held| held != class);
         }
