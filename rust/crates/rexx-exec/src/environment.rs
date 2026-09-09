@@ -1504,8 +1504,7 @@ impl Interp {
             unreachable!("allocated as Body::Native by native_instance")
         };
         native.set_scope(scope);
-        self.roots
-            .add_global(&method_object_root_key(class, name), object);
+        self.class_owns(class, object);
         self.method_objects.insert(key, object);
         // The dictionary entry the caller found, which is what its
         // annotations are keyed by: this class, the instance side, this name.
@@ -1720,8 +1719,7 @@ impl Interp {
     /// Make [`Interp::method_object`] answer `object` for this dictionary
     /// entry, and root it the way one this crate built is rooted.
     fn hold_method_object(&mut self, class: ObjRef, name: &[u8], object: ObjRef) {
-        self.roots
-            .add_global(&method_object_root_key(class, name), object);
+        self.class_owns(class, object);
         self.method_objects.insert((class, name.into()), object);
     }
 
@@ -1763,9 +1761,17 @@ impl Interp {
         if let Some(found) = self.annotations.get(&site).copied() {
             return found;
         }
-        let class = self.environment_model().string_table;
-        let table = self.native_instance(class);
-        self.roots.add_global(&annotation_root_key(&site), table);
+        let string_table = self.environment_model().string_table;
+        let table = self.native_instance(string_table);
+        // A class-owned site is held by its class, so the table dies with it.
+        // Every other site belongs to a package or a program, which outlive
+        // the run, and those keep the global root.
+        match site {
+            Annotated::Class(owner) | Annotated::Member(owner, _, _) => {
+                self.class_owns(owner, table);
+            }
+            _ => self.roots.add_global(&annotation_root_key(&site), table),
+        }
         self.annotations.insert(site, table);
         table
     }
@@ -2109,16 +2115,6 @@ fn package_root_key(package: Package) -> String {
 /// `Routine` object is held under.
 fn program_routine_root_key(program: ProgramId) -> String {
     format!("the main routine of the program {}", program.0)
-}
-
-/// The [`rexx_core::RootSet::add_global`] key one `Method` object is held
-/// under.
-fn method_object_root_key(class: ObjRef, name: &[u8]) -> String {
-    format!(
-        "the instance method {} of the class at {}",
-        String::from_utf8_lossy(name),
-        class.bits()
-    )
 }
 
 /// The [`rexx_core::RootSet::add_global`] key one annotation table is held

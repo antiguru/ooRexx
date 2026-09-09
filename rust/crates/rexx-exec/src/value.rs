@@ -590,7 +590,7 @@ impl Interp {
             let Some(object) = self.heap.get(value) else {
                 return self.not_in_arena(value).len();
             };
-            if matches!(object.body, Body::Class) {
+            if matches!(object.body, Body::Class { .. }) {
                 return self.not_in_arena(value).len();
             }
             self.redirect_of(&object.body)
@@ -866,7 +866,7 @@ impl Interp {
             // A class renders its own name rather than anything the value
             // model holds. Since Phase 5j a class resolves like any other
             // object, so this is an arm and no longer rides the `None`.
-            if matches!(object.body, Body::Class) {
+            if matches!(object.body, Body::Class { .. }) {
                 return Cow::Borrowed(self.not_in_arena(value));
             }
             self.redirect_of(&object.body)
@@ -1031,7 +1031,7 @@ impl Interp {
         let Some(object) = self.heap.get(value) else {
             return Some(self.not_in_arena(value));
         };
-        if matches!(object.body, Body::Class) {
+        if matches!(object.body, Body::Class { .. }) {
             return Some(self.not_in_arena(value));
         }
         match &object.body {

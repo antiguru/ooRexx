@@ -89,7 +89,7 @@ fn a_class_is_an_ordinary_arena_object_and_a_freed_one_misses() {
             })
         })
         .collect();
-    let class = heap.alloc(Body::Class);
+    let class = heap.alloc(Body::Class { owned: Vec::new() });
 
     assert!(
         !values.contains(&class),
@@ -98,7 +98,7 @@ fn a_class_is_an_ordinary_arena_object_and_a_freed_one_misses() {
     assert!(
         matches!(
             heap.get(class).map(|object| &object.body),
-            Some(Body::Class)
+            Some(Body::Class { .. })
         ),
         "a class resolves to an object, and its body is what says it is a class"
     );
@@ -106,7 +106,7 @@ fn a_class_is_an_ordinary_arena_object_and_a_freed_one_misses() {
         assert!(
             !matches!(
                 heap.get(*value).map(|object| &object.body),
-                Some(Body::Class)
+                Some(Body::Class { .. })
             ),
             "a value must not read back as a class: {value:?}"
         );

@@ -239,7 +239,15 @@ pub enum Body {
     /// the method dictionaries and the name tables, keyed by this object's own
     /// handle; this crate holds only what the collector has to trace. The
     /// separation is what lets `rexx-classes` stay free of the heap.
-    Class,
+    ///
+    /// `owned` is the arena objects the class keeps alive -- its variable
+    /// pool, the `Method` object of each of its methods, its annotation
+    /// tables. They live here rather than in a root keyed by the class,
+    /// because a root keyed by the class outlives the class: `RootSet` has no
+    /// way to remove a global, so such an object could never be reclaimed.
+    /// The interpreter keeps its own maps for lookup; this is what makes them
+    /// reachable.
+    Class { owned: Vec<ObjRef> },
     /// The object a `>name` term answers: a variable named rather than read.
     ///
     /// **Boxed for [`Body::Native`]'s reason** -- inline it is the widest
@@ -808,9 +816,7 @@ impl Body {
             // Deliberately reaches nothing: a weak reference must not keep
             // its target alive.
             Body::WeakRef(_) => {}
-            // Nothing yet: what a class owns is still held in `Interp`'s own
-            // tables and rooted from there.
-            Body::Class => {}
+            Body::Class { owned } => out.extend(owned.iter().copied()),
             // A cell is rooted by `RootSet::iter`, which is what keeps the
             // referenced value alive; the owning object of an instance
             // variable is not, and the reference is the only handle a

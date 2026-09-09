@@ -7814,7 +7814,8 @@ impl Interp {
             object_model: _,
             // `.environment` and `.local` are globals; the rest are classes.
             environment: _,
-            // Keys are class identities and values are globals.
+            // A lookup index. Both halves are held by the class itself --
+            // the key is the class, the value is in its `owned` list.
             class_variables: _,
             package_classes,
             package_public_classes,
@@ -7833,10 +7834,13 @@ impl Interp {
             package_imports: _,
             // `RootSet::add_global`, under `constant_root_key`.
             constant_values: _,
-            // `RootSet::add_global`, under `annotation_root_key`.
+            // A lookup index. A class-owned site's table is held by that
+            // class; every other site's is a global under
+            // `annotation_root_key`.
             annotations: _,
             compiled_methods: _,
-            // `RootSet::add_global`, under `method_object_root_key`.
+            // A lookup index. The `Method` object is held by the class whose
+            // dictionary entry it answers for.
             method_objects: _,
             method_bodies: _,
             library_bootstrap: _,
@@ -7983,6 +7987,22 @@ impl Interp {
         }
     }
 
+    /// Records that `class` keeps `object` alive.
+    ///
+    /// **The alternative was a global root keyed by the class, and it cannot
+    /// be undone**: `RootSet` has only `add_global`, so such a root outlives
+    /// the class and the object with it. Holding the handle in the class's own
+    /// body means the object is reachable exactly as long as the class is.
+    ///
+    /// Panics if `class` is not a class object, because the caller's object
+    /// would otherwise be left with no root at all.
+    fn class_owns(&mut self, class: ObjRef, object: ObjRef) {
+        match self.heap.get_mut(class).map(|held| &mut held.body) {
+            Some(rexx_core::Body::Class { owned }) => owned.push(object),
+            _ => panic!("class_owns on a handle that is not a live class object"),
+        }
+    }
+
     /// A class object a program made.
     ///
     /// **Immortal, and only until Phase 5j's Task 4.** This task moves a class
@@ -7997,7 +8017,10 @@ impl Interp {
     ///
     /// [`alloc_immortal_with`]: Interp::alloc_immortal_with
     fn mint_class(&mut self) -> ObjRef {
-        self.alloc_immortal_with(rexx_core::BehaviourId::OBJECT, rexx_core::Body::Class)
+        self.alloc_immortal_with(
+            rexx_core::BehaviourId::OBJECT,
+            rexx_core::Body::Class { owned: Vec::new() },
+        )
     }
 
     /// [`alloc_with`], for an object the collector must never take.

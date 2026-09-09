@@ -3197,12 +3197,9 @@ impl Interp {
                 native: None,
             },
         );
-        // Rooted before anything else can allocate, the rule `.environment`
-        // and `.local` are created under. The key is per class and starts with
-        // a period, so it can collide neither with another class's nor with a
-        // Rexx variable name.
-        self.roots
-            .add_global(&format!(".class-variables {receiver:?}"), owner);
+        // Held by the class before anything else can allocate, which is the
+        // rule `.environment` and `.local` are created under.
+        self.class_owns(receiver, owner);
         self.class_variables.insert(receiver, owner);
         Ok(owner)
     }
@@ -4049,7 +4046,7 @@ impl Interp {
         match self.heap.get(value).map(|object| &object.body) {
             // A class object is a primitive with no `makeArray` of its own,
             // so `requestArray` stops at `TheNilObject`.
-            Some(Body::Class) => Conversion::Refused,
+            Some(Body::Class { .. }) => Conversion::Refused,
             // A multi-dimensional array shares `TheNilObject`'s raise rather
             // than converting (`instructions/ForwardInstruction.cpp:189`-
             // `:191`).

@@ -1364,7 +1364,7 @@ impl Interp {
             Decoded::Nil => false,
             Decoded::SmallInt(_) | Decoded::Text(_) => true,
             Decoded::Heap { .. } => match self.heap.get(value).map(|object| &object.body) {
-                Some(Body::Class) => false,
+                Some(Body::Class { .. }) => false,
                 Some(Body::Text { .. }) | Some(Body::Num { .. }) => true,
                 Some(Body::Stem { default: None, .. }) => true,
                 Some(Body::Stem {
@@ -1753,7 +1753,7 @@ impl Interp {
             // `.array = .array` is `1` and `.array = 'The Array class'` is
             // `0`; oracle rc 159, `.array > .array` and `.array + 1` are both
             // `97.1 Object "The Array class" does not understand message`.
-            Body::Class => Some(value),
+            Body::Class { .. } => Some(value),
             Body::Instance { .. } => Some(value),
             Body::Stem {
                 default: Some(default),
@@ -1818,7 +1818,7 @@ impl Interp {
             return None;
         };
         match &self.heap.get(value)?.body {
-            Body::Class => Some("a class object"),
+            Body::Class { .. } => Some("a class object"),
             Body::Native(_) => Some("one of the interpreter's own objects"),
             // An array *does* have a string value -- `ArrayClass::makeString`
             // joins its items -- so concatenation, which never asks here,

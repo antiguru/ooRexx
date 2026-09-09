@@ -1996,7 +1996,7 @@ impl Interp {
                 Some(object) => match &object.body {
                     // The class test folds in here rather than guarding the
                     // arm above: this match already had to fetch the object.
-                    Body::Class => Ok(Primitive::Class(receiver)),
+                    Body::Class { .. } => Ok(Primitive::Class(receiver)),
                     Body::Text { .. } | Body::Num { .. } => Ok(Primitive::String),
                     Body::Stem { .. } => Ok(Primitive::Stem),
                     Body::Array { .. } => Ok(Primitive::Array),

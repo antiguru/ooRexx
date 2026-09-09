@@ -318,7 +318,7 @@ impl Heap {
     /// what it holds is marked with it, and the sweeper skips it by the rule
     /// it already has.
     pub fn mint_class(&mut self) -> ObjRef {
-        self.alloc_immortal(BehaviourId::OBJECT, Body::Class)
+        self.alloc_immortal(BehaviourId::OBJECT, Body::Class { owned: Vec::new() })
     }
 
     pub fn alloc_immortal(&mut self, behaviour: BehaviourId, body: Body) -> ObjRef {
@@ -524,7 +524,10 @@ impl Heap {
     /// rather than a range check. `false` for a handle that resolves to
     /// nothing, which is what a collected class reads as.
     pub fn is_class(&self, r: ObjRef) -> bool {
-        matches!(self.get(r).map(|object| &object.body), Some(Body::Class))
+        matches!(
+            self.get(r).map(|object| &object.body),
+            Some(Body::Class { .. })
+        )
     }
 
     pub fn live_count(&self) -> usize {
