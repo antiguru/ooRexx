@@ -48,11 +48,43 @@ pub struct CollectStats {
     pub pending_uninit: Vec<ObjRef>,
 }
 
+/// The class-shaped edges a [`Heap`] cannot follow on its own.
+///
+/// A class identity names no arena slot, so the heap can mark one but cannot
+/// know what it owns. The interpreter supplies both halves: the objects a live
+/// class keeps alive, and the classes that are roots for the life of the run.
+///
+/// The heap never learns what a class *is* -- it asks for handles and traces
+/// them like any others.
+pub trait ClassEdges {
+    /// Appends the arena objects `class` keeps alive.
+    fn payload(&self, class: ObjRef, out: &mut Vec<ObjRef>);
+
+    /// Appends every class that is a root on every cycle.
+    fn built_ins(&self, out: &mut Vec<ObjRef>);
+}
+
+/// A heap with no classes, which is every caller outside the interpreter.
+impl ClassEdges for () {
+    fn payload(&self, _class: ObjRef, _out: &mut Vec<ObjRef>) {}
+
+    fn built_ins(&self, _out: &mut Vec<ObjRef>) {}
+}
+
 pub struct Heap {
     slots: Vec<Slot>,
     free_head: Option<u32>,
     live: usize,
     marks: Vec<bool>,
+    /// One mark per class identity, indexed by [`ObjRef::class_id`].
+    ///
+    /// **Separate from `marks` because a class names no slot.** A class
+    /// identity is minted out of [`crate::CLASS_SLOT_BASE`]'s reserved range,
+    /// so `resolve` answers `None` for one and it has no row in `marks` to
+    /// set. Phase 5j needs the bit anyway: it is what says a class is still
+    /// reachable, which decides whether a weak reference to it clears and
+    /// whether its registry rows are expunged.
+    class_marks: Vec<bool>,
     /// The slots this heap will never sweep, in allocation order.
     ///
     /// **A root the heap holds itself**, which is what "immortal" means here.
@@ -97,6 +129,7 @@ impl Heap {
             free_head: None,
             live: 0,
             marks: Vec::new(),
+            class_marks: Vec::new(),
             immortal: Vec::new(),
             uninit: Vec::new(),
             collections: 0,
@@ -134,16 +167,21 @@ impl Heap {
     /// `EXIT`'s result outlives the temps frame that rooted it, all the way to
     /// `exit_code_for`, and `Interp::root_exit_value` is the root that spans
     /// it. Its doc comment carries the measurement.
-    pub fn collect(&mut self, roots: &RootSet) -> CollectStats {
+    pub fn collect(&mut self, roots: &RootSet, classes: &dyn ClassEdges) -> CollectStats {
         self.collections += 1;
         self.marks.clear();
         // Resized every time: the heap grows between collections.
         self.marks.resize(self.slots.len(), false);
+        self.class_marks.clear();
 
         // The caller's roots and this heap's own. See the `immortal` field for
         // why an interned constant is a root here rather than a slot range or
         // a flag.
         let mut work: Vec<ObjRef> = roots.iter().chain(self.immortal.iter().copied()).collect();
+        // A class the caller keeps for the life of the run is a root on every
+        // cycle, not a slot the sweep skips: it can hold a method, a class
+        // variable and a subclass entry, and those are ordinary objects.
+        classes.built_ins(&mut work);
         let mut reached = Vec::new();
         // The marked weak references, gathered here rather than by a walk of
         // the arena afterwards. The mark loop visits each marked slot exactly
@@ -154,6 +192,19 @@ impl Heap {
         // be decided here, so the decision waits for the loop to finish.
         let mut weak_marked: Vec<u32> = Vec::new();
         while let Some(r) = work.pop() {
+            if let Some(class) = r.class_id() {
+                let class = class as usize;
+                if class >= self.class_marks.len() {
+                    self.class_marks.resize(class + 1, false);
+                }
+                if std::mem::replace(&mut self.class_marks[class], true) {
+                    continue;
+                }
+                reached.clear();
+                classes.payload(r, &mut reached);
+                work.extend(reached.iter().copied());
+                continue;
+            }
             let Some(slot) = self.resolve(r) else {
                 continue;
             };
@@ -523,6 +574,18 @@ impl Heap {
         }
     }
 
+    /// Whether the last collection reached `class`.
+    ///
+    /// `false` for a handle that is not a class identity, and for a class no
+    /// collection has yet seen -- the vector is grown as classes are marked,
+    /// so an id past its end has never been reached.
+    pub fn class_marked(&self, class: ObjRef) -> bool {
+        class
+            .class_id()
+            .and_then(|id| self.class_marks.get(id as usize).copied())
+            .unwrap_or(false)
+    }
+
     pub fn live_count(&self) -> usize {
         self.live
     }
@@ -584,7 +647,7 @@ mod retire_tests {
             *generation = GENERATION_MAX;
         }
         let stale = ObjRef::heap(slot, GENERATION_MAX);
-        heap.collect(&roots);
+        heap.collect(&roots, &());
         let next = heap.alloc(Body::Text {
             bytes: Bytes::from_slice(b"new"),
             num: None,
@@ -596,5 +659,108 @@ mod retire_tests {
         );
         assert!(heap.get(stale).is_none(), "the stale handle still misses");
         assert!(heap.get(next).is_some());
+    }
+}
+
+#[cfg(test)]
+mod class_mark_tests {
+    //! A class identity names no slot, so `marks` has no row for one and the
+    //! mark has to be its own store. These exercise the store and the edges
+    //! the heap cannot follow on its own.
+    use super::*;
+    use crate::bytes::Bytes;
+    use crate::{BehaviourHandle, RootSet, ScopePools};
+
+    /// Class edges over a fixed table, for the two tests below.
+    struct Edges {
+        payload: Vec<(ObjRef, ObjRef)>,
+        built_ins: Vec<ObjRef>,
+    }
+
+    impl ClassEdges for Edges {
+        fn payload(&self, class: ObjRef, out: &mut Vec<ObjRef>) {
+            out.extend(
+                self.payload
+                    .iter()
+                    .filter(|(owner, _)| *owner == class)
+                    .map(|(_, object)| *object),
+            );
+        }
+
+        fn built_ins(&self, out: &mut Vec<ObjRef>) {
+            out.extend_from_slice(&self.built_ins);
+        }
+    }
+
+    #[test]
+    fn a_class_a_root_reaches_is_marked_and_one_nothing_reaches_is_not() {
+        let mut heap = Heap::new();
+        let mut roots = RootSet::new();
+        let reached = ObjRef::class(3).expect("in range");
+        let unreached = ObjRef::class(7).expect("in range");
+        let holder = heap.alloc(Body::Instance {
+            class: reached,
+            behaviour: BehaviourHandle::new(0),
+            name: None,
+            pools: ScopePools::new(),
+            own: None,
+            native: None,
+        });
+        roots.add_global("holder", holder);
+        heap.collect(
+            &roots,
+            &Edges {
+                payload: Vec::new(),
+                built_ins: Vec::new(),
+            },
+        );
+        assert!(heap.class_marked(reached), "an instance names its class");
+        assert!(!heap.class_marked(unreached));
+        assert!(!heap.class_marked(holder), "not a class identity");
+    }
+
+    #[test]
+    fn a_marked_class_keeps_its_payload_and_a_built_in_is_a_root() {
+        let mut heap = Heap::new();
+        let mut roots = RootSet::new();
+        let reached = ObjRef::class(3).expect("in range");
+        let built_in = ObjRef::class(4).expect("in range");
+        let text = |heap: &mut Heap, bytes: &[u8]| {
+            heap.alloc(Body::Text {
+                bytes: Bytes::from_slice(bytes),
+                num: None,
+            })
+        };
+        let owned = text(&mut heap, b"owned by the reached class");
+        let built_in_owned = text(&mut heap, b"owned by the built-in class");
+        let orphan = text(&mut heap, b"owned by nothing at all");
+        let holder = heap.alloc(Body::Instance {
+            class: reached,
+            behaviour: BehaviourHandle::new(0),
+            name: None,
+            pools: ScopePools::new(),
+            own: None,
+            native: None,
+        });
+        roots.add_global("holder", holder);
+        heap.collect(
+            &roots,
+            &Edges {
+                payload: vec![(reached, owned), (built_in, built_in_owned)],
+                built_ins: vec![built_in],
+            },
+        );
+        assert!(
+            heap.get(owned).is_some(),
+            "a marked class keeps its payload"
+        );
+        assert!(
+            heap.get(built_in_owned).is_some(),
+            "a built-in is a root, so its payload survives with it"
+        );
+        assert!(
+            heap.get(orphan).is_none(),
+            "the sweep still takes what nothing reaches, or this proves nothing"
+        );
     }
 }

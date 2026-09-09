@@ -4357,6 +4357,14 @@ struct Interp {
     /// A required name that resolves to one of these is 98.952 rather than a
     /// second load.
     requires_installing: Vec<Box<str>>,
+    /// The classes that are a collector root for the whole run -- every class
+    /// carrying `rexx_defined`, captured when the library bootstrap closes.
+    ///
+    /// **Captured once rather than enumerated per collection**, because the
+    /// registry holds classes in a `HashMap` and `native_classes::build` says
+    /// why a loop whose order is a map's is a loop that can come to matter.
+    /// Marking is order-insensitive, so the vector's own order is not one.
+    static_classes: Vec<ObjRef>,
 }
 
 /// Where one installed `::ROUTINE` lives: which loaded program, and which of
@@ -4642,6 +4650,25 @@ enum VarHome {
     Instance(Box<InstanceVar>),
 }
 
+/// [`rexx_core::ClassEdges`] over the interpreter's own tables.
+///
+/// Borrowed field by field rather than from `&self`, so the heap can be
+/// borrowed mutably alongside it.
+struct InterpClassEdges<'a> {
+    class_variables: &'a HashMap<ObjRef, ObjRef>,
+    static_classes: &'a [ObjRef],
+}
+
+impl rexx_core::ClassEdges for InterpClassEdges<'_> {
+    fn payload(&self, class: ObjRef, out: &mut Vec<ObjRef>) {
+        out.extend(self.class_variables.get(&class).copied());
+    }
+
+    fn built_ins(&self, out: &mut Vec<ObjRef>) {
+        out.extend_from_slice(self.static_classes);
+    }
+}
+
 impl CallContext {
     /// Appends every `ObjRef` this convention holds to `out`.
     ///
@@ -4779,6 +4806,7 @@ impl Interp {
             required_paths: HashMap::new(),
             required_packages: HashMap::new(),
             requires_installing: Vec::new(),
+            static_classes: Vec::new(),
             trace_cache: crate::trace::TraceMode::OFF,
         }
     }
@@ -4839,6 +4867,14 @@ impl Interp {
         let outcome = self.enter_library_program(entry, None);
         self.library_bootstrap = false;
         rexx_classes::remove_setup_methods(self.classes());
+        self.static_classes = self.classes().rexx_defined_classes();
+        // An empty capture would make the built-in seed a silent no-op, which
+        // is the shape this phase is most exposed to: every gate stays green
+        // over a collector that reaches nothing.
+        debug_assert!(
+            !self.static_classes.is_empty(),
+            "the library bootstrap defines classes, so the static set cannot be empty"
+        );
         // **Every per-run instrument reads from here, not from process
         // start.** `Outcome::collections` and `Outcome::chunks_refused`
         // answer a question about the program, and so do the compiled
@@ -7898,6 +7934,9 @@ impl Interp {
             required_paths: _,
             required_packages: _,
             requires_installing: _,
+            // Class identities, which are roots for the run rather than
+            // objects; `Heap::collect` takes them through `ClassEdges`.
+            static_classes: _,
         } = self;
         // The context objects of the activations on the stack. **The one
         // object an activation owns outright**: everything else it holds is
@@ -7949,7 +7988,11 @@ impl Interp {
         for object in anchor {
             self.roots.push_temp(object);
         }
-        let stats = self.heap.collect(&self.roots);
+        let edges = InterpClassEdges {
+            class_variables: &self.class_variables,
+            static_classes: &self.static_classes,
+        };
+        let stats = self.heap.collect(&self.roots, &edges);
         self.roots.pop_frame(frame);
         // `pending_uninit` is what the collector resurrected so a finalizer
         // could run against a whole graph. The finalizer is not sent from

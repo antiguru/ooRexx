@@ -13,7 +13,7 @@ fn an_object_with_uninit_is_reported_rather_than_swept_immediately() {
         native: None,
     });
     assert!(heap.set_uninit(obj), "the handle names a live object");
-    let stats = heap.collect(&roots);
+    let stats = heap.collect(&roots, &());
     assert_eq!(stats.pending_uninit, vec![obj]);
     assert!(
         heap.get(obj).is_some(),
@@ -26,7 +26,7 @@ fn an_object_with_uninit_is_reported_rather_than_swept_immediately() {
     // the object would be resurrected on every collection for the rest of the
     // run, which is a leak the first half of the test cannot see.
     heap.clear_uninit_all(&[obj]);
-    let stats = heap.collect(&roots);
+    let stats = heap.collect(&roots, &());
     assert_eq!(stats.pending_uninit, vec![]);
     assert!(heap.get(obj).is_none(), "and it is swept this time");
 }
@@ -41,7 +41,7 @@ fn a_weak_reference_does_not_keep_its_target_alive() {
     });
     let weak = heap.alloc(Body::WeakRef(target));
     roots.add_global(".WEAK", weak);
-    heap.collect(&roots);
+    heap.collect(&roots, &());
     assert!(
         heap.get(target).is_none(),
         "the target was only weakly held"
@@ -58,7 +58,7 @@ fn a_cleared_weak_reference_reads_as_nil() {
     });
     let weak = heap.alloc(Body::WeakRef(target));
     roots.add_global(".WEAK", weak);
-    heap.collect(&roots);
+    heap.collect(&roots, &());
     assert!(matches!(heap.get(weak).map(|o| &o.body), Some(Body::WeakRef(r)) if *r == ObjRef::NIL));
 }
 
@@ -80,7 +80,7 @@ fn a_weak_reference_to_an_uninit_pending_object_is_still_cleared() {
     assert!(heap.set_uninit(target), "the handle names a live object");
     let weak = heap.alloc(Body::WeakRef(target));
     roots.add_global(".WEAK", weak);
-    let stats = heap.collect(&roots);
+    let stats = heap.collect(&roots, &());
     assert_eq!(
         stats.pending_uninit,
         vec![target],
@@ -121,7 +121,7 @@ fn an_object_flagged_twice_across_a_clear_is_reported_once() {
     assert!(heap.set_uninit(obj), "the handle names a live object");
     heap.clear_uninit_all(&[obj]);
     assert!(heap.set_uninit(obj), "and can be flagged again");
-    let stats = heap.collect(&roots);
+    let stats = heap.collect(&roots, &());
     assert_eq!(stats.pending_uninit, vec![obj]);
 }
 
@@ -147,9 +147,9 @@ fn a_still_unreachable_flagged_object_is_reported_once_and_resurrected_every_tim
         native: None,
     });
     assert!(heap.set_uninit(obj), "the handle names a live object");
-    assert_eq!(heap.collect(&roots).pending_uninit, vec![obj]);
+    assert_eq!(heap.collect(&roots, &()).pending_uninit, vec![obj]);
     assert_eq!(
-        heap.collect(&roots).pending_uninit,
+        heap.collect(&roots, &()).pending_uninit,
         vec![],
         "reported once, not once per collection"
     );
@@ -180,7 +180,7 @@ fn taking_the_flagged_objects_clears_every_flag() {
         objects.push(obj);
     }
     assert_eq!(
-        heap.collect(&roots).pending_uninit,
+        heap.collect(&roots, &()).pending_uninit,
         vec![],
         "a rooted object is never unreachable, so no collection reports it"
     );

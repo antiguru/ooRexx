@@ -110,7 +110,7 @@ fn collection(c: &mut Criterion) {
         b.iter_batched(
             build_graph,
             |(mut heap, roots)| {
-                let stats = heap.collect(&roots);
+                let stats = heap.collect(&roots, &());
                 black_box(stats.live)
             },
             BatchSize::LargeInput,
