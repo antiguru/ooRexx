@@ -96,9 +96,10 @@ does not rest on table C alone. It was checked by reading a probe, not assumed.
 work of those six sub-phases sits inside 5c's 1225 rows and cannot be read off per phase. The
 tables evidence the surface, not the phase boundaries.
 
-**`CLOSED_PHASES` names `5a`, `5b`, `5c`, `5d` only**, so the enforcement that a closed phase owns
-no open row does not currently bind 5e–5j. It binds nothing extra today, because no row is owned by
-them — but the guard is narrower than the phase list.
+**The enforcement binds only what the rows attribute.** `CLOSED_PHASES` was widened to `5a`–`5j` at
+the close, so the guard is no longer narrower than the phase list — but since no row is owned by
+5e–5j, widening it changed nothing that runs. The guard is only as good as the attribution above
+it, which is the real limitation.
 
 **"Known" is the load-bearing word.** Instrument 3 sends each documented name *with no arguments*,
 so for a method needing arguments an `answers` verdict is agreement about an arity error, not about
