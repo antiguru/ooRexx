@@ -129,126 +129,101 @@ confirmed, falsified, or unobservable.
 
 ---
 
-### Task 2: `Heap` marks class identities
+### Task 2: A class is an ordinary arena object
 
-No observable change: nothing is expunged yet, so this is pure machinery plus a unit test.
+**Supersedes the reverted Task 2** (`8080cb981`, reverted `bf91af935`), which kept classes outside
+the arena and built a mark store, an edge supplier and a built-in seed around that. Spec §4.0 has
+what changed and why.
 
 **Files:**
-- Modify: `rust/crates/rexx-core/src/heap.rs`
-- Modify: `rust/crates/rexx-exec/src/lib.rs` (`collect_now`)
+- Modify: `rust/crates/rexx-core/src/handle.rs` (delete `CLASS_SLOT_BASE`, `ObjRef::class`, `ObjRef::class_id`, `is_class_slot`)
+- Modify: `rust/crates/rexx-core/src/body.rs` (the new `Body` variant and its `trace` arm)
+- Modify: `rust/crates/rexx-classes/src/native_classes.rs` (take a minting callback)
+- Modify: `rust/crates/rexx-exec/src/lib.rs`, `dispatch.rs`, `eval.rs`, `run.rs` (the discriminator sites)
 
 **Interfaces:**
-- Produces, for Tasks 3–5:
-  - `Heap::collect(&mut self, roots: &RootSet, classes: &dyn ClassEdges) -> Stats`
-  - `pub trait ClassEdges { fn payload(&self, class: ObjRef, out: &mut Vec<ObjRef>); fn built_ins(&self, out: &mut Vec<ObjRef>); }`
-  - `Heap::class_marked(&self, class: ObjRef) -> bool`
+- Produces: a class identity that is an ordinary handle with a slot and a generation; the
+  class/non-class test as a `Body` match arm.
 
-- [ ] **Step 1: Add the mark store**
+- [ ] **Step 1: The `Body` variant**
 
-`Heap` gains `class_marks: Vec<bool>`, indexed by `ObjRef::class_id`, grown on demand. Cleared at
-the start of each `collect`, exactly as `marks` is.
+A class body holding what the class owns, traced like any other body. It holds no `rexx-classes`
+type — the registry keeps the class *structure* and is keyed by identity, which D76 leaves alone.
 
-- [ ] **Step 2: Mark, and trace the payload, in the mark loop**
+- [ ] **Step 2: Mint through a callback**
 
-When the work list yields a handle whose `class_id()` is `Some(id)`: if `class_marks[id]` is already
-set, `continue`; otherwise set it and push `classes.payload(handle, …)` onto the work list. A class
-handle must not fall through to `resolve`, which would drop it as it does today.
+`native_classes::build` takes `&mut dyn FnMut() -> ObjRef`. `rexx-classes` still does not touch the
+heap; `reserve_id`'s counter goes.
 
-- [ ] **Step 3: Seed the built-ins from a captured vector, not from the registry**
+- [ ] **Step 3: Built-ins are allocated immortal**
 
-Before the mark loop, push `classes.built_ins(…)`. Built-ins are marked and traced on every cycle —
-never-collected is not never-traced, and the reason is concrete rather than theoretical here: once
-Task 3 removes the per-class global root, a kernel class's variable pool is reachable only through
-the class, and `ObjectModel` holds 16 class handles against a kernel of far more classes. A kernel
-class neither in the object model nor named by the running program would have its pool swept while
-the class stayed registered and usable — a wrong answer, not a leak.
+`Heap::alloc_immortal`, which is already a traced root — `collect` chains `immortal` into the work
+list. Assert the count is what §1 measured (68) rather than trusting the wiring, because an empty or
+short immortal set is the silent no-op §6 predicts.
 
-**The set is captured once, not enumerated per collection.** `ClassGraph::classes` is a `HashMap`,
-and `native_classes.rs:398-406` records why a loop whose order is a map's is a loop that can come to
-matter. Add `Interp::static_classes: Vec<ObjRef>`, filled when `library_bootstrap` closes, and seed
-from that. The new field will not compile until `Interp::object_roots` names it, which is the point.
+- [ ] **Step 4: The discriminator sites**
 
-- [ ] **Step 4: Supply the edges from `Interp`**
+Each of the sites named above already fetches the object on its fall-through, so each becomes a
+`Body` arm. Do them by following compiler errors from the deletions in Step 1, not by grep — the
+deletions make the compiler enumerate the set.
 
-`collect_now` builds a `ClassEdges` view over `Interp::class_variables` and the registry, using
-disjoint field borrows: `let Interp { heap, roots, class_variables, object_model, .. } = self;`.
-`Interp::object_roots`' exhaustive destructure is the precedent for the form. `payload` answers the
-class's variable-pool object; `built_ins` answers every class for which
-`ClassGraph::is_rexx_defined` holds.
+- [ ] **Step 5: Task 1's predicate returns to one term**
 
-- [ ] **Step 5: Unit test in `heap.rs`**
+Delete the `target.class_id().is_some() ||` term. **`weakref_class.rex` must still pass**, and that
+is the assertion that the revert did not reintroduce the defect it fixed.
 
-A heap holding an instance whose class handle is a class identity: after `collect`, `class_marked`
-is true for that class and false for a class nothing reaches.
+- [ ] **Step 6: Witness, negative controls, gates, commit**
 
-- [ ] **Step 6: Assert no behaviour changed**
-
-`cargo test --release --workspace --no-fail-fast` and the corpus gate both green, and
-`run_program_collect_every_alloc` still passes the L0 subset.
-
-- [ ] **Step 7: Commit**
+Predictions written first. At minimum: with built-ins not immortal, name which test reddens; with
+the new `Body` arm not traced, name which.
 
 ---
 
-### Task 3: Every per-class arena object stops being a named global root
+### Task 3: What a class owns moves into the class object
 
-**Three objects, not one.** The variable pool is the one the spec named, but `Interp::method_objects`
-(rooted under `method_object_root_key(class, name)`) and `Interp::annotations` (keyed by
-`Annotated::Class` / `Annotated::Member`) are per-class arena objects held by a global root too.
-Leaving them rooted would leak a collected class's method objects and annotations, which is D59a's
-growth consequence and therefore in scope.
-
-**And unrooting is not available.** `roots.rs` exposes `add_global` and nothing else — no
-`remove_global`. So the choice is to add removal to `RootSet` or to make these class payload; all
-three prior-art surveys said the latter independently (JVM statics live in the mirror object,
-Smalltalk keeps the class pool as a field, Ruby keeps per-class rows in the class object rather than
-in side tables). Make all three class payload.
-
-**Files:**
-- Modify: `rust/crates/rexx-exec/src/run.rs` (the `add_global` at ~3207)
-- Modify: `rust/crates/rexx-exec/src/environment.rs` (`method_object_root_key`, `annotation_root_key` sites)
-- Modify: `rust/crates/rexx-exec/src/lib.rs` if a root key helper becomes unused
+**Three tables, not one** — `class_variables`, `method_objects` and `annotations` are all per-class
+arena objects held by a named global root, and `roots.rs` has no `remove_global`, so they cannot be
+unrooted. They become fields of the class body, reached by tracing.
 
 - [ ] **Step 1: Delete the per-class `add_global`s**
 
-`self.roots.add_global(&format!(".class-variables {class}"), owner)` goes; the pool is reached from
-Task 2's `payload` instead. Delete the `format!` with it, and do the same for the method-object and
-annotation roots.
+`run.rs:3207`'s `add_global(&format!(".class-variables {class}"), owner)` and the method-object and
+annotation roots. Worth seeing while doing it: `globals` is `Vec<(String, ObjRef)>` and `add_global`
+linearly scans it comparing strings, so a per-class root is not only permanent but an entry in a
+vector a class-creating program grows without bound. No figure is claimed; the shape is in the type.
 
-Worth seeing while doing it: `globals` is `Vec<(String, ObjRef)>` and `add_global` linearly scans it
-comparing strings, so a per-class root is not merely permanent — it is an entry in a vector that a
-class-creating program grows without bound and that `RootSet::iter` walks every collection. No
-figure is claimed; the shape is in the type.
+- [ ] **Step 2: Witness the pool survives a collection**
 
-- [ ] **Step 2: Witness that the pool still survives a collection**
-
-A corpus program that sets a class variable wide enough to need a heap slot, forces a collection,
-and reads it back. Both engines, and under `run_program_collect_every_alloc`.
+A class variable wide enough to need a heap slot, read back after a forced collection, on both
+engines and under `run_program_collect_every_alloc`.
 
 - [ ] **Step 3: Negative control, prediction first**
 
-With `payload` returning nothing, the witness reddens under the stress mode. Predict whether the
-ordinary run also reddens, then measure — the answer says whether the collection is the only thing
-that sees it.
+With the class body's trace arm returning nothing, the witness reddens under the stress mode.
+Predict whether the ordinary run reddens too, then measure — the answer says whether the collection
+is the only thing that sees it.
 
 - [ ] **Step 4: Full gates, then commit**
 
 ---
 
-### Task 4: Expunge unmarked classes
+### Task 4: The sweep unlinks the registry
 
-The first task with an observable behaviour change.
+The first task with an observable behaviour change. **Not a separate expunge pass** — the sweeper
+already frees slots and bumps generations; this is the registry row going with the slot, which is
+Ruby's shape and O(1) per dead class.
 
 **Files:**
 - Modify: `rust/crates/rexx-core/src/heap.rs` (report dead class ids in `Stats`)
 - Modify: `rust/crates/rexx-classes/src/registry.rs`, `class_graph.rs` (row removal)
 - Modify: `rust/crates/rexx-exec/src/lib.rs` (`collect_now` applies the expunge)
 
-- [ ] **Step 1: Report the dead classes**
+- [ ] **Step 1: Report what the sweep freed**
 
-After the `UNINIT` resurrection pass — a class with a pending finalizer is resurrected like any
-other object and must not be expunged in the same cycle — `collect` collects every class id that is
-registered, unmarked, and not a built-in, and returns it in `Stats`.
+The sweeper already frees unmarked slots and bumps their generations. A freed slot whose body was a
+class body is reported in `Stats`. Nothing is special-cased for `UNINIT`: a class with a pending
+finalizer is resurrected by the machinery that resurrects any other object, so it is not freed and
+therefore not reported.
 
 - [ ] **Step 2: Remove the rows**
 
@@ -256,15 +231,11 @@ registered, unmarked, and not a built-in, and returns it in `Stats`.
 `default_names`, `object_names`, `by_name` and `by_system_name`. The list of maps is derived from
 the struct definition with an exhaustive destructure, not from memory.
 
-- [ ] **Step 3: The id is never reused**
+- [ ] **Step 3: A recycled slot is a miss, not an alias**
 
-`reserve_id` continues to count up. Assert it: a test that defines, collects and defines again, and
-checks the two identities differ.
-
-- [ ] **Step 4: The weak predicate becomes the mark test**
-
-Task 1's `target.class_id().is_some()` becomes `class_marked`, and Task 1's comment saying so is
-removed.
+Assert the property the generation buys: define a class, collect it, define another, and check that
+a handle to the first misses rather than answering the second. This is the test that would have had
+to be a never-recycle rule under the reverted design.
 
 - [ ] **Step 5: Witness**
 

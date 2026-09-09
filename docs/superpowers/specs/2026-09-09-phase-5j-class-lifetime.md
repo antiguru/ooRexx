@@ -92,7 +92,9 @@ one.
 (`handle.rs:211-216`), generation fixed at zero so `class_id` can read the range back. The arena's
 stale-handle safety is the generation bump on free (`heap.rs:120-130`): a dead handle *misses*.
 Classes have no such bump, so a recycled class id would make a stale handle **alias** the next class
-defined — a wrong answer at rc 0, not a crash. D69 settles this.
+defined — a wrong answer at rc 0, not a crash. **D67 dissolves this** rather than settling it: an
+arena slot carries a generation, so the question stops existing. The first draft's answer was D69's
+never-recycle rule, withdrawn in §4.0.
 
 **Two independent reasons a class never dies.** The identity is outside the arena, so the sweep
 never sees it; and `run.rs:3207` roots each class's variable pool as a named global keyed by
@@ -167,54 +169,98 @@ not a mechanism to be weakened; it is a root that should not exist.
 
 ## 4. Decisions
 
-**D66. Class collection is by reachability, per class.** No holder, container, or package-liveness
-machinery. Justification is §3's last-but-two paragraph plus §1's measurement: the container rule
-and the per-class rule agree everywhere observable, so the cheap one wins.
+### 4.0 These were rewritten on the day they were written, and why
 
-**D67. The class registry is marked, not traced.** `ClassRegistry`'s six maps and `ClassGraph` stop
-being a reason for a class to be live. A class is marked only when a real root reaches its handle —
-an instance, a variable holding the class value, a package table, the object model. `Heap` gains a
-mark vector for the reserved class range, and the mark loop sets a class's bit when `Body::trace`
-yields a handle whose `class_id()` is `Some`. Spur and Strongtalk are the precedent.
+The first version of §4 kept class identities outside the arena and built the collection machinery
+around that: a mark vector of their own, an edge supplier so the heap could follow what a class
+owns, a captured set of built-ins to seed as roots, a never-recycle rule for ids, and a special case
+in the weak-reference predicate. That was implemented as Task 2, gated green at `8080cb981`, and
+reverted at `bf91af935` after Moritz asked why classes are not simply stored in the heap like any
+other object.
 
-**D68. A marked class's payload is traced from the class, and `run.rs:3207` is deleted.** The
-variable-pool object becomes an edge reached from the marked class rather than a named global root.
-The `format!` per class goes with it.
+**The recorded reason did not survive the question.** D59's own *"Why the alternative is not taken"*
+argues that collecting classes means identities *"stop being a monotone registry outside the arena,
+which is the shape 5a's whole class model is built on"*. That was written under the licence Moritz
+corrected on 2026-09-08, and the first draft of this spec carried its conclusion forward as a
+non-goal without re-arguing it.
 
-**D69. A class id is never recycled.** Class identities have generation zero by construction (§2),
-so reuse would alias rather than miss. Never reusing an id preserves the property that every GC
-defect in this project has been caught by: a dead handle resolves to nothing. The budget is 2^31.
+**The performance half of the argument is backwards, checked by reading the sites.** The claim was
+that `ObjRef::class_id` is asked before the arena on every send, so a class in the arena would cost
+a memory access. But `eval.rs:1367` and `eval.rs:1760` both do the class test and then immediately
+`self.heap.get(value)` on the fall-through; `run.rs:4051` has the same shape; `dispatch.rs:1986`
+classifies a receiver inside a match whose other arms read the body. Every site already fetches the
+object. Folding the class test into a `Body` match arm removes a branch rather than adding a fetch.
 
-**D70. Built-in means `is_rexx_defined`, and a built-in is marked on every cycle — not skipped.**
-Never-collected is not never-traced (JDK-8253081): a built-in holds user methods, class variables
-and subclass entries, all of which must be reached. This is a marking rule, not a sweep exemption.
+**And no dependency inversion is needed.** `rexx-classes` keys classes by `ObjRef` and its own
+manifest says it *"does not touch the heap, `Object` or dispatch, only the identity type a class is
+keyed by"* — which stays true when the identity is an arena handle. The one thing it cannot do is
+*mint* one, because minting becomes allocating. D76 settles that.
 
-**D71. The expunge pass runs after `UNINIT` resurrection and before the registry is next read.** A
-class with a pending finalizer is resurrected like any other object and must not be expunged in the
-same cycle. `Heap::collect` reports the unmarked, non-built-in class ids; `rexx-classes` removes
-their rows. The heap never learns what a class *is*, so no layering is inverted.
+The decisions below are what replaced them. Each names what it deletes, because the point of the
+change is that most of this phase is now a deletion.
 
-**D72. Subclass lists hold weak entries and are scrubbed at expunge.** This is the load-bearing
-edge: `.Object`'s strong `subclasses` vector would otherwise pin every runtime class forever and
-make the whole phase a silent no-op that passes every gate. The oracle's own source is the
-specification — `subClasses` is a list of `WeakReference` and `getSubClasses` prunes as it reads.
-Every surviving class's list is scrubbed of dead ids in the expunge pass.
+### 4.1 The decisions
 
-**D73. `Heap`'s weak-reference predicate gains the class case.** A weak target that is a class
-identity is alive iff its class mark is set. This fixes the §1.1 defect, which is a wrong answer
-**today**, independent of whether anything is ever collected — so it lands first, with its own
-witness, and the rest of the phase is built on top of it.
+**D66. Class collection is by reachability, per class.** Unchanged from the first draft. No holder,
+container or package-liveness machinery: §3's survey and §1's measurement agree that the container
+rule and the per-class rule cover the same observable surface, so the cheap one wins.
 
-**D74. A send to a collected class is loud.** rc 120 with a named message, never a silent wrong
-answer and never a panic. The one thing this phase must not do is convert a lifetime bug into an
-answer.
+**D67. A class is an ordinary arena object.** `CLASS_SLOT_BASE`, `ObjRef::class`, `ObjRef::class_id`
+and `is_class_slot` are deleted. A class identity becomes a handle with a slot and a generation like
+any other value, and the class/non-class question becomes an arm of the `Body` match the callers
+already perform.
 
-**D75. Divergence licence.** Collection *timing* remains unspecified per the existing GC-ordering
-licence. What is no longer licensed is any observable in D59a's four: `UNINIT` on a dropped class,
-`~subclasses` counting one, a `WeakReference` answering one, and unbounded growth under class
-creation. Each gets a committed witness.
+**D68. What a class owns lives in the class object.** The variable pool, and the per-class rows
+`Interp` holds today, are reached by tracing the class body — not by a named global root, and not by
+an edge supplier the heap has to ask. This is what all three surveys independently recommended: JVM
+statics live inside the mirror object, every Smalltalk keeps the class pool as a field of the class,
+and Ruby keeps per-class rows in the class object rather than in side tables. It deletes
+`run.rs:3207`'s `add_global(&format!(".class-variables {class}"))`, and it deletes the `ClassEdges`
+trait the reverted design needed.
 
----
+**D69. Built-in classes are allocated immortal.** `Heap::immortal` is already a root that is
+*traced* rather than merely skipped — `collect` chains it into the initial work list, and the
+field's own doc says seeding the mark phase from there marks the objects and everything they reach.
+So "a built-in is a root on every cycle, and never swept" is a mechanism this heap already has.
+Deletes `Interp::static_classes`, the per-collection built-in seed, and the reverted design's
+`ClassEdges::built_ins`.
+
+**D70. Class ids are recycled like any other slot, and the never-recycle rule is withdrawn.** The
+first draft forbade reuse because a class identity had generation zero by construction, so a
+recycled id would make a stale handle *alias* a new class. An arena slot has a real generation, so a
+stale class handle *misses*, which is the property every GC defect in this project has been caught
+by.
+
+**D71. The sweep is the expunge.** When the sweeper frees a class slot it unlinks that class's
+registry rows, which is Ruby's shape — O(1) per dead class instead of a scan of the registry per
+collection. Deletes the separate expunge pass, and with it the question of where it sits relative to
+the `UNINIT` resurrection: a class with a pending finalizer is resurrected exactly like any other
+object, by the machinery that already does that.
+
+**D72. Subclass lists hold weak entries and are pruned.** Unchanged, and still the decision that
+decides whether the phase does anything: `.Object`'s strong `subclasses` vector would pin every
+runtime class forever while every gate stayed green. The oracle's own source is the specification —
+`ClassClass.hpp:208` declares `subClasses` a list of `WeakReference`, and `getSubClasses` prunes as
+it reads.
+
+**D73. The weak-reference predicate returns to one term.** Task 1's `target.class_id().is_some() ||`
+was correct for a world where a class is unresolvable because it is immortal. Once a class is an
+arena object, `resolve` answers for it and the original predicate is right again. Task 1's witness
+stays and must keep passing across the change — it is what says the revert did not reintroduce the
+defect.
+
+**D74. A send to a collected class is loud.** Unchanged in intent, cheaper in mechanism: a stale
+class handle now misses, so it lands on the existing "a live value" path rather than needing one of
+its own.
+
+**D75. Divergence licence.** Unchanged. Collection *timing* stays unspecified under the existing
+GC-ordering licence; D59a's four observables are no longer licensed and each owes a witness.
+
+**D76. `rexx-classes` does not allocate.** It cannot mint an identity once minting means allocating,
+and inverting the dependency to let it would put the heap inside the class model. Instead the
+identity source is passed in — `native_classes::build` takes a minting callback — so the crate keeps
+holding only the identity type, exactly as its manifest says. A generic heap parameter was
+considered and is not needed for this.
 
 ## 5. Non-goals
 
@@ -222,11 +268,13 @@ creation. Each gets a committed witness.
   `class_packages` have no removal site, so a `::CLASS` class cannot become unreachable and
   weakening the package name tables buys nothing while packages are immortal. That is a separate
   decision, and the oracle pins declared classes too, so it is not a parity gap.
-* **Making class identities arena objects.** Tempting — it would delete the reserved range, give
-  classes a generation, and make D73 need no special case — but it is a heap-representation change,
-  and the heap representation is already queued behind this phase as its own measured spike.
-* **Ephemerons.** §3: the hazard is a cycle, and untraced-registry-plus-expunge is equivalent for
-  the table shape this tree has.
+* **Ephemerons.** §3: the hazard is a cycle, and mark-sweep collects a cycle natively.
+* **Replacing the slot table with real pointers.** A separate question, queued behind this phase as
+  its own measured spike. D67 puts classes into the slot table that exists; it does not touch what
+  that table is made of.
+
+This list previously carried *"making class identities arena objects"* as a non-goal. That is now
+D67 — see §4.0 for what changed and why.
 * **`become:` / class redefinition.** Not a Rexx operation.
 
 ---
@@ -237,6 +285,16 @@ creation. Each gets a committed witness.
 row, a method cache keyed by class, an IR inline cache, a `::REQUIRES` package cache — one of these
 holding a class strongly, and nothing collects, and every test still goes green because nothing
 asserts that a class *died*.
+
+**And D67 adds a second shape the first design could not have had.** While a class was immortal, a
+class handle held anywhere was always valid; a table the tracer never visited was a leak at worst.
+Once a class is an ordinary object, an unrooted holder of a class handle is a **use-after-free** —
+which the surveys named as the worst failure mode of the whole change, and which is the shape this
+tree has already produced once, in `flat_loops`. The generation makes it a loud miss rather than an
+alias, so it fails as `a live value` rather than as a wrong answer; it is still the thing to hunt.
+The instrument is `run_program_collect_every_alloc`, which reaches a missed root as a failure rather
+than as luck, and `Interp::object_roots`' class-identity comments are the list of places to look
+first.
 
 So the gate asserts the observable, not memory: `~subclasses` returns to its baseline, a
 `WeakReference` clears, and a program that mints classes in a loop does not grow without bound. And
