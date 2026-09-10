@@ -532,3 +532,86 @@ do twice, at 531 instructions against 1153.
 
 `startup` remains untouched and is the largest multiple in the tree at 13.3x
 instructions, hidden behind a 1.65x wall clock that is mostly process spawn.
+
+## The driver's code density, measured 2026-09-10 at `20b078177`
+
+Prompted by Moritz: check the driver's asm structure, and see whether the
+individual instruction bodies are short or should be outlined.
+
+### The counter nobody had looked at
+
+Same fixed `rexxcps` work, both interpreters:
+
+| counter | crate | oracle | ratio |
+| --- | ---: | ---: | ---: |
+| instructions | 20.80G | 10.63G | 1.96x |
+| cycles | 6.31G | 3.46G | 1.82x |
+| **L1i misses** | **202.1M** | **58.2M** | **3.47x** |
+| branch misses | 4.60M | 5.43M | 0.85x |
+
+**9.71 icache misses per 1000 instructions against the oracle's 5.48.** It is
+the most disproportionate counter measured on this axis -- worse than the
+instruction ratio it should track -- and branch misses are *lower* than the
+oracle's, so the frontend problem is fetch and not prediction.
+
+### The bodies are already outlined; the bulk is cleanup
+
+Sampled on `instructions:u`, the hot source lines inside `run_ops_from` are
+almost all call sites -- `apply_binary`, `exec_parse`, `run_call_named`,
+`run_call_args`, `run_loop_with_header`, `arith_general`, `read_symbol`. The
+dispatch itself (`for region_op in ops` / `match region_op`) is about half the
+function's own self samples. So the op arms are not fat inline bodies.
+
+**What the function is instead: 87% cold.** 2529 of 2908 instructions carry
+no sample in a full run. The largest cold run, 518 instructions, sits at the
+end (LLVM sank it) and opens with `movups` stack shuffling and `-0x2`
+drop-flag stores -- unwind landing pads and drop glue. Across all cold code the
+mnemonics are 1075 `mov`, 263 `lea`, 96 `movups`: cleanup, not error
+construction. Marking every `Loud` constructor and both `Failure` conversions
+`#[cold] #[inline(never)]` shrank the function by **121 bytes of 15,278**, so
+the error constructors were already outlined calls and are not the bloat.
+
+The remaining ~2000 cold instructions are interleaved with the hot ones through
+the first 85% of the function: the 50-55% band holds 4 hot instructions
+carrying 1527 samples among 141 cold ones. Effective hot footprint is ~379
+instructions spread over ~13KB of address range.
+
+### `const GRANTING` -- measured both ways, and it earns its keep
+
+`run_ops_from` is monomorphised twice on it, 15,278 + 15,127 bytes, and the
+const is read exactly once: `let mut granting = GRANTING;`. Collapsing it to a
+parameter gives one function of 17,767 bytes, **12,638 bytes less driver**.
+Measured, five reps, interleaved, both binaries hashed:
+
+    axis            ins       cyc       l1i
+    dispatch     1.0069    0.8721    0.2305
+    rexxcps      1.0064    0.9848    0.7762
+    alloc        0.9984    0.9802    3.4961
+    compound     1.0108    0.9918    0.9678
+    varlookup    1.0187    1.0023    1.0557
+    strings      1.0094    1.0290    1.2916
+    emptyloop    1.0397    1.0348    1.0521
+
+**Not landed: it is a trade, and both sides are mechanisms rather than
+layout.** In the `<false>` monomorphisation `granting` starts false and is
+never set true, so LLVM proves the two `if granting` branches dead and deletes
+them; a parameter restores about four instructions per clause, which is
+`emptyloop`'s +3.97% **instructions**. The other side is equally real:
+`dispatch` takes -12.8% cycles on +0.69% instructions, from 12.6KB less code.
+The doc comment on `run_ops` claims the const "turns a per-clause branch into
+no code at all" and it is correct; a reading of it as vacuous was wrong.
+
+The design that takes both halves is not this one. It has to shrink the cold
+bulk so that *both* monomorphisations are small -- which means fewer droppable
+locals live across `?` in the driver, not a different signature.
+
+### Two instrument findings, both of which invalidate earlier method
+
+* **Retired instructions cannot measure density work.** Code that never
+  executes retires nothing, so the primary instrument used all day reports
+  `1.0064` for a change worth -12.8% cycles on `dispatch`. Anything about
+  layout, duplication or icache has to be measured on `cycles:u`.
+* **An L1i *ratio* is not evidence where the absolute count is small.** The
+  same change reads 0.2305 on `dispatch` and 3.4961 on `alloc` while cycles
+  move -12.8% and -2.0%. The ratio was called a clean control here and it is
+  not one; absolutes are required before reading it.
