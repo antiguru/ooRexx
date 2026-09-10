@@ -34,7 +34,7 @@ use crate::Interp;
 use crate::options::ConditionSyntax;
 use crate::plan::{BodyKey, Plan, ProgramId};
 use crate::trace::TraceMode;
-use rexx_core::{ObjRef, SlotFrame};
+use rexx_core::{NameMap, ObjRef, SlotFrame};
 use rexx_num::Settings;
 use rexx_parse::{CodeBody, DirectiveKind, Program};
 use std::collections::HashMap;
@@ -530,7 +530,12 @@ pub(crate) struct Activation {
     /// hands out the *slot* but records no *name* for it. This map is where
     /// the name goes. `DROP (v)` has the identical hole, so this is not a
     /// fragment-only mechanism.
-    pub(crate) extra: HashMap<Box<[u8]>, usize>,
+    /// **`NameMap`'s hasher, not `RandomState`.** Measured on
+    /// `bench-programs/dispatch.rex`, whose every send binds one: the insert
+    /// alone was 5.06% of retired instructions with the default hasher, and
+    /// the key is a name out of the program text, which is what `NameMap` is
+    /// for.
+    pub(crate) extra: NameMap<Box<[u8]>, usize>,
     pub(crate) frame: SlotFrame,
     /// Whether this activation is the one that must `pop_slots` [`frame`],
     /// and equivalently whether the pool in it is its own.
@@ -1119,7 +1124,7 @@ impl Activation {
             program_id,
             body: None,
             plan,
-            extra: HashMap::new(),
+            extra: NameMap::default(),
             frame,
             owns_frame: true,
             entry: Entry::TopLevel,
@@ -1239,7 +1244,7 @@ impl Activation {
             program_id,
             body,
             plan,
-            extra: HashMap::new(),
+            extra: NameMap::default(),
             frame,
             owns_frame: false,
             entry: Entry::InternalCall,
@@ -1310,7 +1315,7 @@ impl Activation {
             program_id,
             body: Some(body),
             plan,
-            extra: HashMap::new(),
+            extra: NameMap::default(),
             frame,
             owns_frame: true,
             entry: Entry::Routine,
@@ -1373,7 +1378,7 @@ impl Activation {
             program_id,
             body: Some(body),
             plan,
-            extra: HashMap::new(),
+            extra: NameMap::default(),
             frame,
             owns_frame: true,
             entry: Entry::Method,

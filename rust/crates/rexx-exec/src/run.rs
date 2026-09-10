@@ -91,7 +91,6 @@ use rexx_parse::{
     ProgramSource, Raise, SymbolId, Trace, Use, UseTarget, VariableRef, parse_interpret,
 };
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::rc::Rc;
 
 /// Where control goes after one instruction (the design's "Control flow").
@@ -3018,7 +3017,7 @@ impl Interp {
         // isolation -- except for exposed names the plan never saw, which
         // must keep resolving to the index the alias was installed at.
         let plan = Rc::clone(&self.activation().plan);
-        let mut extra = HashMap::new();
+        let mut extra = rexx_core::NameMap::default();
         for (name, slot, _) in bindings {
             if plan.slot_of(&name).is_none() {
                 extra.insert(name, slot);
