@@ -208,28 +208,60 @@ and `perf annotate` for the per-line view; samply's recorder is cycles.
 
 `run_ops_from::<true>` is 2908 instructions and 15,278 bytes. Of those
 instructions **901 touch `[rsp + …]` and 208 are stores** -- 31% stack traffic,
-which is register pressure in a function this size. Hottest single line in the
-function, by instructions retired:
+which is register pressure in a function this size.
+
+### Skid: the first reading of this was wrong
+
+A non-precise profile put **6.41% on a single 16-byte spill**,
+`movaps %xmm0,0x200(%rsp)`, and that figure was an artifact. With a deep
+pipeline the sample lands a few instructions past the one that stalls, so a
+cheap instruction downstream collects them. The same instruction under a
+precise event is **0.07%**:
+
+| sampling | that `movaps` |
+| --- | ---: |
+| `instructions:u`, not precise | 6.41% |
+| `cycles:pp`, precise | **0.07%** |
+
+**Use a precise event before attributing anything to a single instruction.**
+`instructions:pp` is unavailable on this AMD part and `cycles:pp` is the one
+that works -- worth writing down, since concluding from one refusal that
+precise sampling is unavailable is how a measurement gets retired for the
+wrong reason.
+
+### What precise sampling shows
+
+Flat, no line above 2.84%, dominated by the per-op preamble -- the dispatch
+plus restoring state from the stack after each handler returns:
 
 ```
-6.41%  movaps %xmm0,0x200(%rsp)     one 16-byte spill, ~1% of the whole program
-3.47%  lea    -0xe599b(%rip),%rcx   the Op jump table base
-3.31%  add    %rcx,%rax
-2.39%  jmp    *%rax
-1.95%  testb  $0x1,0x1346(%r14)     a flag tested once per op
-1.03%  movslq (%rcx,%rax,4),%rax
-0.98%  add    $0x10,%r12            the 16-byte op stride
+2.84%  cmp    0x1b0(%rsp),%rax     loop bound, from stack
+2.24%  mov    0x28(%rsp),%rbp      reload
+2.15%  mov    0x8(%rsp),%r14       reload `self`
+2.08%  jmp    117912               back to the top
+2.04%  lea    -0xe595b(%rip),%rcx  jump table base
+1.64%  add    %rcx,%rax
+1.14%  movslq (%rcx,%rax,4),%rax
+1.02%  jmp    *%rax
+1.02%  testb  $0x1,0x1346(%r14)    the `intermediates` flag
 ```
 
-The dispatch sequence is about 12.6% of the function, roughly 2% of the
-program. The handlers are already out of line -- 186 `call` sites, and every
-hot source line is a `match self.<handler>(…)` -- so those 2908 instructions
-are the driver's own dispatch and argument marshalling, not inlined handler
-bodies.
+Together the preamble is **about 17% of the function**. The reloads of `self`
+and its neighbours after every handler call are the register-pressure symptom
+the 31% stack traffic already suggested. The handlers are already out of line
+-- 186 `call` sites, and every hot source line is a `match self.<handler>(…)`
+-- so those 2908 instructions are the driver's own dispatch and marshalling,
+not inlined handler bodies.
 
 **Candidates this opens, all instruction removal and all in the 0.3-1% band
-that compounds:** the single 6.41% spill, the per-op flag test at
-`+0x1346`, and `memmove` at 6.1% whose callers are not yet attributed.
+that compounds:** the per-op preamble's reloads; the `intermediates` flag test
+at `+0x1346`, which candidate A below shows is the visible edge of 238
+value-echo ops; and `memmove` at 6.1%, whose callers are `append_tails` 22%,
+`concat_values` 21%, `to_text` 15%, `exec_parse` 11%, `push_activation` 5.8%
+and `text_built` 5.8%. Most of that is string building the program asked for.
+The one defect in it is `push_activation`: `Activation` is 456 bytes and is
+taken by value, so `*spare = activation` copies all of it per call even on the
+pooled path.
 
 ## Candidate A, re-measured: the Generic fallback is nearly gone, the value
 ## echoes are not (2026-09-10)
