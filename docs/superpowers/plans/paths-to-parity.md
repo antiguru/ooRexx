@@ -384,3 +384,83 @@ win is the two names rather than the two slots that came with them.
 **Two attempts at the same cluster were measured and discarded first**, and
 neither is in the tree: recycling the `extra` map's capacity across pooled
 activations cost +0.18% on both send axes, and boxing `extra` cost +1.95%.
+
+## Re-measured 2026-09-10 at `86ca524e6`: the cluster was not one shape
+
+Three instruments, run back to back on an otherwise idle machine, single perf
+event per run, three reps, median, interleaved, oracle under
+`ulimit -v 1048576` from an empty directory.
+
+### The tree-walker is slower than the IR on every axis
+
+Same binary, `REXX_ENGINE=tree-walker` against the default, retired
+instructions:
+
+| axis | tree-walker | IR | IR/TW |
+| --- | ---: | ---: | ---: |
+| `varlookup` | 31,908,577,449 | 17,259,617,918 | **0.5409** |
+| `strings` | 32,895,825,492 | 22,728,924,169 | 0.6909 |
+| `alloc4c` | 5,735,758,346 | 4,257,811,188 | 0.7423 |
+| `compound` | 14,435,175,816 | 11,175,019,955 | 0.7742 |
+| `rexxcps` | 27,317,694,742 | 23,074,852,970 | 0.8447 |
+| `emptyloop` | 11,096,562,336 | 9,446,603,134 | 0.8513 |
+| `arith` | 13,751,991,059 | 12,855,008,303 | 0.9348 |
+| `dispatch` | 22,946,939,335 | 21,696,993,863 | 0.9455 |
+| `alloc` | 28,932,633,488 | 27,396,681,793 | 0.9469 |
+| `dispatchclass` | 16,889,740,832 | 16,737,789,136 | 0.9910 |
+
+**No axis is above 1.0000.** Retiring the IR in favour of the tree-walker
+would cost between 0.9% and 85% depending on the axis. The representation is
+not what stands between this crate and the oracle, and the question "is the IR
+the wrong approach" is answered: it is not.
+
+What the table also says is where the IR has already given what it has. On
+`dispatchclass`, `alloc` and `dispatch` it is worth 0.9%-5.5%, because on those
+axes the time is not in the clause loop at all.
+
+### Every axis is instruction-bound. None is stall-bound.
+
+Crate against oracle, instructions and cycles measured separately:
+
+| axis | crate IPC | oracle IPC | instr. ratio | cycle ratio |
+| --- | ---: | ---: | ---: | ---: |
+| `startup` | 2.66 | 1.20 | **13.34** | 6.03 |
+| `rexxcps` | 3.42 | 3.10 | 2.17 | 1.97 |
+| `alloc` | 4.60 | 3.97 | 2.06 | 1.78 |
+| `strings` | 5.00 | 4.40 | 2.04 | 1.79 |
+| `dispatchclass` | 4.67 | 3.34 | 1.72 | 1.23 |
+| `dispatch` | 4.64 | 3.45 | 1.65 | 1.23 |
+| `arith` | 3.31 | 3.26 | 1.16 | 1.14 |
+| `compound` | 5.27 | 3.09 | 1.08 | 0.63 |
+| `varlookup` | 6.49 | 4.85 | 1.01 | 0.76 |
+| `emptyloop` | 6.01 | 4.80 | 0.75 | 0.60 |
+
+**Our IPC is higher than the oracle's on all ten axes**, by 1.5% (`arith`) to
+122% (`startup`). Cache, branch prediction, code layout and enum ordering are
+therefore not where the gap lives -- on every axis we retire more instructions
+and retire them faster. Parity is a matter of emitting fewer instructions and
+nothing else.
+
+The cycle ratio tracks the wall-clock ratio to within a few percent on every
+axis except `startup`, which is the cross-check that says these two instruments
+agree.
+
+### The 1.7x cluster has split into three
+
+The uniformity noted at `8565dcfa8` -- six axes between 1.73x and 1.97x --
+does not survive the measurement.
+
+1. **`startup` never belonged.** Its 1.73x wall clock is 26 ms against 15 ms,
+   and most of both is process spawn that `:u` counters do not see. In user
+   space it is **13.3x the instructions** and 6.0x the cycles. Grouping it with
+   the others was pattern-matching on a ratio.
+2. **`dispatch` and `dispatchclass` have left**, from targeted work rather than
+   from anything the flat-tax hypothesis predicted: 1.78x/1.81x wall clock at
+   `8565dcfa8`, **1.20x/1.22x now**. Their shape is also distinct -- 1.65x-1.72x
+   instructions but only 1.23x cycles, on the largest IPC advantage of any axis.
+3. **`alloc`, `strings` and `rexxcps` are the real class**, and they are
+   genuinely uniform: 2.04x-2.17x instructions, 1.78x-1.97x cycles, IPC ahead
+   by 13%-16%. One tax, ~2x the instructions for the same work.
+
+That third group is what "parity" now means, and `startup` is a separate and
+much larger multiple that no path above was drawn to address.
