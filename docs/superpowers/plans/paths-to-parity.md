@@ -774,3 +774,48 @@ cache answers them.
 construction -- something else on the decimal loop path renders a number to
 text. **That is localised but not diagnosed, and it should not be guessed at:
 the mechanism needs a caller-attributed profile of `decloop` specifically.**
+
+### The decimal loop's mechanism, and two more closed leads (2026-09-10)
+
+**`decloop` renders nothing.** The 5.3% of number *formatting* recorded above
+is `decrender`'s, where `length(j)` and `j='foobar'` genuinely require the
+control value as text. A caller-attributed profile of `decloop` contains no
+`format` frame at all; the earlier note conflated the two programs.
+
+**What the 1.63x actually is: the controlled-loop fast path cannot fire.**
+`Interp::loop_advance`'s `LoopState::Controlled` arm has an integer fast path
+guarded on `by_int` and `to_int` -- both `Number::plain_integer` -- and on the
+control value being `ControlValue::Small`. For `do j=1.1 to 2.2 by 1.1` the
+`BY` is not a plain integer, so `by_int` is `None` and the guard can never
+pass. Every step then takes the general path: a genuine variable read (the
+oracle's own semantics, measured), a `Number` conversion, a decimal add, a
+fresh arena object, and a numeric compare.
+
+The loop state is not at fault -- `to` and `by` are already kept as `Number`s
+with `to_int`/`by_int` caches, so nothing is re-parsed per step. `decloop`
+performs exactly 3 conversions per *outer* iteration, which is its three
+literals at loop entry.
+
+**Closed: `Number`'s size is not a lever, and cannot be changed.** The profile
+suggested it -- `Result<Number, Failure>::branch` 2.5%, `Number::clone` 1.5%,
+`Digits::as_slice` 5.1%, all consequences of a 40-byte value type moved through
+`Result`s where the oracle passes a pointer. Shrinking `INLINE_DIGITS` from 30
+to 14 made every axis **worse** (`decloop` +2.3%, `arith` +34%), because
+`Number::from_i64` takes up to nineteen digits and a 14-digit buffer spills
+every integer conversion to the heap. That bound is written in `digits.rs`, and
+the ablation went under it.
+
+Checking it properly closes the line: `digits.rs` records that **every capacity
+from twenty to thirty gives `Digits` 32 bytes and `Number` 40**, because the
+`Vec` arm is 24 bytes. Twenty is the floor `from_i64` sets. So `Number` cannot
+be smaller than 40 bytes, and its size was never available to trade.
+
+**What is left, and it is a real design question.** A decimal-controlled `DO`
+is a supported and not-rare construct that falls off a fast path built only for
+integers. The fix is not to widen that guard -- `by_int` exists because
+integer stepping is exactly representable -- but to give the decimal case its
+own stepping state, keeping the control value as a `Number` across iterations
+instead of round-tripping it through a variable read and an arena allocation
+each step. The oracle's `DoBlock` keeps its control value likewise. That is a
+design change, and it should be bounded by an ablation first, like everything
+else here.
