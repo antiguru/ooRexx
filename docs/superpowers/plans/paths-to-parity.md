@@ -464,3 +464,71 @@ does not survive the measurement.
 
 That third group is what "parity" now means, and `startup` is a separate and
 much larger multiple that no path above was drawn to address.
+
+## The `rexxcps` parity program, opened 2026-09-10
+
+Moritz set the goal: `rexxcps` to 1.00x. The budget, from the fixed 20,000,000
+clauses both sides run: **1153 instructions per clause against the oracle's
+531**. Two landed this day, both from one ablation:
+
+* `46480a4ee` / `46845ce88` -- the required-string protocol answered where the
+  answer is the value. `rexxcps` 23.07G -> 20.79G (**2.17x -> 1.96x**
+  instructions), `strings` 1.81x -> 1.50x wall clock.
+
+### What the profile says after them, and it is the important part
+
+Sampled on `instructions:u` at `46845ce88`, with DWARF inline frames expanded
+so self-time lands on the deepest inlined callee rather than its host:
+
+| leaf | self |
+| --- | ---: |
+| `run_ops_from::<true>` | 11.5% |
+| `memcpy` | 4.1% |
+| `ObjRef::decode` | 3.2% |
+| `slice::Iter<Op>::next` + `NonNull<Op>::eq` | 2.9% |
+| `Digits::as_slice` | 2.8% |
+| `int_free_chunk` | 1.8% |
+| `RootSet::frame_slot` + `set_temp` | 1.8% |
+
+**Nothing above 4.1% outside the driver, and every item opened so far is real
+work rather than waste.** Each of these was chased to its source and none is a
+defect: `Digits::as_slice` is a two-arm match called constantly by decimal
+arithmetic; the op-iteration pair is `Chunk::ops_in`, which exists precisely to
+hoist the per-op bounds check; `memcpy` is 48 distinct stacks whose top three
+are 64, 64 and 61 samples of 557; `concat_values` already has an inline-bytes
+path, a lent buffer and one conditional allocation.
+
+### Candidates ruled out this day, each on evidence
+
+* **The op-dispatch loop.** `emptyloop` is 0.75x on instructions -- bare clause
+  dispatch already beats the oracle by a quarter. Whatever the gap is, it is
+  above dispatch.
+* **Compound tail allocation.** `join_tails`' `Vec::new` is not on the hot
+  path; the three live compound sites already lend through
+  `take_key_buffer`/`give_key_buffer`.
+* **PARSE buffers.** `exec_parse` pools through `give_parse_buffer` and
+  `give_parse_strings`.
+* **An integer arithmetic fast path.** `arith_small_int` exists and is tried
+  first, and `spelled_int_arith` already admits a text operand. `rexxcps`'s hot
+  arithmetic is genuinely decimal (`do j=1.1 to 2.2 by 1.1`,
+  `avar.1.2 * 1.1`), which the oracle also does in decimal.
+* **Allocation volume.** `heaptrack` on the shortened program: 344,336
+  allocation calls against 800,000 clauses -- **0.43 per clause**, about one
+  per 2,400 instructions, which is the ~4% the malloc/free/calloc symbols
+  measure. Allocation count is not the lever; the copies are the larger half
+  of that theme.
+* **A missed-inline family.** Briefly believed, then disproved: those
+  accessors carry `#[inline(always)]` and are absent from the non-expanded
+  profile, so they are inline frames being attributed accurately.
+
+### What that means for the goal
+
+`0.9^n` from 1.96x needs n≈7 more wins of 10%, and the profile no longer
+offers one. Parity is a program of many 1-3% steps against a noise floor of
+about 1% per axis -- the `emptyloop` control moved 1.0079 in an arm whose
+ablated code cannot run at all. The next honest step is not another symbol from
+this table but a structural question: what the oracle does per clause that we
+do twice, at 531 instructions against 1153.
+
+`startup` remains untouched and is the largest multiple in the tree at 13.3x
+instructions, hidden behind a 1.65x wall clock that is mostly process spawn.
