@@ -12,12 +12,24 @@
 //! The register-based instruction stream (Phase 4e): `Op`, `Chunk`, and the
 //! shapes later tasks extend rather than reshape.
 //!
-//! `compile` (`compile.rs`) walks a body once and emits one `Op` per
-//! instruction. `Op::Generic` delegates the instruction at its index back to
-//! the tree-walker's own clause unit (`Interp::step_in_temps_frame`, and
-//! `clause.rs` for the boundary it carries). A construct is promoted by
-//! teaching `compile` to emit something other than `Generic` for it, never by
-//! changing what `Generic` means.
+//! `compile` (`compile.rs`) walks a body once and emits an `Op` region per
+//! instruction: an `Op::Clause` that opens the clause, whatever the
+//! instruction's own work needs, and the region's end.
+//!
+//! Two ops stand for a whole instruction rather than a piece of one.
+//! `Op::Exec` runs the instruction at its index through
+//! `Interp::exec_instruction`, the same arm the tree-walker's own `step`
+//! runs, with the clause unit around it supplied by its region.
+//! `Op::Generic` instead runs the whole clause through the tree-walker's
+//! clause unit (`Interp::step_in_temps_frame`, and `clause.rs` for the
+//! boundary it carries), which is why it may not sit inside a region -- it
+//! echoes the clause itself, and the echo is not idempotent.
+//!
+//! `Generic` is what is left of the tree-walker in this stream and it is
+//! being retired: the kinds still reaching it are the absorbed `WHEN` forms,
+//! `ELSE`, `OTHERWISE`, and an `END` closing anything but a repeating loop.
+//! A construct is promoted by teaching `compile` to emit a region for it,
+//! never by changing what either op means.
 //!
 //! `Interp::chunk_for` (`plan.rs`, beside `plan_for`, under the same
 //! `BodyKey`) is the cache: a body compiles once, on first entry, and the
@@ -117,9 +129,12 @@ impl Op {
 /// **Every op that runs a clause carries its own instruction index**, and
 /// that is what lets it sit inside a region a jump lands in: the driver's
 /// program counter is an *op* index, so there is no instruction counter
-/// walking alongside it to read the index off. `Op::Generic` is what an
-/// unpromoted instruction compiles to; a promoted construct compiles to a
-/// `Clause` region followed by whatever jumps its control flow needs.
+/// walking alongside it to read the index off. An instruction whose whole
+/// execution is one `Interp::exec_instruction` call compiles to a `Clause`
+/// region holding a single `Op::Exec`; a construct with operands or control
+/// flow of its own compiles to a region holding those, followed by whatever
+/// jumps it needs. `Op::Generic` is the one op that is not in a region at
+/// all, and the set reaching it is listed on this module.
 pub(crate) enum Op {
     /// Delegates the instruction at `index` back to the tree-walker's own
     /// clause unit, which runs the whole clause.
@@ -1078,6 +1093,33 @@ pub(crate) enum Op {
     /// **The last op of a [`Op::Clause`] region, and inside it**, for the
     /// reason [`Op::Message`] is.
     Expose { index: u32 },
+    /// Runs the instruction at `index` through the arm of
+    /// `Interp::exec_instruction` that its kind names -- the shared
+    /// implementation the tree-walker's own `step` reached, entered here
+    /// without `Interp::step_in_temps_frame` around it.
+    ///
+    /// **One op for a set of kinds rather than one op each, and that is a
+    /// measurement about where the win is rather than a shortcut.** Against a
+    /// dedicated variant this costs one match on `InstructionKind` and a call
+    /// that does not inline; the bodies behind it set interpreter state, parse
+    /// a fragment or do decimal arithmetic. What a dedicated op buys is not
+    /// the dispatch but the chance to resolve an instruction's operands at
+    /// compile time the way [`Op::Store`] and [`Op::Say`] do, and no kind here
+    /// has been shown to want that yet. `NUMERIC` on
+    /// `bench-programs/arith.rex` and `TRACE`/`ADDRESS` on
+    /// `samples/rexxcps.rex` are the candidates if one ever does -- each runs
+    /// often enough for an axis to notice.
+    ///
+    /// **What the promotion buys is the clause region**, exactly as
+    /// [`Op::Expose`]'s does. That is the whole point of the op: an
+    /// instruction left as [`Op::Generic`] cannot sit inside a region, so its
+    /// clause echo, `SIGL` line, temps frame, deadline count and failure site
+    /// all come from `Interp::step_in_temps_frame`. Inside a region they come
+    /// from [`Op::Clause`], which discharges the same list from the same code.
+    ///
+    /// **The last op of a [`Op::Clause`] region, and inside it**, for the
+    /// reason [`Op::Message`] is.
+    Exec { index: u32 },
     /// Answers the `Flow` the `LEAVE`/`ITERATE` at `index` resolves to: the
     /// instruction's own name, if it has one, and the [`crate::run::
     /// LeaveOrigin`] captured here rather than reconstructed later.

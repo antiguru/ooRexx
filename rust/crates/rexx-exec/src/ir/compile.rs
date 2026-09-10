@@ -263,8 +263,12 @@ enum PatchKind {
 /// `SELECT` becomes one such region per listed `WHEN` as well as for its own
 /// header, laid out as a scan chain with a frame opened over whichever branch
 /// wins; an `Assignment` and a `SAY` each become a region that produces one
-/// value and then writes or prints it; every other instruction becomes
-/// [`Op::Generic`].
+/// value and then writes or prints it; an instruction whose whole execution
+/// is one `Interp::exec_instruction` call becomes a region holding a single
+/// [`Op::Exec`]. What is left for [`Op::Generic`] is the absorbed `WHEN`
+/// forms, `ELSE`, `OTHERWISE`, and an `END` closing anything but a repeating
+/// loop -- and the fallthrough arm that emits it names those kinds rather
+/// than spelling `_`, so a kind added later cannot join the set unnoticed.
 ///
 /// **`plan` is read for one thing: the slot a promoted read or write resolves
 /// to.** The rule a compiled assignment's target has to keep is that a stem, a
@@ -1204,12 +1208,20 @@ pub(crate) fn compile(
                     index: loop_of_end[index].expect("the guard just observed it"),
                 });
             }
-            InstructionKind::When { .. }
-            | InstructionKind::WhenCase { .. }
-            | InstructionKind::Command { .. }
-            | InstructionKind::Else { .. }
-            | InstructionKind::Otherwise
-            | InstructionKind::End { .. }
+            // The kinds whose whole execution is one call into
+            // `Interp::exec_instruction`, which is the arm the tree-walker's
+            // own `step` runs for each. What the promotion decides is the
+            // clause region around that call and nothing about the call: the
+            // region owes the echo, the boundary, the temps frame, the
+            // deadline count and the failing clause's site, and
+            // [`Op::Exec`] owes the work.
+            //
+            // `Call` here is every form but `Call::Named`, which has its own
+            // promotion above. `Command` and `Options` reach
+            // `Loud::instruction` from inside `exec_instruction` exactly as
+            // they do from `step`, since neither has an arm there: promoting
+            // them moves where the refusal is raised from and not whether.
+            InstructionKind::Command { .. }
             | InstructionKind::Drop { .. }
             | InstructionKind::Call(..)
             | InstructionKind::Procedure { .. }
@@ -1222,7 +1234,27 @@ pub(crate) fn compile(
             | InstructionKind::Numeric { .. }
             | InstructionKind::Address { .. }
             | InstructionKind::Trace { .. }
-            | InstructionKind::Options { .. } => ops.push(Op::Generic {
+            | InstructionKind::Options { .. } => {
+                let at = op_index(&ops)?;
+                let echo = echoes(trace, instruction);
+                ops.push(Op::Clause {
+                    index: instruction_index(index)?,
+                    end: 0,
+                });
+                push_echo(&mut ops, echo, instruction_index(index)?);
+                ops.push(Op::Exec {
+                    index: instruction_index(index)?,
+                });
+                close_region(&mut ops, at)?;
+            }
+            // Still `Generic`: the two `WHEN` forms an enclosing `SELECT`
+            // never collected, the `ELSE`/`OTHERWISE` markers, and an `END`
+            // closing anything but a repeating loop.
+            InstructionKind::When { .. }
+            | InstructionKind::WhenCase { .. }
+            | InstructionKind::Else { .. }
+            | InstructionKind::Otherwise
+            | InstructionKind::End { .. } => ops.push(Op::Generic {
                 index: instruction_index(index)?,
             }),
         }
@@ -2298,6 +2330,7 @@ fn assert_region_ops_name_their_clause(ops: &[Op]) {
                 | Op::CallNamed { index, .. }
                 | Op::Message { index }
                 | Op::Expose { index }
+                | Op::Exec { index }
                 | Op::Escape { index }
                 | Op::CallExpr { index, .. }
                 | Op::TraceFunction { index, .. }

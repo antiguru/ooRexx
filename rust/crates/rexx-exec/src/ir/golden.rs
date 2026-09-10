@@ -291,6 +291,9 @@ pub(crate) fn render(chunk: &Chunk) -> String {
             Op::Expose { index: at } => {
                 out.push_str(&format!("{index}: Expose index={at}\n"));
             }
+            Op::Exec { index: at } => {
+                out.push_str(&format!("{index}: Exec index={at}\n"));
+            }
             Op::Escape { index: at } => {
                 out.push_str(&format!("{index}: Escape index={at}\n"));
             }

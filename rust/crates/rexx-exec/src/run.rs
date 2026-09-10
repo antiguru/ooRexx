@@ -1785,6 +1785,26 @@ impl Interp {
         // sees `false`. Only `run_activation` ever sets it. `Procedure` and
         // `Use` are the two arms that read it.
         let first_instruction = std::mem::take(&mut self.procedure_permitted);
+        self.exec_instruction(code, index, instruction, source, first_instruction)
+    }
+
+    /// One instruction's own work, with the clause unit already discharged by
+    /// whoever called: [`Interp::step`] takes the permission and enters from
+    /// `step_in_temps_frame`, and [`crate::ir::Op::Exec`] enters from inside
+    /// the [`crate::ir::Op::Clause`] region that already opened the clause.
+    ///
+    /// **`first_instruction` is a parameter and not a `mem::take` here**,
+    /// because the two callers take it at different moments and neither may
+    /// take it twice: the region's own arm consumes it when the clause opens,
+    /// which is before this runs. `Procedure` and `Use` are what read it.
+    pub(crate) fn exec_instruction(
+        &mut self,
+        code: &Code<'_>,
+        index: usize,
+        instruction: &Instruction,
+        source: Option<&ProgramSource>,
+        first_instruction: bool,
+    ) -> Result<Flow, Failure> {
         match &instruction.kind {
             InstructionKind::Say { expression } => {
                 let value = match expression {

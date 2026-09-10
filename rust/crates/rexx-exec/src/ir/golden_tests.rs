@@ -256,23 +256,34 @@ fn a_call_nested_past_the_paths_width_leaves_the_slot_general() {
     );
 }
 
-/// An instruction whose clause this compiler emits [`super::Op::Generic`] for
-/// gets exactly one op, carrying its own index.
+/// An instruction whose whole execution is one `Interp::exec_instruction`
+/// call gets a clause region of its own holding exactly one
+/// [`super::Op::Exec`], carrying its own index.
 ///
 /// `DROP` and `NUMERIC` are two such instructions, and the choice is
-/// load-bearing rather than arbitrary: a program written out of promoted
-/// instructions says nothing about `Generic` at all. **Promoting either of
-/// these is what should redden this test**, and the answer then is a different
-/// unpromoted instruction rather than a new expectation. It has happened once
-/// already: this body was two `NOP`s and a `DROP` until `NOP` was promoted.
+/// load-bearing rather than arbitrary: a program written out of instructions
+/// with compiled operands says nothing about the delegating op at all.
+///
+/// **This test used to assert the same shape for [`super::Op::Generic`], and
+/// its own note said that promoting `DROP` or `NUMERIC` should redden it and
+/// that the answer was to pick a different unpromoted instruction.** That
+/// answer is no longer available and the note is gone with it: the kinds still
+/// on `Generic` are the absorbed `WHEN`s, `ELSE`, `OTHERWISE` and a
+/// non-repeating `END`, and every one of them needs an enclosing `IF` or
+/// `SELECT`, so no body can be all-`Generic` any more. What the test was
+/// really pinning -- one op per instruction, carrying that instruction's own
+/// index -- transfers to `Op::Exec` and outlives `Op::Generic` entirely.
 #[test]
-fn every_instruction_of_an_all_generic_body_compiles_to_one_generic_op() {
+fn every_instruction_of_an_all_delegating_body_compiles_to_one_exec_op() {
     let chunk = compile_for_test(b"drop n1\ndrop n2\nnumeric digits 5\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Generic index=0\n\
-         1: Generic index=1\n\
-         2: Generic index=2\n"
+        "0: Clause index=0 end=2\n\
+         1: Exec index=0\n\
+         2: Clause index=1 end=4\n\
+         3: Exec index=1\n\
+         4: Clause index=2 end=6\n\
+         5: Exec index=2\n"
     );
     // Nothing here addresses a register, so the chunk reserves none.
     assert_eq!(chunk.registers, 0);
@@ -1972,8 +1983,8 @@ fn a_traced_call_carries_its_clause_echo_in_front_of_the_call() {
     );
 }
 
-/// **`CALL ON`/`CALL OFF` and `CALL (expr)` are not promoted**, and each is
-/// unpromoted for a reason of its own rather than by oversight.
+/// **`CALL ON`/`CALL OFF` and `CALL (expr)` carry no resolved call site**,
+/// and each carries none for a reason of its own rather than by oversight.
 ///
 /// `CALL ON` resolves no name at all: it edits the activation's trap table,
 /// which is `exec_condition_trap`'s and has nothing a call site could
@@ -1981,13 +1992,30 @@ fn a_traced_call_carries_its_clause_echo_in_front_of_the_call() {
 /// a resolution for it without a guard comparing the name it was resolved
 /// for -- and a guarded cache is exactly the shape this task has no evidence
 /// about (D24, amended).
+///
+/// **That is a claim about the call site, not about the clause region.** Both
+/// forms compile to an ordinary region ending in [`super::Op::Exec`], which is
+/// what an instruction whose whole execution is one `exec_instruction` call
+/// gets; what neither gets is the `site=` that [`super::Op::CallNamed`]
+/// renders. The contrast with `a_named_call_carries_its_resolution` above is
+/// the whole of this test: same clause machinery, no resolution.
 #[test]
-fn a_trap_call_and_a_dynamic_call_stay_generic() {
+fn a_trap_call_and_a_dynamic_call_keep_no_resolved_site() {
     let chunk = compile_for_test(b"call on error name zh\ncall (zn)\n").expect("compiles");
+    let rendered = render(&chunk);
     assert_eq!(
-        render(&chunk),
-        "0: Generic index=0\n\
-         1: Generic index=1\n"
+        rendered,
+        "0: Clause index=0 end=2\n\
+         1: Exec index=0\n\
+         2: Clause index=1 end=4\n\
+         3: Exec index=1\n"
+    );
+    // The half the stream above states only by absence, asserted rather than
+    // left to be read out of it: neither form emits the op that carries a
+    // resolution, so neither can carry one.
+    assert!(
+        !rendered.contains("CallNamed"),
+        "a call with nothing to resolve compiled to a resolved call\n{rendered}"
     );
     assert_eq!(chunk.registers, 0);
 }

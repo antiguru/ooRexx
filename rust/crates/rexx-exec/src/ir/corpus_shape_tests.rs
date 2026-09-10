@@ -145,6 +145,7 @@ impl Root {
             | Op::Call { .. }
             | Op::Message { .. }
             | Op::Expose { .. }
+            | Op::Exec { .. }
             | Op::Escape { .. }
             | Op::TraceFunction { .. }
             | Op::EndBranch

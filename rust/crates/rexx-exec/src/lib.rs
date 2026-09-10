@@ -8717,28 +8717,41 @@ say 1
     /// source per clause, rather than the same clause repeated on every op of
     /// its region -- and both halves are asserted, because a renderer that
     /// annotated everything satisfies the first alone.
+    ///
+    /// **`Op::Exec` is what makes the second half worth asserting.** It
+    /// carries an instruction index of its own, so a renderer that annotated
+    /// every op holding an index would annotate it; the ops this test used to
+    /// check the second half against carried no index at all and could not
+    /// tell the two rules apart.
     #[test]
-    fn the_ir_render_names_the_clause_a_generic_op_stands_for() {
-        // `DROP` is unpromoted and `SAY` is promoted, so this program has one
-        // op of each kind with a region of computing ops behind the second.
+    fn the_ir_render_names_the_clause_a_region_opens_and_not_its_inner_ops() {
+        // `DROP` delegates and `SAY` has compiled operands, so this program
+        // has a region of each shape: one holding a single `Exec`, one holding
+        // the ops that compute the value.
         let rendered = super::render_ir(b"drop zn\nsay 'x'\n".to_vec(), b"n").expect("parses");
         let lines: Vec<&str> = rendered.lines().collect();
         assert!(
             lines
                 .iter()
-                .any(|line| line.starts_with("0: Generic") && line.ends_with("; 1: drop zn")),
-            "the Generic op does not name its own clause\n{rendered}"
+                .any(|line| line.starts_with("0: Clause") && line.ends_with("; 1: drop zn")),
+            "the Clause op does not name the clause it opens\n{rendered}"
         );
         assert!(
             lines
                 .iter()
-                .any(|line| line.starts_with("1: Clause") && line.ends_with("; 2: say 'x'")),
-            "the Clause op does not name its own clause\n{rendered}"
+                .any(|line| line.starts_with("2: Clause") && line.ends_with("; 2: say 'x'")),
+            "the second Clause op does not name the clause it opens\n{rendered}"
         );
         assert!(
             lines
                 .iter()
-                .filter(|line| line.starts_with("2: ") || line.starts_with("3: "))
+                .any(|line| line.starts_with("1: Exec") && !line.contains(';')),
+            "the Exec op inside a region repeats its region's clause\n{rendered}"
+        );
+        assert!(
+            lines
+                .iter()
+                .filter(|line| line.starts_with("3: ") || line.starts_with("4: "))
                 .all(|line| !line.contains(';')),
             "an op inside a region repeats its region's clause\n{rendered}"
         );

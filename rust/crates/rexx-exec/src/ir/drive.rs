@@ -259,6 +259,7 @@ fn undriven_op_name(op: &Op) -> &'static str {
         Op::CallNamed { .. } => "CallNamed",
         Op::Message { .. } => "Message",
         Op::Expose { .. } => "Expose",
+        Op::Exec { .. } => "Exec",
         Op::Escape { .. } => "Escape",
         Op::Jump { .. } => "Jump",
         Op::JumpUnless { .. } => "JumpUnless",
@@ -868,7 +869,7 @@ impl Interp {
                     //   `tests/ir_dual_cases/assignment-and-say`'s "procedure
                     //   after an assignment in a called label" row diverge, and
                     //   again nothing else notices.
-                    let _first_instruction = std::mem::take(&mut self.procedure_permitted);
+                    let first_instruction = std::mem::take(&mut self.procedure_permitted);
                     // The ops of this promoted clause, `[pc + 1, end)`, and
                     // where they leave the counter.
                     //
@@ -1965,6 +1966,32 @@ impl Interp {
                                             break 'cold Err(failure);
                                         }
                                         break 'cold Ok(RegionEnd::Flowed(Flow::Next));
+                                    }
+                                    // The instruction's own work, from the same
+                                    // `Interp::exec_instruction` the tree-walker's
+                                    // own `step` enters -- so the kinds this op
+                                    // covers are one implementation and not a
+                                    // second copy beside it.
+                                    //
+                                    // **`first_instruction` is the region's own
+                                    // take**, not a fresh one: this clause already
+                                    // consumed the permission when it opened, and
+                                    // taking it again here would hand `Procedure`
+                                    // and `Use` a `false` the clause had earned.
+                                    Op::Exec { index: at } => {
+                                        debug_assert_names_the_clause(code, *at, clause, "Exec");
+                                        match self.exec_instruction(
+                                            code,
+                                            index,
+                                            clause,
+                                            source,
+                                            first_instruction,
+                                        ) {
+                                            Ok(flow) => {
+                                                break 'cold Ok(RegionEnd::Flowed(flow));
+                                            }
+                                            Err(failure) => break 'cold Err(failure),
+                                        }
                                     }
                                     // `LEAVE`/`ITERATE`. `leave_origin` is the
                                     // tree-walker's own capture, entered here with
