@@ -615,3 +615,58 @@ locals live across `?` in the driver, not a different signature.
   same change reads 0.2305 on `dispatch` and 3.4961 on `alloc` while cycles
   move -12.8% and -2.0%. The ratio was called a clean control here and it is
   not one; absolutes are required before reading it.
+
+### The layout control for the driver, measured 2026-09-10
+
+The section above rejected the `GRANTING` collapse on a cycle measurement, and
+the note above `run_ops` rejected an earlier change for having "no mechanism
+below the layout changed". Neither had a control. This is it.
+
+Four binaries differing **only** in the size of a `#[cold] #[inline(never)]`
+function in the driver's own translation unit, never called (env-gated and
+`black_box`ed so it survives DCE and never runs). Identical semantics,
+byte-identical 15,278-byte driver in all four, four distinct hashes. Retired
+instructions across the extremes: 21,701,992,708 against 21,701,987,585, a
+0.00002% difference -- which is what says the pad never executes and the hot
+code is the same code.
+
+Pad sizes 22, 8,583, 19,543 and 39,274 bytes, bracketing the 12,638-byte delta
+the real change produced. `cycles:u`, five reps, median:
+
+| axis | pad1 | pad400 | pad900 | pad1800 | spread |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `dispatch` | 1.0000 | 0.9677 | 1.0231 | 0.9642 | **5.9 pp** |
+| `strings` | 1.0000 | 1.0402 | 0.9999 | 1.0010 | 4.0 pp |
+| `emptyloop` | 1.0000 | 1.0290 | 1.0048 | 1.0351 | 3.5 pp |
+| `rexxcps` | 1.0000 | 0.9943 | 0.9749 | 0.9843 | 2.5 pp |
+| `alloc` | 1.0000 | 1.0108 | 0.9977 | 1.0060 | 1.3 pp |
+
+**Dead code alone moves a cycle measurement by up to 4% on one axis, and
+`dispatch` spans 5.9 points end to end.** The movement is not monotonic in pad
+size -- `dispatch` is 0.9677 at 8.5KB, 1.0231 at 19.5KB and 0.9642 at 39KB --
+which is what distinguishes a placement artifact from an effect.
+
+**A single-axis cycle difference under about 4% is not evidence.** That
+threshold governs the rest of this document's cycle work, and it retires two
+claims made in the section above:
+
+| axis | `GRANTING` change | band | verdict |
+| --- | ---: | --- | --- |
+| `dispatch` | 0.8721 | 0.9642-1.0231 | **outside, better by 9.2 pp** |
+| `alloc` | 0.9802 | 0.9977-1.0108 | outside, better by 1.8 pp |
+| `rexxcps` | 0.9848 | 0.9749-1.0000 | inside -- **not established** |
+| `strings` | 1.0290 | 0.9999-1.0402 | inside -- **not established** |
+| `emptyloop` | 1.0348 | 1.0000-1.0351 | inside on cycles |
+
+`rexxcps -1.5%` was reported as a win and `strings +2.9%` as a regression.
+Neither is distinguishable from layout and both are withdrawn.
+
+**What survives is the important part.** `dispatch` at -12.8% clears the whole
+band by 9.2 points, and its cost is `emptyloop`'s **+3.97% instructions**,
+which is real for the opposite reason: instructions are layout-insensitive, as
+this control's own 0.00002% shows. So the trade is a 12.8% cycle cut on the
+send axis against roughly four instructions per clause on the tightest loop --
+both real, neither noise. That is a genuine engineering choice rather than the
+measurement artifact the earlier note assumed, and it is evidence that driver
+code size matters for send-heavy work, which is what the "shrink the cold bulk"
+direction rests on.
