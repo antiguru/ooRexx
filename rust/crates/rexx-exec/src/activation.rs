@@ -1903,21 +1903,42 @@ pub(crate) struct BuiltinTraps([Option<Trap>; Builtin::COUNT]);
 #[derive(Clone, Default)]
 pub(crate) struct TrapMap {
     builtin: Option<Rc<BuiltinTraps>>,
-    user: HashMap<Box<[u8]>, Trap>,
+    /// **Boxed, and `None` rather than empty.** A `SIGNAL ON`/`CALL ON` for a
+    /// name that is not one of the builtin conditions is rare, and every
+    /// activation carried this map whether or not it had one: inline the
+    /// `HashMap` is 48 of `TrapMap`'s 56 bytes, and `Interp::push_activation`
+    /// copies the whole `Activation` on every call. `TrapMap` is 16 bytes now
+    /// and `Activation` 416 rather than 456.
+    ///
+    /// **The same change to `Activation::extra` was measured and rejected**:
+    /// boxing that map alone cost `dispatch` +1.95% and `dispatchclass`
+    /// +2.01% in retired instructions, where this one pays. A smaller struct
+    /// is not automatically a faster one, and the two fields differ in how
+    /// often they are populated.
+    ///
+    /// **`clippy::box_collection` is allowed here on a measurement.** The lint
+    /// is right in general -- a `HashMap` already keeps its table on the heap,
+    /// so boxing one buys an extra indirection -- but what it models is the
+    /// cost of reaching the table, and what matters here is the 48 bytes the
+    /// `HashMap` header occupies *inline in this struct*, which every
+    /// `Activation` copies whether or not a trap was ever set. Eight bytes
+    /// instead, and the indirection is paid only by a body that sets one.
+    #[allow(clippy::box_collection)]
+    user: Option<Box<HashMap<Box<[u8]>, Trap>>>,
 }
 
 impl TrapMap {
     pub(crate) fn get(&self, name: &[u8]) -> Option<&Trap> {
         match Builtin::of(name) {
             Some(which) => self.builtin.as_ref()?.0[which as usize].as_ref(),
-            None => self.user.get(name),
+            None => self.user.as_ref()?.get(name),
         }
     }
 
     pub(crate) fn get_mut(&mut self, name: &[u8]) -> Option<&mut Trap> {
         match Builtin::of(name) {
             Some(which) => Rc::make_mut(self.builtin.as_mut()?).0[which as usize].as_mut(),
-            None => self.user.get_mut(name),
+            None => self.user.as_mut()?.get_mut(name),
         }
     }
 
@@ -1930,7 +1951,9 @@ impl TrapMap {
                 Rc::make_mut(slots).0[which as usize] = Some(trap);
             }
             None => {
-                self.user.insert(name, trap);
+                self.user
+                    .get_or_insert_with(Box::default)
+                    .insert(name, trap);
             }
         }
     }
@@ -1943,7 +1966,9 @@ impl TrapMap {
                 }
             }
             None => {
-                self.user.remove(name);
+                if let Some(user) = self.user.as_mut() {
+                    user.remove(name);
+                }
             }
         }
     }
