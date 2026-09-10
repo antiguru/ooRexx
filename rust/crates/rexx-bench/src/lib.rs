@@ -49,6 +49,16 @@ pub static PROGRAMS: &[&str] = &[
     "alloc",
     "alloc4c",
     "emptyloop",
+    // Added 2026-09-10 with the coverage they close: `parse` and `textnum`
+    // because `rexxcps` performs 5,580,002 text-to-number conversions and
+    // 2.24M `PARSE` ops that no program here exercised, and `decloop`/
+    // `decrender` because decimal loop control is a different axis from
+    // integer control -- 1.22x against 1.63x -- and carried the whole of
+    // `rexxcps`' excess over its other primitives.
+    "parse",
+    "textnum",
+    "decloop",
+    "decrender",
 ];
 
 /// Programs in `bench-programs/` that the criterion harness deliberately does

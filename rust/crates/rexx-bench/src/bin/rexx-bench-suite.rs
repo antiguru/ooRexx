@@ -183,6 +183,14 @@ const AXES: &[Axis] = &[
         role: Role::Loop,
     },
     Axis {
+        name: "decloop",
+        role: Role::Loop,
+    },
+    Axis {
+        name: "decrender",
+        role: Role::Loop,
+    },
+    Axis {
         name: "dispatch",
         role: Role::Loop,
     },
@@ -199,11 +207,19 @@ const AXES: &[Axis] = &[
         role: Role::SelfTimed,
     },
     Axis {
+        name: "parse",
+        role: Role::Loop,
+    },
+    Axis {
         name: "startup",
         role: Role::Offset,
     },
     Axis {
         name: "strings",
+        role: Role::Loop,
+    },
+    Axis {
+        name: "textnum",
         role: Role::Loop,
     },
     Axis {

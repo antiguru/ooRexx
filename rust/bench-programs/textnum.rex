@@ -3,7 +3,8 @@
    Each iteration builds fresh strings, so the handles differ and a
    handle-keyed cache cannot answer from the previous iteration. */
 total = 0
-do i = 1 to 200000
+n = 200000
+do i = 1 to n
   s = substr('1234567890', 3, 4)
   t = substr('9876543210', 2, 3)
   if s > t then total = total + 1

@@ -3,7 +3,8 @@
    and no bench program exercises it at all. */
 p0 = 'b'
 total = 0
-do i = 1 to 200000
+n = 200000
+do i = 1 to n
   parse value 'Foo Bar' with v1 +5 v2 .
   rc = 'This is an awfully boring program'; parse var rc p1 (p0) p5
   rc = 'is an awfully boring program This'; parse var rc p2 (p0) p6
