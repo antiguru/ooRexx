@@ -10149,6 +10149,59 @@ impl Interp {
                         }
                     }
                 }
+                // **The same shortcut for the control values the arm above
+                // cannot take.** `Number::plain_integer` opens by rejecting a
+                // negative exponent, so a bound written `1.0` is refused as
+                // flatly as `1.1`: measured, `do j=1.0 to 3.0 by 1.0` and `do
+                // j=1.1 to 3.3 by 1.1` differ by 594 instructions in 3.6
+                // billion, because both reach the general path below. What
+                // that path costs over this one is its own bookkeeping -- a GC
+                // frame per pass, the `NOVALUE` check, two temps, the trace
+                // renderings and `bind_control`'s dispatch on shape -- none of
+                // which a simple untraced control variable needs.
+                //
+                // **The variable is read back here exactly as the integer arm
+                // reads it**, so a body that assigns to the control variable
+                // is still honoured: `do ii = 1 to 3; ii = 10; end; say ii`
+                // prints `11` because this read answers `10`. Reusing
+                // `current` instead would print `4`, which is the defect the
+                // general path's own comment records.
+                //
+                // Non-numeric and unset both fall through rather than being
+                // handled: `self.variable` answers `None` for an unset slot,
+                // and `controlled_step_wide` is the same raiser the general
+                // path uses, so 41.1's report is unchanged.
+                if *stepped
+                    && *shape == NameShape::Simple
+                    && *cached_digits == digits
+                    && for_remaining.is_none()
+                    && let Some(slot) = *at
+                    && let Some(bound) = to.as_ref()
+                {
+                    let mode = self.trace_mode();
+                    let fuzz = self.activation().settings.fuzz();
+                    if !mode.results && !mode.intermediates && fuzz == 0 {
+                        let frame = self.activation().frame;
+                        if let Some(previous) = self.variable(frame, slot)
+                            && matches!(previous.decode(), Decoded::Heap { .. })
+                        {
+                            let sum = self.controlled_step_wide(previous, by, digits)?;
+                            let stepped_value = ControlValue::Wide(sum);
+                            let within = Self::controlled_within_wide(
+                                &stepped_value,
+                                bound,
+                                by,
+                                digits,
+                                fuzz,
+                            )?;
+                            let form = self.activation().settings.form();
+                            let handle = self.controlled_value_wide(&stepped_value, digits, form);
+                            self.set_variable(frame, slot, handle);
+                            *current = stepped_value;
+                            return Ok(within);
+                        }
+                    }
+                }
                 let fuzz = self.activation().settings.fuzz();
                 let form = self.activation().settings.form();
                 if *cached_digits != digits {
