@@ -538,21 +538,6 @@ impl Plan {
         plan.result_slot = Some(plan.slot_for(b"RESULT"));
         plan.slot_for(b"RC");
         plan.sigl_slot = Some(plan.slot_for(b"SIGL"));
-        // **`SELF` and `SUPER` for the same reason, and they were missed.**
-        // `Interp::invoke` binds both on every method send through
-        // `Interp::slot_of`, whose third source grows the frame and records
-        // the name in `Activation::extra` -- so a method body that never
-        // writes either name allocated two boxed keys and two map inserts per
-        // send, exactly the cost the paragraph above describes for `RESULT`.
-        // Measured on `bench-programs/dispatch.rex`, `slot_of` reached from
-        // `invoke` was the largest caller of that map.
-        //
-        // Registered here rather than in the method path because `Plan::build`
-        // is not told which kind of body it has; the cost of holding two slots
-        // in a routine or main body that never binds them is two frame slots,
-        // which is what `RC` already costs every body that never reads it.
-        plan.slot_for(b"SELF");
-        plan.slot_for(b"SUPER");
         plan.indents = crate::run::all_indents(&body.instructions);
         if let Some(source) = source {
             plan.lines = body
