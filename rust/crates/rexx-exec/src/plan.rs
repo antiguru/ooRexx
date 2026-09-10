@@ -31,9 +31,9 @@ use crate::Interp;
 use crate::run::{NameShape, shape_of};
 use crate::trace::ChunkTrace;
 use rexx_parse::{
-    Call, CallTarget, CodeBody, Expr, ExprKind, Fragment, Instruction, InstructionKind, Loop,
-    LoopKind, Parse, ParseSource, ProgramSource, Redirection, Signal, SymbolId, SymbolTable, Tail,
-    Trace, Use, VariableRef, compound_parts,
+    Call, CallTarget, CodeBody, DirectiveKind, Expr, ExprKind, Fragment, Instruction,
+    InstructionKind, Loop, LoopKind, Parse, ParseSource, ProgramSource, Redirection, Signal,
+    SymbolId, SymbolTable, Tail, Trace, Use, VariableRef, compound_parts,
 };
 use std::rc::Rc;
 
@@ -130,6 +130,27 @@ pub(crate) struct BodyKey {
     /// slot-index identity `PROCEDURE EXPOSE`'s alias bitset rests on does
     /// not hold across the two.
     pub(crate) directive: Option<usize>,
+}
+
+/// Whether a body is entered as a method, which is the one thing
+/// [`Plan::build`] needs to know about its caller.
+///
+/// `Interp::enter_method_body` binds `SELF` and `SUPER` before a method body's
+/// first instruction, so this is the predicate "does entering this body bind
+/// those two names" -- spelled as the two kinds of body rather than as a bare
+/// `bool`, because a `true` at a call site would say nothing about which side
+/// it is.
+///
+/// The one other place that binds the two names is
+/// `Interp::eval_constant_expression`, and it is not a case this enum has to
+/// cover: a `::CONSTANT`'s activation carries `Plan::default()` rather than a
+/// built plan, so there is nothing for `build` to have registered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BodyKind {
+    /// A program's main body or a `::ROUTINE`: entering it binds neither name.
+    Plain,
+    /// A `::METHOD` or `::ATTRIBUTE` body.
+    Method,
 }
 
 /// One tail piece of a compound's name, owned.
@@ -495,6 +516,7 @@ impl Plan {
         body: &CodeBody,
         symbols: &SymbolTable,
         source: Option<&ProgramSource>,
+        kind: BodyKind,
     ) -> Plan {
         // `compounds` is sized here rather than filled as names arrive,
         // because `bind`/`note_compound_name` write into it by id and an id
@@ -538,6 +560,23 @@ impl Plan {
         plan.result_slot = Some(plan.slot_for(b"RESULT"));
         plan.slot_for(b"RC");
         plan.sigl_slot = Some(plan.slot_for(b"SIGL"));
+        // **`SELF` and `SUPER` for the same reason, in a method body only.**
+        // `Interp::enter_method_body` binds both on every send through
+        // `Interp::slot_of`, whose third source grows the frame and records
+        // the name in `Activation::extra` -- so a method body that never
+        // mentions either name paid two boxed keys and two map inserts per
+        // send, which is exactly the cost the paragraph above describes for
+        // `RESULT`. Measured on `bench-programs/dispatch.rex`, `slot_of`
+        // reached from that binding was the largest single caller of `extra`.
+        //
+        // Conditional where the three above are unconditional, because the
+        // three above are names the language binds in *every* body and these
+        // two are not: a `::ROUTINE` or a main body never has either bound, so
+        // a slot for them there would be frame width no send ever writes.
+        if kind == BodyKind::Method {
+            plan.slot_for(b"SELF");
+            plan.slot_for(b"SUPER");
+        }
         plan.indents = crate::run::all_indents(&body.instructions);
         if let Some(source) = source {
             plan.lines = body
@@ -1058,9 +1097,42 @@ impl Interp {
         if let Some(plan) = self.plans.get(&key) {
             return Rc::clone(plan);
         }
-        let plan = Rc::new(Plan::build(body, symbols, Some(source)));
+        let plan = Rc::new(Plan::build(
+            body,
+            symbols,
+            Some(source),
+            self.body_kind(key),
+        ));
         self.plans.insert(key, Rc::clone(&plan));
         plan
+    }
+
+    /// Whether the body `key` names is entered as a method.
+    ///
+    /// Read off the key rather than passed in beside it, because the two would
+    /// then be two spellings of one fact and a caller could disagree with the
+    /// cache: a plan is stored under `key` and handed to whatever asks for
+    /// that key next, so a wrong kind at one call site would be answered to
+    /// every other. A directive index selects one directive, and a directive
+    /// is a `::METHOD`, an `::ATTRIBUTE` or something else -- there is nothing
+    /// for the caller to add.
+    ///
+    /// `Plain` for a key naming no directive of this program, which
+    /// `Interp::plan_for`'s own doc rules out by construction; a plan built
+    /// for a body that does not exist has no slots to be wrong about.
+    fn body_kind(&self, key: BodyKey) -> BodyKind {
+        let Some(index) = key.directive else {
+            return BodyKind::Plain;
+        };
+        let kind = self
+            .programs
+            .get(key.program.0)
+            .and_then(|program| program.directives.get(index))
+            .map(|directive| &directive.kind);
+        match kind {
+            Some(DirectiveKind::Method(_) | DirectiveKind::Attribute(_)) => BodyKind::Method,
+            _ => BodyKind::Plain,
+        }
     }
 
     /// The chunk for one body **under one trace setting**, from the cache or
@@ -1152,7 +1224,14 @@ impl Interp {
         // numbers its names 0..n in walk order. Those numbers are local to the
         // fragment and mean nothing to the enclosing frame; the loop below is
         // what translates them.
-        let local = Plan::build(&fragment.body, &fragment.symbols, None);
+        // `BodyKind::Plain` whatever body the `INTERPRET` sits in: this plan
+        // is a numbering of the *fragment's* names, and every name in it is
+        // resolved against the enclosing frame below. `SELF` and `SUPER` are
+        // already bound there when that frame is a method's, so asking for
+        // them here would allocate nothing and change nothing -- and when it
+        // is not a method's, it would grow the enclosing frame by two slots
+        // that nothing writes.
+        let local = Plan::build(&fragment.body, &fragment.symbols, None, BodyKind::Plain);
 
         // Walk order, recovered from the local numbering rather than from
         // iterating the map, because a `HashMap`'s order varies run to run and
@@ -1202,7 +1281,12 @@ mod tests {
     fn indent_of_answers_what_static_indent_answers_at_every_index() {
         let source = b"if 1 = 1 then\n  do i = 1 to 2\n    say i\n  end\nelse\n  nop\nselect\n  when 1 = 0 then nop\n  otherwise\n    say 'o'\nend\n";
         let program = parse_program(source.to_vec()).expect("test program parses");
-        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+        let plan = Plan::build(
+            &program.main,
+            &program.symbols,
+            Some(&program.source),
+            BodyKind::Plain,
+        );
         let instructions = &program.main.instructions;
         assert!(instructions.len() > 8, "the program lost its shape");
 
@@ -1249,7 +1333,12 @@ mod tests {
     fn line_at_answers_what_line_of_answers_at_every_index() {
         let source = b"nop\nsay 1\nif 1 = 1 then\n  nop\nelse\n  nop\ndo i = 1 to 2\n  say i\nend\nsay 'done'\n";
         let program = parse_program(source.to_vec()).expect("test program parses");
-        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+        let plan = Plan::build(
+            &program.main,
+            &program.symbols,
+            Some(&program.source),
+            BodyKind::Plain,
+        );
         let instructions = &program.main.instructions;
         assert!(instructions.len() > 8, "the program lost its shape");
 
@@ -1287,7 +1376,7 @@ mod tests {
     fn line_at_falls_back_when_the_plan_was_built_without_a_source() {
         let source = b"nop\nsay 1\nsay 2\n";
         let program = parse_program(source.to_vec()).expect("test program parses");
-        let plan = Plan::build(&program.main, &program.symbols, None);
+        let plan = Plan::build(&program.main, &program.symbols, None, BodyKind::Plain);
         assert!(plan.lines.is_empty(), "no source, so no table");
         for (index, instruction) in program.main.instructions.iter().enumerate() {
             assert_eq!(
@@ -1311,7 +1400,12 @@ mod tests {
     fn clause_line_at_answers_what_clause_line_answers_and_the_override_still_wins() {
         let source = b"nop\nsay 1\nif 1 = 1 then\n  nop\nelse\n  nop\ndo i = 1 to 2\n  say i\nend\nsay 'done'\n";
         let program = parse_program(source.to_vec()).expect("test program parses");
-        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+        let plan = Plan::build(
+            &program.main,
+            &program.symbols,
+            Some(&program.source),
+            BodyKind::Plain,
+        );
         let code = planned_code(&program, &plan);
         let mut interp = Interp::new();
 
@@ -1375,7 +1469,12 @@ mod tests {
                 let Ok(program) = parse_program(bytes) else {
                     continue;
                 };
-                let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+                let plan = Plan::build(
+                    &program.main,
+                    &program.symbols,
+                    Some(&program.source),
+                    BodyKind::Plain,
+                );
                 let expected: Vec<usize> = program
                     .main
                     .instructions
@@ -1468,7 +1567,12 @@ mod tests {
         ];
         for (source, expected_names) in cases {
             let program = parse_program(source.to_vec()).expect("test program parses");
-            let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+            let plan = Plan::build(
+                &program.main,
+                &program.symbols,
+                Some(&program.source),
+                BodyKind::Plain,
+            );
             assert!(
                 !plan.names.is_empty(),
                 "{:?} must build a non-empty plan",
@@ -1505,7 +1609,12 @@ mod tests {
         let cases: &[(&[u8], &[&str])] = &[(b"leave lbl", &[]), (b"say .nil", &[])];
         for (source, expected_names) in cases {
             let program = parse_program(source.to_vec()).expect("test program parses");
-            let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+            let plan = Plan::build(
+                &program.main,
+                &program.symbols,
+                Some(&program.source),
+                BodyKind::Plain,
+            );
 
             // The reserved names are in every plan, so they are checked
             // for presence once and then set aside; what each case is about
@@ -1535,6 +1644,85 @@ mod tests {
                 String::from_utf8_lossy(source)
             );
         }
+    }
+
+    /// A method body's plan holds `SELF` and `SUPER`, and no other body's
+    /// does.
+    ///
+    /// `Interp::enter_method_body` binds both before a method's first
+    /// instruction, through `Interp::slot_of`. Registering them here is what
+    /// keeps that binding off `slot_of`'s third source, which grows the frame
+    /// and inserts a boxed key into `Activation::extra` -- per send, for a
+    /// name the body may never mention. Registering them in a main body or a
+    /// `::ROUTINE` would be the opposite trade: two slots of frame width that
+    /// nothing there ever writes.
+    ///
+    /// Reached through `Interp::plan_for` rather than by handing `build` a
+    /// kind, because the kind is derived from the cache key
+    /// (`Interp::body_kind`) and it is that derivation, not the parameter,
+    /// that decides what a running body gets. All three bodies come from one
+    /// program, so a `body_kind` answering a single kind for everything fails
+    /// on whichever row it got wrong.
+    #[test]
+    fn only_a_method_body_holds_self_and_super() {
+        let source = b"nop\n::routine r\n  nop\n::class k\n::method m\n  x = 1\n";
+        let program = Rc::new(parse_program(source.to_vec()).expect("test program parses"));
+        let mut interp = Interp::new();
+        let program_id = ProgramId(interp.programs.len());
+        interp.programs.push(Rc::clone(&program));
+
+        let position = |wanted: fn(&DirectiveKind) -> bool| {
+            program
+                .directives
+                .iter()
+                .position(|directive| wanted(&directive.kind))
+                .expect("the program has this directive")
+        };
+        let routine = position(|kind| matches!(kind, DirectiveKind::Routine(_)));
+        let method = position(|kind| matches!(kind, DirectiveKind::Method(_)));
+
+        for (selector, what, expected) in [
+            (None, "the main body", false),
+            (Some(routine), "::ROUTINE r", false),
+            (Some(method), "::METHOD m", true),
+        ] {
+            let body = crate::activation::body_of(&program, selector)
+                .unwrap_or_else(|| panic!("{what} has a body"));
+            let plan = interp.plan_for(
+                BodyKey {
+                    program: program_id,
+                    directive: selector,
+                },
+                body,
+                &program.symbols,
+                &program.source,
+            );
+            for name in [b"SELF".as_slice(), b"SUPER".as_slice()] {
+                assert_eq!(
+                    plan.slot_of(name).is_some(),
+                    expected,
+                    "{what}: {} in the plan, which holds {:?}",
+                    String::from_utf8_lossy(name),
+                    plan.names.keys().collect::<Vec<_>>()
+                );
+            }
+        }
+
+        // Registered after the body's own names, so the method body's own `X`
+        // is still slot 0 -- the property that let the two be added without
+        // renumbering anything a plan already answered.
+        let body =
+            crate::activation::body_of(&program, Some(method)).expect("::METHOD m has a body");
+        let plan = interp.plan_for(
+            BodyKey {
+                program: program_id,
+                directive: Some(method),
+            },
+            body,
+            &program.symbols,
+            &program.source,
+        );
+        assert_eq!(plan.slot_of(b"X"), Some(0));
     }
 
     /// `build` records a compound's split under **the compound's own id**.
@@ -1584,7 +1772,12 @@ mod tests {
     fn build_records_a_compounds_split_under_the_compounds_own_id() {
         let source = b"drop dd.jj; do aa.ii = 1 to 2; say v.i.7; end";
         let program = parse_program(source.to_vec()).expect("test program parses");
-        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+        let plan = Plan::build(
+            &program.main,
+            &program.symbols,
+            Some(&program.source),
+            BodyKind::Plain,
+        );
 
         let variable = |text: &str, at: Option<usize>| TailPiece::Variable {
             name: text.as_bytes().into(),
@@ -1690,7 +1883,12 @@ mod tests {
     fn a_control_variable_does_not_take_the_slots_off_a_compound_already_seen() {
         let source = b"say v.i; do v.i = 1 to 2; end";
         let program = parse_program(source.to_vec()).expect("test program parses");
-        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+        let plan = Plan::build(
+            &program.main,
+            &program.symbols,
+            Some(&program.source),
+            BodyKind::Plain,
+        );
 
         let InstructionKind::Say {
             expression: Some(expr),
@@ -1746,7 +1944,12 @@ mod tests {
     fn a_compound_seen_after_the_control_variable_still_gets_its_slots() {
         let source = b"do v.i = 1 to 2; end; say v.i";
         let program = parse_program(source.to_vec()).expect("test program parses");
-        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+        let plan = Plan::build(
+            &program.main,
+            &program.symbols,
+            Some(&program.source),
+            BodyKind::Plain,
+        );
 
         let (InstructionKind::Do(loop_) | InstructionKind::Loop(loop_)) =
             &program.main.instructions[0].kind
@@ -1820,7 +2023,12 @@ mod tests {
         };
         let id = controlled.control;
 
-        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+        let plan = Plan::build(
+            &program.main,
+            &program.symbols,
+            Some(&program.source),
+            BodyKind::Plain,
+        );
         assert_eq!(
             plan.slot_of(b"ZI"),
             None,
@@ -1835,7 +2043,12 @@ mod tests {
         );
 
         let program = activate(&mut interp, program);
-        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+        let plan = Plan::build(
+            &program.main,
+            &program.symbols,
+            Some(&program.source),
+            BodyKind::Plain,
+        );
         let code = planned_code(&program, &plan);
         // Unset, so the piece derives its own spelling -- the ordinary
         // uninitialised read, reached here through `extra` and growth.
@@ -1886,7 +2099,12 @@ mod tests {
         };
         let id = controlled.control;
 
-        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+        let plan = Plan::build(
+            &program.main,
+            &program.symbols,
+            Some(&program.source),
+            BodyKind::Plain,
+        );
         assert_eq!(
             plan.slot_of(b"ZA."),
             None,
@@ -1895,7 +2113,12 @@ mod tests {
         assert_eq!(expect_entry(&plan, id).stem_at, None);
 
         let program = activate(&mut interp, program);
-        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+        let plan = Plan::build(
+            &program.main,
+            &program.symbols,
+            Some(&program.source),
+            BodyKind::Plain,
+        );
         let code = planned_code(&program, &plan);
         let (stem_name, stem_at) = code.stem(id);
         assert_eq!(stem_name, b"ZA.");
@@ -1947,7 +2170,12 @@ mod tests {
     fn bind_keeps_a_stem_shaped_names_own_slot_as_its_stems() {
         let source = b"zt. = 'v'\ndo zs. = 1 to 2\nnop\nend\ndo aa.ii = 1 to 2\nnop\nend";
         let program = parse_program(source.to_vec()).expect("test program parses");
-        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+        let plan = Plan::build(
+            &program.main,
+            &program.symbols,
+            Some(&program.source),
+            BodyKind::Plain,
+        );
 
         let mut found: Vec<(&str, Option<usize>)> = Vec::new();
         for instruction in &program.main.instructions {
@@ -1995,7 +2223,12 @@ mod tests {
         let frame = interp.activation().frame;
         interp.roots.set_frame_slot(frame, b_slot, two);
 
-        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+        let plan = Plan::build(
+            &program.main,
+            &program.symbols,
+            Some(&program.source),
+            BodyKind::Plain,
+        );
         let code = planned_code(&program, &plan);
         let key = interp
             .tail_key(&code, id)
@@ -2096,7 +2329,12 @@ mod tests {
         let frame = interp.activation().frame;
         interp.roots.set_frame_slot(frame, i_slot, abc);
 
-        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+        let plan = Plan::build(
+            &program.main,
+            &program.symbols,
+            Some(&program.source),
+            BodyKind::Plain,
+        );
         let code = planned_code(&program, &plan);
         let key = interp
             .tail_key(&code, id)
@@ -2145,7 +2383,7 @@ mod tests {
     fn a_body_that_can_reach_the_trace_setting_is_the_one_that_says_so() {
         let retraces = |source: &[u8]| {
             let program = parse_program(source.to_vec()).expect("test program parses");
-            !Plan::build(&program.main, &program.symbols, None).never_retraces()
+            !Plan::build(&program.main, &program.symbols, None, BodyKind::Plain).never_retraces()
         };
 
         // The instruction, in each of its forms.

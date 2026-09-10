@@ -83,7 +83,7 @@ use rexx_parse::{
 
 use super::golden::render;
 use super::{Chunk, ConditionKeyword, Op};
-use crate::plan::Plan;
+use crate::plan::{BodyKind, Plan};
 use crate::trace::{ChunkTrace, TraceMode};
 
 /// The op a promoted clause's value expression must end in.
@@ -394,7 +394,7 @@ fn check_body(
     where_: &str,
     seen: &mut Seen,
 ) {
-    let plan = Plan::build(body, symbols, Some(source));
+    let plan = Plan::build(body, symbols, Some(source), BodyKind::Plain);
     let chunk = match super::compile(body, &plan, ChunkTrace::of(TraceMode::NORMAL)) {
         Ok(chunk) => chunk,
         // The one error `compile` has is a machine width, and no corpus

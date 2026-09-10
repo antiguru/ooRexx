@@ -21,7 +21,7 @@ use rexx_parse::{ExprKind, InstructionKind, parse_program};
 use super::golden::render;
 use super::{Chunk, ChunkTooLarge, NodePath};
 use crate::Interp;
-use crate::plan::{BodyKey, Plan, ProgramId};
+use crate::plan::{BodyKey, BodyKind, Plan, ProgramId};
 use crate::trace::{ChunkTrace, TraceMode};
 
 /// Parses `source`, builds its plan and compiles it **under the setting every
@@ -36,7 +36,12 @@ fn compile_for_test(source: &[u8]) -> Result<Chunk, ChunkTooLarge> {
 /// what `compile` emits (D23).
 fn compile_for_test_under(source: &[u8], trace: ChunkTrace) -> Result<Chunk, ChunkTooLarge> {
     let program = parse_program(source.to_vec()).expect("test program parses");
-    let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+    let plan = Plan::build(
+        &program.main,
+        &program.symbols,
+        Some(&program.source),
+        BodyKind::Plain,
+    );
     super::compile(&program.main, &plan, trace)
 }
 
@@ -442,7 +447,12 @@ fn a_bare_symbol_compiles_to_a_native_read_in_each_of_its_three_kinds() {
 #[test]
 fn a_compiled_read_names_the_symbol_its_expression_does() {
     let program = parse_program(b"zw = za.zi\n".to_vec()).expect("test program parses");
-    let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+    let plan = Plan::build(
+        &program.main,
+        &program.symbols,
+        Some(&program.source),
+        BodyKind::Plain,
+    );
     let chunk = super::compile(&program.main, &plan, intermediates()).expect("compiles");
 
     let InstructionKind::Assignment { value, .. } = &program.main.instructions[0].kind else {
@@ -1717,7 +1727,12 @@ fn two_constructs_ending_at_one_instruction_release_to_the_lower_mark() {
 fn the_instruction_map_has_an_entry_one_past_the_last_instruction() {
     let source = b"if 1 = 1 then say 'a'\nsay 'b'\n";
     let program = parse_program(source.to_vec()).expect("test program parses");
-    let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+    let plan = Plan::build(
+        &program.main,
+        &program.symbols,
+        Some(&program.source),
+        BodyKind::Plain,
+    );
     let chunk =
         super::compile(&program.main, &plan, ChunkTrace::of(TraceMode::NORMAL)).expect("compiles");
     assert_eq!(
@@ -1743,7 +1758,12 @@ fn chunk_for_compiles_a_body_once_across_repeated_lookups() {
         program: ProgramId(0),
         directive: None,
     };
-    let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+    let plan = Plan::build(
+        &program.main,
+        &program.symbols,
+        Some(&program.source),
+        BodyKind::Plain,
+    );
 
     let mut interp = Interp::new();
     let before = super::compile::compile_calls();
@@ -1796,7 +1816,12 @@ fn one_body_under_two_trace_settings_is_two_cached_chunks() {
         program: ProgramId(0),
         directive: None,
     };
-    let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+    let plan = Plan::build(
+        &program.main,
+        &program.symbols,
+        Some(&program.source),
+        BodyKind::Plain,
+    );
     let untraced = ChunkTrace::of(TraceMode::NORMAL);
 
     let mut interp = Interp::new();

@@ -837,7 +837,7 @@ impl Interp {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plan::Plan;
+    use crate::plan::{BodyKind, Plan};
     use crate::{Activation, BodyKey, ProgramId};
     use rexx_num::{Form, Number};
     use rexx_parse::{ExprKind, InstructionKind, Program, parse_program};
@@ -1069,7 +1069,12 @@ mod tests {
         let mut interp = Interp::new();
         let (program, id) = compound_id(&mut interp, b"say v.i");
 
-        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+        let plan = Plan::build(
+            &program.main,
+            &program.symbols,
+            Some(&program.source),
+            BodyKind::Plain,
+        );
         let code = crate::planned_code(&program, &plan);
         let key = interp
             .tail_key(&code, id)
@@ -1099,7 +1104,12 @@ mod tests {
         let frame = interp.activation().frame;
         interp.roots.set_frame_slot(frame, i_slot, abc);
 
-        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+        let plan = Plan::build(
+            &program.main,
+            &program.symbols,
+            Some(&program.source),
+            BodyKind::Plain,
+        );
         let code = crate::planned_code(&program, &plan);
         let key = interp
             .tail_key(&code, id)
@@ -1132,7 +1142,12 @@ mod tests {
         let j_slot = interp.slot_of(b"J");
         interp.roots.set_frame_slot(frame, j_slot, two);
 
-        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+        let plan = Plan::build(
+            &program.main,
+            &program.symbols,
+            Some(&program.source),
+            BodyKind::Plain,
+        );
         let code = crate::planned_code(&program, &plan);
         let key = interp
             .tail_key(&code, id)
@@ -1148,7 +1163,12 @@ mod tests {
         // Parsed only, not activated: activating a second program would push
         // a second frame, shadowing the one `i`/`j` were just bound in.
         let (program2, id2) = parse_compound(b"say a.1.2");
-        let plan2 = Plan::build(&program2.main, &program2.symbols, Some(&program2.source));
+        let plan2 = Plan::build(
+            &program2.main,
+            &program2.symbols,
+            Some(&program2.source),
+            BodyKind::Plain,
+        );
         let code2 = crate::planned_code(&program2, &plan2);
         let key2 = interp
             .tail_key(&code2, id2)

@@ -77,7 +77,7 @@ use input::Input;
 // plan cache, and the full name-resolution order (plan, then `extra`, then
 // growth).
 mod plan;
-use plan::{BodyKey, ClassPackage, CompoundName, Package, Plan, ProgramId};
+use plan::{BodyKey, BodyKind, ClassPackage, CompoundName, Package, Plan, ProgramId};
 
 // One activation: everything about the frame currently executing (D16).
 mod activation;
@@ -8240,9 +8240,9 @@ pub fn render_ir(text: Vec<u8>, setting: &[u8]) -> Result<String, String> {
     let program = rexx_parse::parse_program(text).map_err(|error| format!("{error:?}"))?;
 
     let mut out = String::new();
-    for (body, what) in ir_bodies(&program) {
+    for (body, what, kind) in ir_bodies(&program) {
         out.push_str(&format!("=== {what} ===\n"));
-        let plan = plan::Plan::build(body, &program.symbols, Some(&program.source));
+        let plan = plan::Plan::build(body, &program.symbols, Some(&program.source), kind);
         match ir::compile(body, &plan, trace) {
             Ok(chunk) => out.push_str(&ir::render_annotated(&chunk, body, &program.source)),
             Err(error) => out.push_str(&format!("(refused: {error:?}; runs on the tree-walker)\n")),
@@ -8291,24 +8291,28 @@ pub fn native_entry_points() -> Vec<NativeEntryPoint> {
 /// with no body of its own -- a `::CLASS`, a `::REQUIRES` -- contributes
 /// nothing, which is why the arms are spelled out rather than reached through a
 /// catch-all: a directive kind that gains a body should have to be named here.
-fn ir_bodies(program: &rexx_parse::Program) -> Vec<(&rexx_parse::CodeBody, String)> {
+fn ir_bodies(program: &rexx_parse::Program) -> Vec<(&rexx_parse::CodeBody, String, BodyKind)> {
     use rexx_parse::DirectiveKind;
 
-    let mut out = vec![(&program.main, "main".to_string())];
+    let mut out = vec![(&program.main, "main".to_string(), BodyKind::Plain)];
     for directive in &program.directives {
-        let (body, what) = match &directive.kind {
-            DirectiveKind::Method(method) => (method.body.as_ref(), "::METHOD"),
-            DirectiveKind::Attribute(attribute) => (attribute.body.as_ref(), "::ATTRIBUTE"),
-            DirectiveKind::Routine(routine) => (routine.body.as_ref(), "::ROUTINE"),
+        let (body, what, kind) = match &directive.kind {
+            DirectiveKind::Method(method) => (method.body.as_ref(), "::METHOD", BodyKind::Method),
+            DirectiveKind::Attribute(attribute) => {
+                (attribute.body.as_ref(), "::ATTRIBUTE", BodyKind::Method)
+            }
+            DirectiveKind::Routine(routine) => {
+                (routine.body.as_ref(), "::ROUTINE", BodyKind::Plain)
+            }
             DirectiveKind::Annotate(_)
             | DirectiveKind::Class(_)
             | DirectiveKind::Constant(_)
             | DirectiveKind::Options(_)
             | DirectiveKind::Requires(_)
-            | DirectiveKind::Resource(_) => (None, ""),
+            | DirectiveKind::Resource(_) => (None, "", BodyKind::Plain),
         };
         if let Some(body) = body {
-            out.push((body, what.to_string()));
+            out.push((body, what.to_string(), kind));
         }
     }
     out

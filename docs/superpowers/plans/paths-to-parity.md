@@ -351,3 +351,36 @@ above should be preceded by an ablation that bounds it**, the way the
 bookkeeping ablation bounded its own path and closed it honestly. An ablation
 that comes back small is a path closed for a day's work; one that comes back
 large is a mandate.
+
+## The `SELF`/`SUPER` plan slots, closed 2026-09-10
+
+`Interp::enter_method_body` binds both names on **every** method send through
+`Interp::slot_of`, whose third source grows the frame and inserts a boxed key
+into `Activation::extra` -- for two names a method body usually never mentions.
+`Plan::build` already registers `RESULT`, `RC` and `SIGL` against exactly this
+cost and these two were missed.
+
+Registering them in every plan was measured, and reverted: the tree's own plan
+tests hold `build`'s key set exactly, and a `::ROUTINE` or main body would have
+carried two slots nothing there ever writes. The design that survives is
+`Plan::build` taking a `BodyKind`, derived from the cache key by
+`Interp::body_kind` rather than passed in beside it -- a plan is stored under
+that key and handed to whatever asks for it next, so a caller-supplied kind
+could disagree with the cache.
+
+Measured by retired instructions, ablated arm against the change, three runs
+each, interleaved, both binaries hashed:
+
+    dispatch       25,321,997,864 -> 21,697,000,608   -14.32%
+    dispatchclass  19,637,792,886 -> 16,737,793,895   -14.77%
+    alloc, alloc4c, varlookup, compound, strings, arith,
+    emptyloop, rexxcps                                 1.0000
+
+**Eight controls at exactly 1.0000**, `rexxcps` among them. The change can
+alter a `::METHOD` or `::ATTRIBUTE` body's plan and nothing else, which is what
+makes eight flat axes a control rather than a coincidence -- and what says the
+win is the two names rather than the two slots that came with them.
+
+**Two attempts at the same cluster were measured and discarded first**, and
+neither is in the tree: recycling the `extra` map's capacity across pooled
+activations cost +0.18% on both send axes, and boxing `extra` cost +1.95%.
