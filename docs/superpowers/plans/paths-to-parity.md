@@ -719,3 +719,58 @@ We are also better than the oracle on every cache and predictor measured --
 **87x fewer L1d misses on `varlookup`, 1.6x fewer on `rexxcps`**, fewer branch
 misses, higher IPC on all axes -- and worse only on L1i. The gap is retired
 instructions in the value operations, and nowhere else.
+
+## Why the mix exceeds its parts: decimal loop control (2026-09-10)
+
+`rexxcps` is 1.96x while every primitive it exercises is at or below 1.48x.
+`alloc` (2.06x) and the two dispatch axes are message-send workloads and
+`rexxcps` performs no sends, so they are not its components -- and **`alloc4c`,
+the no-sends allocation axis, is 0.82x: this crate is faster than the oracle at
+allocation.** Allocation is not a lever for the goal.
+
+A profile cannot resolve "the mix exceeds its parts", because it reports shares
+*within* the mix. Bisecting the workload can. `rexxcps`' inner body, one
+construct removed at a time, every variant agreeing with the oracle:
+
+| variant | ratio |
+| --- | ---: |
+| full | 2.014x |
+| **without the `j`-loop** | **1.832x** |
+| without `SELECT` | 2.018x |
+| without `PARSE` | 2.058x |
+| without the compound work | 2.064x |
+| without the `CALL` | 2.140x |
+
+Only the `j`-loop's removal improves the ratio; every other construct is one
+this crate handles *better* than the average of the rest. The `j`-loop's own
+contribution is **2.31x**.
+
+Isolated, and now in `bench-programs/`:
+
+    intloop     1.22x   integer-controlled DO
+    decloop     1.63x   decimal-controlled DO
+    decrender   1.99x   ... plus rendering the control value to text
+
+### Two hypotheses raised and killed
+
+**The `text_numbers` cache is not thrashing.** 85.3% hit with 16 cold misses on
+`rexxcps`; **100.0% hit with 3 misses in 2,000,000** on the decimal loops. Its
+11.32% of `decrender` is therefore *probe* cost -- hash, compare, and a
+`.clone()` of a 40-byte `Result<Number, NotNumeric>` -- and not parsing.
+
+**Pre-parsing numeric literals is not a lever for this crate.** The conversion
+counts said it should be: `decloop` performs exactly 3 conversions per outer
+iteration and its loop header holds exactly three literals. But binding the
+bounds to already-`Number` values first makes the ratio **worse, 1.63x ->
+1.92x**: this crate's instructions rise 3.2% while the oracle's fall 12.5%.
+The oracle pays for re-parsing literals and we largely do not, because the
+cache answers them.
+
+### Open, and the next thing to chase
+
+`decloop` prints nothing, yet `rexx_num::format::resolve_exponential_state` and
+`Number::format_with` together are 5.3% of `decrender`, with malloc/free at
+9.6%. `Interp::number` stores `text: None`, so the rendering is not eager at
+construction -- something else on the decimal loop path renders a number to
+text. **That is localised but not diagnosed, and it should not be guessed at:
+the mechanism needs a caller-attributed profile of `decloop` specifically.**
