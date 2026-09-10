@@ -231,6 +231,80 @@ bodies.
 that compounds:** the single 6.41% spill, the per-op flag test at
 `+0x1346`, and `memmove` at 6.1% whose callers are not yet attributed.
 
+## Candidate A, re-measured: the Generic fallback is nearly gone, the value
+## echoes are not (2026-09-10)
+
+**The 56-`Op::Generic` figure is stale.** Dumping `rexxcps`'s compiled stream
+with `rexx-ir` at this commit: **9 `Generic` ops**, and `PARSE` is promoted --
+it has its own `Op::Parse` inside an `Op::Clause` region, so `exec_parse`'s
+6.5% of retired instructions is the promoted handler doing real work, not a
+fallback. Path A as written aims at something largely already done.
+
+**What the same dump shows instead: 238 `Trace*` ops in a stream compiled
+under trace setting `n`.** About one op in three exists only to be skipped:
+
+    23: Const dst=0 konst=1
+    24: TraceLiteral src=0            <- nothing, untraced
+    25: Load read=Simple at=0 dst=1
+    26: TraceRead read=Simple src=1   <- nothing
+    27: Binary op=blank lhs=0 rhs=1 dst=0
+    28: TraceOperator op=blank src=0  <- nothing
+
+Each pays the jump-table dispatch, the `intermediates` test and the loop-back.
+That test is the `testb $0x1,0x1346(%r14)` the assembly section names:
+`trace_cache` is at `0x1344`, so `0x1346` is byte 2 of `TraceMode`.
+
+**The elision already exists and is already measured** --
+`compile.rs`'s `let echoes_values = trace.intermediates() || !plan.never_retraces();`,
+whose comment records `rexxcps` -1.78% and streams "between 29% and 38%
+value-echo ops". 238 of 763 is 31%, so the comment is still accurate.
+
+**It is defeated by the second disjunct.** A body containing a `TRACE`
+instruction has `never_retraces() == false` and emits every value-echo op
+defensively, forever, whether or not tracing is ever switched on. `rexxcps`
+has three (`trace value tracevar`, `trace value trace()`, `trace off`) and
+enables none of them.
+
+Measured by forcing `echoes_values = trace.intermediates()`, output identical:
+
+| program | ratio | has a `TRACE` instruction |
+| --- | ---: | --- |
+| `rexxcps` | **0.9844** | yes, 3 |
+| `alloc` | 1.0000 | no |
+| `dispatch` | 1.0000 | no |
+| `varlookup` | 1.0000 | no |
+
+**The three controls are exactly 1.0000**, which is what says the cost is the
+defensive emission and nothing else: the change cannot reach a body with no
+`TRACE` in it. `rexxcps` is the only bench program that has one -- and it is
+the headline parity axis.
+
+**Why the existing staleness trick does not extend.** A stale *clause* echo is
+handled at `drive.rs:805` by passing `Echo::Gated` and moving the decision back
+to a runtime gate, in both directions. That works because the op exists either
+way. A *value* echo has no op to gate when the chunk was compiled without one,
+so the same trick cannot produce the line.
+
+**Three ways to make the 1.56% sound**, none yet built:
+
+1. Let the staleness check see `INTERMEDIATES` -- `ChunkTrace` already carries
+   the bit (`trace.rs:298`, `:316`) and `Interp::chunk_for` already keys on it;
+   what is deliberately masked off today is exactly this bit
+   (`trace.rs:319`). Resuming needs an instruction boundary, which `op_of`
+   provides.
+2. Abandon the chunk and finish the activation on the tree-walker when
+   intermediates actually turns on. The engines are equivalent by
+   construction, which `ir_dual` asserts, so the rare path degrades rather
+   than diverging.
+3. Narrow `never_retraces` -- it is per body, and a `TRACE` anywhere in a body
+   taints all of it.
+
+**A note in `ir.rs` is false and should go with whichever lands.** `Op::TraceLiteral`'s
+doc says these ops are emitted unconditionally because the gate is
+`trace_mode().intermediates`, "which `ChunkTrace` does not carry".
+`ChunkTrace` does carry it: `trace.rs:268` defines the bit, `:298` sets it
+from the mode and `:316` reads it.
+
 ## The rule the paths should be run under
 
 `0.9^n` from 1.9x is about six successive 10% wins. Two spikes in this project
