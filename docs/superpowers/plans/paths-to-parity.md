@@ -670,3 +670,52 @@ both real, neither noise. That is a genuine engineering choice rather than the
 measurement artifact the earlier note assumed, and it is evidence that driver
 code size matters for send-heavy work, which is what the "shrink the cold bulk"
 direction rests on.
+
+## The per-primitive parity table, one instrument, 2026-09-10 at `bbe86427d`
+
+Retired instructions throughout, three reps, median, oracle under
+`ulimit -v 1048576` from an empty directory. **Every earlier table in this
+document that mixes wall-clock ratios with instruction ratios should be read
+against this one.**
+
+| axis | crate | oracle | ratio |
+| --- | ---: | ---: | ---: |
+| `emptyloop` | 9,446,594,802 | 12,650,857,189 | **0.75x** |
+| `compound` | 10,194,963,616 | 10,342,231,098 | **0.99x** |
+| `varlookup` | 17,259,616,380 | 17,015,851,635 | 1.01x |
+| `arith` | 12,356,911,967 | 11,076,071,132 | 1.12x |
+| `textnum` | 1,384,896,185 | 1,234,553,685 | 1.12x |
+| `parse` | 1,871,040,268 | 1,261,877,196 | 1.48x |
+| `dispatch` | 21,702,000,878 | 13,111,514,876 | 1.66x |
+| `dispatchclass` | 16,737,784,005 | 9,750,642,549 | 1.72x |
+| `strings` | 20,166,927,819 | 11,162,817,324 | 1.81x |
+| **`rexxcps`** | **20,799,776,442** | **10,625,947,299** | **1.96x** |
+| `alloc` | 27,396,714,532 | 13,280,207,704 | 2.06x |
+
+### What it says, and what it corrects
+
+**`rexxcps` is exceeded only by `alloc`.** It also performs **no method sends
+at all**, so `dispatch` and `dispatchclass` -- where two of the three wins
+landed on 2026-09-10 -- cannot move it. The levers for the goal are
+**allocation (2.06x), string materialisation (1.81x) and `PARSE` (1.48x)**, in
+that order.
+
+**A claim made and withdrawn the same hour.** "The mix is worse than every one
+of its parts" was built by comparing the *wall-clock* ratios (`compound` 0.58x,
+`emptyloop` 0.60x, `varlookup` 0.73x) against `rexxcps`'s *instruction* ratio.
+In consistent units `compound` is 0.99x and `varlookup` 1.01x, and the mix sits
+inside the range of its parts. There was no anomaly; there was a unit error,
+and an architectural argument was built on it before it was checked.
+
+### The interpreter layer is not the tax base
+
+Four ablations on 2026-09-10 bounded it, and `hot-core-size.md` carries them:
+removing the error channel outright is worth 0.9% on this axis, and removing
+**32.8% of all executed ops** is worth 1.73%. An op costs about 8.6
+instructions and there are ~146M of them against 20.8G. Dispatch, op count,
+fusion and trace emission are collectively worth single digits.
+
+We are also better than the oracle on every cache and predictor measured --
+**87x fewer L1d misses on `varlookup`, 1.6x fewer on `rexxcps`**, fewer branch
+misses, higher IPC on all axes -- and worse only on L1i. The gap is retired
+instructions in the value operations, and nowhere else.
