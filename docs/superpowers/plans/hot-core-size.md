@@ -109,14 +109,29 @@ the text lost 199,587.
 compounds with Task 1 rather than competing with it. `ir::compile` already
 exists, so this is a compiler change.
 
-- [ ] **Bound it.** Count the dynamic op-pair frequencies over the corpus, not
-  the static ones -- the static mix is 762 ops and says nothing about which
-  pairs actually run. Take the top pairs and compute the ops removed.
-- [ ] Fuse the dominant patterns: `Load`+`Load`+`Binary`+`Store`,
-  `Const`+`Binary`, the `TraceRead` pairs.
-- [ ] Watch code size: each fused arm adds driver bytes, which Task 1 is
-  trying to remove. Measure both.
-- [ ] Gate, including `ir_dual` and the golden IR tests, which pin the stream.
+- [x] **Bounded, and the task is CLOSED. Op count is not the tax base.**
+
+Measured with per-pc execution counters (`rexxcps` compiles to one chunk --
+`subroutine:` and `novalue:` are labels in the main body -- so counts are exact
+and adjacency comes free from the stream order): **1,273,858 ops for 168,910
+promoted clauses, 7.30 ops per clause.**
+
+The dominant adjacency is real: `Condition` and `JumpUnless` execute 64,601
+times each and are always adjacent, as are `TraceRead`/`Load` at 86,853 and
+`TraceArgument`/`PushArg` at 47,611. Fusing the best of them removes 5.1% of
+executed ops.
+
+**But Task 3's ablation shows what an op is worth.** Removing **32.8% of all
+executed ops bought 1.73% of instructions** -- about 8.6 instructions per
+trace op. At that rate the best fusion available is worth roughly 0.3%, and
+each fused arm *adds* driver bytes. Not built.
+
+**The instrument needed fixing twice, which is the transferable part.** The
+first per-pc counter reported "1.22 ops per clause, 82% `Clause` ops" --
+impossible for a register machine. `Op::Clause` names a *region* whose ops run
+in an inner `ops_in` loop that the counter never saw, so `Load`, `Binary` and
+`Store` all read as zero. A probe that runs, exits 0, and cannot see its
+subject.
 
 ### Task 3: stop emitting trace ops defensively
 
@@ -125,13 +140,34 @@ for a run that never traces, because the body contains `trace value tracevar`
 and `never_retraces` taints the whole body. `chunk_for` already keys on
 `ChunkTrace`, so the mechanism exists; the body-wide taint defeats it.
 
-- [ ] **Bound it.** The existing note bounds the direct win at 1.56%, which is
-  small -- so the case rests on compounding with Tasks 1 and 2 and on the
-  chunk footprint, and that has to be measured rather than assumed.
-- [ ] Recompile on a `TRACE` change instead of emitting for both worlds,
-  resuming at an instruction boundary (`op_of` provides one).
-- [ ] The three named alternatives are in `paths-to-parity.md`; pick with
-  measurements, not by preference.
+- [x] **Bounded at 1.73% instructions on `rexxcps`.** The older note's 1.56%
+  was right and the suspicion that it understated things was wrong.
+
+Ablated by dropping the defensive half of the gate, `echoes_values =
+trace.intermediates()`. `rexxcps` output byte-identical, as it must be: the
+program sets `trace value tracevar` with `tracevar='Off'` and never traces.
+
+| axis | ins | cyc |
+| --- | ---: | ---: |
+| `rexxcps` | **0.9827** | 0.9516 |
+| `dispatch` | 1.0000 | 0.9478 |
+| `strings` | 1.0000 | 0.9576 |
+| `emptyloop` | 1.0000 | 1.0016 |
+| `varlookup` | 1.0000 | 1.0028 |
+
+**Four axes at exactly 1.0000 instructions are the control**: none contains a
+`TRACE` instruction, so the ablation cannot reach them, and it does not.
+
+**The cycle column is not evidence, and it shows the band is per-change-site.**
+`dispatch` and `strings` move -5.2% and -4.2% on cycles with instruction counts
+*exactly* unchanged -- no mechanism reaches them, so that is layout, and it
+lands outside the band measured with pads in `drive.rs`. A one-line edit in
+`compile.rs` moves axes further than 39KB of dead code did. **A pad control
+bounds layout for the site it was measured at, not for the binary.**
+
+- [ ] Whether 1.73% on the goal axis justifies recompiling on a `TRACE` change
+  is Moritz's call; the mechanism and the three alternatives are in
+  `paths-to-parity.md`.
 
 ### Task 4: retire the tree-walker
 
