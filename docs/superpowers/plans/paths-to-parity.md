@@ -819,3 +819,42 @@ instead of round-tripping it through a variable read and an arena allocation
 each step. The oracle's `DoBlock` keeps its control value likewise. That is a
 design change, and it should be bounded by an ablation first, like everything
 else here.
+
+### Correction: it is the *spelling*, not the fractional step (2026-09-10)
+
+The section above says the fast path cannot fire because `BY` is fractional.
+That is wrong, and one experiment shows it. Two loops of identical trip count:
+
+| program | crate | oracle | ratio |
+| --- | ---: | ---: | ---: |
+| `intloop` -- `do j=1 to 3` | 1,531,220,879 | 1,264,758,094 | 1.21x |
+| `decspell` -- `do j=1.0 to 3.0 by 1.0` | 3,631,517,991 | 2,252,634,550 | 1.61x |
+| `decfrac` -- `do j=1.1 to 3.3 by 1.1` | 3,631,517,397 | 2,189,811,584 | 1.66x |
+
+**`decspell` and `decfrac` differ by 594 instructions out of 3.6 billion.** An
+integral-but-decimal-spelled bound takes exactly the same path as a fractional
+one, so the guard is not about the step being fractional.
+
+`Number::plain_integer` opens with `u64::try_from(self.exponent).ok()?`, so it
+rejects any negative exponent. `1.0` is digits `[1, 0]` with exponent `-1` and
+is rejected although it is numerically an integer; `1` is digits `[1]` with
+exponent `0` and is accepted. **The guard turns on how the literal was
+written.**
+
+Both interpreters pay for decimal loop control -- per iteration the oracle goes
+1,054 -> 1,877 instructions (+78%) and this crate 1,276 -> 3,026 (+137%). The
+penalty is real on both sides and larger here, which is the whole of the
+1.21x -> 1.61x move.
+
+**Two candidate changes, and they are not the same size.**
+
+1. Normalise `plain_integer` over trailing zeros, so `1.0` is accepted as `1`.
+   Small and safe, but it only reaches loops written with integral decimal
+   literals -- not `rexxcps`, whose step really is `1.1`.
+2. Give the fractional case its own stepping state, keeping the control value
+   as a `Number` across iterations instead of reading the variable back,
+   re-converting it and allocating a fresh arena value each step. This is the
+   one that reaches the goal axis, and it is a design change: the read-back is
+   load-bearing (`do ii = 1 to 3; ii = 10; end` prints `11` on the oracle, and
+   reusing the loop's own value prints `4`), so any such state has to be
+   invalidated by a body that assigns to the control variable.
