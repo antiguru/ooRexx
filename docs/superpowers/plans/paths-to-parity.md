@@ -187,6 +187,50 @@ cost a redesign of the root discipline. Closed, on an hour's measurement rather
 than a phase's work -- which is the rule this document ends with, applied to
 the first path it was applied to.
 
+## Sample on the event you are bound by (2026-09-10)
+
+Because the gap is instruction count, a **cycle-sampled** profile ranks the
+wrong things. The same `rexxcps` run, cycles against `instructions:u`:
+
+| symbol | by cycles | by instructions |
+| --- | ---: | ---: |
+| `run_ops_from::<true>` | 9.3% | **16.0%** |
+| `exec_parse` | ~4.5% | **6.5%** |
+| `__memmove_avx512_unaligned_erms` | not in top | **6.1%** |
+| string conversion (`required_string_answer` + `_dispatch` + `classify_`) | 6.1% | **7.5%** |
+
+Cheap instructions that retire at high IPC -- stack traffic above all -- are
+nearly invisible to a cycle profile and are exactly what an instruction-bound
+program needs to remove. **Use `perf record -e instructions:u` for this work**,
+and `perf annotate` for the per-line view; samply's recorder is cycles.
+
+### What the driver's assembly shows
+
+`run_ops_from::<true>` is 2908 instructions and 15,278 bytes. Of those
+instructions **901 touch `[rsp + …]` and 208 are stores** -- 31% stack traffic,
+which is register pressure in a function this size. Hottest single line in the
+function, by instructions retired:
+
+```
+6.41%  movaps %xmm0,0x200(%rsp)     one 16-byte spill, ~1% of the whole program
+3.47%  lea    -0xe599b(%rip),%rcx   the Op jump table base
+3.31%  add    %rcx,%rax
+2.39%  jmp    *%rax
+1.95%  testb  $0x1,0x1346(%r14)     a flag tested once per op
+1.03%  movslq (%rcx,%rax,4),%rax
+0.98%  add    $0x10,%r12            the 16-byte op stride
+```
+
+The dispatch sequence is about 12.6% of the function, roughly 2% of the
+program. The handlers are already out of line -- 186 `call` sites, and every
+hot source line is a `match self.<handler>(…)` -- so those 2908 instructions
+are the driver's own dispatch and argument marshalling, not inlined handler
+bodies.
+
+**Candidates this opens, all instruction removal and all in the 0.3-1% band
+that compounds:** the single 6.41% spill, the per-op flag test at
+`+0x1346`, and `memmove` at 6.1% whose callers are not yet attributed.
+
 ## The rule the paths should be run under
 
 `0.9^n` from 1.9x is about six successive 10% wins. Two spikes in this project
