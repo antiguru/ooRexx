@@ -3979,6 +3979,24 @@ impl Interp {
             return Ok(value);
         }
         if self.reqstr_armed {
+            // **A heap string or number is its own string value as much as an
+            // inline one is** -- the same `classify_string_conversion` arm
+            // answers `Object(value)` for `Body::Text` and `Body::Num`. It
+            // costs the heap lookup that arm makes anyway, and it keeps the
+            // `push_temp`, because unlike the two decodings above this value
+            // does live in the arena and the caller's rooting of it is not
+            // this function's to assume.
+            //
+            // Inside the armed branch rather than beside the fast path above,
+            // so that a clear latch still answers `Ok(value)` with no root
+            // pushed and no lookup made, exactly as it did before.
+            if matches!(
+                self.heap.get(value).map(|object| &object.body),
+                Some(Body::Text { .. } | Body::Num { .. })
+            ) {
+                self.roots.push_temp(value);
+                return Ok(value);
+            }
             return self.required_string_dispatch(value);
         }
         debug_assert!(
