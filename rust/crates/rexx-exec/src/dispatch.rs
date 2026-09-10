@@ -3117,6 +3117,13 @@ impl Interp {
             self.park_reply(callee, callee_context);
         } else {
             self.roots.pop_slots(callee.frame);
+            // **Back to the pool**, which until now only `Interp::invoke_call`
+            // fed. The pool is drained by every push and was filled by the
+            // `CALL` path alone, so a program of method sends missed it every
+            // time: measured on `bench-programs/dispatch.rex`, 5,000,089
+            // misses and no hits, each one a `Box::new` of a 416-byte
+            // `Activation` and the free that follows.
+            self.recycle_activation(callee);
         }
         self.activation_indent = saved_base;
         self.indent_offset = saved_offset;
@@ -3526,6 +3533,8 @@ impl Interp {
             "a resumed method body asked to be parked a second time"
         );
         self.roots.pop_slots(callee.frame);
+        // Back to the pool, for the reason the send path above states.
+        self.recycle_activation(callee);
         match ended {
             // Every ending is the same ending here: nothing is waiting for a
             // value, and a resumed body's `EXIT` does not set the process's
