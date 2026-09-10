@@ -49,10 +49,16 @@ This is a hypothesis with an obvious test, not a conclusion. See Path B.
   was the large half and `Bytes` inlining already took it.
 * **Columnar heap layout** -- see `heap-representation-spike-gate.md`.
 
-## Path A -- finish the IR, remove the generic fallback
+## Path A -- finish the IR, remove the generic fallback  [RE-SCOPED, see below]
+
+**Superseded**: re-measured at `873488fc2` the body has **9** `Op::Generic`
+ops, not 56, and `PARSE` is promoted -- see the re-measurement section. What
+survives of this path is the value-echo ops, not the fallback. The original
+framing is kept below because the note it came from is still quoted elsewhere.
 
 Bets that the tax is per-instruction interpretive overhead. `rexxcps`'s main
-body is 142 instructions, 86 promoted and **56 `Op::Generic`**, each re-entering
+body was recorded in a 2026-09-02 note as 142 instructions, 86 promoted and
+**56 `Op::Generic`**, each re-entering
 the tree-walker's clause unit; the delegating set is dominated by
 `THEN`/`ELSE`/`END` structure and `PARSE`, and `exec_parse` measured 4.54%.
 
@@ -62,7 +68,7 @@ bytecode spike's figures are withdrawn -- two spikes, null or retracted.
 *Cheap test:* promote `PARSE` alone and measure. A 4.5% construct that does not
 yield refutes the path for a day's work rather than a phase's.
 
-## Path B -- close the two unattacked oracle advantages
+## Path B -- close the two unattacked oracle advantages  [CLOSED, see below]
 
 `oorexx-oracle-is-a-tree-walker` names four differences read from source. Two
 are still unattacked, and both are uniform per-clause taxes:

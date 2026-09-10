@@ -139,11 +139,23 @@ pub(crate) enum Op {
     /// **Only valid inside a [`Op::Clause`] region**, whose clause is the
     /// `DO`/`LOOP`'s own: the indent it echoes at is that clause's.
     ///
-    /// Emitted unconditionally rather than under [`ChunkTrace`]'s decision the
-    /// way [`Op::TraceClause`] is, because the gate this line answers to is
-    /// `trace_mode().results` rather than the clause echo's, and a second
-    /// compiled emission decision would need a staleness rule of its own. What
-    /// the op form buys here is the ordering, not the elision.
+    /// **Emitted under `compile`'s `echoes_values`**, which is
+    /// `trace.intermediates() || !plan.never_retraces()` -- so a chunk carries
+    /// this op when its own [`ChunkTrace`] says the value lines print, **or**
+    /// when the body contains a `TRACE` instruction and the setting could
+    /// therefore turn on while the chunk runs. The second disjunct is why an
+    /// untraced body that mentions `TRACE` anywhere still carries every one of
+    /// these, dispatching each to a gate that answers no: measured on
+    /// `bench-rexxcps/rexxcps.rex`, 238 of 763 ops, and forcing them off is
+    /// -1.56% of retired instructions there and exactly 1.0000 on the three
+    /// bench programs with no `TRACE` in them.
+    ///
+    /// **The elision cannot use [`Op::TraceClause`]'s trick.** A stale clause
+    /// echo is handled by passing `Echo::Gated` and moving the decision back to
+    /// a run-time gate, which works because the op is in the stream either way;
+    /// a value echo the chunk was compiled without has no op to gate, so
+    /// turning intermediates on mid-run would need a different chunk or a
+    /// fallback to the tree-walker.
     TraceKeyword { role: HeaderRole, src: u16 },
     /// Validates the `DO`/`LOOP` header value in register `src` for the role
     /// it plays and files it for [`Op::LoopRun`].
@@ -580,13 +592,8 @@ pub(crate) enum Op {
     /// **A separate op from the [`Op::Const`] or [`Op::LoadConstant`] that
     /// loaded it**, which is that op's own doc comment. One echo for both,
     /// because `trace_intermediate` sends both node kinds to the same
-    /// `echo_literal`. Emitted unconditionally rather than under
-    /// [`ChunkTrace`]'s decision the way [`Op::TraceClause`] is, for the
-    /// reason [`Op::TraceKeyword`] gives: the gate this line answers to is
-    /// `trace_mode().intermediates`, which [`ChunkTrace`] does not carry, and
-    /// widening it would put a second emission decision under a staleness rule
-    /// of its own. What the op form buys here is that the line exists at all,
-    /// not its elision.
+    /// `echo_literal`. Emitted under `echoes_values`, for the reason
+    /// [`Op::TraceKeyword`] states in full.
     ///
     /// **Only valid inside a [`Op::Clause`] region**, and immediately behind
     /// the `Const` whose register it reads: `eval.rs` emits this line
@@ -642,10 +649,8 @@ pub(crate) enum Op {
     /// [`Op::TraceLiteral`] is separate from [`Op::Const`]: the load emits
     /// nothing, `eval.rs` emits these lines as a side effect of *evaluating*
     /// the expression, and a promoted clause with no such op drops them while
-    /// every line after them still matches. Emitted unconditionally rather
-    /// than under [`ChunkTrace`]'s decision, because the gate these lines
-    /// answer to is `trace_mode().intermediates`, which [`ChunkTrace`] does
-    /// not carry.
+    /// every line after them still matches. Emitted under `echoes_values`, for
+    /// the reason [`Op::TraceKeyword`] states in full.
     ///
     /// **Only valid inside a [`Op::Clause`] region**, and immediately behind
     /// the `Load` whose register it reads and whose symbol and read kind it
@@ -751,10 +756,8 @@ pub(crate) enum Op {
     /// reason [`Op::TraceLiteral`] is separate from [`Op::Const`]: the
     /// computation emits nothing, `eval.rs` emits this line as a side effect of
     /// *evaluating* a binary node, and a promoted clause with no such op drops
-    /// it while every line after it still matches. Emitted unconditionally
-    /// rather than under [`ChunkTrace`]'s decision, because the gate this line
-    /// answers to is `trace_mode().intermediates`, which [`ChunkTrace`] does
-    /// not carry.
+    /// it while every line after it still matches. Emitted under
+    /// `echoes_values`, for the reason [`Op::TraceKeyword`] states in full.
     ///
     /// `op` is repeated here rather than read off the operation behind it,
     /// because the tag is the operator's own spelling and an echo carrying a
