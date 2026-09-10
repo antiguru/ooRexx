@@ -4716,7 +4716,7 @@ impl Interp {
             programs: Vec::new(),
             package_options: HashMap::new(),
             plans: NameMap::default(),
-            engine: Engine::TreeWalker,
+            engine: Engine::Ir,
             deadline: None,
             clause_countdown: crate::clause::Deadline::NO_DEADLINE_SPACING,
             chunks: NameMap::default(),

@@ -313,6 +313,14 @@ pub(crate) fn compile(
     // 29% and 38% value-echo ops, every one of which an untraced run dispatched
     // to reach a gate that answered no.
     let echoes_values = trace.intermediates() || !plan.never_retraces();
+    // **The header's `>K>` line is a *result*, not an intermediate**, so it
+    // asks a different bit than the echoes above. `TraceMode::results`' own
+    // doc names `>>>`/`>K>` as the pair it owns, and the oracle prints `>K>`
+    // under `R` and `I` and under neither `A` nor `N` (measured, `do i = 1 to
+    // 2`). Gating it with `echoes_values` dropped the op from every
+    // non-retracing body entered under `TRACE R`, where the setting cannot
+    // change under the chunk and so nothing put it back.
+    let echoes_keyword = trace.results() || !plan.never_retraces();
 
     let len = body.instructions.len();
     let mut ops: Vec<Op> = Vec::with_capacity(len);
@@ -429,7 +437,7 @@ pub(crate) fn compile(
                             dst,
                         }),
                     }
-                    if echoes_values && role.keyword().is_some() {
+                    if echoes_keyword && role.keyword().is_some() {
                         ops.push(Op::TraceKeyword { role, src: dst });
                     }
                     ops.push(Op::LoopHeaderValue { role, src: dst });
@@ -1196,7 +1204,25 @@ pub(crate) fn compile(
                     index: loop_of_end[index].expect("the guard just observed it"),
                 });
             }
-            _ => ops.push(Op::Generic {
+            InstructionKind::When { .. }
+            | InstructionKind::WhenCase { .. }
+            | InstructionKind::Command { .. }
+            | InstructionKind::Else { .. }
+            | InstructionKind::Otherwise
+            | InstructionKind::End { .. }
+            | InstructionKind::Drop { .. }
+            | InstructionKind::Call(..)
+            | InstructionKind::Procedure { .. }
+            | InstructionKind::Interpret { .. }
+            | InstructionKind::Guard { .. }
+            | InstructionKind::Reply { .. }
+            | InstructionKind::Forward { .. }
+            | InstructionKind::Raise { .. }
+            | InstructionKind::Use { .. }
+            | InstructionKind::Numeric { .. }
+            | InstructionKind::Address { .. }
+            | InstructionKind::Trace { .. }
+            | InstructionKind::Options { .. } => ops.push(Op::Generic {
                 index: instruction_index(index)?,
             }),
         }

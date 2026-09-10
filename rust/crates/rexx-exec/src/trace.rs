@@ -267,6 +267,19 @@ impl ChunkTrace {
     /// runs.
     const INTERMEDIATES: u8 = 4;
 
+    /// [`TraceMode::results`]: a traced instruction's own top-level computed
+    /// value echoes, as `>>>` or -- for a loop header -- as `>K>`.
+    ///
+    /// **A key bit like the three above, and it was missing.** Without it
+    /// `TRACE A` and `TRACE R` pack to the same byte, so `Interp::chunk_for`
+    /// hands a chunk compiled under one back for the other; the observable
+    /// was a loop header's `>K>` line vanishing under `TRACE R`, because
+    /// `ir::compile` gated [`crate::ir::Op::TraceKeyword`] on
+    /// [`ChunkTrace::intermediates`] where [`TraceMode::results`] is the flag
+    /// that owns that line. Measured against the oracle, `do i = 1 to 2`:
+    /// `>K>` prints under `R` and `I` and under neither `A` nor `N`.
+    const RESULTS: u8 = 8;
+
     /// What `compile` reads out of the setting in force.
     ///
     /// **`inline(always)`, and it is a measurement rather than a habit.** These
@@ -295,7 +308,8 @@ impl ChunkTrace {
         ChunkTrace(
             (u8::from(mode.all) * ChunkTrace::CLAUSES)
                 | (u8::from(mode.labels) * ChunkTrace::LABELS)
-                | (u8::from(mode.intermediates) * ChunkTrace::INTERMEDIATES),
+                | (u8::from(mode.intermediates) * ChunkTrace::INTERMEDIATES)
+                | (u8::from(mode.results) * ChunkTrace::RESULTS),
         )
     }
 
@@ -316,16 +330,25 @@ impl ChunkTrace {
         self.0 & ChunkTrace::INTERMEDIATES != 0
     }
 
-    /// This setting with [`ChunkTrace::INTERMEDIATES`] masked off, which is
-    /// what `Interp::run_ops` compares its chunk against per promoted clause.
+    /// Whether a top-level computed value echoes -- `>>>` and the loop
+    /// header's `>K>` -- which is what decides whether a chunk carries the op
+    /// that emits the latter.
+    #[inline(always)]
+    pub(crate) fn results(self) -> bool {
+        self.0 & ChunkTrace::RESULTS != 0
+    }
+
+    /// This setting with [`ChunkTrace::INTERMEDIATES`] and
+    /// [`ChunkTrace::RESULTS`] masked off, which is what `Interp::run_ops`
+    /// compares its chunk against per promoted clause.
     ///
     /// **The staleness check is about the clause echo alone, and must not see
-    /// this type's third bit.** A chunk that left its value echoes out was
+    /// either value-echo bit.** A chunk that left its value echoes out was
     /// compiled for a body [`crate::plan::Plan::never_retraces`] answered for,
     /// so the setting it was keyed under cannot change while it runs; a chunk
     /// that kept them gates every one at run time and is right either way. So
-    /// the bit can differ between a running chunk and the setting in force only
-    /// where nothing reads the difference.
+    /// either bit can differ between a running chunk and the setting in force
+    /// only where nothing reads the difference.
     ///
     /// **Masking rather than comparing the whole byte is a measurement.**
     /// Comparing all three costs `bench-programs/emptyloop.rex` 0.723% of
