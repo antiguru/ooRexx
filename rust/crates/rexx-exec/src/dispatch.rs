@@ -3960,6 +3960,24 @@ impl Interp {
     /// [`Interp::reqstr_armed`]: crate::Interp::reqstr_armed
     #[inline]
     pub(crate) fn required_string_value(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
+        // **A string and a small integer are their own string value**, and
+        // that is the answer whether the latch is armed or clear:
+        // `classify_string_conversion`'s first arm returns
+        // `StringConversion::Object(value)` for both, before it touches
+        // `self`, allocates, or looks at the heap. Answering here rather than
+        // three calls deeper is what keeps an armed interpreter from paying
+        // `required_string_dispatch` + `required_string_answer` +
+        // `classify_string_conversion` for every operand of every comparison.
+        //
+        // **The armed path also pushes its answer as a GC temp, and this does
+        // not.** Neither decoding this arm covers lives in the arena -- a
+        // small integer is tagged and short text is inline in the handle --
+        // so there is nothing for a root to protect. A heap string is
+        // deliberately not here: it would need that `push_temp`, and it needs
+        // the heap lookup the arm below is already making.
+        if matches!(value.decode(), Decoded::SmallInt(_) | Decoded::Text(_)) {
+            return Ok(value);
+        }
         if self.reqstr_armed {
             return self.required_string_dispatch(value);
         }
@@ -4142,6 +4160,20 @@ impl Interp {
         // site would scan the exemption table on every builtin call in every
         // program.
         let raw = crate::builtin::raw_argument_positions(name);
+        // **Scanned before anything is built.** `None` means "the arguments
+        // stand as they are", so a call whose every argument is already its
+        // own string value can answer that instead of allocating a vector to
+        // hold copies of what the caller already has. An armed interpreter
+        // otherwise allocated one `Vec` per builtin call for the whole run,
+        // and being armed is not rare: any instance of a Rexx class arms it.
+        if !args.iter().enumerate().any(|(index, argument)| {
+            argument.is_some_and(|value| {
+                !raw.contains(&(index + 1))
+                    && !matches!(value.decode(), Decoded::SmallInt(_) | Decoded::Text(_))
+            })
+        }) {
+            return Ok(None);
+        }
         let mut converted = Vec::with_capacity(args.len());
         for (index, argument) in args.iter().enumerate() {
             let position = index + 1;
