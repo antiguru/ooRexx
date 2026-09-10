@@ -208,14 +208,14 @@ Raised	raised_for_count_not_whole	body	crates/rexx-exec/src/run.rs:13241	off-sen
 Raised	raised_from_settings	body	crates/rexx-exec/src/run.rs:13207	off-send-surface	-	-	-
 Raised	raised_guard_not_logical	body	crates/rexx-exec/src/run.rs:13039	off-send-surface	-	-	-
 Raised	raised_if_not_logical	body+ir	crates/rexx-exec/src/run.rs:13025	off-send-surface	-	-	-
-Raised	raised_invalid_trace_letter	body	crates/rexx-exec/src/trace.rs:461	off-send-surface	-	-	-
+Raised	raised_invalid_trace_letter	body	crates/rexx-exec/src/trace.rs:484	off-send-surface	-	-	-
 Raised	raised_iterate_no_loop	body	crates/rexx-exec/src/run.rs:13253	off-send-surface	-	-	-
 Raised	raised_iterate_no_match	body	crates/rexx-exec/src/run.rs:13267	off-send-surface	-	-	-
 Raised	raised_iterate_wrong_kind	body	crates/rexx-exec/src/run.rs:13276	off-send-surface	-	-	-
 Raised	raised_leave_no_loop	body	crates/rexx-exec/src/run.rs:13247	off-send-surface	-	-	-
 Raised	raised_leave_no_match	body	crates/rexx-exec/src/run.rs:13262	off-send-surface	-	-	-
 Raised	raised_naming_the_operand	body	crates/rexx-exec/src/run.rs:13193	off-send-surface	-	-	-
-Raised	raised_numeric_trace_interactive_only	body	crates/rexx-exec/src/trace.rs:449	off-send-surface	-	-	-
+Raised	raised_numeric_trace_interactive_only	body	crates/rexx-exec/src/trace.rs:472	off-send-surface	-	-	-
 Raised	raised_repetition_count_not_whole	body	crates/rexx-exec/src/run.rs:13235	off-send-surface	-	-	-
 Raised	raised_select_no_when	body	crates/rexx-exec/src/run.rs:13066	off-send-surface	-	-	-
 Raised	raised_symbol_expected	body	crates/rexx-exec/src/run.rs:13007	off-send-surface	-	-	-

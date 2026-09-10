@@ -813,26 +813,36 @@ fn a_counted_loop_compiles_its_header_to_a_clause_region_and_its_body_to_generic
 }
 
 /// The same loop under `TRACE R`: the clause echo is an op of the region, and
-/// the header's own groups are unchanged behind it.
+/// so is the header's own `>K>` line.
 ///
-/// The pair with the test above is what says the setting decides *what is
-/// emitted* and nothing about the header's shape -- every group is the same
-/// ops, one index further along.
+/// **The pair with the test above is what says the setting decides what is
+/// emitted, and this stream is two ops longer rather than one.** `TRACE R`
+/// buys the `TraceClause` in front of the region's groups *and* an
+/// `Op::TraceKeyword` between the `TO` slot's evaluation and its
+/// `LoopHeaderValue` -- the order the oracle evaluates and echoes a header in.
+/// This assertion previously held the stream without that op, which is the
+/// shape the defect produced: `compile` gated the op on `ChunkTrace::
+/// intermediates` where `>K>` belongs to `TraceMode::results`, so a `TRACE R`
+/// body that could not retrace compiled to a stream with no way to emit the
+/// line. Measured against the oracle, `do i = 1 to 2` prints
+/// `>K>   "TO" => "2"` under `R` and `I` and prints it under neither `A` nor
+/// `N`.
 #[test]
 fn a_traced_counted_loop_echoes_its_do_clause_from_the_stream() {
     let chunk = compile_for_test_under(b"do i = 1 to 3\n  nop\nend\n", traced()).expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=7\n\
+        "0: Clause index=0 end=8\n\
          1: TraceClause index=0\n\
          2: LoadConstant dst=0\n\
          3: LoopHeaderValue role=Initial src=0\n\
          4: LoadConstant dst=1\n\
-         5: LoopHeaderValue role=To src=1\n\
-         6: LoopRun index=0\n\
-         7: Clause index=1 end=9\n\
-         8: TraceClause index=1\n\
-         9: LoopNext index=0\n"
+         5: TraceKeyword role=To src=1\n\
+         6: LoopHeaderValue role=To src=1\n\
+         7: LoopRun index=0\n\
+         8: Clause index=1 end=10\n\
+         9: TraceClause index=1\n\
+         10: LoopNext index=0\n"
     );
     assert_eq!(chunk.registers, 2);
 }
