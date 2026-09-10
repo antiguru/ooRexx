@@ -112,6 +112,81 @@ is structurally out of reach, and stop. A decision rather than an engineering
 effort, named here because the alternatives cost weeks and this costs an
 afternoon of writing down what the word means.
 
+## The measurement that reframes all of it (2026-09-10)
+
+**The gap is retired instructions, and there is no microarchitectural headroom
+left to find.** Better IPC is not a consolation and not a win: it is a
+constraint. It says the entire 2x must come out of instruction count, because
+the per-cycle half is already spent.
+`perf stat`, single event per run so nothing is multiplexed:
+
+| axis | crate IPC | oracle IPC | instructions | cycles | our IPC advantage |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `alloc` | 4.573 | 3.918 | 2.07x | 1.77x | **+16.7%** |
+| `dispatch` | 3.911 | 3.421 | 2.15x | 1.88x | **+14.3%** |
+| `dispatchclass` | 3.742 | 3.362 | 2.25x | 2.02x | **+11.3%** |
+| `rexxcps` | 3.383 | 3.057 | 2.17x | 1.96x | **+10.6%** |
+| `strings` | 4.718 | 4.402 | 2.04x | 1.90x | +7.2% |
+| `arith` | 3.151 | 3.219 | 1.16x | 1.18x | -2.1% |
+| `varlookup` | 6.498 | 4.785 | 1.01x | 0.75x | +35.8% |
+
+On every axis the instruction ratio accounts for the whole gap, and on six of
+seven this crate already retires more instructions per cycle than the oracle
+does -- so there is nothing to recover there. Running at 2.1x the instructions
+is the whole problem, and a better IPC does not help us do it.
+**`varlookup` is the clinching case**: instruction count is at parity, and we
+finish in 0.75x the cycles purely because IPC is 36% better.
+
+**Branch prediction is not the problem and cannot become the fix.** On
+`rexxcps` the crate takes 4,926,508 branch misses against the oracle's
+5,729,709 -- **fewer in absolute terms**, on 1.8x the branches, so half the
+miss rate. The driver's `Op` dispatch compiles to one shared indirect jump
+(`movzx eax, byte [r12]` / table lookup / `jmp rax`, 16-byte stride), which is
+the classic interpreter mispredict trap in the folklore; measured, the
+predictor handles it.
+
+**So a whole family of candidate work is ruled out at once**: enum variant
+reordering, jump-table layout, dispatch replication or computed goto,
+prefetching, cache-line packing. Every one of them buys IPC, and IPC is
+the axis with no headroom left. This is not an argument that those techniques
+are weak -- on a stalled interpreter they are worth multiples, and enum
+ordering can be worth 2x there. It is a measurement that this interpreter is
+not stalled, so they would buy nothing here.
+
+**Parity means executing about 2.1x fewer instructions on the slow axes.**
+That is the whole statement of the problem, and it re-reads the paths above:
+
+* **Path A** removes instructions -- still valid.
+* **Path B is closed by ablation, below.**
+* **Path C** removes instructions, and is now the best-motivated of the set:
+  the oracle allocates *nothing* per arithmetic operation below
+  `FAST_BUFFER = 48`, and every `Vec<u8>` we build instead is pure instruction
+  count.
+* **Path D** removes instructions from startup.
+* **Path E** is unaffected.
+
+## Path B, measured and closed (2026-09-10)
+
+Two of its premises were already stale. `Interp::running` is
+`Option<Box<Activation>>`, so reaching the activation is a null check and a
+pointer load, not `activations.last()` with a bounds check; and
+`RootSet::push_frame`/`pop_frame` are already a length read and a `truncate`,
+not an allocation. What remained was `push_temp`, a `Vec::push` with a capacity
+check, against the oracle's `*(++top) = value` into a preallocated array.
+
+**Ablated: `push_temp` made a no-op, removing the entire temp-rooting tax.**
+Output stayed byte-identical on all nine bench programs, so the numbers are
+comparable. Retired instructions, ablated over real:
+
+    alloc 0.9863   rexxcps 0.9885   strings 0.9910
+    compound 0.9924   dispatch 0.9972   varlookup 1.0022
+
+**A ceiling of 1.4%, and that is with the rooting removed entirely rather than
+made cheaper.** A sound implementation would recover some fraction of 1.4% and
+cost a redesign of the root discipline. Closed, on an hour's measurement rather
+than a phase's work -- which is the rule this document ends with, applied to
+the first path it was applied to.
+
 ## The rule the paths should be run under
 
 `0.9^n` from 1.9x is about six successive 10% wins. Two spikes in this project
