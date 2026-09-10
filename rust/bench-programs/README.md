@@ -14,6 +14,8 @@ Global Constraints and D9), each sized to run roughly 0.5-2s under `build/bin/re
 | `arith.rex` | Decimal arithmetic, alternating `NUMERIC DIGITS 9` and `NUMERIC DIGITS 20` every iteration so both settings are exercised throughout the run rather than only at startup |
 | `alloc.rex` | Allocation churn: a fresh `.array` and `.string` every iteration, neither retained past it, sized to force multiple collections |
 | `alloc4c.rex` | Allocation churn restricted to the 4c surface (no message sends): a new compound-variable tail and a concatenated string every iteration. Not the same axis as `alloc.rex` -- see its own header for what carries over and what does not |
+| `parse.rex` | `PARSE` in the shapes a real program uses: a positional pattern, a **variable** pattern, and `PARSE VAR` with several targets. Added 2026-09-10 to close a coverage hole -- `exec_parse` is 6.8% of `rexxcps`' profile and no program here exercised it at all |
+| `textnum.rex` | Values that arrive as **text** and are then used as numbers, with fresh handles each iteration so a handle-keyed cache cannot answer from the previous one. Added 2026-09-10 for the same reason: `rexxcps` performs 5,580,002 of these conversions and no program here performed one |
 | `startup.rex` | `say 1` — cold-start timing (D2's gate), timed separately with `rexx-time`, not through criterion's statistical sampling |
 | `heapshape.rex` | Full-GC pause over a ~1M-object graph. It prints its own figures, so the suite reports those rather than timing the process. **The slot strings are wider than seven bytes on purpose**: a shorter one lives in the Rust handle and allocates nothing, which collapses the graph to ~1,001 objects -- see the program's own comment |
 
