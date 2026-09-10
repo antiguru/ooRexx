@@ -51,17 +51,56 @@ every live local; the cold runs are full of `movups` stack shuffling and
 `-0x2` drop-flag stores. Nothing about correctness requires the error channel
 to be a droppable value threaded through every op.
 
-- [ ] **Bound it.** Build with `panic = "abort"`, which deletes every unwind
-  landing pad and nothing else. Record the driver's size, its cold fraction
-  from a fresh instruction-sampled profile, and `cycles:u` on the axes.
-  This is not a shippable configuration -- `on_interpreter_thread` resumes
-  panics across the thread boundary -- it is the ceiling.
-- [ ] If the ceiling is small, stop and record it. Otherwise continue.
-- [ ] **Design:** ops return a `Copy` `Flow` carrying a `Failed` variant; the
-  failure is parked on `Interp` and taken at the boundary that currently
-  builds the `Result`. Keep `Result` at the driver's own entry and exit.
-- [ ] Convert the hottest arms first, measure, then the rest.
-- [ ] Measure `cycles:u` with a pad control, plus `instructions:u`. Gate.
+- [x] **Bounded, and the task is CLOSED on the goal axis.** See below.
+- [x] The ceiling is small for `rexxcps`. Stopped. The `Flow`/`Failed`
+  redesign is not built.
+
+**Two ablations, because the first bounded the wrong mechanism.**
+
+`panic = "abort"` deletes every unwind landing pad. It shrank the *driver* by
+**241 bytes of 15,278**, which falsified the premise this task was written on:
+the driver's cold bulk is not unwind machinery. The disassembly has **8**
+`_Unwind_Resume` edges against **70 of 163 calls being error-shaped** -- it is
+ordinary `?` returns, their argument setup and their early-return cleanup.
+
+The second ablation is the real ceiling: every `Loud` constructor made
+divergent (`#[inline(always)] -> Loud { std::process::abort() }`), so LLVM
+kills each caller's argument setup and collapses every error path in every arm
+to one call. Nothing a real implementation does can beat that. Measured
+against the band:
+
+| axis | ins | cyc | L1i | cycles vs band |
+| --- | ---: | ---: | ---: | --- |
+| `rexxcps` | 0.9908 | 0.9854 | 0.9112 | **inside -- not established** |
+| `dispatch` | 0.9802 | 0.8519 | 0.1148 | outside by 11.2 pp |
+| `emptyloop` | 1.0212 | 1.0146 | 1.0205 | inside |
+
+**0.9% instructions on the goal axis, and nothing established on cycles.**
+The send axis has a real 14.8% behind it, but `dispatch` is already 1.27x and
+is not the goal.
+
+**`panic = "abort"` as a candidate in its own right: withdrawn.** It first
+read `rexxcps` -5.2% cycles and `dispatch` -11.5%, which looked like a
+one-line win (Cargo forces `unwind` for test profiles, so the gate is
+unaffected). But it removes ~200KB, five times what the layout band sampled,
+so it was re-measured with a pad restoring the binary to 2,784,501 bytes
+against the original 2,782,832:
+
+| | `rexxcps` cyc | `dispatch` cyc | `emptyloop` ins |
+| --- | ---: | ---: | ---: |
+| `abort`, smaller binary | 0.9478 | 0.8853 | 1.0423 |
+| `abort`, **padded to size** | 0.9882 | 0.8839 | 1.0423 |
+| band | 0.9749-1.0000 | 0.9642-1.0231 | -- |
+
+`rexxcps`'s -5.2% was **total-size layout** and is withdrawn. `dispatch`'s win
+survives the control unchanged -- it is the removal of landing pads
+*interleaved near hot code*, not the binary being smaller -- and `emptyloop`'s
+**+4.23% instructions** is robust across both arms and unexplained.
+
+**The finding that outlives the task:** the footprint that matters is the
+whole binary's, not one function's. `panic = "abort"` moved the driver 241
+bytes and won -11.5% on `dispatch` anyway, because `step` lost 2,722 bytes and
+the text lost 199,587.
 
 ### Task 2: fuse ops
 
