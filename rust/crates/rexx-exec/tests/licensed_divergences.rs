@@ -84,7 +84,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rexx_exec::{Engine, Invocation, Outcome, run_program};
+use rexx_exec::{Invocation, Outcome, run_program};
 use support::oracle::{CppOutcome, did_not_finish, locate, wrapped_exit_code};
 
 /// One licensed divergence: the program, and what each side answers.
@@ -161,34 +161,34 @@ fn materialise(case: &LicensedDivergence) -> PathBuf {
     fs::canonicalize(&file).unwrap_or_else(|e| panic!("cannot resolve {}: {e}", file.display()))
 }
 
-/// Runs one row's program in process on `engine`.
-fn run_crate(path: &Path, engine: Engine) -> Outcome {
+/// Runs one row's program in process.
+fn run_crate(path: &Path) -> Outcome {
     let text = fs::read(path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
     let path_str = path
         .to_str()
         .unwrap_or_else(|| panic!("case path {} is not valid UTF-8", path.display()));
-    run_program(path_str, text, Invocation::none().with_engine(engine))
+    run_program(path_str, text, Invocation::none())
 }
 
 /// Every descriptor of one crate-side run, against what the row records.
-fn assert_crate_side(case: &LicensedDivergence, engine: Engine, outcome: &Outcome) {
+fn assert_crate_side(case: &LicensedDivergence, outcome: &Outcome) {
     assert_eq!(
         String::from_utf8_lossy(&outcome.stdout),
         case.crate_stdout,
-        "[{}] this crate's own stdout moved on {engine:?}",
+        "[{}] this crate's own stdout moved",
         case.name
     );
     assert_eq!(
         String::from_utf8_lossy(&outcome.stderr),
         case.stderr,
-        "[{}] this crate's stderr moved on {engine:?}; a licensed divergence \
+        "[{}] this crate's stderr moved; a licensed divergence \
          that starts raising is no longer silent and is no longer this row",
         case.name
     );
     assert_eq!(
         wrapped_exit_code(outcome.exit_code),
         case.exit_code,
-        "[{}] this crate's exit status moved on {engine:?}",
+        "[{}] this crate's exit status moved",
         case.name
     );
 }
@@ -239,30 +239,12 @@ fn the_licensed_divergences_still_diverge_exactly_as_recorded() {
     let oracle = locate();
     for case in LICENSED_DIVERGENCES {
         let path = materialise(case);
-        let ir = run_crate(&path, Engine::Ir);
-        let tree_walker = run_crate(&path, Engine::TreeWalker);
+        let crate_side = run_crate(&path);
         let cpp = oracle.run(&path);
 
-        assert_crate_side(case, Engine::Ir, &ir);
-        assert_crate_side(case, Engine::TreeWalker, &tree_walker);
+        assert_crate_side(case, &crate_side);
         assert_oracle_side(case, &cpp);
 
-        // Asserted on the runs rather than inferred from the single
-        // `crate_stdout` field: the field says what both engines are expected
-        // to answer, and this says they actually answered the same thing on
-        // every descriptor, so a row cannot go green over two engines that
-        // have drifted apart.
-        assert_eq!(
-            (&ir.stdout, &ir.stderr, ir.exit_code),
-            (
-                &tree_walker.stdout,
-                &tree_walker.stderr,
-                tree_walker.exit_code
-            ),
-            "[{}] the two crate engines disagree, which is an engine defect \
-             rather than a licensed divergence",
-            case.name
-        );
         assert_ne!(
             case.oracle_stdout, case.crate_stdout,
             "[{}] the two answers recorded here are the same, so this row \

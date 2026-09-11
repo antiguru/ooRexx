@@ -47,7 +47,7 @@ mod watchdog;
 
 use std::time::{Duration, Instant};
 
-use rexx_exec::{DEADLINE_EXIT, DEADLINE_REPORT, Engine, Invocation, Outcome, run_program};
+use rexx_exec::{DEADLINE_EXIT, DEADLINE_REPORT, Invocation, Outcome, run_program};
 
 /// A path for a program that was never on disk, matching what the other
 /// in-process harnesses pass.
@@ -65,15 +65,8 @@ const SELF_FORWARD: &[u8] =
 /// far above this.
 const SHORT: Duration = Duration::from_millis(500);
 
-/// Every engine, so a claim made here is made about both.
-const ENGINES: [Engine; 2] = [Engine::TreeWalker, Engine::Ir];
-
-fn under_deadline(text: &[u8], engine: Engine, limit: Duration) -> Outcome {
-    run_program(
-        PATH,
-        text.to_vec(),
-        Invocation::none().with_engine(engine).with_deadline(limit),
-    )
+fn under_deadline(text: &[u8], limit: Duration) -> Outcome {
+    run_program(PATH, text.to_vec(), Invocation::none().with_deadline(limit))
 }
 
 /// The witness: the self-forward ends at its deadline instead of running for
@@ -87,32 +80,30 @@ fn under_deadline(text: &[u8], engine: Engine, limit: Duration) -> Outcome {
 /// why a status alone would not have located it.
 #[test]
 fn the_self_forward_ends_at_its_deadline_on_both_engines() {
-    for engine in ENGINES {
-        let started = Instant::now();
-        let outcome = under_deadline(SELF_FORWARD, engine, SHORT);
-        let elapsed = started.elapsed();
+    let started = Instant::now();
+    let outcome = under_deadline(SELF_FORWARD, SHORT);
+    let elapsed = started.elapsed();
 
-        assert_eq!(
-            outcome.exit_code,
-            DEADLINE_EXIT,
-            "{engine:?}: stderr={:?}",
-            String::from_utf8_lossy(&outcome.stderr)
-        );
-        assert_eq!(outcome.stderr, DEADLINE_REPORT, "{engine:?}");
-        assert_eq!(outcome.stdout, b"returned\n", "{engine:?}");
-        assert!(
-            elapsed >= SHORT,
-            "{engine:?}: returned after {elapsed:?}, inside its own {SHORT:?} bound -- \
-             something other than the deadline ended this run"
-        );
-        // Generous rather than tight: what is under test is "bounded at all".
-        // The check is per `Deadline::CLAUSES_PER_CHECK` clauses, so the
-        // overshoot is however long that many clauses take.
-        assert!(
-            elapsed < SHORT * 20,
-            "{engine:?}: took {elapsed:?} to come back from a {SHORT:?} bound"
-        );
-    }
+    assert_eq!(
+        outcome.exit_code,
+        DEADLINE_EXIT,
+        "stderr={:?}",
+        String::from_utf8_lossy(&outcome.stderr)
+    );
+    assert_eq!(outcome.stderr, DEADLINE_REPORT);
+    assert_eq!(outcome.stdout, b"returned\n");
+    assert!(
+        elapsed >= SHORT,
+        "returned after {elapsed:?}, inside its own {SHORT:?} bound -- \
+         something other than the deadline ended this run"
+    );
+    // Generous rather than tight: what is under test is "bounded at all".
+    // The check is per `Deadline::CLAUSES_PER_CHECK` clauses, so the
+    // overshoot is however long that many clauses take.
+    assert!(
+        elapsed < SHORT * 20,
+        "took {elapsed:?} to come back from a {SHORT:?} bound"
+    );
 }
 
 /// The neighbour that says which half of the program is doing the work: the
@@ -125,21 +116,19 @@ fn the_self_forward_ends_at_its_deadline_on_both_engines() {
 #[test]
 fn a_valued_reply_ends_the_same_program() {
     let text = b"o = .K~new\no~m\nsay 'returned'\n::class K\n::method m\n  reply 1\n  forward message('M')\n";
-    for engine in ENGINES {
-        let outcome = under_deadline(text, engine, SHORT);
-        assert_ne!(
-            outcome.exit_code,
-            DEADLINE_EXIT,
-            "{engine:?}: a valued reply must not reach the deadline; stderr={:?}",
-            String::from_utf8_lossy(&outcome.stderr)
-        );
-        assert_eq!(
-            outcome.stdout,
-            b"returned\n",
-            "{engine:?}: stderr={:?}",
-            String::from_utf8_lossy(&outcome.stderr)
-        );
-    }
+    let outcome = under_deadline(text, SHORT);
+    assert_ne!(
+        outcome.exit_code,
+        DEADLINE_EXIT,
+        "a valued reply must not reach the deadline; stderr={:?}",
+        String::from_utf8_lossy(&outcome.stderr)
+    );
+    assert_eq!(
+        outcome.stdout,
+        b"returned\n",
+        "stderr={:?}",
+        String::from_utf8_lossy(&outcome.stderr)
+    );
 }
 
 /// A deadline that is never reached changes nothing, byte for byte.
@@ -158,16 +147,14 @@ fn a_deadline_a_run_finishes_inside_changes_nothing() {
         b"signal on syntax name h\nsay 1/0\nh: say 'trapped' sigl\n",
     ];
     for text in programs {
-        for engine in ENGINES {
-            let bounded = under_deadline(text, engine, Duration::from_secs(600));
-            let plain = run_program(PATH, text.to_vec(), Invocation::none().with_engine(engine));
-            assert_eq!(
-                (bounded.exit_code, &bounded.stdout, &bounded.stderr),
-                (plain.exit_code, &plain.stdout, &plain.stderr),
-                "{engine:?}: a deadline nothing reached moved the answer for {:?}",
-                String::from_utf8_lossy(text)
-            );
-        }
+        let bounded = under_deadline(text, Duration::from_secs(600));
+        let plain = run_program(PATH, text.to_vec(), Invocation::none());
+        assert_eq!(
+            (bounded.exit_code, &bounded.stdout, &bounded.stderr),
+            (plain.exit_code, &plain.stdout, &plain.stderr),
+            "a deadline nothing reached moved the answer for {:?}",
+            String::from_utf8_lossy(text)
+        );
     }
 }
 
@@ -188,17 +175,15 @@ fn no_trap_catches_the_deadline() {
         b"signal on syntax name h\ndo forever; nop; end\nh: say 'trapped'\n",
     ];
     for text in programs {
-        for engine in ENGINES {
-            let outcome = under_deadline(text, engine, SHORT);
-            assert_eq!(
-                outcome.exit_code,
-                DEADLINE_EXIT,
-                "{engine:?}: {:?}",
-                String::from_utf8_lossy(text)
-            );
-            assert_eq!(outcome.stdout, b"", "{engine:?}: a handler ran");
-            assert_eq!(outcome.stderr, DEADLINE_REPORT, "{engine:?}");
-        }
+        let outcome = under_deadline(text, SHORT);
+        assert_eq!(
+            outcome.exit_code,
+            DEADLINE_EXIT,
+            "{:?}",
+            String::from_utf8_lossy(text)
+        );
+        assert_eq!(outcome.stdout, b"", "a handler ran");
+        assert_eq!(outcome.stderr, DEADLINE_REPORT);
     }
 }
 
@@ -212,7 +197,7 @@ fn no_trap_catches_the_deadline() {
 /// description of the other.
 #[test]
 fn the_report_is_not_a_condition() {
-    let deadline = under_deadline(b"do forever; nop; end\n", Engine::Ir, SHORT);
+    let deadline = under_deadline(b"do forever; nop; end\n", SHORT);
     let raised = run_program(PATH, b"say 1/0\n".to_vec(), Invocation::none());
 
     let has_error_line = |bytes: &[u8]| {
@@ -239,11 +224,7 @@ fn the_report_is_not_a_condition() {
 /// over `do forever` fills memory as fast as the machine can print.
 #[test]
 fn a_run_that_traced_before_its_deadline_still_reads_as_unfinished() {
-    let outcome = under_deadline(
-        b"trace i\nnop\ntrace o\ndo forever; nop; end\n",
-        Engine::Ir,
-        SHORT,
-    );
+    let outcome = under_deadline(b"trace i\nnop\ntrace o\ndo forever; nop; end\n", SHORT);
     assert!(
         outcome.stderr.starts_with(b"     "),
         "the control moved: nothing was traced before the deadline, so this \
@@ -270,23 +251,21 @@ fn a_finalizer_that_outlives_the_deadline_is_still_reported() {
                     ::class K\n::method uninit\n  do forever; nop; end\n";
     let control = b"o = .K~new\ndrop o\ncall gc 'Force'\nsay 'after'\n\
                     ::class K\n::method uninit\n  return\n";
-    for engine in ENGINES {
-        let outcome = under_deadline(looping, engine, SHORT);
-        assert_eq!(
-            outcome.exit_code,
-            DEADLINE_EXIT,
-            "{engine:?}: a deadline reached inside UNINIT was discarded; stdout={:?} stderr={:?}",
-            String::from_utf8_lossy(&outcome.stdout),
-            String::from_utf8_lossy(&outcome.stderr)
-        );
-        let control = under_deadline(control, engine, Duration::from_secs(600));
-        assert_eq!(
-            control.exit_code,
-            0,
-            "{engine:?}: the control must reach its own finalizer cleanly; stderr={:?}",
-            String::from_utf8_lossy(&control.stderr)
-        );
-    }
+    let outcome = under_deadline(looping, SHORT);
+    assert_eq!(
+        outcome.exit_code,
+        DEADLINE_EXIT,
+        "a deadline reached inside UNINIT was discarded; stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&outcome.stdout),
+        String::from_utf8_lossy(&outcome.stderr)
+    );
+    let control = under_deadline(control, Duration::from_secs(600));
+    assert_eq!(
+        control.exit_code,
+        0,
+        "the control must reach its own finalizer cleanly; stderr={:?}",
+        String::from_utf8_lossy(&control.stderr)
+    );
 }
 
 /// Every shape of unbounded run this crate can be made to take, bounded.
@@ -363,33 +342,28 @@ fn every_unbounded_shape_this_crate_can_take_is_bounded() {
         ),
     ];
     for (name, text) in shapes {
-        for engine in ENGINES {
-            let started = Instant::now();
-            let outcome = watchdog::run_bounded_with(
-                PATH,
-                text.to_vec(),
-                Invocation::none().with_engine(engine).with_deadline(SHORT),
-                Duration::from_secs(30),
-            );
-            let elapsed = started.elapsed();
-            assert_eq!(
-                outcome.exit_code,
-                DEADLINE_EXIT,
-                "{name} on {engine:?}: stdout={:?} stderr={:?}",
-                String::from_utf8_lossy(&outcome.stdout),
-                String::from_utf8_lossy(&outcome.stderr)
-            );
-            assert!(
-                outcome.stderr.ends_with(DEADLINE_REPORT),
-                "{name} on {engine:?}: the outer bound answered, so the interpreter \
-                 does not see this shape: {:?}",
-                String::from_utf8_lossy(&outcome.stderr)
-            );
-            assert!(
-                elapsed < SHORT * 20,
-                "{name} on {engine:?}: took {elapsed:?}"
-            );
-        }
+        let started = Instant::now();
+        let outcome = watchdog::run_bounded_with(
+            PATH,
+            text.to_vec(),
+            Invocation::none().with_deadline(SHORT),
+            Duration::from_secs(30),
+        );
+        let elapsed = started.elapsed();
+        assert_eq!(
+            outcome.exit_code,
+            DEADLINE_EXIT,
+            "{name}: stdout={:?} stderr={:?}",
+            String::from_utf8_lossy(&outcome.stdout),
+            String::from_utf8_lossy(&outcome.stderr)
+        );
+        assert!(
+            outcome.stderr.ends_with(DEADLINE_REPORT),
+            "{name}: the outer bound answered, so the interpreter \
+             does not see this shape: {:?}",
+            String::from_utf8_lossy(&outcome.stderr)
+        );
+        assert!(elapsed < SHORT * 20, "{name}: took {elapsed:?}");
     }
 }
 

@@ -48,18 +48,12 @@ fn a_weak_reference_to_a_live_class_answers_the_class() {
         "live object: an Object\n",
         "declared: DECL\n",
     );
-    for engine in [rexx_exec::Engine::TreeWalker, rexx_exec::Engine::Ir] {
-        let outcome = rexx_exec::run_program(
-            "corpus/lang/weakref_class.rex",
-            program.clone(),
-            rexx_exec::Invocation::none().with_engine(engine),
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&outcome.stdout),
-            expected,
-            "{engine:?}"
-        );
-        assert_eq!(String::from_utf8_lossy(&outcome.stderr), "", "{engine:?}");
-        assert_eq!(outcome.exit_code, 0, "{engine:?}");
-    }
+    let outcome = rexx_exec::run_program(
+        "corpus/lang/weakref_class.rex",
+        program.clone(),
+        rexx_exec::Invocation::none(),
+    );
+    assert_eq!(String::from_utf8_lossy(&outcome.stdout), expected);
+    assert_eq!(String::from_utf8_lossy(&outcome.stderr), "");
+    assert_eq!(outcome.exit_code, 0);
 }

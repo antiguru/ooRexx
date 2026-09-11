@@ -120,7 +120,7 @@ use std::path::{Path, PathBuf};
 
 use gate_tables::{
     CLOSED_PHASES, Descriptors, Report, Structural, Verdict, assert_no_structural_failures,
-    compare_raw, excerpt, is_loud, refused_construct, run_on_both_engines, stdout_lines, verdict,
+    compare_raw, excerpt, is_loud, refused_construct, run_gate_probe, stdout_lines, verdict,
     verdict_is_gated, verdict_label,
 };
 use rexx_extract::docs::classes::NO_PROGRAM;
@@ -1209,7 +1209,7 @@ fn run_probe(
         }
     };
 
-    let crate_side = run_on_both_engines(&abs);
+    let crate_side = run_gate_probe(&abs);
     let cpp: CppOutcome = oracle.run(&abs);
     if did_not_finish(&cpp) {
         structural.push(Structural {
@@ -1313,7 +1313,7 @@ fn check_probe_text(
             // -- so a silent return turns off the only thing standing between
             // a row's verdict and a program about a different subject.
             //
-            // Guarded on the directory listing for the reason `run_probe`'s
+            // Guarded on the directory listing for the reason `run_gate_probe`'s
             // own arm is: a genuinely missing file is the set check's case and
             // has already been reported once there.
             if on_disk.contains(probe) {

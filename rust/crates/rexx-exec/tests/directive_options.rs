@@ -32,7 +32,7 @@ mod support;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use rexx_exec::{Engine, Invocation, Outcome, run_program};
+use rexx_exec::{Invocation, Outcome, run_program};
 use support::oracle::locate;
 
 /// The prefix every program this binary runs shares.
@@ -104,12 +104,12 @@ fn stderr_for_comparison(bytes: &[u8], concurrently_traced: bool) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
 
-fn run_crate(path: &Path, engine: Engine) -> Outcome {
+fn run_crate(path: &Path) -> Outcome {
     let text = fs::read(path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
     let path_str = path
         .to_str()
         .unwrap_or_else(|| panic!("{} is not valid UTF-8", path.display()));
-    run_program(path_str, text, Invocation::none().with_engine(engine))
+    run_program(path_str, text, Invocation::none())
 }
 
 /// Every `::OPTIONS` program answers the oracle byte for byte on stdout,
@@ -141,29 +141,27 @@ fn every_directive_options_program_answers_the_oracle() {
             "{name}: on CONCURRENTLY_TRACED and the oracle wrote no stderr, so the \
              multiset comparison below compares two absences"
         );
-        for engine in [Engine::Ir, Engine::TreeWalker] {
-            let outcome = run_crate(&path, engine);
-            assert_eq!(
-                String::from_utf8_lossy(&outcome.stdout),
-                String::from_utf8_lossy(&cpp.stdout),
-                "{name}: stdout differs from the oracle on {engine:?}"
-            );
-            assert_eq!(
-                stderr_for_comparison(&outcome.stderr, licensed),
-                stderr_for_comparison(&cpp.stderr, licensed),
-                "{name}: stderr differs from the oracle on {engine:?}{}",
-                if licensed {
-                    " (compared as a multiset of lines, Deviation 7)"
-                } else {
-                    ""
-                }
-            );
-            assert_eq!(
-                outcome.exit_code,
-                cpp.expect_exit_code(),
-                "{name}: exit status differs from the oracle on {engine:?}"
-            );
-        }
+        let outcome = run_crate(&path);
+        assert_eq!(
+            String::from_utf8_lossy(&outcome.stdout),
+            String::from_utf8_lossy(&cpp.stdout),
+            "{name}: stdout differs from the oracle"
+        );
+        assert_eq!(
+            stderr_for_comparison(&outcome.stderr, licensed),
+            stderr_for_comparison(&cpp.stderr, licensed),
+            "{name}: stderr differs from the oracle{}",
+            if licensed {
+                " (compared as a multiset of lines, Deviation 7)"
+            } else {
+                ""
+            }
+        );
+        assert_eq!(
+            outcome.exit_code,
+            cpp.expect_exit_code(),
+            "{name}: exit status differs from the oracle"
+        );
     }
 }
 
@@ -458,68 +456,66 @@ fn lostdigits_raises_98_972_where_the_oracle_does_and_nowhere_else() {
         fs::write(&path, &source)
             .unwrap_or_else(|e| panic!("cannot write {}: {e}", path.display()));
         let cpp = oracle.run(&path);
-        for engine in [Engine::Ir, Engine::TreeWalker] {
-            let outcome = run_crate(&path, engine);
-            let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
-            match expect {
-                Raises => {
-                    assert!(
-                        String::from_utf8_lossy(&cpp.stderr).contains("98.972"),
-                        "{name}: the oracle no longer raises LOSTDIGITS here, so this row \
-                         would agree over nothing"
-                    );
-                    assert_eq!(
-                        stderr,
-                        String::from_utf8_lossy(&cpp.stderr),
-                        "{name} on {engine:?}: stderr differs from the oracle"
-                    );
-                    assert_eq!(
-                        String::from_utf8_lossy(&outcome.stdout),
-                        String::from_utf8_lossy(&cpp.stdout),
-                        "{name} on {engine:?}: stdout differs from the oracle"
-                    );
-                    assert_eq!(
-                        outcome.exit_code,
-                        cpp.expect_exit_code(),
-                        "{name} on {engine:?}: exit status differs from the oracle"
-                    );
-                }
-                Agrees => {
-                    assert_eq!(
-                        String::from_utf8_lossy(&outcome.stdout),
-                        String::from_utf8_lossy(&cpp.stdout),
-                        "{name} on {engine:?}: stdout differs from the oracle"
-                    );
-                    assert_eq!(
-                        String::from_utf8_lossy(&outcome.stderr),
-                        String::from_utf8_lossy(&cpp.stderr),
-                        "{name} on {engine:?}: stderr differs from the oracle"
-                    );
-                    assert_eq!(
-                        outcome.exit_code,
-                        cpp.expect_exit_code(),
-                        "{name} on {engine:?}: exit status differs from the oracle"
-                    );
-                }
-                Diverges => {
-                    assert_ne!(
-                        outcome.exit_code, 120,
-                        "{name} on {engine:?}: this row records a divergence the refusal does \
-                         not cover, and the refusal now covers it"
-                    );
-                    assert_ne!(
-                        (
-                            String::from_utf8_lossy(&outcome.stdout).into_owned(),
-                            outcome.exit_code
-                        ),
-                        (
-                            String::from_utf8_lossy(&cpp.stdout).into_owned(),
-                            cpp.expect_exit_code()
-                        ),
-                        "{name} on {engine:?}: the two sides now agree, so this row's \
-                         divergence closed and the row belongs deleted"
-                    );
-                }
+        let outcome = run_crate(&path);
+        let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
+        match expect {
+            Raises => {
+                assert!(
+                    String::from_utf8_lossy(&cpp.stderr).contains("98.972"),
+                    "{name}: the oracle no longer raises LOSTDIGITS here, so this row \
+                     would agree over nothing"
+                );
+                assert_eq!(
+                    stderr,
+                    String::from_utf8_lossy(&cpp.stderr),
+                    "{name}: stderr differs from the oracle"
+                );
+                assert_eq!(
+                    String::from_utf8_lossy(&outcome.stdout),
+                    String::from_utf8_lossy(&cpp.stdout),
+                    "{name}: stdout differs from the oracle"
+                );
+                assert_eq!(
+                    outcome.exit_code,
+                    cpp.expect_exit_code(),
+                    "{name}: exit status differs from the oracle"
+                );
+            }
+            Agrees => {
+                assert_eq!(
+                    String::from_utf8_lossy(&outcome.stdout),
+                    String::from_utf8_lossy(&cpp.stdout),
+                    "{name}: stdout differs from the oracle"
+                );
+                assert_eq!(
+                    String::from_utf8_lossy(&outcome.stderr),
+                    String::from_utf8_lossy(&cpp.stderr),
+                    "{name}: stderr differs from the oracle"
+                );
+                assert_eq!(
+                    outcome.exit_code,
+                    cpp.expect_exit_code(),
+                    "{name}: exit status differs from the oracle"
+                );
+            }
+            Diverges => {
+                assert_ne!(
+                    outcome.exit_code, 120,
+                    "{name}: this row records a divergence the refusal does \
+                     not cover, and the refusal now covers it"
+                );
+                assert_ne!(
+                    (
+                        String::from_utf8_lossy(&outcome.stdout).into_owned(),
+                        outcome.exit_code
+                    ),
+                    (
+                        String::from_utf8_lossy(&cpp.stdout).into_owned(),
+                        cpp.expect_exit_code()
+                    ),
+                    "{name}: the two sides now agree, so this row's \
+                     divergence closed and the row belongs deleted"
+                );
             }
         }
     }

@@ -108,62 +108,10 @@ pub struct Invocation {
     argument: Option<Vec<u8>>,
     /// Where `.input` reads its lines from.
     input: ProgramInput,
-    /// Which engine runs the program's bodies.
-    engine: Engine,
     /// How long the run may take before the interpreter abandons it, or
     /// `None` for no bound at all -- which is what every shipped caller
     /// passes. See [`Invocation::with_deadline`].
     deadline: Option<Duration>,
-}
-
-/// Which engine runs each body of the program: the tree-walker, or the
-/// compiled instruction stream.
-///
-/// **A field of [`Invocation`] rather than an environment variable**, and the
-/// difference is not stylistic. A variable is read once per process, so it
-/// cannot give two arms inside one `cargo test` process, and the harnesses
-/// that run a population of programs call
-/// [`run_program`](crate::run_program) directly rather than spawning an
-/// interpreter. `Invocation` is already `run_program`'s third parameter and
-/// already reaches the interpreter, which is what makes a per-run choice
-/// expressible at all.
-///
-/// **A `rexx-run` process is the one case that argument does not cover**,
-/// since it runs one program and exits, so one answer per process is all it
-/// needs. That binary reads `REXX_ENGINE` and turns it into one of these
-/// before it builds an `Invocation` (`bin/rexx-run.rs`'s
-/// `engine_from_environment`). The library itself reads no environment
-/// variable to make this choice at any depth, so an in-process harness gets
-/// exactly what its own `Invocation` asked for.
-/// **No `Default`**, deliberately: [`Invocation::none`] is the one place that
-/// decides which engine a caller who did not choose gets, and a `Default`
-/// impl with no caller would be a second place for that answer to live.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum Engine {
-    /// The tree-walker: an activation's body is stepped instruction by
-    /// instruction, straight out of the AST.
-    TreeWalker,
-    /// The compiled instruction stream: an activation's body is compiled to
-    /// a chunk on first entry, cached, and driven clause by clause.
-    ///
-    /// A body that does not fit the stream's index widths runs on the
-    /// tree-walker instead, and each such refusal is counted in
-    /// [`Outcome::chunks_refused`](crate::Outcome::chunks_refused), so the
-    /// fallback is never silent.
-    Ir,
-}
-
-impl Engine {
-    /// The engine a caller who did not choose gets.
-    ///
-    /// **A constant rather than a literal at each site, because there is more
-    /// than one site and they have to agree.** [`Invocation::none`] is one;
-    /// `bin/rexx-run.rs`'s unset `REXX_ENGINE` is the other, in a crate that
-    /// cannot see this one's private items and so could not be checked
-    /// against it. Both now name this, so the two cannot drift apart without
-    /// someone writing a literal back in -- and each has a test pinning it
-    /// here from its own side.
-    pub const DEFAULT: Engine = Engine::Ir;
 }
 
 /// Where `.input` -- the position `PULL`, `PARSE PULL` and `PARSE LINEIN` all
@@ -207,7 +155,6 @@ impl Invocation {
         Invocation {
             argument: None,
             input: ProgramInput::Nothing,
-            engine: Engine::DEFAULT,
             deadline: None,
         }
     }
@@ -226,17 +173,12 @@ impl Invocation {
         Invocation { input, ..self }
     }
 
-    /// The same invocation, run on `engine`.
-    pub fn with_engine(self, engine: Engine) -> Invocation {
-        Invocation { engine, ..self }
-    }
-
     /// The same invocation, abandoned if the run is still executing clauses
     /// `deadline` after it starts.
     ///
-    /// A field here for the same reason [`Engine`] is one: an environment
-    /// variable is read once per process, and a deadline is a per-run choice
-    /// made by the caller that knows what it is running.
+    /// A field rather than an environment variable: a variable is read once
+    /// per process, and a deadline is a per-run choice made by the caller that
+    /// knows what it is running.
     ///
     /// What it bounds is narrower than the run -- `clause.rs`'s `Deadline`
     /// names what a clause-boundary check cannot see. The run ends with
@@ -256,8 +198,8 @@ impl Invocation {
     /// `execute` needs every part and takes ownership of each, and a set of
     /// getters would either clone the argument bytes or hand out a borrow that
     /// outlives nothing useful.
-    pub(crate) fn into_parts(self) -> (Option<Vec<u8>>, ProgramInput, Engine, Option<Duration>) {
-        (self.argument, self.input, self.engine, self.deadline)
+    pub(crate) fn into_parts(self) -> (Option<Vec<u8>>, ProgramInput, Option<Duration>) {
+        (self.argument, self.input, self.deadline)
     }
 }
 
@@ -333,43 +275,6 @@ mod tests {
                 joined.as_ref().map(|b| String::from_utf8_lossy(b))
             );
         }
-    }
-
-    /// An invocation nobody chose an engine for runs on the compiled stream,
-    /// and the other two builders leave that choice alone.
-    ///
-    /// `with_input` and `with_argument` both build from a `..` update, so a
-    /// field added to this struct is carried by them silently or dropped by
-    /// them silently depending on which side of the `..` it lands. That is
-    /// what the second half checks; the first is the default itself, pinned
-    /// to [`Engine::DEFAULT`] so that this and `bin/rexx-run.rs`'s own test
-    /// are pinning one value from two sides rather than two values that
-    /// happen to match today.
-    #[test]
-    fn an_invocation_that_chose_no_engine_runs_on_the_compiled_stream() {
-        assert_eq!(Engine::DEFAULT, Engine::Ir);
-        assert_eq!(Invocation::none().into_parts().2, Engine::DEFAULT);
-        assert_eq!(
-            Invocation::with_argument(b"a".to_vec()).into_parts().2,
-            Engine::DEFAULT
-        );
-        assert_eq!(
-            Invocation::none()
-                .with_engine(Engine::Ir)
-                .with_input(ProgramInput::Bytes(b"line\n".to_vec()))
-                .into_parts()
-                .2,
-            Engine::Ir,
-            "with_input dropped the chosen engine"
-        );
-        assert_eq!(
-            Invocation::none()
-                .with_engine(Engine::Ir)
-                .with_engine(Engine::TreeWalker)
-                .into_parts()
-                .2,
-            Engine::TreeWalker
-        );
     }
 
     /// The absent/empty split, on its own, because it is the one this type

@@ -22,62 +22,6 @@ use std::io::Write;
 use std::os::unix::ffi::OsStrExt;
 use std::process::ExitCode;
 
-/// Which engine this run uses, from `REXX_ENGINE`.
-///
-/// **An environment variable and not a command-line option**, for the reason
-/// `main`'s own comment gives for having no option parsing at all: every word
-/// after the program path is the program's argument, and a leading `-x` that
-/// this binary swallowed would silently change what a program is given.
-///
-/// It exists because the two engines are the same build selected through
-/// `Invocation`, so a benchmark comparison between them has to interleave
-/// between arms of one binary within one sitting -- and nothing else in this
-/// binary can reach `Invocation::with_engine`.
-///
-/// **Set-but-unrecognised is rejected, and that includes a value this platform
-/// will not decode.** Only an unset variable defaults, to the same engine
-/// `Invocation::none` picks. A typo, or a byte string that is not UTF-8, would
-/// otherwise run whichever engine the default names while the caller believed
-/// it had asked for the other -- which is worse than either running or
-/// refusing, because a benchmark would attribute the result to the wrong arm
-/// and read a comparison of one arm against itself as no movement.
-fn engine_from_environment() -> rexx_exec::Engine {
-    engine_from(std::env::var("REXX_ENGINE"))
-}
-
-/// [`engine_from_environment`]'s decision, over a value rather than over the
-/// process.
-///
-/// **Split out so it can be tested at all.** The environment is process-wide,
-/// `std::env::remove_var` is `unsafe` and this workspace forbids `unsafe`, and
-/// libtest runs its cases on threads of one process -- so a test that unset
-/// the variable would be both unwritable here and a race with every other
-/// test if it were written. Over a `Result` there is nothing to unset.
-fn engine_from(value: Result<String, std::env::VarError>) -> rexx_exec::Engine {
-    use std::env::VarError;
-
-    match value {
-        Err(VarError::NotPresent) => rexx_exec::Engine::DEFAULT,
-        Ok(value) => match value.as_str() {
-            "ir" => rexx_exec::Engine::Ir,
-            "tree-walker" => rexx_exec::Engine::TreeWalker,
-            other => reject_engine(&format!("`{other}`")),
-        },
-        // Not decodable as UTF-8, so there is nothing to compare against
-        // either spelling and nothing to print back either. Rejected rather
-        // than defaulted for the reason above: it is set, so the caller asked
-        // for something.
-        Err(VarError::NotUnicode(_)) => reject_engine("a value that is not UTF-8"),
-    }
-}
-
-/// Reports an unusable `REXX_ENGINE` and stops, with the status `main` uses
-/// for a request it cannot carry out at all.
-fn reject_engine(described: &str) -> ! {
-    eprintln!("rexx-run: REXX_ENGINE is {described}: expected `ir` or `tree-walker`");
-    std::process::exit(2);
-}
-
 fn main() -> ExitCode {
     let mut args = std::env::args_os().skip(1);
     let Some(path) = args.next() else {
@@ -107,8 +51,7 @@ fn main() -> ExitCode {
     // only place in the tree that asks for it: `ProgramInput`'s own doc has why
     // the in-process callers must not, and why the default is not this.
     let invocation = rexx_exec::join_command_line(args.map(|arg| arg.as_bytes().to_vec()))
-        .with_input(rexx_exec::ProgramInput::Stdin)
-        .with_engine(engine_from_environment());
+        .with_input(rexx_exec::ProgramInput::Stdin);
 
     let text = match std::fs::read(&path) {
         Ok(text) => text,
@@ -160,41 +103,4 @@ fn main() -> ExitCode {
     // instead fail and fall back to 255 for every one of them, indistinguishable
     // from `exit -1` alone, which is the bug this replaces.
     ExitCode::from(outcome.exit_code as u8)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::engine_from;
-    use rexx_exec::Engine;
-    use std::env::VarError;
-
-    /// An unset `REXX_ENGINE` gives the same engine a caller who built an
-    /// `Invocation` and chose nothing gets.
-    ///
-    /// **This binary is the one place naming an engine that the library's own
-    /// test cannot see.** `Invocation::into_parts` is `pub(crate)`, so
-    /// `invocation.rs` can pin the library half and nothing there reaches
-    /// this half; the two are pinned to one `Engine::DEFAULT` from opposite
-    /// sides instead. Without this, a flip applied to one and not the other
-    /// would leave `rexx-run` running an engine the library says is not the
-    /// default, and every gate would stay green.
-    #[test]
-    fn an_unset_variable_gives_the_librarys_own_default() {
-        assert_eq!(engine_from(Err(VarError::NotPresent)), Engine::DEFAULT);
-    }
-
-    /// Both recognised spellings still select what they name, so the default
-    /// above cannot be satisfied by a function that answers it for everything.
-    ///
-    /// The two rejecting arms are absent on purpose and not by oversight:
-    /// `reject_engine` ends the process, which libtest cannot survive to
-    /// assert on. What they refuse is stated where they are.
-    #[test]
-    fn each_spelling_selects_the_engine_it_names() {
-        assert_eq!(engine_from(Ok("ir".to_string())), Engine::Ir);
-        assert_eq!(
-            engine_from(Ok("tree-walker".to_string())),
-            Engine::TreeWalker
-        );
-    }
 }

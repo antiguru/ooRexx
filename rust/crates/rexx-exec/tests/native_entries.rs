@@ -48,7 +48,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use gate_tables::run_on_both_engines;
+use gate_tables::run_gate_probe;
 use rexx_exec::{NOT_IMPLEMENTED_EXIT, NativeEntryPoint};
 use support::oracle::wrapped_exit_code;
 
@@ -181,7 +181,7 @@ fn invoking_an_unimplemented_entry_point_is_loud_and_names_its_phase() {
 
         let abs = fs::canonicalize(&probe)
             .unwrap_or_else(|e| panic!("cannot resolve {}: {e}", probe.display()));
-        let outcome = run_on_both_engines(&abs);
+        let outcome = run_gate_probe(&abs);
         let expected = format!(
             "rexx-exec: the LIBRARY REXX entry point \"{}\" is not implemented ({})\n",
             row.entry, row.owner

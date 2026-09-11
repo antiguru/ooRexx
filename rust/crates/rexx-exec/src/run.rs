@@ -80,7 +80,7 @@ use crate::trace::{
 };
 use crate::value::{exact_small_int, within_digits};
 use crate::{
-    ActiveCondition, CallContext, Code, Engine, Failure, InstalledRoutine, Interp, Loud, Novalue,
+    ActiveCondition, CallContext, Code, Failure, InstalledRoutine, Interp, Loud, Novalue,
     PendingTrap, VarHome,
 };
 use rexx_core::{BehaviourId, Body, Decoded, FrameId, ObjRef, ScopePools, SlotFrame, VarRefHome};
@@ -1484,102 +1484,26 @@ impl Interp {
              its chunk would be cached under another body's name"
         );
 
-        // **Engine selection, and it is here rather than at either caller.**
-        // `run_activation` is the one function that runs an activation's
-        // body, so entering an activation is what reaches the compiled
-        // stream, rather than each place that enters one having to ask.
-        // Putting the decision at the callers instead would need the `Code`
-        // above rebuilt at each, and any caller that was missed would
-        // tree-walk its whole body while a dual-engine gate still passed.
+        // **Every activation's body runs from a compiled chunk.** There is
+        // no second engine and no selection left to make: `run_activation` is
+        // the one function that runs a body, and this is where the stream is
+        // entered.
         //
+        // **A refusal raises rather than falling back** (`Loud::chunk_refused`).
         // `None` from `chunk_for` is a body that does not fit the stream's
-        // index widths: it runs the loop below, and `Interp::chunks_refused`
-        // has already counted the refusal so the fallback is not silent.
+        // index widths; it used to run the instruction loop that stood here,
+        // with `Interp::chunks_refused` counting the downgrade so it was not
+        // silent. The tree-walker was that fallback, so retiring it leaves
+        // nothing to fall back to.
+        //
         // The setting in force *now* is what this body's chunk is looked up
         // by, not the one the program started under: the setting is an input
         // to compilation (D23), so entering a body under a second setting is
         // entering a second chunk.
-        if matches!(self.engine, Engine::Ir)
-            && let Some(chunk) = self.chunk_for(key, self.chunk_trace(), body, &plan)
-        {
-            return self.run_chunk(&code, &chunk, Some(&program.source));
-        }
-
-        let depth = self.activation_depth();
-
-        while let Some(instruction) = code.body.instructions.get(self.activation().pc) {
-            let index = self.activation().pc;
-            self.grant_procedure_permission(instruction);
-            // The failing clause's site, if any escapes, is resolved inside
-            // `step_in_temps_frame` itself (Task 10's own doc comment there):
-            // this call may nest arbitrarily deep through `If`/`Select`'s own
-            // `run_bounded`, and only the *innermost* one has the failing
-            // instruction in hand. `run` pops this activation on the way out,
-            // so a site resolved any higher up than that would have nothing
-            // left to resolve against.
-            //
-            // A condition raised inside an `INTERPRET` fragment arrives here
-            // too, and this level records the enclosing `INTERPRET` clause --
-            // but it is no longer the *only* thing recorded. The oracle
-            // prints one echo per level, innermost first, each carrying the
-            // enclosing clause's line number (measured, `interpret "say 2 &
-            // 1"` on line 2):
-            //
-            // ```text
-            //      2 *-* say 2 & 1
-            //      2 *-* interpret "say 2 & 1"
-            // ```
-            //
-            // **Both lines are produced.** `run_fragment` passes
-            // `Some(&fragment.source)` so the
-            // fragment's own spans resolve its clause *text*, the `Interpret`
-            // arm puts the enclosing clause's line and indent in force for
-            // the duration (`Interp::clause_line_override`,
-            // `Interp::indent_offset`), and `seal_site_level` closes the
-            // fragment's level so the first-wins slot is free for this one.
-            // Three separate mechanisms, because the naive version -- pass
-            // the source down and nothing else -- was built twice and
-            // measured wrong twice, once on the line number and once on which
-            // clause won the race.
-            //
-            // The same gap ran through `TRACE`, where nothing is raised at
-            // all (review finding I1), and closed with it: measured, `trace
-            // r` / `zz = 'nop'` / `interpret zz` now prints the oracle's
-            // three lines rather than its first two, and `run.rs`'s own
-            // `interpret_traces_the_text_it_is_about_to_run` asserts the
-            // whole transcript instead of stopping one line short.
-            // The condition-trap boundary, and the reason it
-            // is *here* rather than inside `step_in_temps_frame`: one offer
-            // per activation, made by the activation that is unwinding. A
-            // nested `run_bounded` (an `IF` branch, a `WHEN` body) shares
-            // this activation's traps and must not get a second offer, and
-            // a callee's own offer already happened in its own copy of this
-            // loop before `invoke_call` re-threw. See
-            // `offer_to_trap` for the search rules and for why only a
-            // `SIGNAL ON` trap can take a failure at all.
-            let flow =
-                match self.step_in_temps_frame(&code, index, instruction, Some(&program.source)) {
-                    Ok(flow) => flow,
-                    Err(failure) => self.offer_to_trap(&code, failure)?,
-                };
-            // **No clause boundary here any more** (fix round 3). It moved
-            // inside `step_in_temps_frame`, which is the one place a clause
-            // is stepped -- so this loop, `run_bounded`, and every future
-            // caller get it without being enumerated. See `clause.rs`.
-            if let Some(ended) = self.apply_flow(&code, flow)? {
-                return Ok(ended);
-            }
-            debug_assert_eq!(
-                self.activation_depth(),
-                depth,
-                "step left the activation stack changed, so this loop's `code` and its `pc` \
-                 no longer describe the same frame"
-            );
-        }
-        // Out of instructions. `Exited` and not `Returned`: measured, a
-        // callee that runs off the end of the file ends the *program* and the
-        // caller's next clause never runs. See `Ended::Exited`'s own doc.
-        Ok(Ended::Exited(None))
+        let Some(chunk) = self.chunk_for(key, self.chunk_trace(), body, &plan) else {
+            return Err(Loud::chunk_refused().into());
+        };
+        self.run_chunk(&code, &chunk, Some(&program.source))
     }
 
     /// Transfers "is this the first instruction executed in this activation"

@@ -4967,20 +4967,18 @@ fn use_strict_arg_reports_method_errors_in_a_method_and_call_errors_outside() {
             "Error 40.5:  Missing argument in invocation of SUB; argument 1 is required.\n",
         ),
     ] {
-        for engine in [crate::Engine::TreeWalker, crate::Engine::Ir] {
-            let outcome = crate::run_program(
-                "/t.rex",
-                source.as_bytes().to_vec(),
-                crate::Invocation::none().with_engine(engine),
-            );
-            assert_eq!(
-                (outcome.exit_code, outcome.stdout.len()),
-                (status, 0),
-                "{source:?}"
-            );
-            let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
-            assert!(stderr.ends_with(catalogue), "{source:?}: {stderr:?}");
-        }
+        let outcome = crate::run_program(
+            "/t.rex",
+            source.as_bytes().to_vec(),
+            crate::Invocation::none(),
+        );
+        assert_eq!(
+            (outcome.exit_code, outcome.stdout.len()),
+            (status, 0),
+            "{source:?}"
+        );
+        let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
+        assert!(stderr.ends_with(catalogue), "{source:?}: {stderr:?}");
     }
     // The neighbouring successes: an omitted position without `STRICT` drops
     // the target, and one with a default of its own is filled rather than
@@ -8734,18 +8732,12 @@ macro_rules! corpus_source {
 /// wrong identically on both and the comparison stays green. What this
 /// function adds is a third party: bytes the oracle produced.
 fn assert_stderr_on_both_engines(path: &str, source: &str, expected: &str) {
-    for engine in [crate::Engine::Ir, crate::Engine::TreeWalker] {
-        let outcome = crate::run_program(
-            path,
-            source.as_bytes().to_vec(),
-            crate::Invocation::none().with_engine(engine),
-        );
-        assert_eq!(
-            String::from_utf8(outcome.stderr).expect("the trace is UTF-8"),
-            expected,
-            "{engine:?} arm"
-        );
-    }
+    let outcome = crate::run_program(path, source.as_bytes().to_vec(), crate::Invocation::none());
+    assert_eq!(
+        String::from_utf8(outcome.stderr).expect("the trace is UTF-8"),
+        expected,
+        "the compiled stream"
+    );
 }
 
 /// **A `::METHOD` activation's own trace indents, pinned here because
@@ -8960,30 +8952,26 @@ fn a_value_returned_after_a_reply_reports_the_oracles_own_98_936() {
             "Error 98.936:  RETURN cannot return a value after a REPLY.\n",
         ),
     );
-    for engine in [crate::Engine::Ir, crate::Engine::TreeWalker] {
-        let outcome = crate::run_program(
-            "/abs/method_reply_exit_status.rex",
-            corpus_source!("lang/method_reply_exit_status.rex")
-                .as_bytes()
-                .to_vec(),
-            crate::Invocation::none().with_engine(engine),
-        );
-        assert_eq!(outcome.exit_code, 7, "{engine:?} arm");
-    }
+    let outcome = crate::run_program(
+        "/abs/method_reply_exit_status.rex",
+        corpus_source!("lang/method_reply_exit_status.rex")
+            .as_bytes()
+            .to_vec(),
+        crate::Invocation::none(),
+    );
+    assert_eq!(outcome.exit_code, 7, "the compiled stream");
 
     // The adjacent success: a bare `RETURN` after a `REPLY` is legal, and the
     // owed body's own `SAY` still reaches stdout.
-    for engine in [crate::Engine::Ir, crate::Engine::TreeWalker] {
-        let outcome = crate::run_program(
-            "/abs/bare-return-after-reply.rex",
-            b"say .K~m\n::class K\n::method m class\n  reply 'replied'\n  say 'tail'\n  return\n"
-                .to_vec(),
-            crate::Invocation::none().with_engine(engine),
-        );
-        assert_eq!(outcome.stderr, b"", "{engine:?} arm");
-        assert_eq!(outcome.stdout, b"replied\ntail\n", "{engine:?} arm");
-        assert_eq!(outcome.exit_code, 0, "{engine:?} arm");
-    }
+    let outcome = crate::run_program(
+        "/abs/bare-return-after-reply.rex",
+        b"say .K~m\n::class K\n::method m class\n  reply 'replied'\n  say 'tail'\n  return\n"
+            .to_vec(),
+        crate::Invocation::none(),
+    );
+    assert_eq!(outcome.stderr, b"", "the compiled stream");
+    assert_eq!(outcome.stdout, b"replied\ntail\n", "the compiled stream");
+    assert_eq!(outcome.exit_code, 0, "the compiled stream");
 }
 
 /// **A second `REPLY` reports the oracle's own 98.935**, on the terms the test
@@ -9084,24 +9072,22 @@ fn the_guard_instructions_answers_and_the_phase_6_refusals() {
         },
     ];
     for row in rows {
-        for engine in [crate::Engine::Ir, crate::Engine::TreeWalker] {
-            let outcome = crate::run_program(
-                "/abs/guard-surface.rex",
-                row.source.as_bytes().to_vec(),
-                crate::Invocation::none().with_engine(engine),
+        let outcome = crate::run_program(
+            "/abs/guard-surface.rex",
+            row.source.as_bytes().to_vec(),
+            crate::Invocation::none(),
+        );
+        let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
+        assert_eq!(outcome.stdout, row.stdout, "{}", row.name);
+        assert_eq!(outcome.exit_code, row.exit_code, "{}", row.name);
+        if row.stderr_contains.is_empty() {
+            assert_eq!(stderr, "", "{}", row.name);
+        } else {
+            assert!(
+                stderr.contains(row.stderr_contains),
+                "{}: stderr was {stderr:?}",
+                row.name
             );
-            let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
-            assert_eq!(outcome.stdout, row.stdout, "{}, {engine:?}", row.name);
-            assert_eq!(outcome.exit_code, row.exit_code, "{}, {engine:?}", row.name);
-            if row.stderr_contains.is_empty() {
-                assert_eq!(stderr, "", "{}, {engine:?}", row.name);
-            } else {
-                assert!(
-                    stderr.contains(row.stderr_contains),
-                    "{}, {engine:?}: stderr was {stderr:?}",
-                    row.name
-                );
-            }
         }
     }
 }
@@ -9115,21 +9101,19 @@ fn the_guard_instructions_answers_and_the_phase_6_refusals() {
 /// running both says which.
 fn annotate_on_both_engines(source: &str) -> (i32, String, String) {
     let mut answer = None;
-    for engine in [crate::Engine::Ir, crate::Engine::TreeWalker] {
-        let outcome = crate::run_program(
-            "/abs/annotate.rex",
-            source.as_bytes().to_vec(),
-            crate::Invocation::none().with_engine(engine),
-        );
-        let seen = (
-            outcome.exit_code,
-            String::from_utf8_lossy(&outcome.stdout).into_owned(),
-            String::from_utf8_lossy(&outcome.stderr).into_owned(),
-        );
-        match &answer {
-            None => answer = Some(seen),
-            Some(first) => assert_eq!(first, &seen, "the two engines disagree on {source:?}"),
-        }
+    let outcome = crate::run_program(
+        "/abs/annotate.rex",
+        source.as_bytes().to_vec(),
+        crate::Invocation::none(),
+    );
+    let seen = (
+        outcome.exit_code,
+        String::from_utf8_lossy(&outcome.stdout).into_owned(),
+        String::from_utf8_lossy(&outcome.stderr).into_owned(),
+    );
+    match &answer {
+        None => answer = Some(seen),
+        Some(first) => assert_eq!(first, &seen, "the two engines disagree on {source:?}"),
     }
     answer.expect("at least one engine ran")
 }
@@ -9358,26 +9342,20 @@ fn a_started_method_that_raises_has_an_error_and_reraises_at_result() {
                    ::class K\n\
                    ::method M\n\
                    \x20 return 1/0\n";
-    for engine in [crate::Engine::Ir, crate::Engine::TreeWalker] {
-        let outcome = crate::run_program(
-            PATH,
-            source.to_vec(),
-            crate::Invocation::none().with_engine(engine),
-        );
-        assert_eq!(outcome.exit_code, 214, "256 - 42");
-        assert_eq!(
-            String::from_utf8_lossy(&outcome.stdout),
-            "haserror 1 completed 1\n"
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&outcome.stderr),
-            format!(
-                "\x20    8 *-* return 1/0\n\
-                 \x20      *-* Compiled method \"RESULT\" with scope \"Message\".\n\
-                 \x20    4 *-* say 'result' m~result\n\
-                 Error 42 running {PATH} line 8:  Arithmetic overflow/underflow.\n\
-                 Error 42.3:  Arithmetic overflow; divisor must not be zero.\n"
-            )
-        );
-    }
+    let outcome = crate::run_program(PATH, source.to_vec(), crate::Invocation::none());
+    assert_eq!(outcome.exit_code, 214, "256 - 42");
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stdout),
+        "haserror 1 completed 1\n"
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stderr),
+        format!(
+            "\x20    8 *-* return 1/0\n\
+             \x20      *-* Compiled method \"RESULT\" with scope \"Message\".\n\
+             \x20    4 *-* say 'result' m~result\n\
+             Error 42 running {PATH} line 8:  Arithmetic overflow/underflow.\n\
+             Error 42.3:  Arithmetic overflow; divisor must not be zero.\n"
+        )
+    );
 }

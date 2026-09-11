@@ -66,7 +66,7 @@ use queue::Queue;
 // it can carry, how a list of words becomes that string, and where `.input`
 // reads from.
 mod invocation;
-pub use invocation::{Engine, Invocation, ProgramInput, join_command_line};
+pub use invocation::{Invocation, ProgramInput, join_command_line};
 
 // `.input`: one line position, shared by every construct that reads a line,
 // and the queue-first rule `PULL` follows on top of it.
@@ -325,14 +325,26 @@ pub(crate) const LIBRARY_PACKAGE_NAME: &[u8] = b"REXX";
 ///
 /// Survivable depth at this cost: `536,870,912 / 1840 ≈ 291,777` levels,
 /// still comfortably over D19's 100,000 floor (about 2.9x headroom, down
-/// from Task 7's ~3.35x at 335,000 -- the trend this table exists to show is
-/// still shrinking, as expected, and still nowhere near the floor).
-/// `INTERPRETER_STACK_BYTES` stays at 512 MiB; this is the fifth value this
-/// figure has taken across this phase (820, 850, 783/784, 1600, now 1840),
-/// and the point of keeping every row rather than overwriting the last one
-/// is that each was correct for the code it measured -- re-measure again
-/// rather than trust this one either, the same instruction every prior row
-/// already gives.
+/// from Task 7's ~3.35x at 335,000).
+///
+/// **Re-measured at the tree-walker's removal: 480 bytes per `eval` level,
+/// and the trend reversed.** The deep chain now reaches `eval` through a
+/// single `crate::ir::Op::EvalExpr` instead of through the tree-walker's own
+/// clause unit and `eval_node` chain, so a level is the recursion alone and
+/// not the frames that stood above it. The same command prints (byte for
+/// byte, this run):
+///
+/// ```text
+/// interpreter stack: 536870912 bytes, eval depth reached: 100000, span: 47999520 bytes, per frame: 480.0 bytes
+/// ```
+///
+/// Survivable depth at this cost: `536,870,912 / 480 ≈ 1,118,481` levels,
+/// about 11x D19's floor. `INTERPRETER_STACK_BYTES` stays at 512 MiB; this
+/// is the sixth value this figure has taken across the phase (820, 850,
+/// 783/784, 1600, 1840, now 480), and the point of keeping every row rather
+/// than overwriting the last one is that each was correct for the code it
+/// measured -- re-measure again rather than trust this one either, the same
+/// instruction every prior row already gives.
 ///
 /// **Task 11 set `eval.rs`'s `MAX_EVAL_DEPTH` to 100,000, and that closes off
 /// the way every figure on this page was re-derived.** Everything above was
@@ -1321,6 +1333,27 @@ impl Loud {
     fn chunk_map_too_short() -> Loud {
         Loud {
             message: "a compiled chunk has no op for an instruction of its own body".to_string(),
+        }
+    }
+
+    /// A body the compiler refused, which used to run on the tree-walker.
+    ///
+    /// **The refusal has one cause and it is a machine width** (`ir::compile`'s
+    /// own doc): op indices are `u32` and register indices `u16`, so a body
+    /// whose stream or register file would exceed either cannot be compiled.
+    /// While a second engine existed this was a silent downgrade counted by
+    /// `Outcome::chunks_refused`; there is nowhere to downgrade to now, so it
+    /// raises.
+    ///
+    /// Nothing in the corpus, the samples or the benchmark set is within
+    /// orders of magnitude of either width, and `chunks_refused` is asserted
+    /// zero across `tests/ir_recorded.rs`' populations -- which is the widest
+    /// evidence in the tree that this is unreachable rather than merely rare.
+    fn chunk_refused() -> Loud {
+        Loud {
+            message: "a body does not fit the compiled stream's index widths, and there is no \
+                      longer a second engine to run it"
+                .to_string(),
         }
     }
 
@@ -3142,17 +3175,11 @@ struct Interp {
     /// that returns at once, the two lookups here and on `chunks` cost 9.7% of
     /// the program between them.
     plans: NameMap<BodyKey, Rc<Plan>>,
-    /// Which engine `run_activation` runs a body on, from the
-    /// [`Invocation`] `execute` was handed.
-    ///
-    /// On the interpreter rather than threaded through every call, exactly
-    /// like `stress_collect` beside it: it is a property of the whole run,
-    /// chosen once by the caller and never varying between activations.
-    engine: Engine,
     /// The wall-clock bound `Interp::count_clause_against_deadline` honours,
     /// or `None` for the unbounded run every shipped caller asks for.
     ///
-    /// On the interpreter for `engine`'s own reason, and armed in `execute`
+    /// On the interpreter rather than threaded through every call, because it
+    /// is a property of the whole run; armed in `execute`
     /// rather than here: the countdown starts when the program does, not when
     /// the interpreter is built.
     deadline: Option<crate::clause::Deadline>,
@@ -4716,7 +4743,6 @@ impl Interp {
             programs: Vec::new(),
             package_options: HashMap::new(),
             plans: NameMap::default(),
-            engine: Engine::Ir,
             deadline: None,
             clause_countdown: crate::clause::Deadline::NO_DEADLINE_SPACING,
             chunks: NameMap::default(),
@@ -7824,7 +7850,6 @@ impl Interp {
             programs: _,
             package_options: _,
             plans: _,
-            engine: _,
             deadline: _,
             clause_countdown: _,
             // A chunk's interned literals are allocated immortal.
@@ -8400,9 +8425,8 @@ fn execute(
     // doc for what reads it and for the three measured invocations that tell
     // "no argument" from "one empty argument" apart.
     interp.call_context.name = path.as_bytes().to_vec();
-    let (argument, program_input, engine, deadline) = invocation.into_parts();
+    let (argument, program_input, deadline) = invocation.into_parts();
     interp.input = Input::new(program_input);
-    interp.engine = engine;
     // Armed here rather than in `Interp::new`, and after the parse, so that
     // what it bounds is the running of this program. `Interp::bootstrap_library`
     // below runs clauses of its own and is inside the bound, which is what a
@@ -9213,7 +9237,7 @@ say 1
         let mut then_a_fragment = alone.clone();
         then_a_fragment.extend_from_slice(b"interpret \"say 'b'\"\n");
 
-        let on_eval = || crate::Invocation::none().with_engine(crate::Engine::TreeWalker);
+        let on_eval = || crate::Invocation::none();
         let alone = run_program(TEST_PATH, alone, on_eval());
         let then_a_fragment = run_program(TEST_PATH, then_a_fragment, on_eval());
 

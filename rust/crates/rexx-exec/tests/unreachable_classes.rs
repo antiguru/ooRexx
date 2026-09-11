@@ -32,7 +32,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use gate_tables::{Report, excerpt};
-use rexx_exec::{Engine, Invocation, Outcome};
+use rexx_exec::{Invocation, Outcome};
 use support::oracle::{CppOutcome, did_not_finish, wrapped_exit_code};
 
 /// The `class-set.txt` status this guard is about.
@@ -114,15 +114,8 @@ fn a_class_marked_unreachable_still_has_no_route_to_an_instance() {
             .unwrap_or_else(|e| panic!("cannot canonicalize {}: {e}", file.display()));
         let path = abs.to_str().expect("the staging path is valid UTF-8");
 
-        let run = |engine| -> Outcome {
-            watchdog::run_bounded(
-                path,
-                text.clone().into_bytes(),
-                Invocation::none().with_engine(engine),
-            )
-        };
-        let tree_walker = run(Engine::TreeWalker);
-        let ir = run(Engine::Ir);
+        let crate_side: Outcome =
+            watchdog::run_bounded(path, text.clone().into_bytes(), Invocation::none());
         let cpp: CppOutcome = oracle.run(&abs);
         assert!(
             !did_not_finish(&cpp),
@@ -134,16 +127,10 @@ fn a_class_marked_unreachable_still_has_no_route_to_an_instance() {
         report.line(&format!("  {name}: {route}"));
         for (side, exit, stdout, stderr) in [
             (
-                "tree-walker",
-                wrapped_exit_code(tree_walker.exit_code),
-                &tree_walker.stdout,
-                &tree_walker.stderr,
-            ),
-            (
-                "ir",
-                wrapped_exit_code(ir.exit_code),
-                &ir.stdout,
-                &ir.stderr,
+                "crate",
+                wrapped_exit_code(crate_side.exit_code),
+                &crate_side.stdout,
+                &crate_side.stderr,
             ),
             ("oracle", cpp.expect_exit_code(), &cpp.stdout, &cpp.stderr),
         ] {

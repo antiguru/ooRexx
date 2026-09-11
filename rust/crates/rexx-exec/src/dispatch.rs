@@ -11378,21 +11378,19 @@ mod tests {
     /// are then driven by whichever engine is running.
     fn both_engines(source: &str) -> (i32, String, String) {
         let mut answer = None;
-        for engine in [crate::Engine::TreeWalker, crate::Engine::Ir] {
-            let outcome = crate::run_program(
-                "/t.rex",
-                source.as_bytes().to_vec(),
-                crate::Invocation::none().with_engine(engine),
-            );
-            let seen = (
-                outcome.exit_code,
-                String::from_utf8_lossy(&outcome.stdout).into_owned(),
-                String::from_utf8_lossy(&outcome.stderr).into_owned(),
-            );
-            match &answer {
-                None => answer = Some(seen),
-                Some(first) => assert_eq!(first, &seen, "the two engines disagree on {source:?}"),
-            }
+        let outcome = crate::run_program(
+            "/t.rex",
+            source.as_bytes().to_vec(),
+            crate::Invocation::none(),
+        );
+        let seen = (
+            outcome.exit_code,
+            String::from_utf8_lossy(&outcome.stdout).into_owned(),
+            String::from_utf8_lossy(&outcome.stderr).into_owned(),
+        );
+        match &answer {
+            None => answer = Some(seen),
+            Some(first) => assert_eq!(first, &seen, "the two engines disagree on {source:?}"),
         }
         answer.expect("at least one engine ran")
     }

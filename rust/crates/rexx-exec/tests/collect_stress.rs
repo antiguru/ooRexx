@@ -625,29 +625,27 @@ fn a_loops_per_pass_roots_outlive_the_pass_and_not_the_loop() {
         },
     ];
     for row in rows {
-        for engine in [rexx_exec::Engine::TreeWalker, rexx_exec::Engine::Ir] {
-            let path = format!("<loop-pass-rooting: {}>", row.name);
-            let stress = run_program_collect_every_alloc(
-                &path,
-                row.program.as_bytes().to_vec(),
-                rexx_exec::Invocation::none().with_engine(engine),
-            );
-            assert_eq!(
-                String::from_utf8_lossy(&stress.stdout),
-                row.stdout,
-                "{}, under collect-on-every-allocation",
-                row.name
-            );
-            assert_eq!(
-                stress.collections > 0,
-                row.allocates,
-                "{} collected {} times, against the row's own claim that it \
-                 allocates: {}",
-                row.name,
-                stress.collections,
-                row.allocates
-            );
-        }
+        let path = format!("<loop-pass-rooting: {}>", row.name);
+        let stress = run_program_collect_every_alloc(
+            &path,
+            row.program.as_bytes().to_vec(),
+            rexx_exec::Invocation::none(),
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&stress.stdout),
+            row.stdout,
+            "{}, under collect-on-every-allocation",
+            row.name
+        );
+        assert_eq!(
+            stress.collections > 0,
+            row.allocates,
+            "{} collected {} times, against the row's own claim that it \
+             allocates: {}",
+            row.name,
+            stress.collections,
+            row.allocates
+        );
     }
 }
 
@@ -697,23 +695,21 @@ fn a_parked_reply_keeps_its_variables_across_a_collection() {
         "ffffffffffffffffgggggggggggggggg\n",
         "aaaaaaaaaaaaaaaa\n",
     );
-    for engine in [rexx_exec::Engine::TreeWalker, rexx_exec::Engine::Ir] {
-        let stress = run_program_collect_every_alloc(
-            "<parked-reply-rooting>",
-            program.as_bytes().to_vec(),
-            rexx_exec::Invocation::none().with_engine(engine),
-        );
-        assert_eq!(stress.exit_code, 0, "{:?}", engine);
-        assert_eq!(
-            String::from_utf8_lossy(&stress.stdout),
-            expected,
-            "a parked REPLY lost a value under collect-on-every-allocation, {engine:?}"
-        );
-        assert!(
-            stress.collections > 0,
-            "the stress mode did not collect, so this proves nothing, {engine:?}"
-        );
-    }
+    let stress = run_program_collect_every_alloc(
+        "<parked-reply-rooting>",
+        program.as_bytes().to_vec(),
+        rexx_exec::Invocation::none(),
+    );
+    assert_eq!(stress.exit_code, 0);
+    assert_eq!(
+        String::from_utf8_lossy(&stress.stdout),
+        expected,
+        "a parked REPLY lost a value under collect-on-every-allocation"
+    );
+    assert!(
+        stress.collections > 0,
+        "the stress mode did not collect, so this proves nothing"
+    );
 }
 
 /// A running activation's `RexxContext` survives a collection, with one at
@@ -749,24 +745,22 @@ fn a_running_activation_keeps_its_context_object_across_a_collection() {
         "xxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyy\n",
         "a RexxContext\n",
     );
-    for engine in [rexx_exec::Engine::TreeWalker, rexx_exec::Engine::Ir] {
-        let stress = run_program_collect_every_alloc(
-            "<running-context-rooting>",
-            program.as_bytes().to_vec(),
-            rexx_exec::Invocation::none().with_engine(engine),
-        );
-        assert_eq!(stress.exit_code, 0, "{:?}", engine);
-        assert_eq!(
-            String::from_utf8_lossy(&stress.stdout),
-            expected,
-            "a running activation lost its context object under \
-             collect-on-every-allocation, {engine:?}"
-        );
-        assert!(
-            stress.collections > 0,
-            "the stress mode did not collect, so this proves nothing, {engine:?}"
-        );
-    }
+    let stress = run_program_collect_every_alloc(
+        "<running-context-rooting>",
+        program.as_bytes().to_vec(),
+        rexx_exec::Invocation::none(),
+    );
+    assert_eq!(stress.exit_code, 0);
+    assert_eq!(
+        String::from_utf8_lossy(&stress.stdout),
+        expected,
+        "a running activation lost its context object under \
+         collect-on-every-allocation"
+    );
+    assert!(
+        stress.collections > 0,
+        "the stress mode did not collect, so this proves nothing"
+    );
 }
 
 /// A method body that assigns over `SELF` still reads its exposed variables
@@ -819,23 +813,21 @@ fn a_method_that_assigns_over_self_keeps_its_exposed_variables() {
         "yzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyzyz",
         " 192 clobbered\n",
     );
-    for engine in [rexx_exec::Engine::TreeWalker, rexx_exec::Engine::Ir] {
-        let stress = run_program_collect_every_alloc(
-            "<self-reassigned-rooting>",
-            program.as_bytes().to_vec(),
-            rexx_exec::Invocation::none().with_engine(engine),
-        );
-        assert_eq!(stress.exit_code, 0, "{engine:?}");
-        assert_eq!(
-            String::from_utf8_lossy(&stress.stdout),
-            expected,
-            "an instance lost its variable pools under collect-on-every-allocation, {engine:?}"
-        );
-        assert!(
-            stress.collections > 0,
-            "the stress mode did not collect, so this proves nothing, {engine:?}"
-        );
-    }
+    let stress = run_program_collect_every_alloc(
+        "<self-reassigned-rooting>",
+        program.as_bytes().to_vec(),
+        rexx_exec::Invocation::none(),
+    );
+    assert_eq!(stress.exit_code, 0);
+    assert_eq!(
+        String::from_utf8_lossy(&stress.stdout),
+        expected,
+        "an instance lost its variable pools under collect-on-every-allocation"
+    );
+    assert!(
+        stress.collections > 0,
+        "the stress mode did not collect, so this proves nothing"
+    );
 }
 
 /// A weak reference does not keep its referent alive, and keeps answering one
@@ -868,21 +860,18 @@ fn a_weak_reference_clears_only_when_its_referent_becomes_unreachable() {
         // allocations run is between the referent's creation and the read.
         "say 'temp' (.WeakReference~new(.Object~new)~value == .nil)\n",
     );
-    for engine in [rexx_exec::Engine::TreeWalker, rexx_exec::Engine::Ir] {
-        let stress = run_program_collect_every_alloc(
-            "<weak-reference-clearing>",
-            program.as_bytes().to_vec(),
-            rexx_exec::Invocation::none().with_engine(engine),
-        );
-        assert_eq!(stress.exit_code, 0, "{engine:?}");
-        assert_eq!(
-            String::from_utf8_lossy(&stress.stdout),
-            "dropped 1\nheld 1 Object\ntemp 0\n",
-            "{engine:?}"
-        );
-        assert!(
-            stress.collections > 0,
-            "the stress mode did not collect, so this proves nothing, {engine:?}"
-        );
-    }
+    let stress = run_program_collect_every_alloc(
+        "<weak-reference-clearing>",
+        program.as_bytes().to_vec(),
+        rexx_exec::Invocation::none(),
+    );
+    assert_eq!(stress.exit_code, 0);
+    assert_eq!(
+        String::from_utf8_lossy(&stress.stdout),
+        "dropped 1\nheld 1 Object\ntemp 0\n"
+    );
+    assert!(
+        stress.collections > 0,
+        "the stress mode did not collect, so this proves nothing"
+    );
 }

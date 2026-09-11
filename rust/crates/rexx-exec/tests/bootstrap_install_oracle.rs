@@ -185,28 +185,22 @@ fn the_two_library_files_install_and_answer_what_the_oracle_answers() {
         cpp.termination
     );
 
-    for engine in [rexx_exec::Engine::TreeWalker, rexx_exec::Engine::Ir] {
-        let text = fs::read(&abs).unwrap_or_else(|e| panic!("cannot read {}: {e}", abs.display()));
-        let rust = rexx_exec::run_program(
-            path,
-            text,
-            rexx_exec::Invocation::none().with_engine(engine),
-        );
-        let diffs = descriptor_diffs(&rust, &cpp);
-        assert!(
-            diffs.is_empty(),
-            "the composed library install disagrees with the oracle on [{}], \
-             engine {engine:?}:\n  rust stdout:   {:?}\n  oracle stdout: {:?}\n  \
-             rust stderr:   {:?}\n  oracle stderr: {:?}\n  exit: rust {} oracle {}",
-            diffs.join(", "),
-            String::from_utf8_lossy(&rust.stdout),
-            String::from_utf8_lossy(&cpp.stdout),
-            String::from_utf8_lossy(&rust.stderr),
-            String::from_utf8_lossy(&cpp.stderr),
-            rust.exit_code,
-            cpp.expect_exit_code()
-        );
-    }
+    let text = fs::read(&abs).unwrap_or_else(|e| panic!("cannot read {}: {e}", abs.display()));
+    let rust = rexx_exec::run_program(path, text, rexx_exec::Invocation::none());
+    let diffs = descriptor_diffs(&rust, &cpp);
+    assert!(
+        diffs.is_empty(),
+        "the composed library install disagrees with the oracle on [{}], \
+           rust stdout:   {:?}\n  oracle stdout: {:?}\n  \
+         rust stderr:   {:?}\n  oracle stderr: {:?}\n  exit: rust {} oracle {}",
+        diffs.join(", "),
+        String::from_utf8_lossy(&rust.stdout),
+        String::from_utf8_lossy(&cpp.stdout),
+        String::from_utf8_lossy(&rust.stderr),
+        String::from_utf8_lossy(&cpp.stderr),
+        rust.exit_code,
+        cpp.expect_exit_code()
+    );
 
     assert_eq!(
         oracle.invocations(),

@@ -105,7 +105,7 @@ use std::path::{Path, PathBuf};
 use gate_tables::orx::{self, CORE_CLASSES, STREAM_CLASSES};
 use gate_tables::{
     CLOSED_PHASES, Descriptors, Report, Structural, Verdict, assert_no_structural_failures,
-    compare_raw, excerpt, is_loud, refused_construct, run_on_both_engines, stdout_lines, verdict,
+    compare_raw, excerpt, is_loud, refused_construct, run_gate_probe, stdout_lines, verdict,
     verdict_is_gated, verdict_label,
 };
 use support::oracle::{did_not_finish, wrapped_exit_code};
@@ -581,7 +581,7 @@ fn directive_option_gate_table() {
         // **A probe whose bytes cannot be read is not this arm's case**, which
         // is worth saying because it is the other thing "unreadable" suggests:
         // measured, a `chmod 000` probe canonicalises fine and fails in
-        // `run_on_both_engines`'s own read, naming the path.
+        // `run_gate_probe`'s own read, naming the path.
         let abs = match fs::canonicalize(corpus.join(&probe)) {
             Ok(abs) => abs,
             Err(error) => {
@@ -606,7 +606,7 @@ fn directive_option_gate_table() {
             }
         };
 
-        let crate_side = run_on_both_engines(&abs);
+        let crate_side = run_gate_probe(&abs);
         let cpp = oracle.run(&abs);
         if did_not_finish(&cpp) {
             structural.push(Structural {

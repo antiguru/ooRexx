@@ -71,7 +71,7 @@ use gate_tables::{
     Descriptors, Report, Structural, assert_no_structural_failures, compare_raw, excerpt, is_loud,
     refused_construct, verdict,
 };
-use rexx_exec::{Engine, Invocation, Outcome, StackSpan};
+use rexx_exec::{Invocation, Outcome, StackSpan};
 use support::oracle::{CppOutcome, did_not_finish, wrapped_exit_code};
 
 fn corpus_dir() -> PathBuf {
@@ -560,53 +560,33 @@ struct CrateSide {
     stable: bool,
 }
 
-/// Runs one probe on both engines, bounded, and reports whether the two agreed.
+/// Runs one probe twice, bounded, and reports whether the two runs agreed.
 ///
-/// A disagreement is re-measured on one engine before it is believed: two
-/// runs of the same engine that also disagree mean the program's own answer
-/// moves between runs, which is a row this table cannot classify rather than
-/// an engine defect. Panics when the two engines disagree while two runs of
-/// one engine agree, and when either arm refused a body to the other --
-/// neither is a fact about the oracle and no mode relaxes them.
-fn run_both_engines(abs: &Path, text: &[u8]) -> CrateSide {
+/// **This used to run the probe on both engines and compare them**, re-running
+/// one engine on a disagreement to tell a program whose own answer moves from
+/// an engine defect. With one engine the second half is the whole test: two
+/// runs that disagree mean the program's answer is not reproducible, which is
+/// a row this table cannot classify, and `stable` is what carries that to the
+/// caller.
+///
+/// A refused body still panics. It is not a fact about the oracle and no mode
+/// relaxes it.
+fn run_probe_twice(abs: &Path, text: &[u8]) -> CrateSide {
     let path = abs
         .to_str()
         .unwrap_or_else(|| panic!("probe path {} is not valid UTF-8", abs.display()));
-    let run = |engine| -> Outcome {
-        watchdog::run_bounded(path, text.to_vec(), Invocation::none().with_engine(engine))
-    };
-    let tree_walker = run(Engine::TreeWalker);
-    let ir = run(Engine::Ir);
+    let run = || -> Outcome { watchdog::run_bounded(path, text.to_vec(), Invocation::none()) };
+    let first = run();
     assert!(
-        ir.chunks_refused == 0 && tree_walker.chunks_refused == 0,
-        "a body of {path} did not run on the engine it was attributed to: the ir arm refused \
-         {} bodies to the tree-walker and the tree-walker arm counted {}, where it compiles \
-         nothing to refuse",
-        ir.chunks_refused,
-        tree_walker.chunks_refused,
+        first.chunks_refused == 0,
+        "a body of {path} was refused by the compiler, so this row did not measure what it \
+         reports",
     );
-    if same_outcome(&tree_walker, &ir) {
-        return CrateSide {
-            outcome: tree_walker,
-            stable: true,
-        };
-    }
-    let again = run(Engine::TreeWalker);
-    assert!(
-        !same_outcome(&tree_walker, &again),
-        "the two engines disagree on {path}, which is a structural failure and not a verdict \
-         -- two runs of the tree-walker agree with each other.\n  tree-walker: exit={} \
-         stdout={} stderr={}\n  ir:          exit={} stdout={} stderr={}",
-        wrapped_exit_code(tree_walker.exit_code),
-        excerpt(&tree_walker.stdout),
-        excerpt(&tree_walker.stderr),
-        wrapped_exit_code(ir.exit_code),
-        excerpt(&ir.stdout),
-        excerpt(&ir.stderr),
-    );
+    let second = run();
+    let stable = same_outcome(&first, &second);
     CrateSide {
-        outcome: tree_walker,
-        stable: false,
+        outcome: first,
+        stable,
     }
 }
 
@@ -974,7 +954,7 @@ fn no_row_started_diverging_or_stopped_answering() {
             .unwrap_or_else(|e| panic!("cannot canonicalize {}: {e}", file.display()));
 
         let subject = format!("{} {} ({})", row.class, row.method, row.arm);
-        let crate_side = run_both_engines(&abs, text.as_bytes());
+        let crate_side = run_probe_twice(&abs, text.as_bytes());
         if !crate_side.stable {
             measured.insert(
                 row.key(),

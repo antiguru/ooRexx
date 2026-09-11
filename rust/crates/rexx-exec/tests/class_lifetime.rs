@@ -29,24 +29,14 @@ fn corpus_program(name: &str) -> Vec<u8> {
 
 fn agrees(program: &str, expected: &str) {
     let text = corpus_program(program);
-    for engine in [rexx_exec::Engine::TreeWalker, rexx_exec::Engine::Ir] {
-        let outcome = rexx_exec::run_program(
-            program,
-            text.clone(),
-            rexx_exec::Invocation::none().with_engine(engine),
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&outcome.stdout),
-            expected,
-            "{program} on {engine:?}"
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&outcome.stderr),
-            "",
-            "{program} on {engine:?}"
-        );
-        assert_eq!(outcome.exit_code, 0, "{program} on {engine:?}");
-    }
+    let outcome = rexx_exec::run_program(program, text.clone(), rexx_exec::Invocation::none());
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stdout),
+        expected,
+        "{program}"
+    );
+    assert_eq!(String::from_utf8_lossy(&outcome.stderr), "", "{program}");
+    assert_eq!(outcome.exit_code, 0, "{program}");
 }
 
 /// A class nothing refers to any more is collected, and leaves its

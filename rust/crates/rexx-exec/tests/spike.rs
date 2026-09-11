@@ -268,35 +268,41 @@ fn a_loud_failure_message_does_not_grow_with_the_expression() {
 ///
 /// **The re-measured figure this test prints, recorded here too and not
 /// only in the report file**: at Task 11's own implementation, this test
-/// prints `per frame: 1840.0 bytes` (up from the ~1600 `lib.rs`'s own doc
+/// prints `per frame: 480.0 bytes` at the tree-walker's removal -- the figure
+/// was 1840.0 while the deep chain still reached `eval` through the
+/// tree-walker's own clause unit (up from the ~1600 `lib.rs`'s own doc
 /// comment on `INTERPRETER_STACK_BYTES` recorded after Task 7), giving
-/// `survivable ≈ 291,777` -- comfortably over the `> 100_000.0` the
-/// assertion below checks, still by about 2.9x. `lib.rs`'s own doc comment
+/// `survivable ≈ 1,118,481` -- comfortably over the `> 100_000.0` the
+/// assertion below checks, by about 11x. `lib.rs`'s own doc comment
 /// on the constant carries the dated row; this comment exists so `grep`
 /// for the figure finds it beside the test that produces it too, not only
 /// in a report a later reader may never open.
 ///
-/// **On the tree-walker, because the frame this costs is `eval`'s.** The
-/// compiled engine promotes a chain of native operators to ops that reach the
-/// operator with its operands already in registers, so this program does not
-/// enter `eval` there at all and there is no frame to price; `eval::tests`'
-/// `depth_limited` (`src/eval.rs`) carries the measurement of what the two
-/// engines do with a chain this deep.
+/// **The chain carries one call, because the frame this costs is `eval`'s.**
+/// `compile` promotes a chain of native operators to ops that reach the
+/// operator with its operands already in registers, so a purely native chain
+/// does not enter `eval` at all and there is no frame to price -- measured, it
+/// reaches a peak depth of 5. One call anywhere makes `native_shape` decline
+/// the whole slot, so it compiles to a single `Op::EvalExpr` and `eval` walks
+/// every term. `eval::tests`' own `eval_walked_chain` (`src/eval.rs`) is the
+/// same shape and carries the measurement.
 #[test]
 fn records_the_stack_cost_of_one_eval_frame() {
     const TERMS: usize = 100_000;
 
     let mut program = b"say 'a'".to_vec();
-    for _ in 1..TERMS {
-        program.extend_from_slice(b"||''");
+    for term in 1..TERMS {
+        // The empty string either way: only the expression's *shape* differs,
+        // and one call is what puts the whole chain through `eval`.
+        if term == 5 {
+            program.extend_from_slice(b"||substr('x',1,0)");
+        } else {
+            program.extend_from_slice(b"||''");
+        }
     }
     program.push(b'\n');
 
-    let outcome = run_program(
-        SPIKE_PATH,
-        program,
-        rexx_exec::Invocation::none().with_engine(rexx_exec::Engine::TreeWalker),
-    );
+    let outcome = run_program(SPIKE_PATH, program, rexx_exec::Invocation::none());
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(
         outcome.stdout, b"a\n",

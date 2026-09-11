@@ -28,7 +28,7 @@ use super::{
     arith_hint_skips, call_site_hits, clause_op_entries, const_builds, frame_floor_high_water,
     load_constant_builds, run_chunk_entries, trace_op_echoes,
 };
-use crate::{Engine, Invocation, Outcome, execute, run_program};
+use crate::{Invocation, Outcome, execute, run_program};
 
 /// The path these programs are reported under. Nothing reads it back: no
 /// program below raises, so it never reaches a report.
@@ -58,45 +58,25 @@ sub:
 /// `execute` rather than `run_program`, and that is what makes the count
 /// exact: `run_program` runs the interpreter on a thread of its own, and
 /// `run_chunk`'s counter is per thread. Everything `run_program` does to an
-/// `Invocation` happens here too, so the `Engine` still travels the whole
-/// production route from `Invocation` to `Interp::engine`. The stack
-/// `run_program` sizes is not needed for a program three shallow bodies deep.
-fn drive(engine: Engine) -> (Outcome, usize) {
+/// `Invocation` happens here too, so the invocation still travels the whole
+/// production route. The stack `run_program` sizes is not needed for a
+/// program three shallow bodies deep.
+fn drive() -> (Outcome, usize) {
     let before = run_chunk_entries();
-    let outcome = execute(
-        TEST_PATH,
-        THREE_BODIES.to_vec(),
-        false,
-        Invocation::none().with_engine(engine),
-    );
+    let outcome = execute(TEST_PATH, THREE_BODIES.to_vec(), false, Invocation::none());
     (outcome, run_chunk_entries() - before)
 }
 
 #[test]
 fn the_ir_engine_drives_every_body_the_program_enters() {
-    let (outcome, driven) = drive(Engine::Ir);
+    let (outcome, driven) = drive();
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(
         driven, 3,
         "the IR engine drove {driven} chunks where the program has three \
          bodies: its main body, the CALLed label, and the ::ROUTINE. Fewer \
-         means a way of entering an activation reached the tree-walker \
-         instead, which every later promotion would then silently skip"
-    );
-}
-
-/// The negative control for the test above, and the reason it is a separate
-/// test rather than a second assertion: a counter that never moved would
-/// satisfy "the tree-walker drives nothing" on its own, and only the pair
-/// says the count tracks the engine rather than the program.
-#[test]
-fn the_tree_walker_drives_no_chunk_at_all() {
-    let (outcome, driven) = drive(Engine::TreeWalker);
-    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
-    assert_eq!(
-        driven, 0,
-        "the tree-walker drove {driven} chunks, so the engine choice no longer \
-         decides which driver runs a body"
+         means a way of entering an activation did not reach the compiled \
+         stream, which every later promotion would then silently skip"
     );
 }
 
@@ -131,12 +111,7 @@ fn the_ir_engine_steps_a_loop_body_from_the_chunk() {
     const COUNTED_LOOP: &[u8] = b"do i = 1 to 3\n  nop\nend\n";
 
     let before = clause_op_entries();
-    let outcome = execute(
-        TEST_PATH,
-        COUNTED_LOOP.to_vec(),
-        false,
-        Invocation::none().with_engine(Engine::Ir),
-    );
+    let outcome = execute(TEST_PATH, COUNTED_LOOP.to_vec(), false, Invocation::none());
     let stepped = clause_op_entries() - before;
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(
@@ -168,7 +143,7 @@ fn the_ir_engine_steps_a_simple_blocks_body_from_the_chunk() {
         TEST_PATH,
         b"do\n  nop\n  nop\nend\n".to_vec(),
         false,
-        Invocation::none().with_engine(Engine::Ir),
+        Invocation::none(),
     );
     let stepped = clause_op_entries() - before;
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
@@ -203,12 +178,7 @@ fn the_ir_engine_steps_an_ifs_chosen_branch_from_the_chunk() {
     for (condition, expected, path) in [("1 = 1", 4, "then"), ("1 = 0", 4, "else")] {
         let program = format!("if {condition} then say 'a'\nelse say 'b'\nsay 'c'\n");
         let before = clause_op_entries();
-        let outcome = execute(
-            TEST_PATH,
-            program.into_bytes(),
-            false,
-            Invocation::none().with_engine(Engine::Ir),
-        );
+        let outcome = execute(TEST_PATH, program.into_bytes(), false, Invocation::none());
         let stepped = clause_op_entries() - before;
         assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
         assert_eq!(
@@ -268,7 +238,7 @@ fn the_ir_engine_steps_a_selects_chosen_branch_from_the_chunk() {
             TEST_PATH,
             program.as_bytes().to_vec(),
             false,
-            Invocation::none().with_engine(Engine::Ir),
+            Invocation::none(),
         );
         let stepped = clause_op_entries() - before;
         assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
@@ -279,26 +249,6 @@ fn the_ir_engine_steps_a_selects_chosen_branch_from_the_chunk() {
              the clause after the whole construct are {expected}"
         );
     }
-}
-
-/// The negative control for the test above: the tree-walker steps nothing
-/// from a chunk, so a count that never moved would satisfy it on its own.
-#[test]
-fn the_tree_walker_steps_no_clause_from_a_chunk() {
-    let before = clause_op_entries();
-    let outcome = execute(
-        TEST_PATH,
-        b"do i = 1 to 3\n  nop\nend\n".to_vec(),
-        false,
-        Invocation::none().with_engine(Engine::TreeWalker),
-    );
-    let stepped = clause_op_entries() - before;
-    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
-    assert_eq!(
-        stepped, 0,
-        "the tree-walker stepped {stepped} clauses from a chunk, so the engine \
-         choice no longer decides which driver steps a clause"
-    );
 }
 
 /// A body entered with `TRACE R` already in force echoes its promoted clauses
@@ -337,7 +287,7 @@ sub:
         TEST_PATH,
         ENTERED_TRACED.to_vec(),
         false,
-        Invocation::none().with_engine(Engine::Ir),
+        Invocation::none(),
     );
     let echoed = trace_op_echoes() - before;
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
@@ -350,42 +300,37 @@ sub:
     );
 }
 
-/// The two negative controls for the count above, and they are two because
-/// they answer two different degenerate counters.
+/// The negative control for the count above: the identical construct with
+/// everything but `TRACE` unchanged emits no clause echo from a trace op.
 ///
-/// A counter that never moved would satisfy the tree-walker row on its own; a
-/// counter that moved on every promoted clause regardless of setting would
-/// satisfy neither. The untraced row is the one that says the *setting*
-/// decides, since it runs the identical construct with everything but `TRACE`
-/// unchanged.
+/// **It answers the degenerate counter the pair above cannot.** A counter that
+/// moved on every promoted clause regardless of setting would satisfy the
+/// traced test on its own; this is what says the *setting* decides.
+///
+/// **There used to be a second control here, and it went with the second
+/// engine.** It ran the traced program on the tree-walker, whose clauses never
+/// came from a chunk and so could not echo from a trace op at all -- it
+/// answered "a counter that never moved", which no engine choice can produce
+/// now. What that leaves is the control that was always about the compiled
+/// emission decision rather than about which engine ran.
 #[test]
-fn no_trace_op_echoes_without_the_engine_or_without_the_setting() {
-    const ENTERED_TRACED: &[u8] = b"trace r\ncall sub\nexit\nsub:\n  if 1 = 1 then nop\n  return\n";
+fn no_trace_op_echoes_without_the_setting() {
     const ENTERED_UNTRACED: &[u8] = b"call sub\nexit\nsub:\n  if 1 = 1 then nop\n  return\n";
 
-    for (program, engine, described) in [
-        (
-            ENTERED_TRACED,
-            Engine::TreeWalker,
-            "the tree-walker runs it",
-        ),
-        (ENTERED_UNTRACED, Engine::Ir, "no TRACE is in force"),
-    ] {
-        let before = trace_op_echoes();
-        let outcome = execute(
-            TEST_PATH,
-            program.to_vec(),
-            false,
-            Invocation::none().with_engine(engine),
-        );
-        let echoed = trace_op_echoes() - before;
-        assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
-        assert_eq!(
-            echoed, 0,
-            "{echoed} clause echoes came from a trace op where {described}, so the count no \
-             longer tracks the compiled emission decision"
-        );
-    }
+    let before = trace_op_echoes();
+    let outcome = execute(
+        TEST_PATH,
+        ENTERED_UNTRACED.to_vec(),
+        false,
+        Invocation::none(),
+    );
+    let echoed = trace_op_echoes() - before;
+    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+    assert_eq!(
+        echoed, 0,
+        "{echoed} clause echoes came from a trace op where no TRACE is in force, so the count \
+         no longer tracks the compiled emission decision"
+    );
 }
 
 /// A quickened arithmetic site handed operands the small-integer path cannot
@@ -446,7 +391,7 @@ end
         TEST_PATH,
         QUICKENED_THEN_WIDENED.to_vec(),
         false,
-        Invocation::none().with_engine(Engine::Ir),
+        Invocation::none(),
     );
     let skipped = arith_hint_skips() - before;
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
@@ -487,18 +432,12 @@ end
 /// `execute` alone does not.
 #[test]
 fn no_body_is_refused_by_either_engine() {
-    for engine in [Engine::TreeWalker, Engine::Ir] {
-        let outcome = run_program(
-            TEST_PATH,
-            THREE_BODIES.to_vec(),
-            Invocation::none().with_engine(engine),
-        );
-        assert_eq!(
-            outcome.chunks_refused, 0,
-            "{engine:?} refused a body of a three-body program {} times",
-            outcome.chunks_refused
-        );
-    }
+    let outcome = run_program(TEST_PATH, THREE_BODIES.to_vec(), Invocation::none());
+    assert_eq!(
+        outcome.chunks_refused, 0,
+        "the compiler refused a body of a three-body program {} times",
+        outcome.chunks_refused
+    );
 }
 
 /// A call site reached on every pass of a loop resolves **once** and answers
@@ -537,7 +476,7 @@ zsub:
         TEST_PATH,
         TWO_SITES_IN_A_LOOP.to_vec(),
         false,
-        Invocation::none().with_engine(Engine::Ir),
+        Invocation::none(),
     );
     let hits = call_site_hits() - before;
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
@@ -560,40 +499,6 @@ zsub:
          the table is not being read back"
     );
 }
-
-/// The tree-walker keeps nothing, so the same program hits no site at all.
-///
-/// The negative control for the test above, and a separate test for the reason
-/// [`the_tree_walker_drives_no_chunk_at_all`] is: a counter that never moved
-/// satisfies "nothing was kept" on its own, and only the pair says the count
-/// tracks the engine rather than the program.
-#[test]
-fn the_tree_walker_keeps_no_resolution() {
-    const ONE_SITE_IN_A_LOOP: &[u8] = b"\
-do zi = 1 to 4
-  call zsub zi
-end
-exit
-zsub:
-  return
-";
-
-    let before = call_site_hits();
-    let outcome = execute(
-        TEST_PATH,
-        ONE_SITE_IN_A_LOOP.to_vec(),
-        false,
-        Invocation::none().with_engine(Engine::TreeWalker),
-    );
-    let hits = call_site_hits() - before;
-    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
-    assert_eq!(
-        hits, 0,
-        "the tree-walker answered {hits} calls from a kept resolution, so the table is reached \
-         without the compiled stream"
-    );
-}
-
 /// **A slot resolved before the loop still names its own variable after the
 /// frame has grown under it**, which is the wrong-answer risk a compiled write
 /// and a kept control slot both carry.
@@ -645,20 +550,18 @@ sub: procedure expose zg
   return
 ";
 
-    for engine in [Engine::TreeWalker, Engine::Ir] {
-        let outcome = execute(
-            TEST_PATH,
-            GROWS_UNDER_A_CACHED_SLOT.to_vec(),
-            false,
-            Invocation::none().with_engine(engine),
-        );
-        assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
-        assert_eq!(
-            String::from_utf8_lossy(&outcome.stdout),
-            "10 5\n10 20 30 40\ncallee 17 4\ncaller 17\n",
-            "{engine:?} did not answer the oracle's own bytes for this program"
-        );
-    }
+    let outcome = execute(
+        TEST_PATH,
+        GROWS_UNDER_A_CACHED_SLOT.to_vec(),
+        false,
+        Invocation::none(),
+    );
+    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stdout),
+        "10 5\n10 20 30 40\ncallee 17 4\ncaller 17\n",
+        "the compiled stream did not answer the oracle's own bytes for this program"
+    );
 }
 
 /// The adjacent case the test above needs to be pinned rather than
@@ -712,20 +615,13 @@ end
 say zi za.1 za.2 za.3 za.8
 ";
 
-    for engine in [Engine::TreeWalker, Engine::Ir] {
-        let outcome = execute(
-            TEST_PATH,
-            A_MOVING_TAIL.to_vec(),
-            false,
-            Invocation::none().with_engine(engine),
-        );
-        assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
-        assert_eq!(
-            String::from_utf8_lossy(&outcome.stdout),
-            "8 1 1 1 1\n",
-            "{engine:?} resolved a compound control's tail once instead of on every pass"
-        );
-    }
+    let outcome = execute(TEST_PATH, A_MOVING_TAIL.to_vec(), false, Invocation::none());
+    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stdout),
+        "8 1 1 1 1\n",
+        "a compound control's tail was resolved once instead of on every pass"
+    );
 }
 
 /// A raise that escapes two open loops leaves the frame stack where it found
@@ -772,7 +668,7 @@ signal retry
         TEST_PATH,
         TRAPS_OUT_OF_LOOPS.to_vec(),
         false,
-        Invocation::none().with_engine(Engine::Ir),
+        Invocation::none(),
     );
     // The adjacent success: five traps fired and the handler ran to its own
     // `EXIT`, so the frames really were opened and really were escaped. Without
@@ -830,12 +726,7 @@ say zs zt
 ";
 
     let before = const_builds();
-    let outcome = execute(
-        TEST_PATH,
-        ONE_CONSTANT.to_vec(),
-        false,
-        Invocation::none().with_engine(Engine::Ir),
-    );
+    let outcome = execute(TEST_PATH, ONE_CONSTANT.to_vec(), false, Invocation::none());
     let one = const_builds() - before;
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(
@@ -850,12 +741,7 @@ say zs zt
     );
 
     let before = const_builds();
-    let outcome = execute(
-        TEST_PATH,
-        TWO_CONSTANTS.to_vec(),
-        false,
-        Invocation::none().with_engine(Engine::Ir),
-    );
+    let outcome = execute(TEST_PATH, TWO_CONSTANTS.to_vec(), false, Invocation::none());
     let two = const_builds() - before;
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(
@@ -915,12 +801,7 @@ say zs zt
 
     fn builds(program: &[u8], expected: &str) -> usize {
         let before = load_constant_builds();
-        let outcome = execute(
-            TEST_PATH,
-            program.to_vec(),
-            false,
-            Invocation::none().with_engine(Engine::Ir),
-        );
+        let outcome = execute(TEST_PATH, program.to_vec(), false, Invocation::none());
         assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
         assert_eq!(
             String::from_utf8_lossy(&outcome.stdout),

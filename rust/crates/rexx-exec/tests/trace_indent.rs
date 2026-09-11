@@ -80,7 +80,7 @@
 
 mod support;
 
-use rexx_exec::{Engine, Invocation, run_program};
+use rexx_exec::{Invocation, run_program};
 use std::path::{Path, PathBuf};
 
 /// The path this harness hands `run_program`, and the path every
@@ -191,47 +191,47 @@ fn describe(label: &str, actual: &[u8], expected: &[u8]) -> String {
 /// replacement character, so two different non-UTF-8 stderrs would compare
 /// equal through it. Today's transcripts are ASCII and it would not bite yet;
 /// the premise is what has to stay true.
-fn check_case(name: &str, engine: Engine) -> Vec<String> {
+fn check_case(name: &str) -> Vec<String> {
     let expected = parse_expected(&read_case(name, "expected"), name);
     let source = read_case(name, "rex");
-    let outcome = run_program(CASE_PATH, source, Invocation::none().with_engine(engine));
+    let outcome = run_program(CASE_PATH, source, Invocation::none());
 
     let mut mismatches = Vec::new();
     if outcome.stdout != expected.stdout {
         mismatches.push(describe(
-            &format!("{name} ({engine:?}): stdout"),
+            &format!("{name}: stdout"),
             &outcome.stdout,
             &expected.stdout,
         ));
     }
     if outcome.stderr != expected.stderr {
         mismatches.push(describe(
-            &format!("{name} ({engine:?}): stderr, raw"),
+            &format!("{name}: stderr, raw"),
             &outcome.stderr,
             &expected.stderr,
         ));
     }
     if outcome.exit_code != expected.rc {
         mismatches.push(format!(
-            "  {name} ({engine:?}): exit code\n    actual:   {}\n    expected: {}",
+            "  {name}: exit code\n    actual:   {}\n    expected: {}",
             outcome.exit_code, expected.rc
         ));
     }
     mismatches
 }
 
-/// Every case under one engine, each one run whatever the ones before it did,
+/// Every case, each one run whatever the ones before it did,
 /// with every mismatch named in a single failure.
 ///
 /// **Two counts, because one case can contribute up to three mismatches** --
 /// stdout, stderr and exit code are compared separately and each answers for
 /// itself. A single number over the flattened list is a descriptor count
 /// wearing a case count's words, and it can exceed the number of cases.
-fn check_every_case(engine: Engine) {
+fn check_every_case() {
     let names = case_names();
     let failed: Vec<(&String, Vec<String>)> = names
         .iter()
-        .map(|name| (name, check_case(name, engine)))
+        .map(|name| (name, check_case(name)))
         .filter(|(_, mismatches)| !mismatches.is_empty())
         .collect();
     let descriptors: usize = failed.iter().map(|(_, m)| m.len()).sum();
@@ -241,7 +241,7 @@ fn check_every_case(engine: Engine) {
         .collect();
     assert!(
         failed.is_empty(),
-        "{} of {} cases disagree with the oracle under {engine:?}, in {descriptors} \
+        "{} of {} cases disagree with the oracle, in {descriptors} \
          descriptors, compared raw -- this comparison is the whole point of this file \
          and does not go through DEVIATION 0:\n{}",
         failed.len(),
@@ -251,13 +251,8 @@ fn check_every_case(engine: Engine) {
 }
 
 #[test]
-fn every_case_matches_the_oracle_on_the_tree_walker() {
-    check_every_case(Engine::TreeWalker);
-}
-
-#[test]
-fn every_case_matches_the_oracle_on_the_compiled_engine() {
-    check_every_case(Engine::Ir);
+fn every_case_matches_the_oracle() {
+    check_every_case();
 }
 
 /// The blindness this file exists to reach around, measured per case.

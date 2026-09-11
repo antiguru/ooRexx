@@ -96,7 +96,7 @@ use std::io::Write as _;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-use rexx_exec::{Engine, Invocation, Outcome, run_program};
+use rexx_exec::{Invocation, Outcome, run_program};
 
 use crate::support::oracle::{
     CppOutcome, StderrComparison, descriptor_diff_with, wrapped_exit_code,
@@ -173,73 +173,39 @@ pub fn verdict(differs: Descriptors) -> Verdict {
         (true, true, true) => Verdict::DivergeBoth,
     }
 }
-
-/// Runs `abs` in process on both engines and returns the outcome they agree
-/// on.
-///
-/// **Two assertions, both unconditional and both naming the program**, because
-/// there are two ways a returned outcome can fail to be a two-engine
-/// measurement and only one of them is the engines disagreeing. The other is
-/// the ir arm refusing the body to the tree-walker, which leaves the two
-/// *agreeing* while one engine never ran the program. Neither is a fact about
-/// the oracle, so neither is a verdict and no mode relaxes either.
-///
-/// **In process, and therefore unbounded.** An oracle run is a subprocess and
-/// carries a deadline; these two are calls, and nothing can kill them. What
-/// stands in for the deadline is a rule outside the code: a probe is run by
-/// hand through `rexx-run` under `timeout -s KILL 10` before it is committed.
+/// Runs one probe in process and hands back its outcome.
 ///
 /// `abs` is passed to the executor as-is, already canonicalised by the
 /// caller, because a raised condition's report names the program by its
 /// absolute dot-normalised path and the oracle prints exactly that.
-pub fn run_on_both_engines(abs: &Path) -> Outcome {
+///
+/// **This used to run the probe on both engines and require them to agree
+/// before any verdict existed.** That check is gone with the second engine;
+/// the refusal check below is the half that survives, and it is the half
+/// that could always fail on its own.
+pub fn run_gate_probe(abs: &Path) -> Outcome {
     let text = fs::read(abs).unwrap_or_else(|e| panic!("cannot read {}: {e}", abs.display()));
     let path = abs
         .to_str()
         .unwrap_or_else(|| panic!("probe path {} is not valid UTF-8", abs.display()));
 
-    let run = |engine| -> Outcome {
-        run_program(path, text.clone(), Invocation::none().with_engine(engine))
-    };
-    let tree_walker = run(Engine::TreeWalker);
-    let ir = run(Engine::Ir);
+    let outcome = run_program(path, text, Invocation::none());
 
-    let tw_exit = wrapped_exit_code(tree_walker.exit_code);
-    let ir_exit = wrapped_exit_code(ir.exit_code);
+    // **A refused body used to be attributed to an engine that never ran it.**
+    // `Engine::Ir` ran a body the stream's index widths could not hold on the
+    // tree-walker instead, counting it in `chunks_refused`, so a row could be
+    // reported as a compiled-engine measurement while the tree-walker produced
+    // every byte of it. There is no fallback now and a refusal raises, but the
+    // count is still read here: it is the cheapest possible statement that
+    // this row measured what it says it measured.
     assert!(
-        tw_exit == ir_exit && tree_walker.stdout == ir.stdout && tree_walker.stderr == ir.stderr,
-        "the two engines disagree on {}, which is a structural failure and not a \
-         verdict -- no comparison against the oracle is meaningful until they \
-         agree.\n  tree-walker: exit={tw_exit} stdout={} stderr={}\n  ir:          \
-         exit={ir_exit} stdout={} stderr={}",
+        outcome.chunks_refused == 0,
+        "a body of {} was refused by the compiler, so this row did not measure \
+         what it reports.",
         abs.display(),
-        excerpt(&tree_walker.stdout),
-        excerpt(&tree_walker.stderr),
-        excerpt(&ir.stdout),
-        excerpt(&ir.stderr),
     );
 
-    // Not a disagreement, and that is precisely why it needs its own check.
-    // `Engine::Ir` runs a body the instruction stream's index widths cannot
-    // hold on the tree-walker instead, counting it in `chunks_refused` -- so a
-    // refused body makes the assertion above a comparison of two tree-walker
-    // runs, tautologically true, while the row goes on being reported as a
-    // two-engine measurement. `ir_recorded.rs` checks the same count for the same
-    // reason. The tree-walker arm compiles nothing, so a non-zero count there
-    // means the field stopped meaning what this reads it as.
-    assert!(
-        ir.chunks_refused == 0 && tree_walker.chunks_refused == 0,
-        "a body of {} did not run on the engine it was attributed to: the ir arm \
-         refused {} bodies to the tree-walker and the tree-walker arm counted {}, \
-         where it compiles nothing to refuse. The two arms can still agree while \
-         only one engine ever ran the program, so this is structural and not a \
-         verdict.",
-        abs.display(),
-        ir.chunks_refused,
-        tree_walker.chunks_refused,
-    );
-
-    tree_walker
+    outcome
 }
 
 /// Compares a crate outcome against an oracle outcome on all three channels,

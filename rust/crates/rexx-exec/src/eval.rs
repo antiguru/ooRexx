@@ -93,7 +93,8 @@ use rexx_parse::{CallTarget, Expr, ExprKind, Operator, PrefixOp, SymbolId};
 /// lower limit would fail (it would refuse programs the oracle accepts), and
 /// `INTERPRETER_STACK_BYTES` (512 MiB) divided by this crate's own measured
 /// per-level cost (`lib.rs`'s own doc comment on `INTERPRETER_STACK_BYTES` --
-/// **1840** bytes/level in debug, re-measured at this task's own
+/// **480** bytes/level in debug, re-measured at the tree-walker's removal
+/// (1840 while a deep chain still reached `eval` through it), at that task's own
 /// implementation time and recorded there with the task it belongs to, the
 /// method and the survivable-depth arithmetic, in the same task-anchored
 /// form as every other row in that lineage rather than under a calendar
@@ -3337,22 +3338,68 @@ mod tests {
         program
     }
 
-    /// The engine both boundary tests below run their chain on, and the
-    /// choice is a statement about the subject rather than a convenience.
+    /// The same chain with one **call** in it, which is what makes the whole
+    /// expression reach `eval` at all.
     ///
-    /// `MAX_EVAL_DEPTH` is `eval`'s own counter. `crate::ir::compile` promotes
-    /// a chain of native operators to ops that reach the operator with its
-    /// operands already in registers, so on the compiled engine this program
-    /// never enters `eval` and there is no depth for the counter to count.
+    /// `MAX_EVAL_DEPTH` is `eval`'s own recursion counter, and its purpose is
+    /// to refuse a depth that would otherwise walk off the interpreter
+    /// thread's guard page. `crate::ir::compile` promotes a chain of native
+    /// operators to ops that reach the operator with its operands already in
+    /// registers, so such a chain never recurses and there is no stack to
+    /// exhaust -- measured, a `MAX_EVAL_DEPTH + 1` term native chain answers
+    /// `a` with a peak `eval` depth of **5**.
     ///
-    /// **What that costs is stated rather than implied: the limit is the
-    /// tree-walker's, and the compiled engine runs a chain past it.**
-    /// Measured -- `say 'a'` followed by 100,000 `||''` is rc 245 on the
-    /// tree-walker and rc 0 on the compiled one, and `say 1` followed by
-    /// 100,000 `+0` was already that pair before any operator but arithmetic
-    /// was promoted.
-    fn depth_limited() -> crate::Invocation {
-        crate::Invocation::none().with_engine(crate::Engine::TreeWalker)
+    /// One call anywhere in the chain makes `native_shape` decline the whole
+    /// slot, so it compiles to a single `crate::ir::Op::EvalExpr` and `eval`
+    /// walks every term: measured, the same chain then reports a peak depth
+    /// equal to its own term count. That is the shape the limit is *for*, and
+    /// it is the shape the two boundary tests below use.
+    fn eval_walked_chain(terms: usize) -> Vec<u8> {
+        let mut program = b"say 'a'".to_vec();
+        for term in 1..terms {
+            // `substr('x', 1, 0)` is the empty string, so the chain's value is
+            // unchanged and only its *shape* differs from `chain`'s.
+            if term == 5 {
+                program.extend_from_slice(b"||substr('x',1,0)");
+            } else {
+                program.extend_from_slice(b"||''");
+            }
+        }
+        program.push(b'\n');
+        program
+    }
+
+    /// **A native chain past the limit runs, and that is the point of the
+    /// limit rather than a hole in it.**
+    ///
+    /// `MAX_EVAL_DEPTH` guards `eval`'s recursion against the guard page. A
+    /// compiled native chain does not recurse, so nothing is at risk and
+    /// refusing it would be failing where there is no danger. Measured here:
+    /// `MAX_EVAL_DEPTH + 1` terms, exit 0, and a peak `eval` depth far below
+    /// the limit.
+    ///
+    /// The tree-walker did raise 11.1 for this program. That is the one
+    /// behaviour its removal deliberately changes.
+    #[test]
+    fn a_native_chain_past_the_eval_limit_runs() {
+        let outcome = crate::run_program(
+            "depth-native.rex",
+            chain(MAX_EVAL_DEPTH + 1),
+            crate::Invocation::none(),
+        );
+        assert_eq!(
+            outcome.exit_code,
+            0,
+            "stderr: {:?}",
+            String::from_utf8_lossy(&outcome.stderr)
+        );
+        assert_eq!(outcome.stdout, b"a\n");
+        assert!(
+            outcome.stack.max_depth < MAX_EVAL_DEPTH,
+            "a native chain recursed {} levels into eval, so this test no longer \
+             says that a compiled chain does not recurse",
+            outcome.stack.max_depth
+        );
     }
 
     /// **Why this goes through `run_program` and not a direct `eval` call.**
@@ -3388,8 +3435,8 @@ mod tests {
     fn eval_survives_exactly_max_eval_depth_terms_and_prints_the_oracles_own_answer() {
         let outcome = crate::run_program(
             "depth-boundary-at.rex",
-            chain(MAX_EVAL_DEPTH),
-            depth_limited(),
+            eval_walked_chain(MAX_EVAL_DEPTH),
+            crate::Invocation::none(),
         );
         assert_eq!(
             outcome.exit_code,
@@ -3413,8 +3460,8 @@ mod tests {
     fn eval_raises_11_1_exactly_one_term_past_max_eval_depth() {
         let outcome = crate::run_program(
             "depth-boundary-past.rex",
-            chain(MAX_EVAL_DEPTH + 1),
-            depth_limited(),
+            eval_walked_chain(MAX_EVAL_DEPTH + 1),
+            crate::Invocation::none(),
         );
         assert_eq!(
             outcome.exit_code,
@@ -3662,7 +3709,7 @@ mod tests {
 /// carries that split at the code.
 #[cfg(test)]
 mod object_operand_tests {
-    use crate::{Engine, Invocation, run_program};
+    use crate::{Invocation, run_program};
 
     /// Runs `source` on both engines and hands back `(exit code, stdout,
     /// stderr)`, having first insisted the two engines agree with each other.
@@ -3674,26 +3721,20 @@ mod object_operand_tests {
     /// answering, and only running both arms can tell.
     fn both_engines(source: &[u8]) -> (i32, String, String) {
         let mut answer = None;
-        for engine in [Engine::TreeWalker, Engine::Ir] {
-            let outcome = run_program(
-                "/t.rex",
-                source.to_vec(),
-                Invocation::none().with_engine(engine),
-            );
-            let seen = (
-                outcome.exit_code,
-                String::from_utf8_lossy(&outcome.stdout).into_owned(),
-                String::from_utf8_lossy(&outcome.stderr).into_owned(),
-            );
-            match &answer {
-                None => answer = Some(seen),
-                Some(first) => assert_eq!(
-                    first,
-                    &seen,
-                    "the two engines disagree on {:?}",
-                    String::from_utf8_lossy(source)
-                ),
-            }
+        let outcome = run_program("/t.rex", source.to_vec(), Invocation::none());
+        let seen = (
+            outcome.exit_code,
+            String::from_utf8_lossy(&outcome.stdout).into_owned(),
+            String::from_utf8_lossy(&outcome.stderr).into_owned(),
+        );
+        match &answer {
+            None => answer = Some(seen),
+            Some(first) => assert_eq!(
+                first,
+                &seen,
+                "the two engines disagree on {:?}",
+                String::from_utf8_lossy(source)
+            ),
         }
         answer.expect("at least one engine ran")
     }
