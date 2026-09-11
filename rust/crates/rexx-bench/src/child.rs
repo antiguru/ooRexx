@@ -91,11 +91,14 @@ impl Side {
     pub fn rust(binary: PathBuf, arm: Arm) -> Side {
         Side {
             label: match arm {
-                Arm::TreeWalker => "rust-tw",
                 Arm::Ir => "rust-ir",
             },
             binary,
-            env: vec![("REXX_ENGINE".to_string(), arm.engine().to_string())],
+            // **No environment.** The arm used to be selected per child
+            // through `REXX_ENGINE`; `rexx-run` reads no such variable now,
+            // so setting one would be a row labelled with an arm nobody
+            // chose.
+            env: Vec::new(),
         }
     }
 }
@@ -397,26 +400,30 @@ mod tests {
             ]
         );
     }
-
-    /// Every arm this crate can measure is named in the child's environment
-    /// and in the side's own label, and the two agree.
+    /// A rust side sets **no** environment, and says which arm it is in its
+    /// label.
     ///
-    /// **Red if `Side::rust` ever inherits again.** The version that did
-    /// passed every test in this crate: an inherited `REXX_ENGINE` is a
-    /// correct-looking run of whichever engine `rexx-run` defaults to, and
-    /// the day that default moved, `rexx-bench-suite` and `rexx-bench-band`
-    /// changed which arm they measured against baselines taken on the other
-    /// one. Nothing in either binary's output would have said so, which is
-    /// why this asserts the environment rather than the report.
+    /// **This test used to assert the opposite half.** Each side carried
+    /// `REXX_ENGINE`, because an *inherited* one was a correct-looking run of
+    /// whichever engine `rexx-run` defaulted to -- and the day that default
+    /// moved, the suite and the band would have changed which arm they
+    /// measured against baselines taken on the other, with nothing in either
+    /// binary's output saying so.
+    ///
+    /// There is one engine now and `rexx-run` reads no such variable, so the
+    /// hazard is the mirror image: a harness still setting one would label a
+    /// row `rust-tw` for a run the compiled stream produced. The assertion is
+    /// on the environment rather than on the report for the same reason it
+    /// always was.
     #[test]
-    fn a_rust_side_names_its_arm_in_the_environment_and_in_its_label() {
+    fn a_rust_side_sets_no_engine_environment_and_names_its_arm() {
         for arm in Arm::BOTH {
             let side = Side::rust(PathBuf::from("/bin/true"), arm);
-            assert_eq!(
-                side.env,
-                vec![("REXX_ENGINE".to_string(), arm.engine().to_string())],
-                "{} left the engine to whatever launched the harness",
-                arm.label()
+            assert!(
+                side.env.is_empty(),
+                "a rust side set {:?}, which selects an engine that no longer \
+                 exists and would label the row with an arm nobody ran",
+                side.env
             );
             assert!(
                 side.label.ends_with(arm.label()),
@@ -426,11 +433,6 @@ mod tests {
                 side.label
             );
         }
-        assert_ne!(
-            Side::rust(PathBuf::from("/bin/true"), Arm::Ir).label,
-            Side::rust(PathBuf::from("/bin/true"), Arm::TreeWalker).label,
-            "one label for both arms tells a reducer nothing"
-        );
     }
 
     /// The shell really does apply the cap and the directory, and the

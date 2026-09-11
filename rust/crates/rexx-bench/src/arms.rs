@@ -75,42 +75,27 @@ use crate::child::{Counted, Side, Wrapper, parse_counters, run};
 /// **Both arms come from one binary**, selected through `REXX_ENGINE`, which
 /// is why this is a value the harness sets per run rather than a second
 /// binary it launches.
+/// **One arm, because there is one engine.**
+///
+/// This was a pair -- the tree-walker and the compiled stream -- selected per
+/// child through `REXX_ENGINE`. The tree-walker is gone and `rexx-run` reads
+/// no such variable, so a two-armed harness would have set it, had it
+/// ignored, and labelled the resulting row `rust-tw`: a benchmark reporting
+/// an arm it did not run. The type stays so that the rows, labels and
+/// baseline files keep naming what they measured.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Arm {
-    TreeWalker,
     Ir,
 }
 
 impl Arm {
-    /// Both arms, in the order the ratio is stated: the denominator first.
-    pub const BOTH: [Arm; 2] = [Arm::TreeWalker, Arm::Ir];
+    /// Every arm there is.
+    pub const BOTH: [Arm; 1] = [Arm::Ir];
 
     pub fn label(self) -> &'static str {
         match self {
-            Arm::TreeWalker => "tw",
             Arm::Ir => "ir",
         }
-    }
-
-    /// The `REXX_ENGINE` value that selects this arm. `rexx-run` rejects a
-    /// value it does not recognise rather than defaulting, so a typo here is
-    /// a failed run rather than an arm silently measured against itself.
-    pub fn engine(self) -> &'static str {
-        match self {
-            Arm::TreeWalker => "tree-walker",
-            Arm::Ir => "ir",
-        }
-    }
-
-    /// The arm a command line named, by the same spelling [`Arm::engine`]
-    /// writes.
-    ///
-    /// **One table, read both ways**, so a binary offering `--engine` cannot
-    /// accept a spelling the variable would reject or reject one it would
-    /// accept. `every_arm_parses_the_spelling_it_writes` asserts the round
-    /// trip rather than describing it.
-    pub fn parse(spelling: &str) -> Option<Arm> {
-        Arm::BOTH.into_iter().find(|arm| arm.engine() == spelling)
     }
 }
 
@@ -451,22 +436,6 @@ fn rotation(cells: usize, round: usize) -> Vec<usize> {
 }
 
 impl Sitting {
-    /// The ratio of this build's IR arm to its own tree-walker arm, per round,
-    /// reduced.
-    ///
-    /// **One build's index, and the two arms are read out of it.** The pairing
-    /// is per round, so a round in which the machine was slower moves both
-    /// arms and cancels rather than moving the ratio.
-    pub fn arm_ratio(&self, build: usize, size: Size, instrument: Instrument) -> Option<Figure> {
-        let mut per_round = Vec::new();
-        for round in 0..self.rounds {
-            let tw = self.find(build, Arm::TreeWalker, size, round)?;
-            let ir = self.find(build, Arm::Ir, size, round)?;
-            per_round.push(ir.reading.on(instrument) / tw.reading.on(instrument));
-        }
-        Figure::of(&mut per_round)
-    }
-
     /// One arm's absolute reading, per round, reduced.
     pub fn absolute(
         &self,
@@ -569,23 +538,6 @@ impl ScaledSitting {
         }
         Figure::of(&mut per_round)
     }
-
-    /// The IR arm's per-pass cost less the tree-walker arm's, per round.
-    ///
-    /// The quantity every per-clause figure in this phase is stated in, and
-    /// the reason it is a method rather than a subtraction at the call site:
-    /// subtracting two medians is not the median of the differences, and the
-    /// spread of the difference is the one a per-clause claim needs.
-    pub fn per_pass_gap(&self, build: usize, instrument: Instrument) -> Option<Figure> {
-        let mut per_round = Vec::new();
-        for round in 0..self.0.rounds {
-            let tw = self.per_pass_in(build, Arm::TreeWalker, instrument, round)?;
-            let ir = self.per_pass_in(build, Arm::Ir, instrument, round)?;
-            per_round.push(ir - tw);
-        }
-        Figure::of(&mut per_round)
-    }
-
     /// One arm's cost that does not scale with the loop: the small reading
     /// less the per-pass cost times the small length.
     pub fn fixed(&self, build: usize, arm: Arm, instrument: Instrument) -> Option<Figure> {
@@ -864,25 +816,6 @@ mod tests {
         let scaled = Workload::classify("scaled".into(), "n = 5\n".into()).unwrap();
         assert_eq!(scaled.sizes(), &[Size::Small, Size::Large]);
     }
-
-    /// Every arm parses back from the spelling it writes, and nothing else
-    /// parses at all.
-    ///
-    /// The second half is the one with teeth: a `parse` that answered
-    /// `Some(TreeWalker)` for an unrecognised word would let `--engine ri`
-    /// measure the tree-walker while its caller believed it had asked for the
-    /// other engine, which is the failure `rexx-run` refuses a bad
-    /// `REXX_ENGINE` to avoid.
-    #[test]
-    fn every_arm_parses_the_spelling_it_writes() {
-        for arm in Arm::BOTH {
-            assert_eq!(Arm::parse(arm.engine()), Some(arm));
-        }
-        for other in ["", "ri", "IR", "tree walker", "treewalker", "tw", "default"] {
-            assert_eq!(Arm::parse(other), None, "`{other}` parsed as an arm");
-        }
-    }
-
     /// No cell keeps its slot across the rounds.
     ///
     /// Asserted on the permutation rather than trusted to the expression: an

@@ -239,16 +239,10 @@ fn main() -> ExitCode {
     // tree-walker figures, so reproducing either needs
     // `--engine tree-walker`. An unrecognised value is refused rather than
     // defaulted, exactly as `rexx-run` refuses one.
-    let arm = match flag_value(&arguments, "--engine") {
-        None => Arm::Ir,
-        Some(spelling) => match Arm::parse(&spelling) {
-            Some(arm) => arm,
-            None => {
-                eprintln!("rexx-bench-suite: --engine {spelling}: expected `ir` or `tree-walker`");
-                return ExitCode::from(2);
-            }
-        },
-    };
+    // **No `--engine`.** It used to choose an arm; accepting `tree-walker`
+    // now would set a `REXX_ENGINE` nothing reads and label the rows for an
+    // engine that did not run them.
+    let arm = Arm::Ir;
     let (pairs, warmup, offset_pairs, offset_warmup) = if self_check {
         (1, 0, 3, 0)
     } else {
@@ -338,7 +332,6 @@ fn main() -> ExitCode {
         &oracle_binary,
         &objects,
         &rust_binary,
-        arm,
         pairs,
         warmup,
         offset_pairs,
@@ -810,7 +803,6 @@ fn write_provenance(
     oracle_binary: &Path,
     oracle_objects: &[PathBuf],
     rust_binary: &Path,
-    arm: Arm,
     pairs: usize,
     warmup: usize,
     offset_pairs: usize,
@@ -860,15 +852,17 @@ fn write_provenance(
         rust_binary.display(),
         fingerprint(rust_binary)
     );
-    // The engine belongs here for the same reason the sha256 does: it decides
-    // what the ratios below are ratios of, and a report that omits it can be
-    // compared against a baseline taken on the other arm with nothing to
-    // notice. Every figure recorded before this row existed is a tree-walker
-    // figure, because that is what `rexx-run` defaulted to at the time.
+    // The engine still belongs here for the same reason the sha256 does: it
+    // decides what the ratios below are ratios of, and a baseline taken on
+    // another arm must not be comparable with nothing to notice. It is no
+    // longer a choice -- there is one engine and no `REXX_ENGINE` to set --
+    // so the row states that rather than reporting a variable nothing reads.
+    // Every figure recorded before this row existed is a tree-walker figure,
+    // because that is what `rexx-run` defaulted to at the time.
     let _ = writeln!(
         report,
-        "| this crate's engine | `REXX_ENGINE={}`, set by this harness on every run |",
-        arm.engine()
+        "| this crate's engine | the compiled stream, the only one; \
+         `REXX_ENGINE` is not read |"
     );
     let _ = writeln!(
         report,

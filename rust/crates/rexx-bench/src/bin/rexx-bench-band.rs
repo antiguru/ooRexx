@@ -161,21 +161,14 @@ fn load_average() -> String {
 }
 
 fn collect(arguments: &[String]) -> ExitCode {
-    // Named rather than inherited, and it reaches the rows through the side's
-    // own label -- `rust-ir` or `rust-tw` in the `side` column, where a run
-    // reduced later says which arm produced it. Rows written before this
+    // **No `--engine` flag, because there is one engine.** It used to pick an
+    // arm and reach the rows through the side's own label -- `rust-ir` or
+    // `rust-tw` in the `side` column. Keeping it would have accepted
+    // `tree-walker`, set a `REXX_ENGINE` nothing reads, and written a
+    // `rust-tw` row the compiled stream produced. Rows written before the
     // choice existed read plain `rust` and are tree-walker rows; `summarise`
     // branches on `oracle`, so both shapes still reduce.
-    let arm = match flag(arguments, "--engine") {
-        None => Arm::Ir,
-        Some(spelling) => match Arm::parse(&spelling) {
-            Some(arm) => arm,
-            None => {
-                eprintln!("rexx-bench-band: --engine {spelling}: expected `ir` or `tree-walker`");
-                return ExitCode::from(2);
-            }
-        },
-    };
+    let arm = Arm::Ir;
     let pass = flag(arguments, "--pass").unwrap_or_else(|| "1".to_string());
     let config = flag(arguments, "--config").unwrap_or_else(|| "default".to_string());
     let axes: Vec<String> = flag(arguments, "--axes")

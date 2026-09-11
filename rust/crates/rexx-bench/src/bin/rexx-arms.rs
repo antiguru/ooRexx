@@ -205,16 +205,6 @@ fn report(measured: &Measured, task: &str, commit: &str) -> Vec<String> {
     for (index, build) in sitting.builds().iter().enumerate() {
         for instrument in Instrument::BOTH {
             for size in &sizes {
-                emit(
-                    &build.label,
-                    Scope {
-                        name: "arm_ratio",
-                        arm: "ir/tw".to_string(),
-                        size: size.label(),
-                    },
-                    instrument,
-                    sitting.arm_ratio(index, *size, instrument),
-                );
                 for arm in Arm::BOTH {
                     emit(
                         &build.label,
@@ -251,16 +241,6 @@ fn report(measured: &Measured, task: &str, commit: &str) -> Vec<String> {
                         scaled.fixed(index, arm, instrument),
                     );
                 }
-                emit(
-                    &build.label,
-                    Scope {
-                        name: "per_pass_gap",
-                        arm: "ir-tw".to_string(),
-                        size: "-",
-                    },
-                    instrument,
-                    scaled.per_pass_gap(index, instrument),
-                );
             }
         }
     }
@@ -318,28 +298,18 @@ fn write_raw(path: &Path, sitting: &Sitting, task: &str) -> Result<(), String> {
 /// The human-readable table, on standard error beside the progress notes.
 fn summarise(measured: &Measured) {
     let sitting = measured.sitting();
-    eprintln!("rexx-arms: {} -- IR/TW by build", sitting.axis());
+    // **Absolutes by build, where this printed an IR-over-tree-walker ratio.**
+    // One engine leaves nothing to divide; what a caller compares now is one
+    // build against another, which `across_builds` below already emits.
+    eprintln!("rexx-arms: {} -- by build", sitting.axis());
     for (index, build) in sitting.builds().iter().enumerate() {
-        for instrument in Instrument::BOTH {
-            let large = sitting.arm_ratio(index, Size::Large, instrument);
-            let small = sitting.arm_ratio(index, Size::Small, instrument);
-            eprintln!(
-                "  {:<10} {:<14} small {}  large {}",
-                build.label,
-                instrument.label(),
-                show(small),
-                show(large)
-            );
-        }
         if let Measured::Scaled(scaled) = measured {
             for instrument in Instrument::BOTH {
                 eprintln!(
-                    "  {:<10} {:<14} per pass tw {}  ir {}  gap {}",
+                    "  {:<10} {:<14} per pass {}",
                     build.label,
                     instrument.label(),
-                    show(scaled.per_pass(index, Arm::TreeWalker, instrument)),
                     show(scaled.per_pass(index, Arm::Ir, instrument)),
-                    show(scaled.per_pass_gap(index, instrument)),
                 );
             }
         }
