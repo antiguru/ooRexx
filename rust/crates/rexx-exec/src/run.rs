@@ -7869,7 +7869,7 @@ impl Interp {
         // case 1` -- the same program with a scrutinee that queues nothing
         // either -- agrees, because this line runs for it. So what decides is
         // whether anything settled the boundary, never what the clause
-        // queued. Recorded in `tests/ir_dual_cases/loop-header-boundaries`.
+        // queued. Recorded in `tests/ir_recorded_cases/loop-header-boundaries`.
         self.settle_block_indent(true, indent);
         Ok(value)
     }
@@ -9716,7 +9716,7 @@ impl Interp {
             // **The re-echo of the `DO`/`LOOP` clause itself, once per pass
             // after the first**, and it is asked here rather than at the
             // loop's entry because a `TRACE` in the body changes the answer:
-            // measured, an `ir_dual` case that switches tracing on inside the
+            // measured, an `ir_recorded` case that switches tracing on inside the
             // body loses this line and `END`'s when the decision is made once
             // on the way in.
             && let Some((line, text)) =

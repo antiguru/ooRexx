@@ -453,7 +453,7 @@ pub(crate) fn compile(
                 // Above `header_top` is a register a slot allocated and did not
                 // hand back. Nothing reuses it until the `END`, so it is waste
                 // rather than corruption -- measured, leaking one per slot with
-                // this line removed leaves the `ir_dual` suite green and moves
+                // this line removed leaves the `ir_recorded` suite green and moves
                 // golden streams and nothing else.
                 //
                 // Below `header_top` is a header value's own register handed
@@ -2245,7 +2245,7 @@ fn assert_call_echoes_follow_their_op(ops: &[Op]) {
 /// validation of one header value, in that order and on one register.
 ///
 /// Both halves of that pairing are measured on the oracle and recorded in
-/// `ir_dual_cases/loop-header-boundaries`: `do i = 1 to 'a' by 2` under
+/// `ir_recorded_cases/loop-header-boundaries`: `do i = 1 to 'a' by 2` under
 /// `trace r` prints `>K>   "TO" => "a"` for the very value that then raises
 /// 41.1, so the echo precedes the validation; and `do i = 1 to 'a' by zf()`
 /// never calls `zf`, so the validation precedes the next value's evaluation.

@@ -19,7 +19,7 @@
 //! A row is red if **either** side's answer moves, in either direction. That
 //! includes the crate starting to agree with the oracle: a licence that
 //! quietly stopped being needed is a decision to revisit, so the row is
-//! deleted with the licence rather than edited to match. `ir_dual.rs`'s
+//! deleted with the licence rather than edited to match. `ir_recorded.rs`'s
 //! `KNOWN_DIVERGENCES` states the same property for its own rows and is the
 //! shape this file is built from.
 //!

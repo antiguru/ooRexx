@@ -28,7 +28,7 @@
 #
 # EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, on both
 # engines, before this file was written. Regenerate a row by running its
-# program under the oracle, never with REWRITE=1 -- ir_dual.rs refuses to run
+# program under the oracle, never with REWRITE=1 -- ir_recorded.rs refuses to run
 # at all under REWRITE for that reason. Capture is:
 #
 #   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \

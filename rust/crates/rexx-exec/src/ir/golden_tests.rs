@@ -980,7 +980,7 @@ fn a_header_slot_outside_the_native_set_leaves_the_other_slots_native() {
 /// * The header's own registers released at the region's end instead of past
 ///   the `END` puts the assignment at register 0 -- a value `LoopState` reads
 ///   for the rest of the construct, written over by a body clause, because
-///   `Op::LoopRun` steps the body from inside this same region. The `ir_dual`
+///   `Op::LoopRun` steps the body from inside this same region. The `ir_recorded`
 ///   suite stays green, population sweep included; this test and
 ///   `a_nested_loops_registers_sit_above_the_enclosing_loops_and_a_later_loops_reuse_them`
 ///   move, and nothing else in the workspace.
@@ -1620,7 +1620,7 @@ fn an_absorbed_when_compiles_to_its_own_region() {
 /// the clause echo, the constant load, the literal's own `>L>` line, and the
 /// print with its `>>>`. Three of those four lines come from three different
 /// ops, and the oracle prints them in exactly that order
-/// (`tests/ir_dual_cases/assignment-and-say`, "SAY of a literal under trace
+/// (`tests/ir_recorded_cases/assignment-and-say`, "SAY of a literal under trace
 /// i").
 #[test]
 fn a_traced_if_carries_its_clause_echo_as_an_op_of_the_region() {

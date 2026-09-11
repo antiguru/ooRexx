@@ -74,7 +74,7 @@ use rexx_exec::{DEADLINE_EXIT, Invocation, Outcome, StackSpan, run_program};
 /// **Chosen from the slowest row anyone has measured, not from taste.**
 /// Measured 2026-09-02 with this function itself timed and printing every row
 /// over 50 ms, under `REXX_CORPUS_GATE=1 memcap 8G cargo test --test corpus
-/// --test assertions --test bif_assertions --test ir_dual -p rexx-exec
+/// --test assertions --test bif_assertions --test ir_recorded -p rexx-exec
 /// --no-fail-fast`: 51,084 rows above that floor, median 154 ms, p99 196 ms,
 /// **slowest 294 ms** -- an assertion row, with the corpus's own programs
 /// below it. Separately, debug `rexx-run` over the 331 programs the corpus

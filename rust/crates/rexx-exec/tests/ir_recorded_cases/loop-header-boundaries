@@ -30,12 +30,12 @@
 #
 # EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE. That the two
 # engines produce identical bytes for a row is asserted rather than written
-# down here: `both_engines_agree_on_every_case_file` (`tests/ir_dual.rs`) runs
+# down here: `both_engines_agree_on_every_case_file` (`tests/ir_recorded.rs`) runs
 # every stanza of this directory on both and compares them, so a row that
 # stopped agreeing reddens instead of contradicting a sentence nobody rereads.
 # A row that differs from the oracle says so in its
 # own comment. Regenerate a row by running its program under the oracle, never
-# with REWRITE=1 -- ir_dual.rs refuses to run at all under REWRITE for that
+# with REWRITE=1 -- ir_recorded.rs refuses to run at all under REWRITE for that
 # reason. Capture is:
 #
 #   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
@@ -86,7 +86,7 @@
 # Expected lines are tagged so that no line of the block can be empty: an empty
 # line ends an expected block, and a program's own output may hold one.
 #
-# `/nonexistent/ir-dual-case.rex` is `ir_dual.rs`'s own INLINE_PATH, which a
+# `/nonexistent/ir-dual-case.rex` is `ir_recorded.rs`'s own INLINE_PATH, which a
 # raised condition's middle line prints. It is written out rather than stood in
 # for, because these blocks are compared verbatim and nothing substitutes into
 # them; running the same program under the oracle prints the oracle's own path

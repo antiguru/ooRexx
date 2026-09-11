@@ -473,7 +473,7 @@ pub struct Outcome {
 /// out of a frame slot, neither of them entering `eval`. So `say 'x'` reports
 /// `max_depth` 1 on the tree-walker and 0 on the compiled stream -- one level of
 /// `eval` against none -- and 0 is the honest answer for a run that recursed
-/// nowhere. **Nothing asserts it either way**: `tests/ir_dual.rs` compares
+/// nowhere. **Nothing asserts it either way**: `tests/ir_recorded.rs` compares
 /// stdout, stderr and exit status, and this field reaches no oracle comparison
 /// at all (`tests/support/oracle.rs`'s own doc says the oracle process never
 /// measures it). An operator chain, which is what anything sizing a stack from
@@ -4037,7 +4037,7 @@ struct Interp {
     /// an inner fragment running while it waits: `interpret 'zq = raiser();
     /// interpret "say 1; say 2"; say 3'` prints `1`, `2`, the second handler,
     /// then `3` on the oracle and here, where the flag delivers after `1`.
-    /// `ir_dual_cases/interpret-condition-queue` holds that program, and beside
+    /// `ir_recorded_cases/interpret-condition-queue` holds that program, and beside
     /// it the neighbouring shape that does **not** separate the two designs.
     ///
     /// Separate from `clause_line_override`, which the `Interpret` arm sets

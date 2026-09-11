@@ -26,7 +26,7 @@
 # was measured to produce the identical bytes on both engines before the
 # instructions were promoted -- which is what says a row can tell whether it
 # would ever have failed. Regenerate a row by running its program under the
-# oracle, never with REWRITE=1 -- ir_dual.rs refuses to run at all under
+# oracle, never with REWRITE=1 -- ir_recorded.rs refuses to run at all under
 # REWRITE for that reason. Capture is:
 #
 #   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
@@ -37,7 +37,7 @@
 # bare SAY's does. Trailing blanks are part of what is compared: a clause echo
 # whose instruction ends at a keyword has one.
 #
-# `/nonexistent/ir-dual-case.rex` is `ir_dual.rs`'s own INLINE_PATH, which a
+# `/nonexistent/ir-dual-case.rex` is `ir_recorded.rs`'s own INLINE_PATH, which a
 # raised condition's middle line prints. It is written out rather than stood in
 # for, because these blocks are compared verbatim and nothing substitutes into
 # them; running the same program under the oracle prints the oracle's own path

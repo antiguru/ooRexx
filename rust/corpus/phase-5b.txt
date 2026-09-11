@@ -8,7 +8,7 @@
 # first-seen order and drops a repeat.
 #
 # Task 0 wired this file into every harness that reads a phase subset list
-# (SUBSET_FILES in corpus.rs, coverage.rs, collect_stress.rs and ir_dual.rs;
+# (SUBSET_FILES in corpus.rs, coverage.rs, collect_stress.rs and ir_recorded.rs;
 # the unguarded literal in trace_oracle.rs; and EXPECTED_SUBSET_5B beside
 # EXPECTED_SUBSET_5A in coverage.rs) and added no corpus program of its own.
 # Each 5b task appends its own witness here as its own construct starts

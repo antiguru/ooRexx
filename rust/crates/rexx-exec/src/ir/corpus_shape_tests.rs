@@ -576,7 +576,7 @@ fn corpus_dir() -> PathBuf {
 /// Every corpus program named by a phase subset file, each once, sorted.
 ///
 /// The subset files are read from the directory rather than listed here.
-/// `ir_dual.rs` keeps a literal pinned against the same listing, and a third
+/// `ir_recorded.rs` keeps a literal pinned against the same listing, and a third
 /// copy of that literal is a third thing to keep in step; taking the listing
 /// directly is one fewer, and a phase subset file added later is swept without
 /// anyone remembering this file.

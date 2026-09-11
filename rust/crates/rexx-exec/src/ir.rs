@@ -991,11 +991,11 @@ pub(crate) enum Op {
     /// difference between this promotion and [`Op::Const`]'s: a literal's value
     /// was *taken away* from `eval.rs`, and a call's arguments were not.
     ///
-    /// **The instrument that follows from it.** `tests/ir_dual.rs` compares the
+    /// **The instrument that follows from it.** `tests/ir_recorded.rs` compares the
     /// two engines against each other, so a line both arms emit from one shared
     /// function is a line it structurally cannot police -- measured, by making
     /// the `>A>` emission a no-op: the sweep stays green and
-    /// `tests/ir_dual_cases/calls` reddens on four rows. The oracle-pinned rows
+    /// `tests/ir_recorded_cases/calls` reddens on four rows. The oracle-pinned rows
     /// are what hold these lines, and the dual sweep is what holds the clause
     /// echo this op's region newly decides at compile time.
     ///
@@ -1054,7 +1054,7 @@ pub(crate) enum Op {
     /// is the cached call site. The clause echo, the `SIGL` line, the temps
     /// frame, the condition-delivery boundary and the failing clause's own
     /// site all come from [`Op::Clause`] rather than from
-    /// this stream. With the op, `tests/ir_dual.rs` compares two genuinely
+    /// this stream. With the op, `tests/ir_recorded.rs` compares two genuinely
     /// different routes to the same clause for every corpus program that
     /// sends a message as a whole clause.
     ///

@@ -674,7 +674,7 @@ const PREFIX_COVERAGE: &[(&str, Coverage)] = &[
 /// The phase subset files this file reads, in union order.
 ///
 /// **A named constant pinned against the directory below**, which is the
-/// arrangement `corpus.rs`, `coverage.rs`, `ir_dual.rs` and
+/// arrangement `corpus.rs`, `coverage.rs`, `ir_recorded.rs` and
 /// `collect_stress.rs` each already have. Measured before the pin was added
 /// here: dropping `phase-5d.txt` from this list left this binary and those
 /// four green, because nothing compared the list with the directory -- so a

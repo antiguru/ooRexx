@@ -8728,7 +8728,7 @@ macro_rules! corpus_source {
 /// Runs `source` under both engines at `path` and asserts stderr is exactly
 /// `expected` on each.
 ///
-/// Both arms rather than one, and it is not redundant with `tests/ir_dual.rs`
+/// Both arms rather than one, and it is not redundant with `tests/ir_recorded.rs`
 /// -- that harness compares the two engines against *each other*, and both
 /// format trace through one `crate::trace`, so an indent that is wrong is
 /// wrong identically on both and the comparison stays green. What this

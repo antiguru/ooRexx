@@ -832,7 +832,7 @@ impl Interp {
                     //   *non-granting* driver entry has no later grant at all,
                     //   so without this take a `PROCEDURE` as a loop body's
                     //   first instruction is permitted. Measured: dropping it
-                    //   makes `tests/ir_dual_cases/loop-header-boundaries`'
+                    //   makes `tests/ir_recorded_cases/loop-header-boundaries`'
                     //   "procedure as a loop body's first instruction" row
                     //   diverge between the engines, and nothing else in the
                     //   workspace notices;
@@ -841,7 +841,7 @@ impl Interp {
                     //   itself, or the next clause's grant consumes it instead
                     //   and a `PROCEDURE` behind a promoted clause is permitted.
                     //   Measured: dropping the grant makes
-                    //   `tests/ir_dual_cases/assignment-and-say`'s "procedure
+                    //   `tests/ir_recorded_cases/assignment-and-say`'s "procedure
                     //   after an assignment in a called label" row diverge, and
                     //   again nothing else notices.
                     let first_instruction = std::mem::take(&mut self.procedure_permitted);

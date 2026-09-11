@@ -35,7 +35,7 @@ say 'after' k
    them directly and never reads FUZZ at all -- so this runs 1 to 10 and ends
    at 11, exactly as it would at FUZZ 0. A bound test that applied FUZZ here
    would compare at one digit and run past 10.
-   ir_dual_cases/numeric-fuzz holds the other direction, where the initial
+   ir_recorded_cases/numeric-fuzz holds the other direction, where the initial
    value is spelled with a decimal point and the fuzzed comparison does run. */
 numeric digits 2
 numeric fuzz 1

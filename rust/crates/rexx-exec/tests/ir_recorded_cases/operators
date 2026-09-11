@@ -99,7 +99,7 @@
 # was measured to produce the identical bytes on both engines before these
 # operators were promoted as well as after -- which is what says a row can
 # tell whether it would ever have failed. Regenerate a row by running its
-# program under the oracle, never with REWRITE=1 -- ir_dual.rs refuses to run
+# program under the oracle, never with REWRITE=1 -- ir_recorded.rs refuses to run
 # at all under REWRITE for that reason. Capture is:
 #
 #   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \

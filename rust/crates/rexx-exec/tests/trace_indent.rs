@@ -60,7 +60,7 @@
 //! `tests/trace_oracle.rs`'s own module doc describes, with one substitution:
 //! the absolute program path the oracle prints in a raised condition's middle
 //! line is replaced by [`CASE_PATH`], which is the path this harness hands
-//! `run_program`. `ir_dual.rs`'s `/nonexistent/ir-dual-case.rex` is the same
+//! `run_program`. `ir_recorded.rs`'s `/nonexistent/ir-dual-case.rex` is the same
 //! device for the same reason -- running the program under the oracle prints
 //! the oracle's own path there instead.
 //!

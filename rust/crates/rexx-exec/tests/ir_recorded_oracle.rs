@@ -9,17 +9,17 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! `ir_dual_cases`' recorded expectations, checked against the running oracle
+//! `ir_recorded_cases`' recorded expectations, checked against the running oracle
 //! rather than against this crate.
 //!
 //! # The gap this closes
 //!
-//! Every stanza under `tests/ir_dual_cases` carries a block of bytes its own
-//! header calls oracle-measured, and `ir_dual.rs` compares **this crate**
+//! Every stanza under `tests/ir_recorded_cases` carries a block of bytes its own
+//! header calls oracle-measured, and `ir_recorded.rs` compares **this crate**
 //! against that block. Nothing compared the block against an oracle again
 //! after the day it was written, so a recording and the interpreter could
 //! drift apart and no test in the workspace could see it: this crate agreeing
-//! with a stale recording is exactly what `ir_dual.rs` reports as success.
+//! with a stale recording is exactly what `ir_recorded.rs` reports as success.
 //!
 //! That is not hypothetical. When the oracle binary was replaced with a 5.3
 //! build on 2026-08-20, a sweep of every stanza found six recordings the
@@ -33,7 +33,7 @@
 //!
 //! # Why the expectations are not simply regenerated
 //!
-//! `ir_dual.rs` refuses `REWRITE` for the reason that applies twice over here:
+//! `ir_recorded.rs` refuses `REWRITE` for the reason that applies twice over here:
 //! `datadriven`'s idiom is to regenerate an expectation from the
 //! implementation, and an expectation regenerated from this crate would agree
 //! with whatever this crate does. This file's whole content is that the bytes
@@ -70,12 +70,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use rexx_exec::{Invocation, Outcome, run_program};
 use support::oracle::{Oracle, did_not_finish, locate};
 
-/// The same directory `ir_dual.rs` walks. Two tests reading one directory is
+/// The same directory `ir_recorded.rs` walks. Two tests reading one directory is
 /// the point: one says this crate matches the recording, the other says the
 /// recording matches the interpreter, and neither claim implies the other.
-const CASE_DIR: &str = "tests/ir_dual_cases";
+const CASE_DIR: &str = "tests/ir_recorded_cases";
 
-/// The path a case's program is reported as running from. `ir_dual.rs` records
+/// The path a case's program is reported as running from. `ir_recorded.rs` records
 /// the same literal, because a traceback's middle line names the program file
 /// and a temporary path would put this run's process id into an expectation.
 const INLINE_PATH: &str = "/nonexistent/ir-dual-case.rex";

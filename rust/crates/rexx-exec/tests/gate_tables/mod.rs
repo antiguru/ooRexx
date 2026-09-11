@@ -224,7 +224,7 @@ pub fn run_on_both_engines(abs: &Path) -> Outcome {
     // hold on the tree-walker instead, counting it in `chunks_refused` -- so a
     // refused body makes the assertion above a comparison of two tree-walker
     // runs, tautologically true, while the row goes on being reported as a
-    // two-engine measurement. `ir_dual.rs` checks the same count for the same
+    // two-engine measurement. `ir_recorded.rs` checks the same count for the same
     // reason. The tree-walker arm compiles nothing, so a non-zero count there
     // means the field stopped meaning what this reads it as.
     assert!(
