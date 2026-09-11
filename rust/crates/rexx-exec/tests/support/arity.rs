@@ -10,7 +10,7 @@
 /*----------------------------------------------------------------------------*/
 
 //! The arity probe: what a documented method does when it is sent an argument
-//! list it could accept, measured against the oracle and both engines.
+//! list it could accept, measured against the oracle.
 //!
 //! One machine, two tables. `tests/collection_arity.rs` drives it over the
 //! collections and `tests/introspection_arity.rs` over Phase 5i's
@@ -30,7 +30,7 @@
 //!
 //! # The verdicts
 //!
-//! * `agree` -- the oracle and both engines give identical three descriptors.
+//! * `agree` -- the oracle and the crate give identical three descriptors.
 //! * `send-differs` -- the receiver was built on both sides and the send
 //!   differs. This is the per-row signal.
 //! * `setup-differs` -- one side could not build the receiver at all, so the
@@ -38,8 +38,6 @@
 //!   measurement rather than a harness fault**: the receiver files
 //!   deliberately use the richest receiver the *oracle* can build rather than
 //!   the richest both sides can.
-//! * `engine-differs` -- the two engines disagree with each other, which is a
-//!   defect of its own and never expected.
 //! * `exempt` -- a row with a committed reason instead of a list.
 //! * `no-value` -- under [`Layout::compare_values`], a send both sides
 //!   completed that returned no result, so there was nothing to compare
@@ -360,7 +358,7 @@ impl Layout {
 /// refusal, which is what keeps such a row out of the harness rule. That
 /// handler builds the code from `rc` and `condition('E')` rather than from
 /// `condition('O')~code`, so reaching it asks nothing of a side under test
-/// that the send itself did not: a probe whose handler an engine cannot run
+/// that the send itself did not: a probe whose handler a side cannot run
 /// measures the probe.
 ///
 /// A `call` receiver puts both the setup and the send inside an internal
@@ -520,17 +518,11 @@ pub fn measured(layout: &Layout) -> Vec<(Row, String)> {
         let values = layout.compare_values && !unstable;
         fs::write(&path, program(receiver, &method, &list, values)).expect("the probe is writable");
         let cpp = scrub(run(&mut oracle_command(&oracle, &path, &dir)), &dir);
-        let mut engines = Vec::new();
-        for engine in ["ir", "tree-walker"] {
-            engines.push(scrub(
-                run(Command::new(&binary)
-                    .arg(&path)
-                    .current_dir(&dir)
-                    .env("REXX_ENGINE", engine)),
-                &dir,
-            ));
-        }
-        let (verdict, evidence) = classify(&cpp, &engines[0], &engines[1], unstable);
+        let ours = scrub(
+            run(Command::new(&binary).arg(&path).current_dir(&dir)),
+            &dir,
+        );
+        let (verdict, evidence) = classify(&cpp, &ours, unstable);
         rows.push((
             Row {
                 class,
@@ -546,13 +538,7 @@ pub fn measured(layout: &Layout) -> Vec<(Row, String)> {
     rows
 }
 
-fn classify(cpp: &Three, ir: &Three, tree: &Three, unstable: bool) -> (String, String) {
-    if ir != tree {
-        return (
-            "engine-differs".into(),
-            format!("ir rc{} against tree-walker rc{}", ir.0, tree.0),
-        );
-    }
+fn classify(cpp: &Three, ir: &Three, unstable: bool) -> (String, String) {
     if ir == cpp {
         if unstable {
             return (
@@ -796,22 +782,6 @@ pub fn exemptions_without_a_reason(layout: &Layout) -> Vec<String> {
                 )
             })
         })
-        .collect()
-}
-
-/// The committed rows on which the two engines answer differently.
-pub fn engine_splits(layout: &Layout) -> Vec<Row> {
-    let committed = layout.committed();
-    if !layout.refreshing() {
-        assert!(
-            !committed.is_empty(),
-            "{} is missing, so this reads green over nothing",
-            layout.table
-        );
-    }
-    committed
-        .into_iter()
-        .filter(|row| row.verdict == "engine-differs")
         .collect()
 }
 

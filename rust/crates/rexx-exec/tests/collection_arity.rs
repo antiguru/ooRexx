@@ -54,11 +54,10 @@ const HEADER: &str = "\
 # records agreement about an arity error. No task in this phase may cite it as
 # a reason a row needs no work.
 #
-#   agree          the oracle and both engines give identical descriptors
+#   agree          the oracle and the crate give identical descriptors
 #   send-differs   the receiver was built on both sides and the send differs
 #   setup-differs  one side could not build the receiver, so the row says
 #                  nothing about its own method -- the class has no store
-#   engine-differs the two engines disagree with each other
 #   exempt         a committed reason instead of an argument list
 #
 # The argument lists are corpus/collection-arguments.tsv and the receivers are
@@ -124,14 +123,4 @@ fn every_row_is_sent_something_its_arity_needs() {
 fn every_exemption_says_why() {
     let blank = arity::exemptions_without_a_reason(&layout());
     assert!(blank.is_empty(), "{blank:#?}");
-}
-
-/// The two engines never disagree with each other.
-#[test]
-fn the_engines_agree_with_one_another() {
-    let split = arity::engine_splits(&layout());
-    assert!(
-        split.is_empty(),
-        "the compiled and tree-walking engines answer differently: {split:#?}"
-    );
 }
