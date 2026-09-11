@@ -1325,6 +1325,7 @@ pub(crate) fn compile(
     assert_call_echoes_follow_their_op(&ops);
     assert_keyword_echoes_precede_their_value(&ops);
     assert_region_ops_name_their_clause(&ops);
+    assert_exec_regions_hold_nothing_else(&ops);
 
     let consts = consts.values;
     // Sized from the stream rather than from the program's symbol table, which
@@ -2285,6 +2286,42 @@ fn assert_keyword_echoes_precede_their_value(ops: &[Op]) {
     }
 }
 
+/// Every [`Op::Exec`] region holds nothing but its own [`Op::Clause`], the
+/// optional [`Op::TraceClause`] between them, and the `Exec` itself.
+///
+/// **This is what lets `Interp::region_procedure_permitted` be a field rather
+/// than a value the driver keeps live across the region loop.** The region
+/// takes the `PROCEDURE` permission into that field when it opens and `Exec`
+/// reads it; an op between the two that drove a clause of its own would open
+/// a region and overwrite the field first. Neither `Clause` nor `TraceClause`
+/// drives one, and the two arms that emit `Exec` emit exactly this shape --
+/// which is the part that could stop being true without anything going red.
+///
+/// **What it does not check is a stream with no `Exec` in the region**, which
+/// is every other region and is none of this check's business: the field is
+/// written by all of them and read by none.
+///
+/// An unconditional `assert!` for [`assert_region_ops_name_their_clause`]'s
+/// reason, and one linear scan of a list `compile` has already walked.
+fn assert_exec_regions_hold_nothing_else(ops: &[Op]) {
+    for (at, op) in ops.iter().enumerate() {
+        let Op::Clause { end, .. } = op else {
+            continue;
+        };
+        let inside = &ops[at + 1..(*end as usize).min(ops.len())];
+        if !inside.iter().any(|op| matches!(op, Op::Exec { .. })) {
+            continue;
+        }
+        for (offset, op) in inside.iter().enumerate() {
+            assert!(
+                matches!(op, Op::Exec { .. } | Op::TraceClause { .. }),
+                "op {} sits in the Exec region of clause {at}, which may hold                  nothing but its echo and the Exec itself",
+                at + 1 + offset
+            );
+        }
+    }
+}
+
 /// **Every index-bearing op inside a [`Op::Clause`] region names that region's
 /// own clause.**
 ///
@@ -2402,9 +2439,9 @@ mod tests {
     use rexx_parse::{SymbolId, SymbolTable};
 
     use super::{
-        Op, PlanSlot, Registers, SymbolRead, assert_literal_echoes_follow_their_load,
-        assert_read_echoes_follow_their_load, assert_region_ops_name_their_clause,
-        assert_trace_ops_open_a_clause_region,
+        Op, PlanSlot, Registers, SymbolRead, assert_exec_regions_hold_nothing_else,
+        assert_literal_echoes_follow_their_load, assert_read_echoes_follow_their_load,
+        assert_region_ops_name_their_clause, assert_trace_ops_open_a_clause_region,
     };
 
     /// Two sibling clauses reuse the same registers, and a clause nested
@@ -2770,6 +2807,47 @@ mod tests {
                 at: PlanSlot::UNRESOLVED,
                 src: 0,
             },
+        ]);
+    }
+
+    /// An op that drives clauses of its own, inside the region of an `Exec`.
+    ///
+    /// **The defect this stands for is silent and not a crash.** `Op::LoopRun`
+    /// opens regions of its own, each of which takes the `PROCEDURE`
+    /// permission into `Interp::region_procedure_permitted`, so the `Exec`
+    /// after it would read the last body clause's take instead of its own --
+    /// `false` where its clause had earned `true`, which turns a legal
+    /// `PROCEDURE` into error 17.1 only when the construct is an activation's
+    /// first instruction.
+    #[test]
+    #[should_panic(expected = "op 2 sits in the Exec region of clause 0")]
+    fn an_exec_region_holding_an_op_that_drives_clauses_is_refused() {
+        assert_exec_regions_hold_nothing_else(&[
+            Op::Clause { index: 0, end: 4 },
+            Op::TraceClause { index: 0 },
+            Op::LoopRun { index: 0 },
+            Op::Exec { index: 0 },
+        ]);
+    }
+
+    /// The two arrangements that must stay accepted: the shape `compile`
+    /// actually emits, echoed and not, and a region with no `Exec` in it at
+    /// all, whose ops this check has no opinion about.
+    ///
+    /// Without the second, the refusal above is satisfied by a check that
+    /// refuses every region holding anything but an echo -- which is every
+    /// promoted construct in the language.
+    #[test]
+    fn the_emitted_exec_shapes_and_every_other_region_are_accepted() {
+        assert_exec_regions_hold_nothing_else(&[
+            Op::Clause { index: 0, end: 3 },
+            Op::TraceClause { index: 0 },
+            Op::Exec { index: 0 },
+            Op::Clause { index: 1, end: 5 },
+            Op::Exec { index: 1 },
+            Op::Clause { index: 2, end: 8 },
+            Op::LoopRun { index: 2 },
+            Op::LoopNext { index: 2 },
         ]);
     }
 

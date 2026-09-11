@@ -4181,21 +4181,34 @@ struct Interp {
     /// `PROCEDURE` -- and, read the other way, whether it is the first
     /// instruction executed in its activation.
     ///
-    /// **Set only by `run_activation`, and taken at the top of `step`.**
-    /// That pairing is the whole mechanism, and it is what makes the
-    /// permission stop at exactly one instruction: any nested stepping --
-    /// an `INTERPRET` fragment, an `IF`/`SELECT` branch through
-    /// `run_bounded` -- reaches `step` again after the outer `step` has
-    /// already taken the flag, so it sees `false` without any of those paths
-    /// having to know this field exists. Measured, and the reason it is
-    /// taken on the way in rather than cleared on the way out: `sub:
-    /// interpret "procedure"` is error 17.1, so a fragment must not inherit
-    /// its host clause's permission.
-    ///
-    /// A field rather than a parameter for the reason `current_value_indent`
-    /// gives for the same choice: `step` is reached from several callers
-    /// that have no business knowing about `PROCEDURE`.
+    /// **Set only by `run_activation`, and taken when a
+    /// [`crate::ir::Op::Clause`] region opens.** That pairing is the whole
+    /// mechanism, and it is what makes the permission stop at exactly one
+    /// instruction: any nested driving -- an `INTERPRET` fragment, an
+    /// `IF`/`SELECT` branch through `run_bounded` -- opens its own regions
+    /// after the outer one has already taken the flag, so it sees `false`
+    /// without any of those paths having to know this field exists.
+    /// Measured, and the reason it is taken on the way in rather than
+    /// cleared on the way out: `sub: interpret "procedure"` is error 17.1,
+    /// so a fragment must not inherit its host clause's permission.
     procedure_permitted: bool,
+    /// What [`Interp::procedure_permitted`] held when the running
+    /// [`crate::ir::Op::Clause`] region opened, for the one op that needs it.
+    ///
+    /// **A field rather than a value the driver keeps live across the region
+    /// loop, and that is a measurement.** Held as a local it costs
+    /// `bench-programs/varlookup.rex` 4.0 retired instructions per iteration
+    /// and `emptyloop` 1.0: the bool spans the whole loop, so it takes a
+    /// stack slot and pushes `self` out of its register into reloads. Held
+    /// here it costs one store per region and no liveness at all, which is
+    /// `varlookup` -2.0 per iteration, `rexxcps` -0.07% and no axis worse.
+    ///
+    /// **Nothing can overwrite it between the write and the read**, which
+    /// `compile::assert_exec_regions_hold_nothing_else` checks rather than
+    /// assumes: the only reader is [`crate::ir::Op::Exec`], and its region
+    /// holds nothing but the `Clause` that wrote this and an optional
+    /// `Op::TraceClause`, neither of which drives a clause of its own.
+    region_procedure_permitted: bool,
     /// The call that entered the running activation: what `USE ARG` reads.
     ///
     /// **Saved and restored around every call, alongside the four pieces of
@@ -4812,6 +4825,7 @@ impl Interp {
             stack_first: 0,
             stack_deepest: 0,
             procedure_permitted: false,
+            region_procedure_permitted: false,
             call_context: CallContext::default(),
             queue: Queue::new(),
             // Nothing to read, which is what makes it impossible for a unit
@@ -7949,6 +7963,7 @@ impl Interp {
             stack_first: _,
             stack_deepest: _,
             procedure_permitted: _,
+            region_procedure_permitted: _,
             // A running call's arguments and receiver are the caller's temps;
             // `CallContext::object_roots` is the parked case's other route.
             call_context: _,

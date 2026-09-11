@@ -845,7 +845,7 @@ impl Interp {
                     //   `tests/ir_recorded_cases/assignment-and-say`'s "procedure
                     //   after an assignment in a called label" row diverge, and
                     //   again nothing else notices.
-                    let first_instruction = std::mem::take(&mut self.procedure_permitted);
+                    self.region_procedure_permitted = std::mem::take(&mut self.procedure_permitted);
                     // The ops of this promoted clause, `[pc + 1, end)`, and
                     // where they leave the counter.
                     //
@@ -1949,11 +1949,13 @@ impl Interp {
                                     // covers are one implementation and not a
                                     // second copy beside it.
                                     //
-                                    // **`first_instruction` is the region's own
-                                    // take**, not a fresh one: this clause already
-                                    // consumed the permission when it opened, and
-                                    // taking it again here would hand `Procedure`
-                                    // and `Use` a `false` the clause had earned.
+                                    // **The permission is the region's own take**,
+                                    // not a fresh one: this clause already consumed
+                                    // it when it opened, and taking it again here
+                                    // would hand `Procedure` and `Use` a `false`
+                                    // the clause had earned. `Interp::
+                                    // region_procedure_permitted`'s own doc has why
+                                    // it is parked in a field.
                                     Op::Exec { index: at } => {
                                         debug_assert_names_the_clause(code, *at, clause, "Exec");
                                         match self.exec_instruction(
@@ -1961,7 +1963,7 @@ impl Interp {
                                             index,
                                             clause,
                                             source,
-                                            first_instruction,
+                                            self.region_procedure_permitted,
                                         ) {
                                             Ok(flow) => {
                                                 break 'cold Ok(RegionEnd::Flowed(flow));
