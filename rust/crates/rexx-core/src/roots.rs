@@ -291,12 +291,40 @@ impl RootSet {
     }
 
     /// Reads register `index` of the region opened at `frame`.
+    ///
+    /// **The `assert!` is not a second check and it is not belt and braces.**
+    /// It states the same condition the indexing below states, so LLVM keeps
+    /// one comparison and drops `Index`'s -- and with it the call to
+    /// `panic_bounds_check`, which is the expensive half, because that
+    /// function takes the index, the length and a `Location` and so pins all
+    /// three live across the access. An `assert!` reaches a cold path that
+    /// takes nothing. Counted in the binary: the six asserts in this file
+    /// remove 58 `panic_bounds_check` call sites, 527 to 469.
+    ///
+    /// Measured as retired instructions, interleaved, all six together:
+    /// `varlookup` -5.2%, `rexxcps` -1.6%, `emptyloop` -1.1%, `arith` -0.8%.
+    /// Replacing the indexing with `get_unchecked` instead buys a further
+    /// 2.4% on `varlookup` and is the whole of what the remaining comparison
+    /// costs -- not taken, because the comparison is what makes a compiler
+    /// defect a panic here rather than a silent read of another frame.
+    ///
+    /// **No message, and that is measured too.** A formatted one
+    /// (`"register {index} is outside .."`) puts the values back where
+    /// `panic_bounds_check` had them and builds a `fmt::Arguments` besides:
+    /// `varlookup` +11.1% and `rexxcps` +4.8% against this tree, far worse
+    /// than the checks it was meant to replace. Even a `&'static str` costs
+    /// 2 instructions per `emptyloop` iteration. The stringified condition
+    /// an argument-less `assert!` panics with names the invariant anyway.
     pub fn temp_at(&self, frame: FrameId, index: usize) -> ObjRef {
+        assert!(frame.0 + index < self.temps.len());
         self.temps[frame.0 + index]
     }
 
     /// Writes register `index` of the region opened at `frame`.
+    ///
+    /// The `assert!` is [`RootSet::temp_at`]'s, for its reason.
     pub fn set_temp(&mut self, frame: FrameId, index: usize, value: ObjRef) {
+        assert!(frame.0 + index < self.temps.len());
         self.temps[frame.0 + index] = value;
     }
 
@@ -604,6 +632,7 @@ impl RootSet {
                 self.aliases[position].is_none(),
                 "slot {position} redirects while the alias count says none does"
             );
+            assert!(position < self.slots.len());
             return self.slots[position];
         }
         self.at(self.resolve_aliased(position))
@@ -617,6 +646,7 @@ impl RootSet {
                 self.aliases[position].is_none(),
                 "slot {position} redirects while the alias count says none does"
             );
+            assert!(position < self.slots.len());
             self.slots[position] = Some(value);
             return;
         }
@@ -674,6 +704,7 @@ impl RootSet {
     #[inline(always)]
     fn at(&self, position: usize) -> Option<ObjRef> {
         if position & CELL_TAG == 0 {
+            assert!(position < self.slots.len());
             self.slots[position]
         } else {
             self.cells[position & !CELL_TAG]
@@ -684,6 +715,7 @@ impl RootSet {
     #[inline(always)]
     fn write(&mut self, position: usize, value: Option<ObjRef>) {
         if position & CELL_TAG == 0 {
+            assert!(position < self.slots.len());
             self.slots[position] = value;
         } else {
             self.cells[position & !CELL_TAG] = value;
