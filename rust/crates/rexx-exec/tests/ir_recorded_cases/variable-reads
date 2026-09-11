@@ -1,39 +1,4 @@
 # What promoting a bare-symbol read has to keep, in three kinds.
-#
-# **Shapes**, which ask what the read answers: a set simple variable, one that
-# was never set (which answers its own upcased spelling), one whose value a
-# DROP took away, one a DROP reached through a run-time name, a bare stem, a
-# compound whose tail is computed from a variable, and one whose binding was
-# made by INTERPRET rather than by any clause of the compiled body.
-#
-# **Trace**, which is where a native read op diverges first and where no other
-# instrument in this crate can see it. `eval.rs` emits a variable's `>V>` line
-# as a side effect of evaluating it, and a compound's `>C>` line in front of
-# that; an op that only loads a value into a register emits neither, and every
-# line after the missing one still matches -- so only an exact stderr
-# comparison catches it, which is what these rows are. Both directions are
-# here: `trace i` rows require the lines, and a `trace r` row requires their
-# absence, because an emission that ignored its own gate would print them
-# under every setting.
-#
-# **Order**, which a compound is the only kind that can state: `>C>` announces
-# the fully-resolved name before `>V>` shows what is stored there, whether or
-# not the tail resolves to anything -- the `say za.4` row is the half where it
-# does not.
-#
-# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, and every row
-# was measured to produce the identical bytes on both engines before the read
-# was promoted -- which is what says a row can tell whether it would ever have
-# failed. Regenerate a row by running its program under the oracle, never with
-# REWRITE=1 -- ir_recorded.rs refuses to run at all under REWRITE for that reason.
-# Capture is:
-#
-#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
-#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
-#
-# Expected lines are tagged so that no line of the block can be empty: an empty
-# line ends an expected block, and a program's own output may hold one.
-# Trailing blanks are part of what is compared.
 
 # a set simple variable, read into an assignment and into a SAY
 program

@@ -1,38 +1,5 @@
 # Which clause boundaries a queued CALL ON condition is offered when an
-# INTERPRET fragment is running, pinned on the tree-walker's own bytes.
-#
-# The oracle runs a fragment in an activation whose condition queue is its own,
-# and this crate runs it inside the creating activation. So the queue is shared
-# here and the separation has to be reconstructed. The parts of the rule these
-# rows pin:
-#
-#   * a condition queued BEFORE the fragment is offered no boundary inside it,
-#     however many clauses the fragment has and whatever they are;
-#   * a condition queued INSIDE the fragment is offered the fragment's own
-#     boundaries, and the first of them, not the enclosing INTERPRET's;
-#   * a condition still queued when the fragment ends dies with it, and the
-#     enclosing INTERPRET clause's own boundary does not pick it up;
-#   * a condition queued in an OUTER fragment survives an inner fragment and is
-#     offered no boundary inside it either, so what separates the queues is a
-#     nesting level rather than "a fragment is running".
-#
-# A rule stated only as the first part is satisfied by suppressing the fragment
-# clauses' boundaries, which is what the `zq = raiser(); do; say 'body'; end`
-# row is here to refuse: measured, that suppression prints `body` before the
-# second handler where the oracle prints the second handler first.
-#
-# A rule stated without the nesting-level part is satisfied by a boolean "in a
-# fragment" flag, and that is a narrower gap than it looks. The flag design was
-# built and run against every row below: only the `interpret "say 1; say 2"` row
-# tells it from a nesting level, and the rest, the nested-fragment row included,
-# produce identical bytes under both.
-#
-# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE. Regenerate a
-# row by running its program under the oracle, never with REWRITE=1 --
-# ir_recorded.rs refuses to run at all under REWRITE for that reason. Capture is:
-#
-#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
-#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
+# INTERPRET fragment is running, pinned on the oracle's own bytes.
 
 # A plain DO in the fragment, with a condition already queued when the
 # INTERPRET clause begins. The DO has a header clause and an END clause -- both
@@ -243,10 +210,6 @@ out> after 5
 # inner fragment's boundaries are no more available to it than the program's
 # are. A flag makes the inner fragment's boundaries match, delivering after `1`
 # and ahead of `2` -- built and run, that is the byte difference.
-#
-# Neighbouring shapes do not all separate the designs, so do not shorten this
-# program by eye. Measured under both designs, `interpret 'zq = raiser();
-# interpret "say 1"; say 2'` prints `h1 3 / 1 / h2 3 / 2 / after 5` either way.
 program
 call on user c1 name h1
 call on user c2 name h2

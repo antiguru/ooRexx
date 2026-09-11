@@ -1,56 +1,5 @@
 # What promoting the call forms has to keep, across both routes into one
 # resolution.
-#
-# **Two routes**, because `CALL length 'abc'` and `say length('abc')` reach the
-# same four-step resolution -- internal label, builtin, ::ROUTINE, then the
-# external file this crate answers 43.1 for -- and a promotion that gave one
-# route a resolution of its own would let the two answer differently. Rows here
-# reach a label, a builtin, a ::ROUTINE and an unresolved name through both
-# spellings.
-#
-# **Where the search happens**, which is the one thing about a call that a
-# compiled op can get wrong while every test without an INTERPRET in it stays
-# green: resolution goes against the *running activation's* body, not against
-# the body a chunk was compiled from, and the two differ inside a fragment. A
-# fragment's own label table is always empty -- a label in interpreted text is
-# 47.1 -- so `interpret "call zsub"` is unresolvable to anything that searched
-# the fragment, and the oracle runs the enclosing program's `zsub:`.
-#
-# **Trace**, which for a call is `>A>` and `>F>`. `>A>` is unusual in that it
-# belongs to the call site rather than to the argument's own expression node, so
-# it is emitted where the arguments are evaluated and not by `eval.rs`'s own
-# post-order hook; `>F>` is the function route's alone and the `CALL` route
-# prints `>>>` for `RESULT` in its place. Both directions are here: `trace i`
-# rows require the lines and a `trace r` row requires their absence.
-#
-# **The clause boundary**, which is where a `CALL ON` handler queued by the
-# callee is delivered -- so a promoted `CALL` clause that lost its boundary
-# would run the handler somewhere else or not at all.
-#
-# **This file was measured thin, and is kept anyway.** Five mutations were
-# applied to the promotion and to the paths it enters -- no clause echo op for a
-# CALL, the `>A>` emission made a no-op, a kept resolution answering the wrong
-# thing, a compiled `CALL "name"` searching labels, and a ::ROUTINE search moved
-# in front of the builtin step -- and each was caught by something outside this
-# directory as well, so none of the rows below was the only catcher for any of
-# them. What the file is for is the half no mutation of the implementation
-# shows: the engine-against-engine sweep runs this crate on both arms, so a
-# line both engines emit from one shared function is one it structurally cannot
-# police, and these bytes are the oracle's rather than this crate's.
-#
-# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, and every row
-# was measured to produce the identical bytes on both engines before the call
-# was promoted -- which is what says a row can tell whether it would ever have
-# failed. Regenerate a row by running its program under the oracle, never with
-# REWRITE=1 -- ir_recorded.rs refuses to run at all under REWRITE for that reason.
-# Capture is:
-#
-#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
-#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
-#
-# Expected lines are tagged so that no line of the block can be empty: an empty
-# line ends an expected block, and a program's own output may hold one.
-# Trailing blanks are part of what is compared.
 
 # an internal label, with arguments and the RESULT it settles
 program
@@ -486,18 +435,6 @@ rc> 0
 out> 120
 
 # a name that matches nothing reports 43.1 only after its arguments have run
-#
-# `RexxInstructionCall::execute` (`instructions/CallInstruction.cpp:166`)
-# evaluates the arguments before it dispatches on any of the three targets the
-# parser may have resolved, and the C++ resolves those at parse time -- so a
-# name resolved at run time here owes the same order. The `>L>`/`>A>` pairs
-# below are what says it: both arguments are evaluated and traced, and only
-# then is the routine reported missing.
-#
-# **This row and the two under it are what the dual sweep could not see.**
-# Measured at the commit before them: the compiled engine already had this
-# order for a function call and the tree-walker did not, so the two engines
-# answered 42 and 43 for `nosuch(1/0)` with every test in the workspace green.
 program
 signal on syntax name sx
 trace i

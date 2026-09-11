@@ -251,10 +251,9 @@ end
 }
 
 /// Nothing in an ordinary program overflows the compiled stream's index
-/// widths, so the refusal path is never taken and the counter it bumps stays
-/// at zero.
+/// widths, so the counter `Interp::chunk_for` bumps on a refusal stays at zero.
 #[test]
-fn no_body_is_refused_by_either_engine() {
+fn no_body_is_refused() {
     let outcome = run_program(TEST_PATH, THREE_BODIES.to_vec(), Invocation::none());
     assert_eq!(
         outcome.chunks_refused, 0,

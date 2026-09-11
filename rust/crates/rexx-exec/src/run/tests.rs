@@ -1077,7 +1077,7 @@ fn an_absorbed_whencases_escape_to_end_reports_the_same_constant_offset_nested()
 /// search a `LEAVE` naming the enclosing `SELECT LABEL` needs to find.
 /// The mutation this kills: reverting the escape-redirect check in
 /// `Select`'s own arm (the `if let Flow::Goto(target) = flow && *
-/// otherwise == Some(target)` branch, calling `run_otherwise` instead
+/// otherwise == Some(target)` branch, calling `Op::EnterOtherwise` instead
 /// of forwarding the bare `Goto`) makes `leave s` search *outward* from
 /// outside this `SELECT` and find nothing, raising 28.3 at rc 228
 /// instead of resuming past the `SELECT` cleanly -- reproduced by
@@ -1144,7 +1144,7 @@ fn when_condition_that_is_not_0_or_1_raises_34_2() {
 /// **The coordinator's own finding, fixed after the first round.** A
 /// `WHEN`'s own `step` arm is a pure no-op (`Select`'s own arm reads it
 /// as data instead), so a raise while evaluating its *condition* never
-/// went through a `step_in_temps_frame` call for the `WHEN` itself --
+/// went through a `Op::Clause`'s region call for the `WHEN` itself --
 /// the first version of this task attributed it to the enclosing
 /// `SELECT`, wrong clause *and* wrong line, measured against the
 /// oracle. `record_failure_site`'s own doc comment on `Select`'s call
@@ -1210,7 +1210,7 @@ fn a_select_cases_own_expression_failure_is_attributed_to_the_select() {
 /// A `WhenCase` value expression that raises is the `WHEN`'s own
 /// clause, the same rule as a plain `WHEN`'s condition -- both go
 /// through `Select`'s own explicit-match-and-record path, never
-/// through `step_in_temps_frame` for the `When`/`WhenCase` node itself.
+/// through `Op::Clause`'s region for the `When`/`WhenCase` node itself.
 #[test]
 fn a_whencase_values_own_failure_is_attributed_to_the_when_not_the_select() {
     let mut interp = Interp::new();
@@ -1225,7 +1225,7 @@ fn a_whencase_values_own_failure_is_attributed_to_the_when_not_the_select() {
 
 /// A raise inside an `OTHERWISE` branch was already correct before this
 /// round's fix (`OTHERWISE`'s own body runs through the outer loop's
-/// ordinary `step_in_temps_frame`, never through `Select`'s own
+/// ordinary `Op::Clause`'s region, never through `Select`'s own
 /// explicit-match path), and stays that way -- checked because the
 /// coordinator asked for it explicitly, not assumed from the `WHEN` fix.
 #[test]
@@ -1245,12 +1245,12 @@ fn a_raise_inside_an_otherwise_branch_is_attributed_to_its_own_clause() {
 }
 
 /// A raise inside a matched `WHEN`'s **body** (not its condition) has to
-/// go through `run_bounded`'s own `step_in_temps_frame` calls with
+/// go through `run_bounded`'s own `Op::Clause`'s region calls with
 /// `source` actually threaded through, which is a different path from
 /// every other test in this section: those all check a condition/value
 /// expression `Select`'s own arm evaluates directly, and
 /// `a_raise_inside_an_otherwise_branch_is_attributed_to_its_own_clause`
-/// runs through the *outer* loop's `step_in_temps_frame`, never through a
+/// runs through the *outer* loop's `Op::Clause`'s region, never through a
 /// `run_bounded` nested inside `If`/`Select`'s own arm. That last
 /// distinction matters and an earlier wording of it was wrong: in the
 /// test harness `run_source` routes everything through its own top-level
@@ -1273,7 +1273,7 @@ fn a_raise_inside_a_matched_whens_body_is_attributed_to_its_own_clause() {
 
 /// The `IF` analogue of the `WHEN`-body test above: a raise inside the
 /// matched `THEN` branch's own body, which likewise only ever reaches
-/// `step_in_temps_frame` through `run_bounded`. Confirmed by the same
+/// `Op::Clause`'s region through `run_bounded`. Confirmed by the same
 /// mutation (`None` for `source` at `If`'s own `run_bounded` call site
 /// made this fail too, alongside the `WHEN`-body test, both restored
 /// after).
@@ -3344,7 +3344,7 @@ fn a_callees_clauses_echo_at_the_calling_clauses_indent_plus_two() {
 /// correct one: **two** internal-function calls inside *one* clause
 /// (`ExprKind::Call`, Task 4). Before Task 4 at most one activation
 /// could be entered per clause, and the *next* clause's own
-/// `step_in_temps_frame` re-set the field before anything read it, so
+/// `Op::Clause`'s region re-set the field before anything read it, so
 /// the gap was unobservable through `CALL` alone. Without the restore,
 /// `g`'s own base indent -- and everything computed from it: its
 /// clauses, its `RETURN`'s own value trace, and the enclosing `say`
@@ -5658,7 +5658,7 @@ fn rc_is_set_from_the_condition_when_a_trap_fires() {
 
 /// **Inherited item I16, re-verified against a real trap rather than
 /// argued.** I16 concluded that `SIGNAL ON SYNTAX` cannot accumulate a
-/// temps leak, resting entirely on `step_in_temps_frame` being the single
+/// temps leak, resting entirely on `Op::Clause`'s region being the single
 /// chokepoint that heals the `?`-skipped `pop_frame` sites in
 /// `eval.rs`. The conclusion is measured here rather than inherited: two
 /// hundred trap-and-resume cycles and
@@ -7656,9 +7656,8 @@ macro_rules! corpus_source {
     };
 }
 
-/// Runs `source` under both engines at `path` and asserts stderr is exactly
-/// `expected` on each.
-fn assert_stderr_on_both_engines(path: &str, source: &str, expected: &str) {
+/// Runs `source` at `path` and asserts stderr is exactly `expected`.
+fn assert_stderr(path: &str, source: &str, expected: &str) {
     let outcome = crate::run_program(path, source.as_bytes().to_vec(), crate::Invocation::none());
     assert_eq!(
         String::from_utf8(outcome.stderr).expect("the trace is UTF-8"),
@@ -7671,7 +7670,7 @@ fn assert_stderr_on_both_engines(path: &str, source: &str, expected: &str) {
 /// nothing else in the tree can pin them.**
 #[test]
 fn a_method_activations_trace_indents_are_the_oracles_own_and_normalisation_cannot_see_them() {
-    assert_stderr_on_both_engines(
+    assert_stderr(
         "/abs/method_trace_invocation.rex",
         corpus_source!("lang/method_trace_invocation.rex"),
         concat!(
@@ -7697,7 +7696,7 @@ fn a_method_activations_trace_indents_are_the_oracles_own_and_normalisation_cann
         ),
     );
 
-    assert_stderr_on_both_engines(
+    assert_stderr(
         "/abs/method_trace_nested.rex",
         corpus_source!("lang/method_trace_nested.rex"),
         concat!(
@@ -7735,7 +7734,7 @@ fn a_method_activations_trace_indents_are_the_oracles_own_and_normalisation_cann
 /// innermost first, and neither carries an indent from the other.**
 #[test]
 fn a_condition_inside_a_method_body_echoes_the_body_and_then_the_send() {
-    assert_stderr_on_both_engines(
+    assert_stderr(
         "/abs/method_body_raises.rex",
         corpus_source!("lang/method_body_raises.rex"),
         concat!(
@@ -7792,7 +7791,7 @@ fn a_trap_handler_and_an_internal_call_do_not_carry_the_same_receiver() {
 /// under the corpus gate.**
 #[test]
 fn a_value_returned_after_a_reply_reports_the_oracles_own_98_936() {
-    assert_stderr_on_both_engines(
+    assert_stderr(
         "/abs/method_reply.rex",
         corpus_source!("lang/method_reply.rex"),
         concat!(
@@ -7804,7 +7803,7 @@ fn a_value_returned_after_a_reply_reports_the_oracles_own_98_936() {
 
     // The same raise from a program whose main body chose its own exit status,
     // which is where a raise that settled the status would show.
-    assert_stderr_on_both_engines(
+    assert_stderr(
         "/abs/method_reply_exit_status.rex",
         corpus_source!("lang/method_reply_exit_status.rex"),
         concat!(
@@ -7840,7 +7839,7 @@ fn a_value_returned_after_a_reply_reports_the_oracles_own_98_936() {
 /// whole difference is on stderr.
 #[test]
 fn a_second_reply_reports_the_oracles_own_98_935() {
-    assert_stderr_on_both_engines(
+    assert_stderr(
         "/abs/method_reply_twice.rex",
         corpus_source!("lang/method_reply_twice.rex"),
         concat!(
@@ -7923,25 +7922,18 @@ fn the_guard_instructions_answers_and_the_phase_6_refusals() {
     }
 }
 
-/// Runs `source` on both engines, insisting they agree with each other, and
-/// hands back `(exit code, stdout, stderr)`.
-fn annotate_on_both_engines(source: &str) -> (i32, String, String) {
-    let mut answer = None;
+/// Runs `source` and hands back `(exit code, stdout, stderr)`.
+fn annotate_outcome(source: &str) -> (i32, String, String) {
     let outcome = crate::run_program(
         "/abs/annotate.rex",
         source.as_bytes().to_vec(),
         crate::Invocation::none(),
     );
-    let seen = (
+    (
         outcome.exit_code,
         String::from_utf8_lossy(&outcome.stdout).into_owned(),
         String::from_utf8_lossy(&outcome.stderr).into_owned(),
-    );
-    match &answer {
-        None => answer = Some(seen),
-        Some(first) => assert_eq!(first, &seen, "the two engines disagree on {source:?}"),
-    }
-    answer.expect("at least one engine ran")
+    )
 }
 
 /// Every `::ANNOTATE` target the accumulated package does not hold is the
@@ -7979,7 +7971,7 @@ fn an_annotate_target_the_package_does_not_hold_is_the_oracles_own_refusal() {
         ),
     ];
     for (source, target) in rows {
-        let (code, stdout, stderr) = annotate_on_both_engines(source);
+        let (code, stdout, stderr) = annotate_outcome(source);
         assert_eq!((code, stdout.as_str()), (157, ""), "{source:?}: {stderr:?}");
         assert!(
             stderr.contains(&format!(
@@ -8026,7 +8018,7 @@ fn an_annotate_target_resolves_the_way_the_directive_walk_accumulates() {
         ),
     ];
     for (source, stdout) in rows {
-        let (code, seen, stderr) = annotate_on_both_engines(source);
+        let (code, seen, stderr) = annotate_outcome(source);
         assert_eq!(
             (code, seen.as_str()),
             (0, *stdout),
@@ -8040,13 +8032,13 @@ fn an_annotate_target_resolves_the_way_the_directive_walk_accumulates() {
 #[test]
 fn a_class_answers_one_method_object_per_dictionary_entry() {
     let class = "::class K\n::method m\n  return 1\n::method p\n  return 2\n";
-    let (code, stdout, stderr) = annotate_on_both_engines(&format!(
+    let (code, stdout, stderr) = annotate_outcome(&format!(
         "say (.K~method('M')~identityHash = .K~method('M')~identityHash)\n{class}"
     ));
     assert_eq!((code, stderr.as_str()), (0, ""));
     assert_eq!(stdout, "1\n");
 
-    let (code, stdout, stderr) = annotate_on_both_engines(&format!(
+    let (code, stdout, stderr) = annotate_outcome(&format!(
         ".K~method('M')~objectName = 'renamed'\nsay .K~method('M')\nsay .K~method('P')\n{class}"
     ));
     assert_eq!((code, stderr.as_str()), (0, ""));
@@ -8068,12 +8060,12 @@ fn two_runs_in_one_process_allocate_the_annotation_tables_alike() {
                   ::method m\n  return 1\n::annotate method m a 2\n\
                   ::attribute a\n::annotate attribute a a 3\n\
                   ::routine r\n  return 2\n::annotate routine r a 4\n";
-    let first = annotate_on_both_engines(source);
+    let first = annotate_outcome(source);
     assert_eq!(first.0, 0, "stderr {:?}", first.2);
     assert_eq!(first.1.lines().count(), 6, "stdout {:?}", first.1);
     for _ in 0..8 {
         assert_eq!(
-            annotate_on_both_engines(source),
+            annotate_outcome(source),
             first,
             "a later run in this process allocated the annotation tables in a different order"
         );

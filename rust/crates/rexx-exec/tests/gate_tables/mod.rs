@@ -107,13 +107,9 @@ pub fn run_gate_probe(abs: &Path) -> Outcome {
 
     let outcome = run_program(path, text, Invocation::none());
 
-    // **A refused body used to be attributed to an engine that never ran it.**
-    // `Engine::Ir` ran a body the stream's index widths could not hold on the
-    // tree-walker instead, counting it in `chunks_refused`, so a row could be
-    // reported as a compiled-engine measurement while the tree-walker produced
-    // every byte of it. There is no fallback now and a refusal raises, but the
-    // count is still read here: it is the cheapest possible statement that
-    // this row measured what it says it measured.
+    // A refusal raises, so this count is zero in any row that produced a
+    // measurement; reading it is the cheapest statement that the row measured
+    // what it says it measured.
     assert!(
         outcome.chunks_refused == 0,
         "a body of {} was refused by the compiler, so this row did not measure \

@@ -1439,7 +1439,7 @@ pub(crate) enum Failure {
     /// no such room, so this variant is what lets the same event travel
     /// through an expression instead: constructed once, in `eval_call`
     /// (`eval.rs`), and then propagated by every intervening `?` completely
-    /// unremarked -- `step_in_temps_frame`'s and `Interp::invoke_call`'s own
+    /// unremarked -- `Op::Clause`'s region's and `Interp::invoke_call`'s own
     /// generic "an `Err` escaped, record a site and re-throw" paths do not
     /// need to know this variant exists, because sealing a site nothing
     /// prints is harmless (`execute`, `lib.rs`, never calls `Raised::report`

@@ -4,25 +4,6 @@
 # column pattern, PARSE VAR with a variable pattern, a CALL with two argument
 # expressions, TRACE VALUE and ADDRESS VALUE, and SIGNAL ON NOVALUE over the
 # whole of it.
-#
-# **The loop counts are fixed and every elapsed-time measurement is gone.**
-# `samples/rexxcps.rex` runs a first trial, times it, and scales `count` so the
-# second takes about a second -- so the work it does depends on how fast the
-# machine is that day, and its output is timings. Neither can be a differential
-# case. What is kept is the 1000-clause body verbatim; what is dropped is
-# `time('R')`, the trial loop, and the clauses-per-second arithmetic. The empty
-# `do count; end` calibration loop is kept as work, without being timed.
-#
-# The final `say`s exist because the body is otherwise silent: every `if` in it
-# is a check that says nothing when it passes, so a program that computed
-# everything wrongly and a program that computed nothing would both print the
-# same two header lines. The values printed are the ones the body actually
-# accumulates.
-#
-# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE. Capture is:
-#
-#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
-#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
 
 
 program

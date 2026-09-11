@@ -426,7 +426,7 @@ impl Interp {
     }
 
     /// The same line for a *stepped* instruction, which is the one place a
-    /// `LABEL` reaches the sink: `run.rs`'s `step_in_temps_frame`. Under
+    /// `LABEL` reaches the sink: the `Op::Clause` region. Under
     /// `TRACE L` this is the only echo the whole run produces.
     pub(crate) fn trace_stepped_clause(
         &mut self,

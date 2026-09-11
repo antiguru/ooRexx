@@ -1,32 +1,4 @@
 # What promoting an `IF`'s condition has to keep.
-#
-# The condition used to be one `Op::EvalExpr` doing the whole job: evaluate the
-# expression, trace the value, validate it as exactly "0"/"1", answer the jump.
-# It is now the expression's own native ops followed by `Op::Condition`, which
-# is the rest -- except where `native_shape` declines the expression, and then
-# it is still the whole job in one op.
-#
-# The rows here are transcripts rather than a coverage set: each is one program
-# whose stdout, stderr and exit status are recorded byte for byte, so a line
-# that appears, disappears or moves shows as a diff. The shapes they hold are a
-# condition that is a comma list, one that is an operator above a call, and a
-# declining condition under trace.
-#
-# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, on both
-# engines, before this file was written. Regenerate a row by running its
-# program under the oracle, never with REWRITE=1 -- ir_recorded.rs refuses to run
-# at all under REWRITE for that reason. Capture is:
-#
-#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
-#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
-#
-# Expected lines are tagged so that no line of the block can be empty, and
-# trailing blanks are part of what is compared: an IF header's `*-*` echo ends
-# in one, because the instruction ends at the THEN keyword.
-#
-# `/nonexistent/ir-dual-case.rex` is `ir_recorded.rs`'s own INLINE_PATH, which a
-# raised condition's middle line prints. Running the same program under the
-# oracle prints the oracle's own path there instead.
 
 # 34.6, a comma list: the raiser is `eval_logical_list`'s own, per element,
 # rather than the IF keyword's 34.1. `native_shape` has no `ExprKind::Logical`

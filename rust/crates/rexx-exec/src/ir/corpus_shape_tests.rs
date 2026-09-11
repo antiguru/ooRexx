@@ -298,7 +298,7 @@ fn check_body(
         let at = u32::try_from(index).expect("a corpus body is not four billion instructions");
         *seen.constructs.entry(construct).or_default() += 1;
 
-        // **The `Op::Generic` check that stood here is gone with the op.** It
+        // **The `Op::Exec` check that stood here is gone with the op.** It
         // asserted that a construct in the minimum promotion set had not
         // fallen back; nothing can fall back now, so the question is
         // unaskable. What it was really protecting is the line below: the

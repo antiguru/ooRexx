@@ -8837,25 +8837,18 @@ mod tests {
         );
     }
 
-    /// Runs `source` on both engines and hands back `(exit code, stdout,
-    /// stderr)`, having first insisted the two engines agree with each other.
-    fn both_engines(source: &str) -> (i32, String, String) {
-        let mut answer = None;
+    /// Runs `source` and hands back `(exit code, stdout, stderr)`.
+    fn run_source(source: &str) -> (i32, String, String) {
         let outcome = crate::run_program(
             "/t.rex",
             source.as_bytes().to_vec(),
             crate::Invocation::none(),
         );
-        let seen = (
+        (
             outcome.exit_code,
             String::from_utf8_lossy(&outcome.stdout).into_owned(),
             String::from_utf8_lossy(&outcome.stderr).into_owned(),
-        );
-        match &answer {
-            None => answer = Some(seen),
-            Some(first) => assert_eq!(first, &seen, "the two engines disagree on {source:?}"),
-        }
-        answer.expect("at least one engine ran")
+        )
     }
 
     /// **D24's `SmallInt` behaviour arm is taken for a small integer
@@ -8907,7 +8900,7 @@ mod tests {
         );
 
         assert_eq!(
-            both_engines("say 12345~length\n"),
+            run_source("say 12345~length\n"),
             (0, "5\n".to_string(), String::new())
         );
     }
@@ -8918,7 +8911,7 @@ mod tests {
     #[test]
     fn a_method_send_binds_self_from_the_receiver_in_the_calling_convention() {
         assert_eq!(
-            both_engines(
+            run_source(
                 "say .J~m\n\
                  ::class K\n\
                  ::method m class\n  return self\n\
@@ -8940,7 +8933,7 @@ mod tests {
     #[test]
     fn self_and_super_are_bound_before_the_bodys_first_instruction() {
         assert_eq!(
-            both_engines(
+            run_source(
                 "say .K~m\n\
                  ::class K\n\
                  ::method m class\n  return self '/' super\n"
@@ -8952,7 +8945,7 @@ mod tests {
             )
         );
         assert_eq!(
-            both_engines(
+            run_source(
                 "say .K~m\n\
                  ::class K\n\
                  ::method m class\n  interpret \"zz = self '/' super\"\n  return zz\n"
@@ -8977,7 +8970,7 @@ mod tests {
             "a. = .nil\nsay 'abc'~hasMethod(a.)\n",
             "say .K~hasMethod(.String)\n::class K\n",
         ] {
-            let (code, stdout, stderr) = both_engines(source);
+            let (code, stdout, stderr) = run_source(source);
             assert_eq!((code, stdout.as_str()), (168, ""), "{source:?}");
             assert!(
                 stderr.contains("Error 88.909:  Argument 1 must have a string value."),
@@ -8996,7 +8989,7 @@ mod tests {
             ("say 'abc'~hasMethod(d.)\n", "0\n"),
         ] {
             assert_eq!(
-                both_engines(source),
+                run_source(source),
                 (0, expected.to_string(), String::new()),
                 "{source:?}"
             );
@@ -9031,7 +9024,7 @@ mod tests {
             ),
         ];
         for (source, refusal) in refused {
-            let (code, stdout, stderr) = both_engines(source);
+            let (code, stdout, stderr) = run_source(source);
             assert_eq!(
                 (code, stdout.as_str(), stderr.as_str()),
                 (
@@ -9062,7 +9055,7 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                both_engines(source),
+                run_source(source),
                 (0, expected.to_string(), String::new()),
                 "{source:?}"
             );
@@ -9095,7 +9088,7 @@ mod tests {
                  Error 97.1:  Object \"P\" does not understand message \"{message}\".\n"
             );
             assert_eq!(
-                both_engines(source),
+                run_source(source),
                 (159, String::new(), expected),
                 "{source:?}"
             );
@@ -9163,7 +9156,7 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                both_engines(source),
+                run_source(source),
                 (0, expected.to_string(), String::new()),
                 "{source:?}"
             );
@@ -9179,7 +9172,7 @@ mod tests {
             ),
             ("say .K~a\n::class K\n::attribute a class set\n", "A"),
         ] {
-            let (code, stdout, stderr) = both_engines(source);
+            let (code, stdout, stderr) = run_source(source);
             assert_eq!((code, stdout.as_str()), (159, ""), "{source:?}");
             assert!(
                 stderr.contains(&format!(
@@ -9193,7 +9186,7 @@ mod tests {
         // The setter answers nothing, which a program can read: measured,
         // `91.999` at rc 165 rather than a value the assignment produced.
         let (code, stdout, stderr) =
-            both_engines("r = .K~'A='(9)\nsay r\n::class K\n::attribute a class\n");
+            run_source("r = .K~'A='(9)\nsay r\n::class K\n::attribute a class\n");
         assert_eq!((code, stdout.as_str()), (165, ""));
         assert!(
             stderr.contains("Error 91.999:  Message \"A=\" did not return a result."),
@@ -9229,7 +9222,7 @@ mod tests {
                 "Error 93.902:  Too many arguments in invocation of method; 1 expected.",
             ),
         ] {
-            let (code, stdout, stderr) = both_engines(source);
+            let (code, stdout, stderr) = run_source(source);
             assert_eq!((code, stdout.as_str()), (163, ""), "{source:?}");
             assert!(stderr.contains(catalogue), "{source:?} reported {stderr:?}");
             // **No frame of its own**, which is what separates an accessor
@@ -9260,7 +9253,7 @@ mod tests {
             ("say .K~a\n::class K\n::attribute a class abstract\n", "A"),
             (".K~a = 3\n::class K\n::attribute a class abstract\n", "A="),
         ] {
-            let (code, stdout, stderr) = both_engines(source);
+            let (code, stdout, stderr) = run_source(source);
             assert_eq!((code, stdout.as_str()), (163, ""), "{source:?}");
             assert!(
                 stderr.contains(&format!(
@@ -9278,7 +9271,7 @@ mod tests {
         // the program's own output, which is what makes the row above a send
         // refusal rather than an install refusal. Measured on the oracle.
         assert_eq!(
-            both_engines("say 'installed'\n::class K\n::method m class abstract\n"),
+            run_source("say 'installed'\n::class K\n::method m class abstract\n"),
             (0, "installed\n".to_string(), String::new())
         );
     }
@@ -9296,7 +9289,7 @@ mod tests {
             // A sibling class in the same package.
             &format!("say .S~poke{class}::CLASS S\n::METHOD poke CLASS\n  return .K~m\n"),
         ] {
-            let (code, stdout, stderr) = both_engines(source);
+            let (code, stdout, stderr) = run_source(source);
             assert_eq!((code, stdout.as_str()), (159, ""), "{source:?}");
             assert!(
                 stderr.contains(
@@ -9321,7 +9314,7 @@ mod tests {
              ::CLASS Sub SUBCLASS Base\n::METHOD poke CLASS\n  return .Base~m\n",
         ] {
             assert_eq!(
-                both_engines(source),
+                run_source(source),
                 (0, "inner\n".to_string(), String::new()),
                 "{source:?}"
             );
@@ -9334,14 +9327,14 @@ mod tests {
     #[test]
     fn a_refused_send_reaches_unknown_and_the_unknown_lookup_is_not_checked() {
         assert_eq!(
-            both_engines(
+            run_source(
                 "say .K~m\n::CLASS K\n::METHOD m CLASS PRIVATE\n  return 'never'\n\
                  ::METHOD unknown CLASS\n  use arg name\n  return 'unknown saw' name\n"
             ),
             (0, "unknown saw M\n".to_string(), String::new())
         );
         assert_eq!(
-            both_engines(
+            run_source(
                 "say .K~zork\n::CLASS K\n::METHOD unknown CLASS PRIVATE\n\
                  \x20 use arg name\n  return 'private unknown saw' name\n"
             ),
@@ -9454,16 +9447,16 @@ mod tests {
     #[test]
     fn a_scope_override_answers_and_has_one_refusal_for_each_bad_scope() {
         assert_eq!(
-            both_engines("say 'abc'~length:.String\n"),
+            run_source("say 'abc'~length:.String\n"),
             (0, "3\n".to_string(), String::new())
         );
-        let (code, stdout, stderr) = both_engines("say 'abc'~length:super\n");
+        let (code, stdout, stderr) = run_source("say 'abc'~length:super\n");
         assert_eq!((code, stdout.as_str()), (168, ""));
         assert!(
             stderr.contains("Error 88.914:"),
             "a non-class scope must keep the oracle's own condition, got {stderr:?}"
         );
-        let (code, stdout, stderr) = both_engines("say 'abc'~length:.Array\n");
+        let (code, stdout, stderr) = run_source("say 'abc'~length:.Array\n");
         assert_eq!((code, stdout.as_str()), (163, ""));
         assert!(
             stderr.contains(
@@ -9523,7 +9516,7 @@ mod tests {
     #[test]
     fn identity_hash_answers_a_number_that_follows_the_handle() {
         assert_eq!(
-            both_engines(
+            run_source(
                 "numeric digits 20\n\
                  say (.Array~identityHash == .Array~identityHash)\n\
                  say (.Array~identityHash == .String~identityHash)\n\
@@ -9538,7 +9531,7 @@ mod tests {
     #[test]
     fn identity_hash_answers_every_receiver_kind_as_the_oracle_does() {
         assert_eq!(
-            both_engines(
+            run_source(
                 "numeric digits 20\n\
                  s. = 1\n\
                  o = s.\n\
@@ -9560,7 +9553,7 @@ mod tests {
     #[test]
     fn two_equal_inline_strings_share_one_handle() {
         assert_eq!(
-            both_engines(
+            run_source(
                 "j = 5\n\
                  say ((\"eeeeee\"||j)~identityHash == (\"eeeeee\"||j)~identityHash)\n\
                  say ((\"eeeeeee\"||j)~identityHash == (\"eeeeeee\"||j)~identityHash)\n"
@@ -9575,7 +9568,7 @@ mod tests {
     #[test]
     fn the_object_protocol_answers_a_receiver_that_is_not_a_class_object() {
         assert_eq!(
-            both_engines(
+            run_source(
                 "say 'abc'~class~id\n\
                  say (12345)~class~id\n\
                  say .nil~class~id\n\
@@ -9602,7 +9595,7 @@ mod tests {
             "say .Array~package~id\n",
             "say 'abc'~superClasses\n",
         ] {
-            let (code, stdout, stderr) = both_engines(source);
+            let (code, stdout, stderr) = run_source(source);
             assert_eq!((code, stdout.as_str()), (159, ""), "{source:?}");
             assert!(
                 stderr.contains("Error 97.1:"),
@@ -9629,7 +9622,7 @@ mod tests {
         ] {
             let source = format!("say .{class}~new~class~id\n");
             assert_eq!(
-                both_engines(&source),
+                run_source(&source),
                 (0, format!("{class}\n"), String::new()),
                 "{class}"
             );
@@ -9646,7 +9639,7 @@ mod tests {
             ("Supplier", 163, "Error 93.903:"),
             ("WeakReference", 163, "Error 93.903:"),
         ] {
-            let (code, stdout, stderr) = both_engines(&format!("say .{class}~new\n"));
+            let (code, stdout, stderr) = run_source(&format!("say .{class}~new\n"));
             assert_eq!((code, stdout.as_str()), (status, ""), "{class}");
             assert!(stderr.contains(catalogue), "{class}: {stderr:?}");
         }
@@ -9659,14 +9652,14 @@ mod tests {
     fn a_constructor_taking_arguments_answers_an_instance_and_refuses_its_state() {
         let message = ".Message~new(.Object~new, 'STRING')";
         assert_eq!(
-            both_engines(&format!("o = {message}\nsay o~class~id\n")),
+            run_source(&format!("o = {message}\nsay o~class~id\n")),
             (0, "Message\n".to_string(), String::new())
         );
-        let (code, stdout, stderr) = both_engines(&format!("o = {message}\nsay o~send\n"));
+        let (code, stdout, stderr) = run_source(&format!("o = {message}\nsay o~send\n"));
         assert_eq!((code, stdout.as_str()), (120, ""));
         assert!(stderr.starts_with("rexx-exec: "), "{stderr:?}");
         assert_eq!(
-            both_engines("o = .MutableBuffer~new('abc')\nsay o~class~id\nsay o~length\n"),
+            run_source("o = .MutableBuffer~new('abc')\nsay o~class~id\nsay o~length\n"),
             (0, "MutableBuffer\n3\n".to_string(), String::new())
         );
         // `WeakReference` keeps its referent and reads it back, so it is a
@@ -9674,7 +9667,7 @@ mod tests {
         // is not visible here and cannot be -- nothing on this path collects;
         // `tests/collect_stress.rs` carries that half.
         assert_eq!(
-            both_engines(
+            run_source(
                 "k = .Object~new\n\
                  o = .WeakReference~new(k)\n\
                  say o~class~id (o~value == k) o~value~class~id\n"
@@ -9686,7 +9679,7 @@ mod tests {
         // test's refusal rows exist to catch; it now keeps them in the
         // receiver's own pool and walks them.
         assert_eq!(
-            both_engines(
+            run_source(
                 "o = .Supplier~new(.Array~of('i'), .Array~of('x'))\n\
                  say o~class~id o~available o~item o~index\n"
             ),
@@ -9697,11 +9690,11 @@ mod tests {
         // receiver-side comparison stays an identity test, which is the
         // oracle's `0` beside the `1` the other operand order answers.
         assert_eq!(
-            both_engines("say .MutableBuffer~new('abc')\n"),
+            run_source("say .MutableBuffer~new('abc')\n"),
             (0, "abc\n".to_string(), String::new())
         );
         assert_eq!(
-            both_engines(
+            run_source(
                 "buf = .MutableBuffer~new('abc')\n\
                  say (buf == 'abc') ('abc' == buf) (buf = 'abc') ('abc' = buf)\n"
             ),
@@ -9710,8 +9703,7 @@ mod tests {
         // `~result` on a message nothing has sent blocks the oracle, so this
         // is a refusal rather than an answer; `~completed` and `~hasError`
         // beside it are the oracle's own `0`.
-        let (code, stdout, stderr) =
-            both_engines("say .Message~new(.Object~new, 'STRING')~result\n");
+        let (code, stdout, stderr) = run_source("say .Message~new(.Object~new, 'STRING')~result\n");
         assert_eq!((code, stdout.as_str()), (120, ""));
         assert_eq!(
             stderr,
@@ -9719,7 +9711,7 @@ mod tests {
              implemented (Phase 6)\n"
         );
         assert_eq!(
-            both_engines(
+            run_source(
                 "m = .Message~new(.Object~new, 'STRING')\n\
                  say m~completed m~hasError\n"
             ),
@@ -9732,7 +9724,7 @@ mod tests {
     #[test]
     fn a_new_directory_reads_nil_until_an_entry_is_put_there() {
         assert_eq!(
-            both_engines(
+            run_source(
                 "d = .Directory~new\n\
                  say d['X'] d~at('X') d~zork\n\
                  d~put('v','X')\n\
@@ -9762,7 +9754,7 @@ mod tests {
     #[test]
     fn a_directory_subclass_keeps_the_instance() {
         assert_eq!(
-            both_engines(
+            run_source(
                 "o = .K~new\n\
                  say o~class~id o~isA(.Directory) o~peek\n\
                  ::class K subclass Directory\n\
@@ -9776,7 +9768,7 @@ mod tests {
             ),
             (0, "K 1 5\n".to_string(), String::new())
         );
-        let (code, stdout, stderr) = both_engines(
+        let (code, stdout, stderr) = run_source(
             "o = .Directory~subclass('K')~new\n\
              o['A'] = 1\n\
              say o['A']\n",
@@ -9789,7 +9781,7 @@ mod tests {
     #[test]
     fn a_stem_receiver_answers_stem_and_renders_its_own_value() {
         assert_eq!(
-            both_engines(
+            run_source(
                 "s. = 'dflt'\n\
                  o = s.\n\
                  say o~class~id o~isA(.Stem) o~objectName o~defaultName\n\
@@ -9802,7 +9794,7 @@ mod tests {
             )
         );
         assert_eq!(
-            both_engines(
+            run_source(
                 "say '[' || .Stem~new || ']' '[' || .Stem~new('FOO.') || ']'\n\
                  say .Stem~new~class~id .Stem~new('FOO.')~string\n"
             ),
@@ -9814,7 +9806,7 @@ mod tests {
         // and `items` counts only the tails that hold something.
         for (send, answer) in [("o~at(1)", "dflt"), ("o[1]", "dflt"), ("o~items", "0")] {
             assert_eq!(
-                both_engines(&format!("s. = 'dflt'\no = s.\nsay {send}\n")),
+                run_source(&format!("s. = 'dflt'\no = s.\nsay {send}\n")),
                 (0, format!("{answer}\n"), String::new()),
                 "{send}"
             );
@@ -9822,7 +9814,7 @@ mod tests {
         // A subclass would need the body to carry a class of its own, which
         // `Body::Stem` does not, so the constructor refuses rather than
         // answering an object whose `~class~id` is `Stem`.
-        let (code, stdout, stderr) = both_engines("say .K~new~class~id\n::class K subclass Stem\n");
+        let (code, stdout, stderr) = run_source("say .K~new~class~id\n::class K subclass Stem\n");
         assert_eq!((code, stdout.as_str()), (120, ""));
         assert_eq!(
             stderr,
@@ -9836,7 +9828,7 @@ mod tests {
     #[test]
     fn a_string_table_subclass_answers_its_own_class_methods_and_entries() {
         assert_eq!(
-            both_engines(
+            run_source(
                 "say .TraceObject~new~class~id .TraceObject~new~hasMethod('makeString')\n\
                  say .StringTable~new~class~id .StringTable~new~hasMethod('makeString')\n"
             ),
@@ -9847,7 +9839,7 @@ mod tests {
             )
         );
         assert_eq!(
-            both_engines(
+            run_source(
                 "o = .TraceObject~new\n\
                  say o['OPTION'] o['NUMBER'] o~at('NUMBER') o['TIMESTAMP']~class~id\n"
             ),
@@ -9863,7 +9855,7 @@ mod tests {
         for class in ["EventSemaphore", "MutexSemaphore"] {
             let source = format!("o = .{class}~new\nsay 'built'\n");
             assert_eq!(
-                both_engines(&source),
+                run_source(&source),
                 (0, "built\n".to_string(), String::new()),
                 "{class}"
             );
@@ -9875,7 +9867,7 @@ mod tests {
     #[test]
     fn array_of_fills_its_slots_from_its_arguments() {
         assert_eq!(
-            both_engines(
+            run_source(
                 "say .array~of(1,2,3)~size .array~of(1,2,3)~items .array~of(1,2,3)~dimension\n\
                  say .array~of()~size .array~of()~items .array~of()~dimension\n\
                  say .array~of(1,,3)~size .array~of(1,,3)~items\n\
@@ -9899,7 +9891,7 @@ mod tests {
     #[test]
     fn array_of_on_a_subclass_answers_an_instance_of_it() {
         assert_eq!(
-            both_engines("k = .array~subclass('K')\nsay k~of(1,2)~size\nsay k~of(1,2)~class~id\n"),
+            run_source("k = .array~subclass('K')\nsay k~of(1,2)~size\nsay k~of(1,2)~class~id\n"),
             (0, "2\nK\n".to_string(), String::new())
         );
     }
@@ -9917,7 +9909,7 @@ mod tests {
             "a = (1,2)\nsay a~at((,,3))\n",
             "a = (1,2)\nsay a[(,2)]\n",
         ] {
-            let (code, stdout, stderr) = both_engines(source);
+            let (code, stdout, stderr) = run_source(source);
             assert_eq!((code, stdout.as_str()), (120, ""), "{source:?}");
             assert_eq!(
                 stderr, "rexx-exec: an array subscript that is an empty slot is not implemented\n",
@@ -9927,17 +9919,17 @@ mod tests {
         // The neighbouring successes: one item spread from a two-slot array,
         // two items spread from a three-slot one, and an empty spread.
         assert_eq!(
-            both_engines(
+            run_source(
                 "a = (1,2)\n\
                  say a~at((1,))\n\
                  say a[(2,)]\n"
             ),
             (0, "1\n2\n".to_string(), String::new())
         );
-        let (code, stdout, stderr) = both_engines("a = (1,2)\nsay a~at((1,,3))\n");
+        let (code, stdout, stderr) = run_source("a = (1,2)\nsay a~at((1,,3))\n");
         assert_eq!((code, stdout.as_str()), (163, ""));
         assert!(stderr.contains("Error 93.926:"), "{stderr:?}");
-        let (code, stdout, stderr) = both_engines("a = (1,2)\nsay a~at((,))\n");
+        let (code, stdout, stderr) = run_source("a = (1,2)\nsay a~at((,))\n");
         assert_eq!((code, stdout.as_str()), (163, ""));
         assert!(stderr.contains("Error 93.901:"), "{stderr:?}");
     }
@@ -9976,7 +9968,7 @@ mod tests {
                 "Error 93.959:  An array cannot contain more than 100000000000000000 elements.",
             ),
         ] {
-            let (code, stdout, stderr) = both_engines(source);
+            let (code, stdout, stderr) = run_source(source);
             assert_eq!((code, stdout.as_str()), (163, ""), "{source:?}");
             assert!(stderr.contains(message), "{source:?} {stderr:?}");
         }
@@ -9986,7 +9978,7 @@ mod tests {
     #[test]
     fn new_on_a_subclass_of_array_answers_an_instance_of_it() {
         assert_eq!(
-            both_engines(
+            run_source(
                 "k = .array~subclass('K')\nsay k~id\nsay k~new(2,3)~size\nsay k~new~class~id\n"
             ),
             (0, "K\n6\nK\n".to_string(), String::new())
@@ -10000,7 +9992,7 @@ mod tests {
     #[test]
     fn a_hash_collection_forwards_a_missing_name_to_its_own_unknown() {
         assert_eq!(
-            both_engines(
+            run_source(
                 "say .environment~nosuch\n\
                  say .local~nosuch\n\
                  say .methods~nosuch\n\
@@ -10012,7 +10004,7 @@ mod tests {
                 String::new()
             )
         );
-        let (code, stdout, stderr) = both_engines("say 'abc'~nosuch\n");
+        let (code, stdout, stderr) = run_source("say 'abc'~nosuch\n");
         assert_eq!((code, stdout.as_str()), (159, ""));
         assert!(stderr.contains("Error 97.1:"), "{stderr:?}");
     }
@@ -10027,7 +10019,7 @@ mod tests {
             ".local~\"MYTHING=\"(,)\n",
             ".methods~\"Q=\"()\n::method z\n",
         ] {
-            let (code, stdout, stderr) = both_engines(source);
+            let (code, stdout, stderr) = run_source(source);
             assert_eq!((code, stdout.as_str()), (120, ""), "{source:?}");
             assert!(
                 stderr.starts_with("rexx-exec: an entry-method assignment to ")
@@ -10036,7 +10028,7 @@ mod tests {
             );
         }
         assert_eq!(
-            both_engines(
+            run_source(
                 ".local~\"MYTHING=\"('v')\n\
                  say .MYTHING\n\
                  .local~MYTHING = 'w'\n\
@@ -10051,7 +10043,7 @@ mod tests {
     /// that is a loud refusal rather than a class built from `.Class`'s path.
     #[test]
     fn a_metaclass_with_its_own_new_is_loud() {
-        let (code, stdout, stderr) = both_engines(
+        let (code, stdout, stderr) = run_source(
             "say 'id' .object~subclass(\"k\", .MyMeta)~id\n\
              ::CLASS MyMeta SUBCLASS Class\n\
              ::METHOD new CLASS\n\
@@ -10063,7 +10055,7 @@ mod tests {
             "rexx-exec: method \"NEW\" of class \"MYMETA\" is not implemented (Phase 5)\n"
         );
         assert_eq!(
-            both_engines(
+            run_source(
                 "say 'id' .object~subclass(\"k\", .MyMeta)~id\n\
                  ::CLASS MyMeta SUBCLASS Class\n"
             ),
@@ -10076,7 +10068,7 @@ mod tests {
     #[test]
     fn the_package_tables_hold_what_their_directives_declare() {
         assert_eq!(
-            both_engines(
+            run_source(
                 "say .resources~class\n\
                  say .resources~x~class\n\
                  say .resources~x~items\n\
@@ -10098,7 +10090,7 @@ mod tests {
             )
         );
         assert_eq!(
-            both_engines(
+            run_source(
                 "say .resources~x~items\n\
                  say '[' || .resources~x || ']'\n\
                  ::resource x\n\
@@ -10114,11 +10106,11 @@ mod tests {
     #[test]
     fn an_unknown_sent_by_hand_needs_an_array_this_crate_does_not_convert() {
         assert_eq!(
-            both_engines("say .environment~unknown('ARRAY', .Array~superClasses)\n"),
+            run_source("say .environment~unknown('ARRAY', .Array~superClasses)\n"),
             (0, "The Array class\n".to_string(), String::new())
         );
         assert_eq!(
-            both_engines("say .environment~unknown('ARRAY', 'y')\n"),
+            run_source("say .environment~unknown('ARRAY', 'y')\n"),
             (
                 120,
                 String::new(),
@@ -10138,7 +10130,7 @@ mod tests {
             ("say .environment['ENDOFLINE']\n", "Phase 5"),
             ("say .local['STDOUT']\n", "Phase 7"),
         ] {
-            let (code, stdout, stderr) = both_engines(source);
+            let (code, stdout, stderr) = run_source(source);
             assert_eq!((code, stdout.as_str()), (120, ""), "{source:?}");
             assert!(
                 stderr.starts_with("rexx-exec: directory entry ")
@@ -10147,7 +10139,7 @@ mod tests {
             );
         }
         assert_eq!(
-            both_engines(
+            run_source(
                 "say .environment['STDOUT']\n\
                  say .local['ALARM']\n\
                  say .environment['ARRAY']~id\n"
@@ -10159,7 +10151,7 @@ mod tests {
             )
         );
         assert_eq!(
-            both_engines(
+            run_source(
                 "d = .local\n\
                  d~put('mine', 'STDOUT')\n\
                  say d['STDOUT']\n"
@@ -10199,7 +10191,7 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                both_engines(source),
+                run_source(source),
                 (120, String::new(), message.to_string()),
                 "{source:?}"
             );
@@ -10218,7 +10210,7 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                both_engines(source),
+                run_source(source),
                 (0, expected.to_string(), String::new()),
                 "{source:?}"
             );
@@ -10246,7 +10238,7 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                both_engines(source),
+                run_source(source),
                 (120, String::new(), message.to_string()),
                 "{source:?}"
             );

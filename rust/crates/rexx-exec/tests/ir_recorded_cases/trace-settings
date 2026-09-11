@@ -1,34 +1,6 @@
 # Programs whose TRACE setting is not the one the body was first entered
 # under, which is the axis a compiled-in emission decision can get wrong and
 # no other case table exercises.
-#
-# The setting decides which trace ops a body compiles to, so every row here
-# is a place where the setting in force when a clause runs can differ from
-# the setting the chunk carrying that clause was compiled under. Two ways
-# that happens, and both directions of each: a TRACE executed inside the
-# body after the chunk exists, and the same body entered again under a
-# different setting.
-#
-# These are boundary cases, not shapes. A promoted clause is where the echo
-# is decided, so each row puts the setting change immediately before one --
-# an IF header, a SELECT header, a listed WHEN -- rather than before an
-# ordinary clause, which the tree-walker's own gate answers whatever the
-# compiler does.
-#
-# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, and every
-# row passed with nothing promoted, which is what says a row can tell
-# whether it would ever have failed. Regenerate a row by running its program
-# under the oracle, never with REWRITE=1 -- ir_recorded.rs refuses to run at all
-# under REWRITE for that reason. Capture is:
-#
-#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
-#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
-#
-# Expected lines are tagged so that no line of the block can be empty: an
-# empty line ends an expected block, and a program's own output may hold
-# one. Trailing blanks are part of what is compared -- an IF header's *-*
-# echo ends in one -- and are preserved verbatim by both this format and the
-# comparison.
 
 # trace turned on inside a branch, before a later if
 # The chunk is compiled untraced -- the body's own TRACE runs after it
@@ -123,10 +95,6 @@ err>      4 *-* exit
 # TRACE runs, so the chunk is the silent one; here the body is *entered*
 # with trace r in force, so its chunk carries an echo op per promoted
 # clause and the trace n inside it has to withdraw them.
-#
-# The `3 *-* exit` line is the surrounding evidence that the withdrawal is
-# per activation: trace n ran in the callee's, and the caller's own next
-# clause echoes.
 program
 trace r
 call sub

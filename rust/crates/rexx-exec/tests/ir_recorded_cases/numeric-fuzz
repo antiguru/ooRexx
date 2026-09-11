@@ -1,36 +1,4 @@
 # What `NUMERIC FUZZ` does, including in the state only its own reset reaches.
-#
-# **`NUMERIC DIGITS` with no operand makes the same check the operand form
-# makes.** `NumericInstruction.cpp`'s no-operand arm is
-# `if (defaultDigits <= context->fuzz())` before `setDigits`, and the value it
-# names in the message is the default rather than the setting in force -- so
-# with FUZZ 20 in force the refusal reads `("9") must exceed ... ("20")`. The
-# ANSI draft agrees: `X3J18-199X` 8.3.15.1 gives the no-operand form `Value = 9`
-# and then runs the same `if Value<=#Fuzz.#Level then #Raise 'SYNTAX',33.1`.
-# `NUMERIC FUZZ` with no operand is guarded the same way,
-# `if (defaultFuzz >= context->digits())`.
-#
-# **So the rows here reach FUZZ at or above DIGITS by refusing, not by running.**
-# Probed for another route on 2026-08-20 and none was found: `::OPTIONS FUZZ 20`
-# and `interpret "numeric digits"` both raise 33.1, and a `procedure` inherits a
-# pair that already satisfies the rule. That is a failed search rather than a
-# proof, so `compare.rs`'s `numeric_order` keeps its handling of the state; what
-# it no longer has is a witness at this level.
-#
-# **A comparison of two integer objects inside DIGITS reads FUZZ.**
-# `RexxInteger::comp` (`interpreter/classes/IntegerClass.cpp`) subtracts them
-# directly only while `number_fuzz()` is zero, and anything else -- including a
-# non-zero FUZZ over two plain integers -- falls to `NumberString::comp`. Each
-# row that takes the exact path is paired with the nearest row that does not --
-# the same digits spelled with a decimal point, one digit too wide for DIGITS,
-# or built by a builtin the interpreter builds a string for -- because at
-# `FUZZ 0` the pairing is what pins the rule to which object a value is rather
-# than to what it is worth.
-#
-# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE. Capture is:
-#
-#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
-#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
 
 # the reset refuses rather than storing a default that would sit under FUZZ, and
 # the rejected value it names is the default (9) rather than the 30 in force.

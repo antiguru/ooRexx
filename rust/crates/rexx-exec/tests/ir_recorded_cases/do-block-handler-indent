@@ -1,57 +1,5 @@
 # The trace indent a CALL ON handler is given when it is delivered at a plain
-# DO's own two clause boundaries, pinned on the tree-walker's own bytes.
-#
-# A plain `DO` has a header clause and an `END` clause, and each settles the
-# block indent a handler delivered there inherits. The two settle different
-# values: the header clause has opened the block, so it settles a level in from
-# the `DO`'s own indent; the `END` clause has closed it again, so it settles the
-# `DO`'s own. `Interp::settle_block_indent` is what each calls, and its `open`
-# argument is the whole of the difference -- a level being two columns.
-#
-# **The settled indent is not the column a handler's clauses echo at.** A
-# handler activation echoes a level in from the block indent it inherits --
-# visible in every row below -- so each row's handler sits two columns deeper
-# than the value its boundary settled. Column 0 is where the `call on` clauses
-# at the top of each row echo, outside every block, and the columns each row's
-# note names are read against those.
-#
-# **What each row is for.** The two top-level rows separate the arguments: each
-# is built so that only its own boundary delivers a handler, and measured,
-# flipping either `open` argument in `run_loop_with_header`'s `LoopKind::Simple`
-# arm moves that argument's own row and leaves the other byte-identical, on both
-# engines. The nested row separates `do_indent` from the constant it happens to
-# equal at top level: its `DO` sits inside another block, so `do_indent` is 2
-# rather than 0, and a site that ignored `do_indent` and passed a literal `0`
-# would match both top-level rows. It delivers a handler at both boundaries, so
-# it is not selective between the two arguments; that is what the rows above it
-# are for.
-#
-# **The oracle differential cannot see any of this**, which is why the witness
-# is here: `tests/support/mod.rs` normalises the width of a trace line's indent,
-# and measured, `corpus_differential` in STRICT passes under either `open` flip
-# and under a literal `0` at either site.
-#
-# What these rows do not pin: which argument carries the level. Only the settled
-# indent reaches the handler, so `settle_block_indent(false, do_indent + 2)` at
-# the header would produce these same bytes. Nor do they tell `do_indent` from
-# the `end_indent` computed for the `END`'s own echo -- measured, passing that
-# instead at the `END` site leaves every row below byte-identical. No row
-# contains a repeating loop, so none says anything about the block indent a
-# repeating `DO` settles.
-#
-# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE. Regenerate a
-# row by running its program under the oracle, never with REWRITE=1 --
-# `both_engines_agree_on_every_case_file` refuses to run under REWRITE for that
-# reason. Run from a fresh empty directory, use an absolute path for the program
-# and for every redirect, and capture the three descriptors separately, never
-# merged:
-#
-#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
-#     <ooRexx>/build/bin/rexx <absdir>/PROGRAM.rex </dev/null ) \
-#     > <absdir>/out 2> <absdir>/err
-#
-# and write the block as `rc> <exit status>`, then every line of `out` tagged
-# `out>`, then every line of `err` tagged `err>`.
+# DO's own two clause boundaries, pinned on the oracle's own bytes.
 
 # Delivered at the DO's header clause. `zn = ra()` queues zx, its own boundary
 # runs `h`, and `h` requeues zy -- which the next boundary owes, and the next
@@ -162,11 +110,6 @@ err>        >>>   "0"
 # settles 2 and `m:` echoes at column 4. Measured, replacing `do_indent` with a
 # literal `0` at either site moves that site's own handler two columns out --
 # `g:` to 4, or `m:` to 2 -- and leaves the two rows above byte-identical.
-#
-# Two independent chains reach the two boundaries. zx is queued before the inner
-# `DO` and `h`'s requeue of zy lands at its header; zw is queued by the inner
-# body clause and `k`'s requeue of zv lands at the inner `END`. The outer block's
-# own two boundaries deliver nothing.
 program
 trace r
 call on user zx name h

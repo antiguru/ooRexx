@@ -1,47 +1,4 @@
 # What promoting an assignment and a SAY has to keep, in three kinds.
-#
-# **Shapes**, which ask what the instruction does: an assignment to a simple
-# symbol, to a whole stem, and to a compound whose tail is computed from a
-# variable; a SAY of a literal, of an expression, and of nothing at all.
-#
-# **Trace**, which is where a native expression op diverges first and where no
-# other instrument in this crate can see it. `eval.rs` emits a literal's `>L>`
-# line as a side effect of evaluating the literal; an op that only loads a
-# constant into a register does not, and every line after it still matches --
-# so only an exact stderr comparison catches the missing line, which is what
-# these rows are. Both directions are here: `trace i` rows require the `>L>`
-# line, and a `trace r` row requires its absence, because an emission that
-# ignored its own gate would print it under every setting.
-#
-# **Boundaries**, which ask whether the clause unit is discharged exactly once
-# where a promoted clause opens one -- the axis a table of shapes does not
-# reach. A CALL ON handler queued by the value expression has to run at that
-# instruction's own boundary, after the write and before the next clause; a
-# handler that fails there makes this clause the one blamed; and a handler that
-# itself RAISEs leaves a second trap queued behind it, which `in_clause`
-# delivers at the *next* boundary rather than at this one, so the second
-# delivery's SIGL says which clause took it.
-#
-# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, and every row
-# was measured to produce the identical bytes on both engines before the
-# instructions were promoted -- which is what says a row can tell whether it
-# would ever have failed. Regenerate a row by running its program under the
-# oracle, never with REWRITE=1 -- ir_recorded.rs refuses to run at all under
-# REWRITE for that reason. Capture is:
-#
-#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
-#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
-#
-# Expected lines are tagged so that no line of the block can be empty: an empty
-# line ends an expected block, and a program's own output may hold one -- a
-# bare SAY's does. Trailing blanks are part of what is compared: a clause echo
-# whose instruction ends at a keyword has one.
-#
-# `/nonexistent/ir-dual-case.rex` is `ir_recorded.rs`'s own INLINE_PATH, which a
-# raised condition's middle line prints. It is written out rather than stood in
-# for, because these blocks are compared verbatim and nothing substitutes into
-# them; running the same program under the oracle prints the oracle's own path
-# there instead.
 
 # assignment to a simple symbol
 program
@@ -439,9 +396,8 @@ rc> 0
 out> novalue 2
 
 # an assignment and a SAY inside an INTERPRET fragment
-# A fragment compiles to no chunk at all, so its clauses stay on the
-# tree-walker under both engines -- this says the two instructions still work
-# from the arm the promotion left in place.
+# A fragment compiles to a chunk of its own, and this says the two
+# instructions still work from inside one.
 program
 interpret "zq = 'frag'; say zq"
 say 'after'

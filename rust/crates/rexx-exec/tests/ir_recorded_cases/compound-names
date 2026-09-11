@@ -1,35 +1,4 @@
 # How a compound variable's name splits, one shape of the split per row.
-#
-# `Plan::compounds` records the split of a compound-shaped name once, at plan
-# build time, and `Interp::tail_key` reads it instead of splitting the interned
-# spelling at every reference. A name splits into a stem and pieces; a piece is
-# a constant when it is empty or starts with a digit and a variable otherwise;
-# a variable piece contributes its *current value*, verbatim and
-# case-sensitively; and the pieces join with periods.
-#
-# **Every row here is a transcript and claims nothing about what it catches,
-# except the fragment row.** That one is a measured witness: with the compound
-# half of a fragment's `Code` pointed at the enclosing body's plan, it is the
-# only red test in the workspace, and with this file taken out of the directory
-# under that same mutation nothing reddens at all. Its own stanza header says
-# how it is arranged and what the mutation prints.
-#
-# The neighbouring rows were checked for the same thing and do not have it.
-# `run.rs`'s `a_compound_control_variables_tail_re_resolves_every_pass` already
-# covered the `DO`-control shape before this file existed. The changing-tail row
-# describes a wrong implementation this crate does not have -- a table caching
-# the resolved key rather than the split -- so there is nothing here to mutate
-# into it, and no mutation was run for it.
-#
-# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE. Regenerate a
-# row by running its program under the oracle, never with REWRITE=1 --
-# ir_recorded.rs refuses to run at all under REWRITE for that reason. Capture is:
-#
-#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
-#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
-#
-# Expected lines are tagged so that no line of the block can be empty: an empty
-# line ends an expected block, and a program's own output may hold one.
 
 # a constant tail, set and unset
 # `zc.9` was never written, so it derives its own fully resolved spelling.
@@ -155,17 +124,6 @@ out> 30
 out> 10 20 30
 
 # a fragment's compound read against the ENCLOSING body's split table
-#
-# The row that makes the cross-table hazard loud rather than quiet. A
-# fragment's ids belong to its own `SymbolTable`, so indexing the enclosing
-# body's split table with one is either out of range -- which answers nothing
-# and falls back -- or in range, which answers a different symbol's split and
-# says nothing at all. This program arranges the in-range case: `za.1` is the
-# enclosing body's first interned symbol, and the fragment's own first is its
-# compound, so a fragment reading the enclosing table finds `ZA.`'s split under
-# its own compound's id and writes through the wrong stem. Measured, a build
-# that hands the fragment the enclosing plan prints `ZB.5 / in / ZC.1 / ZC.2 /
-# 2` here: every line wrong, and every line right in the rows above it.
 program
 za.1 = 'first'
 zi = 5
@@ -206,15 +164,6 @@ out> 1 ZB.K
 out> 2 ZB.K
 
 # a tail piece introduced by an INTERPRET, on both sides of the slot question
-#
-# The first half is a piece the enclosing plan does hold: `zv.zi` puts `ZI` on
-# a slot, the fragment's `zi = 4` resolves that same name and writes the same
-# slot, and the read after it sees 4. The second half is a piece the plan holds
-# no slot for at all: `do za.zk` binds the whole `ZA.ZK` and nothing named
-# `ZK`, so the fragment's `zk = 9` binds `ZK` in the activation's run-time
-# bindings instead, and the loop's tail resolves through those on every pass.
-# `3` and not `2` because a controlled loop leaves its control variable holding
-# the value that failed the test, and that final write goes to the same tail.
 program
 interpret "zi = 4"
 zv.zi = 'via fragment'
@@ -233,14 +182,6 @@ out> 3
 
 # one compound read either side of a DROP of its tail variable, and of its own
 # tail
-#
-# `drop (zn)` names its target by `zn`'s *value*, at run time. The piece it
-# drops is `ZI`, which the plan does hold a slot for, so the drop clears that
-# slot rather than binding anything new -- and the read after it finds the
-# piece unset and derives `ZI`, which keys a tail that was never written.
-# Setting `zi` again reaches the original tail, so the drop moved the key and
-# not the tail. The last pair is the tail's own `DROP`: a tombstone, which
-# derives the resolved name rather than falling back to a stem default.
 program
 zi = 1
 zv.zi = 'one'
@@ -260,14 +201,6 @@ out> one
 out> ZV.1
 
 # a stem's own operations, with compound reads through it on either side
-#
-# The stem half of the split, which a compound reference resolves before it
-# resolves any tail. `zs. = 'dflt'` replaces the whole object and gives it a
-# default, so an unwritten tail answers `dflt` and the bare stem renders as
-# that default rather than as its own name; a written tail answers what was
-# written. `drop zs.` replaces the object again with an empty one, after which
-# the same tail derives its resolved name and the bare stem renders its own.
-# A transcript, claiming nothing about what it catches.
 program
 zs. = 'dflt'
 zi = 1
@@ -290,13 +223,6 @@ out> ZS.
 out> two ZS.9
 
 # PROCEDURE EXPOSE of a stem, written through on both sides of the call
-#
-# The exposed name is the stem alone, so the callee's own plan holds `ZP.` and
-# reaches the caller's object through the alias; the tail is resolved
-# separately in each body, against that body's own `ZJ`/`ZI`. The write the
-# callee makes under its own tail is therefore visible to the caller under a
-# different tail of the one stem. A transcript, claiming nothing about what it
-# catches.
 program
 zi = 3
 zp.zi = 'outer'
@@ -315,13 +241,6 @@ out> outer
 out> outer inner
 
 # a compound inside an INTERPRET, on both sides of the stem's slot question
-#
-# `ZQ.` is a stem the enclosing body names for itself, so the enclosing plan
-# holds it; the fragment resolves the same spelling to the same place and the
-# reads after it see the fragment's write. `ZR.` is named by no line of the
-# enclosing body at all, so the plan never holds it and both fragments reach it
-# through the activation's run-time bindings instead. A transcript, claiming
-# nothing about what it catches.
 program
 interpret "zq.1 = 'frag'"
 say zq.1

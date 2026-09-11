@@ -90,7 +90,7 @@ mod parse_template;
 
 // `TRACE` (D17): the mode, the nine reachable prefixes' own byte formatting,
 // and the classification a `TRACE`/`TRACE VALUE` setting goes through to
-// become one. `run.rs`'s `step_in_temps_frame` and its loop drivers, and
+// become one. The `Op::Clause` region and its loop drivers, and
 // `eval.rs`'s `eval`, own *when* to call into this module; this module owns
 // only the bytes.
 mod trace;
@@ -166,8 +166,8 @@ pub struct Outcome {
     /// How many times `Heap::collect` ran during this program.
     pub collections: u64,
     /// How many times the run declined to compile a body because it does not
-    /// fit the compiled stream's index widths, and ran it on the tree-walker
-    /// instead.
+    /// fit the compiled stream's index widths. Such a body raises
+    /// [`Loud::chunk_refused`]; there is no second engine to run it.
     pub chunks_refused: usize,
 }
 
@@ -555,7 +555,7 @@ impl Loud {
         }
     }
 
-    /// A body the compiler refused, which used to run on the tree-walker.
+    /// A body the compiler refused.
     fn chunk_refused() -> Loud {
         Loud {
             message: "a body does not fit the compiled stream's index widths, and there is no \
@@ -1731,7 +1731,7 @@ struct Interp {
     /// **absorbed** `WhenCase` needs that nothing else threads to it: a
     /// *listed* `WhenCase` gets `case_text` handed to it directly by
     /// `Select`'s own explicit arm (`run.rs`), but an absorbed one (a
-    /// `WhenCase` reached only through ordinary `step_in_temps_frame`
+    /// `WhenCase` reached only through ordinary `Op::Clause`'s region
     /// stepping, because it is itself the `THEN` consequence of a
     /// preceding `WHEN`/`WHEN CASE`, `ast.rs`'s own doc comment on
     /// `whens`) has no such hand-off -- it is stepped like any other
@@ -4606,7 +4606,7 @@ pub fn render_ir(text: Vec<u8>, setting: &[u8]) -> Result<String, String> {
         let plan = plan::Plan::build(body, &program.symbols, Some(&program.source), kind);
         match ir::compile(body, &plan, trace) {
             Ok(chunk) => out.push_str(&ir::render_annotated(&chunk, body, &program.source)),
-            Err(error) => out.push_str(&format!("(refused: {error:?}; runs on the tree-walker)\n")),
+            Err(error) => out.push_str(&format!("(refused: {error:?})\n")),
         }
     }
     Ok(out)
@@ -4759,7 +4759,7 @@ fn execute(
         if let Some(argument) = argument {
             let value = interp.text(&argument);
             // Rooted with a `push_temp` taken before `run`, which is what makes it
-            // outlive every clause: `step_in_temps_frame` truncates the
+            // outlive every clause: `Op::Clause`'s region truncates the
             // temporaries stack back to a watermark it takes on entry, and every
             // such watermark sits above this push. This is the same mechanism
             // `Interp::invoke_call` uses to keep a call's own arguments reachable

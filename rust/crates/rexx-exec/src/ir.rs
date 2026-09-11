@@ -136,7 +136,7 @@ pub(crate) enum Op {
         dst: u16,
     },
     /// Closes the branch control has just run off the end of: the clause
-    /// boundary a promoted construct owes where the tree-walker's own wrapper
+    /// boundary a promoted construct owes where wrapper
     /// around the whole arm runs one.
     EndBranch,
     /// Closes the [`Op::EnterWhen`]/[`Op::EnterOtherwise`] frame whose branch
@@ -239,16 +239,15 @@ pub(crate) enum Op {
     /// Runs the message-send clause at `index`: the receiver, the scope
     /// override, the arguments and their `>A>` lines, the send, the `>M>`
     /// line, and `RESULT`. All of it through `Interp::exec_message`, the
-    /// same function the tree-walker's own `step` arm calls.
+    /// same function `step` arm calls.
     Message { index: u32 },
     /// Binds the `EXPOSE` at `index` -- its names to the receiving object's
     /// pool for the running method's scope, through `Interp::exec_expose`,
-    /// which is the tree-walker's own arm.
+    /// which is arm.
     Expose { index: u32 },
     /// Runs the instruction at `index` through the arm of
     /// `Interp::exec_instruction` that its kind names -- the shared
-    /// implementation the tree-walker's own `step` reached, entered here
-    /// without `Interp::step_in_temps_frame` around it.
+    /// implementation named, entered without `Op::Clause`'s region around it.
     Exec { index: u32 },
     /// Answers the `Flow` the `LEAVE`/`ITERATE` at `index` resolves to: the
     /// instruction's own name, if it has one, and the [`crate::run::

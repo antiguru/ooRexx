@@ -92,11 +92,11 @@ impl Ended {
 }
 
 /// Who emits a stepped clause's own `*-*` line
-/// ([`Interp::in_stepped_clause_with`]).
+/// ([`crate::ir::Op::Clause`]).
 pub(crate) enum Echo {
     /// The clause unit asks [`Interp::tracing_clause`] and echoes if the
-    /// answer is yes. Every tree-walker clause, and a promoted clause whose
-    /// chunk was compiled under a setting that is no longer in force.
+    /// answer is yes: a clause whose chunk was compiled under a setting that
+    /// is no longer in force.
     Gated,
     /// The clause unit emits nothing: this clause's chunk already decided,
     /// and carries the decision as [`crate::ir::Op::TraceClause`] or as the
@@ -903,7 +903,7 @@ impl Interp {
 
     /// One instruction's own work, with the clause unit already discharged by
     /// whoever called: [`Interp::step`] takes the permission and enters from
-    /// `step_in_temps_frame`, and [`crate::ir::Op::Exec`] enters from inside
+    /// `Op::Clause`'s region, and [`crate::ir::Op::Exec`] enters from inside
     /// the [`crate::ir::Op::Clause`] region that already opened the clause.
     pub(crate) fn exec_instruction(
         &mut self,
@@ -981,7 +981,7 @@ impl Interp {
 
             // A label is a traced no-op: the C++'s own `execute` on a label
             // instruction only traces it (Task 13's own construct -- a
-            // `Label` clause is echoed here via `step_in_temps_frame`, same
+            // `Label` clause is echoed here via `Op::Clause`'s region, same
             // as any other instruction) and does nothing else besides.
             // `SIGNAL`/`CALL` reach a label by jumping to the instruction
             // after it; nothing ever executes the label node for its own
@@ -1108,7 +1108,7 @@ impl Interp {
             // is a `SELECT CASE`), then tests each of its own *listed*
             // `whens` in source order by reading the `When`/`WhenCase` node
             // directly as data (`condition`/`values`, `false_target`,
-            // `exit`) rather than dispatching through `step_in_temps_frame`
+            // `exit`) rather than dispatching through `Op::Clause`'s region
             // -- a *listed* `When`/`WhenCase` node (one collected into this
             // `whens` list, `ast.rs`'s own doc comment) must never be
             // independently stepped for a decision of its own, only ever
@@ -2884,7 +2884,7 @@ impl Interp {
         // `signal on syntax name nosuchlabel` with `say 1/0` on line 3
         // reports `Error 16.1 Label "NOSUCHLABEL" not found` against line 3
         // -- the raising clause's own site, which is still the one
-        // `step_in_temps_frame` recorded a moment ago and which the clearing
+        // `Op::Clause`'s region recorded a moment ago and which the clearing
         // below would have thrown away.
         let target = self.resolve_signal_target(&trap.label)?;
         let Failure::Raised(raised) = failure else {
@@ -2935,7 +2935,7 @@ impl Interp {
             sites,
         });
         // **The failed clause's own boundary, and the one place it can
-        // happen** (fix round 3). `step_in_temps_frame` ends a *completing*
+        // happen** (fix round 3). `Op::Clause`'s region ends a *completing*
         // clause; a clause that raised has not completed, and at that moment
         // nothing yet knows whether it will be trapped here or unwind the
         // activation. This is the point where that is decided in favour of
@@ -4248,7 +4248,7 @@ impl Interp {
         let frame = self.activation().frame;
         match value {
             Some(value) => {
-                // Re-rooted in the caller: `step_in_temps_frame` popped the
+                // Re-rooted in the caller: `Op::Clause`'s region popped the
                 // callee's temps frame around every clause it ran, this one
                 // included, so the `push_temp` the `RETURN` arm did is gone
                 // by now. Same window `Flow::Exit`'s own arm documents,
@@ -4311,7 +4311,7 @@ impl Interp {
     }
 
     /// Opens a stepped clause of `code`: everything
-    /// [`Interp::in_stepped_clause_with`] owes before the clause's own work
+    /// [`crate::ir::Op::Clause`] owes before the clause's own work
     /// runs.
     #[inline(always)]
     #[allow(
@@ -4447,7 +4447,7 @@ impl Interp {
     }
 
     /// Closes the stepped clause `entry` opened, around `ran` -- everything
-    /// [`Interp::in_stepped_clause_with`] owes once the clause's own work has
+    /// [`crate::ir::Op::Clause`] owes once the clause's own work has
     /// run.
     #[inline(always)]
     pub(crate) fn leave_stepped_clause<T: ClauseValue>(
@@ -4487,7 +4487,7 @@ impl Interp {
         // same clause that owes the site. Recording it twice is harmless --
         // `record_failure_at`'s first-wins guard makes the second call a
         // no-op -- and recording it in neither place is what the measurement
-        // in `in_stepped_clause_with`'s doc comment describes.
+        // in `Op::Clause`'s region's doc comment describes.
         if outcome.is_err() {
             self.record_failure_site(code, index, source, instruction);
         }
@@ -4672,7 +4672,7 @@ impl Interp {
             // doc comment: eagerly, before any propagation), so it needs
             // the identical addition independently, not by inheritance.
             indent: self.printed_indent(code, index),
-            // Already this instruction's own line: `step_in_temps_frame`'s
+            // Already this instruction's own line: `Op::Clause`'s region's
             // `in_clause` set it before dispatching this `step`, through the
             // same `clause_line` call `SIGL` reads.
             clause_line: self.clause_state.line(),
@@ -4702,8 +4702,7 @@ impl Interp {
     }
 
     /// The clause boundary a promoted construct owes once the branch it chose
-    /// has finished -- **the one `step_in_temps_frame` runs for the
-    /// tree-walker and flattening removed.**
+    /// has finished, which flattening removed.
     /// ```text
     /// call on user zx name h        /* h raises zy */
     /// call on user zy name g        /* g says SIGL */
@@ -4898,7 +4897,7 @@ impl Interp {
     }
 
     /// Runs `code.body.instructions[start..end]` in place, one instruction at
-    /// a time through `step_in_temps_frame`, and answers what happened.
+    /// a time through `Op::Clause`'s region, and answers what happened.
     fn run_bounded(
         &mut self,
         code: &Code<'_>,
@@ -5193,14 +5192,13 @@ impl Interp {
         engine: BodyEngine<'_>,
         values: LoopHeaderValues,
     ) -> Result<Flow, Failure> {
-        // **The refusal, for both engines, and it has to be here rather than
-        // in each engine's own entry.** `loop_header_plan` answers `None` for
+        // **The refusal, here rather than at the driver's own entry.**
+        // `loop_header_plan` answers `None` for
         // exactly the three forms this crate does not run, and every arm below
         // relies on that answer: `LoopKind::With` has no `LoopState`, and a
         // `COUNTER` or a stem `OVER` reaches an `expect` on a value nothing
         // evaluated. Measured, before this check existed: all three panicked on
-        // the compiled stream while failing loudly on the tree-walker, and no
-        // test in the workspace was red.
+        // the compiled stream, and no test in the workspace was red.
         if loop_header_plan(body).is_none() {
             return Err(Loud::instruction(&instruction.kind).into());
         }
@@ -5431,7 +5429,7 @@ impl Interp {
         // level), and `WHILE`/`UNTIL` both report two spaces *more* than
         // that (measured: `do while 1/0` at top level is indented two).
         // Captured from `current_value_indent` once, here, rather than
-        // recomputed: `step_in_temps_frame` already set it to exactly this
+        // recomputed: `Op::Clause`'s region already set it to exactly this
         // value (`indent_offset` included) for this same `DO`/`LOOP`
         // instruction, and every caller into this function reaches it
         // through nothing but `self.eval` calls in between (never another
@@ -5444,7 +5442,7 @@ impl Interp {
         // own clause -- and `END`'s -- echo again on every pass, unlike
         // every other construct in this crate, which resolves its whole
         // repetition inside one `step` call and so is stepped, and echoed,
-        // exactly once (`step_in_temps_frame`'s own doc comment). `false`
+        // exactly once (`Op::Clause`'s own doc comment). `false`
         // on entry because the *first* pass's echo already happened there,
         // before `run_loop_with_header` ever called into this function.
         let is_until_loop = matches!(conditional, Some(cond) if cond.until);
@@ -5491,7 +5489,7 @@ impl Interp {
                 // **A header that fails is blamed on the clause that
                 // transferred control back here, at the loop body's indent**
                 // -- not on the `DO` clause, which is where the enclosing
-                // `step_in_temps_frame` would put it (review round 1, F2).
+                // `Op::Clause`'s region would put it (review round 1, F2).
                 // Reachable since the control variable is genuinely re-read:
                 // a body that leaves it non-numeric fails the `BY` addition
                 // on the next re-test. Measured, three shapes, all `trace r`
@@ -5518,11 +5516,11 @@ impl Interp {
                     if let Some(cond) = conditional
                         && !cond.until
                     {
-                        // Overrides `step_in_temps_frame`'s own setting of
+                        // Overrides `Op::Clause`'s region's own setting of
                         // `current_value_indent` (to `do_indent`, from stepping
                         // the `DO`/`LOOP` instruction itself) -- `WHILE`'s own
                         // condition is evaluated here, inside that same `step`
-                        // call, never through a `step_in_temps_frame` of its own.
+                        // call, never through a `Op::Clause`'s region of its own.
                         it.clause_state.current_value_indent = loop_indent;
                         match it.eval_condition(
                             code,
@@ -6153,7 +6151,7 @@ impl Interp {
             }
             // Overrides what stepping the `DO`/`LOOP` instruction set:
             // `WHILE`'s condition is evaluated here, inside that same step,
-            // never through a `step_in_temps_frame` of its own.
+            // never through a `Op::Clause`'s region of its own.
             it.clause_state.current_value_indent = loop_indent;
             let held = match it.eval_condition(
                 code,
@@ -6406,7 +6404,7 @@ impl Interp {
                 let shape = *shape;
                 let re_tested = std::mem::replace(stepped, true);
                 // **One pass's own temps frame, released before the next pass
-                // opens one.** The enclosing `step_in_temps_frame` belongs to
+                // opens one.** The enclosing `Op::Clause`'s region belongs to
                 // the whole `DO` instruction, so without this every root
                 // pushed below survives until the *loop* ends rather than
                 // until the *pass* does -- one `ObjRef` per iteration, and
@@ -6858,7 +6856,7 @@ impl Interp {
             // this arm only for an expression `compile` did not emit a native
             // op for -- a literal is `crate::ir::Op::Const` and a bare symbol
             // is `crate::ir::Op::Load` instead -- and each is trace-identical
-            // to the tree-walker's own arm here because this is the same
+            // to arm here because this is the same
             // `eval` call it makes.
             // `SIGNAL VALUE`'s own expression, for the shapes `compile` emits
             // no native op for. The `>K>` echo and the search are

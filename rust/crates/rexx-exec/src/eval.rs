@@ -398,7 +398,7 @@ impl Interp {
                 // Bound rather than propagated with `?`, so the frame is
                 // popped on the failure path too -- an operator's own raise
                 // discards its operands here, where the `?` on an operand's
-                // evaluation above leaves them for `step_in_temps_frame` to
+                // evaluation above leaves them for `Op::Clause`'s region to
                 // truncate. The module doc has why both are safe.
                 let result = self.apply_binary(*op, left_value, right_value);
                 self.roots.pop_frame(frame);
@@ -2726,26 +2726,14 @@ mod tests {
 mod object_operand_tests {
     use crate::{Invocation, run_program};
 
-    /// Runs `source` on both engines and hands back `(exit code, stdout,
-    /// stderr)`, having first insisted the two engines agree with each other.
-    fn both_engines(source: &[u8]) -> (i32, String, String) {
-        let mut answer = None;
+    /// Runs `source` and hands back `(exit code, stdout, stderr)`.
+    fn run_source(source: &[u8]) -> (i32, String, String) {
         let outcome = run_program("/t.rex", source.to_vec(), Invocation::none());
-        let seen = (
+        (
             outcome.exit_code,
             String::from_utf8_lossy(&outcome.stdout).into_owned(),
             String::from_utf8_lossy(&outcome.stderr).into_owned(),
-        );
-        match &answer {
-            None => answer = Some(seen),
-            Some(first) => assert_eq!(
-                first,
-                &seen,
-                "the two engines disagree on {:?}",
-                String::from_utf8_lossy(source)
-            ),
-        }
-        answer.expect("at least one engine ran")
+        )
     }
 
     /// Every operator the oracle sends to its left operand as a message
@@ -2815,7 +2803,7 @@ mod object_operand_tests {
             ),
         ];
         for (source, op, kind) in cases {
-            let (code, stdout, stderr) = both_engines(source);
+            let (code, stdout, stderr) = run_source(source);
             let expected = format!(
                 "rexx-exec: the operator `{op}` applied to {kind} is not implemented (Phase 5)\n"
             );
@@ -2855,7 +2843,7 @@ mod object_operand_tests {
             (b"say (.array || 'x')\n", "The Array classx"),
             (b"say (.array 'x')\n", "The Array class x"),
         ] {
-            let (code, stdout, stderr) = both_engines(source);
+            let (code, stdout, stderr) = run_source(source);
             assert_eq!(
                 (code, stdout.as_str(), stderr.as_str()),
                 (0, format!("{expected}\n").as_str(), ""),
@@ -2877,7 +2865,7 @@ mod object_operand_tests {
             (b"say \\.array\n", "\\"),
             (b"say .Array~'+'(1)\n", "+"),
         ] {
-            let (code, stdout, stderr) = both_engines(source);
+            let (code, stdout, stderr) = run_source(source);
             assert_eq!(
                 (code, stdout.as_str()),
                 (159, ""),
@@ -2915,7 +2903,7 @@ mod object_operand_tests {
             ),
         ];
         for (source, role, kind) in cases {
-            let (code, stdout, stderr) = both_engines(source);
+            let (code, stdout, stderr) = run_source(source);
             let expected = format!(
                 "rexx-exec: {kind} as a DO header's {role} value is not implemented (Phase 5)\n"
             );
@@ -2937,7 +2925,7 @@ mod object_operand_tests {
             (b"do .array\nend\n", "26.2"),
             (b"numeric digits .array\n", "26.5"),
         ] {
-            let (code, _stdout, stderr) = both_engines(source);
+            let (code, _stdout, stderr) = run_source(source);
             assert_eq!(code, 230, "{:?}", String::from_utf8_lossy(source));
             assert!(
                 stderr.contains(&format!("Error {major}:")),
@@ -2967,7 +2955,7 @@ mod object_operand_tests {
             ),
         ];
         for (source, kind) in cases {
-            let (code, stdout, stderr) = both_engines(source);
+            let (code, stdout, stderr) = run_source(source);
             let expected = format!(
                 "rexx-exec: {kind} as a DO header's OVER target is not implemented (Phase 5)\n"
             );
@@ -2986,7 +2974,7 @@ mod object_operand_tests {
         // refusing above is exactly the two directories this crate models as
         // a subset, which is a MEMBERSHIP difference rather than a missing
         // conversion.
-        let (code, stdout, stderr) = both_engines(b"do e over .array\nsay e\nend\n");
+        let (code, stdout, stderr) = run_source(b"do e over .array\nsay e\nend\n");
         assert_eq!((code, stdout.as_str()), (158, ""));
         assert!(
             stderr.contains(
@@ -3002,7 +2990,7 @@ mod object_operand_tests {
         // count is order-independent for the reason
         // `Interp::hash_collection_indexes` gives.
         assert_eq!(
-            both_engines(
+            run_source(
                 b"n = 0\ndo e over .methods\n  n = n + 1\nend\nsay n\n::method a\n::method b\n"
             ),
             (0, "2\n".to_string(), String::new())
@@ -3024,7 +3012,7 @@ mod object_operand_tests {
             (b"a. = .array\nsay a. + 1\n", 159, "", Some("+")),
             (b"a. = .array\nsay a.zz + 1\n", 159, "", Some("+")),
         ] {
-            let (actual, out, stderr) = both_engines(source);
+            let (actual, out, stderr) = run_source(source);
             assert_eq!(
                 (actual, out.as_str()),
                 (code, stdout),
@@ -3047,7 +3035,7 @@ mod object_operand_tests {
         // through `Interp::header_number`, which asks
         // `Interp::operator_operand_gap` and never the send, so this refuses
         // where the oracle answers 97.1 at rc 159.
-        let (code, stdout, stderr) = both_engines(b"a. = .array\ndo i = 1 to a.\nend\n");
+        let (code, stdout, stderr) = run_source(b"a. = .array\ndo i = 1 to a.\nend\n");
         assert_eq!((code, stdout.as_str()), (120, ""), "reported {stderr:?}");
         assert!(
             stderr.contains("a class object"),
@@ -3059,8 +3047,7 @@ mod object_operand_tests {
     /// that variable is the oracle's **left** operand of the implicit `+`.
     #[test]
     fn an_object_assigned_to_a_control_variable_is_loud_at_the_increment() {
-        let (code, stdout, stderr) =
-            both_engines(b"do i = 1 to 3\nsay 'iter' i\ni = .array\nend\n");
+        let (code, stdout, stderr) = run_source(b"do i = 1 to 3\nsay 'iter' i\ni = .array\nend\n");
         assert_eq!(
             (code, stdout.as_str(), stderr.as_str()),
             (
@@ -3080,7 +3067,7 @@ mod object_operand_tests {
             &b"raise syntax 40.1 additional (.array)\n"[..],
             b"raise syntax 40.1 additional (.environment)\n",
         ] {
-            let (code, stdout, stderr) = both_engines(source);
+            let (code, stdout, stderr) = run_source(source);
             assert_eq!(
                 (code, stdout.as_str()),
                 (120, ""),
@@ -3131,7 +3118,7 @@ mod object_operand_tests {
             ),
         ];
         for (source, expected_code, expected_in_stderr) in cases {
-            let (code, _stdout, stderr) = both_engines(source);
+            let (code, _stdout, stderr) = run_source(source);
             assert_eq!(
                 code,
                 *expected_code,
@@ -3179,7 +3166,7 @@ mod object_operand_tests {
             (b"z. = 5\ndo i = 1 to z.\nsay i\nend\n", "1\n2\n3\n4\n5\n"),
         ];
         for (source, expected) in cases {
-            let (code, stdout, stderr) = both_engines(source);
+            let (code, stdout, stderr) = run_source(source);
             assert_eq!(
                 (code, stdout.as_str(), stderr.as_str()),
                 (0, *expected, ""),
@@ -3198,7 +3185,7 @@ mod object_operand_tests {
             (b"if .array, 1 then say 'y'\n", "34.6"),
             (b"do while .array\nend\n", "34.3"),
         ] {
-            let (code, _stdout, stderr) = both_engines(source);
+            let (code, _stdout, stderr) = run_source(source);
             assert_eq!(code, 222, "{:?}", String::from_utf8_lossy(source));
             assert!(
                 stderr.contains(&format!("Error {major}:")),
@@ -3214,7 +3201,7 @@ mod object_operand_tests {
     /// stem, both of which do.
     #[test]
     fn a_nil_defaulted_stem_carries_no_operator_frame() {
-        let (code, stdout, stderr) = both_engines(b"s. = .nil\nsay s. + 1\n");
+        let (code, stdout, stderr) = run_source(b"s. = .nil\nsay s. + 1\n");
         assert_eq!(code, 159, "{stderr:?}");
         assert!(
             stderr.contains(
@@ -3261,7 +3248,7 @@ mod object_operand_tests {
             ("(+o)", "+"),
         ] {
             let source = format!("{prologue}say {expression}\n{epilogue}");
-            let (code, stdout, stderr) = both_engines(source.as_bytes());
+            let (code, stdout, stderr) = run_source(source.as_bytes());
             assert_eq!(code, 159, "{expression}: {stderr:?}");
             assert_eq!(stdout, "", "{expression}");
             assert!(
@@ -3284,12 +3271,12 @@ mod object_operand_tests {
             ("('q' || o)", "q1\n"),
         ] {
             let source = format!("{prologue}say {expression}\n{epilogue}");
-            let (code, stdout, stderr) = both_engines(source.as_bytes());
+            let (code, stdout, stderr) = run_source(source.as_bytes());
             assert_eq!(code, 0, "{expression}: {stderr:?}");
             assert_eq!(stdout, expected, "{expression}");
         }
         let source = format!("{prologue}if o then say 'yes'\nelse say 'no'\n{epilogue}");
-        let (code, stdout, stderr) = both_engines(source.as_bytes());
+        let (code, stdout, stderr) = run_source(source.as_bytes());
         assert_eq!(code, 0, "{stderr:?}");
         assert_eq!(stdout, "yes\n");
     }

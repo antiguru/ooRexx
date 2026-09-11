@@ -1,22 +1,4 @@
 # The three DO/LOOP forms this crate refuses, on both engines.
-#
-# **These rows are NOT oracle bytes and the oracle is not the reference for
-# them.** It implements all three; this crate declines them, loudly, at
-# `rexx-exec: DO is not implemented` and rc 120. `DO COUNTER` needs
-# running-count bookkeeping no other form needs, `DO WITH` sends `SUPPLIER` a
-# message and nothing here answers messages at all, and a stem `OVER` target is
-# Deviation 1 in `phase-4-exclusions.txt` -- its tail order is a balanced tree
-# against our hash map. So the expected block below is this crate's own answer,
-# and what each row asserts is that the two engines give it identically.
-#
-# The refusal is one decision (`run.rs`'s `loop_header_plan`, consulted by
-# `run_loop_with_header`) rather than one per engine, and these rows are what
-# says so. Measured before that was true: the compiled stream reached an
-# `unreachable!` for `DO WITH` and an `expect` on an unevaluated value for the
-# other two, panicking at rc 101 where the tree-walker refused at rc 120 -- and
-# **the whole workspace was green**, because nothing ran a refused loop on the
-# compiled stream. A promotion that emits its own refusal instead of asking is
-# what these rows are here to catch.
 
 # do with
 program not-oracle-bytes=do-with-refused

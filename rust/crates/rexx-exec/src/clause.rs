@@ -47,11 +47,11 @@ impl Deadline {
 /// against it.
 pub(crate) struct DeadlineCounted(());
 
-/// Every piece of state `step_in_temps_frame` sets fresh, unconditionally, on
+/// Every piece of state `Op::Clause`'s region sets fresh, unconditionally, on
 /// **every** instruction it steps -- and so every field a caller pushing a
 /// nested activation (`Interp::invoke_call`, `run.rs`) must save before the
 /// callee runs and restore after it returns, because the callee's own
-/// `step_in_temps_frame` calls overwrite these exactly as the caller's own
+/// `Op::Clause`'s region calls overwrite these exactly as the caller's own
 /// next clause would.
 pub(crate) struct ClauseState {
     /// The indent (Task 11's `static_indent` quantity, spaces already
@@ -79,7 +79,7 @@ pub(crate) struct ClauseState {
     /// through `eval`/`eval_node`'s entire recursive call graph is exactly
     /// the "every arm in `eval.rs`" retrofit `current_value_indent`'s own
     /// doc comment already declined for the identical reason. Set
-    /// unconditionally by `step_in_temps_frame`, via `clause_line`, which
+    /// unconditionally by `Op::Clause`'s region, via `clause_line`, which
     /// honours `clause_line_override` the same way `clause_site` does -- so
     /// a `SIGNAL`/`CALL` fired from inside an `INTERPRET` fragment reads the
     /// *enclosing* `INTERPRET` clause's own line, matching the oracle's own

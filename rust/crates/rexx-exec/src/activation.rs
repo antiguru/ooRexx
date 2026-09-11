@@ -316,7 +316,7 @@ pub(crate) struct Activation {
     pub(crate) cached_clock: Option<i64>,
     /// Whether [`cached_clock`] needs a fresh read before this activation's
     /// clause may trust it -- the per-clause half [`cached_clock`]'s own
-    /// doc names, set `true` once per instruction by `step_in_temps_frame`
+    /// doc names, set `true` once per instruction by `Op::Clause`'s region
     /// on whichever activation is executing at the time, mirroring
     /// `RexxActivation::run`'s own `settings.timeStamp.valid = false` set
     /// right after `nextInst->execute()` returns (`RexxActivation.cpp:647`).

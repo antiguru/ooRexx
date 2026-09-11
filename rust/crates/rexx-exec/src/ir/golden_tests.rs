@@ -776,8 +776,7 @@ fn a_nested_loops_registers_sit_above_the_enclosing_loops_and_a_later_loops_reus
 }
 
 /// The compiled `IF` with an `ELSE`, which is the shape the whole promotion
-/// is about: both paths are jumps in one stream where the tree-walker splits
-/// them across two engines.
+/// is about: both paths are jumps in one stream.
 #[test]
 fn an_if_with_an_else_compiles_to_a_clause_region_and_two_jumps() {
     let chunk =
@@ -1034,7 +1033,7 @@ fn a_whens_branch_end_is_emitted_in_front_of_an_ifs() {
     assert!(
         end_when < end_branch,
         "the IF's EndBranch is emitted in front of the WHEN's EndWhen, so leaving the branch \
-         runs a clause boundary the tree-walker does not: {stream}"
+         runs a clause boundary it does not owe: {stream}"
     );
 }
 
@@ -1261,7 +1260,7 @@ fn two_constructs_ending_at_one_instruction_release_to_the_lower_mark() {
     let stream = render(&chunk);
     // **Located by the last `EndWhen` rather than by op index.** The indices
     // here move whenever anything before them changes how many ops an
-    // instruction takes -- promoting the `END` off `Op::Generic` shifted them
+    // instruction takes -- promoting the `END` off `Op::Exec` shifted them
     // by one -- and an index in the pattern makes this test report a register
     // that was handed back correctly as one that was not.
     let after_select = stream
@@ -1465,7 +1464,7 @@ fn each_call_site_takes_a_resolution_site_of_its_own() {
 }
 
 /// Under a setting that echoes, the region carries its clause echo op in front
-/// of the call -- the position the tree-walker's own clause unit echoes at,
+/// of the call -- the position clause unit echoes at,
 /// before anything the clause does.
 #[test]
 fn a_traced_call_carries_its_clause_echo_in_front_of_the_call() {

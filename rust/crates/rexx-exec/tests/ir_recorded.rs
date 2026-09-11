@@ -199,9 +199,8 @@ const BRANCH_CASES: &[InlineCase] = &[
         exit_code: 0,
     },
     InlineCase {
-        // The path the compiled form changes most: the tree-walker leaves it
-        // to the enclosing loop's fallthrough, and a jump has to land on the
-        // same `ELSE`.
+        // The path the compiled form changes most: a jump has to land on the
+        // same `ELSE` the enclosing loop's fallthrough reaches.
         name: "if with an else, false path",
         program: "if 1 = 0 then say 'then'\nelse say 'else'\nsay 'after'\n",
         stdout: "else\nafter\n",

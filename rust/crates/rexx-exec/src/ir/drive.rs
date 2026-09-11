@@ -38,8 +38,7 @@ pub(crate) struct SelectFrame {
     label: Option<SymbolId>,
     /// That `SELECT`'s own `OTHERWISE` marker, for [`select_escape`].
     otherwise: Option<usize>,
-    /// The branch's own instruction range -- the range the tree-walker bounds
-    /// the identical `run_bounded` call to, and the one an escaping `Flow` is
+    /// The branch's own instruction range, which an escaping `Flow` is
     /// absorbed against here.
     start: usize,
     end: usize,
@@ -50,9 +49,8 @@ pub(crate) struct SelectFrame {
     /// [`Interp::leave_otherwise`] to build the same answer from.
     select_end: Option<usize>,
     /// One past the branch's last op. **Reaching it is the branch running off
-    /// its own end**, which is the arrival the tree-walker gets as
-    /// `run_bounded` answering `Flow::Next` -- and it is an op position rather
-    /// than an instruction one because that is the space the counter walks.
+    /// its own end**, and it is an op position rather than an instruction one
+    /// because that is the space the counter walks.
     op_end: u32,
     /// Which branch this is, which decides how it is left.
     branch: Branch,
@@ -444,15 +442,6 @@ impl Interp {
         clippy::too_many_arguments,
         reason = "two callers, and every argument is a value each already holds"
     )]
-    // **Bundling the four range-invariant arguments into a struct was tried and
-    // rejected**, so that nobody spends the session on it again. It does what
-    // it promises to `instructions:u` -- 6 fewer per range entry, 1 fewer per
-    // delegated clause -- and on `cycles:u` it moves
-    // `bench-programs/emptyloop.rex` far more than that. Measured while the
-    // tree-walker still existed, so the figures come as a pair: its arm, which
-    // never entered this function, 8.61 to 7.96 billion cycles, and the
-    // compiled arm 8.63 to 9.12, taking that axis' cycle ratio from 1.00 to
-    // 1.15 while its instruction count falls.
     // Reproduced across two sittings and two builds, with branch misses at
     // 70,000 out of 6.3 billion branches either way, so it is not prediction.
     // No mechanism below "the layout changed" was found, and a change with that
@@ -581,7 +570,7 @@ impl Interp {
                     // [`Echo::Gated`] is passed instead, so a chunk compiled to
                     // echo under a setting that no longer does prints nothing,
                     // and one compiled silent under a setting that now echoes
-                    // prints the same line the tree-walker would. The two have
+                    // prints the line the setting now asks for. The two have
                     // to be one decision: doing only the first would leave a
                     // `TRACE R` inside a body invisible to every promoted
                     // clause after it, and only the second would leave `TRACE
@@ -594,7 +583,7 @@ impl Interp {
                     // There is one implementation of the clause boundary --
                     // `Interp::enter_stepped_clause` and
                     // `Interp::leave_stepped_clause`, which
-                    // `Interp::in_stepped_clause_with` is itself defined in
+                    // `crate::ir::Op::Clause` is itself defined in
                     // terms of -- so a promoted clause and an unpromoted one
                     // discharge the same list from the same code.
                     let entry = self.enter_stepped_clause(
@@ -1445,8 +1434,8 @@ impl Interp {
                                         // after a `REPLY` is the failure this
                                         // op can produce; measured, `?` here
                                         // reported `0 *-* <no failing clause
-                                        // recorded>` where the tree-walker
-                                        // echoed the `return` clause.
+                                        // recorded>` instead of the `return`
+                                        // clause.
                                         let flow = match self.returned_value(value, *keyword) {
                                             Ok(flow) => flow,
                                             Err(failure) => break 'cold Err(failure),
@@ -1589,7 +1578,7 @@ impl Interp {
                                     }
                                     // A message send that is a whole clause,
                                     // whichever form it was written in.
-                                    // `exec_message` is the tree-walker's own arm,
+                                    // `exec_message` is arm,
                                     // entered here with the fields it reads: the
                                     // term, and the message-assignment form's
                                     // value.
@@ -1608,9 +1597,8 @@ impl Interp {
                                             };
                                         break 'cold Ok(RegionEnd::Flowed(flow));
                                     }
-                                    // `EXPOSE`. `exec_expose` is the tree-walker's
-                                    // own arm, entered here with the one field it
-                                    // reads.
+                                    // `EXPOSE`, through `exec_expose` with the one
+                                    // field it reads.
                                     Op::Expose { index } => {
                                         debug_assert_names_the_clause(
                                             code, *index, clause, "Expose",
@@ -1624,11 +1612,8 @@ impl Interp {
                                         }
                                         break 'cold Ok(RegionEnd::Flowed(Flow::Next));
                                     }
-                                    // The instruction's own work, from the same
-                                    // `Interp::exec_instruction` the tree-walker's
-                                    // own `step` enters -- so the kinds this op
-                                    // covers are one implementation and not a
-                                    // second copy beside it.
+                                    // The instruction's own work, from
+                                    // `Interp::exec_instruction`.
                                     Op::Exec { index: at } => {
                                         debug_assert_names_the_clause(code, *at, clause, "Exec");
                                         match self.exec_instruction(
@@ -1644,9 +1629,8 @@ impl Interp {
                                             Err(failure) => break 'cold Err(failure),
                                         }
                                     }
-                                    // `LEAVE`/`ITERATE`. `leave_origin` is the
-                                    // tree-walker's own capture, entered here with
-                                    // the clause this region has open; which `Flow`
+                                    // `LEAVE`/`ITERATE`, through `leave_origin`
+                                    // with the clause this region has open; which `Flow`
                                     // carries it is the only thing the two keywords
                                     // differ in, and the clause is what says which.
                                     Op::Escape { index: at } => {
@@ -1671,8 +1655,7 @@ impl Interp {
                                     }
                                     // An `IF`'s or a plain `WHEN`'s condition
                                     // validation and its `>>>` line, through the
-                                    // same `Interp::condition_value` the
-                                    // tree-walker's own `eval_condition` reaches
+                                    // same `Interp::condition_value`
                                     // -- so the trace, the temps frame, the
                                     // readback and the raiser are that function's
                                     // rather than a second copy. One arm for both
@@ -1848,11 +1831,9 @@ impl Interp {
                                         }
                                     }
                                     // The construct itself, from the values the ops
-                                    // above filed. `run_loop_with_header` is the
-                                    // same function the tree-walker reaches, and
-                                    // `BodyEngine::Chunk` is the one thing this call
-                                    // says that the tree-walker's does not: the
-                                    // body's clauses come from this chunk.
+                                    // above filed, through `run_loop_with_header`.
+                                    // `BodyEngine::Chunk` says the body's clauses
+                                    // come from this chunk.
                                     Op::LoopRun { index } => {
                                         debug_assert_names_the_clause(
                                             code, *index, clause, "LoopRun",
@@ -2005,7 +1986,7 @@ impl Interp {
                     pc += 1;
                     continue;
                 }
-                // The boundary the tree-walker's own wrapper around an
+                // The boundary wrapper around an
                 // `IF`'s whole arm runs, which a flattened construct has no
                 // wrapper to run. `Interp::end_promoted_branch`'s doc comment
                 // has the program that says it is not a spare one.
@@ -2200,8 +2181,8 @@ impl Interp {
 
     /// What a `SELECT` does with a `Flow` that left one of its branches:
     /// `select_escape` and `leave_select`, exactly what `step`'s own `Select`
-    /// arm and `run_otherwise` do with the same `Flow`, and then the boundary
-    /// the tree-walker's own wrapper around the whole arm runs.
+    /// arm and `Op::EnterOtherwise` do with the same `Flow`, and then the boundary
+    /// wrapper around the whole arm runs.
     fn leave_branch(
         &mut self,
         code: &Code<'_>,
@@ -2218,7 +2199,7 @@ impl Interp {
                 SelectEscape::Forward(flow) => flow,
             },
             // `Interp::leave_otherwise` is the whole of leaving this branch,
-            // shared with `run_otherwise`: the escape elevation is restored
+            // shared with `Op::EnterOtherwise`: the escape elevation is restored
             // and `leave_select` decides where control goes. **And no
             // end-of-branch boundary follows it**, because `OTHERWISE`'s
             // branch ends at the `END`, a real instruction with a boundary of

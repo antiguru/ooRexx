@@ -128,8 +128,8 @@ struct Patch {
 /// so that arriving at that instruction from elsewhere runs it and falling
 /// into the instruction from the op before it does not.
 enum Before {
-    /// The end of an `IF`'s true branch: the clause boundary the tree-walker's
-    /// own wrapper runs there ([`Op::EndBranch`]), and the jump past the `ELSE`
+    /// The end of an `IF`'s true branch: its clause boundary
+    /// ([`Op::EndBranch`]), and the jump past the `ELSE`
     /// when there is one to skip.
     ThenEnd { resume: Option<usize> },
     /// A `SELECT`'s [`Op::EnterOtherwise`], in front of the `OTHERWISE` marker
@@ -275,8 +275,8 @@ pub(crate) fn compile(
                 let at = op_index(&ops)?;
                 let echo = echoes(trace, instruction);
                 // One group per header expression, and `LoopRun` inside the
-                // region behind them: the whole loop runs inside the `DO` clause,
-                // exactly as it does on the tree-walker. `close_region` below is
+                // region behind them: the whole loop runs inside the `DO` clause.
+                // `close_region` below is
                 // what fixes the region's end, from what was actually pushed.
                 ops.push(Op::Clause {
                     index: instruction_index(index)?,
@@ -500,8 +500,7 @@ pub(crate) fn compile(
                         (*otherwise_index, PatchKind::Resume)
                     }
                     // Landing on the `END` is what makes 7.3 the `END`'s own
-                    // clause rather than this `SELECT`'s, exactly as the
-                    // tree-walker's `Goto(end)` does.
+                    // clause rather than this `SELECT`'s.
                     None => (select_end, PatchKind::Enter),
                 };
                 for (position, &when_index) in whens.iter().enumerate() {
@@ -947,7 +946,7 @@ pub(crate) fn compile(
             // A message send as a whole clause: the plain form, the `~~`
             // form, and the message-assignment form. No register and no
             // expression slot -- `Interp::exec_message` evaluates the term
-            // itself, exactly as the tree-walker's own arm does, so what this
+            // itself, exactly as arm does, so what this
             // promotion decides is the clause region around it and nothing
             // about the send.
             InstructionKind::Message { .. } => {
@@ -965,8 +964,8 @@ pub(crate) fn compile(
             }
             // `EXPOSE`. No register and no expression slot: the names come
             // out of the instruction, and a `VariableRef::Indirect` reads its
-            // selector through `Interp::read` exactly as the tree-walker's
-            // own arm does, so what this promotion decides is the clause
+            // selector through `Interp::read`, so what this promotion decides
+            // is the clause
             // region around it and nothing about the binding.
             InstructionKind::Expose { .. } => {
                 let at = op_index(&ops)?;
@@ -983,8 +982,7 @@ pub(crate) fn compile(
             }
             // `LEAVE`/`ITERATE`. No register and no expression slot: the name
             // is in the instruction and the origin is captured at run time
-            // from the clause the region has open, exactly as the
-            // tree-walker's own two arms capture it.
+            // from the clause the region has open.
             InstructionKind::Leave { .. } | InstructionKind::Iterate { .. } => {
                 let at = op_index(&ops)?;
                 let echo = echoes(trace, instruction);
@@ -1026,8 +1024,7 @@ pub(crate) fn compile(
                 });
             }
             // The kinds whose whole execution is one call into
-            // `Interp::exec_instruction`, which is the arm the tree-walker's
-            // own `step` runs for each. What the promotion decides is the
+            // `Interp::exec_instruction`. What the promotion decides is the
             // clause region around that call and nothing about the call: the
             // region owes the echo, the boundary, the temps frame, the
             // deadline count and the failing clause's site, and
@@ -1523,7 +1520,7 @@ fn echoes(trace: ChunkTrace, instruction: &Instruction) -> bool {
 }
 
 /// Pushes the clause echo op, if `echo`, as the **first** op of the region
-/// that follows -- the position the tree-walker's own clause unit echoes at,
+/// that follows -- the position clause unit echoes at,
 /// before anything the clause computes.
 fn push_echo(ops: &mut Vec<Op>, echo: bool, index: u32) {
     if echo {
@@ -2231,8 +2228,8 @@ mod tests {
 
     /// A slot too wide for a compiled read's own field is **not** a refusal:
     /// the read still has a correct answer and the run-time path is what
-    /// computes it, so the whole body must not fall back to the tree-walker for
-    /// something that is only an optimisation.
+    /// computes it, so the whole body must not be refused for something that
+    /// is only an optimisation.
     #[test]
     fn a_slot_too_wide_for_a_compiled_read_is_unresolved_rather_than_refused() {
         assert_eq!(PlanSlot::of(0).resolved(), Some(0));

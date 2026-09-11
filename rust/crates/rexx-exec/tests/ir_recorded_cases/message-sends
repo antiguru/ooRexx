@@ -1,42 +1,5 @@
 # What promoting the message-send clause has to keep, and why an engine-against-
 # engine sweep is the instrument for it.
-#
-# **The op carries no cache.** `Op::Message` has an `index` and nothing else --
-# message resolution is dynamic (D28), so unlike `Op::Call` there is no kept
-# answer for a row here to falsify. What the promotion decides is the clause
-# *region*: an `Op::Generic` instruction may not sit inside one, so before the
-# op existed the clause echo, the `SIGL` line, the temps frame, the failing
-# clause's own site and the boundary a queued handler is delivered at all came
-# from `Interp::step_in_temps_frame` instead of the compiled stream. Every row
-# below is one of those.
-#
-# **Trace, and what these rows are NOT the catcher for.** The corpus programs
-# that send a message all run at the default setting, so nothing there reaches
-# a compiled clause echo at all. These rows still do not catch a missing
-# `Op::TraceClause` either: measured, removing
-# `push_echo` from the message arm of `compile` leaves the whole workspace
-# green, these rows included, because the driver's `Echo::Gated` fallback
-# prints the identical line whenever the chunk's compiled setting is not the
-# one in force -- which `drive.rs`'s own `TRACE_OP_ECHOES` comment already
-# records as a general property of every construct, not of this one. What holds
-# the compiled emission is that counter, not output.
-#
-# **What these rows do hold** is everything about the send that is not shared
-# between the arms: the clause region the promotion opens, the failing clause's
-# own site resolved from inside it, the boundary a trapped condition is
-# delivered at, and `sigl`. Every row runs on both engines and their bytes are
-# compared against each other as well as against the block below.
-#
-# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE. Regenerate a
-# row by running its program under the oracle, never with REWRITE=1 --
-# ir_recorded.rs refuses to run at all under REWRITE for that reason. Capture is:
-#
-#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
-#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
-#
-# Expected lines are tagged so that no line of the block can be empty: an empty
-# line ends an expected block, and a program's own output may hold one.
-# Trailing blanks are part of what is compared.
 
 # the plain and the ~~ forms as whole clauses, traced: the clause echo, the
 # `>M>` line the send owes, and the RESULT each settles
