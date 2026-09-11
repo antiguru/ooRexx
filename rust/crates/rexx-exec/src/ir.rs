@@ -136,11 +136,14 @@ impl Op {
 /// match drives only the ops that stand at the top of a region, so LLVM lays
 /// its jump table over the discriminant range those cover; when the range
 /// starts at 0 the discriminant indexes the table directly, and when it does
-/// not every dispatch pays a `lea` to bias it first. Measured as retired
-/// instructions against the same tree with a region-interior op first:
-/// `emptyloop` +0.52%, `varlookup` +0.33%, `arith` +0.15%,
-/// `bench-rexxcps/rexxcps.rex` +0.13% -- one instruction per top-level
-/// dispatch, and `emptyloop` drives two of those per iteration.
+/// not every dispatch pays a `lea` to bias it first. The cost is exactly one
+/// instruction per top-level dispatch: measured as retired instructions
+/// against the same tree with a region-interior op first, `emptyloop` retires
+/// 2.0 more per iteration and `varlookup` 3.0, which is how many top-level ops
+/// each of them drives. As whole-axis ratios that is `emptyloop` +0.52%,
+/// `varlookup` +0.33% and `bench-rexxcps/rexxcps.rex` +0.13%. `arith` measures
+/// +0.04% over nine interleaved rounds, and its own base moves 0.13% between
+/// runs, so that axis cannot resolve the effect either way.
 pub(crate) enum Op {
     /// Opens the promoted clause of the instruction at `index`. `end` is the
     /// op index one past this clause's last op -- the mark the register
