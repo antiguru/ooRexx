@@ -130,7 +130,48 @@ impl Op {
 /// flow of its own compiles to a region holding those, followed by whatever
 /// jumps it needs. Every op is inside a region: the stream has no op that
 /// stands outside one.
+///
+/// **The first variant must be one the top-level `match op` in
+/// `Interp::run_ops_from` names**, which is why [`Op::Clause`] leads. That
+/// match drives only the ops that stand at the top of a region, so LLVM lays
+/// its jump table over the discriminant range those cover; when the range
+/// starts at 0 the discriminant indexes the table directly, and when it does
+/// not every dispatch pays a `lea` to bias it first. Measured as retired
+/// instructions against the same tree with a region-interior op first:
+/// `emptyloop` +0.52%, `varlookup` +0.33%, `arith` +0.15%,
+/// `bench-rexxcps/rexxcps.rex` +0.13% -- one instruction per top-level
+/// dispatch, and `emptyloop` drives two of those per iteration.
 pub(crate) enum Op {
+    /// Opens the promoted clause of the instruction at `index`. `end` is the
+    /// op index one past this clause's last op -- the mark the register
+    /// allocator releases to when the clause finishes (the plan's Decisions
+    /// section: "a promoted clause takes a mark when its `Clause` op is
+    /// emitted and releases to it at `end`").
+    ///
+    /// **This is the clause's unconditional half, and [`Op::TraceClause`] is
+    /// the conditional one.** Everything this op runs is semantics rather than
+    /// trace: the clause line `SIGL`, condition objects and syntax error
+    /// messages all read, the clause boundary a queued `CALL ON` handler is
+    /// delivered at, the GC temps frame, and the failing clause's own site.
+    /// None of it may be elided with the echo, which is why the split is two
+    /// ops rather than one op with a flag.
+    ///
+    /// **A marker instruction is this op and nothing else**, its region empty
+    /// but for the [`Op::TraceClause`] a setting that echoes puts in it.
+    /// `NOP` and `THEN` execute as `Ok(Flow::Next)` and compute nothing at
+    /// all, so the clause boundary and the echo *are* the instruction, and
+    /// this op is the whole of both. Falling off the end of an empty region
+    /// leaves the counter at `end`, which is where a one-clause op leaves it.
+    ///
+    /// **No `Generic` op may sit inside `(here, end)`**, which `compile`
+    /// asserts: it runs a whole clause through `step_in_temps_frame`, which
+    /// echoes the clause itself, and the echo is not idempotent. An op that
+    /// runs clauses belonging to something other than this region's own
+    /// instruction is a different thing and is allowed -- [`Op::LoopRun`]
+    /// reaches the body's clauses through `run_bounded` and [`Op::Call`]
+    /// reaches a callee's through `run_activation`, each re-entering a driver
+    /// rather than stepping a clause here.
+    Clause { index: u32, end: u32 },
     /// Echoes the `>K>` line of one `DO`/`LOOP` header value, from register
     /// `src`, under the tag [`HeaderRole`] gives it.
     ///
@@ -226,36 +267,6 @@ pub(crate) enum Op {
     /// that runs the body is bounded by `[body_start, end_index)`, and this op
     /// is the `END`'s.
     LoopNext { index: u32 },
-    /// Opens the promoted clause of the instruction at `index`. `end` is the
-    /// op index one past this clause's last op -- the mark the register
-    /// allocator releases to when the clause finishes (the plan's Decisions
-    /// section: "a promoted clause takes a mark when its `Clause` op is
-    /// emitted and releases to it at `end`").
-    ///
-    /// **This is the clause's unconditional half, and [`Op::TraceClause`] is
-    /// the conditional one.** Everything this op runs is semantics rather than
-    /// trace: the clause line `SIGL`, condition objects and syntax error
-    /// messages all read, the clause boundary a queued `CALL ON` handler is
-    /// delivered at, the GC temps frame, and the failing clause's own site.
-    /// None of it may be elided with the echo, which is why the split is two
-    /// ops rather than one op with a flag.
-    ///
-    /// **A marker instruction is this op and nothing else**, its region empty
-    /// but for the [`Op::TraceClause`] a setting that echoes puts in it.
-    /// `NOP` and `THEN` execute as `Ok(Flow::Next)` and compute nothing at
-    /// all, so the clause boundary and the echo *are* the instruction, and
-    /// this op is the whole of both. Falling off the end of an empty region
-    /// leaves the counter at `end`, which is where a one-clause op leaves it.
-    ///
-    /// **No `Generic` op may sit inside `(here, end)`**, which `compile`
-    /// asserts: it runs a whole clause through `step_in_temps_frame`, which
-    /// echoes the clause itself, and the echo is not idempotent. An op that
-    /// runs clauses belonging to something other than this region's own
-    /// instruction is a different thing and is allowed -- [`Op::LoopRun`]
-    /// reaches the body's clauses through `run_bounded` and [`Op::Call`]
-    /// reaches a callee's through `run_activation`, each re-entering a driver
-    /// rather than stepping a clause here.
-    Clause { index: u32, end: u32 },
     /// Echoes the `*-*` line of the clause of the instruction at `index`.
     ///
     /// **The conditional half of [`Op::Clause`], and its presence in the
